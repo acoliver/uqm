@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 
 /// Application options that can be set via CLI or config file
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Options {
     // Commandline-only options

@@ -1,7 +1,7 @@
 use std::ffi::CString;
-use std::ptr;
 
 /// Log levels matching the C enum
+#[allow(dead_code)]
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
@@ -14,11 +14,10 @@ pub enum LogLevel {
     All = 6,
 }
 
-// Alias Fatal to User to match C behavior
-pub use LogLevel::User as Fatal;
 
 impl LogLevel {
     /// Create a LogLevel from an integer
+    #[allow(dead_code)]
     pub fn from_i32(level: i32) -> Self {
         match level {
             0 => LogLevel::Nothing,
@@ -33,6 +32,7 @@ impl LogLevel {
     }
 
     /// Get the integer representation for the C interface
+    #[allow(dead_code)]
     pub fn as_i32(&self) -> i32 {
         *self as i32
     }
@@ -44,7 +44,7 @@ impl LogLevel {
 /// This function calls into C code via FFI
 pub unsafe fn log_add(level: LogLevel, message: &str) {
     // Convert the Rust string to a C string
-    let c_msg = match CString::new(message) {
+    let _c_msg = match CString::new(message) {
         Ok(s) => s,
         Err(_) => {
             // If the string contains a null byte, we can't convert it
@@ -73,7 +73,7 @@ pub unsafe fn log_init(max_lines: i32) {
 #[macro_export]
 macro_rules! log_fatal {
     ($($arg:tt)*) => {
-        ::logging::log_add(::logging::LogLevel::Fatal, &format!($($arg)*))
+        $crate::logging::log_add($crate::logging::LogLevel::User, &format!($($arg)*))
     };
 }
 
@@ -81,7 +81,7 @@ macro_rules! log_fatal {
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {
-        ::logging::log_add(::logging::LogLevel::Error, &format!($($arg)*))
+        $crate::logging::log_add($crate::logging::LogLevel::Error, &format!($($arg)*))
     };
 }
 
@@ -89,7 +89,7 @@ macro_rules! log_error {
 #[macro_export]
 macro_rules! log_warning {
     ($($arg:tt)*) => {
-        ::logging::log_add(::logging::LogLevel::Warning, &format!($($arg)*))
+        $crate::logging::log_add($crate::logging::LogLevel::Warning, &format!($($arg)*))
     };
 }
 
@@ -97,7 +97,7 @@ macro_rules! log_warning {
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        ::logging::log_add(::logging::LogLevel::Info, &format!($($arg)*))
+        $crate::logging::log_add($crate::logging::LogLevel::Info, &format!($($arg)*))
     };
 }
 
@@ -105,7 +105,7 @@ macro_rules! log_info {
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
-        ::logging::log_add(::logging::LogLevel::Debug, &format!($($arg)*))
+        $crate::logging::log_add($crate::logging::LogLevel::Debug, &format!($($arg)*))
     };
 }
 
@@ -128,7 +128,6 @@ mod tests {
     fn test_log_level_as_i32() {
         assert_eq!(LogLevel::Nothing.as_i32(), 0);
         assert_eq!(LogLevel::User.as_i32(), 1);
-        assert_eq!(LogLevel::Fatal.as_i32(), 1);
         assert_eq!(LogLevel::Error.as_i32(), 2);
         assert_eq!(LogLevel::Warning.as_i32(), 3);
         assert_eq!(LogLevel::Info.as_i32(), 4);

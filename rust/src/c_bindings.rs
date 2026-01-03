@@ -2,8 +2,9 @@
 /* FFI Bindings for Phase 0 */
 
 // Re-export libc types for convenience
-pub use libc::{c_int, c_char, c_void};
+pub use libc::{c_int, c_char};
 
+#[link(name = "uqm_core", kind = "static")]
 extern "C" {
     /// Entry point that Rust calls to start the C code
     /// This is defined in mem_wrapper.c

@@ -78,7 +78,7 @@ pub extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 
         let new_ptr = libc::realloc(ptr, size);
         if new_ptr.is_null() && size > 0 {
-            log_add(User, "HRealloc() FATAL: out of memory.");
+            log_add(LogLevel::User, "HRealloc() FATAL: out of memory.");
             std::process::abort();
         }
         new_ptr
@@ -116,6 +116,7 @@ pub extern "C" fn rust_mem_uninit() -> bool {
 ///
 /// # Safety
 /// This function allocates memory that must be freed with HFree
+#[allow(dead_code)]
 pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut i8, Vec<*mut i8>) {
     use std::ffi::CString;
     use std::ptr;

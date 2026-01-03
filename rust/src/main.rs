@@ -4,12 +4,13 @@ mod logging;
 mod memory;
 mod c_bindings;
 
-use cli::Cli;
 use anyhow::Result;
+use clap::Parser;
+use cli::Cli;
 use std::env;
 use std::ffi::CString;
 
-fn main() -> Result<i32> {
+fn main() -> Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
 
@@ -24,7 +25,7 @@ fn main() -> Result<i32> {
     let options = config::load_config(&cli.configdir)?;
 
     // Merge CLI options into config
-    let mut options = cli.merge_into_options(options)?;
+    let options = cli.merge_into_options(options)?;
 
     // Handle special modes from the CLI
     if let Some(log_file) = &options.log_file {
@@ -37,7 +38,7 @@ fn main() -> Result<i32> {
         // Initialize memory management
         if !memory::rust_mem_init() {
             log_error!("Failed to initialize memory management");
-            return 1;
+            std::process::exit(1);
         }
 
         // Prepare arguments for C code
@@ -87,6 +88,9 @@ fn main() -> Result<i32> {
         }
 
         log_info!("C entry point returned: {}", exit_code);
-        Ok(exit_code)
+        if exit_code != 0 {
+            std::process::exit(exit_code);
+        }
+        Ok(())
     }
 }
