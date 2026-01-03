@@ -1,0 +1,4 @@
+# Quality thresholds enforced in CI
+cognitive-complexity-threshold = 50
+type-complexity-threshold = 250
+too-many-arguments-threshold = 7

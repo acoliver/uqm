@@ -1,0 +1,64 @@
+name: Rust Quality Checks
+
+on:
+  push:
+    branches: [ main, develop, phase0-foundation ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+
+    # Install quality checking tools
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip3 install --break-system-packages lizard
+
+    # Rust formatting check (only on Rust code)
+    - name: Check formatting
+      run: |
+        cd rust
+        cargo fmt -- --check
+
+    # Clippy lints (treat warnings as errors)
+    - name: Run clippy (Rust code only)
+      run: |
+        cd rust
+        cargo clippy -- -D warnings
+
+    # Run tests
+    - name: Run tests
+      run: |
+        cd rust
+        cargo test
+
+    # Security audit
+    - name: Security audit
+      run: |
+        cd rust
+        cargo install cargo-audit
+        cargo audit
+
+    # Cyclomatic complexity check (only rust/)
+    - name: Check complexity
+      run: |
+        lizard -C 50 -w rust/ -x "*.c" -x "*.h"
+
+    # Build verification (Rust project)
+    - name: Build Rust project
+      run: |
+        cd rust
+        cargo build --release
