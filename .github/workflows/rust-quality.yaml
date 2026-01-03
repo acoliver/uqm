@@ -24,7 +24,8 @@ jobs:
     # Install quality checking tools
     - name: Install dependencies
       run: |
-        pip3 install lizard
+        pip3 install --user lizard
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     # Rust formatting check (only on Rust code)
     - name: Check formatting

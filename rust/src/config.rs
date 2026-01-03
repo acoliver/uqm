@@ -170,7 +170,7 @@ pub fn parse_gamma(s: &str) -> Result<f32> {
     const MIN_GAMMA: f32 = 0.03 * GAMMA_SCALE / GAMMA_SCALE;
     const MAX_GAMMA: f32 = 9.9 * GAMMA_SCALE / GAMMA_SCALE;
 
-    if gamma < MIN_GAMMA || gamma > MAX_GAMMA {
+    if !(MIN_GAMMA..=MAX_GAMMA).contains(&gamma) {
         anyhow::bail!("Gamma correction value out of range (0.03 to 9.9)");
     }
 

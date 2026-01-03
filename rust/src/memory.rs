@@ -1,5 +1,4 @@
 use crate::logging::{log_add, LogLevel};
-use libc;
 use std::ffi::c_void;
 
 /// Allocate memory using the system malloc
@@ -7,21 +6,19 @@ use std::ffi::c_void;
 /// # Safety
 /// This function calls into libc's malloc and is unsafe
 #[no_mangle]
-pub extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
-    unsafe {
-        if size == 0 {
-            // Return a non-null pointer for zero-size allocation
-            return libc::malloc(1);
-        }
-
-        let ptr = libc::malloc(size);
-        if ptr.is_null() {
-            // Log fatal error if allocation failed
-            log_add(LogLevel::User, "HMalloc() FATAL: out of memory.");
-            std::process::abort();
-        }
-        ptr
+pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
+    if size == 0 {
+        // Return a non-null pointer for zero-size allocation
+        return libc::malloc(1);
     }
+
+    let ptr = libc::malloc(size);
+    if ptr.is_null() {
+        // Log fatal error if allocation failed
+        log_add(LogLevel::User, "HMalloc() FATAL: out of memory.");
+        std::process::abort();
+    }
+    ptr
 }
 
 /// Free memory that was allocated with rust_hmalloc
@@ -29,11 +26,9 @@ pub extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
 /// # Safety
 /// This function calls into libc's free and is unsafe
 #[no_mangle]
-pub extern "C" fn rust_hfree(ptr: *mut c_void) {
-    unsafe {
-        if !ptr.is_null() {
-            libc::free(ptr);
-        }
+pub unsafe extern "C" fn rust_hfree(ptr: *mut c_void) {
+    if !ptr.is_null() {
+        libc::free(ptr);
     }
 }
 
@@ -42,23 +37,21 @@ pub extern "C" fn rust_hfree(ptr: *mut c_void) {
 /// # Safety
 /// This function calls into libc's malloc and memset and is unsafe
 #[no_mangle]
-pub extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
-    unsafe {
-        if size == 0 {
-            // Return a non-null pointer for zero-size allocation
-            let ptr = libc::malloc(1);
-            libc::memset(ptr, 0, 1);
-            return ptr;
-        }
-
-        let ptr = libc::malloc(size);
-        if ptr.is_null() {
-            log_add(LogLevel::User, "HCalloc() FATAL: out of memory.");
-            std::process::abort();
-        }
-        libc::memset(ptr, 0, size);
-        ptr
+pub unsafe extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
+    if size == 0 {
+        // Return a non-null pointer for zero-size allocation
+        let ptr = libc::malloc(1);
+        libc::memset(ptr, 0, 1);
+        return ptr;
     }
+
+    let ptr = libc::malloc(size);
+    if ptr.is_null() {
+        log_add(LogLevel::User, "HCalloc() FATAL: out of memory.");
+        std::process::abort();
+    }
+    libc::memset(ptr, 0, size);
+    ptr
 }
 
 /// Reallocate memory to a new size
@@ -66,23 +59,21 @@ pub extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
 /// # Safety
 /// This function calls into libc's realloc and is unsafe
 #[no_mangle]
-pub extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
-    unsafe {
-        if size == 0 {
-            // If new size is 0, free the pointer and return a minimal allocation
-            if !ptr.is_null() {
-                libc::free(ptr);
-            }
-            return libc::malloc(1);
+pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
+    if size == 0 {
+        // If new size is 0, free the pointer and return a minimal allocation
+        if !ptr.is_null() {
+            libc::free(ptr);
         }
-
-        let new_ptr = libc::realloc(ptr, size);
-        if new_ptr.is_null() && size > 0 {
-            log_add(LogLevel::User, "HRealloc() FATAL: out of memory.");
-            std::process::abort();
-        }
-        new_ptr
+        return libc::malloc(1);
     }
+
+    let new_ptr = libc::realloc(ptr, size);
+    if new_ptr.is_null() && size > 0 {
+        log_add(LogLevel::User, "HRealloc() FATAL: out of memory.");
+        std::process::abort();
+    }
+    new_ptr
 }
 
 /// Initialize the memory management system
@@ -90,11 +81,9 @@ pub extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
 /// # Safety
 /// This function is meant to be called from C code
 #[no_mangle]
-pub extern "C" fn rust_mem_init() -> bool {
+pub unsafe extern "C" fn rust_mem_init() -> bool {
     // In later phases, this might initialize custom allocators
-    unsafe {
-        log_add(LogLevel::Info, "Rust memory management initialized.");
-    }
+    log_add(LogLevel::Info, "Rust memory management initialized.");
     true
 }
 
@@ -103,10 +92,9 @@ pub extern "C" fn rust_mem_init() -> bool {
 /// # Safety
 /// This function is meant to be called from C code
 #[no_mangle]
-pub extern "C" fn rust_mem_uninit() -> bool {
-    unsafe {
-        log_add(LogLevel::Info, "Rust memory management deinitialized.");
-    }
+pub unsafe extern "C" fn rust_mem_uninit() -> bool {
+    // In later phases, this might deinitialize custom allocators
+    log_add(LogLevel::Info, "Rust memory management deinitialized.");
     true
 }
 
@@ -181,6 +169,8 @@ mod tests {
     #[test]
     fn test_hcalloc() {
         unsafe {
+            log_init(10);
+
             let ptr = rust_hcalloc(100);
             assert!(!ptr.is_null());
 
@@ -197,6 +187,8 @@ mod tests {
     #[test]
     fn test_hrealloc() {
         unsafe {
+            log_init(10);
+
             let ptr = rust_hmalloc(10);
             assert!(!ptr.is_null());
 
@@ -223,6 +215,8 @@ mod tests {
     #[test]
     fn test_zero_size_allocations() {
         unsafe {
+            log_init(10);
+
             let ptr = rust_hmalloc(0);
             assert!(!ptr.is_null());
 

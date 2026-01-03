@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 /// The Ur-Quan Masters - A modernized Rust implementation
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Default)]
 #[command(name = "uqm")]
 #[command(version = "0.8.0")]
 #[command(about = "The Ur-Quan Masters - space exploration strategy game", long_about = None)]
@@ -328,6 +328,7 @@ impl Cli {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Resolution;
 
     #[test]
     fn test_parse_scaler() {

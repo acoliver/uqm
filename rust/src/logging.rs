@@ -72,7 +72,12 @@ pub unsafe fn log_init(max_lines: i32) {
 #[macro_export]
 macro_rules! log_fatal {
     ($($arg:tt)*) => {
-        $crate::logging::log_add($crate::logging::LogLevel::User, &format!($($arg)*))
+        {
+            let msg = format!($($arg)*);
+            unsafe {
+                $crate::logging::log_add($crate::logging::LogLevel::User, &msg)
+            }
+        }
     };
 }
 
@@ -80,7 +85,12 @@ macro_rules! log_fatal {
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {
-        $crate::logging::log_add($crate::logging::LogLevel::Error, &format!($($arg)*))
+        {
+            let msg = format!($($arg)*);
+            unsafe {
+                $crate::logging::log_add($crate::logging::LogLevel::Error, &msg)
+            }
+        }
     };
 }
 
@@ -88,7 +98,12 @@ macro_rules! log_error {
 #[macro_export]
 macro_rules! log_warning {
     ($($arg:tt)*) => {
-        $crate::logging::log_add($crate::logging::LogLevel::Warning, &format!($($arg)*))
+        {
+            let msg = format!($($arg)*);
+            unsafe {
+                $crate::logging::log_add($crate::logging::LogLevel::Warning, &msg)
+            }
+        }
     };
 }
 
@@ -96,7 +111,12 @@ macro_rules! log_warning {
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
-        $crate::logging::log_add($crate::logging::LogLevel::Info, &format!($($arg)*))
+        {
+            let msg = format!($($arg)*);
+            unsafe {
+                $crate::logging::log_add($crate::logging::LogLevel::Info, &msg)
+            }
+        }
     };
 }
 
@@ -104,7 +124,12 @@ macro_rules! log_info {
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
-        $crate::logging::log_add($crate::logging::LogLevel::Debug, &format!($($arg)*))
+        {
+            let msg = format!($($arg)*);
+            unsafe {
+                $crate::logging::log_add($crate::logging::LogLevel::Debug, &msg)
+            }
+        }
     };
 }
 
