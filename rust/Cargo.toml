@@ -1,0 +1,20 @@
+[package]
+name = "uqm"
+version = "0.8.0"
+edition = "2021"
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.70"
+
+[dependencies]
+libc = "0.2"
+anyhow = "1.0"
+thiserror = "1.0"
+clap = { version = "4.4", features = ["derive"] }
+
+[dev-dependencies]
+insta = "1.34"
+proptest = "1.4"
+rstest = "0.18"
+serial_test = "3.0"
