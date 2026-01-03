@@ -1,7 +1,7 @@
+use crate::config::{parse_gamma, parse_resolution, parse_volume};
+use crate::config::{ChoiceOption, MeleeScale, Options, Scaler, SoundDriver, SoundQuality};
+use anyhow::{Context, Result};
 use clap::Parser;
-use crate::config::{Options, Scaler, SoundDriver, SoundQuality, ChoiceOption, MeleeScale};
-use crate::config::{parse_resolution, parse_volume, parse_gamma};
-use anyhow::{Result, Context};
 
 /// The Ur-Quan Masters - A modernized Rust implementation
 #[derive(Parser, Debug)]
@@ -143,8 +143,7 @@ impl Cli {
     pub fn merge_into_options(&self, mut opts: Options) -> Result<Options> {
         // Override with command line arguments
         if let Some(ref res) = self.res {
-            opts.resolution = Some(parse_resolution(res)
-                .context("Invalid resolution format")?);
+            opts.resolution = Some(parse_resolution(res).context("Invalid resolution format")?);
         }
 
         if self.fullscreen {
@@ -286,7 +285,10 @@ impl Cli {
             "smooth" | "3do" => Ok(MeleeScale::Smooth),
             "step" | "pc" => Ok(MeleeScale::Step),
             "bilinear" => Ok(MeleeScale::Bilinear),
-            _ => anyhow::bail!("Invalid melee zoom mode: {}. Valid options: smooth, step, bilinear", s),
+            _ => anyhow::bail!(
+                "Invalid melee zoom mode: {}. Valid options: smooth, step, bilinear",
+                s
+            ),
         }
     }
 
@@ -295,7 +297,10 @@ impl Cli {
             "low" => Ok(SoundQuality::Low),
             "medium" => Ok(SoundQuality::Medium),
             "high" => Ok(SoundQuality::High),
-            _ => anyhow::bail!("Invalid audio quality: {}. Valid options: low, medium, high", s),
+            _ => anyhow::bail!(
+                "Invalid audio quality: {}. Valid options: low, medium, high",
+                s
+            ),
         }
     }
 
@@ -312,7 +317,10 @@ impl Cli {
             "openal" => Ok(SoundDriver::OpenAl),
             "mixsdl" => Ok(SoundDriver::MixSdl),
             "none" | "nosound" => Ok(SoundDriver::None),
-            _ => anyhow::bail!("Invalid sound driver: {}. Valid options: openal, mixsdl, none", s),
+            _ => anyhow::bail!(
+                "Invalid sound driver: {}. Valid options: openal, mixsdl, none",
+                s
+            ),
         }
     }
 }
@@ -338,7 +346,10 @@ mod tests {
 
     #[test]
     fn test_parse_audio_quality() {
-        assert_eq!(Cli::parse_audio_quality("high").unwrap(), SoundQuality::High);
+        assert_eq!(
+            Cli::parse_audio_quality("high").unwrap(),
+            SoundQuality::High
+        );
         assert_eq!(Cli::parse_audio_quality("Low").unwrap(), SoundQuality::Low);
         assert!(Cli::parse_audio_quality("invalid").is_err());
     }
@@ -352,8 +363,14 @@ mod tests {
 
     #[test]
     fn test_parse_sound_driver() {
-        assert_eq!(Cli::parse_sound_driver("openal").unwrap(), SoundDriver::OpenAl);
-        assert_eq!(Cli::parse_sound_driver("MIXSDL").unwrap(), SoundDriver::MixSdl);
+        assert_eq!(
+            Cli::parse_sound_driver("openal").unwrap(),
+            SoundDriver::OpenAl
+        );
+        assert_eq!(
+            Cli::parse_sound_driver("MIXSDL").unwrap(),
+            SoundDriver::MixSdl
+        );
         assert_eq!(Cli::parse_sound_driver("none").unwrap(), SoundDriver::None);
         assert!(Cli::parse_sound_driver("invalid").is_err());
     }
@@ -367,7 +384,13 @@ mod tests {
         };
 
         let opts = cli.merge_into_options(Options::default()).unwrap();
-        assert_eq!(opts.resolution, Some(Resolution { width: 800, height: 600 }));
+        assert_eq!(
+            opts.resolution,
+            Some(Resolution {
+                width: 800,
+                height: 600
+            })
+        );
         assert_eq!(opts.fullscreen, Some(true));
     }
 

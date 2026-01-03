@@ -94,7 +94,10 @@ impl Default for Options {
             addons: Vec::new(),
             graphics_backend: None,
             opengl: None,
-            resolution: Some(Resolution { width: 640, height: 480 }),
+            resolution: Some(Resolution {
+                width: 640,
+                height: 480,
+            }),
             fullscreen: None,
             scanlines: None,
             scaler: None,
@@ -138,12 +141,8 @@ pub fn parse_resolution(s: &str) -> Result<Resolution> {
         anyhow::bail!("Resolution must be in WIDTHxHEIGHT format");
     }
 
-    let width: u32 = parts[0]
-        .parse()
-        .context("Invalid width value")?;
-    let height: u32 = parts[1]
-        .parse()
-        .context("Invalid height value")?;
+    let width: u32 = parts[0].parse().context("Invalid width value")?;
+    let height: u32 = parts[1].parse().context("Invalid height value")?;
 
     if width == 0 || height == 0 {
         anyhow::bail!("Resolution values must be positive");
@@ -165,8 +164,7 @@ pub fn parse_volume(vol: i32) -> f32 {
 
 /// Parse a gamma correction value
 pub fn parse_gamma(s: &str) -> Result<f32> {
-    let gamma: f32 = s.parse()
-        .context("Invalid gamma value")?;
+    let gamma: f32 = s.parse().context("Invalid gamma value")?;
 
     const GAMMA_SCALE: f32 = 1000.0;
     const MIN_GAMMA: f32 = 0.03 * GAMMA_SCALE / GAMMA_SCALE;
@@ -223,7 +221,13 @@ mod tests {
     #[test]
     fn test_options_default() {
         let opts = Options::default();
-        assert_eq!(opts.resolution, Some(Resolution { width: 640, height: 480 }));
+        assert_eq!(
+            opts.resolution,
+            Some(Resolution {
+                width: 640,
+                height: 480
+            })
+        );
         assert!(opts.opengl.is_none());
         assert!(opts.addons.is_empty());
     }

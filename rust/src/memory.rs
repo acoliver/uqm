@@ -1,6 +1,6 @@
+use crate::logging::{log_add, LogLevel};
 use libc;
 use std::ffi::c_void;
-use crate::logging::{log_add, LogLevel};
 
 /// Allocate memory using the system malloc
 ///
@@ -124,8 +124,7 @@ pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut i8, Vec<*mut i8>) {
     // Convert each Rust string to a C string
     let mut c_strings: Vec<*mut i8> = Vec::with_capacity(argv.len());
     for arg in argv {
-        let c_string = CString::new(arg.as_str())
-            .expect("Failed to convert argument to C string");
+        let c_string = CString::new(arg.as_str()).expect("Failed to convert argument to C string");
         c_strings.push(c_string.into_raw());
     }
 

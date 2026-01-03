@@ -7,7 +7,6 @@ fn main() {
         .cpp(false)
         .compile("uqm_core");
 
-
     println!("cargo:rerun-if-changed=../sc2/src/mem_wrapper.c");
 
     // Create minimal manual FFI bindings for Phase 0

@@ -1,8 +1,8 @@
+mod c_bindings;
 mod cli;
 mod config;
 mod logging;
 mod memory;
-mod c_bindings;
 
 use anyhow::Result;
 use clap::Parser;
@@ -52,10 +52,7 @@ fn main() -> Result<()> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| anyhow::anyhow!("Failed to convert arguments: {}", e))?;
 
-        let mut c_argv: Vec<*mut i8> = c_args
-            .iter()
-            .map(|cs| cs.as_ptr() as *mut i8)
-            .collect();
+        let mut c_argv: Vec<*mut i8> = c_args.iter().map(|cs| cs.as_ptr() as *mut i8).collect();
         c_argv.push(std::ptr::null_mut()); // Null-terminate
 
         // Display configuration

@@ -14,7 +14,6 @@ pub enum LogLevel {
     All = 6,
 }
 
-
 impl LogLevel {
     /// Create a LogLevel from an integer
     #[allow(dead_code)]
