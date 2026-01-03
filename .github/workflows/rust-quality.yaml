@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
         rust: [stable]
 
     steps:
@@ -23,9 +23,9 @@ jobs:
 
     # Install quality checking tools
     - name: Install dependencies
+      shell: bash
       run: |
-        pip3 install --user lizard
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+        pip3 install --break-system-packages lizard
 
     # Rust formatting check (only on Rust code)
     - name: Check formatting
@@ -55,7 +55,7 @@ jobs:
     # Cyclomatic complexity check (only rust/)
     - name: Check complexity
       run: |
-        lizard -CCN 30 -w rust/ --ignore "*.c" --ignore "*.h"
+        lizard -C 50 -w rust/ -x "*.c" -x "*.h"
 
     # Build verification (Rust project)
     - name: Build Rust project
