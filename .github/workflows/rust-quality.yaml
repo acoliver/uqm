@@ -3,62 +3,139 @@ name: Rust Quality Checks
 on:
   push:
     branches: [ main, develop, phase0-foundation ]
+    paths:
+      - rust/**
   pull_request:
     branches: [ main, develop ]
+    paths:
+      - rust/**
 
 jobs:
-  quality:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-        rust: [stable]
-
+  quality-gate:
+    runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: ${{ matrix.rust }}
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
 
-    # Install quality checking tools
-    - name: Install dependencies
-      shell: bash
-      run: |
-        pip3 install --break-system-packages lizard
+      - name: Install dependencies
+        shell: bash
+        run: |
+          pip3 install --break-system-packages lizard
+          cargo install cargo-audit
 
-    # Rust formatting check (only on Rust code)
-    - name: Check formatting
-      run: |
-        cd rust
-        cargo fmt -- --check
+      - name: Check formatting
+        run: |
+          cd rust
+          cargo fmt -- --check
 
-    # Clippy lints (treat warnings as errors)
-    - name: Run clippy (Rust code only)
-      run: |
-        cd rust
-        cargo clippy -- -D warnings
+      - name: Run clippy
+        run: |
+          cd rust
+          cargo clippy -- -D warnings
 
-    # Run tests
-    - name: Run tests
-      run: |
-        cd rust
-        cargo test
+      - name: Check complexity
+        run: |
+          lizard -C 50 -w rust/ -x "*.c" -x "*.h"
 
-    # Security audit
-    - name: Security audit
-      run: |
-        cd rust
-        cargo install cargo-audit
-        cargo audit
+      - name: Security audit
+        run: |
+          cd rust
+          cargo audit
 
-    # Cyclomatic complexity check (only rust/)
-    - name: Check complexity
-      run: |
-        lizard -C 50 -w rust/ -x "*.c" -x "*.h"
+      - name: Validate workflows
+        uses: rhysd/actionlint@v1
 
-    # Build verification (Rust project)
-    - name: Build Rust project
-      run: |
-        cd rust
-        cargo build --release
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    needs: quality-gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Run tests with coverage
+        run: |
+          cd rust
+          cargo llvm-cov --lcov --output-path coverage-ubuntu.lcov
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-ubuntu
+          path: rust/coverage-ubuntu.lcov
+
+  test-macos:
+    runs-on: macos-latest
+    needs: quality-gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Run tests with coverage
+        run: |
+          cd rust
+          cargo llvm-cov --lcov --output-path coverage-macos.lcov
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-macos
+          path: rust/coverage-macos.lcov
+
+  coverage-report:
+    runs-on: ubuntu-latest
+    needs: [test-ubuntu, test-macos]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install coverage tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lcov
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage
+
+      - name: Combine coverage reports
+        shell: bash
+        run: |
+          lcov -a coverage/coverage-ubuntu/coverage-ubuntu.lcov \
+               -a coverage/coverage-macos/coverage-macos.lcov \
+               -o combined.lcov
+
+      - name: Generate HTML report
+        run: |
+          genhtml combined.lcov --output-directory coverage-html
+
+      - name: Enforce coverage threshold
+        shell: bash
+        run: |
+          coverage=$(lcov --summary combined.lcov | awk '/lines\./ {gsub("%","",$2); print $2}')
+          echo "Total line coverage: ${coverage}%"
+          awk -v cov="$coverage" 'BEGIN { if (cov < 80) { exit 1 } }'
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage-html
