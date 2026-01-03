@@ -110,13 +110,13 @@ case "$HOST_SYSTEM" in
 	Darwin)
 		if not have_framework libpng; then
 			LIB_libpng_CFLAGS=""
-			LIB_libpng_LDFLAGS="-lpng"
+			LIB_libpng_LDFLAGS="-lpng -lm"
 		fi
 		;;
 	*)
 		LIB_libpng_CFLAGS=""
-		LIB_libpng_LDFLAGS="-lpng"
-	;;
+		LIB_libpng_LDFLAGS="-lpng -lm"
+		;;
 esac
 
 
@@ -185,12 +185,12 @@ case "$HOST_SYSTEM" in
 		;;
 	MINGW32*|CYGWIN*|cegcc)
 		LIB_vorbisfile_CFLAGS=""
-		LIB_vorbisfile_LDFLAGS="-lvorbisfile -lvorbis -lm -logg"
+		LIB_vorbisfile_LDFLAGS="-lvorbisfile -lvorbis -logg -lm"
 		;;
 	Darwin)
 		if not have_framework vorbisfile Vorbis; then
-			LIB_vorbisfile_CFLAGS="-D__MACOSX__"
-			LIB_vorbisfile_LDFLAGS="-lvorbisfile -lvorbis"
+			LIB_vorbisfile_CFLAGS=""
+			LIB_vorbisfile_LDFLAGS="-lvorbisfile -lvorbis -logg -lm"
 		fi
 		;;
 	QNX)
