@@ -1,10 +1,12 @@
 // UQM Rust library
 // Phase 1: Core Systems Modernization
+// Phase 2: Graphics Modernization (drawable/context systems)
 
 pub mod c_bindings;
 pub mod cli;
 pub mod config;
 pub mod game_init;
+pub mod graphics;
 pub mod io;
 pub mod logging;
 pub mod memory;
