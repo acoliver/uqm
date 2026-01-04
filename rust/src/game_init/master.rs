@@ -186,6 +186,7 @@ impl std::error::Error for MasterError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_master_ship_list_new() {
@@ -195,6 +196,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_master_ship_list_load() {
         let mut list = MasterShipList::new();
 
@@ -205,6 +207,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_master_ship_list_free() {
         let mut list = MasterShipList::new();
         list.load().unwrap();
@@ -239,6 +242,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_master_ship() {
         // Ensure clean state
         free_master_ship_list().ok();
@@ -256,6 +260,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_load_master_ship_list() {
         // Ensure clean state
         free_master_ship_list().ok();
@@ -273,6 +278,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_free_master_ship_list() {
         // Ensure clean state
         free_master_ship_list().ok();
@@ -299,6 +305,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_master_ship_count() {
         let count = get_master_ship_count();
         assert_eq!(count, 0);
