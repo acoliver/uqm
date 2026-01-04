@@ -66,7 +66,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd rust
-          cargo llvm-cov --lcov --output-path coverage-ubuntu.lcov
+          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-ubuntu.lcov
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -91,7 +91,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd rust
-          cargo llvm-cov --lcov --output-path coverage-macos.lcov
+          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-macos.lcov
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
