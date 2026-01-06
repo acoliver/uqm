@@ -2198,7 +2198,6 @@ mod tests {
             .with_pixels_mut(|pixels| {
                 pixels[0] = 1;
                 pixels[1] = 2;
-                Ok(())
             })
             .unwrap();
 
@@ -2217,7 +2216,6 @@ mod tests {
                 pixels[1] = 0;
                 pixels[2] = 0;
                 pixels[3] = 255;
-                Ok(())
             })
             .unwrap();
 
