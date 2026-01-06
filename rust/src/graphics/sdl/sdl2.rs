@@ -410,6 +410,13 @@ impl GraphicsDriver for SdlDriver {
             return Err(DriverError::NotInitialized);
         }
 
+        if gamma <= 0.0 || gamma.is_nan() {
+            return Err(DriverError::InvalidOperation(format!(
+                "invalid gamma: {}",
+                gamma
+            )));
+        }
+
         if let Some(window) = self.window.as_mut() {
             if let Err(err) = window.set_brightness(gamma as f64) {
                 log::warn!("SDL2 set brightness failed: {}", err);

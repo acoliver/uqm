@@ -686,15 +686,22 @@ impl DrawCommandQueue {
                 dest,
                 colormap: _,
                 draw_mode: _,
-                scale: _,
-                scale_mode: _,
+                scale,
+                scale_mode,
             } => {
                 if let (Some(canvas), Some(image)) =
                     (self.get_screen_canvas(dest), self.get_image(image))
                 {
                     let mut canvas = canvas.write().unwrap();
-                    if let Err(err) = crate::graphics::tfb_draw::draw_image(&mut canvas, &image, x, y, 0)
-                    {
+                    if let Err(err) = crate::graphics::tfb_draw::draw_scaled_image(
+                        &mut canvas,
+                        &image,
+                        x,
+                        y,
+                        scale,
+                        scale_mode,
+                        0,
+                    ) {
                         warn!("DCQ image draw failed: {}", err);
                     }
                 }
@@ -703,18 +710,26 @@ impl DrawCommandQueue {
                 image,
                 x,
                 y,
-                color: _,
+                color,
                 dest,
                 draw_mode: _,
-                scale: _,
-                scale_mode: _,
+                scale,
+                scale_mode,
             } => {
                 if let (Some(canvas), Some(image)) =
                     (self.get_screen_canvas(dest), self.get_image(image))
                 {
                     let mut canvas = canvas.write().unwrap();
-                    if let Err(err) = crate::graphics::tfb_draw::draw_image(&mut canvas, &image, x, y, 0)
-                    {
+                    if let Err(err) = crate::graphics::tfb_draw::draw_filled_image(
+                        &mut canvas,
+                        &image,
+                        x,
+                        y,
+                        color,
+                        scale,
+                        scale_mode,
+                        0,
+                    ) {
                         warn!("DCQ filled image draw failed: {}", err);
                     }
                 }

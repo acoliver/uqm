@@ -553,6 +553,13 @@ impl GraphicsDriver for OpenGlDriver {
             return Err(DriverError::NotInitialized);
         }
 
+        if gamma <= 0.0 || gamma.is_nan() {
+            return Err(DriverError::InvalidOperation(format!(
+                "invalid gamma: {}",
+                gamma
+            )));
+        }
+
         self.state.set_gamma(gamma);
         Ok(())
     }

@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::{Arc, RwLock};
 
+use crate::graphics::tfb_draw::{Canvas, CanvasFormat, TFImage};
+
 /// Drawable type classification (from DRAWABLE_TYPE)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DrawableType {
@@ -148,12 +150,12 @@ impl HotSpot {
 
     /// Centered hot spot
     pub fn centered(extent: Extent) -> Self {
-        Point::new(-(extent.width as i16) / 2, -(extent.height as i16) / 2)
+        Point::new((extent.width as i16) / 2, (extent.height as i16) / 2)
     }
 
     /// Bottom-right hot spot
     pub fn bottom_right(extent: Extent) -> Self {
-        Point::new(-(extent.width as i16), -(extent.height as i16))
+        Point::new(extent.width as i16, extent.height as i16)
     }
 }
 
@@ -254,10 +256,24 @@ pub enum FrameError {
     InvalidBounds,
 }
 
+/// Image data stored on a frame.
+#[derive(Debug, Clone)]
+pub struct FrameImage {
+    pub image: Arc<TFImage>,
+}
+
+impl FrameImage {
+    pub fn new(image: Arc<TFImage>) -> Self {
+        Self { image }
+    }
+}
+
+
 /// Frame representation
 ///
 /// A Frame represents a single image frame within a Drawable.
-/// It contains bounds, hot spot information, and a reference to its parent.
+/// It contains bounds, hot spot information, a reference to its parent,
+/// and optional image data for RAM-backed drawables.
 #[derive(Debug, Clone)]
 pub struct Frame {
     /// Unique frame identifier within its drawable
@@ -268,6 +284,8 @@ pub struct Frame {
     pub bounds: Extent,
     /// Hot spot offset
     pub hot_spot: HotSpot,
+    /// Optional image data for this frame
+    pub image: Option<FrameImage>,
     /// Reference to parent drawable
     pub parent: Option<NonZeroU32>,
 }
@@ -290,6 +308,7 @@ impl Frame {
             frame_type,
             bounds: Extent::new(width, height),
             hot_spot,
+            image: None,
             parent: None,
         })
     }
@@ -302,6 +321,31 @@ impl Frame {
         height: u16,
     ) -> Result<Self, FrameError> {
         Self::new(index, frame_type, width, height, HotSpot::top_left())
+    }
+
+    /// Create a frame backed by an existing image
+    pub fn from_image(
+        index: usize,
+        frame_type: DrawableType,
+        image: Arc<TFImage>,
+        hot_spot: HotSpot,
+    ) -> Result<Self, FrameError> {
+        let extent = image
+            .extent()
+            .ok_or(FrameError::InvalidBounds)?;
+        if extent.width <= 0 || extent.height <= 0 {
+            return Err(FrameError::InvalidBounds);
+        }
+
+        let mut frame = Self::new(
+            index,
+            frame_type,
+            extent.width as u16,
+            extent.height as u16,
+            hot_spot,
+        )?;
+        frame.set_image(image);
+        Ok(frame)
     }
 
     /// Get frame width
@@ -322,7 +366,7 @@ impl Frame {
     /// Calculate the effective bounds with hot spot applied
     pub fn effective_rect(&self) -> Rect {
         Rect::new(
-            Point::new(self.hot_spot.x, self.hot_spot.y),
+            Point::new(-self.hot_spot.x, -self.hot_spot.y),
             self.bounds.width,
             self.bounds.height,
         )
@@ -341,6 +385,11 @@ impl Frame {
     /// Clear parent reference
     pub fn clear_parent(&mut self) {
         self.parent = None;
+    }
+
+    /// Attach an image to this frame
+    pub fn set_image(&mut self, image: Arc<TFImage>) {
+        self.image = Some(FrameImage::new(image));
     }
 }
 
@@ -361,6 +410,8 @@ pub struct Drawable {
     frames: Vec<Frame>,
     /// Maximum frame index (capacity)
     max_index: usize,
+    /// Default frame size for newly allocated frames
+    default_bounds: Extent,
 }
 
 impl Drawable {
@@ -371,12 +422,24 @@ impl Drawable {
         flags: DrawableFlags,
         num_frames: usize,
     ) -> Self {
+        Self::with_bounds(id, drawable_type, flags, num_frames, Extent::new(0, 0))
+    }
+
+    /// Create a new drawable with preset frame bounds
+    pub fn with_bounds(
+        id: NonZeroU32,
+        drawable_type: DrawableType,
+        flags: DrawableFlags,
+        num_frames: usize,
+        bounds: Extent,
+    ) -> Self {
         Self {
             id,
             drawable_type,
             flags,
             frames: Vec::with_capacity(num_frames),
             max_index: num_frames.saturating_sub(1),
+            default_bounds: bounds,
         }
     }
 
@@ -394,13 +457,50 @@ impl Drawable {
         let mut linked_frame = frame;
         linked_frame.set_parent(self.id);
 
-        // Ensure vector has capacity
-        while self.frames.len() <= frame_index {
-            self.frames.push(unsafe { std::mem::zeroed() });
-        }
-
+        self.ensure_frames_initialized();
         self.frames[frame_index] = linked_frame;
         Ok(())
+    }
+
+    /// Ensure all frame slots are initialized
+    fn ensure_frames_initialized(&mut self) {
+        if self.frames.len() == self.max_index + 1 {
+            return;
+        }
+
+        let frame_type = self.drawable_type;
+        let bounds = self.default_bounds;
+        let flags = self.flags;
+
+        while self.frames.len() <= self.max_index {
+            let index = self.frames.len();
+            let mut frame = Frame {
+                index,
+                frame_type,
+                bounds,
+                hot_spot: HotSpot::top_left(),
+                image: None,
+                parent: Some(self.id),
+            };
+
+            if matches!(frame_type, DrawableType::Ram) && bounds.width > 0 && bounds.height > 0 {
+                let canvas = Canvas::new(
+                    crate::graphics::dcqueue::Extent::new(
+                        bounds.width as i32,
+                        bounds.height as i32,
+                    ),
+                    if flags.want_alpha {
+                        CanvasFormat::rgba()
+                    } else {
+                        CanvasFormat::rgb()
+                    },
+                );
+                let image = Arc::new(TFImage::new(canvas));
+                frame.set_image(image);
+            }
+
+            self.frames.push(frame);
+        }
     }
 
     /// Get a frame by index
@@ -410,6 +510,10 @@ impl Drawable {
                 index,
                 max_index: self.max_index,
             });
+        }
+
+        if self.frames.is_empty() {
+            return Err(FrameError::NotInitialized);
         }
 
         let frame = self.frames.get(index).ok_or(FrameError::NotInitialized)?;
@@ -429,6 +533,7 @@ impl Drawable {
             });
         }
 
+        self.ensure_frames_initialized();
         let frame = self
             .frames
             .get_mut(index)
@@ -452,7 +557,7 @@ impl Drawable {
 
     /// Get frame count
     pub fn frame_count(&self) -> usize {
-        self.frames.iter().filter(|f| f.parent.is_some()).count()
+        self.max_index + 1
     }
 
     /// Get total capacity (max index + 1)
@@ -497,6 +602,17 @@ impl DrawableRegistry {
         flags: DrawableFlags,
         num_frames: usize,
     ) -> Result<NonZeroU32> {
+        self.allocate_with_bounds(ty, flags, num_frames, Extent::new(0, 0))
+    }
+
+    /// Allocate a new drawable with preset frame bounds
+    pub fn allocate_with_bounds(
+        &self,
+        ty: DrawableType,
+        flags: DrawableFlags,
+        num_frames: usize,
+        bounds: Extent,
+    ) -> Result<NonZeroU32> {
         let id = {
             let mut next = self.next_id.write().unwrap();
             let id = *next;
@@ -508,7 +624,7 @@ impl DrawableRegistry {
             NonZeroU32::new(id).context("Failed to allocate drawable ID")?
         };
 
-        let drawable = Drawable::new(id, ty, flags, num_frames);
+        let drawable = Drawable::with_bounds(id, ty, flags, num_frames, bounds);
 
         let mut registry = self.drawables.write().unwrap();
         registry.insert(id, drawable);
@@ -519,8 +635,9 @@ impl DrawableRegistry {
     /// Get a drawable by ID
     pub fn get(&self, id: u32) -> Result<Arc<Drawable>> {
         let id = NonZeroU32::new(id).context("Invalid drawable ID: 0")?;
-        let registry = self.drawables.read().unwrap();
-        let drawable = registry.get(&id).context("Drawable not found")?;
+        let mut registry = self.drawables.write().unwrap();
+        let drawable = registry.get_mut(&id).context("Drawable not found")?;
+        drawable.ensure_frames_initialized();
 
         // Clone via Arc for safe concurrent access
         Ok(Arc::new(drawable.clone()))
@@ -539,8 +656,9 @@ impl DrawableRegistry {
     /// Get frame from a drawable
     pub fn get_frame(&self, drawable_id: u32, frame_index: usize) -> Result<Frame> {
         let id = NonZeroU32::new(drawable_id).context("Invalid drawable ID: 0")?;
-        let registry = self.drawables.read().unwrap();
-        let drawable = registry.get(&id).context("Drawable not found")?;
+        let mut registry = self.drawables.write().unwrap();
+        let drawable = registry.get_mut(&id).context("Drawable not found")?;
+        drawable.ensure_frames_initialized();
         Ok(drawable.get_frame(frame_index)?.clone())
     }
 
@@ -595,12 +713,12 @@ mod tests {
         assert_eq!(top_left.y, 0);
 
         let centered = HotSpot::centered(extent);
-        assert_eq!(centered.x, -32);
-        assert_eq!(centered.y, -16);
+        assert_eq!(centered.x, 32);
+        assert_eq!(centered.y, 16);
 
         let bottom_right = HotSpot::bottom_right(extent);
-        assert_eq!(bottom_right.x, -64);
-        assert_eq!(bottom_right.y, -32);
+        assert_eq!(bottom_right.x, 64);
+        assert_eq!(bottom_right.y, 32);
     }
 
     #[test]
@@ -666,13 +784,13 @@ mod tests {
 
         assert_eq!(drawable.id(), 1);
         assert_eq!(drawable.capacity(), 3);
-        assert_eq!(drawable.frame_count(), 0);
+        assert_eq!(drawable.frame_count(), 3);
 
         // Add a frame
         let frame = Frame::with_top_left_hotspot(0, DrawableType::Ram, 32, 32).unwrap();
         drawable.add_frame(frame).unwrap();
 
-        assert_eq!(drawable.frame_count(), 1);
+        assert_eq!(drawable.frame_count(), 3);
 
         // Retrieve the frame
         let retrieved = drawable.get_frame(0).unwrap();
@@ -718,17 +836,24 @@ mod tests {
         let registry = DrawableRegistry::new();
 
         let id = registry
-            .allocate(DrawableType::Ram, DrawableFlags::default(), 5)
+            .allocate_with_bounds(
+                DrawableType::Ram,
+                DrawableFlags::default(),
+                2,
+                Extent::new(16, 16),
+            )
             .unwrap();
 
-        // For now, test that we can at least access drawables
         let drawable_ref = registry.get(id.get()).unwrap();
-        assert_eq!(drawable_ref.capacity(), 5);
+        assert_eq!(drawable_ref.capacity(), 2);
+        assert_eq!(drawable_ref.frame_count(), 2);
+        let frame = drawable_ref.get_frame(1).unwrap();
+        assert!(frame.image.is_some());
     }
 
     #[test]
     fn test_effective_rect() {
-        let frame = Frame::new(0, DrawableType::Ram, 64, 32, HotSpot::make(-32, -16)).unwrap();
+        let frame = Frame::new(0, DrawableType::Ram, 64, 32, HotSpot::make(32, 16)).unwrap();
 
         let rect = frame.effective_rect();
         assert_eq!(rect.corner.x, -32);

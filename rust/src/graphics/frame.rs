@@ -13,6 +13,7 @@
 //! and SDL rendering are handled in separate modules (per Phase 2 scope).
 
 use crate::graphics::drawable::{Drawable, DrawableRegistry};
+use crate::graphics::tfb_draw::TFImage;
 use anyhow::{Context, Result};
 use std::sync::{Arc, RwLock};
 
@@ -149,6 +150,19 @@ impl FrameHandle {
     /// Clear cached scale mode
     pub fn clear_cached_scale_mode(&mut self) {
         self.cached_scale_mode = None;
+    }
+
+    /// Get optional image associated with the frame.
+    pub fn image(&self) -> Option<Arc<TFImage>> {
+        self.frame
+            .image
+            .as_ref()
+            .map(|frame_image| Arc::clone(&frame_image.image))
+    }
+
+    /// Set image for the frame.
+    pub fn set_image(&mut self, image: Arc<TFImage>) {
+        self.frame.set_image(image);
     }
 }
 
@@ -330,6 +344,26 @@ impl FrameRegistry {
 
         Ok(FrameHandle::new(frame, drawable_id))
     }
+
+    /// Cache or retrieve a frame handle for repeated access.
+    pub fn get_or_cache_frame(&self, drawable_id: u32, index: usize) -> Result<FrameHandle> {
+        if let Some(handle) = self
+            .frame_cache
+            .read()
+            .unwrap()
+            .get(&(drawable_id, index))
+            .cloned()
+        {
+            return Ok(handle);
+        }
+
+        let handle = self.get_frame(drawable_id, index)?;
+        self.frame_cache
+            .write()
+            .unwrap()
+            .insert((drawable_id, index), handle.clone());
+        Ok(handle)
+    }
 }
 
 #[cfg(test)]
@@ -382,32 +416,59 @@ mod tests {
         let drawables = Arc::new(DrawableRegistry::new());
         let registry = FrameRegistry::new(drawables.clone());
 
-        // Create a test drawable
-        let id = drawables
-            .allocate(DrawableType::Ram, DrawableFlags::default(), 3)
+        let drawable_id = drawables
+            .allocate_with_bounds(
+                DrawableType::Ram,
+                DrawableFlags::default(),
+                3,
+                Extent::new(8, 8),
+            )
             .unwrap();
 
-        // Add frames
-        let frame0 =
-            crate::graphics::drawable::Frame::with_top_left_hotspot(1, DrawableType::Ram, 32, 32)
-                .unwrap();
-        let frame1 =
-            crate::graphics::drawable::Frame::with_top_left_hotspot(2, DrawableType::Ram, 32, 32)
-                .unwrap();
-
-{
-            let id_u32 = id.get();
-            let mut drawable = drawables.get(id_u32).unwrap();
-            // Note: Need to modify through drawables for now
-            // This is a limitation of the current API structure
-            // For testing purposes, we skip frame addition
-        }
-
-        let id_u32 = id.get();
-        let result = registry.get_frame_count(&FrameHandle::new(frame0, id_u32));
-        // Expected to fail since we didn't actually add frames
-        assert!(result.is_ok() || result.is_err());
+        let handle = registry.capture_drawable(drawable_id.get()).unwrap();
+        let count = registry.get_frame_count(&handle).unwrap();
+        assert_eq!(count, 3);
     }
+
+    #[test]
+    fn test_frame_registry_multi_frame_indices() {
+        let drawables = Arc::new(DrawableRegistry::new());
+        let registry = FrameRegistry::new(drawables.clone());
+
+        let drawable_id = drawables
+            .allocate_with_bounds(
+                DrawableType::Ram,
+                DrawableFlags::default(),
+                3,
+                Extent::new(8, 8),
+            )
+            .unwrap();
+
+        let mut handle = registry.capture_drawable(drawable_id.get()).unwrap();
+        assert_eq!(registry.get_frame_index(&handle), 0);
+
+        registry.set_abs_frame_index(&mut handle, 2).unwrap();
+        assert_eq!(registry.get_frame_index(&handle), 2);
+
+        registry.set_rel_frame_index(&mut handle, 1).unwrap();
+        assert_eq!(registry.get_frame_index(&handle), 0);
+    }
+
+    #[test]
+    fn test_frame_handle_image_access() {
+        let canvas = crate::graphics::tfb_draw::Canvas::new_rgba(4, 4);
+        let image = Arc::new(TFImage::new(canvas));
+        let frame = crate::graphics::drawable::Frame::from_image(
+            0,
+            DrawableType::Ram,
+            Arc::clone(&image),
+            HotSpot::top_left(),
+        )
+        .unwrap();
+        let handle = FrameHandle::new(frame, 1);
+        assert!(handle.image().is_some());
+    }
+
 
     #[test]
     fn test_effective_rect() {
@@ -416,7 +477,7 @@ mod tests {
             DrawableType::Ram,
             64,
             32,
-            HotSpot::make(-32, -16),
+            HotSpot::make(32, 16),
         )
         .unwrap();
         let handle = FrameHandle::new(frame, 1);

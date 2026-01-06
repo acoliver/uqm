@@ -2,6 +2,7 @@
 
 use std::ffi::CStr;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::time::Instant;
 
 use crate::graphics::dcqueue::{DcqConfig, DrawCommandQueue, Screen as DcqScreen};
 use crate::graphics::render_context::{RenderContext, ResourceType, ScreenType};
@@ -132,6 +133,8 @@ pub struct FrameRateState {
     pub rate: f32,
     /// Tick base time reference.
     pub tick_base: i32,
+    /// Last frame timestamp in milliseconds.
+    pub last_tick_ms: u64,
 }
 
 impl Default for FrameRateState {
@@ -139,6 +142,7 @@ impl Default for FrameRateState {
         Self {
             rate: 60.0,
             tick_base: 0,
+            last_tick_ms: 0,
         }
     }
 }
@@ -179,6 +183,7 @@ pub struct GraphicsState {
     driver: Option<Box<dyn GraphicsDriver>>,
     dcq: Arc<RwLock<DrawCommandQueue>>,
     render_context: Arc<RwLock<RenderContext>>,
+    frame_timer: RwLock<Option<Instant>>,
 }
 
 impl GraphicsState {
@@ -202,6 +207,7 @@ impl GraphicsState {
             driver: None,
             dcq,
             render_context,
+            frame_timer: RwLock::new(None),
         }
     }
 
@@ -233,17 +239,38 @@ impl GraphicsState {
             width as u32,
             height as u32,
             flags.contains(GfxFlags::FULLSCREEN),
-        );
+        )
+        .with_linear_scaling(flags.contains(GfxFlags::SCALE_BILINEAR));
         new_driver
             .init(&config)
             .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
 
+        let driver_dims = new_driver.get_dimensions();
+        self.set_dimensions(ScreenDimensions {
+            width: driver_dims.width as i32,
+            height: driver_dims.height as i32,
+            actual_width: driver_dims.actual_width as i32,
+            actual_height: driver_dims.actual_height as i32,
+            color_depth: self.get_dimensions().color_depth,
+        });
+
         self.driver = Some(new_driver);
 
         if self.driver.is_some() {
-            let main_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(width, height)));
-            let extra_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(width, height)));
-            let transition_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(width, height)));
+            let logical_width = driver_dims.width as i32;
+            let logical_height = driver_dims.height as i32;
+            let main_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(
+                logical_width,
+                logical_height,
+            )));
+            let extra_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(
+                logical_width,
+                logical_height,
+            )));
+            let transition_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(
+                logical_width,
+                logical_height,
+            )));
 
             let mut ctx = self.render_context.write().unwrap();
             ctx.set_screen(ScreenType::Main, Arc::clone(&main_canvas));
@@ -251,6 +278,7 @@ impl GraphicsState {
             ctx.set_screen(ScreenType::Transition, Arc::clone(&transition_canvas));
         }
 
+        *self.frame_timer.write().unwrap() = Some(Instant::now());
         *self.initialized.write().unwrap() = true;
         Ok(())
     }
@@ -337,7 +365,9 @@ impl GraphicsState {
                 .driver
                 .as_mut()
                 .ok_or(GraphicsError::NotInitialized)?;
-            sync_canvases_to_driver(&self.render_context, &mut **driver, DcqScreen::Main)?;
+            for screen in [DcqScreen::Main, DcqScreen::Extra, DcqScreen::Transition] {
+                sync_canvases_to_driver(&self.render_context, &mut **driver, screen)?;
+            }
         }
 
         let driver = self
@@ -347,6 +377,8 @@ impl GraphicsState {
         driver
             .swap_buffers(map_redraw_mode(redraw_mode))
             .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
+
+        self.update_frame_rate_from_clock();
 
         Ok(())
     }
@@ -482,7 +514,9 @@ impl GraphicsState {
 
     /// Set the frame rate tick base.
     pub fn set_frame_rate_tick_base(&self, tick_base: i32) {
-        self.frame_rate.write().unwrap().tick_base = tick_base;
+        let mut state = self.frame_rate.write().unwrap();
+        state.tick_base = tick_base;
+        state.last_tick_ms = tick_base.max(0) as u64;
     }
 
     /// Get the frame rate tick base.
@@ -497,7 +531,23 @@ impl GraphicsState {
             return;
         }
         let fps = 1000.0 / delta_time_ms as f32;
-        self.frame_rate.write().unwrap().rate = fps;
+        let mut frame_state = self.frame_rate.write().unwrap();
+        frame_state.rate = fps;
+        frame_state.last_tick_ms = delta_time_ms as u64;
+    }
+
+    fn update_frame_rate_from_clock(&self) {
+        let now = Instant::now();
+        let mut timer = self.frame_timer.write().unwrap();
+        let mut frame_state = self.frame_rate.write().unwrap();
+
+        if let Some(previous) = timer.replace(now) {
+            let elapsed_ms = now.duration_since(previous).as_millis() as u64;
+            if elapsed_ms > 0 {
+                frame_state.rate = 1000.0 / elapsed_ms as f32;
+                frame_state.last_tick_ms = elapsed_ms;
+            }
+        }
     }
 
     // Helper function to sync canvas pixels to driver (outside impl to avoid borrow conflicts)
@@ -727,6 +777,7 @@ mod tests {
         let state = FrameRateState::default();
         assert_eq!(state.rate, 60.0);
         assert_eq!(state.tick_base, 0);
+        assert_eq!(state.last_tick_ms, 0);
     }
 
     #[test]
@@ -899,6 +950,14 @@ mod tests {
     }
 
     #[test]
+    fn test_set_frame_rate_tick_base_updates_last_tick() {
+        let state = GraphicsState::new();
+        state.set_frame_rate_tick_base(120);
+        assert_eq!(state.get_frame_rate_tick_base(), 120);
+        assert_eq!(state.frame_rate.read().unwrap().last_tick_ms, 120);
+    }
+
+    #[test]
     fn test_set_graphic_scale() {
         let state = GraphicsState::new();
         let old_scale = state.set_graphic_scale(512);
@@ -944,6 +1003,17 @@ mod tests {
         }
         let fps = state.get_frame_rate();
         assert!((55.0..=65.0).contains(&fps), "FPS: {}", fps);
+        assert_eq!(state.frame_rate.read().unwrap().last_tick_ms, 17);
+    }
+
+    #[test]
+    fn test_update_frame_rate_skips_zero_delta() {
+        let state = GraphicsState::new();
+        state.update_frame_rate(20);
+        let previous = state.get_frame_rate();
+        state.update_frame_rate(0);
+        assert_eq!(state.get_frame_rate(), previous);
+        assert_eq!(state.frame_rate.read().unwrap().last_tick_ms, 20);
     }
 
     #[test]

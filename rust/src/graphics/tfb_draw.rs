@@ -85,9 +85,18 @@ impl ScissorRect {
     }
 }
 
+/// Canvas pixel format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanvasPixelFormat {
+    Rgba,
+    Rgb,
+    Paletted,
+}
+
 /// Canvas format information.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CanvasFormat {
+    pub kind: CanvasPixelFormat,
     pub bits_per_pixel: i32,
     pub bytes_per_pixel: i32,
     pub has_alpha: bool,
@@ -96,6 +105,7 @@ pub struct CanvasFormat {
 impl CanvasFormat {
     pub const fn rgba() -> Self {
         Self {
+            kind: CanvasPixelFormat::Rgba,
             bits_per_pixel: 32,
             bytes_per_pixel: 4,
             has_alpha: true,
@@ -104,10 +114,24 @@ impl CanvasFormat {
 
     pub const fn rgb() -> Self {
         Self {
+            kind: CanvasPixelFormat::Rgb,
             bits_per_pixel: 24,
             bytes_per_pixel: 3,
             has_alpha: false,
         }
+    }
+
+    pub const fn paletted() -> Self {
+        Self {
+            kind: CanvasPixelFormat::Paletted,
+            bits_per_pixel: 8,
+            bytes_per_pixel: 1,
+            has_alpha: true,
+        }
+    }
+
+    pub const fn is_paletted(self) -> bool {
+        matches!(self.kind, CanvasPixelFormat::Paletted)
     }
 }
 
@@ -127,6 +151,8 @@ struct CanvasInner {
     locked: bool,
     generation: u64,
     pixels: Vec<u8>,
+    palette: Option<[Color; 256]>,
+    transparent_index: Option<u8>,
 }
 
 impl CanvasInner {
@@ -143,6 +169,12 @@ impl CanvasInner {
             locked: false,
             generation: 0,
             pixels,
+            palette: if format.is_paletted() {
+                Some([Color::new(0, 0, 0, 255); 256])
+            } else {
+                None
+            },
+            transparent_index: None,
         }
     }
 
@@ -186,6 +218,7 @@ impl CanvasInner {
     }
 
     fn id(&self) -> CanvasId {
+
         self.id
     }
 
@@ -208,6 +241,116 @@ pub struct Canvas {
     inner: Arc<Mutex<CanvasInner>>,
 }
 
+fn default_palette() -> [Color; 256] {
+    [Color::new(0, 0, 0, 255); 256]
+}
+
+fn paletted_to_rgba(canvas: &Canvas) -> Result<Canvas, CanvasError> {
+    if !canvas.is_paletted() {
+        return Err(CanvasError::FormatMismatch);
+    }
+    let extent = canvas.extent();
+    let mut rgba = Canvas::new_rgba(extent.width, extent.height);
+    let palette = canvas.palette().unwrap_or_else(default_palette);
+    let transparent = canvas.transparent_index();
+    let src_pixels = canvas.pixels();
+    rgba.with_pixels_mut(|dst_pixels| {
+        for (index, chunk) in dst_pixels.chunks_exact_mut(4).enumerate() {
+            let idx = src_pixels.get(index).copied().unwrap_or(0) as usize;
+            let mut color = palette[idx];
+            if Some(idx as u8) == transparent {
+                color.a = 0;
+            }
+            chunk[0] = color.r;
+            chunk[1] = color.g;
+            chunk[2] = color.b;
+            chunk[3] = color.a;
+        }
+    })?;
+    Ok(rgba)
+}
+
+fn rgba_to_paletted(canvas: &Canvas, palette: [Color; 256]) -> Result<Canvas, CanvasError> {
+    if canvas.is_paletted() {
+        return Err(CanvasError::FormatMismatch);
+    }
+    let extent = canvas.extent();
+    let mut paletted = Canvas::new_paletted(extent.width, extent.height, palette);
+    let src_pixels = canvas.pixels();
+    paletted.with_pixels_mut(|dst_pixels| {
+        for (idx, chunk) in src_pixels.chunks_exact(4).enumerate() {
+            let mut best_index = 0usize;
+            let mut best_score = i32::MAX;
+            for (palette_index, color) in palette.iter().enumerate() {
+                let dr = chunk[0] as i32 - color.r as i32;
+                let dg = chunk[1] as i32 - color.g as i32;
+                let db = chunk[2] as i32 - color.b as i32;
+                let score = dr * dr + dg * dg + db * db;
+                if score < best_score {
+                    best_score = score;
+                    best_index = palette_index;
+                    if score == 0 {
+                        break;
+                    }
+                }
+            }
+            if let Some(slot) = dst_pixels.get_mut(idx) {
+                *slot = best_index as u8;
+            }
+        }
+    })?;
+    Ok(paletted)
+}
+
+fn ensure_canvas_truecolor(canvas: &Canvas) -> Result<Canvas, CanvasError> {
+    if canvas.is_paletted() {
+        paletted_to_rgba(canvas)
+    } else {
+        Ok(canvas.clone())
+    }
+}
+
+pub fn convert_canvas_format(
+    canvas: &Canvas,
+    target: CanvasFormat,
+    palette: Option<[Color; 256]>,
+) -> Result<Canvas, CanvasError> {
+    if canvas.format() == target {
+        return Ok(canvas.clone());
+    }
+
+    if target.is_paletted() {
+        let palette = palette.unwrap_or_else(default_palette);
+        return rgba_to_paletted(canvas, palette);
+    }
+
+    if canvas.is_paletted() {
+        return paletted_to_rgba(canvas);
+    }
+
+    let extent = canvas.extent();
+    let mut converted = Canvas::new(extent, target);
+    let src_pixels = canvas.pixels();
+    let src_bpp = canvas.format().bytes_per_pixel as usize;
+    let dst_bpp = target.bytes_per_pixel as usize;
+    converted.with_pixels_mut(|dst_pixels| {
+        for (idx, chunk) in dst_pixels.chunks_exact_mut(dst_bpp).enumerate() {
+            let src_offset = idx * src_bpp;
+            if src_offset + src_bpp <= src_pixels.len() {
+                chunk.copy_from_slice(&src_pixels[src_offset..src_offset + dst_bpp.min(src_bpp)]);
+                if dst_bpp > src_bpp {
+                    for extra in &mut chunk[src_bpp..] {
+                        *extra = 255;
+                    }
+                }
+            }
+        }
+    })?;
+    Ok(converted)
+}
+
+
+
 impl Canvas {
     pub fn new(extent: Extent, format: CanvasFormat) -> Self {
         Self {
@@ -217,6 +360,16 @@ impl Canvas {
 
     pub fn new_rgba(width: i32, height: i32) -> Self {
         Self::new(Extent::new(width, height), CanvasFormat::rgba())
+    }
+
+    pub fn new_rgb(width: i32, height: i32) -> Self {
+        Self::new(Extent::new(width, height), CanvasFormat::rgb())
+    }
+
+    pub fn new_paletted(width: i32, height: i32, palette: [Color; 256]) -> Self {
+        let mut canvas = Self::new(Extent::new(width, height), CanvasFormat::paletted());
+        canvas.set_palette(palette);
+        canvas
     }
 
     pub fn new_for_screen(width: i32, height: i32) -> Self {
@@ -247,16 +400,30 @@ impl Canvas {
         self.extent().height
     }
 
+    pub fn with_locked_pixels<F, R>(&self, f: F) -> Result<R, CanvasError>
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        let mut inner = self.inner.lock().unwrap();
+        if !inner.locked {
+            return Err(CanvasError::NotLocked);
+        }
+        Ok(f(inner.pixels_mut()))
+    }
+
+    pub fn with_pixels_mut<F, R>(&mut self, f: F) -> Result<R, CanvasError>
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.locked {
+            return Err(CanvasError::AlreadyLocked);
+        }
+        Ok(f(inner.pixels_mut()))
+    }
+
     pub fn format(&self) -> CanvasFormat {
         self.inner.lock().unwrap().format()
-    }
-
-    pub fn id(&self) -> CanvasId {
-        self.inner.lock().unwrap().id()
-    }
-
-    pub fn generation(&self) -> u64 {
-        self.inner.lock().unwrap().generation()
     }
 
     pub fn scissor(&self) -> ScissorRect {
@@ -283,12 +450,26 @@ impl Canvas {
         self.inner.lock().unwrap().pixels_mut().to_vec()
     }
 
-    pub fn with_pixels_mut<F, R>(&mut self, f: F) -> Result<R, CanvasError>
-    where
-        F: FnOnce(&mut [u8]) -> R,
-    {
+    pub fn is_paletted(&self) -> bool {
+        self.format().is_paletted()
+    }
+
+    pub fn palette(&self) -> Option<[Color; 256]> {
+        self.inner.lock().unwrap().palette
+    }
+
+    pub fn set_palette(&mut self, palette: [Color; 256]) {
         let mut inner = self.inner.lock().unwrap();
-        Ok(f(inner.pixels_mut()))
+        inner.palette = Some(palette);
+    }
+
+    pub fn transparent_index(&self) -> Option<u8> {
+        self.inner.lock().unwrap().transparent_index
+    }
+
+    pub fn set_transparent_index(&mut self, index: Option<u8>) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.transparent_index = index;
     }
 
     pub fn copy_rect(
@@ -342,6 +523,8 @@ pub struct TFImage {
     last_scale: Arc<Mutex<i32>>,
     last_scale_type: Arc<Mutex<Option<ScaleMode>>>,
     dirty: Arc<Mutex<bool>>,
+    frames: Arc<Mutex<Vec<Arc<TFImage>>>>,
+    frame_index: Arc<Mutex<usize>>,
 }
 
 impl TFImage {
@@ -356,11 +539,30 @@ impl TFImage {
             last_scale: Arc::new(Mutex::new(0)),
             last_scale_type: Arc::new(Mutex::new(None)),
             dirty: Arc::new(Mutex::new(false)),
+            frames: Arc::new(Mutex::new(Vec::new())),
+            frame_index: Arc::new(Mutex::new(0)),
         }
     }
 
     pub fn new_rgba(width: i32, height: i32) -> Self {
         Self::new(Canvas::new_rgba(width, height))
+    }
+
+    pub fn new_paletted(width: i32, height: i32, palette: [Color; 256]) -> Self {
+        Self::new(Canvas::new_paletted(width, height, palette))
+    }
+
+    pub fn new_for_screen(width: i32, height: i32, with_alpha: bool) -> Self {
+        let format = if with_alpha {
+            CanvasFormat::rgba()
+        } else {
+            CanvasFormat::rgb()
+        };
+        Self::new(Canvas::new(Extent::new(width, height), format))
+    }
+
+    pub fn from_canvas(canvas: Canvas) -> Self {
+        Self::new(canvas)
     }
 
     pub fn normal(&self) -> Option<Canvas> {
@@ -423,7 +625,46 @@ impl TFImage {
         *self.scaled.lock().unwrap() = canvas;
     }
 
+    pub fn add_frame(&self, frame: Arc<TFImage>) {
+        self.frames.lock().unwrap().push(frame);
+    }
+
+    pub fn frame_count(&self) -> usize {
+        self.frames.lock().unwrap().len() + 1
+    }
+
+    pub fn set_frame_index(&self, index: usize) {
+        let mut frame_index = self.frame_index.lock().unwrap();
+        let count = self.frame_count();
+        *frame_index = index % count;
+    }
+
+    pub fn frame_index(&self) -> usize {
+        *self.frame_index.lock().unwrap()
+    }
+
+    pub fn current_frame(&self) -> Option<Arc<TFImage>> {
+        let frames = self.frames.lock().unwrap();
+        let index = self.frame_index();
+        if index == 0 {
+            None
+        } else {
+            frames.get(index - 1).cloned()
+        }
+    }
+
     pub fn set_mipmap(&self, canvas: Option<Canvas>, hs: HotSpot) {
+        if let Some(ref mipmap) = canvas {
+            if let Some(ref normal) = *self.normal.lock().unwrap() {
+                if normal.is_paletted()
+                    && mipmap.is_paletted()
+                    && normal.transparent_index() != mipmap.transparent_index()
+                {
+                    *self.mipmap.lock().unwrap() = None;
+                    return;
+                }
+            }
+        }
         *self.mipmap.lock().unwrap() = canvas;
         *self.mipmap_hs.lock().unwrap() = hs;
     }
@@ -450,9 +691,44 @@ impl TFImage {
         *self.last_scale.lock().unwrap() = 0;
         *self.last_scale_type.lock().unwrap() = None;
     }
+
+    pub fn delete(&self) {
+        *self.normal.lock().unwrap() = None;
+        *self.scaled.lock().unwrap() = None;
+        *self.mipmap.lock().unwrap() = None;
+        *self.filled.lock().unwrap() = None;
+        self.invalidate_scaling_cache();
+        self.mark_clean();
+    }
+
+    pub fn set_palette_from(&self, palette: [Color; 256]) -> Result<(), TFImageError> {
+        let mut guard = self.normal.lock().unwrap();
+        let Some(canvas) = guard.as_mut() else {
+            return Err(TFImageError::NoPrimaryCanvas);
+        };
+        if !canvas.is_paletted() {
+            return Err(TFImageError::InvalidPaletteConversion);
+        }
+        canvas.set_palette(palette);
+        Ok(())
+    }
+
+    pub fn fix_scaling(&self, scale: i32, scale_mode: ScaleMode) -> Result<(), TFImageError> {
+        let scale = if scale == 0 { 256 } else { scale };
+        if self.scaling_cache_valid(scale, scale_mode) {
+            return Ok(());
+        }
+
+        let scaled = rescale_image(self, scale, scale_mode)?;
+        self.set_scaled(Some(scaled));
+        self.update_scaling_cache(scale, scale_mode);
+        self.mark_clean();
+        Ok(())
+    }
 }
 
 impl fmt::Debug for TFImage {
+
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TFImage")
             .field("extent", &self.extent())
@@ -464,6 +740,8 @@ impl fmt::Debug for TFImage {
             .field("has_filled", &self.filled().is_some())
             .field("last_scale", &*self.last_scale.lock().unwrap())
             .field("last_scale_type", &*self.last_scale_type.lock().unwrap())
+            .field("frames", &self.frame_count())
+            .field("frame_index", &self.frame_index())
             .finish()
     }
 }
@@ -475,6 +753,7 @@ pub enum CanvasError {
     InvalidRect,
     InvalidPoint,
     InvalidOperation(String),
+    FormatMismatch,
 }
 
 impl fmt::Display for CanvasError {
@@ -485,6 +764,7 @@ impl fmt::Display for CanvasError {
             Self::InvalidRect => write!(f, "Invalid rectangle specification"),
             Self::InvalidPoint => write!(f, "Invalid point specification"),
             Self::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
+            Self::FormatMismatch => write!(f, "Format mismatch"),
         }
     }
 }
@@ -496,6 +776,7 @@ pub enum TFImageError {
     Canvas(CanvasError),
     NoPrimaryCanvas,
     InvalidMipmap,
+    InvalidPaletteConversion,
 }
 
 impl fmt::Display for TFImageError {
@@ -504,6 +785,7 @@ impl fmt::Display for TFImageError {
             Self::Canvas(err) => write!(f, "Canvas error: {}", err),
             Self::NoPrimaryCanvas => write!(f, "TFImage has no primary canvas"),
             Self::InvalidMipmap => write!(f, "Mipmap invalid: colormap restriction violated"),
+            Self::InvalidPaletteConversion => write!(f, "Palette conversion requires paletted canvas"),
         }
     }
 }
@@ -707,14 +989,11 @@ pub fn copy_canvas(
 ) -> Result<(), CanvasError> {
     check_canvas(dst)?;
     check_canvas(src)?;
-    
-    // Verify formats match
+    // Verify formats match (or convert)
     if dst.format() != src.format() {
-        return Err(CanvasError::InvalidOperation(
-            "Canvas formats must match for copy".to_string()
-        ));
+        return Err(CanvasError::FormatMismatch);
     }
-    
+
     let dst_width = dst.width();
     let dst_height = dst.height();
     let src_width = src.width();
@@ -743,7 +1022,7 @@ pub fn copy_canvas(
     let src_clip_x1 = src_start_x.max(0).min(src_width);
     let src_clip_y1 = src_start_y.max(0).min(src_height);
     let src_clip_x2 = src_end_x.max(0).min(src_width);
-    let src_clip_y2 = src_end_x.max(0).min(src_height);
+    let src_clip_y2 = src_end_y.max(0).min(src_height);
     let dst_clip_x1 = dst_start_x.max(0).min(dst_width);
     let dst_clip_y1 = dst_start_y.max(0).min(dst_height);
     let dst_clip_x2 = dst_end_x.max(0).min(dst_width);
@@ -894,6 +1173,284 @@ pub enum Rotation {
 /// Draw an image to a canvas.
 ///
 /// Blits the primary (normal) canvas from a TFImage to the destination
+fn rescale_image(
+    image: &TFImage,
+    scale: i32,
+    scale_mode: ScaleMode,
+) -> Result<Canvas, CanvasError> {
+    let source = image
+        .normal()
+        .ok_or_else(|| CanvasError::InvalidOperation("TFImage has no primary canvas".to_string()))?;
+    let source = ensure_canvas_truecolor(&source)?;
+
+    let scaled_extent = scaled_extent_for_canvas(&source, image.normal_hot_spot(), scale, scale_mode)?;
+    let mut target = Canvas::new(scaled_extent, CanvasFormat::rgba());
+
+    match scale_mode {
+        ScaleMode::Nearest | ScaleMode::Step => {
+            rescale_nearest(&source, &mut target)?;
+        }
+        ScaleMode::Bilinear => {
+            rescale_bilinear(&source, &mut target)?;
+        }
+        ScaleMode::Trilinear => {
+            let mipmap = image.mipmap().ok_or(CanvasError::InvalidOperation(
+                "Trilinear scaling requires mipmap".to_string(),
+            ))?;
+            let mipmap = ensure_canvas_truecolor(&mipmap)?;
+            rescale_trilinear(&source, &mipmap, &mut target)?;
+        }
+    }
+
+    Ok(target)
+}
+
+fn scaled_extent_for_canvas(
+    canvas: &Canvas,
+    hotspot: HotSpot,
+    scale: i32,
+    scale_mode: ScaleMode,
+) -> Result<Extent, CanvasError> {
+    if scale <= 0 {
+        return Err(CanvasError::InvalidOperation("Scale factor must be > 0".to_string()));
+    }
+    let width = canvas.width();
+    let height = canvas.height();
+    if width <= 0 || height <= 0 {
+        return Err(CanvasError::InvalidRect);
+    }
+    let scaled_w = ((width as i64 * scale as i64) + 255) / 256;
+    let scaled_h = ((height as i64 * scale as i64) + 255) / 256;
+    let mut scaled_w = scaled_w.max(1) as i32;
+    let mut scaled_h = scaled_h.max(1) as i32;
+
+    if scale_mode != ScaleMode::Nearest {
+        let hs_x = (hotspot.x * scale) & 0xFF;
+        let hs_y = (hotspot.y * scale) & 0xFF;
+        if hs_x != 0 {
+            scaled_w += 1;
+        }
+        if hs_y != 0 {
+            scaled_h += 1;
+        }
+    }
+
+    Ok(Extent::new(scaled_w, scaled_h))
+}
+
+fn rescale_nearest(src: &Canvas, dst: &mut Canvas) -> Result<(), CanvasError> {
+    check_canvas(src)?;
+    check_canvas(dst)?;
+    if src.format() != dst.format() {
+        return Err(CanvasError::FormatMismatch);
+    }
+
+    let src_width = src.width();
+    let src_height = src.height();
+    let dst_width = dst.width();
+    let dst_height = dst.height();
+    let bytes_per_pixel = src.format().bytes_per_pixel as usize;
+
+    let src_pixels = src.pixels();
+    dst.with_pixels_mut(|dst_pixels| {
+        for y in 0..dst_height {
+            let src_y = (y * src_height) / dst_height;
+            for x in 0..dst_width {
+                let src_x = (x * src_width) / dst_width;
+                let src_offset = (src_y * src_width + src_x) as usize * bytes_per_pixel;
+                let dst_offset = (y * dst_width + x) as usize * bytes_per_pixel;
+                dst_pixels[dst_offset..dst_offset + bytes_per_pixel]
+                    .copy_from_slice(&src_pixels[src_offset..src_offset + bytes_per_pixel]);
+            }
+        }
+    })?;
+    Ok(())
+}
+
+fn rescale_bilinear(src: &Canvas, dst: &mut Canvas) -> Result<(), CanvasError> {
+    check_canvas(src)?;
+    check_canvas(dst)?;
+    if src.format() != dst.format() {
+        return Err(CanvasError::FormatMismatch);
+    }
+
+    let src_width = src.width().max(1);
+    let src_height = src.height().max(1);
+    let dst_width = dst.width().max(1);
+    let dst_height = dst.height().max(1);
+    let bytes_per_pixel = src.format().bytes_per_pixel as usize;
+
+    let src_pixels = src.pixels();
+    dst.with_pixels_mut(|dst_pixels| {
+        for y in 0..dst_height {
+            let src_y = y as f32 * (src_height - 1) as f32 / (dst_height - 1).max(1) as f32;
+            let y0 = src_y.floor() as i32;
+            let y1 = (y0 + 1).min(src_height - 1);
+            let fy = src_y - y0 as f32;
+            for x in 0..dst_width {
+                let src_x = x as f32 * (src_width - 1) as f32 / (dst_width - 1).max(1) as f32;
+                let x0 = src_x.floor() as i32;
+                let x1 = (x0 + 1).min(src_width - 1);
+                let fx = src_x - x0 as f32;
+                let offsets = [
+                    ((y0 * src_width + x0) as usize * bytes_per_pixel),
+                    ((y0 * src_width + x1) as usize * bytes_per_pixel),
+                    ((y1 * src_width + x0) as usize * bytes_per_pixel),
+                    ((y1 * src_width + x1) as usize * bytes_per_pixel),
+                ];
+                let dst_offset = (y * dst_width + x) as usize * bytes_per_pixel;
+                for channel in 0..bytes_per_pixel {
+                    let p00 = src_pixels[offsets[0] + channel] as f32;
+                    let p10 = src_pixels[offsets[1] + channel] as f32;
+                    let p01 = src_pixels[offsets[2] + channel] as f32;
+                    let p11 = src_pixels[offsets[3] + channel] as f32;
+                    let top = p00 + (p10 - p00) * fx;
+                    let bottom = p01 + (p11 - p01) * fx;
+                    let value = top + (bottom - top) * fy;
+                    dst_pixels[dst_offset + channel] = value.round().clamp(0.0, 255.0) as u8;
+                }
+            }
+        }
+    })?;
+    Ok(())
+}
+
+fn rescale_trilinear(
+    src: &Canvas,
+    mipmap: &Canvas,
+    dst: &mut Canvas,
+) -> Result<(), CanvasError> {
+    check_canvas(src)?;
+    check_canvas(mipmap)?;
+    check_canvas(dst)?;
+    if src.format() != dst.format() || mipmap.format() != dst.format() {
+        return Err(CanvasError::FormatMismatch);
+    }
+
+    let mut dst_from_src = Canvas::new(dst.extent(), dst.format());
+    let mut dst_from_mipmap = Canvas::new(dst.extent(), dst.format());
+    rescale_bilinear(src, &mut dst_from_src)?;
+    rescale_bilinear(mipmap, &mut dst_from_mipmap)?;
+
+    let src_pixels = dst_from_src.pixels();
+    let mip_pixels = dst_from_mipmap.pixels();
+    dst.with_pixels_mut(|dst_pixels| {
+        for i in 0..dst_pixels.len() {
+            let src_val = src_pixels[i] as f32;
+            let mip_val = mip_pixels[i] as f32;
+            let blended = (src_val + mip_val) * 0.5;
+            dst_pixels[i] = blended.round().clamp(0.0, 255.0) as u8;
+        }
+    })?;
+    Ok(())
+}
+
+pub fn draw_scaled_image(
+    canvas: &mut Canvas,
+    image: &TFImage,
+    x: i32,
+    y: i32,
+    scale: i32,
+    scale_mode: ScaleMode,
+    flags: u32,
+) -> Result<(), CanvasError> {
+    check_canvas(canvas)?;
+
+    let image_flags = ImageFlags::new(flags);
+    if image_flags.bits() != 0 {
+        log::warn!(
+            "draw_image flags not fully implemented: 0x{:x} (flip_h={}, flip_v={}, rotation={:?}, colormap={})",
+            image_flags.bits(),
+            image_flags.flip_horizontal(),
+            image_flags.flip_vertical(),
+            image_flags.rotation(),
+            image_flags.use_colormap()
+        );
+    }
+
+    let draw_scale = if scale == 0 { 256 } else { scale };
+    let active_image = image.current_frame();
+    let active_image_ref = active_image.as_deref().unwrap_or(image);
+
+    let (source_canvas, source_hotspot) = if draw_scale != 256 {
+        if active_image_ref.scaling_cache_valid(draw_scale, scale_mode) {
+            if let Some(cached) = active_image_ref.scaled() {
+                let hotspot = active_image_ref.normal_hot_spot();
+                (cached, hotspot)
+            } else {
+                (
+                    active_image_ref.normal().ok_or_else(|| {
+                        CanvasError::InvalidOperation("TFImage has no primary canvas".to_string())
+                    })?,
+                    active_image_ref.normal_hot_spot(),
+                )
+            }
+        } else {
+            let scaled = rescale_image(active_image_ref, draw_scale, scale_mode)?;
+            active_image_ref.set_scaled(Some(scaled.clone()));
+            active_image_ref.update_scaling_cache(draw_scale, scale_mode);
+            active_image_ref.mark_clean();
+            (scaled, active_image_ref.normal_hot_spot())
+        }
+    } else {
+        (
+            active_image_ref.normal().ok_or_else(|| {
+                CanvasError::InvalidOperation("TFImage has no primary canvas".to_string())
+            })?,
+            active_image_ref.normal_hot_spot(),
+        )
+    };
+
+    let draw_x = x - source_hotspot.x;
+    let draw_y = y - source_hotspot.y;
+
+    copy_canvas(canvas, &source_canvas, draw_x, draw_y, 0, 0, -1, -1)
+}
+
+pub fn draw_filled_image(
+    canvas: &mut Canvas,
+    image: &TFImage,
+    x: i32,
+    y: i32,
+    fill_color: Color,
+    scale: i32,
+    scale_mode: ScaleMode,
+    flags: u32,
+) -> Result<(), CanvasError> {
+    let _ = flags;
+    let draw_scale = if scale == 0 { 256 } else { scale };
+    let active_image = image.current_frame();
+    let active_image_ref = active_image.as_deref().unwrap_or(image);
+
+    let source = active_image_ref
+        .normal()
+        .ok_or_else(|| CanvasError::InvalidOperation("TFImage has no primary canvas".to_string()))?;
+    let source = ensure_canvas_truecolor(&source)?;
+
+    let extent = if draw_scale == 256 {
+        source.extent()
+    } else {
+        scaled_extent_for_canvas(&source, active_image_ref.normal_hot_spot(), draw_scale, scale_mode)?
+    };
+
+    let mut filled = Canvas::new(extent, CanvasFormat::rgba());
+    fill_rect(&mut filled, 0, 0, extent.width - 1, extent.height - 1, fill_color)?;
+
+    if draw_scale == 256 {
+        copy_canvas(&mut filled, &source, 0, 0, 0, 0, -1, -1)?;
+    } else {
+        let scaled = rescale_image(active_image_ref, draw_scale, scale_mode)?;
+        copy_canvas(&mut filled, &scaled, 0, 0, 0, 0, -1, -1)?;
+    }
+
+    active_image_ref.set_filled(Some(filled.clone()));
+    let draw_x = x - active_image_ref.normal_hot_spot().x;
+    let draw_y = y - active_image_ref.normal_hot_spot().y;
+    copy_canvas(canvas, &filled, draw_x, draw_y, 0, 0, -1, -1)
+}
+
+
+
 /// canvas at the specified position. The image has a hot spot offset
 /// for positioning sprites correctly.
 ///
@@ -924,36 +1481,9 @@ pub fn draw_image(
     y: i32,
     flags: u32,
 ) -> Result<(), CanvasError> {
-    check_canvas(canvas)?;
-
-    let image_flags = ImageFlags::new(flags);
-    if image_flags.bits() != 0 {
-        log::warn!(
-            "draw_image flags not fully implemented: 0x{:x} (flip_h={}, flip_v={}, rotation={:?}, colormap={})",
-            image_flags.bits(),
-            image_flags.flip_horizontal(),
-            image_flags.flip_vertical(),
-            image_flags.rotation(),
-            image_flags.use_colormap()
-        );
-    }
-
-    // Get the image canvas
-    let image_canvas = image.normal().ok_or_else(|| {
-        CanvasError::InvalidOperation("TFImage has no primary canvas".to_string())
-    })?;
-
-    // Apply hot spot offset
-    let hs = image.normal_hot_spot();
-    let draw_x = x - hs.x;
-    let draw_y = y - hs.y;
-
-    // Copy from image canvas to destination canvas
-    // Using default parameters (0, 0 for src position, -1, -1 for entire image)
-    copy_canvas(canvas, &image_canvas, draw_x, draw_y, 0, 0, -1, -1)?;
-
-    Ok(())
+    draw_scaled_image(canvas, image, x, y, 256, ScaleMode::Nearest, flags)
 }
+
 
 /// Draw a single font character to a canvas.
 ///
@@ -1133,6 +1663,52 @@ pub fn draw_fontchar(
     Ok(disp_width)
 }
 
+fn draw_fontchar_from_ref(
+    canvas: &mut Canvas,
+    fontchar: FontCharRef,
+    backing: Option<&TFImage>,
+    x: i32,
+    y: i32,
+    mode: DrawMode,
+) -> Result<(), CanvasError> {
+    if let Some(backing) = backing {
+        let hs = backing.normal_hot_spot();
+        let draw_x = x - hs.x;
+        let draw_y = y - hs.y;
+        let backing_canvas = backing.normal().ok_or_else(|| {
+            CanvasError::InvalidOperation("Backing image missing primary canvas".to_string())
+        })?;
+        copy_canvas(canvas, &backing_canvas, draw_x, draw_y, 0, 0, -1, -1)?;
+    }
+
+    let page = crate::graphics::global_state()
+        .lock()
+        .map_err(|_| CanvasError::InvalidOperation("Graphics state lock poisoned".to_string()))?
+        .render_context()
+        .read()
+        .map_err(|_| CanvasError::InvalidOperation("Render context lock poisoned".to_string()))?
+        .get_font_page(fontchar.page_id)
+        .ok_or_else(|| {
+            CanvasError::InvalidOperation(format!(
+                "Font page {} not found",
+                fontchar.page_id
+            ))
+        })?;
+
+    draw_fontchar(
+        canvas,
+        Color::new(255, 255, 255, 255),
+        &page,
+        fontchar.char_code,
+        x,
+        y,
+        false,
+    )?;
+    let _ = mode;
+    Ok(())
+}
+
+
 pub trait CanvasPrimitive {
     fn draw_line(
         &self,
@@ -1243,46 +1819,54 @@ impl CanvasPrimitive for Canvas {
         Ok(())
     }
 
-    fn draw_rect(&self, _rect: Rect, _color: Color, _mode: DrawMode) -> Result<(), CanvasError> {
-        Ok(())
+    fn draw_rect(&self, rect: Rect, color: Color, mode: DrawMode) -> Result<(), CanvasError> {
+        let mut canvas = self.clone();
+        let x1 = rect.corner.x;
+        let y1 = rect.corner.y;
+        let x2 = rect.corner.x + rect.extent.width - 1;
+        let y2 = rect.corner.y + rect.extent.height - 1;
+        draw_rect(&mut canvas, x1, y1, x2, y2, color, mode)
     }
 
     fn draw_image(
         &self,
-        _image: &TFImage,
-        _x: i32,
-        _y: i32,
-        _scale: i32,
-        _scale_mode: ScaleMode,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        scale: i32,
+        scale_mode: ScaleMode,
         _mode: DrawMode,
-        _flags: u32,
+        flags: u32,
     ) -> Result<(), CanvasError> {
-        Ok(())
+        let mut canvas = self.clone();
+        draw_scaled_image(&mut canvas, image, x, y, scale, scale_mode, flags)
     }
 
     fn draw_filled_image(
         &self,
-        _image: &TFImage,
-        _x: i32,
-        _y: i32,
-        _fill_color: Color,
-        _scale: i32,
-        _scale_mode: ScaleMode,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        fill_color: Color,
+        scale: i32,
+        scale_mode: ScaleMode,
         _mode: DrawMode,
-        _flags: u32,
+        flags: u32,
     ) -> Result<(), CanvasError> {
-        Ok(())
+        let mut canvas = self.clone();
+        draw_filled_image(&mut canvas, image, x, y, fill_color, scale, scale_mode, flags)
     }
 
     fn draw_fontchar(
         &self,
-        _fontchar: FontCharRef,
-        _backing: Option<&TFImage>,
-        _x: i32,
-        _y: i32,
-        _mode: DrawMode,
+        fontchar: FontCharRef,
+        backing: Option<&TFImage>,
+        x: i32,
+        y: i32,
+        mode: DrawMode,
     ) -> Result<(), CanvasError> {
-        Ok(())
+        let mut canvas = self.clone();
+        draw_fontchar_from_ref(&mut canvas, fontchar, backing, x, y, mode)
     }
 
     fn copy_rect(&self, source: &Canvas, src_rect: Rect, dst_pt: Point) -> Result<(), CanvasError> {
@@ -1535,6 +2119,32 @@ mod tests {
         let result = canvas.lock();
         assert!(matches!(result, Err(CanvasError::AlreadyLocked)));
     }
+    #[test]
+    fn test_tfimage_multi_frame_draw() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let mut frame_a = Canvas::new_rgba(4, 4);
+        let mut frame_b = Canvas::new_rgba(4, 4);
+
+        fill_rect(&mut frame_a, 0, 0, 3, 3, Color::rgb(255, 0, 0)).unwrap();
+        fill_rect(&mut frame_b, 0, 0, 3, 3, Color::rgb(0, 0, 255)).unwrap();
+
+        let base = TFImage::new(frame_a);
+        let second = Arc::new(TFImage::new(frame_b));
+        base.add_frame(Arc::clone(&second));
+
+        base.set_frame_index(0);
+        draw_image(&mut dst, &base, 0, 0, 0).unwrap();
+        let pixels = dst.pixels();
+        assert_eq!(pixels[0], 255);
+
+        base.set_frame_index(1);
+        draw_image(&mut dst, &base, 5, 0, 0).unwrap();
+        let pixels = dst.pixels();
+        let offset = (0 * dst.width() + 5) as usize * 4;
+        assert_eq!(pixels[offset + 2], 255);
+    }
+
+
 
     #[test]
     fn test_unlock_without_lock_error() {
@@ -1549,6 +2159,7 @@ mod tests {
         let image = TFImage::new(canvas);
         assert_eq!(image.width(), Some(100));
         assert_eq!(image.height(), Some(50));
+        assert_eq!(image.frame_count(), 1);
         assert!(!image.is_dirty());
     }
 
@@ -1575,6 +2186,77 @@ mod tests {
         assert_eq!(origin.y, 0);
         assert!(origin.is_origin());
     }
+    #[test]
+    fn test_paletted_to_rgba_conversion() {
+        let mut palette = default_palette();
+        palette[1] = Color::new(255, 0, 0, 255);
+        palette[2] = Color::new(0, 255, 0, 255);
+
+        let mut paletted = Canvas::new_paletted(2, 1, palette);
+        paletted.set_transparent_index(Some(2));
+        paletted
+            .with_pixels_mut(|pixels| {
+                pixels[0] = 1;
+                pixels[1] = 2;
+                Ok(())
+            })
+            .unwrap();
+
+        let rgba = paletted_to_rgba(&paletted).unwrap();
+        let pixels = rgba.pixels();
+        assert_eq!(&pixels[0..4], &[255, 0, 0, 255]);
+        assert_eq!(&pixels[4..8], &[0, 255, 0, 0]);
+    }
+
+    #[test]
+    fn test_convert_canvas_format_to_paletted() {
+        let mut rgba = Canvas::new_rgba(1, 1);
+        rgba
+            .with_pixels_mut(|pixels| {
+                pixels[0] = 255;
+                pixels[1] = 0;
+                pixels[2] = 0;
+                pixels[3] = 255;
+                Ok(())
+            })
+            .unwrap();
+
+        let mut palette = default_palette();
+        palette[5] = Color::new(255, 0, 0, 255);
+
+        let paletted = convert_canvas_format(&rgba, CanvasFormat::paletted(), Some(palette)).unwrap();
+        assert!(paletted.is_paletted());
+        assert_eq!(paletted.pixels()[0], 5);
+    }
+
+    #[test]
+    fn test_trilinear_scaling_blends_mipmap() {
+        let mut base = Canvas::new_rgba(2, 2);
+        let mut mip = Canvas::new_rgba(2, 2);
+        fill_rect(&mut base, 0, 0, 1, 1, Color::rgb(255, 0, 0)).unwrap();
+        fill_rect(&mut mip, 0, 0, 1, 1, Color::rgb(0, 0, 255)).unwrap();
+
+        let image = TFImage::new(base);
+        image.set_mipmap(Some(mip), HotSpot::origin());
+
+        let scaled = rescale_image(&image, 256, ScaleMode::Trilinear).unwrap();
+        let pixels = scaled.pixels();
+        assert_eq!(pixels[0], 128);
+        assert_eq!(pixels[2], 128);
+    }
+
+    #[test]
+    fn test_fix_scaling_respects_dirty_flag() {
+        let mut canvas = Canvas::new_rgba(2, 2);
+        fill_rect(&mut canvas, 0, 0, 1, 1, Color::rgb(255, 0, 0)).unwrap();
+        let image = TFImage::new(canvas);
+        image.mark_dirty();
+        image.fix_scaling(128, ScaleMode::Nearest).unwrap();
+        assert!(!image.is_dirty());
+        assert!(image.scaled().is_some());
+    }
+
+
 
     #[test]
     fn test_image_primitive_delegates_to_canvas() {
