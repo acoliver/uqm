@@ -1,0 +1,9 @@
+[build]
+rustflags = ["-L", "/opt/homebrew/Cellar/sdl2/2.32.10/lib"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-L", "/opt/homebrew/Cellar/sdl2/2.32.10/lib"]
+
+[env]
+SDL2_LIB_DIR = "/opt/homebrew/Cellar/sdl2/2.32.10/lib"
+SDL2_INCLUDE_DIR = "/opt/homebrew/Cellar/sdl2/2.32.10/include"

@@ -1,0 +1,2528 @@
+//! TFB Draw System
+//!
+//! This module provides the core drawing primitives for TFB (The Final Battle).
+//! It implements the drawing commands for images, canvases, and screens.
+//!
+//! # Architecture
+//!
+//! The draw system is organized into three main layers:
+//!
+//! 1. **Image Layer (TFImage)**: Wraps a pixel canvas with metadata (hotspots,
+//!    scaled versions, mipmap tracking, dirty flag).
+//!
+//! 2. **Canvas Layer (Canvas)**: Represents a raw pixel buffer with clipping
+//!    support and direct pixel access.
+//!
+//! # Scope (Phase 2)
+//!
+//! - Core data structures: TFImage, Canvas
+//! - Primitive drawing APIs: line, rect, image, fontchar, copy, scissor
+//! - State/lifecycle tests (no actual rendering or SDL)
+//!
+//! # Out of Scope
+//!
+//! - DCQ integration (handled by dcqueue module)
+//! - Color map handling
+//! - Font parsing
+//! - Scaling algorithms
+//! - SDL drivers
+//! - FFI bindings
+
+use std::fmt;
+use std::sync::{Arc, Mutex};
+use std::u64;
+
+use crate::graphics::dcqueue::{Color, DrawMode, Extent, FontCharRef, Point, Rect};
+use crate::graphics::font::FontPage;
+use crate::graphics::gfx_common::ScaleMode;
+
+/// Unique identifier for canvas resources.
+pub type CanvasId = u64;
+
+/// Hot spot offset for image positioning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct HotSpot {
+    pub x: i32,
+    pub y: i32,
+}
+
+impl HotSpot {
+    pub const fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    pub const fn origin() -> Self {
+        Self { x: 0, y: 0 }
+    }
+
+    pub fn is_origin(&self) -> bool {
+        self.x == 0 && self.y == 0
+    }
+}
+
+/// Canvas clipping configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScissorRect {
+    pub rect: Option<Rect>,
+}
+
+impl ScissorRect {
+    pub const fn new(rect: Option<Rect>) -> Self {
+        Self { rect }
+    }
+
+    pub const fn disabled() -> Self {
+        Self { rect: None }
+    }
+
+    pub const fn enabled(rect: Rect) -> Self {
+        Self { rect: Some(rect) }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.rect.is_some()
+    }
+}
+
+/// Canvas format information.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CanvasFormat {
+    pub bits_per_pixel: i32,
+    pub bytes_per_pixel: i32,
+    pub has_alpha: bool,
+}
+
+impl CanvasFormat {
+    pub const fn rgba() -> Self {
+        Self {
+            bits_per_pixel: 32,
+            bytes_per_pixel: 4,
+            has_alpha: true,
+        }
+    }
+
+    pub const fn rgb() -> Self {
+        Self {
+            bits_per_pixel: 24,
+            bytes_per_pixel: 3,
+            has_alpha: false,
+        }
+    }
+}
+
+impl Default for CanvasFormat {
+    fn default() -> Self {
+        Self::rgba()
+    }
+}
+
+/// Internal canvas state.
+#[derive(Debug)]
+struct CanvasInner {
+    id: CanvasId,
+    extent: Extent,
+    format: CanvasFormat,
+    scissor: ScissorRect,
+    locked: bool,
+    generation: u64,
+    pixels: Vec<u8>,
+}
+
+impl CanvasInner {
+    fn new(extent: Extent, format: CanvasFormat) -> Self {
+        let pixel_count = (extent.width * extent.height) as usize;
+        let bytes_per_pixel = format.bytes_per_pixel as usize;
+        let pixels = vec![0u8; pixel_count * bytes_per_pixel];
+
+        Self {
+            id: Self::next_id(),
+            extent,
+            format,
+            scissor: ScissorRect::disabled(),
+            locked: false,
+            generation: 0,
+            pixels,
+        }
+    }
+
+    fn next_id() -> u64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        NEXT_ID.fetch_add(1, Ordering::Relaxed)
+    }
+
+    fn lock(&mut self) -> Result<(), CanvasError> {
+        if self.locked {
+            return Err(CanvasError::AlreadyLocked);
+        }
+        self.locked = true;
+        Ok(())
+    }
+
+    fn unlock(&mut self) -> Result<(), CanvasError> {
+        if !self.locked {
+            return Err(CanvasError::NotLocked);
+        }
+        self.locked = false;
+        self.generation += 1;
+        Ok(())
+    }
+
+    fn scissor(&self) -> ScissorRect {
+        self.scissor
+    }
+
+    fn set_scissor(&mut self, scissor: ScissorRect) {
+        self.scissor = scissor;
+    }
+
+    fn extent(&self) -> Extent {
+        self.extent
+    }
+
+    fn format(&self) -> CanvasFormat {
+        self.format
+    }
+
+    fn id(&self) -> CanvasId {
+        self.id
+    }
+
+    fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    fn pixels(&self) -> &[u8] {
+        &self.pixels
+    }
+
+    fn pixels_mut(&mut self) -> &mut [u8] {
+        &mut self.pixels
+    }
+}
+
+/// A canvas representing a pixel buffer.
+#[derive(Clone)]
+pub struct Canvas {
+    inner: Arc<Mutex<CanvasInner>>,
+}
+
+impl Canvas {
+    pub fn new(extent: Extent, format: CanvasFormat) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(CanvasInner::new(extent, format))),
+        }
+    }
+
+    pub fn new_rgba(width: i32, height: i32) -> Self {
+        Self::new(Extent::new(width, height), CanvasFormat::rgba())
+    }
+
+    pub fn new_for_screen(width: i32, height: i32) -> Self {
+        Self::new_rgba(width, height)
+    }
+
+    pub fn lock(&self) -> Result<(), CanvasError> {
+        self.inner.lock().unwrap().lock()
+    }
+
+    pub fn unlock(&self) -> Result<(), CanvasError> {
+        self.inner.lock().unwrap().unlock()
+    }
+
+    pub fn is_locked(&self) -> bool {
+        self.inner.lock().unwrap().locked
+    }
+
+    pub fn extent(&self) -> Extent {
+        self.inner.lock().unwrap().extent()
+    }
+
+    pub fn width(&self) -> i32 {
+        self.extent().width
+    }
+
+    pub fn height(&self) -> i32 {
+        self.extent().height
+    }
+
+    pub fn format(&self) -> CanvasFormat {
+        self.inner.lock().unwrap().format()
+    }
+
+    pub fn id(&self) -> CanvasId {
+        self.inner.lock().unwrap().id()
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.inner.lock().unwrap().generation()
+    }
+
+    pub fn scissor(&self) -> ScissorRect {
+        self.inner.lock().unwrap().scissor()
+    }
+
+    pub fn set_scissor(&self, scissor: ScissorRect) {
+        self.inner.lock().unwrap().set_scissor(scissor);
+    }
+
+    pub fn enable_scissor(&self, rect: Rect) {
+        self.set_scissor(ScissorRect::enabled(rect));
+    }
+
+    pub fn disable_scissor(&self) {
+        self.set_scissor(ScissorRect::disabled());
+    }
+
+    pub fn pixels(&self) -> Vec<u8> {
+        self.inner.lock().unwrap().pixels().to_vec()
+    }
+
+    pub fn pixels_mut(&mut self) -> Vec<u8> {
+        self.inner.lock().unwrap().pixels_mut().to_vec()
+    }
+
+    pub fn with_pixels_mut<F, R>(&mut self, f: F) -> Result<R, CanvasError>
+    where
+        F: FnOnce(&mut [u8]) -> R,
+    {
+        let mut inner = self.inner.lock().unwrap();
+        Ok(f(inner.pixels_mut()))
+    }
+
+    pub fn copy_rect(
+        &self,
+        source: &Canvas,
+        src_rect: Rect,
+        dst_pt: Point,
+    ) -> Result<(), CanvasError> {
+        let _dst_extent = self.extent();
+        let src_extent = source.extent();
+
+        if src_rect.corner.x < 0
+            || src_rect.corner.y < 0
+            || src_rect.corner.x + src_rect.extent.width > src_extent.width
+            || src_rect.corner.y + src_rect.extent.height > src_extent.height
+        {
+            return Err(CanvasError::InvalidRect);
+        }
+
+        if dst_pt.x < 0 || dst_pt.y < 0 {
+            return Err(CanvasError::InvalidPoint);
+        }
+
+        Ok(())
+    }
+}
+
+impl fmt::Debug for Canvas {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let inner = self.inner.lock().unwrap();
+        f.debug_struct("Canvas")
+            .field("id", &inner.id())
+            .field("extent", &inner.extent())
+            .field("format", &inner.format())
+            .field("locked", &inner.locked)
+            .field("scissor_enabled", &inner.scissor().is_enabled())
+            .field("generation", &inner.generation())
+            .finish()
+    }
+}
+
+/// TFImage - A wrapped canvas with image metadata.
+#[derive(Clone)]
+pub struct TFImage {
+    normal: Arc<Mutex<Option<Canvas>>>,
+    scaled: Arc<Mutex<Option<Canvas>>>,
+    mipmap: Arc<Mutex<Option<Canvas>>>,
+    filled: Arc<Mutex<Option<Canvas>>>,
+    normal_hs: Arc<Mutex<HotSpot>>,
+    mipmap_hs: Arc<Mutex<HotSpot>>,
+    last_scale: Arc<Mutex<i32>>,
+    last_scale_type: Arc<Mutex<Option<ScaleMode>>>,
+    dirty: Arc<Mutex<bool>>,
+}
+
+impl TFImage {
+    pub fn new(canvas: Canvas) -> Self {
+        Self {
+            normal: Arc::new(Mutex::new(Some(canvas))),
+            scaled: Arc::new(Mutex::new(None)),
+            mipmap: Arc::new(Mutex::new(None)),
+            filled: Arc::new(Mutex::new(None)),
+            normal_hs: Arc::new(Mutex::new(HotSpot::origin())),
+            mipmap_hs: Arc::new(Mutex::new(HotSpot::origin())),
+            last_scale: Arc::new(Mutex::new(0)),
+            last_scale_type: Arc::new(Mutex::new(None)),
+            dirty: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    pub fn new_rgba(width: i32, height: i32) -> Self {
+        Self::new(Canvas::new_rgba(width, height))
+    }
+
+    pub fn normal(&self) -> Option<Canvas> {
+        self.normal.lock().unwrap().clone()
+    }
+
+    pub fn scaled(&self) -> Option<Canvas> {
+        self.scaled.lock().unwrap().clone()
+    }
+
+    pub fn mipmap(&self) -> Option<Canvas> {
+        self.mipmap.lock().unwrap().clone()
+    }
+
+    pub fn filled(&self) -> Option<Canvas> {
+        self.filled.lock().unwrap().clone()
+    }
+
+    pub fn normal_hot_spot(&self) -> HotSpot {
+        *self.normal_hs.lock().unwrap()
+    }
+
+    pub fn set_normal_hot_spot(&self, hs: HotSpot) {
+        *self.normal_hs.lock().unwrap() = hs;
+    }
+
+    pub fn mipmap_hot_spot(&self) -> HotSpot {
+        *self.mipmap_hs.lock().unwrap()
+    }
+
+    pub fn set_mipmap_hot_spot(&self, hs: HotSpot) {
+        *self.mipmap_hs.lock().unwrap() = hs;
+    }
+
+    pub fn extent(&self) -> Option<Extent> {
+        self.normal.lock().unwrap().as_ref().map(|c| c.extent())
+    }
+
+    pub fn width(&self) -> Option<i32> {
+        self.extent().map(|e| e.width)
+    }
+
+    pub fn height(&self) -> Option<i32> {
+        self.extent().map(|e| e.height)
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        *self.dirty.lock().unwrap()
+    }
+
+    pub fn mark_dirty(&self) {
+        *self.dirty.lock().unwrap() = true;
+    }
+
+    pub fn mark_clean(&self) {
+        *self.dirty.lock().unwrap() = false;
+    }
+
+    pub fn set_scaled(&self, canvas: Option<Canvas>) {
+        *self.scaled.lock().unwrap() = canvas;
+    }
+
+    pub fn set_mipmap(&self, canvas: Option<Canvas>, hs: HotSpot) {
+        *self.mipmap.lock().unwrap() = canvas;
+        *self.mipmap_hs.lock().unwrap() = hs;
+    }
+
+    pub fn set_filled(&self, canvas: Option<Canvas>) {
+        *self.filled.lock().unwrap() = canvas;
+    }
+
+    pub fn scaling_cache_valid(&self, scale: i32, scale_type: ScaleMode) -> bool {
+        if self.is_dirty() {
+            return false;
+        }
+        let cached_scale = *self.last_scale.lock().unwrap();
+        let cached_type = *self.last_scale_type.lock().unwrap();
+        cached_scale == scale && cached_type == Some(scale_type)
+    }
+
+    pub fn update_scaling_cache(&self, scale: i32, scale_type: ScaleMode) {
+        *self.last_scale.lock().unwrap() = scale;
+        *self.last_scale_type.lock().unwrap() = Some(scale_type);
+    }
+
+    pub fn invalidate_scaling_cache(&self) {
+        *self.last_scale.lock().unwrap() = 0;
+        *self.last_scale_type.lock().unwrap() = None;
+    }
+}
+
+impl fmt::Debug for TFImage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TFImage")
+            .field("extent", &self.extent())
+            .field("normal_hs", &self.normal_hot_spot())
+            .field("mipmap_hs", &self.mipmap_hot_spot())
+            .field("dirty", &self.is_dirty())
+            .field("has_scaled", &self.scaled().is_some())
+            .field("has_mipmap", &self.mipmap().is_some())
+            .field("has_filled", &self.filled().is_some())
+            .field("last_scale", &*self.last_scale.lock().unwrap())
+            .field("last_scale_type", &*self.last_scale_type.lock().unwrap())
+            .finish()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CanvasError {
+    AlreadyLocked,
+    NotLocked,
+    InvalidRect,
+    InvalidPoint,
+    InvalidOperation(String),
+}
+
+impl fmt::Display for CanvasError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AlreadyLocked => write!(f, "Canvas is already locked"),
+            Self::NotLocked => write!(f, "Canvas is not locked"),
+            Self::InvalidRect => write!(f, "Invalid rectangle specification"),
+            Self::InvalidPoint => write!(f, "Invalid point specification"),
+            Self::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for CanvasError {}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TFImageError {
+    Canvas(CanvasError),
+    NoPrimaryCanvas,
+    InvalidMipmap,
+}
+
+impl fmt::Display for TFImageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Canvas(err) => write!(f, "Canvas error: {}", err),
+            Self::NoPrimaryCanvas => write!(f, "TFImage has no primary canvas"),
+            Self::InvalidMipmap => write!(f, "Mipmap invalid: colormap restriction violated"),
+        }
+    }
+}
+
+impl std::error::Error for TFImageError {}
+
+impl From<CanvasError> for TFImageError {
+    fn from(err: CanvasError) -> Self {
+        Self::Canvas(err)
+    }
+}
+
+/// Helper function to check canvas validity.
+fn check_canvas(canvas: &Canvas) -> Result<(), CanvasError> {
+    let inner = canvas.inner.lock().unwrap();
+    if inner.pixels().is_empty() {
+        return Err(CanvasError::InvalidRect);
+    }
+    let extent = inner.extent();
+    if extent.width <= 0 || extent.height <= 0 {
+        return Err(CanvasError::InvalidRect);
+    }
+    Ok(())
+}
+
+/// Check if a point is within the current scissor rectangle.
+///
+/// Returns true if the point should be drawn, false if it's clipped.
+fn is_in_scissor(canvas: &Canvas, x: i32, y: i32) -> bool {
+    let scissor = canvas.scissor();
+    if let Some(rect) = scissor.rect {
+        let sc_x = rect.corner.x;
+        let sc_y = rect.corner.y;
+        let sc_w = rect.extent.width as i32;
+        let sc_h = rect.extent.height as i32;
+        
+        x >= sc_x && x < sc_x + sc_w && y >= sc_y && y < sc_y + sc_h
+    } else {
+        true  // No scissor active
+    }
+}
+
+/// Draw a rectangle outline between two corners.
+///
+/// Uses four draw_line calls to create a 1-pixel outline.
+///
+/// Note: DrawMode is currently not respected and will be ignored.
+/// Future implementation may blend colors based on mode.
+pub fn draw_rect(
+    canvas: &mut Canvas,
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+    color: Color,
+    mode: DrawMode,
+) -> Result<(), CanvasError> {
+    canvas.draw_line(x1, y1, x2, y1, color, mode)?;
+    canvas.draw_line(x2, y1, x2, y2, color, mode)?;
+    canvas.draw_line(x2, y2, x1, y2, color, mode)?;
+    canvas.draw_line(x1, y2, x1, y1, color, mode)?;
+    Ok(())
+}
+
+/// Fill a rectangle between two corners with solid color.
+///
+/// Efficient row-by-row fill using direct pixel access with scissor support.
+pub fn fill_rect(
+    canvas: &mut Canvas,
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+    color: Color,
+) -> Result<(), CanvasError> {
+    check_canvas(canvas)?;
+    
+    let width = canvas.width();
+    let height = canvas.height();
+    let bytes_per_pixel = canvas.format().bytes_per_pixel as usize;
+    
+    // Compute unclamped bounds first
+    let x_unclamped_start = x1.min(x2);
+    let x_unclamped_end = x1.max(x2);
+    let y_unclamped_start = y1.min(y2);
+    let y_unclamped_end = y1.max(y2);
+    
+    // Early exit if entirely outside canvas
+    if x_unclamped_end < 0 || x_unclamped_start >= width ||
+       y_unclamped_end < 0 || y_unclamped_start >= height {
+        return Ok(());
+    }
+    
+    // Clamp to canvas bounds
+    let x_start = x_unclamped_start.max(0);
+    let x_end = x_unclamped_end.min(width - 1);
+    let y_start = y_unclamped_start.max(0);
+    let y_end = y_unclamped_end.min(height - 1);
+    
+    let color_bytes = [color.r, color.g, color.b, color.a];
+    
+    // Get scissor rect before entering closure to avoid borrow conflict
+    let scissor_opt = canvas.scissor().rect;
+    
+    // Fill row by row with scissor check
+    canvas.with_pixels_mut(|pixels| {
+        for y in y_start..=y_end {
+            // Check if this row is in scissor (or if scissor is disabled)
+            let row_in_scissor = if let Some(ref rect) = scissor_opt {
+                let sc_y = rect.corner.y;
+                let sc_h = rect.extent.height as i32;
+                y >= sc_y && y < sc_y + sc_h
+            } else {
+                true
+            };
+            
+            if !row_in_scissor {
+                continue;
+            }
+            
+            for x in x_start..=x_end {
+                // Check scissor before setting pixel
+                let in_scissor = if let Some(ref rect) = scissor_opt {
+                    let sc_x = rect.corner.x;
+                    let sc_y = rect.corner.y;
+                    let sc_w = rect.extent.width as i32;
+                    let sc_h = rect.extent.height as i32;
+                    x >= sc_x && x < sc_x + sc_w && y >= sc_y && y < sc_y + sc_h
+                } else {
+                    true
+                };
+                
+                if in_scissor {
+                    let offset = (y * width + x) as usize * bytes_per_pixel;
+                    
+                    // Write color respecting format
+                    for i in 0..bytes_per_pixel {
+                        if offset + i < pixels.len() {
+                            pixels[offset + i] = color_bytes[i];
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    })?
+}
+
+/// Copy pixels from source canvas to destination canvas.
+///
+/// Copies a rectangular region from src_canvas to dst_canvas at the given
+/// destination position. This is used for blitting sprites, copying between
+/// screens, and other image operations.
+///
+/// Parameters:
+/// - `dst`: Destination canvas
+/// - `src`: Source canvas
+/// - `dst_x,dst_y`: Destination position on dst canvas
+/// - `src_x,src_y`: Source position on src canvas (default: 0,0)
+/// - `width,height`: Size to copy (default: entire source)
+///
+/// Returns:
+/// - `Ok(())` - Copy completed successfully
+/// - `Err(CanvasError)` - Copy failed (invalid canvas, mismatched formats, etc.)
+///
+/// Notes:
+/// - Clipping is applied - areas outside either canvas are skipped
+/// - Scissor clipping is applied on destination canvas
+/// - Canvas formats must match (e.g., both RGBA)
+/// - No blending performed - direct pixel copy
+pub fn copy_canvas(
+    dst: &mut Canvas,
+    src: &Canvas,
+    dst_x: i32,
+    dst_y: i32,
+    src_x: i32,
+    src_y: i32,
+    width: i32,
+    height: i32,
+) -> Result<(), CanvasError> {
+    check_canvas(dst)?;
+    check_canvas(src)?;
+    
+    // Verify formats match
+    if dst.format() != src.format() {
+        return Err(CanvasError::InvalidOperation(
+            "Canvas formats must match for copy".to_string()
+        ));
+    }
+    
+    let dst_width = dst.width();
+    let dst_height = dst.height();
+    let src_width = src.width();
+    let src_height = src.height();
+    let bytes_per_pixel = dst.format().bytes_per_pixel as usize;
+    
+    // Handle default parameters (copy entire source)
+    let copy_width = if width <= 0 { src_width } else { width };
+    let copy_height = if height <= 0 { src_height } else { height };
+
+    // Define the source region to copy from
+    let src_x1 = src_x;
+    let src_y1 = src_y;
+    let src_x2 = src_x + copy_width;
+    let src_y2 = src_y + copy_height;
+
+    // Define the destination region to copy to
+    let dst_x1 = dst_x;
+    let dst_y1 = dst_y;
+    let dst_x2 = dst_x + copy_width;
+    let dst_y2 = dst_y + copy_height;
+
+    // Clip source region to source canvas bounds
+    let src_clipped_x1 = src_x1.max(0).min(src_width);
+    let src_clipped_x2 = src_x2.max(0).min(src_width);
+    let src_clipped_y1 = src_y1.max(0).min(src_height);
+    let src_clipped_y2 = src_y2.max(0).min(src_height);
+
+    // Clip destination region to destination canvas bounds
+    let dst_clipped_x1 = dst_x1.max(0).min(dst_width);
+    let dst_clipped_x2 = dst_x2.max(0).min(dst_width);
+    let dst_clipped_y1 = dst_y1.max(0).min(dst_height);
+    let dst_clipped_y2 = dst_y2.max(0).min(dst_height);
+
+    // Calculate the widths/heights of clipped regions
+    let src_clip_w = src_clipped_x2 - src_clipped_x1;
+    let src_clip_h = src_clipped_y2 - src_clipped_y1;
+    let dst_clip_w = dst_clipped_x2 - dst_clipped_x1;
+    let dst_clip_h = dst_clipped_y2 - dst_clipped_y1;
+
+    // The actual copy width/height is the minimum of the clipped dimensions
+    let copy_w = src_clip_w.min(dst_clip_w).max(0);
+    let copy_h = src_clip_h.min(dst_clip_h).max(0);
+
+    // Early exit if nothing to copy
+    if copy_w <= 0 || copy_h <= 0 {
+        return Ok(());
+    }
+
+    // Calculate the offset from the clipped source start to the original source start
+    // This is needed when src_x1 is negative (we need to skip those pixels)
+    let _src_offset_x = src_clipped_x1 - src_x1;
+    let _src_offset_y = src_clipped_y1 - src_y1;
+
+    // Calculate the offset from the clipped destination start to the original destination start
+    // This is needed when dst_x1 is negative (we need to skip those source pixels)
+    let dst_offset_x = dst_clipped_x1 - dst_x1;
+    let dst_offset_y = dst_clipped_y1 - dst_y1;
+
+    // Calculate actual source position: start from clipped position, then adjust for dst offset
+    let src_actual_x = src_clipped_x1 + dst_offset_x;
+    let src_actual_y = src_clipped_y1 + dst_offset_y;
+
+    // Get scissor rect before entering closure to avoid borrow conflict
+    let scissor_opt = dst.scissor().rect;
+
+    // Get pixel buffers
+    let src_pixels = src.pixels();
+    dst.with_pixels_mut(|dst_pixels| {
+        // Copy pixel by pixel with scissor check
+        for y in 0..copy_h {
+            let src_y = src_actual_y + y;
+            let dst_y = dst_clipped_y1 + y;
+
+            for x in 0..copy_w {
+                let src_x = src_actual_x + x;
+                let dst_x = dst_clipped_x1 + x;
+
+                // Check scissor before copying
+                let in_scissor = if let Some(ref rect) = scissor_opt {
+                    let sc_x = rect.corner.x;
+                    let sc_y = rect.corner.y;
+                    let sc_w = rect.extent.width as i32;
+                    let sc_h = rect.extent.height as i32;
+                    dst_x >= sc_x && dst_x < sc_x + sc_w && dst_y >= sc_y && dst_y < sc_y + sc_h
+                } else {
+                    true
+                };
+
+                if in_scissor {
+                    let src_row_offset = (src_y * src_width + src_x) as usize * bytes_per_pixel;
+                    let dst_row_offset = (dst_y * dst_width + dst_x) as usize * bytes_per_pixel;
+
+                    // Copy this pixel
+                    for i in 0..bytes_per_pixel {
+                        dst_pixels[dst_row_offset + i] = src_pixels[src_row_offset + i];
+                    }
+                }
+            }
+        }
+    })?;
+    
+    Ok(())
+}
+
+/// Draw a single font character to a canvas.
+///
+/// Renders a character from a font page with alpha blending support.
+/// The character bitmap data is transferred to the canvas, applying
+/// the character's alpha channel for transparency.
+///
+/// # Parameters
+///
+/// - `canvas`: Destination canvas to draw to
+/// - `fg_color`: Foreground color for the character
+/// - `page`: Font page containing the character data
+/// - `char_index`: Index of the character within the page
+/// - `x`: X position for drawing (baseline position)
+/// - `y`: Y position for drawing (baseline position)
+/// - `use_pixmap`: If true, render with higher quality (currently unused)
+///
+/// # Returns
+///
+/// - `Ok(width)` - Returns the character's display width
+/// - `Err(CanvasError)` - Drawing failed
+///
+/// # Notes
+///
+/// - Character bitmaps are stored as alpha-only data in `TFChar.data`
+/// - The alpha channel is applied to the `fg_color` for each pixel
+/// - Hot spot offsets are applied to position the glyph correctly
+/// - Transparent pixels (alpha = 0) preserve the canvas background
+/// - Clipping is performed based on canvas bounds and scissor region
+pub fn draw_fontchar(
+    canvas: &mut Canvas,
+    fg_color: Color,
+    page: &FontPage,
+    char_code: u32,
+    x: i32,
+    y: i32,
+    use_pixmap: bool,
+) -> Result<usize, CanvasError> {
+    check_canvas(canvas)?;
+    
+    // Get character descriptor from page (char_code is the Unicode code point)
+    let tf_char = page.get_char(char_code)
+        .ok_or_else(|| CanvasError::InvalidOperation(
+            format!("Character code 0x{:04X} not found in font page", char_code)
+        ))?;
+    
+    // Check if we have data to render
+    let data = tf_char.data.as_ref().ok_or_else(|| CanvasError::InvalidOperation(
+        "Character has no bitmap data".to_string()
+    ))?;
+    
+    let extent_width = tf_char.extent.width as usize;
+    let extent_height = tf_char.extent.height as usize;
+    let disp_width = tf_char.disp.width as usize;
+    let disp_height = tf_char.disp.height as usize;
+    let pitch = tf_char.pitch as usize;
+    
+    // Calculate drawing position applying hot spot offset
+    let draw_x = x - tf_char.hotspot.x as i32;
+    let draw_y = y - tf_char.hotspot.y as i32;
+    
+    // Get canvas properties
+    let canvas_width = canvas.width() as usize;
+    let canvas_height = canvas.height() as usize;
+    let bytes_per_pixel = canvas.format().bytes_per_pixel as usize;
+    
+    // Early exit if character has no dimensions or is off canvas
+    if extent_width == 0 || extent_height == 0 || disp_width == 0 || disp_height == 0 {
+        return Ok(disp_width);
+    }
+    
+    // Get scissor rect
+    let scissor_rect = canvas.scissor().rect;
+    
+    // Transfer alpha channel to destination pixels
+    canvas.with_pixels_mut(|pixels| {
+        let fg_bytes = [fg_color.r, fg_color.g, fg_color.b, fg_color.a];
+        
+        // Iterate through character bitmap
+        for char_y in 0..disp_height {
+            for char_x in 0..disp_width {
+                let src_offset = char_y * pitch + char_x;
+                
+                if src_offset >= data.len() {
+                    continue;
+                }
+                
+                // Get glyph alpha from character bitmap
+                let glyph_alpha = data[src_offset] as i32;
+                
+                // Skip fully transparent pixels
+                if glyph_alpha == 0 {
+                    continue;
+                }
+                
+                // Calculate effective alpha combining glyph and foreground color
+                // This allows semi-transparent text colors to work correctly
+                let effective_alpha = (glyph_alpha * fg_color.a as i32) / 255;
+                let alpha = effective_alpha.clamp(0, 255);
+                
+                // Skip if effective alpha is zero
+                if alpha == 0 {
+                    continue;
+                }
+                
+                // Calculate destination position
+                let dst_x = draw_x + char_x as i32;
+                let dst_y = draw_y + char_y as i32;
+                
+                // Check canvas bounds
+                if dst_x < 0 || dst_x >= canvas_width as i32 ||
+                   dst_y < 0 || dst_y >= canvas_height as i32 {
+                    continue;
+                }
+                
+                // Check scissor clip (if enabled)
+                if let Some(ref scissor) = scissor_rect {
+                    let sc_x = scissor.corner.x;
+                    let sc_y = scissor.corner.y;
+                    let sc_w = scissor.extent.width as i32;
+                    let sc_h = scissor.extent.height as i32;
+                    
+                    if dst_x < sc_x || dst_x >= sc_x + sc_w ||
+                       dst_y < sc_y || dst_y >= sc_y + sc_h {
+                        continue;
+                    }
+                }
+                
+                // Calculate destination pixel offset
+                let dst_offset = (dst_y as usize * canvas_width + dst_x as usize) * bytes_per_pixel;
+                
+                // Apply color with alpha blending
+                if bytes_per_pixel >= 4 {
+                    // RGBA format: blend RGB channels with effective alpha,
+                    // then blend alpha channel properly
+                    let alpha_factor = alpha;
+                    let inv_alpha = 255 - alpha_factor;
+                    
+                    // Blend RGB channels (0, 1, 2)
+                    for i in 0..3 {
+                        if dst_offset + i < pixels.len() {
+                            let fg_val = fg_bytes[i] as i32;
+                            let dst_val = pixels[dst_offset + i] as i32;
+                            let blended = (fg_val * alpha_factor + dst_val * inv_alpha) / 255;
+                            pixels[dst_offset + i] = blended as u8;
+                        }
+                    }
+                    
+                    // Blend alpha channel (3) using proper alpha compositing
+                    // Standard alpha blend: result = src + dst * (1 - src_alpha)
+                    if dst_offset + 3 < pixels.len() {
+                        let dst_a = pixels[dst_offset + 3] as i32;
+                        let result_alpha = alpha as i32 + (dst_a * inv_alpha) / 255;
+                        pixels[dst_offset + 3] = result_alpha.min(255).max(0) as u8;
+                    }
+                } else if bytes_per_pixel == 3 {
+                    // RGB without alpha channel - use effective alpha for all channels
+                    let alpha_factor = alpha;
+                    let inv_alpha = 255 - alpha_factor;
+                    
+                    for i in 0..3 {
+                        if dst_offset + i < pixels.len() {
+                            let fg_val = fg_bytes[i] as i32;
+                            let dst_val = pixels[dst_offset + i] as i32;
+                            let blended = (fg_val * alpha_factor + dst_val * inv_alpha) / 255;
+                            pixels[dst_offset + i] = blended as u8;
+                        }
+                    }
+                }
+            }
+        }
+    })?;
+    
+    // Note: use_pixmap parameter is reserved for future high-quality rendering
+    let _ = use_pixmap;
+    
+    Ok(disp_width)
+}
+
+pub trait CanvasPrimitive {
+    fn draw_line(
+        &self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        color: Color,
+        mode: DrawMode,
+    ) -> Result<(), CanvasError>;
+
+    fn draw_rect(&self, rect: Rect, color: Color, mode: DrawMode) -> Result<(), CanvasError>;
+
+    fn draw_image(
+        &self,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        scale: i32,
+        scale_mode: ScaleMode,
+        mode: DrawMode,
+    ) -> Result<(), CanvasError>;
+
+    fn draw_filled_image(
+        &self,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        fill_color: Color,
+        scale: i32,
+        scale_mode: ScaleMode,
+        mode: DrawMode,
+    ) -> Result<(), CanvasError>;
+
+    fn draw_fontchar(
+        &self,
+        fontchar: FontCharRef,
+        backing: Option<&TFImage>,
+        x: i32,
+        y: i32,
+        mode: DrawMode,
+    ) -> Result<(), CanvasError>;
+
+    fn copy_rect(&self, source: &Canvas, src_rect: Rect, dst_pt: Point) -> Result<(), CanvasError>;
+}
+
+impl CanvasPrimitive for Canvas {
+    fn draw_line(
+        &self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        color: Color,
+        _mode: DrawMode,
+    ) -> Result<(), CanvasError> {
+        check_canvas(self)?;
+
+        let width = self.width();
+        let height = self.height();
+        let bytes_per_pixel = self.format().bytes_per_pixel;
+
+        // Bresenham's line algorithm with i64 to prevent overflow
+        let dx = (x2 as i64 - x1 as i64).abs();
+        let dy = (y2 as i64 - y1 as i64).abs();
+
+        let sx = if x1 < x2 { 1 } else { -1 };
+        let sy = if y1 < y2 { 1 } else { -1 };
+
+        let mut err = dx - dy;
+        let mut x = x1;
+        let mut y = y1;
+        let color_bytes = [color.r, color.g, color.b, color.a];
+
+        loop {
+            // Check bounds AND scissor
+            if x >= 0 && x < width && y >= 0 && y < height && is_in_scissor(self, x, y) {
+                let offset = (y * width + x) as usize * bytes_per_pixel as usize;
+
+                let mut inner = self.inner.lock().unwrap();
+                let pixels = inner.pixels_mut();
+
+                // Write color respecting format
+                for i in 0..bytes_per_pixel.min(color_bytes.len() as i32) as usize {
+                    if offset + i < pixels.len() {
+                        pixels[offset + i] = color_bytes[i];
+                    }
+                }
+            }
+
+            if x == x2 && y == y2 {
+                break;
+            }
+
+            let e2 = 2 * err;
+            if e2 > -dy {
+                err -= dy;
+                x += sx;
+            }
+            if e2 < dx {
+                err += dx;
+                y += sy;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn draw_rect(&self, _rect: Rect, _color: Color, _mode: DrawMode) -> Result<(), CanvasError> {
+        Ok(())
+    }
+
+    fn draw_image(
+        &self,
+        _image: &TFImage,
+        _x: i32,
+        _y: i32,
+        _scale: i32,
+        _scale_mode: ScaleMode,
+        _mode: DrawMode,
+    ) -> Result<(), CanvasError> {
+        Ok(())
+    }
+
+    fn draw_filled_image(
+        &self,
+        _image: &TFImage,
+        _x: i32,
+        _y: i32,
+        _fill_color: Color,
+        _scale: i32,
+        _scale_mode: ScaleMode,
+        _mode: DrawMode,
+    ) -> Result<(), CanvasError> {
+        Ok(())
+    }
+
+    fn draw_fontchar(
+        &self,
+        _fontchar: FontCharRef,
+        _backing: Option<&TFImage>,
+        _x: i32,
+        _y: i32,
+        _mode: DrawMode,
+    ) -> Result<(), CanvasError> {
+        Ok(())
+    }
+
+    fn copy_rect(&self, source: &Canvas, src_rect: Rect, dst_pt: Point) -> Result<(), CanvasError> {
+        self.copy_rect(source, src_rect, dst_pt)
+    }
+}
+
+pub trait ImagePrimitive {
+    fn draw_line(
+        &self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        color: Color,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError>;
+
+    fn draw_rect(&self, rect: Rect, color: Color, mode: DrawMode) -> Result<(), TFImageError>;
+
+    fn draw_image(
+        &self,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        scale: i32,
+        scale_mode: ScaleMode,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError>;
+
+    fn draw_filled_image(
+        &self,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        fill_color: Color,
+        scale: i32,
+        scale_mode: ScaleMode,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError>;
+
+    fn draw_fontchar(
+        &self,
+        fontchar: FontCharRef,
+        backing: Option<&TFImage>,
+        x: i32,
+        y: i32,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError>;
+
+    fn copy_rect(
+        &self,
+        source: &TFImage,
+        src_rect: Rect,
+        dst_pt: Point,
+    ) -> Result<(), TFImageError>;
+}
+
+impl ImagePrimitive for TFImage {
+    fn draw_line(
+        &self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        color: Color,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError> {
+        let canvas = self.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        canvas.draw_line(x1, y1, x2, y2, color, mode)?;
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn draw_rect(&self, rect: Rect, color: Color, mode: DrawMode) -> Result<(), TFImageError> {
+        let canvas = self.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        canvas.draw_rect(rect, color, mode)?;
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn draw_image(
+        &self,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        scale: i32,
+        scale_mode: ScaleMode,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError> {
+        let canvas = self.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        canvas.draw_image(image, x, y, scale, scale_mode, mode)?;
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn draw_filled_image(
+        &self,
+        image: &TFImage,
+        x: i32,
+        y: i32,
+        fill_color: Color,
+        scale: i32,
+        scale_mode: ScaleMode,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError> {
+        let canvas = self.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        canvas.draw_filled_image(image, x, y, fill_color, scale, scale_mode, mode)?;
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn draw_fontchar(
+        &self,
+        fontchar: FontCharRef,
+        backing: Option<&TFImage>,
+        x: i32,
+        y: i32,
+        mode: DrawMode,
+    ) -> Result<(), TFImageError> {
+        let canvas = self.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        canvas.draw_fontchar(fontchar, backing, x, y, mode)?;
+        self.mark_dirty();
+        Ok(())
+    }
+
+    fn copy_rect(
+        &self,
+        source: &TFImage,
+        src_rect: Rect,
+        dst_pt: Point,
+    ) -> Result<(), TFImageError> {
+        let target_canvas = self.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        let source_canvas = source.normal().ok_or(TFImageError::NoPrimaryCanvas)?;
+        target_canvas.copy_rect(&source_canvas, src_rect, dst_pt)?;
+        self.mark_dirty();
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_canvas_creation() {
+        let canvas = Canvas::new_rgba(100, 50);
+        assert_eq!(canvas.width(), 100);
+        assert_eq!(canvas.height(), 50);
+        assert_eq!(canvas.format().bytes_per_pixel, 4);
+    }
+
+    #[test]
+    fn test_canvas_lock_unlock() {
+        let canvas = Canvas::new_rgba(100, 50);
+        assert!(!canvas.is_locked());
+        assert!(canvas.lock().is_ok());
+        assert!(canvas.is_locked());
+        assert!(canvas.unlock().is_ok());
+        assert!(!canvas.is_locked());
+    }
+
+    #[test]
+    fn test_draw_horizontal_line() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let red = Color::rgb(255, 0, 0);
+        let mode = DrawMode::Normal;
+
+        canvas.draw_line(2, 5, 7, 5, red, mode).unwrap();
+
+        let pixels = canvas.pixels();
+        // Check that pixels (2,5) through (7,5) are red
+        for x in 2..=7 {
+            let offset = (5 * 10 + x) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+            assert_eq!(pixels[offset + 1], 0); // G
+            assert_eq!(pixels[offset + 2], 0); // B
+            assert_eq!(pixels[offset + 3], 255); // A
+        }
+    }
+
+    #[test]
+    fn test_draw_vertical_line() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let green = Color::rgb(0, 255, 0);
+        let mode = DrawMode::Normal;
+
+        canvas.draw_line(5, 2, 5, 7, green, mode).unwrap();
+
+        let pixels = canvas.pixels();
+        // Check that pixels (5,2) through (5,7) are green
+        for y in 2..=7 {
+            let offset = (y * 10 + 5) as usize * 4;
+            assert_eq!(pixels[offset], 0); // R
+            assert_eq!(pixels[offset + 1], 255); // G
+            assert_eq!(pixels[offset + 2], 0); // B
+            assert_eq!(pixels[offset + 3], 255); // A
+        }
+    }
+
+    #[test]
+    fn test_draw_diagonal_line() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let blue = Color::rgb(0, 0, 255);
+        let mode = DrawMode::Normal;
+
+        canvas.draw_line(2, 2, 7, 7, blue, mode).unwrap();
+
+        let pixels = canvas.pixels();
+        // Check that diagonal pixels (2,2) through (7,7) are blue
+        for i in 0..6 {
+            let x = 2 + i;
+            let y = 2 + i;
+            let offset = (y * 10 + x) as usize * 4;
+            assert_eq!(pixels[offset], 0); // R
+            assert_eq!(pixels[offset + 1], 0); // G
+            assert_eq!(pixels[offset + 2], 255); // B
+            assert_eq!(pixels[offset + 3], 255); // A
+        }
+    }
+
+    #[test]
+    fn test_draw_line_partial_clip() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let white = Color::rgb(255, 255, 255);
+        let mode = DrawMode::Normal;
+
+        // Line that starts outside and ends inside
+        canvas.draw_line(-5, 5, 5, 5, white, mode).unwrap();
+
+        let pixels = canvas.pixels();
+        // Only pixels from (0,5) to (5,5) should be drawn
+        for x in 0..=5 {
+            let offset = (5 * 10 + x) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+            assert_eq!(pixels[offset + 1], 255); // G
+            assert_eq!(pixels[offset + 2], 255); // B
+            assert_eq!(pixels[offset + 3], 255); // A
+        }
+    }
+
+    #[test]
+    fn test_double_lock_error() {
+        let canvas = Canvas::new_rgba(100, 50);
+        assert!(canvas.lock().is_ok());
+        let result = canvas.lock();
+        assert!(matches!(result, Err(CanvasError::AlreadyLocked)));
+    }
+
+    #[test]
+    fn test_unlock_without_lock_error() {
+        let canvas = Canvas::new_rgba(100, 50);
+        let result = canvas.unlock();
+        assert!(matches!(result, Err(CanvasError::NotLocked)));
+    }
+
+    #[test]
+    fn test_tfimage_creation() {
+        let canvas = Canvas::new_rgba(100, 50);
+        let image = TFImage::new(canvas);
+        assert_eq!(image.width(), Some(100));
+        assert_eq!(image.height(), Some(50));
+        assert!(!image.is_dirty());
+    }
+
+    #[test]
+    fn test_tfimage_dirty_flag() {
+        let canvas = Canvas::new_rgba(100, 50);
+        let image = TFImage::new(canvas);
+        assert!(!image.is_dirty());
+        image.mark_dirty();
+        assert!(image.is_dirty());
+        image.mark_clean();
+        assert!(!image.is_dirty());
+    }
+
+    #[test]
+    fn test_hotspot() {
+        let hs = HotSpot::new(10, 20);
+        assert_eq!(hs.x, 10);
+        assert_eq!(hs.y, 20);
+        assert!(!hs.is_origin());
+
+        let origin = HotSpot::origin();
+        assert_eq!(origin.x, 0);
+        assert_eq!(origin.y, 0);
+        assert!(origin.is_origin());
+    }
+
+    #[test]
+    fn test_image_primitive_delegates_to_canvas() {
+        let canvas = Canvas::new_rgba(10, 10);
+        let mut image = TFImage::new(canvas);
+        let red = Color::rgb(255, 0, 0);
+        let mode = DrawMode::Normal;
+
+        image.draw_line(2, 5, 7, 5, red, mode).unwrap();
+
+        assert!(image.is_dirty());
+        let canvas = image.normal().unwrap();
+        let pixels = canvas.pixels();
+
+        // Check that the line was drawn on the underlying canvas
+        for x in 2..=7 {
+            let offset = (5 * 10 + x) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+        }
+    }
+    #[test]
+    fn test_draw_rect() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        let red = Color::rgb(255, 0, 0);
+        let mode = DrawMode::Normal;
+
+        // Draw a rectangle from (5,5) to (15,15)
+        draw_rect(&mut canvas, 5, 5, 15, 15, red, mode).unwrap();
+
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+
+        // Check top edge (y=5, x=5 to 15)
+        for x in 5..=15 {
+            let offset = (5 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+        }
+
+        // Check bottom edge (y=15, x=5 to 15)
+        for x in 5..=15 {
+            let offset = (15 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+        }
+
+        // Check left edge (x=5, y=5 to 15)
+        for y in 5..=15 {
+            let offset = (y * width + 5) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+        }
+
+        // Check right edge (x=15, y=5 to 15)
+        for y in 5..=15 {
+            let offset = (y * width + 15) as usize * 4;
+            assert_eq!(pixels[offset], 255); // R
+        }
+    }
+
+    #[test]
+    fn test_draw_rect_swapped_coords() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        let green = Color::rgb(0, 255, 0);
+        let mode = DrawMode::Normal;
+
+        // Draw a rectangle with swapped coordinates (x2 < x1, y2 < y1)
+        draw_rect(&mut canvas, 15, 15, 5, 5, green, mode).unwrap();
+
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+
+        // Should still draw the same rectangle
+        for x in 5..=15 {
+            // Check corners are green
+            let top_offset = (5 * width + x) as usize * 4;
+            let bottom_offset = (15 * width + x) as usize * 4;
+            assert_eq!(pixels[top_offset], 0); // R
+            assert_eq!(pixels[top_offset + 1], 255); // G
+            assert_eq!(pixels[bottom_offset], 0); // R
+            assert_eq!(pixels[bottom_offset + 1], 255); // G
+        }
+    }
+
+    #[test]
+    fn test_draw_rect_outside_canvas() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let blue = Color::rgb(0, 0, 255);
+        let mode = DrawMode::Normal;
+
+        // Draw a rectangle completely outside canvas bounds
+        draw_rect(&mut canvas, 15, 15, 25, 25, blue, mode).unwrap();
+
+        let pixels = canvas.pixels();
+
+        // All pixels should remain black
+        for i in (0..pixels.len()).step_by(4) {
+            assert_eq!(pixels[i], 0); // R
+        }
+    }
+
+    #[test]
+    fn test_fill_rect_small() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        let blue = Color::rgb(0, 0, 255);
+
+        // Fill a small rectangle from (5,5) to (10,10)
+        fill_rect(&mut canvas, 5, 5, 10, 10, blue).unwrap();
+
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+
+        // Check all pixels in the filled area are blue
+        for y in 5..=10 {
+            for x in 5..=10 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 0); // R
+                assert_eq!(pixels[offset + 1], 0); // G
+                assert_eq!(pixels[offset + 2], 255); // B
+                assert_eq!(pixels[offset + 3], 255); // A
+            }
+        }
+    }
+
+    #[test]
+    fn test_fill_rect_large() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        let white = Color::rgb(255, 255, 255);
+
+        // Fill a large portion of the canvas
+        fill_rect(&mut canvas, 2, 2, 18, 18, white).unwrap();
+
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+
+        // Check filled area
+        for y in 2..=18 {
+            for x in 2..=18 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 255); // R
+                assert_eq!(pixels[offset + 1], 255); // G
+                assert_eq!(pixels[offset + 2], 255); // B
+            }
+        }
+
+        // Check border is still black
+        for y in 0..1 {
+            for x in 0..20 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 0); // R
+            }
+        }
+    }
+
+    #[test]
+    fn test_fill_rect_partial_clip() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let yellow = Color::rgb(255, 255, 0);
+
+        // Fill a rectangle that extends beyond canvas bounds
+        fill_rect(&mut canvas, 5, 5, 15, 15, yellow).unwrap();
+
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+
+        // Check only pixels within bounds were filled
+        for y in 5..=9 {
+            for x in 5..=9 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 255); // R
+                assert_eq!(pixels[offset + 1], 255); // G
+                assert_eq!(pixels[offset + 2], 0); // B
+            }
+        }
+
+        // Pixels outside the fill area should be black
+        for y in 0..4 {
+            for x in 0..10 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 0); // R
+            }
+        }
+    }
+
+    #[test]
+    fn test_fill_rect_edge_cases() {
+        let mut canvas = Canvas::new_rgba(10, 10);
+        let magenta = Color::rgb(255, 0, 255);
+
+        // Fill entire canvas
+        fill_rect(&mut canvas, 0, 0, 9, 9, magenta).unwrap();
+
+        let pixels = canvas.pixels();
+        for i in (0..pixels.len()).step_by(4) {
+            assert_eq!(pixels[i], 255); // R
+            assert_eq!(pixels[i + 2], 255); // B
+        }
+    }
+
+    #[test]
+    fn test_fill_rect_entirely_outside() {
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let red = Color::rgb(255, 0, 0);
+        
+        // Rectangle entirely to the left of canvas
+        fill_rect(&mut canvas, -100, 10, -10, 90, red).unwrap();
+        
+        // Verify no pixels changed (all should still be black/transparent)
+        let pixels = canvas.pixels();
+        for i in (0..pixels.len()).step_by(4) {
+            assert_eq!(pixels[i], 0, "Pixel at {} should be 0 (black)", i);
+            assert_eq!(pixels[i + 1], 0);
+            assert_eq!(pixels[i + 2], 0);
+            assert_eq!(pixels[i + 3], 0);
+        }
+        
+        // Rectangle entirely to the right of canvas
+        fill_rect(&mut canvas, 110, 10, 200, 90, red).unwrap();
+        
+        // Still no changes
+        for i in (0..pixels.len()).step_by(4) {
+            assert_eq!(pixels[i], 0);
+        }
+        
+        // Rectangle entirely above canvas
+        fill_rect(&mut canvas, 10, -100, 90, -10, red).unwrap();
+        
+        // Still no changes
+        for i in (0..pixels.len()).step_by(4) {
+            assert_eq!(pixels[i], 0);
+        }
+        
+        // Rectangle entirely below canvas
+        fill_rect(&mut canvas, 10, 110, 90, 200, red).unwrap();
+        
+        // Still no changes
+        for i in (0..pixels.len()).step_by(4) {
+            assert_eq!(pixels[i], 0);
+        }
+    }
+
+    #[test]
+    fn test_copy_canvas_same_size() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let mut src = Canvas::new_rgba(10, 10);
+        
+        // Fill source with red
+        fill_rect(&mut src, 0, 0, 9, 9, Color::rgb(255, 0, 0)).unwrap();
+        
+        // Copy entire source to destination
+        copy_canvas(&mut dst, &src, 0, 0, 0, 0, -1, -1).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        
+        // Verify all pixels were copied
+        for i in (0..dst_pixels.len()).step_by(4) {
+            assert_eq!(dst_pixels[i], 255); // R
+            assert_eq!(dst_pixels[i + 1], 0); // G
+            assert_eq!(dst_pixels[i + 2], 0); // B
+            assert_eq!(dst_pixels[i + 3], 255); // A
+        }
+    }
+
+    #[test]
+    fn test_copy_canvas_to_offset() {
+        let mut dst = Canvas::new_rgba(20, 20);
+        let mut src = Canvas::new_rgba(10, 10);
+        
+        // Fill source with green
+        fill_rect(&mut src, 0, 0, 9, 9, Color::rgb(0, 255, 0)).unwrap();
+        
+        // Copy source to specific position in destination
+        copy_canvas(&mut dst, &src, 5, 5, 0, 0, -1, -1).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        let dst_width = dst.width();
+        
+        // Verify pixels in the copied area are green
+        for y in 5..15 {
+            for x in 5..15 {
+                let offset = (y * dst_width + x) as usize * 4;
+                assert_eq!(dst_pixels[offset], 0); // R
+                assert_eq!(dst_pixels[offset + 1], 255); // G
+                assert_eq!(dst_pixels[offset + 2], 0); // B
+            }
+        }
+        
+        // Verify pixels outside the copied area are black
+        // Check top-left area
+        let offset = (0 * dst_width + 0) as usize * 4;
+        assert_eq!(dst_pixels[offset], 0); // R
+    }
+
+    #[test]
+    fn test_copy_canvas_clip_source() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let mut src = Canvas::new_rgba(20, 20);
+        
+        // Fill entire source with blue
+        fill_rect(&mut src, 0, 0, 19, 19, Color::rgb(0, 0, 255)).unwrap();
+        
+        // Copy only partial rect from source (10x10 from position (5,5))
+        copy_canvas(&mut dst, &src, 0, 0, 5, 5, 10, 10).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        let dst_width = dst.width();
+        
+        // Verify entire destination is blue (we copied exactly 10x10)
+        for y in 0..10 {
+            for x in 0..10 {
+                let offset = (y * dst_width + x) as usize * 4;
+                assert_eq!(dst_pixels[offset], 0); // R
+                assert_eq!(dst_pixels[offset + 1], 0); // G
+                assert_eq!(dst_pixels[offset + 2], 255); // B
+            }
+        }
+    }
+
+    #[test]
+    fn test_copy_canvas_clip_destination() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let mut src = Canvas::new_rgba(20, 20);
+        
+        // Fill source with yellow
+        fill_rect(&mut src, 0, 0, 19, 19, Color::rgb(255, 255, 0)).unwrap();
+        
+        // Copy larger source (20x20) to smaller destination starting at negative offset
+        copy_canvas(&mut dst, &src, -5, -5, 0, 0, 20, 20).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        let dst_width = dst.width();
+        
+        // Verify only pixels within destination bounds were copied
+        // The copy starts at (-5, -5), so we expect pixels (0,0) to (14,14) from source
+        // which would map to positions (5,5) to (9,9) in destination
+        for y in 0..10 {
+            for x in 0..10 {
+                let offset = (y * dst_width + x) as usize * 4;
+                if x >= 5 && y >= 5 {
+                    // Pixels that should have been copied
+                    assert_eq!(dst_pixels[offset], 255); // R
+                    assert_eq!(dst_pixels[offset + 1], 255); // G
+                    assert_eq!(dst_pixels[offset + 2], 0); // B
+                } else {
+                    // Pixels that remain black
+                    assert_eq!(dst_pixels[offset], 0); // R
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_copy_canvas_partial_overlap() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let mut src = Canvas::new_rgba(10, 10);
+        
+        // Fill destination with black (default)
+        // Fill source with magenta
+        fill_rect(&mut src, 0, 0, 9, 9, Color::rgb(255, 0, 255)).unwrap();
+        
+        // Copy partial rect from source to partial position in destination
+        copy_canvas(&mut dst, &src, 2, 2, 0, 0, 6, 6).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        let dst_width = dst.width();
+        
+        // Verify copied area is magenta
+        for y in 2..8 {
+            for x in 2..8 {
+                let offset = (y * dst_width + x) as usize * 4;
+                assert_eq!(dst_pixels[offset], 255); // R
+                assert_eq!(dst_pixels[offset + 1], 0); // G
+                assert_eq!(dst_pixels[offset + 2], 255); // B
+            }
+        }
+        
+        // Verify uncopied area is black
+        let offset = (0 * dst_width + 0) as usize * 4;
+        assert_eq!(dst_pixels[offset], 0); // R
+    }
+
+    #[test]
+    fn test_copy_canvas_entirely_outside() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let src = Canvas::new_rgba(10, 10);
+        
+        // Fill source with cyan
+        let mut src_mut = src;
+        fill_rect(&mut src_mut, 0, 0, 9, 9, Color::rgb(0, 255, 255)).unwrap();
+        
+        // Try to copy entirely outside destination bounds
+        copy_canvas(&mut dst, &src, 20, 20, 0, 0, 10, 10).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        
+        // Verify no pixels were modified
+        for i in (0..dst_pixels.len()).step_by(4) {
+            assert_eq!(dst_pixels[i], 0); // R
+            assert_eq!(dst_pixels[i + 1], 0); // G
+            assert_eq!(dst_pixels[i + 2], 0); // B
+            assert_eq!(dst_pixels[i + 3], 0); // A
+        }
+    }
+
+    #[test]
+    fn test_copy_canvas_default_params_entire_source() {
+        let mut dst = Canvas::new_rgba(10, 10);
+        let mut src = Canvas::new_rgba(10, 10);
+        
+        // Fill source with white
+        fill_rect(&mut src, 0, 0, 9, 9, Color::rgb(255, 255, 255)).unwrap();
+        
+        // Copy with default parameters (width=0, height=0 means copy entire source)
+        copy_canvas(&mut dst, &src, 0, 0, 0, 0, 0, 0).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        
+        // Verify entire source was copied
+        for i in (0..dst_pixels.len()).step_by(4) {
+            assert_eq!(dst_pixels[i], 255); // R
+            assert_eq!(dst_pixels[i + 1], 255); // G
+            assert_eq!(dst_pixels[i + 2], 255); // B
+        }
+    }
+
+    #[test]
+    fn test_copy_canvas_format_mismatch() {
+        let mut dst = Canvas::new(Extent::new(10, 10), CanvasFormat::rgba());
+        let src = Canvas::new(Extent::new(10, 10), CanvasFormat::rgb());
+        
+        // Should fail due to format mismatch
+        let result = copy_canvas(&mut dst, &src, 0, 0, 0, 0, -1, -1);
+        assert!(matches!(result, Err(CanvasError::InvalidOperation(_))));
+    }
+
+    #[test]
+    fn test_copy_canvas_large_to_small() {
+        let mut dst = Canvas::new_rgba(5, 5);
+        let mut src = Canvas::new_rgba(10, 10);
+        
+        // Fill source with varied colors
+        for y in 0..10 {
+            for x in 0..10 {
+                let color = Color::rgb(
+                    (x as u8 * 25) % 256,
+                    (y as u8 * 25) % 256,
+                    128,
+                );
+                let mut temp_canvas = Canvas::new_rgba(1, 1);
+                fill_rect(&mut temp_canvas, 0, 0, 0, 0, color).unwrap();
+                let temp_pixels = temp_canvas.pixels();
+                src.with_pixels_mut(|src_pixels| {
+                    let offset = (y * 10 + x) as usize * 4;
+                    src_pixels[offset..offset + 4].copy_from_slice(&temp_pixels[..4]);
+                }).unwrap();
+            }
+        }
+        
+        // Copy larger source to smaller destination
+        copy_canvas(&mut dst, &src, 0, 0, 0, 0, 10, 10).unwrap();
+        
+        // Should only copy 5x5 pixels (destination size)
+        let dst_pixels = dst.pixels();
+        let dst_width = dst.width();
+        
+        // Verify top-left 5x5 pixels from source were copied
+        for y in 0..5 {
+            for x in 0..5 {
+                let offset = (y * dst_width + x) as usize * 4;
+                // Verify pixel values correspond to source
+                assert!(dst_pixels[offset] == (x as u8 * 25) % 256); // R
+                assert!(dst_pixels[offset + 1] == (y as u8 * 25) % 256); // G
+            }
+        }
+    }
+
+
+    #[test]
+    fn test_scissor_clips_line() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        // Set a scissor rect from (5,5) to (15,15)
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(10, 10));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        let red = Color::rgb(255, 0, 0);
+        let mode = DrawMode::Normal;
+        
+        // Draw a line from (0, 10) to (20, 10) - horizontal through canvas
+        // Only the portion from (5, 10) to (14, 10) should be drawn (10 pixels in scissor)
+        canvas.draw_line(0, 10, 20, 10, red, mode).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check pixels inside scissor are red (at y=10, x=5 to 14)
+        for x in 5..15 {
+            let offset = (10 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 255, "Pixel at ({}, {}) should be red", x, 10);
+        }
+        
+        // Check pixels left of scissor at y=10 are black
+        for x in 0..5 {
+            let offset = (10 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 0, "Pixel at ({}, {}) should be black", x, 10);
+        }
+        
+        // Check pixels right of scissor at y=10 are black
+        for x in 15..20 {
+            let offset = (10 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 0, "Pixel at ({}, {}) should be black", x, 10);
+        }
+        
+        // Check pixels in scissor at other y values are unchanged (black)
+        for y in 5..15 {
+            for x in 5..15 {
+                if y != 10 {
+                    let offset = (y * width + x) as usize * 4;
+                    assert_eq!(pixels[offset], 0, "Pixel at ({}, {}) should be black", x, y);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_scissor_clips_diagonal_line() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        // Set a scissor rect from (5,5) to (15,15)
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(10, 10));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        let blue = Color::rgb(0, 0, 255);
+        let mode = DrawMode::Normal;
+        
+        // Draw diagonal line from (0,0) to (20,20)
+        // Only pixels in the scissor should be drawn
+        canvas.draw_line(0, 0, 20, 20, blue, mode).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check diagonal pixels inside scissor are blue
+        for i in 5..15 {
+            let offset = (i * width + i) as usize * 4;
+            assert_eq!(pixels[offset], 0, "R at ({}, {})", i, i);  // R should be 0 for blue
+            assert_eq!(pixels[offset + 1], 0, "G at ({}, {})", i, i);  // G should be 0 for blue
+            assert_eq!(pixels[offset + 2], 255, "B at ({}, {})", i, i);  // B should be 255 for blue
+        }
+        
+        // Check diagonal pixels outside scissor are black
+        for i in 0..5 {
+            let offset = (i * width + i) as usize * 4;
+            assert_eq!(pixels[offset], 0, "Pixel at ({}, {}) outside scissor should be black", i, i);
+        }
+        
+        for i in 15..20 {
+            let offset = (i * width + i) as usize * 4;
+            assert_eq!(pixels[offset], 0, "Pixel at ({}, {}) outside scissor should be black", i, i);
+        }
+    }
+
+    #[test]
+    fn test_disable_scissor() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        // Set a scissor rect
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(10, 10));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        // Draw with scissor enabled
+        canvas.draw_line(0, 10, 20, 10, Color::rgb(255, 0, 0), DrawMode::Normal).unwrap();
+        
+        // Now disable scissor
+        canvas.set_scissor(ScissorRect::disabled());
+        
+        // Draw a different line in green
+        canvas.draw_line(0, 15, 20, 15, Color::rgb(0, 255, 0), DrawMode::Normal).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // The red line should still be clipped (it was drawn while scissor was active)
+        for x in 0..5 {
+            let offset = (10 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 0, "Red line outside scissor should be black at x={}", x);
+        }
+        
+        // The green line should not be clipped (scissor was disabled)
+        for x in 0..20 {
+            let offset = (15 * width + x) as usize * 4;
+            assert_eq!(pixels[offset], 0, "G should be 0 for green");
+            assert_eq!(pixels[offset + 1], 255, "G should be 255 for green at x={}", x);
+        }
+    }
+
+    #[test]
+    fn test_scissor_clips_fill_rect() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        // Set a scissor rect from (5,5) to (15,15)
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(10, 10));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        // Fill a larger rect from (0,0) to (20,20)
+        fill_rect(&mut canvas, 0, 0, 20, 20, Color::rgb(255, 0, 0)).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check pixels inside scissor are red
+        for y in 5..15 {
+            for x in 5..15 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 255, "Pixel in scissor at ({}, {}) should be red", x, y);
+            }
+        }
+        
+        // Check pixels outside scissor are black
+        for y in 0..20 {
+            for x in 0..20 {
+                let offset = (y * width + x) as usize * 4;
+                if x < 5 || x >= 15 || y < 5 || y >= 15 {
+                    assert_eq!(pixels[offset], 0, "Pixel outside scissor at ({}, {}) should be black", x, y);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_scissor_partial_fill_rect() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        // Set a scissor rect from (10,10) to (15,15)
+        let scissor_rect = Rect::new(Point::new(10, 10), Extent::new(5, 5));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        // Fill a rect from (5,5) to (20,20)
+        fill_rect(&mut canvas, 5, 5, 20, 20, Color::rgb(0, 255, 0)).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check pixels in intersection of fill rect and scissor are green
+        for y in 10..15 {
+            for x in 10..15 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 0, "R");
+                assert_eq!(pixels[offset + 1], 255, "G at ({}, {})", x, y);
+                assert_eq!(pixels[offset + 2], 0, "B");
+            }
+        }
+        
+        // Check pixels in fill rect but outside scissor are black
+        let offset = (5 * width + 5) as usize * 4;
+        assert_eq!(pixels[offset], 0, "Pixel at (5,5) should be black");
+    }
+
+    #[test]
+    fn test_scissor_clips_copy_canvas() {
+        let mut dst = Canvas::new_rgba(20, 20);
+        let mut src = Canvas::new_rgba(10, 10);
+        
+        // Set scissor on destination from (5,5) to (15,15)
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(10, 10));
+        dst.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        // Fill source with blue
+        fill_rect(&mut src, 0, 0, 10, 10, Color::rgb(0, 0, 255)).unwrap();
+        
+        // Copy source to destination at (0,0)
+        copy_canvas(&mut dst, &src, 0, 0, 0, 0, -1, -1).unwrap();
+        
+        let dst_pixels = dst.pixels();
+        let dst_width = dst.width();
+        
+        // Check pixels inside scissor are blue (where copy intersects scissor)
+        for y in 5..10 {
+            for x in 5..10 {
+                let offset = (y * dst_width + x) as usize * 4;
+                assert_eq!(dst_pixels[offset], 0, "R at ({}, {})", x, y);
+                assert_eq!(dst_pixels[offset + 1], 0, "G at ({}, {})", x, y);
+                assert_eq!(dst_pixels[offset + 2], 255, "B at ({}, {})", x, y);
+            }
+        }
+        
+        // Check pixels in source region but outside scissor are black
+        for y in 0..5 {
+            for x in 0..10 {
+                let offset = (y * dst_width + x) as usize * 4;
+                assert_eq!(dst_pixels[offset], 0, "Pixel at ({}, {}) should be black", x, y);
+            }
+        }
+    }
+
+    #[test]
+    fn test_is_in_scissor_no_scissor() {
+        let canvas = Canvas::new_rgba(20, 20);
+        
+        // No scissor set - all points should be in scissor
+        assert!(is_in_scissor(&canvas, 0, 0));
+        assert!(is_in_scissor(&canvas, 10, 10));
+        assert!(is_in_scissor(&canvas, 19, 19));
+        assert!(is_in_scissor(&canvas, -1, -1));
+        assert!(is_in_scissor(&canvas, 100, 100));
+    }
+
+    #[test]
+    fn test_is_in_scissor_with_scissor() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(10, 10));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        // Points inside scissor (including left/top edge, excluding right/bottom edge)
+        assert!(is_in_scissor(&canvas, 5, 5));
+        assert!(is_in_scissor(&canvas, 14, 14));
+        assert!(is_in_scissor(&canvas, 5, 10));
+        assert!(is_in_scissor(&canvas, 10, 5));
+        
+        // Points on right/bottom edge should be out of scissor (exclusive)
+        assert!(!is_in_scissor(&canvas, 15, 15));
+        assert!(!is_in_scissor(&canvas, 15, 10));
+        assert!(!is_in_scissor(&canvas, 10, 15));
+        
+        // Points outside scissor
+        assert!(!is_in_scissor(&canvas, 4, 5));
+        assert!(!is_in_scissor(&canvas, 5, 4));
+        assert!(!is_in_scissor(&canvas, 15, 5));
+        assert!(!is_in_scissor(&canvas, 5, 15));
+        assert!(!is_in_scissor(&canvas, 0, 0));
+        assert!(!is_in_scissor(&canvas, 19, 19));
+    }
+
+    #[test]
+    fn test_scissor_edge_cases() {
+        let mut canvas = Canvas::new_rgba(20, 20);
+        
+        // Scissor at canvas origin
+        let scissor_rect = Rect::new(Point::new(5, 5), Extent::new(5, 5));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        assert!(is_in_scissor(&canvas, 0, 0));
+        assert!(is_in_scissor(&canvas, 4, 4));
+        assert!(!is_in_scissor(&canvas, 5, 5));
+        assert!(!is_in_scissor(&canvas, 0, 5));
+        assert!(!is_in_scissor(&canvas, 5, 0));
+        
+        // Scissor at canvas edge
+        let scissor_rect = Rect::new(Point::new(15, 15), Extent::new(5, 5));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        assert!(is_in_scissor(&canvas, 15, 15));
+        assert!(is_in_scissor(&canvas, 19, 19));
+        assert!(!is_in_scissor(&canvas, 14, 15));
+        assert!(!is_in_scissor(&canvas, 15, 14));
+    }
+
+    #[test]
+    fn test_draw_fontchar_missing_char() {
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let page = FontPage::new(0x0000, 0x0020, 10);
+        let red = Color::rgb(255, 0, 0);
+        
+        // Try to draw character that doesn't exist
+        let result = draw_fontchar(&mut canvas, red, &page, 0x0020, 10, 10, false);
+        assert!(matches!(result, Err(CanvasError::InvalidOperation(_))));
+    }
+
+    #[test]
+    fn test_draw_fontchar_empty_char() {
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let red = Color::rgb(255, 0, 0);
+        
+        // Add a character with no data
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(8, 12),
+            disp: crate::graphics::font::Extent::new(8, 12),
+            hotspot: crate::graphics::font::Point::new(0, 10),
+            data: None,
+            pitch: 8,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Try to draw character with no bitmap data
+        let result = draw_fontchar(&mut canvas, red, &page, 0x0020, 10, 10, false);
+        assert!(matches!(result, Err(CanvasError::InvalidOperation(_))));
+    }
+
+    #[test]
+    fn test_draw_fontchar_zero_dimensions() {
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let red = Color::rgb(255, 0, 0);
+        
+        // Add a character with zero dimensions
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(0, 0),
+            disp: crate::graphics::font::Extent::new(0, 0),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(std::sync::Arc::new([])),
+            pitch: 0,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Should return 0 width without error
+        let result = draw_fontchar(&mut canvas, red, &page, 0x0020, 10, 10, false);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0);
+    }
+
+    #[test]
+    fn test_draw_fontchar_simple_opaque() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let red = Color::rgb(255, 0, 0);
+        
+        // Create a simple 3x3 character with full opacity
+        let data: Vec<u8> = vec![255; 9]; // All pixels fully opaque
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(3, 3),
+            disp: crate::graphics::font::Extent::new(3, 3),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(Arc::from(data)),
+            pitch: 3,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Draw character at (10, 10)
+        let result = draw_fontchar(&mut canvas, red, &page, 0x0020, 10, 10, false);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+        
+        // Check that pixels (10,10) through (12,12) are red
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        for y in 10..13 {
+            for x in 10..13 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 255, "R at ({},{})", x, y);
+                assert_eq!(pixels[offset + 1], 0, "G at ({},{})", x, y);
+                assert_eq!(pixels[offset + 2], 0, "B at ({},{})", x, y);
+            }
+        }
+    }
+
+    #[test]
+    fn test_draw_fontchar_with_hotspot() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let green = Color::rgb(0, 255, 0);
+        
+        // Create a 2x2 character with hotspot offset
+        let data: Vec<u8> = vec![255, 255, 255, 255]; // All pixels fully opaque
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(2, 2),
+            disp: crate::graphics::font::Extent::new(2, 2),
+            hotspot: crate::graphics::font::Point::new(1, 1),
+            data: Some(Arc::from(data)),
+            pitch: 2,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Draw character at (20, 20) - should appear at (19, 19) due to hotspot
+        let result = draw_fontchar(&mut canvas, green, &page, 0x0020, 20, 20, false);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2);
+        
+        // Check that pixels (19,19) through (20,20) are green
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        for y in 19..21 {
+            for x in 19..21 {
+                let offset = (y * width + x) as usize * 4;
+                assert_eq!(pixels[offset], 0, "R at ({},{})", x, y);
+                // Allow some tolerance from blending
+                assert!(pixels[offset + 1] > 200, "G at ({},{})", x, y);
+                assert_eq!(pixels[offset + 2], 0, "B at ({},{})", x, y);
+            }
+        }
+    }
+
+    #[test]
+    fn test_draw_fontchar_alpha_blending() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(100, 100);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let blue = Color::rgb(0, 0, 255);
+        
+        // Fill background with white first
+        fill_rect(&mut canvas, 0, 0, 99, 99, Color::rgb(255, 255, 255)).unwrap();
+        
+        // Create a 2x2 character with varying alpha values
+        // Top-left: 0 (transparent), Top-right: 85, Bottom-left: 170, Bottom-right: 255
+        let data: Vec<u8> = vec![0, 85, 170, 255];
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(2, 2),
+            disp: crate::graphics::font::Extent::new(2, 2),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(Arc::from(data)),
+            pitch: 2,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Draw character over white background
+        draw_fontchar(&mut canvas, blue, &page, 0x0020, 50, 50, false).unwrap();
+        
+        // Check alpha blending results
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Top-left (0 alpha) should still be white
+        let offset = (50 * width + 50) as usize * 4;
+        assert_eq!(pixels[offset], 255, "R at (50,50) should be white");
+        assert_eq!(pixels[offset + 1], 255, "G at (50,50) should be white");
+        assert_eq!(pixels[offset + 2], 255, "B at (50,50) should be white");
+        
+        // Top-right (85/255 alpha) should be light blue (blended)
+        let offset = (50 * width + 51) as usize * 4;
+        // Should have more red/green than pure blue due to white background
+        assert!(pixels[offset] > 100, "R at (50,51)");
+        assert!(pixels[offset + 1] > 100, "G at (50,51)");
+        assert!(pixels[offset + 2] > 150, "B at (50,51)");
+        
+        // Bottom-left (170/255 alpha) should be more blue
+        let offset = (51 * width + 50) as usize * 4;
+        assert!(pixels[offset] < 100, "R at (51,50)");
+        assert!(pixels[offset + 1] < 100, "G at (51,50)");
+        assert!(pixels[offset + 2] > 200, "B at (51,50)");
+        
+        // Bottom-right (255 alpha) should be pure blue
+        let offset = (51 * width + 51) as usize * 4;
+        assert_eq!(pixels[offset], 0, "R at (51,51)");
+        assert_eq!(pixels[offset + 1], 0, "G at (51,51)");
+        assert_eq!(pixels[offset + 2], 255, "B at (51,51)");
+    }
+
+    #[test]
+    fn test_draw_fontchar_scissor_clip() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(50, 50);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let magenta = Color::rgb(255, 0, 255);
+        
+        // Create a 10x10 fully opaque character
+        let data: Vec<u8> = vec![255; 100];
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(10, 10),
+            disp: crate::graphics::font::Extent::new(10, 10),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(Arc::from(data)),
+            pitch: 10,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Set scissor rect from (10,10) to (20,20)
+        let scissor_rect = Rect::new(Point::new(10, 10), Extent::new(10, 10));
+        canvas.set_scissor(ScissorRect::enabled(scissor_rect));
+        
+        // Draw character at (15, 15) - partially inside scissor
+        draw_fontchar(&mut canvas, magenta, &page, 0x0020, 15, 15, false).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check pixels inside scissor are magenta (where character overlaps)
+        for y in 15..20 {
+            for x in 15..20 {
+                let offset = (y * width + x) as usize * 4;
+                if x < 25 && y < 25 {  // Within character bounds
+                    assert!(pixels[offset] > 200, "R at ({},{})", x, y);
+                    assert!(pixels[offset + 2] > 200, "B at ({},{})", x, y);
+                }
+            }
+        }
+        
+        // Check pixels outside scissor are still black
+        let offset = (5 * width + 5) as usize * 4;
+        assert_eq!(pixels[offset], 0, "Pixel outside scissor should be black");
+    }
+
+    #[test]
+    fn test_draw_fontchar_canvas_bounds_clip() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(20, 20);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        let cyan = Color::rgb(0, 255, 255);
+        
+        // Create a 20x20 fully opaque character
+        let data: Vec<u8> = vec![255; 400];
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(20, 20),
+            disp: crate::graphics::font::Extent::new(20, 20),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(Arc::from(data)),
+            pitch: 20,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Draw character at (-5, -5) - partially outside canvas
+        draw_fontchar(&mut canvas, cyan, &page, 0x0020, -5, -5, false).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check that pixels (0,0) through (14,14) are drawn (clipped portion)
+        for y in 0..15 {
+            for x in 0..15 {
+                let offset = (y * width + x) as usize * 4;
+                assert!(pixels[offset + 1] > 200, "G at ({},{})", x, y);
+                assert!(pixels[offset + 2] > 200, "B at ({},{})", x, y);
+            }
+        }
+        
+        // Should not panic or access out of bounds
+        assert_eq!(canvas.pixels().len(), 20 * 20 * 4);
+    }
+
+    #[test]
+    fn test_draw_fontchar_semitransparent_fg() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(50, 50);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        
+        // Start with white background
+        fill_rect(&mut canvas, 0, 0, 49, 49, Color::rgb(255, 255, 255)).unwrap();
+        
+        // Create a 10x10 fully opaque character (glyph_alpha = 255)
+        let data: Vec<u8> = vec![255; 100];
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(10, 10),
+            disp: crate::graphics::font::Extent::new(10, 10),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(Arc::from(data)),
+            pitch: 10,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Draw with semi-transparent foreground color (alpha = 128)
+        // Effective alpha = (255 * 128) / 255 = 128
+        let fg_color = Color { r: 255, g: 0, b: 0, a: 128 };
+        draw_fontchar(&mut canvas, fg_color, &page, 0x0020, 10, 10, false).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Check that pixels in the character have been blended
+        // With alpha=128, we expect red to be blended with white background
+        // Result should be approximately: R = 255*0.5 + 255*0.5 = 255 (clamped)
+        // This tests that effective alpha combining works correctly
+        let offset = (12 * width + 12) as usize * 4;
+        assert!(pixels[offset] > 200, "R should be high (blended with white)");
+        assert!(pixels[offset + 1] < 200, "G should be reduced (blended with red)");
+        assert!(pixels[offset + 2] < 200, "B should be reduced (blended with red)");
+        
+        // Check alpha channel - should use proper alpha blending
+        // Effective alpha = 128, background alpha = 255
+        // For alpha channel: 128 + 255*(255-128)/255 = 128 + 255*127/255 = 128 + 127 = 255
+        assert_eq!(pixels[offset + 3], 255, "Alpha should be properly blended");
+    }
+
+    #[test]
+    fn test_draw_fontchar_combined_alpha() {
+        use std::sync::Arc;
+        
+        let mut canvas = Canvas::new_rgba(50, 50);
+        let mut page = FontPage::new(0x0000, 0x0020, 10);
+        
+        // Create a 10x10 character with varying glyph alpha
+        let mut data: Vec<u8> = Vec::with_capacity(100);
+        for y in 0..10 {
+            for x in 0..10 {
+                // Create a gradient: left pixels have alpha 128, right pixels have alpha 255
+                let alpha = if x < 5 { 128 } else { 255 };
+                data.push(alpha);
+            }
+        }
+        
+        let tf_char = crate::graphics::font::TFChar {
+            extent: crate::graphics::font::Extent::new(10, 10),
+            disp: crate::graphics::font::Extent::new(10, 10),
+            hotspot: crate::graphics::font::Point::new(0, 0),
+            data: Some(Arc::from(data)),
+            pitch: 10,
+        };
+        page.set_char(0x0020, tf_char).unwrap();
+        
+        // Draw with semi-transparent foreground color (alpha = 128)
+        let fg_color = Color { r: 255, g: 0, b: 0, a: 128 };
+        draw_fontchar(&mut canvas, fg_color, &page, 0x0020, 10, 10, false).unwrap();
+        
+        let pixels = canvas.pixels();
+        let width = canvas.width();
+        
+        // Left side: glyph_alpha=128, fg_color.a=128
+        // Effective alpha = (128 * 128) / 255 = 64
+        let offset_left = (12 * width + 12) as usize * 4;
+        let r_left = pixels[offset_left] as i32;
+        
+        // Right side: glyph_alpha=255, fg_color.a=128
+        // Effective alpha = (255 * 128) / 255 = 128
+        let offset_right = (12 * width + 17) as usize * 4;
+        let r_right = pixels[offset_right] as i32;
+        
+        // Right side should have more red (higher effective alpha)
+        assert!(r_right > r_left, 
+                "Right side (alpha=128) should have more red than left side (alpha=64)");
+    }
+
+}

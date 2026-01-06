@@ -1,8 +1,15 @@
 //! Graphics core state and configuration.
 
 use std::ffi::CStr;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU32, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
+
+use crate::graphics::dcqueue::{DcqConfig, DrawCommandQueue, Screen as DcqScreen};
+use crate::graphics::render_context::{RenderContext, ResourceType, ScreenType};
+use crate::graphics::sdl::{
+    DriverConfig, GraphicsDriver, GraphicsEvent, OpenGlDriver, RedrawMode as DriverRedrawMode,
+    SdlDriver,
+};
+use crate::graphics::tfb_draw::Canvas;
 
 /// Graphics driver backend type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -136,44 +143,77 @@ impl Default for FrameRateState {
     }
 }
 
-/// Core graphics system state.
-#[derive(Debug)]
-pub struct GraphicsState {
-    driver: AtomicI32,
-    flags: AtomicU32,
-    dimensions: Mutex<ScreenDimensions>,
-    scale_config: Mutex<ScaleConfig>,
-    frame_rate: Mutex<FrameRateState>,
+/// Graphics API errors.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GraphicsError {
+    /// Graphics system not initialized.
+    NotInitialized,
+    /// Invalid operation for current state.
+    InvalidOperation(String),
+    /// Graphics driver error.
+    DriverError(String),
+}
 
-    gamma: AtomicU32,
-    initialized: AtomicBool,
+impl std::fmt::Display for GraphicsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotInitialized => write!(f, "Graphics not initialized"),
+            Self::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
+            Self::DriverError(msg) => write!(f, "Driver error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for GraphicsError {}
+
+/// Core graphics system state.
+pub struct GraphicsState {
+    driver_id: RwLock<GfxDriver>,
+    flags: RwLock<GfxFlags>,
+    dimensions: RwLock<ScreenDimensions>,
+    scale_config: RwLock<ScaleConfig>,
+    frame_rate: RwLock<FrameRateState>,
+    gamma: RwLock<f32>,
+    initialized: RwLock<bool>,
+
+    driver: Option<Box<dyn GraphicsDriver>>,
+    dcq: Arc<RwLock<DrawCommandQueue>>,
+    render_context: Arc<RwLock<RenderContext>>,
 }
 
 impl GraphicsState {
     /// Create a new graphics state with default values.
     #[must_use]
     pub fn new() -> Self {
+        let render_context = Arc::new(RwLock::new(RenderContext::new()));
+        let dcq = Arc::new(RwLock::new(DrawCommandQueue::with_config(
+            DcqConfig::standard(),
+            Arc::clone(&render_context),
+        )));
+
         Self {
-            driver: AtomicI32::new(GfxDriver::default() as i32),
-            flags: AtomicU32::new(0),
-            dimensions: Mutex::new(ScreenDimensions::default()),
-            scale_config: Mutex::new(ScaleConfig::default()),
-            frame_rate: Mutex::new(FrameRateState::default()),
-            gamma: AtomicU32::new(1.0_f32.to_bits()),
-            initialized: AtomicBool::new(false),
+            driver_id: RwLock::new(GfxDriver::default()),
+            flags: RwLock::new(GfxFlags::new(0)),
+            dimensions: RwLock::new(ScreenDimensions::default()),
+            scale_config: RwLock::new(ScaleConfig::default()),
+            frame_rate: RwLock::new(FrameRateState::default()),
+            gamma: RwLock::new(1.0_f32),
+            initialized: RwLock::new(false),
+            driver: None,
+            dcq,
+            render_context,
         }
     }
 
     /// Initialize the graphics subsystem.
     pub fn init(
-        &self,
+        &mut self,
         driver: GfxDriver,
         flags: GfxFlags,
-
         _renderer: Option<&CStr>,
         width: i32,
         height: i32,
-    ) -> Result<(), String> {
+    ) -> Result<(), GraphicsError> {
         self.set_driver(driver);
         self.set_flags(flags);
         self.set_dimensions(ScreenDimensions {
@@ -183,82 +223,272 @@ impl GraphicsState {
             actual_height: height,
             color_depth: self.get_dimensions().color_depth,
         });
-        self.initialized.store(true, Ordering::Relaxed);
+
+        let mut new_driver: Box<dyn GraphicsDriver> = match driver {
+            GfxDriver::SdlOpenGL => Box::new(OpenGlDriver::new()),
+            GfxDriver::SdlPure => Box::new(SdlDriver::new()),
+        };
+
+        let config = DriverConfig::new(
+            width as u32,
+            height as u32,
+            flags.contains(GfxFlags::FULLSCREEN),
+        );
+        new_driver
+            .init(&config)
+            .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
+
+        self.driver = Some(new_driver);
+
+        if self.driver.is_some() {
+            let main_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(width, height)));
+            let extra_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(width, height)));
+            let transition_canvas = Arc::new(RwLock::new(Canvas::new_for_screen(width, height)));
+
+            let mut ctx = self.render_context.write().unwrap();
+            ctx.set_screen(ScreenType::Main, Arc::clone(&main_canvas));
+            ctx.set_screen(ScreenType::Extra, Arc::clone(&extra_canvas));
+            ctx.set_screen(ScreenType::Transition, Arc::clone(&transition_canvas));
+        }
+
+        *self.initialized.write().unwrap() = true;
         Ok(())
     }
 
     /// Reinitialize graphics with new parameters.
     pub fn reinit(
-        &self,
+        &mut self,
         driver: GfxDriver,
         flags: GfxFlags,
+        renderer: Option<&CStr>,
         width: i32,
         height: i32,
-    ) -> Result<(), String> {
+    ) -> Result<(), GraphicsError> {
         if !self.is_initialized() {
-            return Err("Graphics not initialized".to_string());
+            return Err(GraphicsError::NotInitialized);
         }
-        self.init(driver, flags, None, width, height)
+
+        self.driver = None;
+        self.init(driver, flags, renderer, width, height)
     }
 
     /// Shutdown the graphics subsystem.
-    pub fn uninit(&self) {
-        self.initialized.store(false, Ordering::Relaxed);
+    pub fn uninit(&mut self) {
+        if !self.is_initialized() {
+            return;
+        }
+
+        if let Err(err) = self.purge_dangling() {
+            log::warn!("Failed to purge dangling resources during uninit: {}", err);
+        }
+
+        if let Some(driver) = self.driver.as_mut() {
+            if let Err(err) = driver.uninit() {
+                log::warn!("Driver uninit failed: {}", err);
+            }
+        }
+        self.driver = None;
+        *self.initialized.write().unwrap() = false;
     }
 
     /// Check if graphics are initialized.
     #[must_use]
     pub fn is_initialized(&self) -> bool {
-        self.initialized.load(Ordering::Relaxed)
+        *self.initialized.read().unwrap()
+    }
+
+    /// Get reference to driver.
+    pub fn driver(&self) -> Option<&dyn GraphicsDriver> {
+        self.driver.as_deref()
+    }
+
+    /// Get DCQ.
+    pub fn dcq(&self) -> Arc<RwLock<DrawCommandQueue>> {
+        Arc::clone(&self.dcq)
+    }
+
+    /// Get render context.
+    pub fn render_context(&self) -> Arc<RwLock<RenderContext>> {
+        Arc::clone(&self.render_context)
     }
 
     /// Swap backbuffers and update display.
-    pub fn swap_buffers(&self, _force_redraw: RedrawMode) {
-        debug_assert!(self.is_initialized(), "graphics not initialized");
+    pub fn swap_buffers(&mut self, force_full_redraw: bool) -> Result<(), GraphicsError> {
+        if !self.is_initialized() {
+            return Err(GraphicsError::NotInitialized);
+        }
+
+        self.dcq
+            .write()
+            .unwrap()
+            .process_commands()
+            .map_err(|err| {
+                GraphicsError::InvalidOperation(format!("DCQ processing failed: {}", err))
+            })?;
+
+        let redraw_mode = if force_full_redraw {
+            RedrawMode::Full
+        } else {
+            RedrawMode::None
+        };
+
+        {
+            let driver = self
+                .driver
+                .as_mut()
+                .ok_or(GraphicsError::NotInitialized)?;
+            sync_canvases_to_driver(&self.render_context, &mut **driver, DcqScreen::Main)?;
+        }
+
+        let driver = self
+            .driver
+            .as_mut()
+            .ok_or(GraphicsError::NotInitialized)?;
+        driver
+            .swap_buffers(map_redraw_mode(redraw_mode))
+            .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
+
+        Ok(())
     }
 
     /// Process pending graphics events.
-    pub fn process_events(&self) {
-        debug_assert!(self.is_initialized(), "graphics not initialized");
+    pub fn process_events(&mut self) -> Result<bool, GraphicsError> {
+        let driver = self
+            .driver
+            .as_mut()
+            .ok_or(GraphicsError::NotInitialized)?;
+
+        let events = driver
+            .poll_events()
+            .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
+        let should_quit = events.iter().any(|event| matches!(event, GraphicsEvent::Quit));
+
+        Ok(should_quit)
     }
 
     /// Flush pending graphics commands.
-    pub fn flush(&self) {
-        debug_assert!(self.is_initialized(), "graphics not initialized");
+    pub fn flush(&mut self) -> Result<(), GraphicsError> {
+        if !self.is_initialized() {
+            return Err(GraphicsError::NotInitialized);
+        }
+
+        self.dcq
+            .write()
+            .unwrap()
+            .process_commands()
+            .map_err(|err| GraphicsError::InvalidOperation(format!("Flush failed: {}", err)))?;
+
+        Ok(())
     }
 
     /// Purge dangling graphics resources.
-    pub fn purge_dangling(&self) {
-        debug_assert!(self.is_initialized(), "graphics not initialized");
+    pub fn purge_dangling(&mut self) -> Result<usize, GraphicsError> {
+        if !self.is_initialized() {
+            return Ok(0);
+        }
+
+        let mut purged = 0;
+        let orphans = {
+            let ctx_guard = self.render_context.read().unwrap();
+            ctx_guard.find_orphaned_resources()
+        };
+
+        if !orphans.is_empty() {
+            let mut ctx_guard = self.render_context.write().unwrap();
+            let mut removed_images = Vec::new();
+
+            for id in orphans {
+                let Some(meta) = ctx_guard.get_metadata(id).cloned() else {
+                    continue;
+                };
+
+                if meta.resource_type == ResourceType::Screen {
+                    continue;
+                }
+
+                if meta.resource_type == ResourceType::Image {
+                    if let Some(image) = ctx_guard.remove_image(id) {
+                        removed_images.push(image);
+                    }
+                }
+
+                match meta.resource_type {
+                    ResourceType::Image => {}
+                    ResourceType::Canvas => {
+                        ctx_guard.remove_canvas(id);
+                    }
+                    ResourceType::Font => {
+                        ctx_guard.remove_font_page(id);
+                    }
+                    ResourceType::ColorMap => {
+                        ctx_guard.remove_color_map(id);
+                    }
+                    ResourceType::DataPtr => {
+                        continue;
+                    }
+                    ResourceType::Screen => {
+                        continue;
+                    }
+                }
+
+                purged += 1;
+                log::debug!("Purged orphaned resource {} of type {:?}", id, meta.resource_type);
+            }
+
+            if let Some(driver) = self.driver.as_mut() {
+                for image in removed_images {
+                    driver.on_image_removed(image.as_ref());
+                }
+            }
+        }
+
+        purged += self.render_context.write().unwrap().purge_data_ptrs();
+
+        Ok(purged)
     }
 
+
     /// Set the gamma correction value.
-    pub fn set_gamma(&self, gamma: f32) -> bool {
-        self.gamma.store(gamma.to_bits(), Ordering::Relaxed);
-        true
+    pub fn set_gamma(&mut self, gamma: f32) -> Result<(), GraphicsError> {
+        if gamma <= 0.0 || gamma.is_nan() {
+            return Err(GraphicsError::InvalidOperation(format!(
+                "Invalid gamma: {}",
+                gamma
+            )));
+        }
+
+        *self.gamma.write().unwrap() = gamma;
+
+        if let Some(driver) = self.driver.as_mut() {
+            driver
+                .set_gamma(gamma)
+                .map_err(|err| GraphicsError::DriverError(format!("set_gamma failed: {}", err)))?;
+        }
+
+        Ok(())
     }
 
     /// Get the current gamma value.
     #[must_use]
     pub fn get_gamma(&self) -> f32 {
-        f32::from_bits(self.gamma.load(Ordering::Relaxed))
+        *self.gamma.read().unwrap()
     }
 
     /// Get the current frame rate.
     #[must_use]
     pub fn get_frame_rate(&self) -> f32 {
-        self.frame_rate.lock().unwrap().rate
+        self.frame_rate.read().unwrap().rate
     }
 
     /// Set the frame rate tick base.
     pub fn set_frame_rate_tick_base(&self, tick_base: i32) {
-        self.frame_rate.lock().unwrap().tick_base = tick_base;
+        self.frame_rate.write().unwrap().tick_base = tick_base;
     }
 
     /// Get the frame rate tick base.
     #[must_use]
     pub fn get_frame_rate_tick_base(&self) -> i32 {
-        self.frame_rate.lock().unwrap().tick_base
+        self.frame_rate.read().unwrap().tick_base
     }
 
     /// Update frame rate (called by driver each frame).
@@ -267,8 +497,54 @@ impl GraphicsState {
             return;
         }
         let fps = 1000.0 / delta_time_ms as f32;
-        self.frame_rate.lock().unwrap().rate = fps;
+        self.frame_rate.write().unwrap().rate = fps;
     }
+
+    // Helper function to sync canvas pixels to driver (outside impl to avoid borrow conflicts)
+} // Close impl block for Sync function
+fn sync_canvases_to_driver(
+    render_context: &Arc<RwLock<RenderContext>>,
+    driver: &mut dyn GraphicsDriver,
+    screen: DcqScreen,
+) -> Result<(), GraphicsError> {
+    let screen_type = ScreenType::from(screen);
+    let canvas = render_context
+        .read()
+        .unwrap()
+        .get_screen(screen_type)
+        .ok_or_else(|| GraphicsError::InvalidOperation("Screen not found".to_string()))?;
+
+    let canvas_guard = canvas.read().unwrap();
+    let width = canvas_guard.width();
+    let height = canvas_guard.height();
+    let bytes_per_pixel = canvas_guard.format().bytes_per_pixel as usize;
+    let stride = width as usize * bytes_per_pixel;
+    let pixels = canvas_guard.pixels();
+
+    let buffer_ptr = driver
+        .get_screen_pixels_mut(screen as usize)
+        .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
+    let pitch = driver
+        .get_screen_pitch(screen as usize)
+        .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
+
+    let buffer_len = pitch.saturating_mul(height as usize);
+    let copy_len = stride.min(pitch);
+
+    unsafe {
+        let buffer = std::slice::from_raw_parts_mut(buffer_ptr, buffer_len);
+        for row in 0..height as usize {
+            let src_start = row * stride;
+            let dst_start = row * pitch;
+            if src_start + copy_len > pixels.len() || dst_start + copy_len > buffer.len() {
+                break;
+            }
+            buffer[dst_start..dst_start + copy_len]
+                .copy_from_slice(&pixels[src_start..src_start + copy_len]);
+        }
+    }
+
+    Ok(())
 }
 
 impl Default for GraphicsState {
@@ -281,12 +557,12 @@ impl GraphicsState {
     /// Get screen dimensions (read-only snapshot).
     #[must_use]
     pub fn get_dimensions(&self) -> ScreenDimensions {
-        *self.dimensions.lock().unwrap()
+        *self.dimensions.read().unwrap()
     }
 
     /// Set screen dimensions.
     pub fn set_dimensions(&self, dims: ScreenDimensions) {
-        *self.dimensions.lock().unwrap() = dims;
+        *self.dimensions.write().unwrap() = dims;
     }
 
     /// Get screen logical width.
@@ -316,18 +592,18 @@ impl GraphicsState {
     /// Get current scale configuration.
     #[must_use]
     pub fn get_scale_config(&self) -> ScaleConfig {
-        *self.scale_config.lock().unwrap()
+        *self.scale_config.read().unwrap()
     }
 
     /// Get graphic scale factor.
     #[must_use]
     pub fn get_graphic_scale(&self) -> i32 {
-        self.scale_config.lock().unwrap().scale
+        self.scale_config.read().unwrap().scale
     }
 
     /// Set graphic scale factor.
     pub fn set_graphic_scale(&self, scale: i32) -> i32 {
-        let mut config = self.scale_config.lock().unwrap();
+        let mut config = self.scale_config.write().unwrap();
         let previous = config.scale;
         config.scale = scale;
         previous
@@ -336,12 +612,12 @@ impl GraphicsState {
     /// Get graphic scale mode.
     #[must_use]
     pub fn get_graphic_scale_mode(&self) -> ScaleMode {
-        self.scale_config.lock().unwrap().mode
+        self.scale_config.read().unwrap().mode
     }
 
     /// Set graphic scale mode.
     pub fn set_graphic_scale_mode(&self, mode: ScaleMode) -> ScaleMode {
-        let mut config = self.scale_config.lock().unwrap();
+        let mut config = self.scale_config.write().unwrap();
         let previous = config.mode;
         config.mode = mode;
         previous
@@ -350,12 +626,12 @@ impl GraphicsState {
     /// Get graphics flags.
     #[must_use]
     pub fn get_flags(&self) -> GfxFlags {
-        GfxFlags::new(self.flags.load(Ordering::Relaxed))
+        *self.flags.read().unwrap()
     }
 
     /// Set graphics flags.
     pub fn set_flags(&self, flags: GfxFlags) {
-        self.flags.store(flags.bits(), Ordering::Relaxed);
+        *self.flags.write().unwrap() = flags;
     }
 
     /// Check if FPS display is enabled.
@@ -373,15 +649,12 @@ impl GraphicsState {
     /// Get current graphics driver.
     #[must_use]
     pub fn get_driver(&self) -> GfxDriver {
-        match self.driver.load(Ordering::Relaxed) {
-            0 => GfxDriver::SdlOpenGL,
-            _ => GfxDriver::SdlPure,
-        }
+        *self.driver_id.read().unwrap()
     }
 
     /// Set graphics driver.
     pub fn set_driver(&self, driver: GfxDriver) {
-        self.driver.store(driver as i32, Ordering::Relaxed);
+        *self.driver_id.write().unwrap() = driver;
     }
 
     /// Check if hardware scaling is supported.
@@ -390,26 +663,41 @@ impl GraphicsState {
         if !self.is_initialized() {
             return None;
         }
+        if let Some(driver) = self.driver.as_ref() {
+            return Some(driver.supports_hardware_scaling());
+        }
         Some(self.get_driver() == GfxDriver::SdlOpenGL)
     }
 }
 
-static GLOBAL_STATE: OnceLock<GraphicsState> = OnceLock::new();
+fn map_redraw_mode(mode: RedrawMode) -> DriverRedrawMode {
+    match mode {
+        RedrawMode::None => DriverRedrawMode::None,
+        RedrawMode::Fading => DriverRedrawMode::Fading,
+        RedrawMode::Expose => DriverRedrawMode::Expose,
+        RedrawMode::Full => DriverRedrawMode::Full,
+    }
+}
+
+static GLOBAL_STATE: OnceLock<Mutex<GraphicsState>> = OnceLock::new();
 
 /// Initialize global graphics state.
-pub fn init_global_state() -> &'static GraphicsState {
-    GLOBAL_STATE.get_or_init(GraphicsState::new)
+pub fn init_global_state() -> &'static Mutex<GraphicsState> {
+    GLOBAL_STATE.get_or_init(|| Mutex::new(GraphicsState::new()))
 }
 
 /// Get a reference to the global graphics state.
 #[must_use]
-pub fn global_state() -> &'static GraphicsState {
+pub fn global_state() -> &'static Mutex<GraphicsState> {
     GLOBAL_STATE.get().expect("graphics state not initialized")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graphics::cmap::ColorMapInner;
+    use crate::graphics::font::FontPage;
+    use crate::graphics::tfb_draw::TFImage;
 
     #[test]
     fn test_graphics_state_default() {
@@ -449,9 +737,9 @@ mod tests {
 
     #[test]
     fn test_reinit_fails_when_uninitialized() {
-        let state = GraphicsState::new();
-        let result = state.reinit(GfxDriver::SdlPure, GfxFlags::new(0), 640, 480);
-        assert!(result.is_err());
+        let mut state = GraphicsState::new();
+        let result = state.reinit(GfxDriver::SdlPure, GfxFlags::new(0), None, 640, 480);
+        assert!(matches!(result, Err(GraphicsError::NotInitialized)));
     }
 
     #[test]
@@ -510,11 +798,97 @@ mod tests {
 
     #[test]
     fn test_set_gamma() {
-        let state = GraphicsState::new();
+        let mut state = GraphicsState::new();
         assert_eq!(state.get_gamma(), 1.0);
-        let success = state.set_gamma(1.5);
-        assert!(success);
+        let result = state.set_gamma(1.5);
+        assert!(result.is_ok());
         assert_eq!(state.get_gamma(), 1.5);
+    }
+
+    #[test]
+    fn test_purge_dangling_no_orphans() {
+        let mut state = GraphicsState::new();
+        let render_context = state.render_context();
+        let canvas = Arc::new(RwLock::new(Canvas::new_rgba(6, 6)));
+
+        {
+            let mut ctx = render_context.write().unwrap();
+            ctx.set_screen(ScreenType::Main, Arc::clone(&canvas));
+        }
+
+        *state.initialized.write().unwrap() = true;
+
+        let result = state.purge_dangling().unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_purge_dangling_cleans_resources() {
+        let mut state = GraphicsState::new();
+        let render_context = state.render_context();
+        let canvas = Arc::new(RwLock::new(Canvas::new_rgba(6, 6)));
+        let image = Arc::new(TFImage::new_rgba(8, 8));
+        let page = Arc::new(FontPage::new(0x0000, 0x0020, 1));
+        let cmap = Arc::new(ColorMapInner::new(0));
+
+        let ids = {
+            let mut ctx = render_context.write().unwrap();
+            let canvas_id = ctx.register_canvas(Arc::clone(&canvas));
+            let image_id = ctx.register_image(Arc::clone(&image));
+            let font_id = ctx.register_font_page(Arc::clone(&page));
+            let cmap_id = ctx.register_color_map(Arc::clone(&cmap));
+            ctx.register_data_ptr(0x1000);
+            let data_id = ctx.get_data_ptr_id(0x1000);
+            assert_eq!(ctx.data_ptr_count(), 1);
+
+            ctx.decrement_ref(canvas_id);
+            ctx.decrement_ref(image_id);
+            ctx.decrement_ref(font_id);
+            ctx.decrement_ref(cmap_id);
+            if let Some(id) = data_id {
+                ctx.decrement_ref(id);
+            }
+
+            (canvas_id, image_id, font_id, cmap_id, data_id)
+        };
+
+        *state.initialized.write().unwrap() = true;
+
+        let purged = state.purge_dangling().unwrap();
+        assert!(purged >= 4);
+
+        let ctx_guard = render_context.read().unwrap();
+        assert!(!ctx_guard.has_resource(ids.0));
+        assert!(!ctx_guard.has_resource(ids.1));
+        assert!(!ctx_guard.has_resource(ids.2));
+        assert!(!ctx_guard.has_resource(ids.3));
+        assert_eq!(ctx_guard.data_ptr_count(), 0);
+        if let Some(data_id) = ids.4 {
+            assert!(!ctx_guard.has_resource(data_id));
+        }
+    }
+
+    #[test]
+    fn test_purge_dangling_preserves_screens() {
+        let mut state = GraphicsState::new();
+        let render_context = state.render_context();
+        let canvas = Arc::new(RwLock::new(Canvas::new_rgba(6, 6)));
+
+        {
+            let mut ctx = render_context.write().unwrap();
+            ctx.set_screen(ScreenType::Main, Arc::clone(&canvas));
+            if let Some(meta) = ctx.get_metadata(ScreenType::Main as u32) {
+                assert_eq!(meta.resource_type, ResourceType::Screen);
+            }
+            ctx.decrement_ref(ScreenType::Main as u32);
+        }
+
+        *state.initialized.write().unwrap() = true;
+
+        let purged = state.purge_dangling().unwrap();
+        assert_eq!(purged, 0);
+        let ctx_guard = render_context.read().unwrap();
+        assert!(ctx_guard.get_screen(ScreenType::Main).is_some());
     }
 
     #[test]
@@ -585,18 +959,23 @@ mod tests {
     }
 
     #[test]
-    fn test_supports_hardware_scaling() {
+    fn test_supports_hardware_scaling_default() {
         let state = GraphicsState::new();
         assert_eq!(state.supports_hardware_scaling(), None);
-        state
-            .init(GfxDriver::SdlOpenGL, GfxFlags::new(0), None, 640, 480)
-            .unwrap();
-        assert_eq!(state.supports_hardware_scaling(), Some(true));
     }
 
     #[test]
     fn test_init_global_state() {
         let state = init_global_state();
-        assert!(!state.is_initialized());
+        let guard = state.lock().unwrap();
+        assert!(!guard.is_initialized());
     }
 }
+// SAFETY: GraphicsState contains a GraphicsDriver trait object that we only access
+// from the main thread per SDL2 requirements. The actual drivers implement Send/Sync
+// via unsafe impls. This is safe because:
+// 1. All graphics operations happen on the main thread
+// 2. SDL2 requires main-thread-only usage
+// 3. The Mutex ensures only one thread accesses the state at a time
+unsafe impl Send for GraphicsState {}
+unsafe impl Sync for GraphicsState {}

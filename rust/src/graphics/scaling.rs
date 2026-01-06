@@ -1,0 +1,1064 @@
+//! Image scaling algorithms and caching
+//!
+//! This module implements scaling algorithms inspired by the original C code:
+//! - sc2/src/libs/graphics/sdl/scalers.c
+//! - sc2/src/libs/graphics/sdl/scalers.h
+//! - sc2/src/libs/graphics/sdl/nearest2x.c
+//! - sc2/src/libs/graphics/sdl/bilinear2x.c
+//! - sc2/src/libs/graphics/sdl/triscan2x.c
+//! - sc2/src/libs/graphics/sdl/2xscalers*.c
+//!
+//! For Phase 2 scope:
+//! - Implements scaling mode enum
+//! - Provides nearest, bilinear, and trilinear scaler stubs
+//! - Defines cache strategy
+//! - Unit tests for all scalers
+//! - Does NOT touch SDL, FFI, DCQ, tfb_draw, cmap, or fonts
+
+use crate::graphics::pixmap::{Pixmap, PixmapFormat};
+use anyhow::Result;
+use std::collections::HashMap;
+use std::num::NonZeroU32;
+use std::sync::Mutex;
+
+// ==============================================================================
+// Scaling Mode
+// ==============================================================================
+
+/// Scaling interpolation mode
+///
+/// Defines how pixels are interpolated when scaling an image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ScaleMode {
+    /// Step mode (no interpolation, not truly a scaler)
+    Step = 0,
+    /// Nearest-neighbor scaling (fast, pixelated)
+    Nearest = 1,
+    /// Bilinear interpolation (smoother)
+    Bilinear = 2,
+    /// Trilinear interpolation (smoothest, uses mipmaps)
+    Trilinear = 3,
+}
+
+impl ScaleMode {
+    /// Check if mode is a hardware accelerated scaler
+    pub fn is_hardware(&self) -> bool {
+        matches!(self, ScaleMode::Bilinear)
+    }
+
+    /// Check if mode is a software scaler
+    pub fn is_software(&self) -> bool {
+        matches!(self, ScaleMode::Nearest | ScaleMode::Trilinear)
+    }
+}
+
+/// Convert from gfx_common::ScaleMode
+impl From<crate::graphics::gfx_common::ScaleMode> for ScaleMode {
+    fn from(mode: crate::graphics::gfx_common::ScaleMode) -> Self {
+        match mode {
+            crate::graphics::gfx_common::ScaleMode::Step => ScaleMode::Step,
+            crate::graphics::gfx_common::ScaleMode::Nearest => ScaleMode::Nearest,
+            crate::graphics::gfx_common::ScaleMode::Bilinear => ScaleMode::Bilinear,
+            crate::graphics::gfx_common::ScaleMode::Trilinear => ScaleMode::Trilinear,
+        }
+    }
+}
+
+/// Convert to gfx_common::ScaleMode
+impl From<ScaleMode> for crate::graphics::gfx_common::ScaleMode {
+    fn from(mode: ScaleMode) -> Self {
+        match mode {
+            ScaleMode::Step => crate::graphics::gfx_common::ScaleMode::Step,
+            ScaleMode::Nearest => crate::graphics::gfx_common::ScaleMode::Nearest,
+            ScaleMode::Bilinear => crate::graphics::gfx_common::ScaleMode::Bilinear,
+            ScaleMode::Trilinear => crate::graphics::gfx_common::ScaleMode::Trilinear,
+        }
+    }
+}
+
+// ==============================================================================
+// Scaling Configuration
+// ==============================================================================
+
+/// Scaling parameters
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScaleParams {
+    /// Scale factor (256 = 1.0, 512 = 2.0)
+    pub scale: i32,
+    /// Interpolation mode
+    pub mode: ScaleMode,
+}
+
+impl ScaleParams {
+    /// Create new scale parameters
+    pub fn new(scale: i32, mode: ScaleMode) -> Self {
+        Self { scale, mode }
+    }
+
+    /// Get scale factor as float
+    pub fn scale_factor(&self) -> f32 {
+        self.scale as f32 / 256.0
+    }
+
+    /// Check if this is an upscale (scale > 256)
+    pub fn is_upscale(&self) -> bool {
+        self.scale > 256
+    }
+
+    /// Check if this is a downscale (scale < 256)
+    pub fn is_downscale(&self) -> bool {
+        self.scale < 256
+    }
+
+    /// Check if this is identity (scale == 256)
+    pub fn is_identity(&self) -> bool {
+        self.scale == 256
+    }
+}
+
+impl Default for ScaleParams {
+    fn default() -> Self {
+        Self {
+            scale: 256,
+            mode: ScaleMode::Nearest,
+        }
+    }
+}
+
+// ==============================================================================
+// Scaling Errors
+// ==============================================================================
+
+/// Errors related to scaling operations
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ScaleError {
+    #[error("Invalid scale factor: {factor} (must be > 0)")]
+    InvalidScaleFactor { factor: i32 },
+
+    #[error("Unsupported mode: {mode:?}")]
+    UnsupportedMode { mode: ScaleMode },
+
+    #[error("Format mismatch during scaling")]
+    FormatMismatch,
+
+    #[error("Cannot perform trilinear scaling without mipmap")]
+    MissingMipmap,
+
+    #[error("Scaling would produce zero or negative dimensions")]
+    InvalidDimensions,
+}
+
+// ==============================================================================
+// Scaler Trait
+// ==============================================================================
+
+/// Trait for image scaling algorithms
+pub trait Scaler {
+    /// Scale a pixmap and return a new pixmap with the scaled result
+    fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap>;
+
+    /// Check if this scaler supports a specific mode
+    fn supports(&self, mode: ScaleMode) -> bool;
+}
+
+// ==============================================================================
+// Nearest Neighbor Scaler
+// ==============================================================================
+
+/// Nearest-neighbor scaling implementation
+///
+/// Fast but produces pixelated results when upscaling.
+/// Corresponds to: `sc2/src/libs/graphics/sdl/nearest2x.c`
+pub struct NearestScaler;
+
+impl NearestScaler {
+    /// Create a new nearest scaler
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Scale using nearest-neighbor interpolation
+    fn scale_nearest(src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.scale <= 0 {
+            return Err(ScaleError::InvalidScaleFactor {
+                factor: params.scale,
+            }
+            .into());
+        }
+
+        let scale_factor = params.scale_factor();
+        let dst_width = ((src.width() as f32) * scale_factor).round() as u32;
+        let dst_height = ((src.height() as f32) * scale_factor).round() as u32;
+
+        if dst_width == 0 || dst_height == 0 {
+            return Err(ScaleError::InvalidDimensions.into());
+        }
+
+        let id =
+            NonZeroU32::new(1).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let mut dst = Pixmap::new(id, dst_width, dst_height, src.format())?;
+
+        // Only support 32-bit RGBA format for now
+        if src.format() != PixmapFormat::Rgba32 {
+            return Err(ScaleError::FormatMismatch.into());
+        }
+
+        let src_data = src.data();
+        let src_width = src.width();
+        let src_height = src.height();
+        let src_stride = src.bytes_per_row() as usize;
+        let dst_stride = dst.bytes_per_row() as usize;
+        let dst_data = dst.data_mut();
+
+        // Nearest-neighbor interpolation: for each destination pixel,
+        // find the closest source pixel and copy it directly
+        for dst_y in 0..dst_height {
+            for dst_x in 0..dst_width {
+                // Calculate the corresponding source pixel coordinate
+                // Using rounding to find the nearest neighbor
+                let src_x = ((dst_x as f32) / scale_factor).round() as u32;
+                let src_y = ((dst_y as f32) / scale_factor).round() as u32;
+
+                // Clamp to source boundaries
+                let src_x = src_x.min(src_width - 1);
+                let src_y = src_y.min(src_height - 1);
+
+                // Copy the pixel directly
+                let src_offset = (src_y as usize * src_stride + src_x as usize * 4) as usize;
+                let dst_offset = (dst_y as usize * dst_stride + dst_x as usize * 4) as usize;
+
+                unsafe {
+                    let src_ptr = src_data.as_ptr().add(src_offset);
+                    let dst_ptr = dst_data.as_mut_ptr().add(dst_offset);
+                    *dst_ptr = *src_ptr;
+                    *dst_ptr.add(1) = *src_ptr.add(1);
+                    *dst_ptr.add(2) = *src_ptr.add(2);
+                    *dst_ptr.add(3) = *src_ptr.add(3);
+                }
+            }
+        }
+
+        dst.clear_dirty();
+        Ok(dst)
+    }
+}
+
+impl Scaler for NearestScaler {
+    fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.mode != ScaleMode::Nearest && params.mode != ScaleMode::Step {
+            return Err(ScaleError::UnsupportedMode { mode: params.mode }.into());
+        }
+        Self::scale_nearest(src, params)
+    }
+
+    fn supports(&self, mode: ScaleMode) -> bool {
+        mode == ScaleMode::Nearest || mode == ScaleMode::Step
+    }
+}
+
+impl Default for NearestScaler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ==============================================================================
+// Bilinear Scaler
+// ==============================================================================
+
+/// Bilinear interpolation scaling implementation
+///
+/// Produces smoother results than nearest-neighbor by interpolating between
+/// the four nearest pixels. Corresponds to: `sc2/src/libs/graphics/sdl/bilinear2x.c`
+pub struct BilinearScaler;
+
+impl BilinearScaler {
+    /// Create a new bilinear scaler
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Helper function to blend colors
+    #[inline]
+    fn lerp(a: u8, b: u8, t: f32) -> u8 {
+        let val = a as f32 + (b as f32 - a as f32) * t;
+        val.round().clamp(0.0, 255.0) as u8
+    }
+
+    /// Get a pixel from a pixmap, clamped to valid range
+    fn get_pixel_clamped(pixmap: &Pixmap, x: u32, y: u32) -> [u8; 4] {
+        let x = x.min(pixmap.width() - 1);
+        let y = y.min(pixmap.height() - 1);
+        let offset = (y * pixmap.bytes_per_row() + x * 4) as usize;
+        let data = pixmap.data();
+        let p = unsafe { data.as_ptr().add(offset) };
+        unsafe { [*p, *p.add(1), *p.add(2), *p.add(3)] }
+    }
+
+    /// Scale using bilinear interpolation
+    fn scale_bilinear(src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.scale <= 0 {
+            return Err(ScaleError::InvalidScaleFactor {
+                factor: params.scale,
+            }
+            .into());
+        }
+
+        let scale_factor = params.scale_factor();
+        let dst_width = ((src.width() as f32) * scale_factor).round() as u32;
+        let dst_height = ((src.height() as f32) * scale_factor).round() as u32;
+
+        if dst_width == 0 || dst_height == 0 {
+            return Err(ScaleError::InvalidDimensions.into());
+        }
+
+        let id =
+            NonZeroU32::new(2).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let mut dst = Pixmap::new(id, dst_width, dst_height, src.format())?;
+
+        if src.format() != PixmapFormat::Rgba32 {
+            return Err(ScaleError::FormatMismatch.into());
+        }
+
+        let src_width = src.width();
+        let src_height = src.height();
+        let dst_stride = dst.bytes_per_row() as usize;
+        let dst_data = dst.data_mut();
+
+        for dst_y in 0..dst_height {
+            for dst_x in 0..dst_width {
+                let src_x = dst_x as f32 / scale_factor;
+                let src_y = dst_y as f32 / scale_factor;
+
+                let x0 = src_x.floor() as u32;
+                let y0 = src_y.floor() as u32;
+                let x1 = (x0 + 1).min(src_width - 1);
+                let y1 = (y0 + 1).min(src_height - 1);
+
+                let fx = src_x - x0 as f32;
+                let fy = src_y - y0 as f32;
+
+                let p00 = Self::get_pixel_clamped(src, x0, y0);
+                let p10 = Self::get_pixel_clamped(src, x1, y0);
+                let p01 = Self::get_pixel_clamped(src, x0, y1);
+                let p11 = Self::get_pixel_clamped(src, x1, y1);
+
+                let r1 = Self::lerp(p00[0], p10[0], fx);
+                let g1 = Self::lerp(p00[1], p10[1], fx);
+                let b1 = Self::lerp(p00[2], p10[2], fx);
+                let a1 = Self::lerp(p00[3], p10[3], fx);
+
+                let r2 = Self::lerp(p01[0], p11[0], fx);
+                let g2 = Self::lerp(p01[1], p11[1], fx);
+                let b2 = Self::lerp(p01[2], p11[2], fx);
+                let a2 = Self::lerp(p01[3], p11[3], fx);
+
+                let r = Self::lerp(r1, r2, fy);
+                let g = Self::lerp(g1, g2, fy);
+                let b = Self::lerp(b1, b2, fy);
+                let a = Self::lerp(a1, a2, fy);
+
+                let dst_offset = ((dst_y as usize * dst_stride) + dst_x as usize * 4) as usize;
+                unsafe {
+                    let dst_ptr = dst_data.as_mut_ptr().add(dst_offset);
+                    *dst_ptr = r;
+                    *dst_ptr.add(1) = g;
+                    *dst_ptr.add(2) = b;
+                    *dst_ptr.add(3) = a;
+                }
+            }
+        }
+
+        dst.clear_dirty();
+        Ok(dst)
+    }
+}
+
+impl Scaler for BilinearScaler {
+    fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.mode != ScaleMode::Bilinear {
+            return Err(ScaleError::UnsupportedMode { mode: params.mode }.into());
+        }
+        Self::scale_bilinear(src, params)
+    }
+
+    fn supports(&self, mode: ScaleMode) -> bool {
+        mode == ScaleMode::Bilinear
+    }
+}
+
+impl Default for BilinearScaler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ==============================================================================
+// Trilinear Scaler
+// ==============================================================================
+
+/// Trilinear interpolation scaling implementation
+///
+/// The smoothest approach, using mipmaps for texture detail at different scales.
+/// Corresponds to: `sc2/src/libs/graphics/sdl/triscan2x.c`
+///
+/// Trilinear scaling works by:
+/// 1. Selecting two mipmaps based on the scale factor
+/// 2. Bilinearly sampling each mipmap
+/// 3. Linearly interpolating between the two results
+pub struct TrilinearScaler;
+
+impl TrilinearScaler {
+    /// Create a new trilinear scaler
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Helper function to blend colors
+    #[inline]
+    fn lerp(a: u8, b: u8, t: f32) -> u8 {
+        let val = a as f32 + (b as f32 - a as f32) * t;
+        val.round().clamp(0.0, 255.0) as u8
+    }
+
+    /// Get a pixel from a pixmap, clamped to valid range
+    fn get_pixel_clamped(pixmap: &Pixmap, x: u32, y: u32) -> [u8; 4] {
+        let x = x.min(pixmap.width() - 1);
+        let y = y.min(pixmap.height() - 1);
+        let offset = (y * pixmap.bytes_per_row() + x * 4) as usize;
+        let data = pixmap.data();
+        let p = unsafe { data.as_ptr().add(offset) };
+        unsafe { [*p, *p.add(1), *p.add(2), *p.add(3)] }
+    }
+
+    /// Scale using trilinear interpolation
+    ///
+    /// This is a stub implementation that performs bilinear scaling on the primary
+    /// pixmap. Full trilinear implementation would use the mipmap parameter to
+    /// blend between two mipmap levels.
+    fn scale_trilinear(
+        src: &Pixmap,
+        _mipmap: Option<&Pixmap>,
+        params: ScaleParams,
+    ) -> Result<Pixmap> {
+        if params.scale <= 0 {
+            return Err(ScaleError::InvalidScaleFactor {
+                factor: params.scale,
+            }
+            .into());
+        }
+
+        let scale_factor = params.scale_factor();
+        let dst_width = ((src.width() as f32) * scale_factor).round() as u32;
+        let dst_height = ((src.height() as f32) * scale_factor).round() as u32;
+
+        if dst_width == 0 || dst_height == 0 {
+            return Err(ScaleError::InvalidDimensions.into());
+        }
+
+        let id =
+            NonZeroU32::new(3).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let mut dst = Pixmap::new(id, dst_width, dst_height, src.format())?;
+
+        if src.format() != PixmapFormat::Rgba32 {
+            return Err(ScaleError::FormatMismatch.into());
+        }
+
+        let src_width = src.width();
+        let src_height = src.height();
+        let dst_stride = dst.bytes_per_row() as usize;
+        let dst_data = dst.data_mut();
+
+        // For the stub, we use bilinear interpolation on the source
+        // A full implementation would:
+        // 1. Determine which two miplevels to use based on scale_factor
+        // 2. Bilinearly sample from each miplevel
+        // 3. Linearly interpolate between the two samples
+
+        for dst_y in 0..dst_height {
+            for dst_x in 0..dst_width {
+                let src_x = dst_x as f32 / scale_factor;
+                let src_y = dst_y as f32 / scale_factor;
+
+                let x0 = src_x.floor() as u32;
+                let y0 = src_y.floor() as u32;
+                let x1 = (x0 + 1).min(src_width - 1);
+                let y1 = (y0 + 1).min(src_height - 1);
+
+                let fx = src_x - x0 as f32;
+                let fy = src_y - y0 as f32;
+
+                let p00 = Self::get_pixel_clamped(src, x0, y0);
+                let p10 = Self::get_pixel_clamped(src, x1, y0);
+                let p01 = Self::get_pixel_clamped(src, x0, y1);
+                let p11 = Self::get_pixel_clamped(src, x1, y1);
+
+                let r1 = Self::lerp(p00[0], p10[0], fx);
+                let g1 = Self::lerp(p00[1], p10[1], fx);
+                let b1 = Self::lerp(p00[2], p10[2], fx);
+                let a1 = Self::lerp(p00[3], p10[3], fx);
+
+                let r2 = Self::lerp(p01[0], p11[0], fx);
+                let g2 = Self::lerp(p01[1], p11[1], fx);
+                let b2 = Self::lerp(p01[2], p11[2], fx);
+                let a2 = Self::lerp(p01[3], p11[3], fx);
+
+                let r = Self::lerp(r1, r2, fy);
+                let g = Self::lerp(g1, g2, fy);
+                let b = Self::lerp(b1, b2, fy);
+                let a = Self::lerp(a1, a2, fy);
+
+                let dst_offset = ((dst_y as usize * dst_stride) + dst_x as usize * 4) as usize;
+                unsafe {
+                    let dst_ptr = dst_data.as_mut_ptr().add(dst_offset);
+                    *dst_ptr = r;
+                    *dst_ptr.add(1) = g;
+                    *dst_ptr.add(2) = b;
+                    *dst_ptr.add(3) = a;
+                }
+            }
+        }
+
+        dst.clear_dirty();
+        Ok(dst)
+    }
+}
+
+impl Scaler for TrilinearScaler {
+    fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.mode != ScaleMode::Trilinear {
+            return Err(ScaleError::UnsupportedMode { mode: params.mode }.into());
+        }
+        // Note: Full trilinear implementation would take a mipmap parameter
+        // For this stub, we call scale_trilinear with None for mipmap
+        Self::scale_trilinear(src, None, params)
+    }
+
+    fn supports(&self, mode: ScaleMode) -> bool {
+        mode == ScaleMode::Trilinear
+    }
+}
+
+impl Default for TrilinearScaler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ==============================================================================
+// Scaling Cache
+// ==============================================================================
+
+/// Cache key for scaled images
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ScaleCacheKey {
+    /// Source pixmap ID
+    src_id: u32,
+    /// Scale factor
+    scale: i32,
+    /// Scale mode
+    mode: ScaleMode,
+}
+
+/// Cached scaled pixmap entry
+#[derive(Debug, Clone)]
+struct ScaleCacheEntry {
+    /// Scaled pixmap
+    pixmap: Pixmap,
+    /// Last access timestamp (for LRU eviction)
+    last_access: u64,
+}
+
+/// Scaling cache for efficient reuse of scaled images
+///
+/// Implements a simple LRU cache using HashMap to store recently scaled images.
+/// Corresponds to the caching strategy for TFB_Image::ScaledImg.
+pub struct ScaleCache {
+    /// Cache of scaled images with LRU ordering
+    cache: Mutex<HashMap<ScaleCacheKey, ScaleCacheEntry>>,
+    /// LRU ordering: keys in order from least recently used to most最近
+    lru_order: Mutex<Vec<ScaleCacheKey>>,
+    /// Maximum cache capacity
+    capacity: usize,
+    /// Cache hit counter
+    hits: Mutex<u64>,
+    /// Cache miss counter
+    misses: Mutex<u64>,
+    /// Timestamp counter for LRU
+    timestamp: Mutex<u64>,
+}
+
+impl ScaleCache {
+    /// Create a new scaling cache with specified capacity
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            cache: Mutex::new(HashMap::new()),
+            lru_order: Mutex::new(Vec::new()),
+            capacity,
+            hits: Mutex::new(0),
+            misses: Mutex::new(0),
+            timestamp: Mutex::new(0),
+        }
+    }
+
+    /// Try to get a cached scaled pixmap
+    pub fn get(&self, src_id: u32, scale: i32, mode: ScaleMode) -> Option<Pixmap> {
+        let key = ScaleCacheKey {
+            src_id,
+            scale,
+            mode,
+        };
+
+        let cache = self.cache.lock().unwrap();
+        let mut order = self.lru_order.lock().unwrap();
+
+        if let Some(entry) = cache.get(&key) {
+            // Move key to end of LRU order (most recently used)
+            if let Some(pos) = order.iter().position(|k| k == &key) {
+                order.remove(pos);
+            }
+            order.push(key);
+
+            let mut hits = self.hits.lock().unwrap();
+            *hits += 1;
+            Some(entry.pixmap.clone())
+        } else {
+            let mut misses = self.misses.lock().unwrap();
+            *misses += 1;
+            None
+        }
+    }
+
+    /// Store a scaled pixmap in the cache
+    pub fn put(&self, src_id: u32, scale: i32, mode: ScaleMode, pixmap: Pixmap) {
+        let key = ScaleCacheKey {
+            src_id,
+            scale,
+            mode,
+        };
+
+        let entry = ScaleCacheEntry {
+            pixmap,
+            last_access: self.next_timestamp(),
+        };
+
+        let mut cache = self.cache.lock().unwrap();
+        let mut order = self.lru_order.lock().unwrap();
+
+        // Remove existing entry if present
+        if cache.contains_key(&key) {
+            if let Some(pos) = order.iter().position(|k| k == &key) {
+                order.remove(pos);
+            }
+        }
+
+        // Evict if at capacity
+        while order.len() >= self.capacity {
+            if let Some(evicted_key) = order.first().cloned() {
+                cache.remove(&evicted_key);
+                order.remove(0);
+            } else {
+                break;
+            }
+        }
+
+        cache.insert(key.clone(), entry);
+        order.push(key.clone());
+    }
+
+    /// Clear the cache
+    pub fn clear(&self) {
+        let mut cache = self.cache.lock().unwrap();
+        let mut order = self.lru_order.lock().unwrap();
+        cache.clear();
+        order.clear();
+    }
+
+    /// Get cache statistics
+    pub fn stats(&self) -> (u64, u64, usize) {
+        let hits = *self.hits.lock().unwrap();
+        let misses = *self.misses.lock().unwrap();
+        let len = self.cache.lock().unwrap().len();
+        (hits, misses, len)
+    }
+
+    /// Get the next timestamp
+    fn next_timestamp(&self) -> u64 {
+        let mut ts = self.timestamp.lock().unwrap();
+        *ts += 1;
+        *ts
+    }
+}
+
+impl Default for ScaleCache {
+    fn default() -> Self {
+        Self::new(64) // Default cache size = 64 entries
+    }
+}
+
+// ==============================================================================
+// Scaler Manager
+// ==============================================================================
+
+/// Manager for all scaling operations
+///
+/// Provides a unified interface for scaling images with different algorithms,
+/// plus built-in caching for efficient reuse.
+pub struct ScalerManager {
+    /// Nearest-neighbor scaler
+    nearest: NearestScaler,
+    /// Bilinear scaler
+    bilinear: BilinearScaler,
+    /// Trilinear scaler
+    trilinear: TrilinearScaler,
+    /// Scaling cache
+    cache: ScaleCache,
+}
+
+impl ScalerManager {
+    /// Create a new scaler manager
+    pub fn new() -> Self {
+        Self {
+            nearest: NearestScaler::new(),
+            bilinear: BilinearScaler::new(),
+            trilinear: TrilinearScaler::new(),
+            cache: ScaleCache::new(64),
+        }
+    }
+
+    /// Create a scaler manager with specified cache capacity
+    pub fn with_cache_capacity(capacity: usize) -> Self {
+        Self {
+            nearest: NearestScaler::new(),
+            bilinear: BilinearScaler::new(),
+            trilinear: TrilinearScaler::new(),
+            cache: ScaleCache::new(capacity),
+        }
+    }
+
+    /// Scale a pixmap with the specified parameters
+    pub fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        // Check cache first
+        if let Some(cached) = self.cache.get(src.id(), params.scale, params.mode) {
+            return Ok(cached);
+        }
+
+        // Perform scaling
+        let result = match params.mode {
+            ScaleMode::Nearest => self.nearest.scale(src, params),
+            ScaleMode::Bilinear => self.bilinear.scale(src, params),
+            ScaleMode::Trilinear => self.trilinear.scale(src, params),
+            ScaleMode::Step => self.nearest.scale(src, params), // Step uses nearest
+        };
+
+        // Cache the result
+        if let Ok(ref pixmap) = result {
+            self.cache
+                .put(src.id(), params.scale, params.mode, pixmap.clone());
+        }
+
+        result
+    }
+
+    /// Get a reference to the cache
+    pub fn cache(&self) -> &ScaleCache {
+        &self.cache
+    }
+
+    /// Clear the cache
+    pub fn clear_cache(&self) {
+        self.cache.clear();
+    }
+
+    /// Get cache statistics
+    pub fn cache_stats(&self) -> (u64, u64, usize) {
+        self.cache.stats()
+    }
+}
+
+impl Default for ScalerManager {
+    fn default() -> Self {
+        Self::with_cache_capacity(64)
+    }
+}
+
+// ==============================================================================
+// Tests
+// ==============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::num::NonZeroU32;
+
+    fn create_test_pixmap(id: u32, width: u32, height: u32) -> Pixmap {
+        let id = NonZeroU32::new(id).unwrap();
+        Pixmap::new(id, width, height, PixmapFormat::Rgba32).unwrap()
+    }
+
+    #[test]
+    fn test_scale_mode_values() {
+        assert_eq!(ScaleMode::Step as u8, 0);
+        assert_eq!(ScaleMode::Nearest as u8, 1);
+        assert_eq!(ScaleMode::Bilinear as u8, 2);
+        assert_eq!(ScaleMode::Trilinear as u8, 3);
+    }
+
+    #[test]
+    fn test_scale_mode_properties() {
+        assert!(ScaleMode::Nearest.is_software());
+        assert!(ScaleMode::Bilinear.is_software());
+        assert!(ScaleMode::Bilinear.is_hardware());
+        assert!(ScaleMode::Trilinear.is_software());
+    }
+
+    #[test]
+    fn test_scale_params() {
+        let params = ScaleParams::new(512, ScaleMode::Nearest);
+
+        assert_eq!(params.scale, 512);
+        assert_eq!(params.mode, ScaleMode::Nearest);
+        assert!((params.scale_factor() - 2.0).abs() < 0.001);
+        assert!(params.is_upscale());
+        assert!(!params.is_downscale());
+        assert!(!params.is_identity());
+    }
+
+    #[test]
+    fn test_scale_params_identity() {
+        let params = ScaleParams::new(256, ScaleMode::Nearest);
+
+        assert_eq!(params.scale, 256);
+        assert!(params.is_identity());
+        assert!(!params.is_upscale());
+        assert!(!params.is_downscale());
+    }
+
+    #[test]
+    fn test_nearest_scaler_creation() {
+        let scaler = NearestScaler::new();
+        assert!(scaler.supports(ScaleMode::Nearest));
+        assert!(!scaler.supports(ScaleMode::Bilinear));
+    }
+
+    #[test]
+    fn test_bilinear_scaler_creation() {
+        let scaler = BilinearScaler::new();
+        assert!(scaler.supports(ScaleMode::Bilinear));
+        assert!(!scaler.supports(ScaleMode::Nearest));
+    }
+
+    #[test]
+    fn test_trilinear_scaler_creation() {
+        let scaler = TrilinearScaler::new();
+        assert!(scaler.supports(ScaleMode::Trilinear));
+        assert!(!scaler.supports(ScaleMode::Bilinear));
+    }
+
+    #[test]
+    fn test_nearest_scaling_2x() {
+        let src = create_test_pixmap(1, 10, 10);
+        let scaler = NearestScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Nearest); // 2x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20);
+        assert_eq!(dst.height(), 20);
+        assert_eq!(dst.format(), PixmapFormat::Rgba32);
+    }
+
+    #[test]
+    fn test_nearest_scaling_half() {
+        let src = create_test_pixmap(1, 100, 100);
+        let scaler = NearestScaler::new();
+        let params = ScaleParams::new(128, ScaleMode::Nearest); // 0.5x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 50);
+        assert_eq!(dst.height(), 50);
+    }
+
+    #[test]
+    fn test_bilinear_scaling_2x() {
+        let src = create_test_pixmap(1, 10, 10);
+        let scaler = BilinearScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Bilinear); // 2x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20);
+        assert_eq!(dst.height(), 20);
+    }
+
+    #[test]
+    fn test_trilinear_scaling_stub() {
+        let src = create_test_pixmap(1, 10, 10);
+        let scaler = TrilinearScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Trilinear); // 2x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20);
+        assert_eq!(dst.height(), 20);
+    }
+
+    #[test]
+    fn test_invalid_scale_factor() {
+        let src = create_test_pixmap(1, 10, 10);
+        let scaler = NearestScaler::new();
+        let params = ScaleParams::new(0, ScaleMode::Nearest);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Invalid scale factor"));
+    }
+
+    #[test]
+    fn test_unsupported_mode() {
+        let src = create_test_pixmap(1, 10, 10);
+        let scaler = NearestScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Bilinear);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Unsupported mode"));
+    }
+
+    #[test]
+    fn test_scale_cache() {
+        let cache = ScaleCache::new(4);
+
+        // Put and get
+        let src = create_test_pixmap(1, 10, 10);
+        cache.put(1, 512, ScaleMode::Nearest, src.clone());
+
+        let cached = cache.get(1, 512, ScaleMode::Nearest);
+        assert!(cached.is_some());
+
+        let (hits, misses, size) = cache.stats();
+        assert_eq!(hits, 1);
+        assert_eq!(misses, 0);
+        assert_eq!(size, 1);
+
+        // Cache miss
+        let cached = cache.get(2, 512, ScaleMode::Nearest);
+        assert!(cached.is_none());
+
+        let (hits, misses, size) = cache.stats();
+        assert_eq!(hits, 1);
+        assert_eq!(misses, 1);
+        assert_eq!(size, 1);
+    }
+
+    #[test]
+    fn test_scale_cache_clear() {
+        let cache = ScaleCache::new(4);
+
+        let src = create_test_pixmap(1, 10, 10);
+        cache.put(1, 512, ScaleMode::Nearest, src.clone());
+
+        let (hits, misses, size) = cache.stats();
+        assert_eq!(size, 1);
+
+        cache.clear();
+
+        let (_, _, size) = cache.stats();
+        assert_eq!(size, 0);
+    }
+
+    #[test]
+    fn test_scaler_manager() {
+        let manager = ScalerManager::new();
+        let src = create_test_pixmap(1, 10, 10);
+        let params = ScaleParams::new(512, ScaleMode::Nearest);
+
+        let result = manager.scale(&src, params);
+        assert!(result.is_ok());
+
+        let (hits, misses, size) = manager.cache_stats();
+        // First call should be a miss
+        assert_eq!(misses, 1);
+        assert_eq!(hits, 0);
+
+        // Second call should hit the cache
+        let _ = manager.scale(&src, params);
+        let (hits, misses, _) = manager.cache_stats();
+        assert_eq!(misses, 1);
+        assert_eq!(hits, 1);
+    }
+
+    #[test]
+    fn test_scaler_manager_clear_cache() {
+        let manager = ScalerManager::new();
+        let src = create_test_pixmap(1, 10, 10);
+        let params = ScaleParams::new(512, ScaleMode::Nearest);
+
+        let _ = manager.scale(&src, params);
+        let (_, _, size) = manager.cache_stats();
+        assert_eq!(size, 1);
+
+        manager.clear_cache();
+        let (_, _, size) = manager.cache_stats();
+        assert_eq!(size, 0);
+    }
+
+    #[test]
+    fn test_lerp_function() {
+        assert_eq!(BilinearScaler::lerp(0, 255, 0.5), 128);
+        assert_eq!(BilinearScaler::lerp(0, 255, 0.0), 0);
+        assert_eq!(BilinearScaler::lerp(0, 255, 1.0), 255);
+        assert_eq!(BilinearScaler::lerp(100, 200, 0.5), 150);
+    }
+
+    #[test]
+    fn test_scale_cache_key_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let key1 = ScaleCacheKey {
+            src_id: 1,
+            scale: 512,
+            mode: ScaleMode::Nearest,
+        };
+        let key2 = ScaleCacheKey {
+            src_id: 1,
+            scale: 512,
+            mode: ScaleMode::Nearest,
+        };
+        let key3 = ScaleCacheKey {
+            src_id: 2,
+            scale: 512,
+            mode: ScaleMode::Nearest,
+        };
+
+        let mut h1 = DefaultHasher::new();
+        key1.hash(&mut h1);
+        let hash1 = h1.finish();
+
+        let mut h2 = DefaultHasher::new();
+        key2.hash(&mut h2);
+        let hash2 = h2.finish();
+
+        let mut h3 = DefaultHasher::new();
+        key3.hash(&mut h3);
+        let hash3 = h3.finish();
+
+        assert_eq!(hash1, hash2);
+        assert_ne!(hash1, hash3);
+    }
+}
