@@ -1190,7 +1190,9 @@ fn rescale_image(
         ScaleMode::Nearest | ScaleMode::Step | ScaleMode::Hq2x => {
             rescale_nearest(&source, &mut target)?;
         }
-        ScaleMode::Bilinear => {
+        ScaleMode::Bilinear | ScaleMode::Biadaptive => {
+            // Note: Biadaptive should use the scaling::BiadaptiveScaler
+            // Falling back to bilinear for compatibility
             rescale_bilinear(&source, &mut target)?;
         }
         ScaleMode::Trilinear => {

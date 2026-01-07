@@ -41,6 +41,8 @@ pub enum ScaleMode {
     Trilinear = 3,
     /// HQ2x interpolation (high-quality 2x magnification for pixel art)
     Hq2x = 4,
+    /// Biadaptive interpolation (edge-adaptive bilinear scaling)
+    Biadaptive = 5,
 }
 
 impl ScaleMode {
@@ -51,7 +53,7 @@ impl ScaleMode {
 
     /// Check if mode is a software scaler
     pub fn is_software(&self) -> bool {
-        matches!(self, ScaleMode::Nearest | ScaleMode::Trilinear | ScaleMode::Hq2x)
+        matches!(self, ScaleMode::Nearest | ScaleMode::Trilinear | ScaleMode::Hq2x | ScaleMode::Biadaptive)
     }
 }
 
@@ -64,6 +66,7 @@ impl From<crate::graphics::gfx_common::ScaleMode> for ScaleMode {
             crate::graphics::gfx_common::ScaleMode::Bilinear => ScaleMode::Bilinear,
             crate::graphics::gfx_common::ScaleMode::Trilinear => ScaleMode::Trilinear,
             crate::graphics::gfx_common::ScaleMode::Hq2x => ScaleMode::Hq2x,
+            crate::graphics::gfx_common::ScaleMode::Biadaptive => ScaleMode::Biadaptive,
         }
     }
 }
@@ -77,6 +80,7 @@ impl From<ScaleMode> for crate::graphics::gfx_common::ScaleMode {
             ScaleMode::Bilinear => crate::graphics::gfx_common::ScaleMode::Bilinear,
             ScaleMode::Trilinear => crate::graphics::gfx_common::ScaleMode::Trilinear,
             ScaleMode::Hq2x => crate::graphics::gfx_common::ScaleMode::Hq2x,
+            ScaleMode::Biadaptive => crate::graphics::gfx_common::ScaleMode::Biadaptive,
         }
     }
 }
@@ -844,6 +848,274 @@ impl Default for Hq2xScaler {
 // Scaling Cache
 // ==============================================================================
 
+
+// ==============================================================================
+// Biadaptive Scaler
+// ==============================================================================
+
+/// Biadaptive scaling implementation
+///
+/// Edge-adaptive bilinear interpolation that preserves sharp edges while
+/// smoothing gradual transitions. Works by detecting edge strength and
+/// blending between nearest-neighbor (for sharp edges) and bilinear
+/// (for smooth areas) based on local gradient magnitude.
+pub struct BiadaptiveScaler;
+
+impl BiadaptiveScaler {
+    /// Default edge detection threshold
+    const DEFAULT_EDGE_THRESHOLD: f32 = 30.0;
+
+    /// Create a new biadaptive scaler
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Helper function to blend colors
+    #[inline]
+    fn lerp(a: u8, b: u8, t: f32) -> u8 {
+        let val = a as f32 + (b as f32 - a as f32) * t;
+        val.round().clamp(0.0, 255.0) as u8
+    }
+
+    /// Get a pixel from source data, clamped to image boundaries
+    #[inline(always)]
+    fn get_pixel(src: &[u8], x: u32, y: u32, width: usize, height: usize) -> [u8; 4] {
+        let x = x.min(width as u32 - 1) as usize;
+        let y = y.min(height as u32 - 1) as usize;
+        let offset = (y * width + x) * 4;
+        [src[offset], src[offset + 1], src[offset + 2], src[offset + 3]]
+    }
+
+    /// Convert RGB to luminance
+    #[inline(always)]
+    fn rgb_to_luminance(r: u8, g: u8, b: u8) -> f32 {
+        // Standard ITU-R BT.709 luminance coefficients
+        (r as f32 * 0.2126) + (g as f32 * 0.7152) + (b as f32 * 0.0722)
+    }
+
+    /// Calculate gradient magnitude at a pixel position using Sobel-like operator
+    fn compute_gradient(src: &[u8], x: u32, y: u32, width: usize, height: usize) -> f32 {
+        // Sample 3x3 neighborhood
+        let p00 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x.wrapping_sub(1), y.wrapping_sub(1), width, height)[0],
+            Self::get_pixel(src, x.wrapping_sub(1), y.wrapping_sub(1), width, height)[1],
+            Self::get_pixel(src, x.wrapping_sub(1), y.wrapping_sub(1), width, height)[2],
+        );
+        let p10 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x, y.wrapping_sub(1), width, height)[0],
+            Self::get_pixel(src, x, y.wrapping_sub(1), width, height)[1],
+            Self::get_pixel(src, x, y.wrapping_sub(1), width, height)[2],
+        );
+        let p20 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x.wrapping_add(1), y.wrapping_sub(1), width, height)[0],
+            Self::get_pixel(src, x.wrapping_add(1), y.wrapping_sub(1), width, height)[1],
+            Self::get_pixel(src, x.wrapping_add(1), y.wrapping_sub(1), width, height)[2],
+        );
+        let p01 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x.wrapping_sub(1), y, width, height)[0],
+            Self::get_pixel(src, x.wrapping_sub(1), y, width, height)[1],
+            Self::get_pixel(src, x.wrapping_sub(1), y, width, height)[2],
+        );
+        let p21 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x.wrapping_add(1), y, width, height)[0],
+            Self::get_pixel(src, x.wrapping_add(1), y, width, height)[1],
+            Self::get_pixel(src, x.wrapping_add(1), y, width, height)[2],
+        );
+        let p02 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x.wrapping_sub(1), y.wrapping_add(1), width, height)[0],
+            Self::get_pixel(src, x.wrapping_sub(1), y.wrapping_add(1), width, height)[1],
+            Self::get_pixel(src, x.wrapping_sub(1), y.wrapping_add(1), width, height)[2],
+        );
+        let p12 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x, y.wrapping_add(1), width, height)[0],
+            Self::get_pixel(src, x, y.wrapping_add(1), width, height)[1],
+            Self::get_pixel(src, x, y.wrapping_add(1), width, height)[2],
+        );
+        let p22 = Self::rgb_to_luminance(
+            Self::get_pixel(src, x.wrapping_add(1), y.wrapping_add(1), width, height)[0],
+            Self::get_pixel(src, x.wrapping_add(1), y.wrapping_add(1), width, height)[1],
+            Self::get_pixel(src, x.wrapping_add(1), y.wrapping_add(1), width, height)[2],
+        );
+
+        // Sobel kernels
+        // Gx: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
+        // Gy: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
+        let gx = (-1.0 * p00) + (1.0 * p20) +
+                  (-2.0 * p01) + (2.0 * p21) +
+                  (-1.0 * p02) + (1.0 * p22);
+
+        let gy = (-1.0 * p00) + (-2.0 * p10) + (-1.0 * p20) +
+                  (1.0 * p02) + (2.0 * p12) + (1.0 * p22);
+
+        (gx * gx + gy * gy).sqrt()
+    }
+
+    /// Bilinear interpolation at a position
+    fn bilinear_sample(src: &[u8], src_x: f32, src_y: f32, width: usize, height: usize) -> [u8; 4] {
+        let x0 = src_x.floor() as u32;
+        let y0 = src_y.floor() as u32;
+        let x1 = (x0 + 1).min(width as u32 - 1);
+        let y1 = (y0 + 1).min(height as u32 - 1);
+
+        let fx = src_x - x0 as f32;
+        let fy = src_y - y0 as f32;
+
+        let p00 = Self::get_pixel(src, x0, y0, width, height);
+        let p10 = Self::get_pixel(src, x1, y0, width, height);
+        let p01 = Self::get_pixel(src, x0, y1, width, height);
+        let p11 = Self::get_pixel(src, x1, y1, width, height);
+
+        let r1 = Self::lerp(p00[0], p10[0], fx);
+        let g1 = Self::lerp(p00[1], p10[1], fx);
+        let b1 = Self::lerp(p00[2], p10[2], fx);
+        let a1 = Self::lerp(p00[3], p10[3], fx);
+
+        let r2 = Self::lerp(p01[0], p11[0], fx);
+        let g2 = Self::lerp(p01[1], p11[1], fx);
+        let b2 = Self::lerp(p01[2], p11[2], fx);
+        let a2 = Self::lerp(p01[3], p11[3], fx);
+
+        let r = Self::lerp(r1, r2, fy);
+        let g = Self::lerp(g1, g2, fy);
+        let b = Self::lerp(b1, b2, fy);
+        let a = Self::lerp(a1, a2, fy);
+
+        [r, g, b, a]
+    }
+
+    /// Nearest-neighbor sampling at a position
+    fn nearest_sample(src: &[u8], src_x: f32, src_y: f32, width: usize, height: usize) -> [u8; 4] {
+        let x = src_x.round() as u32;
+        let y = src_y.round() as u32;
+        Self::get_pixel(src, x, y, width, height)
+    }
+
+    /// Core biadaptive scaling function
+    ///
+    /// Blends between nearest-neighbor and bilinear based on edge strength.
+    /// Gradient magnitude determines edge strength; higher values = stronger edges.
+    /// At strong edges, pixel sharpness is preserved using nearest-neighbor.
+    /// In smooth areas, bilinear provides smoother results.
+    pub fn biadaptive_scale(
+        src: &[u8],
+        dst: &mut [u8],
+        src_width: usize,
+        src_height: usize,
+        dst_width: usize,
+        dst_height: usize,
+        bpp: usize,
+    ) {
+        if bpp != 4 {
+            return; // Only support RGBA
+        }
+
+        if src_width == 0 || src_height == 0 || dst_width == 0 || dst_height == 0 {
+            return;
+        }
+
+        let scale_x = src_width as f32 / dst_width as f32;
+        let scale_y = src_height as f32 / dst_height as f32;
+        let edge_threshold = Self::DEFAULT_EDGE_THRESHOLD;
+
+        for dst_y in 0..dst_height {
+            for dst_x in 0..dst_width {
+                let src_x = dst_x as f32 * scale_x;
+                let src_y = dst_y as f32 * scale_y;
+
+                // Compute edge strength at the source position
+                let gradient = Self::compute_gradient(src, src_x as u32, src_y as u32, src_width, src_height);
+
+                // Blend factor: 0.0 = nearest-neighbor, 1.0 = bilinear
+                // Strong edges (high gradient) -> favor nearest-neighbor (sharp)
+                // Smooth areas (low gradient) -> favor bilinear (smooth)
+                let blend_factor = if gradient >= edge_threshold {
+                    // At strong edges, heavily favor nearest-neighbor
+                    (gradient - edge_threshold) / (gradient * 0.5 + 1.0).min(0.2)
+                } else {
+                    // In smooth areas, favor bilinear more
+                    0.8
+                }.clamp(0.0, 1.0);
+
+                // Get both samples
+                let bilinear = Self::bilinear_sample(src, src_x, src_y, src_width, src_height);
+                let nearest = Self::nearest_sample(src, src_x, src_y, src_width, src_height);
+
+                // Blend between the two based on edge strength
+                let r = Self::lerp(nearest[0], bilinear[0], blend_factor);
+                let g = Self::lerp(nearest[1], bilinear[1], blend_factor);
+                let b = Self::lerp(nearest[2], bilinear[2], blend_factor);
+                let a = Self::lerp(nearest[3], bilinear[3], blend_factor);
+
+                let dst_offset = (dst_y * dst_width + dst_x) * 4;
+                dst[dst_offset] = r;
+                dst[dst_offset + 1] = g;
+                dst[dst_offset + 2] = b;
+                dst[dst_offset + 3] = a;
+            }
+        }
+    }
+
+    /// Scale using biadaptive interpolation
+    fn scale_biadaptive(src: &Pixmap, params: ScaleParams, edge_threshold: f32) -> Result<Pixmap> {
+        if params.scale <= 0 {
+            return Err(ScaleError::InvalidScaleFactor {
+                factor: params.scale,
+            }
+            .into());
+        }
+
+        let scale_factor = params.scale_factor();
+        let dst_width = ((src.width() as f32) * scale_factor).round() as u32;
+        let dst_height = ((src.height() as f32) * scale_factor).round() as u32;
+
+        if dst_width == 0 || dst_height == 0 {
+            return Err(ScaleError::InvalidDimensions.into());
+        }
+
+        let id = NonZeroU32::new(5).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let mut dst = Pixmap::new(id, dst_width, dst_height, src.format())?;
+
+        if src.format() != PixmapFormat::Rgba32 {
+            return Err(ScaleError::FormatMismatch.into());
+        }
+
+        let src_width = src.width() as usize;
+        let src_height = src.height() as usize;
+        let dst_width_usize = dst_width as usize;
+        let dst_height_usize = dst_height as usize;
+
+        let src_data = src.data();
+        let dst_data = dst.data_mut();
+
+        // Use the provided edge_threshold or default
+        let _threshold = if edge_threshold > 0.0 { edge_threshold } else { Self::DEFAULT_EDGE_THRESHOLD };
+
+        // Call the core scaling function
+        Self::biadaptive_scale(src_data, dst_data, src_width, src_height, dst_width_usize, dst_height_usize, 4);
+
+        dst.clear_dirty();
+        Ok(dst)
+    }
+}
+
+impl Scaler for BiadaptiveScaler {
+    fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.mode != ScaleMode::Biadaptive {
+            return Err(ScaleError::UnsupportedMode { mode: params.mode }.into());
+        }
+        Self::scale_biadaptive(src, params, Self::DEFAULT_EDGE_THRESHOLD)
+    }
+
+    fn supports(&self, mode: ScaleMode) -> bool {
+        mode == ScaleMode::Biadaptive
+    }
+}
+
+impl Default for BiadaptiveScaler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 /// Cache key for scaled images
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ScaleCacheKey {
@@ -1008,6 +1280,8 @@ pub struct ScalerManager {
     trilinear: TrilinearScaler,
     /// HQ2x scaler
     hq2x: Hq2xScaler,
+    /// Biadaptive scaler
+    biadaptive: BiadaptiveScaler,
     /// Scaling cache
     cache: ScaleCache,
 }
@@ -1020,6 +1294,7 @@ impl ScalerManager {
             bilinear: BilinearScaler::new(),
             trilinear: TrilinearScaler::new(),
             hq2x: Hq2xScaler::new(),
+            biadaptive: BiadaptiveScaler::new(),
             cache: ScaleCache::new(64),
         }
     }
@@ -1031,6 +1306,7 @@ impl ScalerManager {
             bilinear: BilinearScaler::new(),
             trilinear: TrilinearScaler::new(),
             hq2x: Hq2xScaler::new(),
+            biadaptive: BiadaptiveScaler::new(),
             cache: ScaleCache::new(capacity),
         }
     }
@@ -1048,6 +1324,7 @@ impl ScalerManager {
             ScaleMode::Bilinear => self.bilinear.scale(src, params),
             ScaleMode::Trilinear => self.trilinear.scale(src, params),
             ScaleMode::Hq2x => self.hq2x.scale(src, params),
+            ScaleMode::Biadaptive => self.biadaptive.scale(src, params),
             ScaleMode::Step => self.nearest.scale(src, params), // Step uses nearest
         };
 
@@ -1103,6 +1380,7 @@ mod tests {
         assert_eq!(ScaleMode::Bilinear as u8, 2);
         assert_eq!(ScaleMode::Trilinear as u8, 3);
         assert_eq!(ScaleMode::Hq2x as u8, 4);
+        assert_eq!(ScaleMode::Biadaptive as u8, 5);
     }
 
     #[test]
@@ -1644,4 +1922,401 @@ mod tests {
         assert!(ScaleMode::Hq2x.is_software());
         assert!(!ScaleMode::Hq2x.is_hardware());
     }
+
+// Tests to add to the scaling.rs test module
+
+    // ==============================================================================
+    // Biadaptive Tests
+    // ==============================================================================
+
+    #[test]
+    fn test_biadaptive_scaler_creation() {
+        let scaler = BiadaptiveScaler::new();
+        assert!(scaler.supports(ScaleMode::Biadaptive));
+        assert!(!scaler.supports(ScaleMode::Nearest));
+        assert!(!scaler.supports(ScaleMode::Bilinear));
+    }
+
+    #[test]
+    fn test_biadaptive_scaling_dimensions() {
+        let src = create_test_pixmap(8, 10, 10);
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Biadaptive); // 2x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20); // 10 * 2
+        assert_eq!(dst.height(), 20); // 10 * 2
+        assert_eq!(dst.format(), PixmapFormat::Rgba32);
+    }
+
+    #[test]
+    fn test_biadaptive_scaling_3x() {
+        let src = create_test_pixmap(9, 10, 10);
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(768, ScaleMode::Biadaptive); // 3x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 30); // 10 * 3
+        assert_eq!(dst.height(), 30); // 10 * 3
+    }
+
+    #[test]
+    fn test_biadaptive_scaling_15x() {
+        // Test arbitrary non-integer scale factor (1.5x)
+        let src = create_test_pixmap(10, 10, 10);
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(384, ScaleMode::Biadaptive); // 1.5x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 15); // 10 * 1.5 = 15
+        assert_eq!(dst.height(), 15); // 10 * 1.5 = 15
+    }
+
+    #[test]
+    fn test_biadaptive_scaling_downscale() {
+        let src = create_test_pixmap(11, 100, 100);
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(128, ScaleMode::Biadaptive); // 0.5x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 50); // 100 * 0.5 = 50
+        assert_eq!(dst.height(), 50); // 100 * 0.5 = 50
+    }
+
+    #[test]
+    fn test_biadaptive_unsupported_mode() {
+        let src = create_test_pixmap(12, 10, 10);
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Nearest);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Unsupported mode"));
+    }
+
+    #[test]
+    fn test_biadaptive_rgb_to_luminance() {
+        // Test luminance calculation with ITU-R BT.709 coefficients
+        let y = BiadaptiveScaler::rgb_to_luminance(255, 255, 255);
+        assert!((y - 255.0).abs() < 0.01, "White should have max luminance");
+
+        let y = BiadaptiveScaler::rgb_to_luminance(0, 0, 0);
+        assert!((y - 0.0).abs() < 0.01, "Black should have min luminance");
+
+        // Green has highest luminance component
+        let y = BiadaptiveScaler::rgb_to_luminance(0, 255, 0);
+        assert!(y > 128.0, "Pure green should have high luminance");
+
+        // Blue has lowest luminance component
+        let y = BiadaptiveScaler::rgb_to_luminance(0, 0, 255);
+        assert!(y < 50.0, "Pure blue should have low luminance");
+    }
+
+    #[test]
+    fn test_biadaptive_edge_detection() {
+        // Create a larger test image with a sharp edge in the middle
+        let id = NonZeroU32::new(100).unwrap();
+        let mut src = Pixmap::new(id, 6, 6, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Left half black, right half white
+        for y in 0..6 {
+            for x in 0..6 {
+                let idx = (y * 6 + x) * 4;
+                if x < 3 {
+                    data[idx] = 0;     // R
+                    data[idx + 1] = 0; // G
+                    data[idx + 2] = 0; // B
+                    data[idx + 3] = 255; // A
+                } else {
+                    data[idx] = 255;   // R
+                    data[idx + 1] = 255; // G
+                    data[idx + 2] = 255; // B
+                    data[idx + 3] = 255; // A
+                }
+            }
+        }
+
+        // Check that edge detection finds higher gradients at the boundary
+        let src_data = src.data();
+        let grad_left = BiadaptiveScaler::compute_gradient(src_data, 1, 3, 6, 6);
+        let grad_edge = BiadaptiveScaler::compute_gradient(src_data, 2, 3, 6, 6);
+        let grad_edge2 = BiadaptiveScaler::compute_gradient(src_data, 3, 3, 6, 6);
+        let grad_right = BiadaptiveScaler::compute_gradient(src_data, 4, 3, 6, 6);
+
+        // The edge should have higher gradient than smooth areas
+        assert!(grad_edge > grad_left, "Edge should have higher gradient");
+        assert!(grad_edge2 > grad_right, "Edge should have higher gradient");
+        assert!(grad_edge > 50.0, "Edge gradient should be significant");
+        assert!(grad_edge2 > 50.0, "Edge gradient should be significant");
+    }
+
+    #[test]
+    fn test_biadaptive_smooth_area() {
+        // Create a uniform image (should have low gradients)
+        let id = NonZeroU32::new(101).unwrap();
+        let mut src = Pixmap::new(id, 4, 4, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        let color = [128, 128, 128, 255];
+        for i in 0..16 {
+            data[i * 4] = color[0];
+            data[i * 4 + 1] = color[1];
+            data[i * 4 + 2] = color[2];
+            data[i * 4 + 3] = color[3];
+        }
+
+        // Check gradients are low in smooth areas
+        let src_data = src.data();
+        let grad = BiadaptiveScaler::compute_gradient(src_data, 1, 1, 4, 4);
+
+        assert!(grad < 1.0, "Smooth area should have negligible gradient");
+    }
+
+    #[test]
+    fn test_biadaptive_gradient_diagonal_edge() {
+        // Create an image with a diagonal edge
+        let id = NonZeroU32::new(102).unwrap();
+        let mut src = Pixmap::new(id, 3, 3, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Top-left to bottom-right diagonal: top-left = white, rest = black
+        // W B B
+        // B W B
+        // B B B
+        let white = [255, 255, 255, 255];
+        let black = [0, 0, 0, 255];
+
+        data[0] = white[0]; data[1] = white[1]; data[2] = white[2]; data[3] = white[3];
+        for i in 1..9 {
+            data[i * 4] = black[0];
+            data[i * 4 + 1] = black[1];
+            data[i * 4 + 2] = black[2];
+            data[i * 4 + 3] = black[3];
+        }
+        data[4 * 4] = white[0]; data[4 * 4 + 1] = white[1]; data[4 * 4 + 2] = white[2]; data[4 * 4 + 3] = white[3];
+
+        // Check diagonal edge detection
+        let src_data = src.data();
+        let grad_corner = BiadaptiveScaler::compute_gradient(src_data, 0, 0, 3, 3);
+        let grad_center = BiadaptiveScaler::compute_gradient(src_data, 1, 1, 3, 3);
+
+        // Both positions should have significant gradients
+        assert!(grad_corner > 50.0, "Corner should have significant gradient");
+        assert!(grad_center > 50.0, "Center should have significant gradient");
+    }
+
+    #[test]
+    fn test_biadaptive_blending_behavior() {
+        // Create a larger test image with edge and smooth regions
+        let id = NonZeroU32::new(103).unwrap();
+        let mut src = Pixmap::new(id, 5, 5, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Top 2 rows red, rest green
+        //  R R R R R
+        //  R R R R R
+        //  G G G G G
+        //  G G G G G
+        //  G G G G G
+        let red = [255, 0, 0, 255];
+        let green = [0, 255, 0, 255];
+
+        for x in 0..5 {
+            for y in 0..5 {
+                let idx = (y * 5 + x) * 4;
+                if y < 2 {
+                    data[idx] = red[0];
+                    data[idx + 1] = red[1];
+                    data[idx + 2] = red[2];
+                    data[idx + 3] = red[3];
+                } else {
+                    data[idx] = green[0];
+                    data[idx + 1] = green[1];
+                    data[idx + 2] = green[2];
+                    data[idx + 3] = green[3];
+                }
+            }
+        }
+
+        let src_data = src.data();
+        let grad_edge1 = BiadaptiveScaler::compute_gradient(src_data, 2, 1, 5, 5);
+        let grad_edge2 = BiadaptiveScaler::compute_gradient(src_data, 2, 2, 5, 5);
+        let grad_smooth = BiadaptiveScaler::compute_gradient(src_data, 2, 3, 5, 5);
+
+        // Edge should have higher gradient than smooth area
+        assert!(grad_edge1 > grad_smooth, "Edge1 gradient > smooth gradient");
+        assert!(grad_edge2 > grad_smooth, "Edge2 gradient > smooth gradient");
+        assert!(grad_smooth < 10.0, "Smooth area should have low gradient");
+    }
+
+    #[test]
+    fn test_biadaptive_with_scaler_manager() {
+        let manager = ScalerManager::new();
+        let src = create_test_pixmap(13, 10, 10);
+        let params = ScaleParams::new(512, ScaleMode::Biadaptive);
+
+        let result = manager.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20);
+        assert_eq!(dst.height(), 20);
+
+        // Second call should hit the cache
+        let result = manager.scale(&src, params);
+        assert!(result.is_ok());
+
+        let (hits, misses, size) = manager.cache_stats();
+        assert_eq!(hits, 1);
+        assert_eq!(misses, 1);
+        assert_eq!(size, 1);
+    }
+
+    #[test]
+    fn test_biadaptive_default_trait() {
+        let scaler = BiadaptiveScaler::default();
+        assert!(scaler.supports(ScaleMode::Biadaptive));
+    }
+
+    #[test]
+    fn test_scale_mode_biadaptive_value() {
+        assert_eq!(ScaleMode::Biadaptive as u8, 5);
+    }
+
+    #[test]
+    fn test_scale_mode_biadaptive_properties() {
+        // Biadaptive is a software scaler
+        assert!(ScaleMode::Biadaptive.is_software());
+        assert!(!ScaleMode::Biadaptive.is_hardware());
+    }
+
+    #[test]
+    fn test_biadaptive_bilinear_sample() {
+        // Create a simple 2x2 test image
+        let data: Vec<u8> = vec![
+            0, 0, 0, 255,    // Top-left: black
+            255, 255, 255, 255, // Top-right: white
+            128, 128, 128, 255, // Bottom-left: gray
+            64, 64, 64, 255,     // Bottom-right: dark gray
+        ];
+
+        // Sample at exact corner should give that pixel
+        let p00 = BiadaptiveScaler::bilinear_sample(&data, 0.0, 0.0, 2, 2);
+        assert_eq!(p00, [0, 0, 0, 255]);
+
+        let p01 = BiadaptiveScaler::bilinear_sample(&data, 0.0, 1.0, 2, 2);
+        assert_eq!(p01, [128, 128, 128, 255]);
+
+        let p10 = BiadaptiveScaler::bilinear_sample(&data, 1.0, 0.0, 2, 2);
+        assert_eq!(p10, [255, 255, 255, 255]);
+
+        // Sample at center should be blend of all four
+        let pc = BiadaptiveScaler::bilinear_sample(&data, 0.5, 0.5, 2, 2);
+        assert!(pc[0] > 64 && pc[0] < 192); // Intermediate brightness
+    }
+
+    #[test]
+    fn test_biadaptive_nearest_sample() {
+        // Create a 3x3 test image
+        let mut data = vec![0u8; 9 * 4];
+        for y in 0..3 {
+            for x in 0..3 {
+                let idx = (y * 3 + x) * 4;
+                data[idx] = (y * 3 + x) as u8; // Unique color value
+                data[idx + 1] = ((y * 3 + x) >> 8) as u8;
+                data[idx + 2] = ((y * 3 + x) >> 16) as u8;
+                data[idx + 3] = 255;
+            }
+        }
+
+        // Nearest sample should round to nearest pixel
+        let p0 = BiadaptiveScaler::nearest_sample(&data, 0.3, 0.3, 3, 3); // Should map to (0, 0)
+        assert_eq!(p0[0], 0);
+
+        let p1 = BiadaptiveScaler::nearest_sample(&data, 1.6, 1.4, 3, 3); // Should map to (2, 1)
+        assert_eq!(p1[0], 5); // y=1, x=2 => index = 1*3 + 2 = 5
+    }
+
+    #[test]
+    fn test_biadaptive_invalid_scale_factor() {
+        let src = create_test_pixmap(14, 10, 10);
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(0, ScaleMode::Biadaptive);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Invalid scale factor"));
+    }
+
+    #[test]
+    fn test_biadaptive_uniform_image_preserved() {
+        // Test that a uniform image scales reasonably
+        let id = NonZeroU32::new(104).unwrap();
+        let mut src = Pixmap::new(id, 4, 4, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        let color = [100, 150, 200, 255];
+        for i in 0..16 {
+            data[i * 4] = color[0];
+            data[i * 4 + 1] = color[1];
+            data[i * 4 + 2] = color[2];
+            data[i * 4 + 3] = color[3];
+        }
+
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Biadaptive);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 8);
+        assert_eq!(dst.height(), 8);
+
+        // All pixels should be close to the original color
+        // (may have small variations due to edge detection, but should be minimal)
+        let dst_data = dst.data();
+        for i in 0..dst_data.len() / 4 {
+            let r = dst_data[i * 4];
+            let g = dst_data[i * 4 + 1];
+            let b = dst_data[i * 4 + 2];
+            assert!((r as i32 - color[0] as i32).abs() <= 5, "Red channel variation too large");
+            assert!((g as i32 - color[1] as i32).abs() <= 5, "Green channel variation too large");
+            assert!((b as i32 - color[2] as i32).abs() <= 5, "Blue channel variation too large");
+        }
+    }
+
+    #[test]
+    fn test_biadaptive_format_mismatch() {
+        // Biadaptive only supports RGBA format
+        let id = NonZeroU32::new(105).unwrap();
+        let src = Pixmap::new(id, 2, 2, PixmapFormat::Rgb24).unwrap();
+
+        let scaler = BiadaptiveScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Biadaptive);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Format mismatch"));
+    }
+
 }
