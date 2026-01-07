@@ -46,6 +46,8 @@ pub enum ScaleMode {
     Bilinear = 2,
     /// Trilinear scaling.
     Trilinear = 3,
+    /// HQ2x scaling (high-quality 2x magnification).
+    Hq2x = 4,
 }
 
 /// Graphics initialization flags.
@@ -807,6 +809,7 @@ mod tests {
         assert_eq!(ScaleMode::Nearest as i32, 1);
         assert_eq!(ScaleMode::Bilinear as i32, 2);
         assert_eq!(ScaleMode::Trilinear as i32, 3);
+        assert_eq!(ScaleMode::Hq2x as i32, 4);
     }
 
     #[test]
