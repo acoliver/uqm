@@ -878,27 +878,29 @@ mod tests {
     fn test_page_lookup_correct_page() {
         let mut font = Font::new(16, 10);
 
-        // First page at 0x0000
-        let mut page1 = FontPage::new(0x0000, 0x0020, 10);
+        // First page at 0x0000, first_char=0x0020, 32 chars (0x0020-0x003F)
+        let mut page1 = FontPage::new(0x0000, 0x0020, 32);
         let mut tf_char = TFChar::default();
         tf_char.disp = Extent::new(8, 12);
-        page1.set_char(0x0025, tf_char).unwrap();
+        page1.set_char(0x0025, tf_char).unwrap(); // '%' character
         font.add_page(page1);
 
-        // Replace with second page at 0x2000
-        let mut page2 = FontPage::new(0x2000, 0x2000, 10);
+        // Second page at 0x2000, first_char=0x2000, 32 chars (0x2000-0x201F)
+        let mut page2 = FontPage::new(0x2000, 0x2000, 32);
         tf_char = TFChar::default();
         tf_char.disp = Extent::new(10, 14);
         page2.set_char(0x2005, tf_char).unwrap();
         font.add_page(page2);
 
-        // Lookup should find the character in the correct page
-        let result = font.lookup_char(0x2005);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().disp.width, 10);
+        // Lookup should find character in first page
+        let result1 = font.lookup_char(0x0025);
+        assert!(result1.is_some());
+        assert_eq!(result1.unwrap().disp.width, 8);
 
-        // Old character is no longer accessible
-        assert!(font.lookup_char(0x0025).is_none());
+        // Lookup should find character in second page
+        let result2 = font.lookup_char(0x2005);
+        assert!(result2.is_some());
+        assert_eq!(result2.unwrap().disp.width, 10);
     }
 
     #[test]
@@ -910,7 +912,8 @@ mod tests {
 
         let err = FontError::LoadFailed("test error".to_string());
         let s = format!("{}", err);
-        assert!(s.contains("LoadFailed"));
+        // Display impl says "Font loading failed: <msg>"
+        assert!(s.contains("test error"));
     }
 
     #[test]

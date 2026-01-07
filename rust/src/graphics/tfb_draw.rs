@@ -2579,26 +2579,24 @@ mod tests {
         fill_rect(&mut src, 0, 0, 19, 19, Color::rgb(255, 255, 0)).unwrap();
         
         // Copy larger source (20x20) to smaller destination starting at negative offset
+        // Copy area: source (0,0)-(19,19) copied to dest (-5,-5)-(14,14)
+        // Only the 10x10 area that overlaps dest (0,0)-(9,9) will actually be copied
+        // This corresponds to source area (5,5)-(14,14)
         copy_canvas(&mut dst, &src, -5, -5, 0, 0, 20, 20).unwrap();
         
         let dst_pixels = dst.pixels();
         let dst_width = dst.width();
         
         // Verify only pixels within destination bounds were copied
-        // The copy starts at (-5, -5), so we expect pixels (0,0) to (14,14) from source
-        // which would map to positions (5,5) to (9,9) in destination
+        // Source (5,5) maps to dest (0,0), source (14,14) maps to dest (9,9)
         for y in 0..10 {
             for x in 0..10 {
                 let offset = (y * dst_width + x) as usize * 4;
-                if x >= 5 && y >= 5 {
-                    // Pixels that should have been copied
-                    assert_eq!(dst_pixels[offset], 255); // R
-                    assert_eq!(dst_pixels[offset + 1], 255); // G
-                    assert_eq!(dst_pixels[offset + 2], 0); // B
-                } else {
-                    // Pixels that remain black
-                    assert_eq!(dst_pixels[offset], 0); // R
-                }
+                // All pixels should be yellow since the entire 10x10 destination
+                // receives pixels from source (5,5) to (14,14)
+                assert_eq!(dst_pixels[offset], 255); // R
+                assert_eq!(dst_pixels[offset + 1], 255); // G
+                assert_eq!(dst_pixels[offset + 2], 0); // B
             }
         }
     }
@@ -2683,7 +2681,7 @@ mod tests {
         
         // Should fail due to format mismatch
         let result = copy_canvas(&mut dst, &src, 0, 0, 0, 0, -1, -1);
-        assert!(matches!(result, Err(CanvasError::InvalidOperation(_))));
+        assert!(matches!(result, Err(CanvasError::FormatMismatch)));
     }
 
     #[test]
@@ -2868,17 +2866,20 @@ mod tests {
     fn test_scissor_edge_cases() {
         let mut canvas = Canvas::new_rgba(20, 20);
         
-        // Scissor at canvas origin
+        // Scissor rect from (5,5) to (10,10) - points inside should pass
         let scissor_rect = Rect::from_parts(Point::new(5, 5), Extent::new(5, 5));
         canvas.set_scissor(ScissorRect::enabled(scissor_rect));
         
-        assert!(is_in_scissor(&canvas, 0, 0));
-        assert!(is_in_scissor(&canvas, 4, 4));
-        assert!(!is_in_scissor(&canvas, 5, 5));
-        assert!(!is_in_scissor(&canvas, 0, 5));
-        assert!(!is_in_scissor(&canvas, 5, 0));
+        // Points outside scissor rect (before it)
+        assert!(!is_in_scissor(&canvas, 0, 0));
+        assert!(!is_in_scissor(&canvas, 4, 4));
+        // Points inside scissor rect
+        assert!(is_in_scissor(&canvas, 5, 5));
+        assert!(is_in_scissor(&canvas, 9, 9));
+        // Points outside (after it)
+        assert!(!is_in_scissor(&canvas, 10, 10));
         
-        // Scissor at canvas edge
+        // Scissor at canvas edge (15,15) to (20,20)
         let scissor_rect = Rect::from_parts(Point::new(15, 15), Extent::new(5, 5));
         canvas.set_scissor(ScissorRect::enabled(scissor_rect));
         

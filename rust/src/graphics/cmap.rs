@@ -281,8 +281,10 @@ impl ColorMapManager {
                 colors.len()
             ));
         }
-        *self.map_count.lock().unwrap() =
-            (*self.map_count.lock().unwrap()).max(end_index as usize + 1);
+        {
+            let mut count = self.map_count.lock().unwrap();
+            *count = (*count).max(end_index as usize + 1);
+        }
         for i in 0..=end_index - index {
             let map_idx = (index + i) as usize;
             let base_offset = i as usize * NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;

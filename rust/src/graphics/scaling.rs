@@ -807,10 +807,12 @@ mod tests {
 
     #[test]
     fn test_scale_mode_properties() {
+        // Nearest and Trilinear are software scalers
         assert!(ScaleMode::Nearest.is_software());
-        assert!(ScaleMode::Bilinear.is_software());
-        assert!(ScaleMode::Bilinear.is_hardware());
         assert!(ScaleMode::Trilinear.is_software());
+        // Bilinear is hardware accelerated (not software)
+        assert!(!ScaleMode::Bilinear.is_software());
+        assert!(ScaleMode::Bilinear.is_hardware());
     }
 
     #[test]
