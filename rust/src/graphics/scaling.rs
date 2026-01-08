@@ -30,10 +30,10 @@ use std::sync::Mutex;
 // SIMD Support (stable Rust via std::arch)
 // ==============================================================================
 
-#[cfg(all(target_arch = "x86_64", test))]
+#[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-#[cfg(all(target_arch = "aarch64", test))]
+#[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 
 // ==============================================================================
@@ -1061,9 +1061,9 @@ impl BiadaptiveScaler {
     // SIMD Helpers for Gradient Computation
     // ==============================================================================
 
-    /// Convert RGB triple to luminance using SIMD
+    /// Convert RGB triple to luminance using SIMD (test-only helper)
     #[allow(unused_variables)]
-    #[cfg(test)]
+    #[allow(dead_code)]
     #[inline]
     fn rgb_to_luminance_simd(r: u8, g: u8, b: u8) -> f32 {
         // SSE2 implementation for x86_64
