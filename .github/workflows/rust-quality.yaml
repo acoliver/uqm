@@ -136,7 +136,7 @@ jobs:
       - name: Generate HTML report
         run: |
           cd rust
-          genhtml ../combined.lcov --output-directory ../coverage-html
+          genhtml ../combined.lcov --output-directory ../coverage-html --ignore-errors source
 
       - name: Enforce coverage threshold
         shell: bash
