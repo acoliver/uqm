@@ -3370,36 +3370,36 @@ fn test_draw_image_with_hotspot() {
             assert_eq!(dst_pixels[offset + 2], 0); // B
         }
     }
+}
 
-    #[test]
-    fn test_draw_image_partial_clip() {
-        let mut dst = Canvas::new_rgba(10, 10);
-        let mut src_canvas = Canvas::new_rgba(10, 10);
+#[test]
+fn test_draw_image_partial_clip() {
+    let mut dst = Canvas::new_rgba(10, 10);
+    let mut src_canvas = Canvas::new_rgba(10, 10);
 
-        // Fill source image with blue
-        fill_rect(&mut src_canvas, 0, 0, 9, 9, Color::rgb(0, 0, 255)).unwrap();
+    // Fill source image with blue
+    fill_rect(&mut src_canvas, 0, 0, 9, 9, Color::rgb(0, 0, 255)).unwrap();
 
-        let image = TFImage::new(src_canvas);
+    let image = TFImage::new(src_canvas);
 
-        // Draw image partially off the canvas (starts at -5, -5)
-        draw_image(&mut dst, &image, -5, -5, 0).unwrap();
+    // Draw image partially off the canvas (starts at -5, -5)
+    draw_image(&mut dst, &image, -5, -5, 0).unwrap();
 
-        let dst_pixels = dst.pixels();
-        let dst_width = dst.width();
+    let dst_pixels = dst.pixels();
+    let dst_width = dst.width();
 
-        // Only pixels within canvas bounds should be drawn
-        // Source (5,5) to (9,9) should map to (0,0) to (4,4) in destination
-        for y in 0..5 {
-            for x in 0..5 {
-                let offset = (y * dst_width + x) as usize * 4;
-                assert_eq!(dst_pixels[offset], 0); // R
-                assert_eq!(dst_pixels[offset + 1], 0); // G
-                assert_eq!(dst_pixels[offset + 2], 255); // B
-            }
+    // Only pixels within canvas bounds should be drawn
+    // Source (5,5) to (9,9) should map to (0,0) to (4,4) in destination
+    for y in 0..5 {
+        for x in 0..5 {
+            let offset = (y * dst_width + x) as usize * 4;
+            assert_eq!(dst_pixels[offset], 0); // R
+            assert_eq!(dst_pixels[offset + 1], 0); // G
+            assert_eq!(dst_pixels[offset + 2], 255); // B
         }
-
-        // Pixels outside the copied area should remain black
-        let offset = (7 * dst_width + 7) as usize * 4;
-        assert_eq!(dst_pixels[offset], 0); // R
     }
+
+    // Pixels outside the copied area should remain black
+    let offset = (7 * dst_width + 7) as usize * 4;
+    assert_eq!(dst_pixels[offset], 0); // R
 }
