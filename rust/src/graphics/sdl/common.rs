@@ -126,8 +126,6 @@ impl Screen {
     }
 }
 
-
-
 /// Update region for tracking dirty rectangles, mirroring SDL_Rect in C.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct UpdateRect {
