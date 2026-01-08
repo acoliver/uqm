@@ -223,19 +223,15 @@ impl NearestScaler {
         // SSE2 implementation for x86_64
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
         unsafe {
-            // Load 4 bytes (one pixel)
-            let src_vec = _mm_loadu_si32(src_ptr as *const i32);
-            // Store 4 bytes
-            _mm_storeu_si32(dst_ptr as *mut i32, src_vec);
+            // Copy 4 bytes (one RGBA pixel) using simple pointer copy
+            std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, 4);
         }
 
         // NEON implementation for ARM64
         #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
         unsafe {
-            // Load 1x32-bit (one pixel)
-            let src_vec = vld1q_u32(src_ptr as *const u32);
-            // Store 1x32-bit
-            vst1q_u32(dst_ptr as *mut u32, src_vec);
+            // Copy 4 bytes (one RGBA pixel) using simple pointer copy
+            std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, 4);
         }
 
         // Scalar fallback
