@@ -50,6 +50,8 @@ pub enum ScaleMode {
     Hq2x = 4,
     /// Biadaptive scaling (edge-adaptive bilinear).
     Biadaptive = 5,
+    /// Triscan scaling (scanline-aware adaptive scaling).
+    Triscan = 6,
 }
 
 /// Graphics initialization flags.

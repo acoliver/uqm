@@ -43,6 +43,8 @@ pub enum ScaleMode {
     Hq2x = 4,
     /// Biadaptive interpolation (edge-adaptive bilinear scaling)
     Biadaptive = 5,
+    /// Triscan interpolation (scanline-aware adaptive scaling)
+    Triscan = 6,
 }
 
 impl ScaleMode {
@@ -53,7 +55,7 @@ impl ScaleMode {
 
     /// Check if mode is a software scaler
     pub fn is_software(&self) -> bool {
-        matches!(self, ScaleMode::Nearest | ScaleMode::Trilinear | ScaleMode::Hq2x | ScaleMode::Biadaptive)
+        matches!(self, ScaleMode::Nearest | ScaleMode::Trilinear | ScaleMode::Hq2x | ScaleMode::Biadaptive | ScaleMode::Triscan)
     }
 }
 
@@ -67,7 +69,7 @@ impl From<crate::graphics::gfx_common::ScaleMode> for ScaleMode {
             crate::graphics::gfx_common::ScaleMode::Trilinear => ScaleMode::Trilinear,
             crate::graphics::gfx_common::ScaleMode::Hq2x => ScaleMode::Hq2x,
             crate::graphics::gfx_common::ScaleMode::Biadaptive => ScaleMode::Biadaptive,
-        }
+            crate::graphics::gfx_common::ScaleMode::Triscan => ScaleMode::Triscan,        }
     }
 }
 
@@ -81,7 +83,7 @@ impl From<ScaleMode> for crate::graphics::gfx_common::ScaleMode {
             ScaleMode::Trilinear => crate::graphics::gfx_common::ScaleMode::Trilinear,
             ScaleMode::Hq2x => crate::graphics::gfx_common::ScaleMode::Hq2x,
             ScaleMode::Biadaptive => crate::graphics::gfx_common::ScaleMode::Biadaptive,
-        }
+            ScaleMode::Triscan => crate::graphics::gfx_common::ScaleMode::Triscan,        }
     }
 }
 
@@ -1325,6 +1327,7 @@ impl ScalerManager {
             ScaleMode::Trilinear => self.trilinear.scale(src, params),
             ScaleMode::Hq2x => self.hq2x.scale(src, params),
             ScaleMode::Biadaptive => self.biadaptive.scale(src, params),
+            ScaleMode::Triscan => self.bilinear.scale(src, params), // Use bilinear as fallback
             ScaleMode::Step => self.nearest.scale(src, params), // Step uses nearest
         };
 

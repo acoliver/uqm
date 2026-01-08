@@ -1187,7 +1187,7 @@ fn rescale_image(
     let mut target = Canvas::new(scaled_extent, CanvasFormat::rgba());
 
     match scale_mode {
-        ScaleMode::Nearest | ScaleMode::Step | ScaleMode::Hq2x => {
+        ScaleMode::Nearest | ScaleMode::Step | ScaleMode::Hq2x | ScaleMode::Triscan => {
             rescale_nearest(&source, &mut target)?;
         }
         ScaleMode::Bilinear | ScaleMode::Biadaptive => {
