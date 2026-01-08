@@ -2063,7 +2063,7 @@ mod tests {
 
     #[test]
     fn test_draw_horizontal_line() {
-        let mut canvas = Canvas::new_rgba(10, 10);
+        let canvas = Canvas::new_rgba(10, 10);
         let red = Color::rgb(255, 0, 0);
         let mode = DrawMode::Normal;
 
@@ -2082,7 +2082,7 @@ mod tests {
 
     #[test]
     fn test_draw_vertical_line() {
-        let mut canvas = Canvas::new_rgba(10, 10);
+        let canvas = Canvas::new_rgba(10, 10);
         let green = Color::rgb(0, 255, 0);
         let mode = DrawMode::Normal;
 
@@ -2101,7 +2101,7 @@ mod tests {
 
     #[test]
     fn test_draw_diagonal_line() {
-        let mut canvas = Canvas::new_rgba(10, 10);
+        let canvas = Canvas::new_rgba(10, 10);
         let blue = Color::rgb(0, 0, 255);
         let mode = DrawMode::Normal;
 
@@ -2122,7 +2122,7 @@ mod tests {
 
     #[test]
     fn test_draw_line_partial_clip() {
-        let mut canvas = Canvas::new_rgba(10, 10);
+        let canvas = Canvas::new_rgba(10, 10);
         let white = Color::rgb(255, 255, 255);
         let mode = DrawMode::Normal;
 
@@ -2283,7 +2283,7 @@ mod tests {
     #[test]
     fn test_image_primitive_delegates_to_canvas() {
         let canvas = Canvas::new_rgba(10, 10);
-        let mut image = TFImage::new(canvas);
+        let image = TFImage::new(canvas);
         let red = Color::rgb(255, 0, 0);
         let mode = DrawMode::Normal;
 
@@ -2748,7 +2748,7 @@ mod tests {
 
     #[test]
     fn test_scissor_clips_line() {
-        let mut canvas = Canvas::new_rgba(20, 20);
+        let canvas = Canvas::new_rgba(20, 20);
 
         // Set a scissor rect from (5,5) to (15,15)
         let scissor_rect = Rect::from_parts(Point::new(5, 5), Extent::new(10, 10));
@@ -2905,7 +2905,7 @@ mod tests {
 
     #[test]
     fn test_scissor_edge_cases() {
-        let mut canvas = Canvas::new_rgba(20, 20);
+        let canvas = Canvas::new_rgba(20, 20);
 
         // Scissor rect from (5,5) to (10,10) - points inside should pass
         let scissor_rect = Rect::from_parts(Point::new(5, 5), Extent::new(5, 5));
@@ -3266,7 +3266,7 @@ mod tests {
 
         // Create a 10x10 character with varying glyph alpha
         let mut data: Vec<u8> = Vec::with_capacity(100);
-        for y in 0..10 {
+        for _y in 0..10 {
             for x in 0..10 {
                 // Create a gradient: left pixels have alpha 128, right pixels have alpha 255
                 let alpha = if x < 5 { 128 } else { 255 };
