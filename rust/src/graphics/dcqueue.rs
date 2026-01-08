@@ -455,6 +455,7 @@ impl Inner {
     }
 }
 
+#[allow(dead_code)]
 fn ring_distance(front: usize, back: usize, capacity: usize) -> usize {
     if front <= back {
         back - front
@@ -497,6 +498,12 @@ pub struct DrawCommandQueue {
     condvar: Arc<Condvar>,
     config: DcqConfig,
     render_context: Arc<RwLock<RenderContext>>,
+}
+
+impl Default for DrawCommandQueue {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DrawCommandQueue {

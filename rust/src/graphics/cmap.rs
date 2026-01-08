@@ -210,6 +210,7 @@ impl XformControl {
     fn in_use(&self) -> bool {
         self.cmap_index >= 0
     }
+    #[allow(dead_code)]
     fn is_complete(&self) -> bool {
         Instant::now() >= self.end_time
     }
@@ -290,10 +291,10 @@ impl ColorMapManager {
             let base_offset = i as usize * NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;
             let new_cmap = self.allocate_colormap(map_idx as i16);
             let mut palette = vec![Color::new(0, 0, 0); NUMBER_OF_PLUTVALS];
-            for j in 0..NUMBER_OF_PLUTVALS {
+            for (j, color) in palette.iter_mut().enumerate().take(NUMBER_OF_PLUTVALS) {
                 let offset = base_offset + j * PLUTVAL_BYTE_SIZE;
                 if offset + PLUTVAL_BYTE_SIZE <= colors.len() {
-                    palette[j] = Color::new(
+                    *color = Color::new(
                         colors[offset + PLUTVAL_RED],
                         colors[offset + PLUTVAL_GREEN],
                         colors[offset + PLUTVAL_BLUE],
@@ -459,7 +460,7 @@ impl ColorMapManager {
         let elapsed = now.saturating_duration_since(xform.start_time);
         let duration = Duration::from_millis(xform.duration_ms).max(Duration::from_millis(1));
         let progress =
-            (elapsed.as_millis() as i64 * XFORM_SCALE as i64 / duration.as_millis() as i64) as i64;
+            elapsed.as_millis() as i64 * XFORM_SCALE as i64 / duration.as_millis() as i64;
         let progress = progress.min(XFORM_SCALE as i64);
         let mut palette = cmap.palette.lock().unwrap();
         for (idx, (old, target)) in xform

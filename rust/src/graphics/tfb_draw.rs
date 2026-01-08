@@ -30,7 +30,6 @@
 
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use std::u64;
 
 use crate::graphics::dcqueue::{Color, DrawMode, Extent, FontCharRef, Point, Rect};
 use crate::graphics::font::FontPage;
@@ -817,8 +816,8 @@ fn is_in_scissor(canvas: &Canvas, x: i32, y: i32) -> bool {
     if let Some(rect) = scissor.rect {
         let sc_x = rect.corner.x;
         let sc_y = rect.corner.y;
-        let sc_w = rect.extent.width as i32;
-        let sc_h = rect.extent.height as i32;
+        let sc_w = rect.extent.width;
+        let sc_h = rect.extent.height;
         let max_x = sc_x + sc_w;
         let max_y = sc_y + sc_h;
 
@@ -918,7 +917,7 @@ pub fn fill_rect(
             // Check if this row is in scissor (or if scissor is disabled)
             let row_in_scissor = if let Some(ref rect) = scissor_opt {
                 let sc_y = rect.corner.y;
-                let sc_h = rect.extent.height as i32;
+                let sc_h = rect.extent.height;
                 y >= sc_y && y < sc_y + sc_h
             } else {
                 true
@@ -933,8 +932,8 @@ pub fn fill_rect(
                 let in_scissor = if let Some(ref rect) = scissor_opt {
                     let sc_x = rect.corner.x;
                     let sc_y = rect.corner.y;
-                    let sc_w = rect.extent.width as i32;
-                    let sc_h = rect.extent.height as i32;
+                    let sc_w = rect.extent.width;
+                    let sc_h = rect.extent.height;
                     x >= sc_x && x < sc_x + sc_w && y >= sc_y && y < sc_y + sc_h
                 } else {
                     true
@@ -978,6 +977,7 @@ pub fn fill_rect(
 /// - Scissor clipping is applied on destination canvas
 /// - Canvas formats must match (e.g., both RGBA)
 /// - No blending performed - direct pixel copy
+#[allow(clippy::too_many_arguments)]
 pub fn copy_canvas(
     dst: &mut Canvas,
     src: &Canvas,
@@ -1056,8 +1056,8 @@ pub fn copy_canvas(
                 let in_scissor = if let Some(ref rect) = scissor_opt {
                     let sc_x = rect.corner.x;
                     let sc_y = rect.corner.y;
-                    let sc_w = rect.extent.width as i32;
-                    let sc_h = rect.extent.height as i32;
+                    let sc_w = rect.extent.width;
+                    let sc_h = rect.extent.height;
                     dst_x >= sc_x && dst_x < sc_x + sc_w && dst_y >= sc_y && dst_y < sc_y + sc_h
                 } else {
                     true
@@ -1067,9 +1067,8 @@ pub fn copy_canvas(
                     let src_row_offset = (src_y * src_width + src_x) as usize * bytes_per_pixel;
                     let dst_row_offset = (dst_y * dst_width + dst_x) as usize * bytes_per_pixel;
 
-                    for i in 0..bytes_per_pixel {
-                        dst_pixels[dst_row_offset + i] = src_pixels[src_row_offset + i];
-                    }
+                    dst_pixels[dst_row_offset..(bytes_per_pixel + dst_row_offset)]
+                        .copy_from_slice(&src_pixels[src_row_offset..(bytes_per_pixel + src_row_offset)]);
                 }
             }
         }
@@ -1409,6 +1408,7 @@ pub fn draw_scaled_image(
     copy_canvas(canvas, &source_canvas, draw_x, draw_y, 0, 0, -1, -1)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_filled_image(
     canvas: &mut Canvas,
     image: &TFImage,
@@ -1471,7 +1471,7 @@ pub fn draw_filled_image(
 /// - `image`: TFImage to draw
 /// - `x,y`: Draw position on canvas (before applying hotspot)
 /// - `flags`: Drawing flags from `draw_image_flags` module
-///            (flip, rotate, color map - not all implemented yet)
+///   (flip, rotate, color map - not all implemented yet)
 ///
 /// Returns:
 /// - `Ok(())` - Image drawn successfully
@@ -1620,8 +1620,8 @@ pub fn draw_fontchar(
                 if let Some(ref scissor) = scissor_rect {
                     let sc_x = scissor.corner.x;
                     let sc_y = scissor.corner.y;
-                    let sc_w = scissor.extent.width as i32;
-                    let sc_h = scissor.extent.height as i32;
+                    let sc_w = scissor.extent.width;
+                    let sc_h = scissor.extent.height;
 
                     if dst_x < sc_x || dst_x >= sc_x + sc_w || dst_y < sc_y || dst_y >= sc_y + sc_h
                     {
@@ -1653,8 +1653,8 @@ pub fn draw_fontchar(
                     // Standard alpha blend: result = src + dst * (1 - src_alpha)
                     if dst_offset + 3 < pixels.len() {
                         let dst_a = pixels[dst_offset + 3] as i32;
-                        let result_alpha = alpha as i32 + (dst_a * inv_alpha) / 255;
-                        pixels[dst_offset + 3] = result_alpha.min(255).max(0) as u8;
+                        let result_alpha = alpha + (dst_a * inv_alpha) / 255;
+                        pixels[dst_offset + 3] = result_alpha.clamp(0, 255) as u8;
                     }
                 } else if bytes_per_pixel == 3 {
                     // RGB without alpha channel - use effective alpha for all channels

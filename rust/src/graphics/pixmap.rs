@@ -205,7 +205,7 @@ impl PixmapLayout {
 
     /// Calculate bytes per row
     pub fn bytes_per_row(&self) -> u32 {
-        (self.stride * self.bits_per_pixel + 7) / 8
+        (self.stride * self.bits_per_pixel).div_ceil(8)
     }
 }
 
@@ -400,9 +400,9 @@ impl Pixmap {
                 // Generic fill
                 let color_bytes = color.to_le_bytes();
                 for i in (0..self.data.len()).step_by(color_bytes.len()) {
-                    for j in 0..color_bytes.len() {
+                    for (j, &byte) in color_bytes.iter().enumerate() {
                         if i + j < self.data.len() {
-                            self.data_mut()[i + j] = color_bytes[j];
+                            self.data_mut()[i + j] = byte;
                         }
                     }
                 }

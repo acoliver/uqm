@@ -302,7 +302,7 @@ impl Font {
             match current {
                 Some(existing) if existing.page_start == page_start => {
                     page.next = existing.next.take();
-                    *existing = Box::new(page);
+                    **existing = page;
                     return;
                 }
                 Some(existing) => {

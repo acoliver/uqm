@@ -294,8 +294,8 @@ impl NearestScaler {
                 let src_y = src_y.min(src_height - 1);
 
                 // Copy the pixel directly using SIMD
-                let src_offset = (src_y as usize * src_stride + src_x as usize * 4) as usize;
-                let dst_offset = (dst_y as usize * dst_stride + dst_x as usize * 4) as usize;
+                let src_offset = src_y as usize * src_stride + src_x as usize * 4;
+                let dst_offset = dst_y as usize * dst_stride + dst_x as usize * 4;
 
                 unsafe {
                     let src_ptr = src_data.as_ptr().add(src_offset);
@@ -516,7 +516,7 @@ impl BilinearScaler {
                 let b = result[2];
                 let a = result[3];
 
-                let dst_offset = ((dst_y as usize * dst_stride) + dst_x as usize * 4) as usize;
+                let dst_offset = (dst_y as usize * dst_stride) + dst_x as usize * 4;
                 unsafe {
                     let dst_ptr = dst_data.as_mut_ptr().add(dst_offset);
                     *dst_ptr = r;
@@ -666,7 +666,7 @@ impl TrilinearScaler {
                 let b = Self::lerp(b1, b2, fy);
                 let a = Self::lerp(a1, a2, fy);
 
-                let dst_offset = ((dst_y as usize * dst_stride) + dst_x as usize * 4) as usize;
+                let dst_offset = (dst_y as usize * dst_stride) + dst_x as usize * 4;
                 unsafe {
                     let dst_ptr = dst_data.as_mut_ptr().add(dst_offset);
                     *dst_ptr = r;
@@ -1063,6 +1063,7 @@ impl BiadaptiveScaler {
 
     /// Convert RGB triple to luminance using SIMD
     #[allow(unused_variables)]
+    #[allow(dead_code)]
     #[inline]
     fn rgb_to_luminance_simd(r: u8, g: u8, b: u8) -> f32 {
         // SSE2 implementation for x86_64
@@ -1154,11 +1155,9 @@ impl BiadaptiveScaler {
         // Sobel kernels
         // Gx: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
         // Gy: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
-        let gx =
-            (-1.0 * p00) + (1.0 * p20) + (-2.0 * p01) + (2.0 * p21) + (-1.0 * p02) + (1.0 * p22);
+        let gx = -p00 + p20 + (-2.0 * p01) + (2.0 * p21) - p02 + p22;
 
-        let gy =
-            (-1.0 * p00) + (-2.0 * p10) + (-1.0 * p20) + (1.0 * p02) + (2.0 * p12) + (1.0 * p22);
+        let gy = -p00 + (-2.0 * p10) - p20 + p02 + (2.0 * p12) + p22;
 
         (gx * gx + gy * gy).sqrt()
     }
@@ -1564,6 +1563,7 @@ struct ScaleCacheEntry {
     /// Scaled pixmap
     pixmap: Pixmap,
     /// Last access timestamp (for LRU eviction)
+    #[allow(dead_code)]
     last_access: u64,
 }
 
