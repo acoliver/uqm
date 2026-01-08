@@ -307,6 +307,9 @@ mod tests {
     #[test]
     #[serial]
     fn test_get_master_ship_count() {
+        // Ensure clean state - may fail if not loaded, which is fine
+        free_master_ship_list().ok();
+
         let count = get_master_ship_count();
         assert_eq!(count, 0);
 
