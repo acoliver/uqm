@@ -651,7 +651,7 @@ mod tests {
         let colors = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
         mgr.set_colors(0, 0, &colors).unwrap();
         let cmap1 = mgr.get_colormap(0).unwrap();
-        let cmap2 = mgr.get_colormap(0).unwrap();
+        let _cmap2 = mgr.get_colormap(0).unwrap();
         assert_eq!(Arc::strong_count(&cmap1), 3);
     }
 

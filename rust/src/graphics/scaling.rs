@@ -1981,13 +1981,13 @@ mod tests {
         let src = create_test_pixmap(1, 10, 10);
         cache.put(1, 512, ScaleMode::Nearest, src.clone());
 
-        let (hits, misses, size) = cache.stats();
+        let (_, _, size) = cache.stats();
         assert_eq!(size, 1);
 
         cache.clear();
 
-        let (_, _, size) = cache.stats();
-        assert_eq!(size, 0);
+        let (_, _, new_size) = cache.stats();
+        assert_eq!(new_size, 0);
     }
 
     #[test]
@@ -2269,8 +2269,9 @@ mod tests {
 
         for i in 0..dst_data.len() / 4 {
             let r = dst_data[i * 4];
-            let g = dst_data[i * 4 + 1];
-            let b = dst_data[i * 4 + 2];
+            // g and b are available if needed but we only check r for intermediate colors
+            let _g = dst_data[i * 4 + 1];
+            let _b = dst_data[i * 4 + 2];
 
             // Check for intermediate colors (not 50, not 200)
             if r > 60 && r < 190 {

@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 mod driver_tests {
-    use uqm::graphics::sdl::common::{DriverConfig, GraphicsDriver, RedrawMode, ScreenDims};
+    use uqm::graphics::sdl::common::{DriverConfig, GraphicsDriver, RedrawMode};
     use uqm::graphics::sdl::opengl::OpenGlDriver;
     use uqm::graphics::sdl::sdl2::SdlDriver;
 
