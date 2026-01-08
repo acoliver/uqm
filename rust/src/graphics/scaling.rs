@@ -1118,6 +1118,201 @@ impl Default for BiadaptiveScaler {
         Self::new()
     }
 }
+
+// ==============================================================================
+// Triscan Scaler
+// ==============================================================================
+
+/// Triscan scaling implementation (Scale2x/AdvMAME2x algorithm)
+///
+/// Fast pixel-art 2x scaler that preserves sharp edges while expanding to 2x size.
+/// Based on the Scale2x algorithm by Andrea Mazzoleni.
+///
+/// For each source pixel P with neighbors:
+///   A
+/// C P B
+///   D
+///
+/// Output 2x2 block:
+/// E0 E1
+/// E2 E3
+///
+/// Scale2x rules:
+/// - E0 = (C == A && C != D && A != B) ? A : P
+/// - E1 = (A == B && A != C && B != D) ? B : P
+/// - E2 = (D == C && D != B && C != A) ? C : P
+/// - E3 = (B == D && B != A && D != C) ? D : P
+///
+/// Corresponds to: `sc2/src/libs/graphics/sdl/triscan2x.c`
+pub struct TriscanScaler;
+
+impl TriscanScaler {
+    /// Create a new Triscan scaler
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Get a pixel from source data, clamped to image boundaries
+    #[inline(always)]
+    fn get_pixel(src: &[u8], x: usize, y: usize, width: usize, height: usize) -> [u8; 4] {
+        let x = x.min(width.saturating_sub(1));
+        let y = y.min(height.saturating_sub(1));
+        let offset = (y * width + x) * 4;
+        [src[offset], src[offset + 1], src[offset + 2], src[offset + 3]]
+    }
+
+    /// Set a pixel in destination buffer
+    #[inline(always)]
+    fn set_pixel(dst: &mut [u8], x: usize, y: usize, width: usize, pixel: [u8; 4]) {
+        let offset = (y * width + x) * 4;
+        dst[offset] = pixel[0];
+        dst[offset + 1] = pixel[1];
+        dst[offset + 2] = pixel[2];
+        dst[offset + 3] = pixel[3];
+    }
+
+    /// Check if two pixels are equal (all components match)
+    #[inline(always)]
+    fn pixels_equal(p1: [u8; 4], p2: [u8; 4]) -> bool {
+        p1[0] == p2[0] && p1[1] == p2[1] && p1[2] == p2[2] && p1[3] == p2[3]
+    }
+
+    /// Core Triscan (Scale2x) scaling function
+    ///
+    /// Processes each source pixel and generates a 2x2 output block using the
+    /// Scale2x edge-preserving algorithm.
+    fn triscan_scale(src: &[u8], dst: &mut [u8], width: usize, height: usize, bpp: usize) {
+        if bpp != 4 {
+            return; // Only support RGBA
+        }
+
+        let dst_width = width * 2;
+        let dst_height = height * 2;
+
+        for y in 0..height {
+            for x in 0..width {
+                // Get center pixel (P) and its four neighbors
+                //   A
+                // C P B
+                //   D
+                let p = Self::get_pixel(src, x, y, width, height);
+
+                // Handle edge cases by clamping
+                let x_prev = if x > 0 { x - 1 } else { 0 };
+                let x_next = if x < width - 1 { x + 1 } else { x };
+                let y_prev = if y > 0 { y - 1 } else { 0 };
+                let y_next = if y < height - 1 { y + 1 } else { y };
+
+                let a = Self::get_pixel(src, x, y_prev, width, height);      // Top
+                let b = Self::get_pixel(src, x_next, y, width, height);     // Right
+                let c = Self::get_pixel(src, x_prev, y, width, height);     // Left
+                let d = Self::get_pixel(src, x, y_next, width, height);     // Bottom
+
+                // Apply Scale2x rules to generate 2x2 output block
+                // Output positions:
+                // E0 E1
+                // E2 E3
+
+                // E0 = (C == A && C != D && A != B) ? A : P
+                let e0 = if Self::pixels_equal(c, a) &&
+                           !Self::pixels_equal(c, d) &&
+                           !Self::pixels_equal(a, b) {
+                    a
+                } else {
+                    p
+                };
+
+                // E1 = (A == B && A != C && B != D) ? B : P
+                let e1 = if Self::pixels_equal(a, b) &&
+                           !Self::pixels_equal(a, c) &&
+                           !Self::pixels_equal(b, d) {
+                    b
+                } else {
+                    p
+                };
+
+                // E2 = (D == C && D != B && C != A) ? C : P
+                let e2 = if Self::pixels_equal(d, c) &&
+                           !Self::pixels_equal(d, b) &&
+                           !Self::pixels_equal(c, a) {
+                    c
+                } else {
+                    p
+                };
+
+                // E3 = (B == D && B != A && D != C) ? D : P
+                let e3 = if Self::pixels_equal(b, d) &&
+                           !Self::pixels_equal(b, a) &&
+                           !Self::pixels_equal(d, c) {
+                    d
+                } else {
+                    p
+                };
+
+                // Write the 2x2 output block
+                let dst_x = x * 2;
+                let dst_y = y * 2;
+
+                Self::set_pixel(dst, dst_x, dst_y, dst_width, e0);
+                Self::set_pixel(dst, dst_x + 1, dst_y, dst_width, e1);
+                Self::set_pixel(dst, dst_x, dst_y + 1, dst_width, e2);
+                Self::set_pixel(dst, dst_x + 1, dst_y + 1, dst_width, e3);
+            }
+        }
+    }
+
+    /// Scale using Triscan (Scale2x) algorithm
+    fn scale_triscan(src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        // Triscan is always 2x scaling (scale factor 512)
+        if params.scale != 512 {
+            return Err(ScaleError::InvalidScaleFactor {
+                factor: params.scale,
+            }
+            .into());
+        }
+
+        if src.format() != PixmapFormat::Rgba32 {
+            return Err(ScaleError::FormatMismatch.into());
+        }
+
+        let src_width = src.width() as usize;
+        let src_height = src.height() as usize;
+        let dst_width = src_width * 2;
+        let dst_height = src_height * 2;
+
+        let id = NonZeroU32::new(6)
+            .ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let mut dst = Pixmap::new(id, dst_width as u32, dst_height as u32, src.format())?;
+
+        let src_data = src.data();
+        let dst_data = dst.data_mut();
+
+        Self::triscan_scale(src_data, dst_data, src_width, src_height, 4);
+
+        dst.clear_dirty();
+        Ok(dst)
+    }
+}
+
+impl Scaler for TriscanScaler {
+    fn scale(&self, src: &Pixmap, params: ScaleParams) -> Result<Pixmap> {
+        if params.mode != ScaleMode::Triscan {
+            return Err(ScaleError::UnsupportedMode { mode: params.mode }.into());
+        }
+        Self::scale_triscan(src, params)
+    }
+
+    fn supports(&self, mode: ScaleMode) -> bool {
+        mode == ScaleMode::Triscan
+    }
+}
+
+impl Default for TriscanScaler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Cache key for scaled images
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ScaleCacheKey {
@@ -1284,6 +1479,8 @@ pub struct ScalerManager {
     hq2x: Hq2xScaler,
     /// Biadaptive scaler
     biadaptive: BiadaptiveScaler,
+    /// Triscan scaler
+    triscan: TriscanScaler,
     /// Scaling cache
     cache: ScaleCache,
 }
@@ -1297,6 +1494,7 @@ impl ScalerManager {
             trilinear: TrilinearScaler::new(),
             hq2x: Hq2xScaler::new(),
             biadaptive: BiadaptiveScaler::new(),
+            triscan: TriscanScaler::new(),
             cache: ScaleCache::new(64),
         }
     }
@@ -1309,6 +1507,7 @@ impl ScalerManager {
             trilinear: TrilinearScaler::new(),
             hq2x: Hq2xScaler::new(),
             biadaptive: BiadaptiveScaler::new(),
+            triscan: TriscanScaler::new(),
             cache: ScaleCache::new(capacity),
         }
     }
@@ -1327,7 +1526,7 @@ impl ScalerManager {
             ScaleMode::Trilinear => self.trilinear.scale(src, params),
             ScaleMode::Hq2x => self.hq2x.scale(src, params),
             ScaleMode::Biadaptive => self.biadaptive.scale(src, params),
-            ScaleMode::Triscan => self.bilinear.scale(src, params), // Use bilinear as fallback
+            ScaleMode::Triscan => self.triscan.scale(src, params),
             ScaleMode::Step => self.nearest.scale(src, params), // Step uses nearest
         };
 
@@ -2320,6 +2519,406 @@ mod tests {
 
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Format mismatch"));
+    }
+
+    // ==============================================================================
+    // Triscan Tests
+    // ==============================================================================
+
+    #[test]
+    fn test_triscan_scaler_creation() {
+        let scaler = TriscanScaler::new();
+        assert!(scaler.supports(ScaleMode::Triscan));
+        assert!(!scaler.supports(ScaleMode::Nearest));
+        assert!(!scaler.supports(ScaleMode::Bilinear));
+        assert!(!scaler.supports(ScaleMode::Hq2x));
+        assert!(!scaler.supports(ScaleMode::Biadaptive));
+    }
+
+    #[test]
+    fn test_triscan_scale_2x_dimensions() {
+        let src = create_test_pixmap(15, 10, 10);
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan); // 2x scale
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20); // 10 * 2
+        assert_eq!(dst.height(), 20); // 10 * 2
+        assert_eq!(dst.format(), PixmapFormat::Rgba32);
+    }
+
+    #[test]
+    fn test_triscan_uniform_area() {
+        // Test that a solid color area stays solid
+        let id = NonZeroU32::new(200).unwrap();
+        let mut src = Pixmap::new(id, 5, 5, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        let color = [100, 150, 200, 255];
+        for i in 0..25 {
+            data[i * 4] = color[0];
+            data[i * 4 + 1] = color[1];
+            data[i * 4 + 2] = color[2];
+            data[i * 4 + 3] = color[3];
+        }
+
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        let dst_data = dst.data();
+
+        // All pixels should be exactly the same (no interpolation)
+        for i in 0..dst_data.len() / 4 {
+            assert_eq!(dst_data[i * 4], color[0]);
+            assert_eq!(dst_data[i * 4 + 1], color[1]);
+            assert_eq!(dst_data[i * 4 + 2], color[2]);
+            assert_eq!(dst_data[i * 4 + 3], color[3]);
+        }
+    }
+
+    #[test]
+    fn test_triscan_diagonal_edge() {
+        // Test diagonal edge preservation
+        let id = NonZeroU32::new(201).unwrap();
+        let mut src = Pixmap::new(id, 4, 4, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Create an image where left side is black, right side is white
+        // This creates a vertical edge at the center
+        let black = [0, 0, 0, 255];
+        let white = [255, 255, 255, 255];
+
+        for y in 0..4 {
+            for x in 0..4 {
+                let idx = (y * 4 + x) * 4;
+                if x < 2 {
+                    data[idx] = black[0];
+                    data[idx + 1] = black[1];
+                    data[idx + 2] = black[2];
+                    data[idx + 3] = black[3];
+                } else {
+                    data[idx] = white[0];
+                    data[idx + 1] = white[1];
+                    data[idx + 2] = white[2];
+                    data[idx + 3] = white[3];
+                }
+            }
+        }
+
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        let dst_data = dst.data();
+
+        // Count black and white pixels
+        let mut black_count = 0;
+        let mut white_count = 0;
+
+        for i in 0..dst_data.len() / 4 {
+            let r = dst_data[i * 4];
+            let g = dst_data[i * 4 + 1];
+            let b = dst_data[i * 4 + 2];
+
+            if r == 0 && g == 0 && b == 0 {
+                black_count += 1;
+            } else if r == 255 && g == 255 && b == 255 {
+                white_count += 1;
+            }
+        }
+
+        // Should have both black and white pixels (edge preserved, not blended)
+        assert!(black_count > 0);
+        assert!(white_count > 0);
+    }
+
+    #[test]
+    fn test_triscan_horizontal_edge() {
+        // Test horizontal edge preservation
+        let id = NonZeroU32::new(202).unwrap();
+        let mut src = Pixmap::new(id, 4, 4, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Top half black, bottom half white (horizontal edge)
+        let black = [0, 0, 0, 255];
+        let white = [255, 255, 255, 255];
+
+        for y in 0..4 {
+            for x in 0..4 {
+                let idx = (y * 4 + x) * 4;
+                if y < 2 {
+                    data[idx] = black[0];
+                    data[idx + 1] = black[1];
+                    data[idx + 2] = black[2];
+                    data[idx + 3] = black[3];
+                } else {
+                    data[idx] = white[0];
+                    data[idx + 1] = white[1];
+                    data[idx + 2] = white[2];
+                    data[idx + 3] = white[3];
+                }
+            }
+        }
+
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        let dst_data = dst.data();
+
+        // Count black and white pixels
+        let mut black_count = 0;
+        let mut white_count = 0;
+
+        for i in 0..dst_data.len() / 4 {
+            let r = dst_data[i * 4];
+            let g = dst_data[i * 4 + 1];
+            let b = dst_data[i * 4 + 2];
+
+            if r == 0 && g == 0 && b == 0 {
+                black_count += 1;
+            } else if r == 255 && g == 255 && b == 255 {
+                white_count += 1;
+            }
+        }
+
+        // Should have both black and white pixels (edge preserved)
+        assert!(black_count > 0);
+        assert!(white_count > 0);
+    }
+
+    #[test]
+    fn test_triscan_vertical_edge() {
+        // Test vertical edge using a different pattern
+        let id = NonZeroU32::new(203).unwrap();
+        let mut src = Pixmap::new(id, 3, 3, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Left column red, middle column green, right column blue
+        // Creates two vertical edges
+        let red = [255, 0, 0, 255];
+        let green = [0, 255, 0, 255];
+        let blue = [0, 0, 255, 255];
+
+        for y in 0..3 {
+            for x in 0..3 {
+                let idx = (y * 3 + x) * 4;
+                match x {
+                    0 => {
+                        data[idx] = red[0];
+                        data[idx + 1] = red[1];
+                        data[idx + 2] = red[2];
+                        data[idx + 3] = red[3];
+                    }
+                    1 => {
+                        data[idx] = green[0];
+                        data[idx + 1] = green[1];
+                        data[idx + 2] = green[2];
+                        data[idx + 3] = green[3];
+                    }
+                    2 => {
+                        data[idx] = blue[0];
+                        data[idx + 1] = blue[1];
+                        data[idx + 2] = blue[2];
+                        data[idx + 3] = blue[3];
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 6);
+        assert_eq!(dst.height(), 6);
+
+        let dst_data = dst.data();
+
+        // Should have pixels of all three colors (no blending between columns)
+        let mut has_red = false;
+        let mut has_green = false;
+        let mut has_blue = false;
+
+        for i in 0..dst_data.len() / 4 {
+            let r = dst_data[i * 4];
+            let g = dst_data[i * 4 + 1];
+            let b = dst_data[i * 4 + 2];
+
+            if r == 255 && g == 0 && b == 0 {
+                has_red = true;
+            } else if r == 0 && g == 255 && b == 0 {
+                has_green = true;
+            } else if r == 0 && g == 0 && b == 255 {
+                has_blue = true;
+            }
+        }
+
+        assert!(has_red);
+        assert!(has_green);
+        assert!(has_blue);
+    }
+
+    #[test]
+    fn test_triscan_with_scaler_manager() {
+        let manager = ScalerManager::new();
+        let src = create_test_pixmap(16, 10, 10);
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = manager.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 20);
+        assert_eq!(dst.height(), 20);
+
+        // Second call should hit the cache
+        let result = manager.scale(&src, params);
+        assert!(result.is_ok());
+
+        let (hits, misses, size) = manager.cache_stats();
+        assert_eq!(hits, 1);
+        assert_eq!(misses, 1);
+        assert_eq!(size, 1);
+    }
+
+    #[test]
+    fn test_triscan_rejects_non_2x_scale() {
+        let src = create_test_pixmap(17, 10, 10);
+        let scaler = TriscanScaler::new();
+
+        // Test 3x scale (should fail)
+        let params = ScaleParams::new(768, ScaleMode::Triscan);
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        // Test 1x scale (should fail)
+        let params = ScaleParams::new(256, ScaleMode::Triscan);
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_triscan_default_trait() {
+        let scaler = TriscanScaler::default();
+        assert!(scaler.supports(ScaleMode::Triscan));
+    }
+
+    #[test]
+    fn test_triscan_pixels_equal() {
+        let p1 = [100, 150, 200, 255];
+        let p2 = [100, 150, 200, 255];
+        let p3 = [100, 150, 200, 254];
+        let p4 = [100, 150, 199, 255];
+
+        assert!(TriscanScaler::pixels_equal(p1, p2));
+        assert!(!TriscanScaler::pixels_equal(p1, p3));
+        assert!(!TriscanScaler::pixels_equal(p1, p4));
+    }
+
+    #[test]
+    fn test_triscan_unsupported_mode() {
+        let src = create_test_pixmap(18, 10, 10);
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Nearest);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Unsupported mode"));
+    }
+
+    #[test]
+    fn test_triscan_format_mismatch() {
+        let id = NonZeroU32::new(204).unwrap();
+        let src = Pixmap::new(id, 2, 2, PixmapFormat::Rgb24).unwrap();
+
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_err());
+
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("Format mismatch"));
+    }
+
+    #[test]
+    fn test_triscan_edge_behavior() {
+        // Test that Triscan handles edge pixels correctly
+        let id = NonZeroU32::new(205).unwrap();
+        let mut src = Pixmap::new(id, 2, 2, PixmapFormat::Rgba32).unwrap();
+        let data = src.data_mut();
+
+        // Simple checkerboard pattern
+        let black = [0, 0, 0, 255];
+        let white = [255, 255, 255, 255];
+
+        data[0] = black[0]; data[1] = black[1]; data[2] = black[2]; data[3] = black[3];
+        data[4] = white[0]; data[5] = white[1]; data[6] = white[2]; data[7] = white[3];
+        data[8] = white[0]; data[9] = white[1]; data[10] = white[2]; data[11] = white[3];
+        data[12] = black[0]; data[13] = black[1]; data[14] = black[2]; data[15] = black[3];
+
+        let scaler = TriscanScaler::new();
+        let params = ScaleParams::new(512, ScaleMode::Triscan);
+
+        let result = scaler.scale(&src, params);
+        assert!(result.is_ok());
+
+        let dst = result.unwrap();
+        assert_eq!(dst.width(), 4);
+        assert_eq!(dst.height(), 4);
+
+        let dst_data = dst.data();
+
+        // Should have both colors (no crashes or invalid memory access)
+        let mut has_black = false;
+        let mut has_white = false;
+
+        for i in 0..dst_data.len() / 4 {
+            let r = dst_data[i * 4];
+            let g = dst_data[i * 4 + 1];
+            let b = dst_data[i * 4 + 2];
+
+            if r == 0 && g == 0 && b == 0 {
+                has_black = true;
+            } else if r == 255 && g == 255 && b == 255 {
+                has_white = true;
+            }
+        }
+
+        assert!(has_black);
+        assert!(has_white);
+    }
+
+    #[test]
+    fn test_scale_mode_triscan_value() {
+        assert_eq!(ScaleMode::Triscan as u8, 6);
+    }
+
+    #[test]
+    fn test_scale_mode_triscan_properties() {
+        // Triscan is a software scaler
+        assert!(ScaleMode::Triscan.is_software());
+        assert!(!ScaleMode::Triscan.is_hardware());
     }
 
 }
