@@ -467,8 +467,9 @@ impl Pixmap {
             let src_offset = (src_y * src.bytes_per_row()
                 + src_rect.corner.x as u32 * src_bytes_per_pixel as u32)
                 as usize;
-            let dst_offset =
-                (dst_y * self.bytes_per_row() + dst_point.x as u32 * dst_bytes_per_pixel as u32) as usize;
+            let dst_offset = (dst_y * self.bytes_per_row()
+                + dst_point.x as u32 * dst_bytes_per_pixel as u32)
+                as usize;
 
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -504,13 +505,13 @@ impl Pixmap {
         let mut region = Pixmap::new(id, rect.width() as u32, rect.height() as u32, self.format)?;
 
         let src_bytes_per_pixel = self.bytes_per_pixel() as usize;
-        let dst_bytes_per_pixel = region.bytes_per_pixel() as usize;
         let row_bytes = rect.width() as usize * src_bytes_per_pixel;
 
         for y in 0..rect.height() {
             let src_y = (rect.corner.y + y as i16) as u32;
             let src_offset = (src_y * self.bytes_per_row()
-                + rect.corner.x as u32 * src_bytes_per_pixel as u32) as usize;
+                + rect.corner.x as u32 * src_bytes_per_pixel as u32)
+                as usize;
             let dst_offset = (y as u32 * region.bytes_per_row()) as usize;
 
             unsafe {

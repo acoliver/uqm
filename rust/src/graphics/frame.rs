@@ -469,7 +469,6 @@ mod tests {
         assert!(handle.image().is_some());
     }
 
-
     #[test]
     fn test_effective_rect() {
         let frame = crate::graphics::drawable::Frame::new(

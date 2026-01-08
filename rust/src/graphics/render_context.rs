@@ -80,7 +80,6 @@ pub struct ResourceTrackingInfo {
     pub data_ptrs: usize,
 }
 
-
 /// Registry for render resources resolved by DCQ.
 pub struct RenderContext {
     screens: [Option<ScreenHandle>; 3],
@@ -453,7 +452,9 @@ mod tests {
         let canvas_id = ctx.register_canvas(Arc::clone(&canvas));
         let image_id = ctx.register_image(Arc::clone(&image));
 
-        let canvas_meta = ctx.get_metadata(canvas_id).expect("canvas metadata missing");
+        let canvas_meta = ctx
+            .get_metadata(canvas_id)
+            .expect("canvas metadata missing");
         let image_meta = ctx.get_metadata(image_id).expect("image metadata missing");
 
         assert_eq!(canvas_meta.resource_type, ResourceType::Canvas);
@@ -524,7 +525,9 @@ mod tests {
 
         ctx.set_screen(ScreenType::Main, Arc::clone(&canvas));
 
-        let fetched = ctx.get_screen(ScreenType::Main).expect("screen should exist");
+        let fetched = ctx
+            .get_screen(ScreenType::Main)
+            .expect("screen should exist");
         assert!(Arc::ptr_eq(&canvas, &fetched));
         assert!(ctx.get_screen(ScreenType::Extra).is_none());
     }

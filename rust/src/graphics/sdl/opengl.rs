@@ -1,7 +1,10 @@
 //!
 //! OpenGL graphics driver implementation.
 
-use std::{ffi::CString, sync::atomic::{AtomicU8, Ordering}};
+use std::{
+    ffi::CString,
+    sync::atomic::{AtomicU8, Ordering},
+};
 
 use sdl2::{
     event::Event,
@@ -10,8 +13,8 @@ use sdl2::{
 };
 
 use crate::graphics::sdl::common::{
-    DriverConfig, DriverError, DriverResult, DriverState, GraphicsDriver, GraphicsEvent, RedrawMode,
-    Screen, ScreenDims,
+    DriverConfig, DriverError, DriverResult, DriverState, GraphicsDriver, GraphicsEvent,
+    RedrawMode, Screen, ScreenDims,
 };
 
 const LOGICAL_WIDTH: u32 = 320;
@@ -135,8 +138,8 @@ impl OpenGlDriver {
         unsafe {
             gl::AttachShader(program, vertex_shader);
             gl::AttachShader(program, fragment_shader);
-            gl::BindAttribLocation(program, 0, b"a_pos\0".as_ptr().cast());
-            gl::BindAttribLocation(program, 1, b"a_tex\0".as_ptr().cast());
+            gl::BindAttribLocation(program, 0, c"a_pos".as_ptr());
+            gl::BindAttribLocation(program, 1, c"a_tex".as_ptr());
             gl::LinkProgram(program);
         }
 
@@ -163,7 +166,7 @@ impl OpenGlDriver {
             gl::DeleteShader(vertex_shader);
             gl::DeleteShader(fragment_shader);
             gl::UseProgram(program);
-            let sampler_location = gl::GetUniformLocation(program, b"u_tex\0".as_ptr().cast());
+            let sampler_location = gl::GetUniformLocation(program, c"u_tex".as_ptr());
             if sampler_location >= 0 {
                 gl::Uniform1i(sampler_location, 0);
             }
@@ -271,7 +274,6 @@ impl OpenGlDriver {
             .to_string()
     }
 
-
     fn init_textures(&mut self, config: &DriverConfig) {
         let filter = if config.linear_scaling {
             gl::LINEAR
@@ -304,8 +306,8 @@ impl OpenGlDriver {
     }
 
     fn init_sdl(&mut self, config: &DriverConfig) -> DriverResult<()> {
-        let sdl_context = sdl2::init()
-            .map_err(|e| DriverError::VideoModeFailed(format!("SDL2 init: {}", e)))?;
+        let sdl_context =
+            sdl2::init().map_err(|e| DriverError::VideoModeFailed(format!("SDL2 init: {}", e)))?;
         let video_subsystem = sdl_context
             .video()
             .map_err(|e| DriverError::VideoModeFailed(format!("video subsystem: {}", e)))?;
@@ -493,7 +495,8 @@ impl GraphicsDriver for OpenGlDriver {
         self.init_buffers();
 
         self.state.mark_initialized(*config);
-        self.active_screen.store(Screen::Main as u8, Ordering::Relaxed);
+        self.active_screen
+            .store(Screen::Main as u8, Ordering::Relaxed);
         Ok(())
     }
 
@@ -517,7 +520,12 @@ impl GraphicsDriver for OpenGlDriver {
         let (x, y, width, height) = self.viewport_for_window(window_width, window_height);
 
         unsafe {
-            gl::Viewport(0, 0, window_width.max(1) as i32, window_height.max(1) as i32);
+            gl::Viewport(
+                0,
+                0,
+                window_width.max(1) as i32,
+                window_height.max(1) as i32,
+            );
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::Viewport(x, y, width, height);
         }
@@ -573,10 +581,7 @@ impl GraphicsDriver for OpenGlDriver {
             return Err(DriverError::NotInitialized);
         }
 
-        let window = self
-            .window
-            .as_mut()
-            .ok_or(DriverError::NotInitialized)?;
+        let window = self.window.as_mut().ok_or(DriverError::NotInitialized)?;
 
         let mut config = self.state.config();
 
@@ -632,11 +637,14 @@ impl GraphicsDriver for OpenGlDriver {
             .as_ref()
             .ok_or(DriverError::NotInitialized)?;
 
-        self.active_screen.store(match screen {
-            0 => Screen::Main,
-            1 => Screen::Extra,
-            _ => Screen::Transition,
-        } as u8, Ordering::Relaxed);
+        self.active_screen.store(
+            match screen {
+                0 => Screen::Main,
+                1 => Screen::Extra,
+                _ => Screen::Transition,
+            } as u8,
+            Ordering::Relaxed,
+        );
 
         Ok(surface.as_ptr())
     }
@@ -652,11 +660,14 @@ impl GraphicsDriver for OpenGlDriver {
             .as_mut()
             .ok_or(DriverError::NotInitialized)?;
 
-        self.active_screen.store(match screen {
-            0 => Screen::Main,
-            1 => Screen::Extra,
-            _ => Screen::Transition,
-        } as u8, Ordering::Relaxed);
+        self.active_screen.store(
+            match screen {
+                0 => Screen::Main,
+                1 => Screen::Extra,
+                _ => Screen::Transition,
+            } as u8,
+            Ordering::Relaxed,
+        );
 
         Ok(surface.as_mut_ptr())
     }
@@ -731,7 +742,6 @@ mod tests {
         assert!(driver.keep_aspect_ratio);
     }
 }
-
 
 // SAFETY: We only access the driver from the main thread per SDL2 requirements.
 unsafe impl Send for OpenGlDriver {}

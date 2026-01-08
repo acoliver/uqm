@@ -29,8 +29,8 @@ pub mod opengl;
 pub mod sdl2;
 
 pub use common::{
-    DriverConfig, DriverError, DriverResult, RedrawMode, GraphicsDriver, Screen,
-    ScreenDims, UpdateRect, GraphicsEvent,
+    DriverConfig, DriverError, DriverResult, GraphicsDriver, GraphicsEvent, RedrawMode, Screen,
+    ScreenDims, UpdateRect,
 };
 pub use opengl::OpenGlDriver;
 pub use sdl2::SdlDriver;

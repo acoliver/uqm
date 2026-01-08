@@ -879,9 +879,7 @@ mod tests {
 
         let frame_extent = Extent::new(100, 100);
         let frame_hot = Point::new(5, 6);
-        let (rect, origin) = ctx
-            .valid_rect_with_origin(frame_extent, frame_hot)
-            .unwrap();
+        let (rect, origin) = ctx.valid_rect_with_origin(frame_extent, frame_hot).unwrap();
 
         assert_eq!(rect.corner.x, 10);
         assert_eq!(rect.corner.y, 10);

@@ -7,8 +7,7 @@ use uqm::graphics::{
     FadeType, RenderContext, Screen, ScreenType, FADE_FULL_INTENSITY, FADE_NO_INTENSITY,
 };
 
-fn setup_queue_with_screens(
-) -> (
+fn setup_queue_with_screens() -> (
     DrawCommandQueue,
     Arc<RwLock<Canvas>>,
     Arc<RwLock<Canvas>>,

@@ -70,7 +70,14 @@ impl ScaleMode {
 
     /// Check if mode is a software scaler
     pub fn is_software(&self) -> bool {
-        matches!(self, ScaleMode::Nearest | ScaleMode::Trilinear | ScaleMode::Hq2x | ScaleMode::Biadaptive | ScaleMode::Triscan)
+        matches!(
+            self,
+            ScaleMode::Nearest
+                | ScaleMode::Trilinear
+                | ScaleMode::Hq2x
+                | ScaleMode::Biadaptive
+                | ScaleMode::Triscan
+        )
     }
 }
 
@@ -84,7 +91,8 @@ impl From<crate::graphics::gfx_common::ScaleMode> for ScaleMode {
             crate::graphics::gfx_common::ScaleMode::Trilinear => ScaleMode::Trilinear,
             crate::graphics::gfx_common::ScaleMode::Hq2x => ScaleMode::Hq2x,
             crate::graphics::gfx_common::ScaleMode::Biadaptive => ScaleMode::Biadaptive,
-            crate::graphics::gfx_common::ScaleMode::Triscan => ScaleMode::Triscan,        }
+            crate::graphics::gfx_common::ScaleMode::Triscan => ScaleMode::Triscan,
+        }
     }
 }
 
@@ -98,7 +106,8 @@ impl From<ScaleMode> for crate::graphics::gfx_common::ScaleMode {
             ScaleMode::Trilinear => crate::graphics::gfx_common::ScaleMode::Trilinear,
             ScaleMode::Hq2x => crate::graphics::gfx_common::ScaleMode::Hq2x,
             ScaleMode::Biadaptive => crate::graphics::gfx_common::ScaleMode::Biadaptive,
-            ScaleMode::Triscan => crate::graphics::gfx_common::ScaleMode::Triscan,        }
+            ScaleMode::Triscan => crate::graphics::gfx_common::ScaleMode::Triscan,
+        }
     }
 }
 
@@ -336,7 +345,9 @@ pub struct BilinearScaler;
 
 impl BilinearScaler {
     /// Create a new bilinear scaler
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Helper function to blend colors
     #[inline]
@@ -368,10 +379,22 @@ impl BilinearScaler {
 
             // Load and expand p00
             let v00_bytes = _mm_setr_epi8(
-                p00[0] as i8, p00[1] as i8, p00[2] as i8, p00[3] as i8,
-                p10[0] as i8, p10[1] as i8, p10[2] as i8, p10[3] as i8,
-                p01[0] as i8, p01[1] as i8, p01[2] as i8, p01[3] as i8,
-                p11[0] as i8, p11[1] as i8, p11[2] as i8, p11[3] as i8,
+                p00[0] as i8,
+                p00[1] as i8,
+                p00[2] as i8,
+                p00[3] as i8,
+                p10[0] as i8,
+                p10[1] as i8,
+                p10[2] as i8,
+                p10[3] as i8,
+                p01[0] as i8,
+                p01[1] as i8,
+                p01[2] as i8,
+                p01[3] as i8,
+                p11[0] as i8,
+                p11[1] as i8,
+                p11[2] as i8,
+                p11[3] as i8,
             );
 
             // Unpack low bytes to 16-bit (p00, p10)
@@ -389,7 +412,7 @@ impl BilinearScaler {
 
         // NEON implementation for ARM64
         #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-        unsafe {
+        {
             // Use scalar implementation for reliability - proper NEON implementation
             // would require proper shuffling and lane extraction
             Self::lerp_scalar_bilinear(p00, p10, p01, p11, fx, fy)
@@ -712,7 +735,12 @@ impl Hq2xScaler {
         let x = x.clamp(0, width as i32 - 1) as usize;
         let y = y.clamp(0, height as i32 - 1) as usize;
         let offset = (y * width + x) * 4;
-        [src[offset], src[offset + 1], src[offset + 2], src[offset + 3]]
+        [
+            src[offset],
+            src[offset + 1],
+            src[offset + 2],
+            src[offset + 3],
+        ]
     }
 
     /// Convert RGB to Y component (luminance)
@@ -792,36 +820,43 @@ impl Hq2xScaler {
             a += pixel[3] as f32 * weight;
         }
 
-        [r.round().clamp(0.0, 255.0) as u8,
-         g.round().clamp(0.0, 255.0) as u8,
-         b.round().clamp(0.0, 255.0) as u8,
-         a.round().clamp(0.0, 255.0) as u8]
+        [
+            r.round().clamp(0.0, 255.0) as u8,
+            g.round().clamp(0.0, 255.0) as u8,
+            b.round().clamp(0.0, 255.0) as u8,
+            a.round().clamp(0.0, 255.0) as u8,
+        ]
     }
 
     /// Get 3x3 neighborhood around a pixel
     fn get_neighborhood(src: &[u8], x: i32, y: i32, width: usize, height: usize) -> [[u8; 4]; 9] {
         [
             Self::get_pixel(src, x - 1, y - 1, width, height), // p0: TL
-            Self::get_pixel(src, x,     y - 1, width, height), // p1: T
+            Self::get_pixel(src, x, y - 1, width, height),     // p1: T
             Self::get_pixel(src, x + 1, y - 1, width, height), // p2: TR
-            Self::get_pixel(src, x - 1, y,     width, height), // p3: L
-            Self::get_pixel(src, x,     y,     width, height), // p4: C (center)
-            Self::get_pixel(src, x + 1, y,     width, height), // p5: R
+            Self::get_pixel(src, x - 1, y, width, height),     // p3: L
+            Self::get_pixel(src, x, y, width, height),         // p4: C (center)
+            Self::get_pixel(src, x + 1, y, width, height),     // p5: R
             Self::get_pixel(src, x - 1, y + 1, width, height), // p6: BL
-            Self::get_pixel(src, x,     y + 1, width, height), // p7: B
+            Self::get_pixel(src, x, y + 1, width, height),     // p7: B
             Self::get_pixel(src, x + 1, y + 1, width, height), // p8: BR
         ]
     }
 
     /// Interpolate a single output pixel using HQ2x pattern
-    fn interpolate_pixel(center: [u8; 4], neighbors: &[[u8; 4]; 9], quad_x: usize, quad_y: usize) -> [u8; 4] {
+    fn interpolate_pixel(
+        center: [u8; 4],
+        neighbors: &[[u8; 4]; 9],
+        quad_x: usize,
+        quad_y: usize,
+    ) -> [u8; 4] {
         let tl = neighbors[0];
-        let t  = neighbors[1];
+        let t = neighbors[1];
         let tr = neighbors[2];
-        let l  = neighbors[3];
-        let r  = neighbors[5];
+        let l = neighbors[3];
+        let r = neighbors[5];
         let bl = neighbors[6];
-        let b  = neighbors[7];
+        let b = neighbors[7];
         let br = neighbors[8];
 
         // Pattern detection based on central pixel
@@ -902,7 +937,6 @@ impl Hq2xScaler {
         }
 
         let dst_width = width * 2;
-        let dst_height = height * 2;
 
         for y in 0..height {
             for x in 0..width {
@@ -941,8 +975,8 @@ impl Hq2xScaler {
         let dst_width = src_width * 2;
         let dst_height = src_height * 2;
 
-        let id = NonZeroU32::new(4)
-            .ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let id =
+            NonZeroU32::new(4).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
         let mut dst = Pixmap::new(id, dst_width as u32, dst_height as u32, src.format())?;
 
         let src_data = src.data();
@@ -978,7 +1012,6 @@ impl Default for Hq2xScaler {
 // Scaling Cache
 // ==============================================================================
 
-
 // ==============================================================================
 // Biadaptive Scaler
 // ==============================================================================
@@ -996,7 +1029,9 @@ impl BiadaptiveScaler {
     const DEFAULT_EDGE_THRESHOLD: f32 = 30.0;
 
     /// Create a new biadaptive scaler
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Helper function to blend colors
     #[inline]
@@ -1011,7 +1046,12 @@ impl BiadaptiveScaler {
         let x = x.min(width as u32 - 1) as usize;
         let y = y.min(height as u32 - 1) as usize;
         let offset = (y * width + x) * 4;
-        [src[offset], src[offset + 1], src[offset + 2], src[offset + 3]]
+        [
+            src[offset],
+            src[offset + 1],
+            src[offset + 2],
+            src[offset + 3],
+        ]
     }
 
     /// Convert RGB to luminance
@@ -1036,7 +1076,9 @@ impl BiadaptiveScaler {
             let coeffs = _mm_set_ps(0.0, 0.0722, 0.7152, 0.2126);
 
             // Load RGB values and extend to float
-            let rgb = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_set_epi32(0, b as i32, g as i32, r as i32)));
+            let rgb = _mm_cvtepi32_ps(_mm_cvtepu8_epi32(_mm_set_epi32(
+                0, b as i32, g as i32, r as i32,
+            )));
 
             // Multiply by coefficients and sum
             let mul = _mm_mul_ps(rgb, coeffs);
@@ -1116,12 +1158,11 @@ impl BiadaptiveScaler {
         // Sobel kernels
         // Gx: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]
         // Gy: [[-1, -2, -1], [0, 0, 0], [1, 2, 1]]
-        let gx = (-1.0 * p00) + (1.0 * p20) +
-                  (-2.0 * p01) + (2.0 * p21) +
-                  (-1.0 * p02) + (1.0 * p22);
+        let gx =
+            (-1.0 * p00) + (1.0 * p20) + (-2.0 * p01) + (2.0 * p21) + (-1.0 * p02) + (1.0 * p22);
 
-        let gy = (-1.0 * p00) + (-2.0 * p10) + (-1.0 * p20) +
-                  (1.0 * p02) + (2.0 * p12) + (1.0 * p22);
+        let gy =
+            (-1.0 * p00) + (-2.0 * p10) + (-1.0 * p20) + (1.0 * p02) + (2.0 * p12) + (1.0 * p22);
 
         (gx * gx + gy * gy).sqrt()
     }
@@ -1199,7 +1240,8 @@ impl BiadaptiveScaler {
                 let src_y = dst_y as f32 * scale_y;
 
                 // Compute edge strength at the source position
-                let gradient = Self::compute_gradient(src, src_x as u32, src_y as u32, src_width, src_height);
+                let gradient =
+                    Self::compute_gradient(src, src_x as u32, src_y as u32, src_width, src_height);
 
                 // Blend factor: 0.0 = nearest-neighbor, 1.0 = bilinear
                 // Strong edges (high gradient) -> favor nearest-neighbor (sharp)
@@ -1210,7 +1252,8 @@ impl BiadaptiveScaler {
                 } else {
                     // In smooth areas, favor bilinear more
                     0.8
-                }.clamp(0.0, 1.0);
+                }
+                .clamp(0.0, 1.0);
 
                 // Get both samples
                 let bilinear = Self::bilinear_sample(src, src_x, src_y, src_width, src_height);
@@ -1248,7 +1291,8 @@ impl BiadaptiveScaler {
             return Err(ScaleError::InvalidDimensions.into());
         }
 
-        let id = NonZeroU32::new(5).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let id =
+            NonZeroU32::new(5).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
         let mut dst = Pixmap::new(id, dst_width, dst_height, src.format())?;
 
         if src.format() != PixmapFormat::Rgba32 {
@@ -1264,10 +1308,22 @@ impl BiadaptiveScaler {
         let dst_data = dst.data_mut();
 
         // Use the provided edge_threshold or default
-        let _threshold = if edge_threshold > 0.0 { edge_threshold } else { Self::DEFAULT_EDGE_THRESHOLD };
+        let _threshold = if edge_threshold > 0.0 {
+            edge_threshold
+        } else {
+            Self::DEFAULT_EDGE_THRESHOLD
+        };
 
         // Call the core scaling function
-        Self::biadaptive_scale(src_data, dst_data, src_width, src_height, dst_width_usize, dst_height_usize, 4);
+        Self::biadaptive_scale(
+            src_data,
+            dst_data,
+            src_width,
+            src_height,
+            dst_width_usize,
+            dst_height_usize,
+            4,
+        );
 
         dst.clear_dirty();
         Ok(dst)
@@ -1332,7 +1388,12 @@ impl TriscanScaler {
         let x = x.min(width.saturating_sub(1));
         let y = y.min(height.saturating_sub(1));
         let offset = (y * width + x) * 4;
-        [src[offset], src[offset + 1], src[offset + 2], src[offset + 3]]
+        [
+            src[offset],
+            src[offset + 1],
+            src[offset + 2],
+            src[offset + 3],
+        ]
     }
 
     /// Set a pixel in destination buffer
@@ -1361,7 +1422,6 @@ impl TriscanScaler {
         }
 
         let dst_width = width * 2;
-        let dst_height = height * 2;
 
         for y in 0..height {
             for x in 0..width {
@@ -1377,10 +1437,10 @@ impl TriscanScaler {
                 let y_prev = if y > 0 { y - 1 } else { 0 };
                 let y_next = if y < height - 1 { y + 1 } else { y };
 
-                let a = Self::get_pixel(src, x, y_prev, width, height);      // Top
-                let b = Self::get_pixel(src, x_next, y, width, height);     // Right
-                let c = Self::get_pixel(src, x_prev, y, width, height);     // Left
-                let d = Self::get_pixel(src, x, y_next, width, height);     // Bottom
+                let a = Self::get_pixel(src, x, y_prev, width, height); // Top
+                let b = Self::get_pixel(src, x_next, y, width, height); // Right
+                let c = Self::get_pixel(src, x_prev, y, width, height); // Left
+                let d = Self::get_pixel(src, x, y_next, width, height); // Bottom
 
                 // Apply Scale2x rules to generate 2x2 output block
                 // Output positions:
@@ -1388,36 +1448,40 @@ impl TriscanScaler {
                 // E2 E3
 
                 // E0 = (C == A && C != D && A != B) ? A : P
-                let e0 = if Self::pixels_equal(c, a) &&
-                           !Self::pixels_equal(c, d) &&
-                           !Self::pixels_equal(a, b) {
+                let e0 = if Self::pixels_equal(c, a)
+                    && !Self::pixels_equal(c, d)
+                    && !Self::pixels_equal(a, b)
+                {
                     a
                 } else {
                     p
                 };
 
                 // E1 = (A == B && A != C && B != D) ? B : P
-                let e1 = if Self::pixels_equal(a, b) &&
-                           !Self::pixels_equal(a, c) &&
-                           !Self::pixels_equal(b, d) {
+                let e1 = if Self::pixels_equal(a, b)
+                    && !Self::pixels_equal(a, c)
+                    && !Self::pixels_equal(b, d)
+                {
                     b
                 } else {
                     p
                 };
 
                 // E2 = (D == C && D != B && C != A) ? C : P
-                let e2 = if Self::pixels_equal(d, c) &&
-                           !Self::pixels_equal(d, b) &&
-                           !Self::pixels_equal(c, a) {
+                let e2 = if Self::pixels_equal(d, c)
+                    && !Self::pixels_equal(d, b)
+                    && !Self::pixels_equal(c, a)
+                {
                     c
                 } else {
                     p
                 };
 
                 // E3 = (B == D && B != A && D != C) ? D : P
-                let e3 = if Self::pixels_equal(b, d) &&
-                           !Self::pixels_equal(b, a) &&
-                           !Self::pixels_equal(d, c) {
+                let e3 = if Self::pixels_equal(b, d)
+                    && !Self::pixels_equal(b, a)
+                    && !Self::pixels_equal(d, c)
+                {
                     d
                 } else {
                     p
@@ -1454,8 +1518,8 @@ impl TriscanScaler {
         let dst_width = src_width * 2;
         let dst_height = src_height * 2;
 
-        let id = NonZeroU32::new(6)
-            .ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
+        let id =
+            NonZeroU32::new(6).ok_or_else(|| anyhow::anyhow!("Failed to generate pixmap ID"))?;
         let mut dst = Pixmap::new(id, dst_width as u32, dst_height as u32, src.format())?;
 
         let src_data = src.data();
@@ -2174,7 +2238,10 @@ mod tests {
         let top_left_pixel = [dst_data[0], dst_data[1], dst_data[2], dst_data[3]];
 
         // The top-left should have at least some red component
-        assert!(top_left_pixel[0] > 0, "Top-left pixel should have red component");
+        assert!(
+            top_left_pixel[0] > 0,
+            "Top-left pixel should have red component"
+        );
     }
 
     #[test]
@@ -2233,7 +2300,10 @@ mod tests {
         }
 
         // With the simple HQ2x implementation, the edge region should blend
-        assert!(has_intermediate || true, "Color blending detected (or explicit blending check needed)");
+        assert!(
+            has_intermediate || true,
+            "Color blending detected (or explicit blending check needed)"
+        );
     }
 
     #[test]
@@ -2299,7 +2369,7 @@ mod tests {
         assert!(!ScaleMode::Hq2x.is_hardware());
     }
 
-// Tests to add to the scaling.rs test module
+    // Tests to add to the scaling.rs test module
 
     // ==============================================================================
     // Biadaptive Tests
@@ -2414,12 +2484,12 @@ mod tests {
             for x in 0..6 {
                 let idx = (y * 6 + x) * 4;
                 if x < 3 {
-                    data[idx] = 0;     // R
+                    data[idx] = 0; // R
                     data[idx + 1] = 0; // G
                     data[idx + 2] = 0; // B
                     data[idx + 3] = 255; // A
                 } else {
-                    data[idx] = 255;   // R
+                    data[idx] = 255; // R
                     data[idx + 1] = 255; // G
                     data[idx + 2] = 255; // B
                     data[idx + 3] = 255; // A
@@ -2477,14 +2547,20 @@ mod tests {
         let white = [255, 255, 255, 255];
         let black = [0, 0, 0, 255];
 
-        data[0] = white[0]; data[1] = white[1]; data[2] = white[2]; data[3] = white[3];
+        data[0] = white[0];
+        data[1] = white[1];
+        data[2] = white[2];
+        data[3] = white[3];
         for i in 1..9 {
             data[i * 4] = black[0];
             data[i * 4 + 1] = black[1];
             data[i * 4 + 2] = black[2];
             data[i * 4 + 3] = black[3];
         }
-        data[4 * 4] = white[0]; data[4 * 4 + 1] = white[1]; data[4 * 4 + 2] = white[2]; data[4 * 4 + 3] = white[3];
+        data[4 * 4] = white[0];
+        data[4 * 4 + 1] = white[1];
+        data[4 * 4 + 2] = white[2];
+        data[4 * 4 + 3] = white[3];
 
         // Check diagonal edge detection
         let src_data = src.data();
@@ -2492,8 +2568,14 @@ mod tests {
         let grad_center = BiadaptiveScaler::compute_gradient(src_data, 1, 1, 3, 3);
 
         // Both positions should have significant gradients
-        assert!(grad_corner > 50.0, "Corner should have significant gradient");
-        assert!(grad_center > 50.0, "Center should have significant gradient");
+        assert!(
+            grad_corner > 50.0,
+            "Corner should have significant gradient"
+        );
+        assert!(
+            grad_center > 50.0,
+            "Center should have significant gradient"
+        );
     }
 
     #[test]
@@ -2585,10 +2667,10 @@ mod tests {
     fn test_biadaptive_bilinear_sample() {
         // Create a simple 2x2 test image
         let data: Vec<u8> = vec![
-            0, 0, 0, 255,    // Top-left: black
+            0, 0, 0, 255, // Top-left: black
             255, 255, 255, 255, // Top-right: white
             128, 128, 128, 255, // Bottom-left: gray
-            64, 64, 64, 255,     // Bottom-right: dark gray
+            64, 64, 64, 255, // Bottom-right: dark gray
         ];
 
         // Sample at exact corner should give that pixel
@@ -2673,9 +2755,18 @@ mod tests {
             let r = dst_data[i * 4];
             let g = dst_data[i * 4 + 1];
             let b = dst_data[i * 4 + 2];
-            assert!((r as i32 - color[0] as i32).abs() <= 5, "Red channel variation too large");
-            assert!((g as i32 - color[1] as i32).abs() <= 5, "Green channel variation too large");
-            assert!((b as i32 - color[2] as i32).abs() <= 5, "Blue channel variation too large");
+            assert!(
+                (r as i32 - color[0] as i32).abs() <= 5,
+                "Red channel variation too large"
+            );
+            assert!(
+                (g as i32 - color[1] as i32).abs() <= 5,
+                "Green channel variation too large"
+            );
+            assert!(
+                (b as i32 - color[2] as i32).abs() <= 5,
+                "Blue channel variation too large"
+            );
         }
     }
 
@@ -3046,10 +3137,22 @@ mod tests {
         let black = [0, 0, 0, 255];
         let white = [255, 255, 255, 255];
 
-        data[0] = black[0]; data[1] = black[1]; data[2] = black[2]; data[3] = black[3];
-        data[4] = white[0]; data[5] = white[1]; data[6] = white[2]; data[7] = white[3];
-        data[8] = white[0]; data[9] = white[1]; data[10] = white[2]; data[11] = white[3];
-        data[12] = black[0]; data[13] = black[1]; data[14] = black[2]; data[15] = black[3];
+        data[0] = black[0];
+        data[1] = black[1];
+        data[2] = black[2];
+        data[3] = black[3];
+        data[4] = white[0];
+        data[5] = white[1];
+        data[6] = white[2];
+        data[7] = white[3];
+        data[8] = white[0];
+        data[9] = white[1];
+        data[10] = white[2];
+        data[11] = white[3];
+        data[12] = black[0];
+        data[13] = black[1];
+        data[14] = black[2];
+        data[15] = black[3];
 
         let scaler = TriscanScaler::new();
         let params = ScaleParams::new(512, ScaleMode::Triscan);
@@ -3110,48 +3213,61 @@ mod tests {
         // Test at various positions
         for &fx in &[0.0, 0.25, 0.5, 0.75, 1.0] {
             for &fy in &[0.0, 0.25, 0.5, 0.75, 1.0] {
-                let simd_result = BilinearScaler::bilinear_interpolate_simd(p00, p10, p01, p11, fx, fy);
+                let simd_result =
+                    BilinearScaler::bilinear_interpolate_simd(p00, p10, p01, p11, fx, fy);
                 let scalar_r = BilinearScaler::lerp(
                     BilinearScaler::lerp(p00[0], p10[0], fx),
                     BilinearScaler::lerp(p01[0], p11[0], fx),
-                    fy
+                    fy,
                 );
                 let scalar_g = BilinearScaler::lerp(
                     BilinearScaler::lerp(p00[1], p10[1], fx),
                     BilinearScaler::lerp(p01[1], p11[1], fx),
-                    fy
+                    fy,
                 );
                 let scalar_b = BilinearScaler::lerp(
                     BilinearScaler::lerp(p00[2], p10[2], fx),
                     BilinearScaler::lerp(p01[2], p11[2], fx),
-                    fy
+                    fy,
                 );
                 let scalar_a = BilinearScaler::lerp(
                     BilinearScaler::lerp(p00[3], p10[3], fx),
                     BilinearScaler::lerp(p01[3], p11[3], fx),
-                    fy
+                    fy,
                 );
 
                 // Allow small floating-point differences (within 1 in 255 scale)
                 assert!(
                     (simd_result[0] as i32 - scalar_r as i32).abs() <= 1,
                     "R channel mismatch at fx={}, fy={}: SIMD={}, scalar={}",
-                    fx, fy, simd_result[0], scalar_r
+                    fx,
+                    fy,
+                    simd_result[0],
+                    scalar_r
                 );
                 assert!(
                     (simd_result[1] as i32 - scalar_g as i32).abs() <= 1,
                     "G channel mismatch at fx={}, fy={}: SIMD={}, scalar={}",
-                    fx, fy, simd_result[1], scalar_g
+                    fx,
+                    fy,
+                    simd_result[1],
+                    scalar_g
                 );
                 assert!(
                     (simd_result[2] as i32 - scalar_b as i32).abs() <= 1,
                     "B channel mismatch at fx={}, fy={}: SIMD={}, scalar={}",
-                    fx, fy, simd_result[2], scalar_b
+                    fx,
+                    fy,
+                    simd_result[2],
+                    scalar_b
                 );
                 assert!(
                     (simd_result[3] as i32 - scalar_a as i32).abs() <= 1,
                     "A channel mismatch at fx={}, fy={}: SIMD={}, scalar={}",
-                    fx, fy, simd_result[3], scalar_a
+                    fx,
+                    fy,
+                    simd_result[3],
+                    scalar_a
                 );
             }
         }
@@ -3178,9 +3294,9 @@ mod tests {
         let test_cases = [
             ([0u8, 0, 0], 0.0),
             ([255, 255, 255], 255.0),
-            ([255, 0, 0], 54.0),     // Red has low luminance
-            ([0, 255, 0], 182.0),    // Green has high luminance
-            ([0, 0, 255], 18.0),     // Blue has lowest luminance
+            ([255, 0, 0], 54.0),      // Red has low luminance
+            ([0, 255, 0], 182.0),     // Green has high luminance
+            ([0, 0, 255], 18.0),      // Blue has lowest luminance
             ([128, 128, 128], 128.0), // Mid-gray
         ];
 
@@ -3191,12 +3307,16 @@ mod tests {
             assert!(
                 (simd_lum - scalar_lum).abs() < 1.0,
                 "Luminance mismatch for {:?}: SIMD={}, scalar={}",
-                rgb, simd_lum, scalar_lum
+                rgb,
+                simd_lum,
+                scalar_lum
             );
             assert!(
                 (simd_lum - expected).abs() < 1.0,
                 "Luminance value for {:?}: got={}, expected={}",
-                rgb, simd_lum, expected
+                rgb,
+                simd_lum,
+                expected
             );
         }
     }
@@ -3213,7 +3333,7 @@ mod tests {
             for x in 0..16 {
                 let idx = (y * 16 + x) * 4;
                 let val = if (x + y) % 2 == 0 { 255 } else { 0 };
-                data[idx] = val;     // R
+                data[idx] = val; // R
                 data[idx + 1] = val; // G
                 data[idx + 2] = val; // B
                 data[idx + 3] = 255; // A
@@ -3242,7 +3362,10 @@ mod tests {
             }
         }
 
-        assert!(has_intermediate, "Bilinear should produce intermediate colors");
+        assert!(
+            has_intermediate,
+            "Bilinear should produce intermediate colors"
+        );
     }
 
     #[test]
@@ -3257,9 +3380,13 @@ mod tests {
             for x in 0..16 {
                 let idx = (y * 16 + x) * 4;
                 if (x + y) % 2 == 0 {
-                    data[idx] = 255; data[idx + 1] = 0; data[idx + 2] = 0;
+                    data[idx] = 255;
+                    data[idx + 1] = 0;
+                    data[idx + 2] = 0;
                 } else {
-                    data[idx] = 0; data[idx + 1] = 255; data[idx + 2] = 0;
+                    data[idx] = 0;
+                    data[idx + 1] = 255;
+                    data[idx + 2] = 0;
                 }
                 data[idx + 3] = 255;
             }
@@ -3306,9 +3433,13 @@ mod tests {
             for x in 0..16 {
                 let idx = (y * 16 + x) * 4;
                 if x < 8 {
-                    data[idx] = 0; data[idx + 1] = 0; data[idx + 2] = 0;
+                    data[idx] = 0;
+                    data[idx + 1] = 0;
+                    data[idx + 2] = 0;
                 } else {
-                    data[idx] = 255; data[idx + 1] = 255; data[idx + 2] = 255;
+                    data[idx] = 255;
+                    data[idx + 1] = 255;
+                    data[idx + 2] = 255;
                 }
                 data[idx + 3] = 255;
             }
@@ -3325,8 +3456,10 @@ mod tests {
 
         // Verify SIMD luminance matches scalar
         let test_pixel = [128, 64, 32];
-        let simd_lum = BiadaptiveScaler::rgb_to_luminance_simd(test_pixel[0], test_pixel[1], test_pixel[2]);
-        let scalar_lum = BiadaptiveScaler::rgb_to_luminance(test_pixel[0], test_pixel[1], test_pixel[2]);
+        let simd_lum =
+            BiadaptiveScaler::rgb_to_luminance_simd(test_pixel[0], test_pixel[1], test_pixel[2]);
+        let scalar_lum =
+            BiadaptiveScaler::rgb_to_luminance(test_pixel[0], test_pixel[1], test_pixel[2]);
 
         assert!(
             (simd_lum - scalar_lum).abs() < 1.0,
@@ -3348,10 +3481,10 @@ mod tests {
             [40, 50, 60, 255],
             [70, 80, 90, 255],
             [100, 110, 120, 255],
-            0.5, 0.5
+            0.5,
+            0.5,
         );
 
         let _ = BiadaptiveScaler::rgb_to_luminance_simd(100, 150, 200);
     }
-
 }

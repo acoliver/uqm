@@ -471,7 +471,10 @@ pub struct BatchGuard {
 
 impl BatchGuard {
     fn new(queue: DrawCommandQueue) -> Self {
-        Self { queue, active: true }
+        Self {
+            queue,
+            active: true,
+        }
     }
 
     pub fn cancel(mut self) {
@@ -499,7 +502,10 @@ pub struct DrawCommandQueue {
 impl DrawCommandQueue {
     #[must_use]
     pub fn new() -> Self {
-        Self::with_config(DcqConfig::standard(), Arc::new(RwLock::new(RenderContext::new())))
+        Self::with_config(
+            DcqConfig::standard(),
+            Arc::new(RwLock::new(RenderContext::new())),
+        )
     }
 
     #[must_use]
@@ -743,7 +749,7 @@ impl DrawCommandQueue {
                 dest,
             } => {
                 if let Some(canvas) = self.get_screen_canvas(dest) {
-                    let mut canvas = canvas.write().unwrap();
+                    let canvas = canvas.write().unwrap();
                     let backing = backing.and_then(|id| self.get_image(id));
                     let backing_ref = backing.as_deref();
                     if let Err(err) = canvas.draw_fontchar(fontchar, backing_ref, x, y, draw_mode) {
@@ -812,15 +818,17 @@ impl DrawCommandQueue {
                 hotx,
                 hoty,
             } => {
-                if let (Some(image), Some(mipmap)) =
-                    (self.get_image(image), self.get_image(mipmap))
+                if let (Some(image), Some(mipmap)) = (self.get_image(image), self.get_image(mipmap))
                 {
                     let mipmap_canvas = mipmap.normal();
                     image.set_mipmap(mipmap_canvas, HotSpot::new(hotx, hoty));
                 }
             }
             DrawCommand::DeleteImage { image } => {
-                self.render_context.write().unwrap().remove_image(image.id());
+                self.render_context
+                    .write()
+                    .unwrap()
+                    .remove_image(image.id());
             }
             DrawCommand::DeleteData { data } => {
                 self.render_context.write().unwrap().remove_data_ptr(data);
@@ -828,7 +836,12 @@ impl DrawCommandQueue {
             DrawCommand::SendSignal { signal } => {
                 signal.store(true, Ordering::Release);
             }
-            DrawCommand::ReinitVideo { driver, flags, width, height } => {
+            DrawCommand::ReinitVideo {
+                driver,
+                flags,
+                width,
+                height,
+            } => {
                 debug!(
                     "DCQ reinit video requested: driver={}, flags={}, {}x{}",
                     driver, flags, width, height
@@ -841,7 +854,10 @@ impl DrawCommandQueue {
     }
 
     fn get_screen_canvas(&self, screen: Screen) -> Option<Arc<RwLock<Canvas>>> {
-        self.render_context.read().unwrap().get_screen(ScreenType::from(screen))
+        self.render_context
+            .read()
+            .unwrap()
+            .get_screen(ScreenType::from(screen))
     }
 
     fn get_image(&self, image: ImageRef) -> Option<Arc<TFImage>> {
@@ -955,7 +971,15 @@ mod tests {
     #[test]
     fn color_new() {
         let color = Color::new(1, 2, 3, 4);
-        assert_eq!(color, Color { r: 1, g: 2, b: 3, a: 4 });
+        assert_eq!(
+            color,
+            Color {
+                r: 1,
+                g: 2,
+                b: 3,
+                a: 4
+            }
+        );
     }
 
     #[test]
@@ -967,7 +991,13 @@ mod tests {
     #[test]
     fn extent_new() {
         let extent = Extent::new(7, 8);
-        assert_eq!(extent, Extent { width: 7, height: 8 });
+        assert_eq!(
+            extent,
+            Extent {
+                width: 7,
+                height: 8
+            }
+        );
     }
 
     #[test]
@@ -1078,7 +1108,9 @@ mod tests {
 
     #[test]
     fn command_scissor_enable_variant() {
-        let cmd = DrawCommand::ScissorEnable { rect: Rect::default() };
+        let cmd = DrawCommand::ScissorEnable {
+            rect: Rect::default(),
+        };
         matches!(cmd, DrawCommand::ScissorEnable { .. });
     }
 
@@ -1101,7 +1133,9 @@ mod tests {
 
     #[test]
     fn command_delete_image_variant() {
-        let cmd = DrawCommand::DeleteImage { image: ImageRef::new(1) };
+        let cmd = DrawCommand::DeleteImage {
+            image: ImageRef::new(1),
+        };
         matches!(cmd, DrawCommand::DeleteImage { .. });
     }
 
@@ -1132,7 +1166,10 @@ mod tests {
 
     #[test]
     fn command_callback_variant() {
-        let cmd = DrawCommand::Callback { callback: |_| {}, arg: 5 };
+        let cmd = DrawCommand::Callback {
+            callback: |_| {},
+            arg: 5,
+        };
         matches!(cmd, DrawCommand::Callback { .. });
     }
 
@@ -1151,7 +1188,10 @@ mod tests {
     fn try_push_would_block() {
         let queue = make_queue_with_capacity(1);
         queue.try_push(basic_line_command()).unwrap();
-        assert_eq!(queue.try_push(DrawCommand::ScissorDisable), Err(DcqError::WouldBlock));
+        assert_eq!(
+            queue.try_push(DrawCommand::ScissorDisable),
+            Err(DcqError::WouldBlock)
+        );
     }
 
     #[test]
@@ -1297,9 +1337,7 @@ mod tests {
             }
         }
         let arg = Arc::into_raw(hit_clone) as u64;
-        queue
-            .push(DrawCommand::Callback { callback, arg })
-            .unwrap();
+        queue.push(DrawCommand::Callback { callback, arg }).unwrap();
         queue.process_commands().unwrap();
         unsafe {
             let _ = Arc::from_raw(arg as *const AtomicUsize);

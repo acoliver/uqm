@@ -6,10 +6,10 @@ pub mod context;
 pub mod dcqueue;
 pub mod drawable;
 pub mod font;
-pub mod render_context;
 pub mod frame;
 pub mod gfx_common;
 pub mod pixmap;
+pub mod render_context;
 pub mod scaling;
 pub mod tfb_draw;
 

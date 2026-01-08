@@ -367,19 +367,13 @@ impl GraphicsState {
         };
 
         {
-            let driver = self
-                .driver
-                .as_mut()
-                .ok_or(GraphicsError::NotInitialized)?;
+            let driver = self.driver.as_mut().ok_or(GraphicsError::NotInitialized)?;
             for screen in [DcqScreen::Main, DcqScreen::Extra, DcqScreen::Transition] {
                 sync_canvases_to_driver(&self.render_context, &mut **driver, screen)?;
             }
         }
 
-        let driver = self
-            .driver
-            .as_mut()
-            .ok_or(GraphicsError::NotInitialized)?;
+        let driver = self.driver.as_mut().ok_or(GraphicsError::NotInitialized)?;
         driver
             .swap_buffers(map_redraw_mode(redraw_mode))
             .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
@@ -391,15 +385,14 @@ impl GraphicsState {
 
     /// Process pending graphics events.
     pub fn process_events(&mut self) -> Result<bool, GraphicsError> {
-        let driver = self
-            .driver
-            .as_mut()
-            .ok_or(GraphicsError::NotInitialized)?;
+        let driver = self.driver.as_mut().ok_or(GraphicsError::NotInitialized)?;
 
         let events = driver
             .poll_events()
             .map_err(|err| GraphicsError::DriverError(err.to_string()))?;
-        let should_quit = events.iter().any(|event| matches!(event, GraphicsEvent::Quit));
+        let should_quit = events
+            .iter()
+            .any(|event| matches!(event, GraphicsEvent::Quit));
 
         Ok(should_quit)
     }
@@ -470,7 +463,11 @@ impl GraphicsState {
                 }
 
                 purged += 1;
-                log::debug!("Purged orphaned resource {} of type {:?}", id, meta.resource_type);
+                log::debug!(
+                    "Purged orphaned resource {} of type {:?}",
+                    id,
+                    meta.resource_type
+                );
             }
 
             if let Some(driver) = self.driver.as_mut() {
@@ -484,7 +481,6 @@ impl GraphicsState {
 
         Ok(purged)
     }
-
 
     /// Set the gamma correction value.
     pub fn set_gamma(&mut self, gamma: f32) -> Result<(), GraphicsError> {

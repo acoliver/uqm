@@ -268,7 +268,6 @@ impl FrameImage {
     }
 }
 
-
 /// Frame representation
 ///
 /// A Frame represents a single image frame within a Drawable.
@@ -330,9 +329,7 @@ impl Frame {
         image: Arc<TFImage>,
         hot_spot: HotSpot,
     ) -> Result<Self, FrameError> {
-        let extent = image
-            .extent()
-            .ok_or(FrameError::InvalidBounds)?;
+        let extent = image.extent().ok_or(FrameError::InvalidBounds)?;
         if extent.width <= 0 || extent.height <= 0 {
             return Err(FrameError::InvalidBounds);
         }

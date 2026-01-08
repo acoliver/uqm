@@ -33,8 +33,8 @@ use sdl2::{
 };
 
 use crate::graphics::sdl::common::{
-    DriverConfig, DriverError, DriverResult, DriverState,
-    GraphicsDriver, RedrawMode, GraphicsEvent, Screen,
+    DriverConfig, DriverError, DriverResult, DriverState, GraphicsDriver, GraphicsEvent,
+    RedrawMode, Screen,
 };
 
 /// Pixel format for textures.
@@ -142,8 +142,8 @@ impl SdlDriver {
         log::info!("Initializing SDL2");
 
         // Initialize SDL2 video subsystem
-        let sdl_context = sdl2::init()
-            .map_err(|e| DriverError::VideoModeFailed(format!("SDL2 init: {}", e)))?;
+        let sdl_context =
+            sdl2::init().map_err(|e| DriverError::VideoModeFailed(format!("SDL2 init: {}", e)))?;
 
         let video_subsystem = sdl_context
             .video()
@@ -202,7 +202,6 @@ impl SdlDriver {
             .build()
             .map_err(|e| DriverError::RendererCreationFailed(e.to_string()))?;
 
-
         let info = canvas.info();
         log::info!("SDL2 renderer: {}", info.name);
 
@@ -240,7 +239,7 @@ impl SdlDriver {
             for y in 0..LOGICAL_HEIGHT as usize {
                 for x in 0..LOGICAL_WIDTH as usize {
                     let offset = (y * LOGICAL_WIDTH as usize + x) * 4;
-                    pixel_buffer[offset] = 0;     // R
+                    pixel_buffer[offset] = 0; // R
                     pixel_buffer[offset + 1] = 0; // G
                     pixel_buffer[offset + 2] = 0; // B
                     pixel_buffer[offset + 3] = 255; // X (unused)
@@ -364,18 +363,19 @@ impl GraphicsDriver for SdlDriver {
 
         let active_index = self.active_screen.get().index();
         if let Some(buffer) = &self.pixel_buffers[active_index] {
-            let mut texture = texture_creator.create_texture(
-                PIXEL_FORMAT,
-                TextureAccess::Streaming,
-                LOGICAL_WIDTH,
-                LOGICAL_HEIGHT,
-            ).map_err(|e| {
-                DriverError::RendererCreationFailed(format!(
-                    "screen {} texture: {}",
-                    active_index,
-                    e
-                ))
-            })?;
+            let mut texture = texture_creator
+                .create_texture(
+                    PIXEL_FORMAT,
+                    TextureAccess::Streaming,
+                    LOGICAL_WIDTH,
+                    LOGICAL_HEIGHT,
+                )
+                .map_err(|e| {
+                    DriverError::RendererCreationFailed(format!(
+                        "screen {} texture: {}",
+                        active_index, e
+                    ))
+                })?;
 
             // Upload pixel data to texture
             let pitch = Self::get_pitch_internal();
@@ -396,7 +396,6 @@ impl GraphicsDriver for SdlDriver {
 
         Ok(())
     }
-
 
     /// Set gamma correction.
     ///
@@ -427,10 +426,9 @@ impl GraphicsDriver for SdlDriver {
         Ok(())
     }
 
-    /// Get current gamma value.
-    ///
-    /// Returns the tracked gamma value.
-    #[must_use]
+/// Get current gamma value.
+///
+/// Returns the tracked gamma value.
     fn get_gamma(&self) -> f32 {
         self.state.gamma()
     }
@@ -445,10 +443,7 @@ impl GraphicsDriver for SdlDriver {
             return Err(DriverError::NotInitialized);
         }
 
-        let window = self
-            .window
-            .as_mut()
-            .ok_or(DriverError::NotInitialized)?;
+        let window = self.window.as_mut().ok_or(DriverError::NotInitialized)?;
 
         let mut config = self.state.config();
 
@@ -464,7 +459,11 @@ impl GraphicsDriver for SdlDriver {
                 .map_err(|e| DriverError::FullscreenFailed(format!("set size: {}", e)))?;
 
             config.fullscreen = false;
-            log::info!("Switched to windowed mode: {}x{}", config.width, config.height);
+            log::info!(
+                "Switched to windowed mode: {}x{}",
+                config.width,
+                config.height
+            );
         } else {
             // Switch to fullscreen mode
             window
@@ -480,13 +479,11 @@ impl GraphicsDriver for SdlDriver {
     }
 
     /// Check if currently in fullscreen mode.
-    #[must_use]
     fn is_fullscreen(&self) -> bool {
         self.state.config().is_fullscreen()
     }
 
     /// Check if the driver is initialized.
-    #[must_use]
     fn is_initialized(&self) -> bool {
         self.state.is_initialized()
     }
@@ -494,7 +491,6 @@ impl GraphicsDriver for SdlDriver {
     /// Check if hardware scaling is supported.
     ///
     /// SDL2 supports hardware scaling via the renderer.
-    #[must_use]
     fn supports_hardware_scaling(&self) -> bool {
         true
     }
@@ -502,7 +498,6 @@ impl GraphicsDriver for SdlDriver {
     /// Get current screen dimensions.
     ///
     /// Note: In the minimal driver, logical resolution is always 320x240.
-    #[must_use]
     fn get_dimensions(&self) -> crate::graphics::sdl::common::ScreenDims {
         use crate::graphics::sdl::common::ScreenDims;
         let config = self.state.config();
@@ -593,11 +588,17 @@ impl GraphicsDriver for SdlDriver {
                 Event::Quit { .. } => {
                     events.push(GraphicsEvent::Quit);
                 }
-                Event::KeyDown { scancode: Some(scancode), .. } => {
+                Event::KeyDown {
+                    scancode: Some(scancode),
+                    ..
+                } => {
                     events.push(GraphicsEvent::KeyDown(scancode as i32));
                 }
                 Event::KeyDown { .. } => {}
-                Event::KeyUp { scancode: Some(scancode), .. } => {
+                Event::KeyUp {
+                    scancode: Some(scancode),
+                    ..
+                } => {
                     events.push(GraphicsEvent::KeyUp(scancode as i32));
                 }
                 Event::KeyUp { .. } => {}
@@ -764,7 +765,6 @@ mod tests {
         assert_eq!(dims.actual_height, 240);
     }
 }
-
 
 // SAFETY: We only access the driver from the main thread per SDL2 requirements.
 unsafe impl Send for SdlDriver {}
