@@ -1067,8 +1067,9 @@ pub fn copy_canvas(
                     let src_row_offset = (src_y * src_width + src_x) as usize * bytes_per_pixel;
                     let dst_row_offset = (dst_y * dst_width + dst_x) as usize * bytes_per_pixel;
 
-                    dst_pixels[dst_row_offset..(bytes_per_pixel + dst_row_offset)]
-                        .copy_from_slice(&src_pixels[src_row_offset..(bytes_per_pixel + src_row_offset)]);
+                    dst_pixels[dst_row_offset..(bytes_per_pixel + dst_row_offset)].copy_from_slice(
+                        &src_pixels[src_row_offset..(bytes_per_pixel + src_row_offset)],
+                    );
                 }
             }
         }
