@@ -222,16 +222,20 @@ impl NearestScaler {
     fn copy_pixel_simd(dst_ptr: *mut u8, src_ptr: *const u8) {
         // SSE2 implementation for x86_64
         #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
-        unsafe {
-            // Copy 4 bytes (one RGBA pixel) using simple pointer copy
-            std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, 4);
+        {
+            // SAFETY: Caller guarantees valid aligned pointers with at least 4 bytes
+            unsafe {
+                std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, 4);
+            }
         }
 
         // NEON implementation for ARM64
         #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-        unsafe {
-            // Copy 4 bytes (one RGBA pixel) using simple pointer copy
-            std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, 4);
+        {
+            // SAFETY: Caller guarantees valid aligned pointers with at least 4 bytes
+            unsafe {
+                std::ptr::copy_nonoverlapping(src_ptr, dst_ptr, 4);
+            }
         }
 
         // Scalar fallback
@@ -239,11 +243,14 @@ impl NearestScaler {
             all(target_arch = "x86_64", target_feature = "sse2"),
             all(target_arch = "aarch64", target_feature = "neon")
         )))]
-        unsafe {
-            *dst_ptr = *src_ptr;
-            *dst_ptr.add(1) = *src_ptr.add(1);
-            *dst_ptr.add(2) = *src_ptr.add(2);
-            *dst_ptr.add(3) = *src_ptr.add(3);
+        {
+            // SAFETY: Caller guarantees valid aligned pointers with at least 4 bytes
+            unsafe {
+                *dst_ptr = *src_ptr;
+                *dst_ptr.add(1) = *src_ptr.add(1);
+                *dst_ptr.add(2) = *src_ptr.add(2);
+                *dst_ptr.add(3) = *src_ptr.add(3);
+            }
         }
     }
 
@@ -1999,7 +2006,7 @@ mod tests {
         let result = manager.scale(&src, params);
         assert!(result.is_ok());
 
-        let (hits, misses, size) = manager.cache_stats();
+        let (hits, misses, _size) = manager.cache_stats();
         // First call should be a miss
         assert_eq!(misses, 1);
         assert_eq!(hits, 0);
@@ -3260,11 +3267,9 @@ mod tests {
         let src_pixel = [123, 200, 77, 255];
         let mut dst_pixel = [0u8; 4];
 
-        unsafe {
-            let src_ptr = src_pixel.as_ptr();
-            let dst_ptr = dst_pixel.as_mut_ptr();
-            NearestScaler::copy_pixel_simd(dst_ptr, src_ptr);
-        }
+        let src_ptr = src_pixel.as_ptr();
+        let dst_ptr = dst_pixel.as_mut_ptr();
+        NearestScaler::copy_pixel_simd(dst_ptr, src_ptr);
 
         assert_eq!(dst_pixel, src_pixel);
     }
