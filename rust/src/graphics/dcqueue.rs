@@ -455,15 +455,6 @@ impl Inner {
     }
 }
 
-#[allow(dead_code)]
-fn ring_distance(front: usize, back: usize, capacity: usize) -> usize {
-    if front <= back {
-        back - front
-    } else {
-        back + capacity - front
-    }
-}
-
 /// RAII guard for batching.
 pub struct BatchGuard {
     queue: DrawCommandQueue,

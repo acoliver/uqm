@@ -210,10 +210,6 @@ impl XformControl {
     fn in_use(&self) -> bool {
         self.cmap_index >= 0
     }
-    #[allow(dead_code)]
-    fn is_complete(&self) -> bool {
-        Instant::now() >= self.end_time
-    }
 }
 
 pub struct ColorMapManager {

@@ -30,10 +30,10 @@ use std::sync::Mutex;
 // SIMD Support (stable Rust via std::arch)
 // ==============================================================================
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", test))]
 use std::arch::x86_64::*;
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", test))]
 use std::arch::aarch64::*;
 
 // ==============================================================================
@@ -1063,7 +1063,7 @@ impl BiadaptiveScaler {
 
     /// Convert RGB triple to luminance using SIMD
     #[allow(unused_variables)]
-    #[allow(dead_code)]
+    #[cfg(test)]
     #[inline]
     fn rgb_to_luminance_simd(r: u8, g: u8, b: u8) -> f32 {
         // SSE2 implementation for x86_64
@@ -1562,9 +1562,6 @@ struct ScaleCacheKey {
 struct ScaleCacheEntry {
     /// Scaled pixmap
     pixmap: Pixmap,
-    /// Last access timestamp (for LRU eviction)
-    #[allow(dead_code)]
-    last_access: u64,
 }
 
 /// Scaling cache for efficient reuse of scaled images
@@ -1574,7 +1571,7 @@ struct ScaleCacheEntry {
 pub struct ScaleCache {
     /// Cache of scaled images with LRU ordering
     cache: Mutex<HashMap<ScaleCacheKey, ScaleCacheEntry>>,
-    /// LRU ordering: keys in order from least recently used to most最近
+    /// LRU ordering: keys in order from least recently used to most recently used
     lru_order: Mutex<Vec<ScaleCacheKey>>,
     /// Maximum cache capacity
     capacity: usize,
@@ -1582,8 +1579,6 @@ pub struct ScaleCache {
     hits: Mutex<u64>,
     /// Cache miss counter
     misses: Mutex<u64>,
-    /// Timestamp counter for LRU
-    timestamp: Mutex<u64>,
 }
 
 impl ScaleCache {
@@ -1595,7 +1590,6 @@ impl ScaleCache {
             capacity,
             hits: Mutex::new(0),
             misses: Mutex::new(0),
-            timestamp: Mutex::new(0),
         }
     }
 
@@ -1635,10 +1629,7 @@ impl ScaleCache {
             mode,
         };
 
-        let entry = ScaleCacheEntry {
-            pixmap,
-            last_access: self.next_timestamp(),
-        };
+        let entry = ScaleCacheEntry { pixmap };
 
         let mut cache = self.cache.lock().unwrap();
         let mut order = self.lru_order.lock().unwrap();
@@ -1678,13 +1669,6 @@ impl ScaleCache {
         let misses = *self.misses.lock().unwrap();
         let len = self.cache.lock().unwrap().len();
         (hits, misses, len)
-    }
-
-    /// Get the next timestamp
-    fn next_timestamp(&self) -> u64 {
-        let mut ts = self.timestamp.lock().unwrap();
-        *ts += 1;
-        *ts
     }
 }
 

@@ -126,8 +126,7 @@ impl Screen {
     }
 }
 
-#[allow(dead_code)]
-const NUM_SCREENS: usize = 3;
+
 
 /// Update region for tracking dirty rectangles, mirroring SDL_Rect in C.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
