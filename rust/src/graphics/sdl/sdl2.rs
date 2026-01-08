@@ -426,9 +426,9 @@ impl GraphicsDriver for SdlDriver {
         Ok(())
     }
 
-/// Get current gamma value.
-///
-/// Returns the tracked gamma value.
+    /// Get current gamma value.
+    ///
+    /// Returns the tracked gamma value.
     fn get_gamma(&self) -> f32 {
         self.state.gamma()
     }
