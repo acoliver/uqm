@@ -97,6 +97,8 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Run tests with coverage
+        env:
+          LIBRARY_PATH: /opt/homebrew/lib:/usr/local/lib
         run: |
           cd rust
           cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-macos.lcov
