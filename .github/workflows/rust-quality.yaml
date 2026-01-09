@@ -133,7 +133,7 @@ jobs:
                -a coverage/coverage-macos/coverage-macos.lcov \
                -o combined.lcov
           # Remove generated files from coverage (bindings.rs from build dirs)
-          lcov --remove combined.lcov '*/target/*' -o combined.lcov
+          lcov --ignore-errors unused --remove combined.lcov '*/target/*' -o combined.lcov || true
 
       - name: Generate HTML report
         run: |
