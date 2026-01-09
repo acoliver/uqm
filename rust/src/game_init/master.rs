@@ -291,6 +291,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_all_ship_ids() {
         // Ensure clean state
         free_master_ship_list().ok();
