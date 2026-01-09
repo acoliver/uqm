@@ -132,13 +132,14 @@ jobs:
           lcov -a coverage/coverage-ubuntu/coverage-ubuntu.lcov \
                -a coverage/coverage-macos/coverage-macos.lcov \
                -o combined.lcov
-          # Remove generated files from coverage (bindings.rs from build dirs)
-          lcov --ignore-errors unused --remove combined.lcov '*/target/*' -o combined.lcov || true
+          # Filter out generated files (bindings.rs) that don't exist on report runner
+          grep -v 'bindings\.rs' combined.lcov > combined_filtered.lcov || true
+          mv combined_filtered.lcov combined.lcov
 
       - name: Generate HTML report
         run: |
           cd rust
-          genhtml ../combined.lcov --output-directory ../coverage-html --ignore-errors source,unmapped
+          genhtml ../combined.lcov --output-directory ../coverage-html --ignore-errors source
 
       - name: Enforce coverage threshold
         shell: bash
