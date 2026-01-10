@@ -438,6 +438,33 @@ impl Context {
             self.clip_rect.height(),
         )
     }
+
+    /// Compute the valid drawing rectangle and origin offset.
+    ///
+    /// Returns `None` when the clip rect does not intersect the frame bounds.
+    pub fn valid_rect_with_origin(
+        &self,
+        frame_extent: Extent,
+        frame_hot_spot: Point,
+    ) -> Option<(Rect, Point)> {
+        let frame_rect = Rect::from_xywh(0, 0, frame_extent.width, frame_extent.height);
+        let clip_rect = self.clip_rect.as_rect();
+        let intersection = if self.clip_rect.extent.width == 0 {
+            Some(frame_rect)
+        } else {
+            frame_rect.intersection(&clip_rect)
+        }?;
+
+        let mut origin = frame_hot_spot;
+        if self.clip_rect.extent.width != 0 {
+            origin = Point::new(
+                origin.x + self.clip_rect.origin.x,
+                origin.y + self.clip_rect.origin.y,
+            );
+        }
+
+        Some((intersection, origin))
+    }
 }
 
 /// Context stack for managing multiple contexts
@@ -447,6 +474,7 @@ impl Context {
 pub struct ContextStack {
     contexts: RwLock<Vec<Arc<Context>>>,
     current: RwLock<Option<Arc<Context>>>,
+    stack: RwLock<Vec<Arc<Context>>>,
     next_id: RwLock<u32>,
 }
 
@@ -456,6 +484,7 @@ impl ContextStack {
         Self {
             contexts: RwLock::new(Vec::new()),
             current: RwLock::new(None),
+            stack: RwLock::new(Vec::new()),
             next_id: RwLock::new(1),
         }
     }
@@ -556,6 +585,41 @@ impl ContextStack {
             .context("No current context")
     }
 
+    /// Get current context (optional).
+    pub fn current_optional(&self) -> Result<Option<Arc<Context>>> {
+        Ok(self
+            .current
+            .read()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?
+            .as_ref()
+            .cloned())
+    }
+
+    /// Push a context onto the stack and switch to it.
+    pub fn push(&self, context: Arc<Context>) -> Result<()> {
+        let mut stack = self
+            .stack
+            .write()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        if let Some(current) = self.current_optional()? {
+            stack.push(current);
+        }
+        self.switch(context)
+    }
+
+    /// Pop the last context from the stack and restore it.
+    pub fn pop(&self) -> Result<Option<Arc<Context>>> {
+        let mut stack = self
+            .stack
+            .write()
+            .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+        let restored = stack.pop();
+        if let Some(context) = restored.clone() {
+            self.switch(context)?;
+        }
+        Ok(restored)
+    }
+
     /// Destroy a context
     pub fn destroy(&self, id: u32) -> Result<bool> {
         let mut contexts = self
@@ -574,8 +638,13 @@ impl ContextStack {
             }
         });
 
-        // If we destroyed the current context, clear it
         if found {
+            let mut stack = self
+                .stack
+                .write()
+                .map_err(|e| anyhow::anyhow!("Lock error: {}", e))?;
+            stack.retain(|ctx| ctx.id() != id);
+
             let mut current = self
                 .current
                 .write()
@@ -803,6 +872,24 @@ mod tests {
     }
 
     #[test]
+    fn test_context_valid_rect_with_origin() {
+        let id = NonZeroU32::new(1).unwrap();
+        let mut ctx = Context::new(id, 640, 480);
+        ctx.set_clip_rect(ClipRect::new(10, 10, 50, 50));
+
+        let frame_extent = Extent::new(100, 100);
+        let frame_hot = Point::new(5, 6);
+        let (rect, origin) = ctx.valid_rect_with_origin(frame_extent, frame_hot).unwrap();
+
+        assert_eq!(rect.corner.x, 10);
+        assert_eq!(rect.corner.y, 10);
+        assert_eq!(rect.extent.width, 50);
+        assert_eq!(rect.extent.height, 50);
+        assert_eq!(origin.x, 15);
+        assert_eq!(origin.y, 16);
+    }
+
+    #[test]
     fn test_graphics_status_conversion() {
         let status = GraphicsStatus::INACTIVE;
         let byte: u8 = status.into();
@@ -885,6 +972,13 @@ mod tests {
         stack.switch(Arc::clone(&ctx2)).unwrap();
         let current = stack.current().unwrap();
         assert_eq!(current.id(), 2);
+
+        // Push and pop context
+        stack.push(Arc::clone(&ctx1)).unwrap();
+        let current = stack.current().unwrap();
+        assert_eq!(current.id(), 1);
+        let restored = stack.pop().unwrap();
+        assert_eq!(restored.unwrap().id(), 2);
 
         // Destroy first context
         let destroyed = stack.destroy(1).unwrap();
