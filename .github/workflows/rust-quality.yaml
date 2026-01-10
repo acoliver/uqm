@@ -71,7 +71,8 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd rust
-          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-ubuntu.lcov
+          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-ubuntu.lcov \
+            --ignore-filename-regex '(/target/|/bindings\.rs$)'
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -101,7 +102,8 @@ jobs:
           LIBRARY_PATH: /opt/homebrew/lib:/usr/local/lib
         run: |
           cd rust
-          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-macos.lcov
+          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-macos.lcov \
+            --ignore-filename-regex '(/target/|/bindings\.rs$)'
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -132,9 +134,8 @@ jobs:
           lcov -a coverage/coverage-ubuntu/coverage-ubuntu.lcov \
                -a coverage/coverage-macos/coverage-macos.lcov \
                -o combined.lcov
-          # Filter out generated files (bindings.rs) that don't exist on report runner
-          grep -v 'bindings\.rs' combined.lcov > combined_filtered.lcov || true
-          mv combined_filtered.lcov combined.lcov
+          # Remove generated bindings from coverage (target/.../bindings.rs)
+          lcov --ignore-errors unused --remove combined.lcov '*/target/*/bindings.rs' -o combined.lcov
 
       - name: Generate HTML report
         run: |
