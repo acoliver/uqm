@@ -1,0 +1,41 @@
+//! Sound decoding module for UQM
+//!
+//! This module provides Rust implementations of sound decoders that can be
+//! called from C code. The architecture mirrors the C vtable-based decoder
+//! system in `sc2/src/libs/sound/decoders/`.
+//!
+//! # Architecture
+//!
+//! - `SoundDecoder` trait defines the decoder interface
+//! - `DecoderFormats` specifies the output audio format
+//! - Individual decoder implementations (Ogg, Wav, etc.)
+//! - FFI module provides C-compatible function pointers
+
+pub mod decoder;
+pub mod ffi;
+pub mod formats;
+pub mod null;
+pub mod ogg;
+pub mod wav;
+pub mod wav_ffi;
+pub mod mixer;
+
+pub use decoder::{DecodeError, DecodeResult, SoundDecoder};
+pub use ffi::rust_ova_DecoderVtbl;
+pub use formats::{AudioFormat, DecoderFormats};
+pub use null::NullDecoder;
+pub use ogg::OggDecoder;
+pub use wav::WavDecoder;
+pub use wav_ffi::rust_wav_DecoderVtbl;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_module_exports() {
+        // Verify that all public types are accessible
+        let _formats = DecoderFormats::default();
+        let _decoder = NullDecoder::new();
+    }
+}

@@ -7,6 +7,7 @@ pub mod dirs;
 pub mod ffi;
 pub mod files;
 pub mod temp;
+pub mod uio_bridge;
 
 // Re-exports for convenience
 pub use dirs::{

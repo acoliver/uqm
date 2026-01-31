@@ -1,5 +1,5 @@
 uqm_SUBDIRS="comm planets ships supermelee"
-uqm_CFILES="battle.c battlecontrols.c border.c build.c cleanup.c clock.c
+uqm_CFILES="battle.c battlecontrols.c border.c build.c cleanup.c
 		cnctdlg.c collide.c comm.c commanim.c commglue.c confirm.c credits.c
 		cyborg.c demo.c displist.c dummy.c encount.c flash.c fmv.c galaxy.c
 		gameev.c gameinp.c gameopt.c gendef.c getchar.c globdata.c gravity.c
@@ -10,6 +10,14 @@ uqm_CFILES="battle.c battlecontrols.c border.c build.c cleanup.c clock.c
 		ship.c shipstat.c shipyard.c sis.c sounds.c starbase.c starcon.c
 		starmap.c state.c status.c tactrans.c trans.c uqmdebug.c util.c
 		velocity.c weapon.c"
+
+# Exclude clock.c when USE_RUST_CLOCK is enabled
+# The Rust implementation provides these functions via clock_rust.c
+if [ "$uqm_USE_RUST_CLOCK" = "1" ]; then
+	uqm_CFILES="$uqm_CFILES clock_rust.c"
+else
+	uqm_CFILES="$uqm_CFILES clock.c"
+fi
 uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		collide.h colors.h commanim.h commglue.h comm.h cons_res.h controls.h
 		corecode.h credits.h demo.h displist.h dummy.h element.h encount.h

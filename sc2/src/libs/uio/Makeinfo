@@ -1,3 +1,8 @@
+# Export USE_RUST_UIO to Makeinfo's environment
+if [ -n "$USE_RUST_UIO" ]; then
+	export USE_RUST_UIO
+fi
+
 uqm_SUBDIRS="stdio"
 uqm_CFILES="charhashtable.c defaultfs.c fileblock.c fstypes.c gphys.c io.c
 		ioaux.c match.c mount.c mounttree.c paths.c physical.c uiostream.c
@@ -5,6 +10,14 @@ uqm_CFILES="charhashtable.c defaultfs.c fileblock.c fstypes.c gphys.c io.c
 uqm_HFILES="charhashtable.h defaultfs.h fileblock.h fstypes.h getint.h
 		gphys.h ioaux.h io.h iointrn.h match.h mem.h mount.h mounttree.h
 		paths.h physical.h types.h uioport.h uiostream.h uioutils.h utils.h"
+
+	# Exclude C UIO sources when Rust implementations are enabled
+if [ -n "$USE_RUST_UIO" ]; then
+	uqm_CFILES="charhashtable.c paths.c uioutils.c uio_fread_shim.c"
+	uqm_HFILES="charhashtable.h paths.h uioutils.h"
+	uqm_SUBDIRS=""
+fi
+
 
 if [ -n "$uqm_USE_ZIP_IO" ]; then
 	uqm_SUBDIRS="$uqm_SUBDIRS zip"

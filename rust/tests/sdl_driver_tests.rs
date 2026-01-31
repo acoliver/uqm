@@ -5,9 +5,9 @@
 
 #[cfg(test)]
 mod driver_tests {
-    use uqm::graphics::sdl::common::{DriverConfig, GraphicsDriver, RedrawMode};
-    use uqm::graphics::sdl::opengl::OpenGlDriver;
-    use uqm::graphics::sdl::sdl2::SdlDriver;
+    use uqm_rust::graphics::sdl::common::{DriverConfig, GraphicsDriver, RedrawMode};
+    use uqm_rust::graphics::sdl::opengl::OpenGlDriver;
+    use uqm_rust::graphics::sdl::sdl2::SdlDriver;
 
     #[test]
     fn test_sdl_driver_new() {

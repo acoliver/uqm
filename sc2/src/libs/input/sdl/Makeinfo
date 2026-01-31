@@ -1,2 +1,6 @@
-uqm_CFILES="input.c keynames.c vcontrol.c"
-uqm_HFILES="input.h keynames.h vcontrol.h"
+if [ "$uqm_USE_RUST_INPUT" = 1 ]; then
+	uqm_CFILES="input.c keynames.c"
+else
+	uqm_CFILES="input.c keynames.c vcontrol.c"
+fi
+uqm_HFILES="input.h keynames.h vcontrol.h rust_vcontrol.h"

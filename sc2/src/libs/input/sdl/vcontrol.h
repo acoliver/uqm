@@ -20,11 +20,20 @@
 #include "port.h"
 #include SDL_INCLUDE(SDL.h)
 
+/* When USE_RUST_INPUT is defined, include the Rust bindings which define
+ * macros mapping VControl_* to rust_VControl_* */
+#ifdef USE_RUST_INPUT
+#include "rust_vcontrol.h"
+#endif
+
 #if SDL_MAJOR_VERSION == 1
 typedef SDLKey sdl_key_t;
 #else
 typedef SDL_Keycode sdl_key_t;
 #endif
+
+#ifndef USE_RUST_INPUT
+/* C VControl declarations - only used when not using Rust */
 
 /* Initialization routines */
 void VControl_Init (void);
@@ -95,6 +104,8 @@ int VControl_DumpGesture (char *buf, int n, VCONTROL_GESTURE *g);
 void VControl_ClearGesture (void);
 int  VControl_GetLastGesture (VCONTROL_GESTURE *g);
 
+#endif /* !USE_RUST_INPUT */
+
 /* Constants for handling the "Start bit."  If a gesture is made, and
  * then ends, within a single frame, it will still, for one frame,
  * have a nonzero value.  This is because Bit 16 will be on for the
@@ -105,4 +116,4 @@ int  VControl_GetLastGesture (VCONTROL_GESTURE *g);
 #define VCONTROL_STARTBIT 0x10000
 #define VCONTROL_MASK     0x0FFFF
 
-#endif
+#endif /* LIBS_INPUT_SDL_VCONTROL_H_ */

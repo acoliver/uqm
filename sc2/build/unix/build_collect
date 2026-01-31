@@ -10,16 +10,33 @@
 
 BUILD_ROOT=${BUILD_ROOT%/}/
 BUILD_WORK=${BUILD_WORK%/}/
+. "${BUILD_WORK}build.vars"
+. "${BUILD_ROOT}Makeproject"
+
 eval OBJDIR=\"${BUILD_WORK}\${${BUILD_PROJECT}_OBJS}\"
 
-. "${BUILD_ROOT}Makeproject"
-. "${BUILD_WORK}build.vars"
+if [ "$uqm_USE_RUST_FILE" = "1" ]; then
+	export USE_RUST_FILE=1
+fi
+if [ "$uqm_USE_RUST_CLOCK" = "1" ]; then
+	export USE_RUST_CLOCK=1
+fi
+if [ "$uqm_USE_RUST_UIO" = "1" ]; then
+	export USE_RUST_UIO=1
+fi
+
+export uqm_OGGVORBIS
+export uqm_USE_ZIP_IO
+export uqm_NETPLAY
+export uqm_USE_INTERNAL_MIKMOD
+export uqm_THREADLIB
+export uqm_GFXMODULE
 
 build/unix/recurse "$BUILD_PROJECT" "$BUILD_ROOT" | \
 		while read TYPE FILE; do
 	case "$TYPE" in
 		C|CXX|M|RC)
-			echo "$OBJDIR$FILE"
+			echo "${OBJDIR}${FILE}"
 			;;
 	esac
 done

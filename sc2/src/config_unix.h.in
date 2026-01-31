@@ -61,3 +61,16 @@
 
 #endif  /* CONFIG_UNIX_H_ */
 
+/* Defined if using Rust bridge (Phase 3) */
+@SYMBOL_USE_RUST_BRIDGE_DEF@
+
+/* Defined if using Rust file I/O (Phase 3) */
+@SYMBOL_USE_RUST_FILE_DEF@
+
+/* Defined if using Rust clock (Phase 3) */
+@SYMBOL_USE_RUST_CLOCK_DEF@
+
+/* Defined if using Rust UIO (Phase 3) */
+@SYMBOL_USE_RUST_UIO_DEF@
+
+

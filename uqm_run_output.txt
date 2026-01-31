@@ -1,0 +1,53 @@
+The Ur-Quan Masters v0.8.0 (compiled Jan 25 2026 18:56:58)
+This software comes with ABSOLUTELY NO WARRANTY;
+for details see the included 'COPYING' file.
+
+Netplay protocol version 0.4. Netplay opponent must have UQM 0.6.9 or later.
+Initializing base SDL functionality.
+Using SDL version 2.32.10 (compiled with 2.32.10)
+RUST_UIO: uio_init called
+RUST_UIO: uio_openRepository called
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/"
+Using config dir '/Users/acoliver/.uqm/'
+RUST_UIO: uio_mountDir called - returning dummy handle
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/"
+RUST_UIO: uio_stat called
+RUST_UIO: uio_fopen called
+Using '/Users/acoliver/projects/uqm/sc2/content' as base content dir.
+RUST_UIO: uio_mountDir called - returning dummy handle
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/"
+RUST_UIO: uio_openDir called with path: "/packages"
+RUST_UIO: uio_openDir resolved to: "/packages"
+RUST_UIO: uio_getDirList called
+RUST_UIO: uio_DirList_free called
+RUST_UIO: uio_closeDir called
+RUST_UIO: uio_openDirRelative called
+RUST_UIO: uio_getDirList called
+RUST_UIO: uio_DirList_free called
+RUST_UIO: uio_getDirList called
+0 available addon packs.
+RUST_UIO: uio_DirList_free called
+RUST_UIO: uio_closeDir called
+RUST_UIO: uio_openDirRelative called
+Saved games are kept in /Users/acoliver/.uqm/save/.
+RUST_UIO: uio_openDirRelative called
+RUST_UIO: uio_openDirRelative called
+RUST_UIO: uio_closeDir called
+Initializing SDL.
+SDL initialized.
+Initializing Screen.
+SDL2 renderer 'metal' selected.
+
+0 joysticks were found.
+RUST_UIO: uio_stat called
+RUST_UIO: uio_fopen called
+RUST_UIO: uio_stat called
+RUST_UIO: uio_fopen called
+RUST_UIO: uio_stat called
+RUST_UIO: uio_fopen called
+RUST_UIO: uio_stat called
+RUST_UIO: uio_fopen called
+Initializing SDL audio subsystem.

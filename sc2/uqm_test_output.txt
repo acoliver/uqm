@@ -1,0 +1,100 @@
+The Ur-Quan Masters v0.8.0 (compiled Jan 27 2026 22:55:15)
+This software comes with ABSOLUTELY NO WARRANTY;
+for details see the included 'COPYING' file.
+
+Netplay protocol version 0.4. Netplay opponent must have UQM 0.6.9 or later.
+Initializing base SDL functionality.
+Using SDL version 2.32.10 (compiled with 2.32.10)
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/"
+Using config dir '/Users/acoliver/.uqm/'
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/Users/acoliver/.uqm/"
+Using '/Users/acoliver/projects/uqm/sc2/content' as base content dir.
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/Users/acoliver/projects/uqm/sc2/content"
+RUST_UIO: uio_openDir called with path: "/packages"
+RUST_UIO: uio_openDir resolved to: "/Users/acoliver/projects/uqm/sc2/content/packages"
+0 available addon packs.
+Saved games are kept in /Users/acoliver/.uqm/save/.
+Initializing SDL.
+SDL initialized.
+Initializing Screen.
+SDL2 renderer 'metal' selected.
+
+0 joysticks were found.
+Initializing SDL audio subsystem.
+SDL audio subsystem initialized.
+Opening SDL audio device.
+    using coreaudio at 44100 Hz 16 bit stereo, 4096 samples audio buffer
+Initializing mixer.
+Mixer initialized.
+Initializing sound decoders.
+Sound decoders initialized.
+Loading resource index 'addons'
+Loading resource index 'uqm.rmp'
+Loading resource index 'uqm.key'
+Loading resource index 'version'
+Loading resource index 'menu.key'
+Loading resource index 'packages'
+Loading resource index 'base'
+Loading resource index 'starbase.ogg'
+Loading resource index 'uqmpack.nfo'
+Loading resource index 'orbit5.ogg'
+Loading resource index 'space.ogg'
+Loading resource index 'orbit4.ogg'
+Loading resource index 'orbit3.ogg'
+Loading resource index 'orbit2.ogg'
+Loading resource index 'orbit1.ogg'
+Loading resource index 'quasispace.ogg'
+Loading resource index 'battle.ogg'
+Loading resource index 'credits.ogg'
+Loading resource index 'hyper.ogg'
+Loading resource index 'shipyard.ogg'
+Loading resource index 'outfit.ogg'
+Loading resource index '3domusic.rmp'
+Loading resource index 'talkingpet'
+Loading resource index 'supox'
+Loading resource index 'umgah'
+Loading resource index 'commander'
+Loading resource index 'mycon'
+Loading resource index 'kohrah'
+Loading resource index 'uqmpack.nfo'
+Loading resource index 'zoqfotpik'
+Loading resource index 'vux'
+Loading resource index 'arilou'
+Loading resource index 'utwig'
+Loading resource index 'slylandro'
+Loading resource index 'safeones'
+Loading resource index 'syreen'
+Loading resource index 'orz'
+Loading resource index '3dovoice.rmp'
+Loading resource index 'thraddash'
+Loading resource index 'druuge'
+Loading resource index 'starbase'
+Loading resource index 'chmmr'
+Loading resource index 'yehat'
+Loading resource index 'shofixti'
+Loading resource index 'ilwrath'
+Loading resource index 'spathi'
+Loading resource index 'urquan'
+Loading resource index 'pkunk'
+Loading resource index 'probe'
+Loading resource index 'yehatrebels'
+Loading resource index 'melnorme'
+Trying to get undefined resource 'colortable.main'
+
+  *** FATAL ERROR: Could not load basic content ***
+
+UQM requires at least the base content pack to run properly.
+This file is typically called uqm-0.8.0-content.uqm.  UQM was expecting
+it in the /Users/acoliver/projects/uqm/sc2/content/packages directory.
+Either your installation did not install the content pack at all, or it
+installed it in a different directory.
+
+Fix your installation and rerun UQM.
+
+  *******************
+
+Thread 'Starcon2Main' done (returned 1).
+Thread 'audio stream decoder' done (returned 0).

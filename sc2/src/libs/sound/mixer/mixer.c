@@ -17,6 +17,13 @@
 /* Mixer for low-level sound output drivers
  */
 
+#include "config.h"
+
+#ifdef USE_RUST_MIXER
+/* This file is not used when USE_RUST_MIXER is enabled */
+/* The Rust mixer provides all functionality */
+#else /* !USE_RUST_MIXER */
+
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -1758,3 +1765,5 @@ mixer_ResampleFlat (mixer_Convertion *conv)
 		mixer_PutConvSample (&dst, dstbpc, flags, samp);
 	}
 }
+
+#endif /* !USE_RUST_MIXER */

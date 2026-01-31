@@ -31,6 +31,12 @@
 #ifndef OVCODEC_NONE
 #	include "oggaud.h"
 #endif  /* OVCODEC_NONE */
+#ifdef USE_RUST_OGG
+#	include "rust_oggaud.h"
+#endif  /* USE_RUST_OGG */
+#ifdef USE_RUST_WAV
+#	include "rust_wav.h"
+#endif  /* USE_RUST_WAV */
 #include "aiffaud.h"
 
 
@@ -132,11 +138,19 @@ struct TFB_RegSoundDecoder
 };
 static TFB_RegSoundDecoder sd_decoders[MAX_REG_DECODERS + 1] = 
 {
+#ifdef USE_RUST_WAV
+	/* Use Rust WAV decoder */
+	{true,  true,  "wav", &rust_wav_DecoderVtbl},
+#else
 	{true,  true,  "wav", &wava_DecoderVtbl},
+#endif  /* USE_RUST_WAV */
 	{true,  true,  "mod", &moda_DecoderVtbl},
-#ifndef OVCODEC_NONE
+#ifdef USE_RUST_OGG
+	/* Use Rust Ogg Vorbis decoder (pure Rust, no libvorbis dependency) */
+	{true,  true,  "ogg", &rust_ova_DecoderVtbl},
+#elif !defined(OVCODEC_NONE)
 	{true,  true,  "ogg", &ova_DecoderVtbl},
-#endif  /* OVCODEC_NONE */
+#endif  /* USE_RUST_OGG / OVCODEC_NONE */
 	{true,  true,  "duk", &duka_DecoderVtbl},
 	{true,  true,  "aif", &aifa_DecoderVtbl},
 	{false, false,  NULL, NULL}, // null term
@@ -629,6 +643,8 @@ SoundDecoder_Seek (TFB_SoundDecoder *decoder, uint32 seekTime)
 	}
 
 	pcm_pos = (uint32) (seekTime / 1000.0f * decoder->frequency);
+	log_add (log_Debug, "SoundDecoder_Seek(): seekTime=%u freq=%u start_sample=%u pcm_pos=%u",
+			seekTime, decoder->frequency, decoder->start_sample, pcm_pos);
 	pcm_pos = decoder->funcs->Seek (decoder,
 			decoder->start_sample + pcm_pos);
 	decoder->pos = pcm_pos * decoder->bytes_per_samp;

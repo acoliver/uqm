@@ -1,3 +1,8 @@
+#ifdef USE_RUST_FILE
+#error "files.c should not be compiled when USE_RUST_FILE is enabled"
+#endif
+
+
 /*
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by

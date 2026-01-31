@@ -1,3 +1,7 @@
 uqm_SUBDIRS="sdl nosound"
-uqm_CFILES="mixer.c"
+if [ "$USE_RUST_MIXER" = 1 ]; then
+    uqm_CFILES=""
+else
+    uqm_CFILES="mixer.c"
+fi
 uqm_HFILES="mixer.h mixerint.h"

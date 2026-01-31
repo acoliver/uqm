@@ -46,12 +46,15 @@
 #include "options.h"
 #include "uqmversion.h"
 #include "uqm/comm.h"
+#ifdef USE_RUST_BRIDGE
+#include "rust_bridge.h"
+#endif
 #ifdef NETPLAY
-#	include "libs/callback.h"
-#	include "libs/alarm.h"
-#	include "libs/net.h"
-#	include "uqm/supermelee/netplay/netoptions.h"
-#	include "uqm/supermelee/netplay/netplay.h"
+	#include "libs/callback.h"
+	#include "libs/alarm.h"
+	#include "libs/net.h"
+	#include "uqm/supermelee/netplay/netoptions.h"
+	#include "uqm/supermelee/netplay/netplay.h"
 #endif
 #include "uqm/setup.h"
 #include "uqm/starcon.h"
@@ -147,10 +150,8 @@ struct option_list_value
 
 static const struct option_list_value scalerList[] = 
 {
-	{"bilinear", TFB_GFXFLAGS_SCALE_BILINEAR},
-	{"biadapt",  TFB_GFXFLAGS_SCALE_BIADAPT},
-	{"biadv",    TFB_GFXFLAGS_SCALE_BIADAPTADV},
-	{"triscan",  TFB_GFXFLAGS_SCALE_TRISCAN},
+	{"xbrz3",    TFB_GFXFLAGS_SCALE_XBRZ3},
+	{"xbrz4",    TFB_GFXFLAGS_SCALE_XBRZ4},
 	{"hq",       TFB_GFXFLAGS_SCALE_HQXX},
 	{"none",     0},
 	{"no",       0}, /* uqm.cfg value */
@@ -224,6 +225,7 @@ static int parseFloatOption (const char *str, float *f,
 static void parseIntVolume (int intVol, float *vol);
 static int InvalidArgument (const char *supplied, const char *opt_name);
 static const char *choiceOptString (const struct int_option *option);
+static const char *scalerOptString (const struct int_option *option);
 static const char *boolOptString (const struct bool_option *option);
 static const char *boolNotOptString (const struct bool_option *option);
 
@@ -240,28 +242,30 @@ main (int argc, char *argv[])
 		/* .numAddons = */          0,
 		/* .graphicsBackend = */     NULL,
 
+		// Defaults configured for 3DO experience with higher resolution
+		// No scanlines, text menus, 3DO music + remixes, 3DO speech
 		INIT_CONFIG_OPTION(  opengl,            false ),
-		INIT_CONFIG_OPTION2( resolution,        640, 480 ),
+		INIT_CONFIG_OPTION2( resolution,        1280, 960 ),  // 4x original (320x240)
 		INIT_CONFIG_OPTION(  fullscreen,        false ),
-		INIT_CONFIG_OPTION(  scanlines,         false ),
-		INIT_CONFIG_OPTION(  scaler,            0 ),
+		INIT_CONFIG_OPTION(  scanlines,         false ),      // No scanlines
+		INIT_CONFIG_OPTION(  scaler,            TFB_GFXFLAGS_SCALE_HQXX ),  // HQ scaler for crisp graphics
 		INIT_CONFIG_OPTION(  showFps,           false ),
-		INIT_CONFIG_OPTION(  keepAspectRatio,   false ),
+		INIT_CONFIG_OPTION(  keepAspectRatio,   true ),       // Preserve aspect ratio
 		INIT_CONFIG_OPTION(  gamma,             1.0f ),
 		INIT_CONFIG_OPTION(  soundDriver,       audio_DRIVER_MIXSDL ),
-		INIT_CONFIG_OPTION(  soundQuality,      audio_QUALITY_MEDIUM ),
-		INIT_CONFIG_OPTION(  use3doMusic,       true ),
-		INIT_CONFIG_OPTION(  useRemixMusic,     false ),
-		INIT_CONFIG_OPTION(  useSpeech,         true ),
-		INIT_CONFIG_OPTION(  whichCoarseScan,   OPT_PC ),
-		INIT_CONFIG_OPTION(  whichMenu,         OPT_PC ),
-		INIT_CONFIG_OPTION(  whichFonts,        OPT_PC ),
-		INIT_CONFIG_OPTION(  whichIntro,        OPT_PC ),
-		INIT_CONFIG_OPTION(  whichShield,       OPT_PC ),
-		INIT_CONFIG_OPTION(  smoothScroll,      OPT_PC ),
-		INIT_CONFIG_OPTION(  meleeScale,        TFB_SCALE_TRILINEAR ),
+		INIT_CONFIG_OPTION(  soundQuality,      audio_QUALITY_HIGH ),  // High quality audio
+		INIT_CONFIG_OPTION(  use3doMusic,       true ),       // 3DO music
+		INIT_CONFIG_OPTION(  useRemixMusic,     true ),       // Plus remixes
+		INIT_CONFIG_OPTION(  useSpeech,         true ),       // 3DO speech
+		INIT_CONFIG_OPTION(  whichCoarseScan,   OPT_3DO ),    // 3DO planet scan
+		INIT_CONFIG_OPTION(  whichMenu,         OPT_PC ),     // Text menus (as requested)
+		INIT_CONFIG_OPTION(  whichFonts,        OPT_PC ),     // PC fonts (cleaner)
+		INIT_CONFIG_OPTION(  whichIntro,        OPT_3DO ),    // 3DO intro
+		INIT_CONFIG_OPTION(  whichShield,       OPT_3DO ),    // 3DO shield effect
+		INIT_CONFIG_OPTION(  smoothScroll,      OPT_3DO ),    // 3DO smooth scroll
+		INIT_CONFIG_OPTION(  meleeScale,        TFB_SCALE_TRILINEAR ),  // Smooth melee scaling
 		INIT_CONFIG_OPTION(  subtitles,         true ),
-		INIT_CONFIG_OPTION(  stereoSFX,         false ),
+		INIT_CONFIG_OPTION(  stereoSFX,         true ),       // Stereo sound effects
 		INIT_CONFIG_OPTION(  musicVolumeScale,  1.0f ),
 		INIT_CONFIG_OPTION(  sfxVolumeScale,    1.0f ),
 		INIT_CONFIG_OPTION(  speechVolumeScale, 1.0f ),
@@ -279,6 +283,11 @@ main (int argc, char *argv[])
 	optionsResult = parseOptions (argc, argv, &options);
 
 	log_init (15);
+
+#ifdef USE_RUST_BRIDGE
+	// Initialize Rust bridge logging for Phase 0 verification
+	rust_bridge_init();
+#endif
 
 	if (options.logFile != NULL)
 	{
@@ -1192,8 +1201,8 @@ usage (FILE *out, const struct options_struct *defaults)
 			boolNotOptString (&defaults->opengl));
 	log_add (log_User, "  -k, --keepaspectratio (default %s)",
 			boolOptString (&defaults->keepAspectRatio));
-	log_add (log_User, "  -c, --scale=MODE (bilinear, biadapt, biadv, "
-			"triscan, hq or none (default) )");
+	log_add (log_User, "  -c, --scale=MODE (hq, xbrz3, xbrz4, or none) (default %s)",
+			scalerOptString (&defaults->scaler));
 	log_add (log_User, "  -b, --meleezoom=MODE (step, aka pc, or smooth, "
 			"aka 3do; default is 3do)");
 	log_add (log_User, "  -s, --scanlines (default %s)",
@@ -1268,6 +1277,22 @@ choiceOptString (const struct int_option *option)
 		case OPT_PC:
 			return "pc";
 		default:  /* 0 */
+			return "none";
+	}
+}
+
+static const char *
+scalerOptString (const struct int_option *option)
+{
+	switch (option->value)
+	{
+		case TFB_GFXFLAGS_SCALE_HQXX:
+			return "hq";
+		case TFB_GFXFLAGS_SCALE_XBRZ3:
+			return "xbrz3";
+		case TFB_GFXFLAGS_SCALE_XBRZ4:
+			return "xbrz4";
+		default:
 			return "none";
 	}
 }

@@ -1,15 +1,11 @@
 // FFI bindings for I/O module
 // Provides C-compatible interface for file and directory operations
 
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
-use std::ptr;
 
-use crate::io::{
-    copy_file, create_directory, create_directory_all, delete_file, directory_exists, file_exists,
-    get_file_size, remove_directory, remove_directory_all, DirHandle,
-};
+use crate::io::{copy_file, file_exists};
 
 /// Convert C string to PathBuf
 unsafe fn cstr_to_path(c_str: *const c_char) -> Option<PathBuf> {
@@ -29,6 +25,276 @@ unsafe fn cstr_to_string(c_str: *const c_char) -> Option<String> {
 
     CStr::from_ptr(c_str).to_str().ok().map(String::from)
 }
+
+/// Write a log marker to the rust-bridge.log file
+fn log_marker(marker: &str) {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("rust-bridge.log")
+    {
+        let _ = writeln!(file, "{}", marker);
+    }
+}
+
+// Opaque representation of uio_DirHandle from C
+// We only use it as a pointer, never dereference it
+#[repr(C)]
+pub struct uio_DirHandle {
+    _private: [u8; 0],
+}
+
+// Opaque representation of uio_Stream from C (used by uio_fopen/fclose)
+#[repr(C)]
+pub struct uio_Stream {
+    _private: [u8; 0],
+}
+
+// Opaque representation of uio_Handle from C (used by uio_open/close/read/write/fstat)
+#[repr(C)]
+pub struct uio_Handle {
+    _private: [u8; 0],
+}
+
+// stat struct for uio_fstat
+#[repr(C)]
+pub struct stat {
+    pub st_dev: u64,
+    pub st_mode: u32,
+    pub st_nlink: u32,
+    pub st_ino: u64,
+    pub st_uid: u32,
+    pub st_gid: u32,
+    pub st_rdev: u64,
+    pub st_size: i64,
+    pub st_atime: i64,
+    pub st_mtime: i64,
+    pub st_ctime: i64,
+    pub st_blksize: i64,
+    pub st_blocks: i64,
+}
+
+// FFI bindings to C uio_* functions
+extern "C" {
+    // uio_fopen/uio_fclose - for fileExists2
+    pub fn uio_fopen(dir: *mut uio_DirHandle, path: *const c_char, mode: *const c_char) -> *mut uio_Stream;
+    pub fn uio_fclose(stream: *mut uio_Stream) -> c_int;
+
+    // uio_open/uio_close - for copyFile
+    pub fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut uio_Handle;
+    pub fn uio_close(handle: *mut uio_Handle) -> c_int;
+
+    // uio_read/uio_write - for copyFile
+    pub fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: usize) -> isize;
+    pub fn uio_write(handle: *mut uio_Handle, buf: *const u8, count: usize) -> isize;
+
+    // uio_fstat - for copyFile (to get file permissions)
+    pub fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int;
+
+    // uio_unlink - for copyFile (to clean up on error)
+    pub fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int;
+}
+
+// errno variable from C
+extern "C" {
+    #[link_name = "errno"]
+    static mut errno: c_int;
+}
+
+// Constants for uio_open flags
+const O_RDONLY: c_int = 0;
+const O_WRONLY: c_int = 1;
+const O_RDWR: c_int = 2;
+const O_CREAT: c_int = 0o100;
+const O_EXCL: c_int = 0o200;
+const O_BINARY: c_int = 0;
+
+// Constants for file permissions (mode)
+const S_IRWXU: c_int = 0o700;
+const S_IRWXG: c_int = 0o070;
+const S_IRWXO: c_int = 0o007;
+
+// EINTR for retry on interrupt
+const EINTR: c_int = 4;
+
+/// Check if a file exists (Phase 1 bridge)
+///
+/// # Safety
+///
+/// - `name` must point to a valid null-terminated C string or be null
+#[no_mangle]
+pub unsafe extern "C" fn fileExists(name: *const c_char) -> c_int {
+    // Write to log immediately to verify we're being called
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("rust-bridge.log")
+    {
+        let _ = writeln!(file, "RUST_FILE_EXISTS_CALLED");
+    }
+
+    match cstr_to_path(name) {
+        Some(p) => {
+            if file_exists(&p) {
+                1
+            } else {
+                0
+            }
+        }
+        None => 0,
+    }
+}
+
+/// Check if a file exists in a directory (Phase 1 bridge)
+///
+/// # Safety
+///
+/// - `dir` must be a valid pointer to uio_DirHandle or be null
+/// - `file_name` must point to a valid null-terminated C string or be null
+#[no_mangle]
+pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const c_char) -> c_int {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    // Log for debugging (only if log doesn't exist yet to avoid spam)
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("rust-bridge.log")
+    {
+        let _ = writeln!(file, "RUST_FILE_EXISTS2_CALLED");
+    }
+
+
+
+    // Check for null parameters
+    if dir.is_null() || file_name.is_null() {
+        return 0;
+    }
+
+    // Use C's uio_fopen to check if file exists (matches files.c behavior)
+    let stream = uio_fopen(dir, file_name, b"rb\0".as_ptr() as *const c_char);
+    if stream.is_null() {
+        return 0;
+    }
+
+    // File exists, close the stream
+    uio_fclose(stream);
+    1
+}
+
+/// Copy a file (Phase 1 bridge)
+///
+/// # Safety
+///
+/// - `src_dir` must be a valid pointer to uio_DirHandle or be null
+/// - `src_name` must point to a valid null-terminated C string or be null
+/// - `dst_dir` must be a valid pointer to uio_DirHandle or be null
+/// - `new_name` must point to a valid null-terminated C string or be null
+#[no_mangle]
+pub unsafe extern "C" fn copyFile(
+    src_dir: *mut uio_DirHandle,
+    src_name: *const c_char,
+    dst_dir: *mut uio_DirHandle,
+    new_name: *const c_char,
+) -> c_int {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    // Log for debugging
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("rust-bridge.log")
+    {
+        let _ = writeln!(file, "RUST_COPY_FILE_CALLED");
+    }
+
+    // Check for null parameters
+    if src_dir.is_null() || src_name.is_null() || dst_dir.is_null() || new_name.is_null() {
+        return -1;
+    }
+
+    // Open source file for reading (matches files.c behavior)
+    let src = uio_open(src_dir, src_name, O_RDONLY | O_BINARY, 0);
+    if src.is_null() {
+        return -1;
+    }
+
+    // Get file stats to preserve permissions
+    let mut stat_buf: stat = std::mem::zeroed();
+    if uio_fstat(src, &mut stat_buf) == -1 {
+        uio_close(src);
+        return -1;
+    }
+
+    // Open destination file for writing (O_EXCL ensures we don't overwrite)
+    let dst = uio_open(
+        dst_dir,
+        new_name,
+        O_WRONLY | O_CREAT | O_EXCL | O_BINARY,
+        (stat_buf.st_mode as c_int) & (S_IRWXU | S_IRWXG | S_IRWXO),
+    );
+    if dst.is_null() {
+        uio_close(src);
+        return -1;
+    }
+
+    // Buffer for copying data (64KB buffer like files.c)
+    const BUFSIZE: usize = 65536;
+    let mut buf = vec![0u8; BUFSIZE];
+
+    // Copy loop - handles partial writes and EINTR like files.c
+    loop {
+        let num_in_buf = uio_read(src, buf.as_mut_ptr(), BUFSIZE);
+        if num_in_buf == -1 {
+            if errno == EINTR {
+                continue;
+            }
+            // Error reading - clean up and delete partial copy
+            uio_close(src);
+            uio_close(dst);
+            uio_unlink(dst_dir, new_name);
+            return -1;
+        }
+        if num_in_buf == 0 {
+            break; // EOF
+        }
+
+        // Write all data, handling partial writes
+        let mut remaining = num_in_buf as usize;
+        let mut buf_ptr = buf.as_ptr();
+
+        while remaining > 0 {
+            let num_written = uio_write(dst, buf_ptr, remaining);
+            if num_written == -1 {
+                if errno == EINTR {
+                    continue;
+                }
+                // Error writing - clean up and delete partial copy
+                uio_close(src);
+                uio_close(dst);
+                uio_unlink(dst_dir, new_name);
+                return -1;
+            }
+            remaining -= num_written as usize;
+            buf_ptr = buf_ptr.add(num_written as usize);
+        }
+    }
+
+    // Success - close handles
+    uio_close(src);
+    uio_close(dst);
+    0
+}
+
+// Keep the existing rust_* prefixed functions for compatibility
 
 /// Check if a file exists
 ///
@@ -65,221 +331,6 @@ pub unsafe extern "C" fn rust_copy_file(src_path: *const c_char, dst_path: *cons
     }
 }
 
-/// Delete a file
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_delete_file(path: *const c_char) -> c_int {
-    match cstr_to_path(path) {
-        Some(p) => match delete_file(&p) {
-            Ok(()) => 1,
-            Err(_) => 0,
-        },
-        None => 0,
-    }
-}
-
-/// Get file size
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_get_file_size(path: *const c_char) -> u64 {
-    match cstr_to_path(path) {
-        Some(p) => get_file_size(&p).unwrap_or(0),
-        None => 0,
-    }
-}
-
-/// Check if a directory exists
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_directory_exists(path: *const c_char) -> c_int {
-    match cstr_to_path(path) {
-        Some(p) => {
-            if directory_exists(&p) {
-                1
-            } else {
-                0
-            }
-        }
-        None => 0,
-    }
-}
-
-/// Create a directory
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_create_directory(path: *const c_char) -> c_int {
-    match cstr_to_path(path) {
-        Some(p) => match create_directory(&p) {
-            Ok(()) => 1,
-            Err(_) => 0,
-        },
-        None => 0,
-    }
-}
-
-/// Create directory and all parent directories
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_create_directory_all(path: *const c_char) -> c_int {
-    match cstr_to_path(path) {
-        Some(p) => match create_directory_all(&p) {
-            Ok(()) => 1,
-            Err(_) => 0,
-        },
-        None => 0,
-    }
-}
-
-/// Remove a directory
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_remove_directory(path: *const c_char) -> c_int {
-    match cstr_to_path(path) {
-        Some(p) => match remove_directory(&p) {
-            Ok(()) => 1,
-            Err(_) => 0,
-        },
-        None => 0,
-    }
-}
-
-/// Remove a directory and all contents
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_remove_directory_all(path: *const c_char) -> c_int {
-    match cstr_to_path(path) {
-        Some(p) => match remove_directory_all(&p) {
-            Ok(()) => 1,
-            Err(_) => 0,
-        },
-        None => 0,
-    }
-}
-
-/// Directory handle for FFI
-pub struct FFIDirHandle {
-    entries: Vec<String>,
-    current_index: usize,
-}
-
-impl FFIDirHandle {
-    fn new(entries: Vec<String>) -> Self {
-        FFIDirHandle {
-            entries,
-            current_index: 0,
-        }
-    }
-}
-
-/// Open a directory for enumeration
-///
-/// # Safety
-///
-/// `path` must be a valid null-terminated C string or null.
-#[no_mangle]
-pub unsafe extern "C" fn rust_open_directory(path: *const c_char) -> *mut FFIDirHandle {
-    match cstr_to_path(path) {
-        Some(p) => match DirHandle::open(&p) {
-            Ok(mut handle) => {
-                let mut entries = Vec::new();
-                while let Some(Ok(entry)) = handle.next_entry() {
-                    entries.push(entry.file_name());
-                }
-                Box::into_raw(Box::new(FFIDirHandle::new(entries)))
-            }
-            Err(_) => ptr::null_mut(),
-        },
-        None => ptr::null_mut(),
-    }
-}
-
-/// Get the next entry from a directory handle
-///
-/// # Safety
-///
-/// `handle` must be a valid pointer from `rust_open_directory`. `buffer` must be a valid mutable pointer.
-#[no_mangle]
-pub unsafe extern "C" fn rust_read_directory_entry(
-    handle: *mut FFIDirHandle,
-    buffer: *mut c_char,
-    buffer_size: usize,
-) -> c_int {
-    if handle.is_null() || buffer.is_null() || buffer_size == 0 {
-        return 0;
-    }
-
-    let handle = &mut *handle;
-
-    if handle.current_index >= handle.entries.len() {
-        return 0; // No more entries
-    }
-
-    let entry = &handle.entries[handle.current_index];
-
-    let c_string = match CString::new(entry.as_str()) {
-        Ok(s) => s,
-        Err(_) => {
-            handle.current_index += 1;
-            return 0;
-        }
-    };
-
-    let bytes = c_string.as_bytes_with_nul();
-    if bytes.len() > buffer_size {
-        handle.current_index += 1;
-        return 0;
-    }
-
-    ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, buffer, bytes.len());
-    handle.current_index += 1;
-    1
-}
-
-/// Close a directory handle
-///
-/// # Safety
-///
-/// `handle` must be a valid pointer from `rust_open_directory`.
-#[no_mangle]
-pub unsafe extern "C" fn rust_close_directory(handle: *mut FFIDirHandle) {
-    if !handle.is_null() {
-        let _ = Box::from_raw(handle);
-    }
-}
-
-/// Reset directory enumeration to the beginning
-///
-/// # Safety
-///
-/// `handle` must be a valid pointer from `rust_open_directory`.
-#[no_mangle]
-pub unsafe extern "C" fn rust_rewind_directory(handle: *mut FFIDirHandle) {
-    if !handle.is_null() {
-        (*handle).current_index = 0;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,6 +338,8 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::ffi::CString;
+    use std::ptr;
 
     static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -351,188 +404,5 @@ mod tests {
 
         // Cleanup
         cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_delete_file() {
-        let test_dir = get_test_dir();
-        fs::create_dir_all(&test_dir).unwrap();
-        let test_file = test_dir.join("ffi_delete.txt");
-
-        // Create file
-        fs::write(&test_file, "test").unwrap();
-        assert!(test_file.exists());
-        let c_path = CString::new(test_file.to_str().unwrap()).unwrap();
-
-        unsafe {
-            // Delete file
-            assert_eq!(rust_delete_file(c_path.as_ptr()), 1);
-        }
-        assert!(!test_file.exists());
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_get_file_size() {
-        let test_dir = get_test_dir();
-        fs::create_dir_all(&test_dir).unwrap();
-        let test_file = test_dir.join("ffi_size.txt");
-        let content = b"test content";
-
-        fs::write(&test_file, content).unwrap();
-        let c_path = CString::new(test_file.to_str().unwrap()).unwrap();
-        let size: u64;
-        unsafe {
-            size = rust_get_file_size(c_path.as_ptr());
-        }
-
-        assert_eq!(size, content.len() as u64);
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_directory_exists() {
-        let test_dir = get_test_dir();
-        let c_path = CString::new(test_dir.to_str().unwrap()).unwrap();
-
-        // Should not exist initially
-        unsafe {
-            assert_eq!(rust_directory_exists(c_path.as_ptr()), 0);
-
-            // Create directory
-            fs::create_dir(&test_dir).unwrap();
-        }
-        unsafe {
-            assert_eq!(rust_directory_exists(c_path.as_ptr()), 1);
-        }
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_create_directory() {
-        let test_dir = get_test_dir();
-        let c_path = CString::new(test_dir.to_str().unwrap()).unwrap();
-
-        assert!(!test_dir.exists());
-
-        unsafe {
-            assert_eq!(rust_create_directory(c_path.as_ptr()), 1);
-        }
-        assert!(test_dir.exists());
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_create_directory_all() {
-        let test_dir = get_test_dir();
-        let nested_dir = test_dir.join("ffi_create_all").join("nested").join("path");
-
-        let c_path = CString::new(nested_dir.to_str().unwrap()).unwrap();
-
-        unsafe {
-            assert_eq!(rust_create_directory_all(c_path.as_ptr()), 1);
-        }
-        assert!(nested_dir.exists());
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_remove_directory() {
-        let test_dir = get_test_dir();
-        fs::create_dir_all(&test_dir).unwrap();
-        let remove_dir = test_dir.join("ffi_remove_dir");
-
-        fs::create_dir(&remove_dir).unwrap();
-        assert!(remove_dir.exists());
-        let c_path = CString::new(remove_dir.to_str().unwrap()).unwrap();
-
-        unsafe {
-            assert_eq!(rust_remove_directory(c_path.as_ptr()), 1);
-        }
-        assert!(!remove_dir.exists());
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_rust_directory_enumeration() {
-        let test_dir = get_test_dir();
-        fs::create_dir_all(&test_dir).unwrap();
-        let enum_dir = test_dir.join("ffi_enum");
-        fs::create_dir(&enum_dir).unwrap();
-
-        // Create some files
-        fs::write(enum_dir.join("file1.txt"), "").unwrap();
-        fs::write(enum_dir.join("file2.txt"), "").unwrap();
-        fs::write(enum_dir.join("file3.txt"), "").unwrap();
-        let c_path = CString::new(enum_dir.to_str().unwrap()).unwrap();
-
-        let handle = unsafe { rust_open_directory(c_path.as_ptr()) };
-        assert!(!handle.is_null());
-
-        let mut entries = Vec::new();
-        let mut buffer = [0i8; 256];
-
-        while unsafe { rust_read_directory_entry(handle, buffer.as_mut_ptr(), 256) } != 0 {
-            let entry = unsafe {
-                CStr::from_ptr(buffer.as_ptr())
-                    .to_string_lossy()
-                    .to_string()
-            };
-            entries.push(entry);
-        }
-
-        assert_eq!(entries.len(), 3);
-        assert!(entries.contains(&String::from("file1.txt")));
-        assert!(entries.contains(&String::from("file2.txt")));
-        assert!(entries.contains(&String::from("file3.txt")));
-
-        // Test rewind
-        unsafe { rust_rewind_directory(handle) };
-        entries.clear();
-
-        while unsafe { rust_read_directory_entry(handle, buffer.as_mut_ptr(), 256) } != 0 {
-            let entry = unsafe {
-                CStr::from_ptr(buffer.as_ptr())
-                    .to_string_lossy()
-                    .to_string()
-            };
-            entries.push(entry);
-        }
-
-        assert_eq!(entries.len(), 3);
-
-        unsafe { rust_close_directory(handle) };
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
-    }
-
-    #[test]
-    fn test_null_pointers() {
-        unsafe {
-            assert_eq!(rust_file_exists(ptr::null()), 0);
-            assert_eq!(rust_copy_file(ptr::null(), ptr::null()), 0);
-            assert_eq!(rust_delete_file(ptr::null()), 0);
-            assert_eq!(rust_get_file_size(ptr::null()), 0);
-            assert_eq!(rust_directory_exists(ptr::null()), 0);
-            assert_eq!(rust_create_directory(ptr::null()), 0);
-            assert_eq!(rust_create_directory_all(ptr::null()), 0);
-            assert_eq!(rust_remove_directory(ptr::null()), 0);
-            assert_eq!(rust_open_directory(ptr::null()).is_null(), true);
-            rust_close_directory(ptr::null_mut());
-            rust_rewind_directory(ptr::null_mut());
-        }
     }
 }

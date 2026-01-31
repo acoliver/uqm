@@ -22,16 +22,23 @@
 #define LIBS_UIO_UIOSTREAM_H_
 
 
-typedef struct uio_Stream uio_Stream;
-
-#include "io.h"
-
+#include <stddef.h>
 #include <stdarg.h>
 
+typedef struct uio_Stream uio_Stream;
+typedef struct uio_DirHandle uio_DirHandle;
+typedef struct uio_Handle uio_Handle;
 
 uio_Stream *uio_fopen(uio_DirHandle *dir, const char *path, const char *mode);
 int uio_fclose(uio_Stream *stream);
+
+#if defined(USE_RUST_UIO)
+size_t uio_fread(void *buf, size_t size, size_t nmemb, uio_Stream *stream)
+	__attribute__((noinline));
+#else
 size_t uio_fread(void *buf, size_t size, size_t nmemb, uio_Stream *stream);
+#endif
+
 char *uio_fgets(char *buf, int size, uio_Stream *stream);
 int uio_fgetc(uio_Stream *stream);
 #define uio_getc uio_fgetc

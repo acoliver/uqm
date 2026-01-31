@@ -21,6 +21,13 @@
 #define LIBS_SOUND_MIXER_MIXER_H_
 
 #include "config.h"
+
+#ifdef USE_RUST_MIXER
+/* Use Rust mixer implementation */
+#include "libs/sound/rust_mixer.h"
+#else
+/* Use C mixer implementation */
+
 #include "types.h"
 #include "endian_uqm.h"
 
@@ -270,5 +277,7 @@ MIX_COMPILE_TIME_ASSERT (mixer_IntVal,
 		sizeof(mixer_IntVal) >= sizeof(mixer_Object));
 
 #undef MIX_COMPILE_TIME_ASSERT
+
+#endif /* USE_RUST_MIXER */
 
 #endif /* LIBS_SOUND_MIXER_MIXER_H_ */

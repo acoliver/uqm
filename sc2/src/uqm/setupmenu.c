@@ -216,7 +216,7 @@ number_res_options (void)
 {
 	if (TFB_SupportsHardwareScaling ())
 	{
-		return 5;
+		return 6;
 	}
 	else
 	{
@@ -1239,22 +1239,14 @@ GetGlobalOptions (GLOBALOPTS *opts)
 {
 	bool whichBound;
 
-	if (GfxFlags & TFB_GFXFLAGS_SCALE_BILINEAR) 
+	if (GfxFlags & TFB_GFXFLAGS_SCALE_XBRZ3)
 	{
-		opts->scaler = OPTVAL_BILINEAR_SCALE;
+		opts->scaler = OPTVAL_XBRZ3_SCALE;
 	}
-	else if (GfxFlags & TFB_GFXFLAGS_SCALE_BIADAPT)
+	else if (GfxFlags & TFB_GFXFLAGS_SCALE_XBRZ4)
 	{
-		opts->scaler = OPTVAL_BIADAPT_SCALE;
+		opts->scaler = OPTVAL_XBRZ4_SCALE;
 	}
-	else if (GfxFlags & TFB_GFXFLAGS_SCALE_BIADAPTADV) 
-	{
-		opts->scaler = OPTVAL_BIADV_SCALE;
-	}
-	else if (GfxFlags & TFB_GFXFLAGS_SCALE_TRISCAN) 
-	{
-		opts->scaler = OPTVAL_TRISCAN_SCALE;
-	} 
 	else if (GfxFlags & TFB_GFXFLAGS_SCALE_HQXX)
 	{
 		opts->scaler = OPTVAL_HQXX_SCALE;
@@ -1379,6 +1371,16 @@ GetGlobalOptions (GLOBALOPTS *opts)
 			opts->res = OPTVAL_1280_960;
 		}
 		break;
+	case 960:
+		if (ScreenHeightActual != 720)
+		{
+			opts->res = OPTVAL_CUSTOM;
+		}
+		else
+		{
+			opts->res = OPTVAL_960_720;
+		}
+		break;
 	default:
 		opts->res = OPTVAL_CUSTOM;
 		break;
@@ -1458,6 +1460,11 @@ SetGlobalOptions (GLOBALOPTS *opts)
 		NewHeight = 960;
 		NewDriver = TFB_GFXDRIVER_SDL_OPENGL;
 		break;
+	case OPTVAL_960_720:
+		NewWidth = 960;
+		NewHeight = 720;
+		NewDriver = TFB_GFXDRIVER_SDL_OPENGL;
+		break;
 	default:
 		/* Don't mess with the custom value */
 		break;
@@ -1469,25 +1476,17 @@ SetGlobalOptions (GLOBALOPTS *opts)
 	res_PutBoolean ("config.usegl", NewDriver == TFB_GFXDRIVER_SDL_OPENGL);
 
 	switch (opts->scaler) {
-	case OPTVAL_BILINEAR_SCALE:
-		NewGfxFlags |= TFB_GFXFLAGS_SCALE_BILINEAR;
-		res_PutString ("config.scaler", "bilinear");
-		break;
-	case OPTVAL_BIADAPT_SCALE:
-		NewGfxFlags |= TFB_GFXFLAGS_SCALE_BIADAPT;
-		res_PutString ("config.scaler", "biadapt");
-		break;
-	case OPTVAL_BIADV_SCALE:
-		NewGfxFlags |= TFB_GFXFLAGS_SCALE_BIADAPTADV;
-		res_PutString ("config.scaler", "biadv");
-		break;
-	case OPTVAL_TRISCAN_SCALE:
-		NewGfxFlags |= TFB_GFXFLAGS_SCALE_TRISCAN;
-		res_PutString ("config.scaler", "triscan");
-		break;
 	case OPTVAL_HQXX_SCALE:
 		NewGfxFlags |= TFB_GFXFLAGS_SCALE_HQXX;
 		res_PutString ("config.scaler", "hq");
+		break;
+	case OPTVAL_XBRZ3_SCALE:
+		NewGfxFlags |= TFB_GFXFLAGS_SCALE_XBRZ3;
+		res_PutString ("config.scaler", "xbrz3");
+		break;
+	case OPTVAL_XBRZ4_SCALE:
+		NewGfxFlags |= TFB_GFXFLAGS_SCALE_XBRZ4;
+		res_PutString ("config.scaler", "xbrz4");
 		break;
 	default:
 		/* OPTVAL_NO_SCALE has no equivalent in gfxflags. */

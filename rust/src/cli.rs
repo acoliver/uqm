@@ -14,11 +14,11 @@ pub struct Cli {
     pub res: Option<String>,
 
     /// Enable fullscreen mode
-    #[arg(short, long)]
+    #[arg(long)]
     pub fullscreen: bool,
 
     /// Enable OpenGL rendering
-    #[arg(short, long)]
+    #[arg(short = 'o', long)]
     pub opengl: bool,
 
     /// Disable OpenGL rendering
@@ -26,11 +26,11 @@ pub struct Cli {
     pub nogl: bool,
 
     /// Enable aspect ratio preservation
-    #[arg(short, long)]
+    #[arg(short = 'k', long)]
     pub keepaspectratio: bool,
 
     /// Scaler mode (bilinear, biadapt, biadv, triscan, hq, none)
-    #[arg(short, long, value_name = "MODE")]
+    #[arg(short = 's', long, value_name = "MODE")]
     pub scale: Option<String>,
 
     /// Melee scaling mode (step/pc, smooth/3do, bilinear)
@@ -38,23 +38,23 @@ pub struct Cli {
     pub meleezoom: Option<String>,
 
     /// Enable scanlines effect
-    #[arg(short, long)]
+    #[arg(long)]
     pub scanlines: bool,
 
     /// Show FPS counter
-    #[arg(short, long)]
+    #[arg(short = 'f', long)]
     pub fps: bool,
 
     /// Gamma correction value (default 1.0)
-    #[arg(short, long, value_name = "CORRECTIONVALUE")]
+    #[arg(short = 'g', long, value_name = "CORRECTIONVALUE")]
     pub gamma: Option<String>,
 
     /// Configuration directory path
-    #[arg(short, long, value_name = "CONFIGDIR")]
+    #[arg(short = 'c', long, value_name = "CONFIGDIR")]
     pub configdir: Option<String>,
 
     /// Content directory path
-    #[arg(short, long, value_name = "CONTENTDIR")]
+    #[arg(short = 'd', long, value_name = "CONTENTDIR")]
     pub contentdir: Option<String>,
 
     /// Music volume (0-100)
@@ -70,11 +70,11 @@ pub struct Cli {
     pub speechvol: Option<String>,
 
     /// Audio quality (high, medium, low)
-    #[arg(short, long, value_name = "QUALITY")]
+    #[arg(short = 'a', long, value_name = "QUALITY")]
     pub audioquality: Option<String>,
 
     /// Disable subtitles
-    #[arg(short, long)]
+    #[arg(long)]
     pub nosubtitles: bool,
 
     /// Log file path

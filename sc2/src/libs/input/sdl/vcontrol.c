@@ -14,6 +14,10 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+#ifdef USE_RUST_INPUT
+#error "vcontrol.c should not be compiled when USE_RUST_INPUT is enabled"
+#endif
+
 #include "port.h"
 #include SDL_INCLUDE(SDL.h)
 #include <stdlib.h>

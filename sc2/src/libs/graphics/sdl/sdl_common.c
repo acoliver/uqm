@@ -34,6 +34,11 @@
 #include "libs/memlib.h"
 #include "libs/vidlib.h"
 
+#ifdef USE_RUST_GFX
+#include "rust_gfx.h"
+#include "scalers.h"
+#endif
+
 SDL_Surface *SDL_Screen;
 SDL_Surface *TransitionScreen;
 
@@ -50,6 +55,42 @@ TFB_GRAPHICS_BACKEND *graphics_backend = NULL;
 volatile int QuitPosted = 0;
 volatile int GameActive = 1; // Track the SDL_ACTIVEEVENT state SDL_APPACTIVE
 
+#ifdef USE_RUST_GFX
+/* Rust graphics backend vtable wrapper functions */
+static void Rust_Preprocess (int force_redraw, int transition_amount, int fade_amount)
+{
+	rust_gfx_preprocess (force_redraw, transition_amount, fade_amount);
+}
+
+static void Rust_Postprocess (void)
+{
+	rust_gfx_postprocess ();
+}
+
+static void Rust_UploadTransitionScreen (void)
+{
+	rust_gfx_upload_transition_screen ();
+}
+
+static void Rust_ScreenLayer (SCREEN screen, Uint8 alpha, SDL_Rect *rect)
+{
+	rust_gfx_screen (screen, alpha, rect);
+}
+
+static void Rust_ColorLayer (Uint8 r, Uint8 g, Uint8 b, Uint8 a, SDL_Rect *rect)
+{
+	rust_gfx_color (r, g, b, a, rect);
+}
+
+static TFB_GRAPHICS_BACKEND rust_backend = {
+	Rust_Preprocess,
+	Rust_Postprocess,
+	Rust_UploadTransitionScreen,
+	Rust_ScreenLayer,
+	Rust_ColorLayer
+};
+#endif /* USE_RUST_GFX */
+
 int
 TFB_InitGraphics (int driver, int flags, const char *renderer, int width, int height)
 {
@@ -64,6 +105,42 @@ TFB_InitGraphics (int driver, int flags, const char *renderer, int width, int he
 
 	GfxFlags = flags;
 
+#ifdef USE_RUST_GFX
+	/* Use Rust graphics driver - it handles all SDL initialization */
+	log_add (log_Info, "Using Rust graphics driver");
+	
+	/* Set screen dimensions - these globals are used throughout the codebase */
+	ScreenWidth = 320;
+	ScreenHeight = 240;
+	ScreenWidthActual = width;
+	ScreenHeightActual = height;
+	
+	result = rust_gfx_init (driver, flags, renderer, width, height);
+	if (result != 0)
+	{
+		log_add (log_Fatal, "Rust graphics initialization failed!");
+		exit (EXIT_FAILURE);
+	}
+	graphics_backend = &rust_backend;
+
+	/* Get SDL_Surface pointers from Rust for C drawing code */
+	for (i = 0; i < TFB_GFX_NUMSCREENS; i++)
+	{
+		SDL_Screens[i] = rust_gfx_get_screen_surface (i);
+		if (!SDL_Screens[i])
+		{
+			log_add (log_Fatal, "Failed to get Rust screen surface %d", i);
+			exit (EXIT_FAILURE);
+		}
+	}
+	SDL_Screen = SDL_Screens[0];
+	TransitionScreen = SDL_Screens[2];
+	format_conv_surf = rust_gfx_get_format_conv_surf ();
+	
+	log_add (log_Info, "Rust graphics: got %d screen surfaces, ScreenWidth=%d ScreenHeight=%d", 
+			TFB_GFX_NUMSCREENS, ScreenWidth, ScreenHeight);
+#else
+	/* Use C graphics driver */
 	if (driver == TFB_GFXDRIVER_SDL_OPENGL)
 	{
 #ifdef HAVE_OPENGL
@@ -79,6 +156,8 @@ TFB_InitGraphics (int driver, int flags, const char *renderer, int width, int he
 	{
 		result = TFB_Pure_InitGraphics (driver, flags, renderer, width, height);
 	}
+	(void)result;
+#endif /* USE_RUST_GFX */
 
 #if SDL_MAJOR_VERSION == 1
 	/* Other versions do this when setting up the window */
@@ -105,6 +184,14 @@ TFB_UninitGraphics (void)
 
 	Uninit_DrawCommandQueue ();
 
+#ifdef USE_RUST_GFX
+	rust_gfx_uninit ();
+	for (i = 0; i < TFB_GFX_NUMSCREENS; i++)
+		SDL_Screens[i] = NULL;
+	SDL_Screen = NULL;
+	TransitionScreen = NULL;
+	format_conv_surf = NULL;
+#else
 	for (i = 0; i < TFB_GFX_NUMSCREENS; i++)
 		UnInit_Screen (&SDL_Screens[i]);
 
@@ -114,6 +201,7 @@ TFB_UninitGraphics (void)
 #endif
 
 	UnInit_Screen (&format_conv_surf);
+#endif
 }
 
 void

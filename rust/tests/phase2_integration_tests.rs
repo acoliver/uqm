@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, RwLock};
 
-use uqm::graphics::{
+use uqm_rust::graphics::{
     Canvas, ColorMapManager, DcqColor, DcqConfig, DcqDrawMode, DrawCommand, DrawCommandQueue,
     FadeType, RenderContext, Screen, ScreenType, FADE_FULL_INTENSITY, FADE_NO_INTENSITY,
 };

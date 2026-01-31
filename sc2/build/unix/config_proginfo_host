@@ -37,6 +37,17 @@ SYSTEM_HOST_LDFLAGS=""
 
 
 ##############################################################################
+# Describe the symbols (possibly) used:                                      #
+##############################################################################
+
+# Rust Graphics System Integration - set all to enabled for Phase 3
+USE_RUST_BRIDGE=1
+USE_RUST_FILE=1
+USE_RUST_CLOCK=1
+USE_RUST_UIO=1
+
+
+##############################################################################
 # Describe the libaries (possibly) used:                                     #
 ##############################################################################
 
@@ -70,7 +81,30 @@ case "$HOST_SYSTEM" in
 		LIB_SDL_CFLAGS='$(sdl-config --cflags)'
 		LIB_SDL_LDFLAGS='$(sdl-config --libs)'
 		LIB_SDL_VERSION='$(sdl-config --version)'
-		;;
+##############################################################################
+# Describe the symbols (possibly) used:                                      #
+##############################################################################
+
+# Rust Graphics System Integration
+# Note: These are added to HAVE_SYMBOLS for substitution into build.vars
+SYMBOL_USE_RUST_BRIDGE_DEFNAME="USE_RUST_BRIDGE"
+SYMBOL_USE_RUST_BRIDGE="$USE_RUST_BRIDGE"
+
+SYMBOL_USE_RUST_FILE_DEFNAME="USE_RUST_FILE"
+SYMBOL_USE_RUST_FILE="$USE_RUST_FILE"
+
+SYMBOL_USE_RUST_CLOCK_DEFNAME="USE_RUST_CLOCK"
+SYMBOL_USE_RUST_CLOCK="$USE_RUST_CLOCK"
+
+SYMBOL_USE_RUST_UIO_DEFNAME="USE_RUST_UIO"
+SYMBOL_USE_RUST_UIO="$USE_RUST_UIO"
+
+
+##############################################################################
+# Describe the symbols (possibly) used:                                      #
+##############################################################################
+
+
 esac
 
 
@@ -109,8 +143,8 @@ LIB_libpng_NAME="libpng"
 case "$HOST_SYSTEM" in
 	Darwin)
 		if not have_framework libpng; then
-			LIB_libpng_CFLAGS=""
-			LIB_libpng_LDFLAGS="-lpng -lm"
+			LIB_libpng_CFLAGS='$(pkg-config --cflags libpng)'
+			LIB_libpng_LDFLAGS='$(pkg-config --libs libpng) -lz -lm'
 		fi
 		;;
 	*)

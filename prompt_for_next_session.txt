@@ -1,0 +1,70 @@
+Context summary for next session
+
+Overall goal:
+- Create and execute bottom-up Rust integration plan so the C build calls Rust implementations for file/time modules, with robust verification and log proof.
+
+Current state:
+- Phase 0 implementation done; Phase 0 verification partially blocked by build issues and later by harness spawn failure.
+- Rust bridge wiring is in place:
+  - rust/Cargo.toml has [lib] name = "uqm_rust", crate-type = ["staticlib"]
+  - rust/src/bridge_log.rs provides rust_bridge_init() and rust_bridge_log() with RUST_BRIDGE_PHASE0_OK marker
+  - rust/src/lib.rs exports bridge_log
+  - sc2/src/rust_bridge.h defines rust_bridge_init/log
+  - sc2/src/uqm.c includes rust_bridge.h and calls rust_bridge_init() under USE_RUST_BRIDGE
+  - sc2/build/unix/build.config has rust_bridge menu; adds -DUSE_RUST_BRIDGE and LDFLAGS -L../../../rust/target/release -luqm_rust; uqm_pre_build builds Rust staticlib if enabled
+  - sc2/build.vars.in exports uqm_USE_RUST_BRIDGE
+- Removed extra rust_bridge_init() call and include from sc2/src/uqm/setup.c.
+- Updated sc2/build/unix/config_proginfo_host libpng flags to use pkg-config on Darwin:
+  - LIB_libpng_CFLAGS='$(pkg-config --cflags libpng)'
+  - LIB_libpng_LDFLAGS='$(pkg-config --libs libpng) -lz -lm'
+
+Dependencies installed (Homebrew):
+- libpng, libmikmod, sdl2_mixer, libvorbis, libogg, sdl12-compat (SDL1 headers at /opt/homebrew/include/SDL/SDL.h).
+
+Last blockers:
+- After dependency installs, harness command execution began failing with `posix_spawnp failed` for any command (pwd, ls, ./build.sh). This blocked further verification/build steps.
+- Before the spawn failure, `./build.sh uqm reprocess_config` succeeded once after libpng fix and generated config. Build then failed due to missing SDL.h/vorbis/mikmod headers; installs were performed to fix that.
+
+What to do next (todo setup):
+1) Verify Phase 0 using project-plans/timeandfile/verification-0.md.
+   - Re-run: cd rust && cargo build --release
+   - Ensure sc2/config.state exists with CHOICE_rust_bridge_VALUE='enabled'
+   - Run: cd sc2 && ./build.sh uqm reprocess_config
+   - Run: cd sc2 && ./build.sh uqm
+   - Verify symbol: nm sc2/build/uqm | rg "rust_bridge_init" (must be T)
+   - Verify call site: objdump -d sc2/build/uqm | rg "call.*rust_bridge_init" (or otool -tV on macOS)
+   - Run the binary, exit after menu appears, confirm rust-bridge.log has RUST_BRIDGE_PHASE0_OK
+2) If verification fails, remediate and reverify (Phase 0 remediation todo).
+3) Then proceed to Phase 1–3 implementation + verification per project-plans/timeandfile/phase-1.md ... verification-3.md.
+4) Final holistic verification + user instructions.
+
+Todo list that should be recreated:
+- Phase 0 verify (in progress)
+- Phase 0 remediation if needed
+- Phase 1 implement/verify/remediate
+- Phase 2 implement/verify/remediate
+- Phase 3 implement/verify/remediate
+- Final holistic verification + user instructions
+
+Subagent usage:
+- Use rustexpert subagent for phase implementation tasks (phase-0 to phase-3 docs). Provide explicit instruction to avoid interactive config; set sc2/config.state and run ./build.sh uqm reprocess_config.
+- Keep tool whitelist: read_file, write_file, replace, insert_at_line, delete_line_range, run_shell_command, glob, search_file_content, list_directory.
+
+Notes:
+- Avoid modifying sc2/build/unix/config_proginfo_host except the libpng pkg-config fix above.
+- No AGENTS.md found in repo.
+- project-plans/timeandfile contains phase and verification docs and should be followed.
+
+Relevant files changed:
+- rust/Cargo.toml
+- rust/src/bridge_log.rs (new)
+- rust/src/lib.rs
+- sc2/src/rust_bridge.h (new)
+- sc2/src/uqm.c
+- sc2/build.vars.in
+- sc2/build/unix/build.config
+- sc2/build/unix/config_proginfo_host (libpng pkg-config fix)
+
+Command hints:
+- Ensure environment recovers from posix_spawnp error before running any shell commands.
+- If build still fails due to missing headers, confirm sdl12-compat, libvorbis, libogg, libmikmod are visible in include paths (pkg-config can help).

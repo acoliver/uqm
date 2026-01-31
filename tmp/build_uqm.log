@@ -1,0 +1,705 @@
+Building Rust staticlib...
+warning: type `uio_DirListInternal` should have an upper camel case name
+   --> src/io/uio_bridge.rs:223:8
+    |
+223 | struct uio_DirListInternal {
+    |        ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to upper camel case: `UioDirListInternal`
+    |
+    = note: `#[warn(non_camel_case_types)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: type `uio_Handle` should have an upper camel case name
+   --> src/io/uio_bridge.rs:240:10
+    |
+240 | pub type uio_Handle = Mutex<std::fs::File>;
+    |          ^^^^^^^^^^ help: convert the identifier to upper camel case: `UioHandle`
+
+warning: type `stat` should have an upper camel case name
+   --> src/io/uio_bridge.rs:953:10
+    |
+953 | pub type stat = libc::stat;
+    |          ^^^^ help: convert the identifier to upper camel case (notice the capitalization): `Stat`
+
+warning: unused import: `std::path::Path`
+ --> src/sound/ffi.rs:7:5
+  |
+7 | use std::path::Path;
+  |     ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `#[no_mangle]` attribute cannot be used on structs
+   --> src/io/uio_bridge.rs:613:1
+    |
+613 | #[no_mangle]
+    | ^^^^^^^^^^^^
+    |
+    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+    = help: `#[no_mangle]` can be applied to functions and statics
+    = note: `#[warn(unused_attributes)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `i`
+    --> src/io/uio_bridge.rs:1869:10
+     |
+1869 |     for (i, name) in name_strings.iter().enumerate() {
+     |          ^ help: if this is intentional, prefix it with an underscore: `_i`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `flags`
+  --> src/sound/wav_ffi.rs:53:35
+   |
+53 | extern "C" fn rust_wav_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
+   |                                   ^^^^^ help: if this is intentional, prefix it with an underscore: `_flags`
+
+warning: fields `width` and `height` are never read
+   --> src/graphics/ffi.rs:108:5
+    |
+ 84 | struct RustGraphicsState {
+    |        ----------------- fields in this struct
+...
+108 |     width: u32,
+    |     ^^^^^
+109 |     height: u32,
+    |     ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `log_marker` is never used
+  --> src/io/ffi.rs:30:4
+   |
+30 | fn log_marker(marker: &str) {
+   |    ^^^^^^^^^^
+
+warning: constant `O_RDWR` is never used
+   --> src/io/ffi.rs:110:7
+    |
+110 | const O_RDWR: c_int = 2;
+    |       ^^^^^^
+
+warning: struct `uio_DirListInternal` is never constructed
+   --> src/io/uio_bridge.rs:223:8
+    |
+223 | struct uio_DirListInternal {
+    |        ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `O_EXCL` is never used
+   --> src/io/uio_bridge.rs:961:7
+    |
+961 | const O_EXCL: c_int = 0o200;
+    |       ^^^^^^
+
+warning: fields `id`, `size`, and `format` are never read
+  --> src/sound/wav.rs:27:5
+   |
+26 | struct WavFileHeader {
+   |        ------------- fields in this struct
+27 |     id: u32,       // "RIFF"
+   |     ^^
+28 |     size: u32,     // File size - 8
+   |     ^^^^
+29 |     format: u32,   // "WAVE"
+   |     ^^^^^^
+   |
+   = note: `WavFileHeader` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `format`, `byte_rate`, and `block_align` are never read
+  --> src/sound/wav.rs:35:5
+   |
+34 | struct WavFormatHeader {
+   |        --------------- fields in this struct
+35 |     format: u16,           // 1 = PCM
+   |     ^^^^^^
+...
+38 |     byte_rate: u32,        // bytes per second
+   |     ^^^^^^^^^
+39 |     block_align: u16,      // bytes per sample frame
+   |     ^^^^^^^^^^^
+   |
+   = note: `WavFormatHeader` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: constant `ABSOLUTE_EVENT` is never used
+  --> src/time/clock_bridge.rs:44:7
+   |
+44 | const ABSOLUTE_EVENT: c_int = 0;
+   |       ^^^^^^^^^^^^^^
+
+warning: constant `RELATIVE_EVENT` is never used
+  --> src/time/clock_bridge.rs:45:7
+   |
+45 | const RELATIVE_EVENT: c_int = 1;
+   |       ^^^^^^^^^^^^^^
+
+warning: function `ValidateEvent` is never used
+  --> src/time/clock_bridge.rs:35:8
+   |
+35 |     fn ValidateEvent(type_: c_int, pmonth_index: *mut c_int, pday_index: *mut c_int, pyear_index: *mut c_int) -> c_int;
+   |        ^^^^^^^^^^^^^
+
+warning: function `AddEvent` is never used
+  --> src/time/clock_bridge.rs:36:8
+   |
+36 |     fn AddEvent(type_: c_int, month_index: c_int, day_index: c_int, year_index: c_int, func_index: u8) -> usize;
+   |        ^^^^^^^^
+
+warning: structure field `numNames` should have a snake case name
+   --> src/io/uio_bridge.rs:235:5
+    |
+235 |     numNames: c_int,
+    |     ^^^^^^^^ help: convert the identifier to snake case: `num_names`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: variable `_inPath` should have a snake case name
+   --> src/io/uio_bridge.rs:267:5
+    |
+267 |     _inPath: *const c_char,
+    |     ^^^^^^^ help: convert the identifier to snake case: `_in_path`
+
+warning: variable `mountHandle` should have a snake case name
+   --> src/io/uio_bridge.rs:269:5
+    |
+269 |     mountHandle: *mut *mut uio_MountHandle,
+    |     ^^^^^^^^^^^ help: convert the identifier to snake case: `mount_handle`
+
+warning: variable `outPath` should have a snake case name
+   --> src/io/uio_bridge.rs:270:5
+    |
+270 |     outPath: *mut *mut c_char,
+    |     ^^^^^^^ help: convert the identifier to snake case: `out_path`
+
+warning: variable `_mountHandle` should have a snake case name
+   --> src/io/uio_bridge.rs:284:41
+    |
+284 | pub unsafe extern "C" fn uio_unmountDir(_mountHandle: *mut uio_MountHandle) -> c_int {
+    |                                         ^^^^^^^^^^^^ help: convert the identifier to snake case: `_mount_handle`
+
+warning: variable `_mountHandle` should have a snake case name
+   --> src/io/uio_bridge.rs:297:5
+    |
+297 |     _mountHandle: *mut uio_MountHandle,
+    |     ^^^^^^^^^^^^ help: convert the identifier to snake case: `_mount_handle`
+
+warning: variable `_mountPoint` should have a snake case name
+   --> src/io/uio_bridge.rs:305:5
+    |
+305 |     _mountPoint: *const c_char,
+    |     ^^^^^^^^^^^ help: convert the identifier to snake case: `_mount_point`
+
+warning: variable `_sourceDir` should have a snake case name
+   --> src/io/uio_bridge.rs:306:5
+    |
+306 |     _sourceDir: *mut uio_DirHandle,
+    |     ^^^^^^^^^^ help: convert the identifier to snake case: `_source_dir`
+
+warning: variable `_startGPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:713:5
+    |
+713 |     _startGPDir: *mut uio_GPDir,
+    |     ^^^^^^^^^^^ help: convert the identifier to snake case: `_start_gpdir`
+
+warning: variable `_dirHandle` should have a snake case name
+   --> src/io/uio_bridge.rs:767:5
+    |
+767 |     _dirHandle: *const uio_DirHandle,
+    |     ^^^^^^^^^^ help: convert the identifier to snake case: `_dir_handle`
+
+warning: variable `_outStream` should have a snake case name
+   --> src/io/uio_bridge.rs:768:5
+    |
+768 |     _outStream: *mut libc::FILE,
+    |     ^^^^^^^^^^ help: convert the identifier to snake case: `_out_stream`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:783:5
+    |
+783 |     _gPDir: *mut uio_GPDir,
+    |     ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_fileName` should have a snake case name
+   --> src/io/uio_bridge.rs:784:5
+    |
+784 |     _fileName: *const c_char,
+    |     ^^^^^^^^^ help: convert the identifier to snake case: `_file_name`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:791:49
+    |
+791 | pub unsafe extern "C" fn uio_GPDir_closeEntries(_gPDir: *mut uio_GPDir) {
+    |                                                 ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:797:5
+    |
+797 |     _gPDir: *mut uio_GPDir,
+    |     ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_dirName` should have a snake case name
+   --> src/io/uio_bridge.rs:798:5
+    |
+798 |     _dirName: *const c_char,
+    |     ^^^^^^^^ help: convert the identifier to snake case: `_dir_name`
+
+warning: variable `_subDir` should have a snake case name
+   --> src/io/uio_bridge.rs:799:5
+    |
+799 |     _subDir: *mut uio_GPDir,
+    |     ^^^^^^^ help: convert the identifier to snake case: `_sub_dir`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:807:5
+    |
+807 |     _gPDir: *mut uio_GPDir,
+    |     ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:823:48
+    |
+823 | pub unsafe extern "C" fn uio_GPDir_openEntries(_gPDir: *mut uio_GPDir) -> c_int {
+    |                                                ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:830:5
+    |
+830 |     _gPDir: *mut uio_GPDir,
+    |     ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_dirName` should have a snake case name
+   --> src/io/uio_bridge.rs:831:5
+    |
+831 |     _dirName: *const c_char,
+    |     ^^^^^^^^ help: convert the identifier to snake case: `_dir_name`
+
+warning: variable `_gPDir` should have a snake case name
+   --> src/io/uio_bridge.rs:838:48
+    |
+838 | pub unsafe extern "C" fn uio_GPDir_readEntries(_gPDir: *mut uio_GPDir) -> c_int {
+    |                                                ^^^^^^ help: convert the identifier to snake case: `_g_pdir`
+
+warning: variable `_gPFile` should have a snake case name
+   --> src/io/uio_bridge.rs:849:44
+    |
+849 | pub unsafe extern "C" fn uio_GPFile_delete(_gPFile: *mut uio_GPFile) {
+    |                                            ^^^^^^^ help: convert the identifier to snake case: `_g_pfile`
+
+warning: variable `_pRoot` should have a snake case name
+   --> src/io/uio_bridge.rs:858:5
+    |
+858 |     _pRoot: *mut uio_PRoot,
+    |     ^^^^^^ help: convert the identifier to snake case: `_p_root`
+
+warning: variable `_gPRoot` should have a snake case name
+   --> src/io/uio_bridge.rs:868:44
+    |
+868 | pub unsafe extern "C" fn uio_GPRoot_delete(_gPRoot: *mut uio_GPRoot) {
+    |                                            ^^^^^^^ help: convert the identifier to snake case: `_g_proot`
+
+warning: variable `_gPRoot` should have a snake case name
+   --> src/io/uio_bridge.rs:876:47
+    |
+876 | pub unsafe extern "C" fn uio_GPRoot_makePRoot(_gPRoot: *mut uio_GPRoot) -> *mut uio_PRoot {
+    |                                               ^^^^^^^ help: convert the identifier to snake case: `_g_proot`
+
+warning: variable `_pRoot` should have a snake case name
+   --> src/io/uio_bridge.rs:883:44
+    |
+883 | pub unsafe extern "C" fn uio_GPRoot_umount(_pRoot: *mut uio_PRoot) -> c_int {
+    |                                            ^^^^^^ help: convert the identifier to snake case: `_p_root`
+
+warning: variable `_openFlags` should have a snake case name
+   --> src/io/uio_bridge.rs:892:5
+    |
+892 |     _openFlags: c_int,
+    |     ^^^^^^^^^^ help: convert the identifier to snake case: `_open_flags`
+
+warning: variable `_pRoot` should have a snake case name
+   --> src/io/uio_bridge.rs:900:5
+    |
+900 |     _pRoot: *mut uio_PRoot,
+    |     ^^^^^^ help: convert the identifier to snake case: `_p_root`
+
+warning: variable `_outStream` should have a snake case name
+   --> src/io/uio_bridge.rs:936:5
+    |
+936 |     _outStream: *mut libc::FILE,
+    |     ^^^^^^^^^^ help: convert the identifier to snake case: `_out_stream`
+
+warning: variable `_destRep` should have a snake case name
+    --> src/io/uio_bridge.rs:1251:5
+     |
+1251 |     _destRep: *mut uio_Repository,
+     |     ^^^^^^^^ help: convert the identifier to snake case: `_dest_rep`
+
+warning: variable `mountPoint` should have a snake case name
+    --> src/io/uio_bridge.rs:1252:5
+     |
+1252 |     mountPoint: *const c_char,
+     |     ^^^^^^^^^^ help: convert the identifier to snake case: `mount_point`
+
+warning: variable `_fsType` should have a snake case name
+    --> src/io/uio_bridge.rs:1253:5
+     |
+1253 |     _fsType: c_int,
+     |     ^^^^^^^ help: convert the identifier to snake case: `_fs_type`
+
+warning: variable `sourceDir` should have a snake case name
+    --> src/io/uio_bridge.rs:1254:5
+     |
+1254 |     sourceDir: *mut uio_DirHandle,
+     |     ^^^^^^^^^ help: convert the identifier to snake case: `source_dir`
+
+warning: variable `sourcePath` should have a snake case name
+    --> src/io/uio_bridge.rs:1255:5
+     |
+1255 |     sourcePath: *const c_char,
+     |     ^^^^^^^^^^ help: convert the identifier to snake case: `source_path`
+
+warning: variable `inPath` should have a snake case name
+    --> src/io/uio_bridge.rs:1256:5
+     |
+1256 |     inPath: *const c_char,
+     |     ^^^^^^ help: convert the identifier to snake case: `in_path`
+
+warning: variable `_autoMount` should have a snake case name
+    --> src/io/uio_bridge.rs:1257:5
+     |
+1257 |     _autoMount: *mut *mut (),
+     |     ^^^^^^^^^^ help: convert the identifier to snake case: `_auto_mount`
+
+warning: variable `_matchType` should have a snake case name
+    --> src/io/uio_bridge.rs:1779:5
+     |
+1779 |     _matchType: c_int,
+     |     ^^^^^^^^^^ help: convert the identifier to snake case: `_match_type`
+
+warning: structure field `GetName` should have a snake case name
+  --> src/sound/ffi.rs:75:9
+   |
+75 |     pub GetName: extern "C" fn() -> *const c_char,
+   |         ^^^^^^^ help: convert the identifier to snake case: `get_name`
+
+warning: structure field `InitModule` should have a snake case name
+  --> src/sound/ffi.rs:76:9
+   |
+76 |     pub InitModule: extern "C" fn(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int,
+   |         ^^^^^^^^^^ help: convert the identifier to snake case: `init_module`
+
+warning: structure field `TermModule` should have a snake case name
+  --> src/sound/ffi.rs:77:9
+   |
+77 |     pub TermModule: extern "C" fn(),
+   |         ^^^^^^^^^^ help: convert the identifier to snake case: `term_module`
+
+warning: structure field `GetStructSize` should have a snake case name
+  --> src/sound/ffi.rs:78:9
+   |
+78 |     pub GetStructSize: extern "C" fn() -> u32,
+   |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `get_struct_size`
+
+warning: structure field `GetError` should have a snake case name
+  --> src/sound/ffi.rs:79:9
+   |
+79 |     pub GetError: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> c_int,
+   |         ^^^^^^^^ help: convert the identifier to snake case: `get_error`
+
+warning: structure field `Init` should have a snake case name
+  --> src/sound/ffi.rs:80:9
+   |
+80 |     pub Init: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> c_int,
+   |         ^^^^ help: convert the identifier to snake case (notice the capitalization): `init`
+
+warning: structure field `Term` should have a snake case name
+  --> src/sound/ffi.rs:81:9
+   |
+81 |     pub Term: extern "C" fn(decoder: *mut TFB_SoundDecoder),
+   |         ^^^^ help: convert the identifier to snake case: `term`
+
+warning: structure field `Open` should have a snake case name
+  --> src/sound/ffi.rs:82:9
+   |
+82 |     pub Open: extern "C" fn(decoder: *mut TFB_SoundDecoder, dir: *mut uio_DirHandle, filename: *const c_char) -> c_int,
+   |         ^^^^ help: convert the identifier to snake case (notice the capitalization): `open`
+
+warning: structure field `Close` should have a snake case name
+  --> src/sound/ffi.rs:83:9
+   |
+83 |     pub Close: extern "C" fn(decoder: *mut TFB_SoundDecoder),
+   |         ^^^^^ help: convert the identifier to snake case (notice the capitalization): `close`
+
+warning: structure field `Decode` should have a snake case name
+  --> src/sound/ffi.rs:84:9
+   |
+84 |     pub Decode: extern "C" fn(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int,
+   |         ^^^^^^ help: convert the identifier to snake case: `decode`
+
+warning: structure field `Seek` should have a snake case name
+  --> src/sound/ffi.rs:85:9
+   |
+85 |     pub Seek: extern "C" fn(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32,
+   |         ^^^^ help: convert the identifier to snake case (notice the capitalization): `seek`
+
+warning: structure field `GetFrame` should have a snake case name
+  --> src/sound/ffi.rs:86:9
+   |
+86 |     pub GetFrame: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> u32,
+   |         ^^^^^^^^ help: convert the identifier to snake case: `get_frame`
+
+warning: function `rust_ova_GetName` should have a snake case name
+   --> src/sound/ffi.rs:112:15
+    |
+112 | extern "C" fn rust_ova_GetName() -> *const c_char {
+    |               ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_get_name`
+
+warning: function `rust_ova_InitModule` should have a snake case name
+   --> src/sound/ffi.rs:116:15
+    |
+116 | extern "C" fn rust_ova_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
+    |               ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_init_module`
+
+warning: function `rust_ova_TermModule` should have a snake case name
+   --> src/sound/ffi.rs:146:15
+    |
+146 | extern "C" fn rust_ova_TermModule() {
+    |               ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_term_module`
+
+warning: function `rust_ova_GetStructSize` should have a snake case name
+   --> src/sound/ffi.rs:154:15
+    |
+154 | extern "C" fn rust_ova_GetStructSize() -> u32 {
+    |               ^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_get_struct_size`
+
+warning: function `rust_ova_GetError` should have a snake case name
+   --> src/sound/ffi.rs:158:15
+    |
+158 | extern "C" fn rust_ova_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_get_error`
+
+warning: function `rust_ova_Init` should have a snake case name
+   --> src/sound/ffi.rs:174:15
+    |
+174 | extern "C" fn rust_ova_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_ova_init`
+
+warning: function `rust_ova_Term` should have a snake case name
+   --> src/sound/ffi.rs:203:15
+    |
+203 | extern "C" fn rust_ova_Term(decoder: *mut TFB_SoundDecoder) {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_term`
+
+warning: function `rust_ova_Open` should have a snake case name
+   --> src/sound/ffi.rs:228:15
+    |
+228 | extern "C" fn rust_ova_Open(
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_ova_open`
+
+warning: function `rust_ova_Close` should have a snake case name
+   --> src/sound/ffi.rs:341:15
+    |
+341 | extern "C" fn rust_ova_Close(decoder: *mut TFB_SoundDecoder) {
+    |               ^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_ova_close`
+
+warning: function `rust_ova_Decode` should have a snake case name
+   --> src/sound/ffi.rs:357:15
+    |
+357 | extern "C" fn rust_ova_Decode(
+    |               ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_decode`
+
+warning: function `rust_ova_Seek` should have a snake case name
+   --> src/sound/ffi.rs:392:15
+    |
+392 | extern "C" fn rust_ova_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_ova_seek`
+
+warning: function `rust_ova_GetFrame` should have a snake case name
+   --> src/sound/ffi.rs:419:15
+    |
+419 | extern "C" fn rust_ova_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_ova_get_frame`
+
+warning: function `rust_wav_GetName` should have a snake case name
+  --> src/sound/wav_ffi.rs:49:15
+   |
+49 | extern "C" fn rust_wav_GetName() -> *const c_char {
+   |               ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_get_name`
+
+warning: function `rust_wav_InitModule` should have a snake case name
+  --> src/sound/wav_ffi.rs:53:15
+   |
+53 | extern "C" fn rust_wav_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
+   |               ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_init_module`
+
+warning: function `rust_wav_TermModule` should have a snake case name
+  --> src/sound/wav_ffi.rs:77:15
+   |
+77 | extern "C" fn rust_wav_TermModule() {
+   |               ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_term_module`
+
+warning: function `rust_wav_GetStructSize` should have a snake case name
+  --> src/sound/wav_ffi.rs:85:15
+   |
+85 | extern "C" fn rust_wav_GetStructSize() -> u32 {
+   |               ^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_get_struct_size`
+
+warning: function `rust_wav_GetError` should have a snake case name
+  --> src/sound/wav_ffi.rs:89:15
+   |
+89 | extern "C" fn rust_wav_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
+   |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_get_error`
+
+warning: function `rust_wav_Init` should have a snake case name
+   --> src/sound/wav_ffi.rs:105:15
+    |
+105 | extern "C" fn rust_wav_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_wav_init`
+
+warning: function `rust_wav_Term` should have a snake case name
+   --> src/sound/wav_ffi.rs:134:15
+    |
+134 | extern "C" fn rust_wav_Term(decoder: *mut TFB_SoundDecoder) {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_term`
+
+warning: function `rust_wav_Open` should have a snake case name
+   --> src/sound/wav_ffi.rs:151:15
+    |
+151 | extern "C" fn rust_wav_Open(
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_wav_open`
+
+warning: function `rust_wav_Close` should have a snake case name
+   --> src/sound/wav_ffi.rs:240:15
+    |
+240 | extern "C" fn rust_wav_Close(decoder: *mut TFB_SoundDecoder) {
+    |               ^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_wav_close`
+
+warning: function `rust_wav_Decode` should have a snake case name
+   --> src/sound/wav_ffi.rs:256:15
+    |
+256 | extern "C" fn rust_wav_Decode(
+    |               ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_decode`
+
+warning: function `rust_wav_Seek` should have a snake case name
+   --> src/sound/wav_ffi.rs:282:15
+    |
+282 | extern "C" fn rust_wav_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
+    |               ^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `rust_wav_seek`
+
+warning: function `rust_wav_GetFrame` should have a snake case name
+   --> src/sound/wav_ffi.rs:301:15
+    |
+301 | extern "C" fn rust_wav_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
+    |               ^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `rust_wav_get_frame`
+
+warning: `uio_open` redeclared with a different signature
+   --> src/sound/ffi.rs:222:5
+    |
+222 |     fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut c_void;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+    |
+   ::: src/io/ffi.rs:87:5
+    |
+ 87 |     pub fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut uio_Handle;
+    |     ------------------------------------------------------------------------------------------------------------ `uio_open` previously declared here
+    |
+    = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_DirHandle, *const i8, i32, i32) -> *mut io::ffi::uio_Handle`
+               found `unsafe extern "C" fn(*mut sound::ffi::uio_DirHandle, *const i8, i32, i32) -> *mut c_void`
+    = note: `#[warn(clashing_extern_declarations)]` on by default
+
+warning: `uio_read` redeclared with a different signature
+   --> src/sound/ffi.rs:223:5
+    |
+223 |     fn uio_read(handle: *mut c_void, buf: *mut u8, count: usize) -> isize;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+    |
+   ::: src/io/ffi.rs:91:5
+    |
+ 91 |     pub fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: usize) -> isize;
+    |     ------------------------------------------------------------------------------ `uio_read` previously declared here
+    |
+    = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_Handle, *mut u8, usize) -> isize`
+               found `unsafe extern "C" fn(*mut c_void, *mut u8, usize) -> isize`
+
+warning: `uio_close` redeclared with a different signature
+   --> src/sound/ffi.rs:224:5
+    |
+224 |     fn uio_close(handle: *mut c_void) -> c_int;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+    |
+   ::: src/io/ffi.rs:88:5
+    |
+ 88 |     pub fn uio_close(handle: *mut uio_Handle) -> c_int;
+    |     --------------------------------------------------- `uio_close` previously declared here
+    |
+    = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_Handle) -> i32`
+               found `unsafe extern "C" fn(*mut c_void) -> i32`
+
+warning: `uio_fstat` redeclared with a different signature
+   --> src/sound/ffi.rs:225:5
+    |
+225 |     fn uio_fstat(handle: *mut c_void, stat_buf: *mut libc::stat) -> c_int;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+    |
+   ::: src/io/ffi.rs:95:5
+    |
+ 95 |     pub fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int;
+    |     ------------------------------------------------------------------------ `uio_fstat` previously declared here
+    |
+    = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_Handle, *mut io::ffi::stat) -> i32`
+               found `unsafe extern "C" fn(*mut c_void, *mut libc::stat) -> i32`
+
+warning: `uio_open` redeclared with a different signature
+  --> src/sound/wav_ffi.rs:21:5
+   |
+21 |     fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut c_void;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+   |
+  ::: src/io/ffi.rs:87:5
+   |
+87 |     pub fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut uio_Handle;
+   |     ------------------------------------------------------------------------------------------------------------ `uio_open` previously declared here
+   |
+   = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_DirHandle, *const i8, i32, i32) -> *mut io::ffi::uio_Handle`
+              found `unsafe extern "C" fn(*mut sound::ffi::uio_DirHandle, *const i8, i32, i32) -> *mut c_void`
+
+warning: `uio_read` redeclared with a different signature
+  --> src/sound/wav_ffi.rs:22:5
+   |
+22 |     fn uio_read(handle: *mut c_void, buf: *mut u8, count: usize) -> isize;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+   |
+  ::: src/io/ffi.rs:91:5
+   |
+91 |     pub fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: usize) -> isize;
+   |     ------------------------------------------------------------------------------ `uio_read` previously declared here
+   |
+   = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_Handle, *mut u8, usize) -> isize`
+              found `unsafe extern "C" fn(*mut c_void, *mut u8, usize) -> isize`
+
+warning: `uio_close` redeclared with a different signature
+  --> src/sound/wav_ffi.rs:23:5
+   |
+23 |     fn uio_close(handle: *mut c_void) -> c_int;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+   |
+  ::: src/io/ffi.rs:88:5
+   |
+88 |     pub fn uio_close(handle: *mut uio_Handle) -> c_int;
+   |     --------------------------------------------------- `uio_close` previously declared here
+   |
+   = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_Handle) -> i32`
+              found `unsafe extern "C" fn(*mut c_void) -> i32`
+
+warning: `uio_fstat` redeclared with a different signature
+  --> src/sound/wav_ffi.rs:24:5
+   |
+24 |     fn uio_fstat(handle: *mut c_void, stat_buf: *mut libc::stat) -> c_int;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this signature doesn't match the previous declaration
+   |
+  ::: src/io/ffi.rs:95:5
+   |
+95 |     pub fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int;
+   |     ------------------------------------------------------------------------ `uio_fstat` previously declared here
+   |
+   = note: expected `unsafe extern "C" fn(*mut io::ffi::uio_Handle, *mut io::ffi::stat) -> i32`
+              found `unsafe extern "C" fn(*mut c_void, *mut libc::stat) -> i32`
+
+warning: `uqm` (lib) generated 100 warnings (run `cargo fix --lib -p uqm` to apply 4 suggestions)
+    Finished `release` profile [optimized] target(s) in 0.07s
+make: `uqm' is up to date.

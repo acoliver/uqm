@@ -1,0 +1,1299 @@
+The Ur-Quan Masters v0.8.0 (compiled Jan 29 2026 22:50:55)
+This software comes with ABSOLUTELY NO WARRANTY;
+for details see the included 'COPYING' file.
+
+Netplay protocol version 0.4. Netplay opponent must have UQM 0.6.9 or later.
+Initializing base SDL functionality.
+Using SDL version 2.32.10 (compiled with 2.32.10)
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/"
+Using config dir '/Users/acoliver/.uqm/'
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/Users/acoliver/.uqm/"
+Using '/Users/acoliver/projects/uqm/sc2/content' as base content dir.
+RUST_UIO: uio_openDir called with path: "/"
+RUST_UIO: uio_openDir resolved to: "/Users/acoliver/projects/uqm/sc2/content"
+RUST_UIO: uio_openDir called with path: "/packages"
+RUST_UIO: uio_openDir resolved to: "/Users/acoliver/projects/uqm/sc2/content/packages"
+4 available addon packs.
+    1. 3domusic
+    2. 3dovideo
+    3. 3dovoice
+    4. remix
+Saved games are kept in /Users/acoliver/.uqm/save/.
+Using Rust graphics driver
+Rust graphics: got 3 screen surfaces, ScreenWidth=320 ScreenHeight=240
+0 joysticks were found.
+Initializing SDL audio subsystem.
+SDL audio subsystem initialized.
+Opening SDL audio device.
+    using coreaudio at 44100 Hz 16 bit stereo, 4096 samples audio buffer
+Initializing mixer.
+Mixer initialized.
+Initializing sound decoders.
+Sound decoders initialized.
+Loading resource index 'uqm.rmp'
+Loading resource index '3domusic.rmp'
+Loading resource index '3dovoice.rmp'
+Loading resource index 'remix4.rmp'
+Loading resource index '3dovideo.rmp'
+	'base/uqm.ct' -- 104466 bytes
+We've loaded the Kernel
+	'base/ui/title.ani' -- 20 bytes
+	'base/ships/arilou/skiff-icons.ani' -- 60 bytes
+	'base/ships/arilou/skiff-meleeicons.ani' -- 66 bytes
+	'base/ships/arilou/skiff.txt' -- 407 bytes
+	'base/ships/chmmr/avatar-icons.ani' -- 60 bytes
+	'base/ships/chmmr/avatar-meleeicons.ani' -- 70 bytes
+	'base/ships/chmmr/avatar.txt' -- 353 bytes
+	'base/ships/human/cruiser-icons.ani' -- 62 bytes
+	'base/ships/human/cruiser-meleeicons.ani' -- 71 bytes
+	'base/ships/human/cruiser.txt' -- 331 bytes
+	'base/ships/orz/nemesis-icons.ani' -- 64 bytes
+	'base/ships/orz/nemesis-meleeicons.ani' -- 72 bytes
+	'base/ships/orz/nemesis.txt' -- 389 bytes
+	'base/ships/pkunk/fury-icons.ani' -- 58 bytes
+	'base/ships/pkunk/fury-meleeicons.ani' -- 66 bytes
+	'base/ships/pkunk/fury.txt' -- 329 bytes
+	'base/ships/shofixti/scout-icons.ani' -- 60 bytes
+	'base/ships/shofixti/scout-meleeicons.ani' -- 66 bytes
+	'base/ships/shofixti/scout.txt' -- 395 bytes
+	'base/ships/spathi/eluder-icons.ani' -- 61 bytes
+	'base/ships/spathi/eluder-meleeicons.ani' -- 70 bytes
+	'base/ships/spathi/eluder.txt' -- 382 bytes
+	'base/ships/supox/blade-icons.ani' -- 59 bytes
+	'base/ships/supox/blade-meleeicons.ani' -- 67 bytes
+	'base/ships/supox/blade.txt' -- 321 bytes
+	'base/ships/thraddash/torch-icons.ani' -- 60 bytes
+	'base/ships/thraddash/torch-meleeicons.ani' -- 68 bytes
+	'base/ships/thraddash/torch.txt' -- 339 bytes
+	'base/ships/utwig/jugger-icons.ani' -- 62 bytes
+	'base/ships/utwig/jugger-meleeicons.ani' -- 70 bytes
+	'base/ships/utwig/jugger.txt' -- 315 bytes
+	'base/ships/vux/intruder-icons.ani' -- 66 bytes
+	'base/ships/vux/intruder-meleeicons.ani' -- 72 bytes
+	'base/ships/vux/intruder.txt' -- 249 bytes
+	'base/ships/yehat/terminator-icons.ani' -- 70 bytes
+	'base/ships/yehat/terminator-meleeicons.ani' -- 77 bytes
+	'base/ships/yehat/terminator.txt' -- 425 bytes
+	'base/ships/melnorme/trader-icons.ani' -- 61 bytes
+	'base/ships/melnorme/trader-meleeicons.ani' -- 70 bytes
+	'base/ships/melnorme/trader.txt' -- 369 bytes
+	'base/ships/druuge/mauler-icons.ani' -- 61 bytes
+	'base/ships/druuge/mauler-meleeicons.ani' -- 70 bytes
+	'base/ships/druuge/mauler.txt' -- 333 bytes
+	'base/ships/ilwrath/avenger-icons.ani' -- 62 bytes
+	'base/ships/ilwrath/avenger-meleeicons.ani' -- 72 bytes
+	'base/ships/ilwrath/avenger.txt' -- 365 bytes
+	'base/ships/mycon/podship-icons.ani' -- 64 bytes
+	'base/ships/mycon/podship-meleeicons.ani' -- 72 bytes
+	'base/ships/mycon/podship.txt' -- 329 bytes
+	'base/ships/slylandro/probe-icons.ani' -- 58 bytes
+	'base/ships/slylandro/probe-meleeicons.ani' -- 68 bytes
+	'base/ships/slylandro/probe.txt' -- 367 bytes
+	'base/ships/umgah/drone-icons.ani' -- 60 bytes
+	'base/ships/umgah/drone-meleeicons.ani' -- 66 bytes
+	'base/ships/umgah/drone.txt' -- 367 bytes
+	'base/ships/urquan/dreadnought-icons.ani' -- 71 bytes
+	'base/ships/urquan/dreadnought-meleeicons.ani' -- 80 bytes
+	'base/ships/urquan/dreadnought.txt' -- 425 bytes
+	'base/ships/zoqfotpik/stinger-icons.ani' -- 64 bytes
+	'base/ships/zoqfotpik/stinger-meleeicons.ani' -- 72 bytes
+	'base/ships/zoqfotpik/stinger.txt' -- 367 bytes
+	'base/ships/syreen/penetrator-icons.ani' -- 70 bytes
+	'base/ships/syreen/penetrator-meleeicons.ani' -- 77 bytes
+	'base/ships/syreen/penetrator.txt' -- 343 bytes
+	'base/ships/kohrah/marauder-icons.ani' -- 64 bytes
+	'base/ships/kohrah/marauder-meleeicons.ani' -- 74 bytes
+	'base/ships/kohrah/marauder.txt' -- 429 bytes
+	'base/ships/androsynth/guardian-icons.ani' -- 66 bytes
+	'base/ships/androsynth/guardian-meleeicons.ani' -- 73 bytes
+	'base/ships/androsynth/guardian.txt' -- 389 bytes
+	'base/ships/chenjesu/broodhome-icons.ani' -- 66 bytes
+	'base/ships/chenjesu/broodhome-meleeicons.ani' -- 76 bytes
+	'base/ships/chenjesu/broodhome.txt' -- 369 bytes
+	'base/ships/mmrnmhrm/xform-icons.ani' -- 58 bytes
+	'base/ships/mmrnmhrm/xform-meleeicons.ani' -- 68 bytes
+	'base/ships/mmrnmhrm/xform.txt' -- 395 bytes
+	'base/fonts/starcon.fon' -- 1 bytes
+	'base/fonts/tiny.fon' -- 1 bytes
+	'base/ui/activity.ani' -- 259 bytes
+	'base/ui/status.ani' -- 144 bytes
+	'base/gamestrings.txt' -- 15945 bytes
+	'base/fonts/micro.fon' -- 1 bytes
+	'base/ui/menu.snd' -- 56 bytes
+_GetSoundBankData(): loading base/ui/menusnd01.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 1971
+_GetSoundBankData(): loading base/ui/menusnd02.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 4181 format 4352
+_GetSoundBankData(): decoded bytes 1955
+_GetSoundBankData(): loading base/ui/menusnd03.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 1576
+_GetSoundBankData(): loading base/ui/menusnd04.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 2090 format 4352
+_GetSoundBankData(): decoded bytes 2399
+	'base/battle/stars.ani' -- 66 bytes
+	'base/battle/boom-big.ani' -- 227 bytes
+	'base/battle/boom-med.ani' -- 229 bytes
+	'base/battle/boom-sml.ani' -- 230 bytes
+	'base/battle/blast-big.ani' -- 208 bytes
+	'base/battle/blast-med.ani' -- 208 bytes
+	'base/battle/blast-sml.ani' -- 208 bytes
+	'base/battle/asteroid-big.ani' -- 649 bytes
+	'base/battle/asteroid-med.ani' -- 609 bytes
+	'base/battle/asteroid-sml.ani' -- 609 bytes
+	'base/ui/newgame.ani' -- 183 bytes
+	'addons/remix/4/01_-_Main_Menu_-_Control_the_Stars.ogg' -- 3762775 bytes
+_GetMusicData(): loading addons/remix/4/01_-_Main_Menu_-_Control_the_Stars.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+SoundDecoder_Seek(): seekTime=0 freq=44100 start_sample=0 pcm_pos=0
+	'addons/3dovideo/intro/intro.duk' -- video
+	No associated audio
+	No associated speech
+	No specified loop frame
+VideoDecoder_Load: 'DukVid' decoder did not load addons/3dovideo/intro/intro.duk, code 0
+	'base/ui/playmenu.ani' -- 1182 bytes
+	'base/ships/drone/drone-meleeicons.ani' -- 33 bytes
+	'base/ui/flagshipstatus.ani' -- 822 bytes
+	'base/ui/miscdata.ani' -- 2658 bytes
+	'base/fonts/fontgradient.ani' -- 186 bytes
+	'base/nav/orbitbackground.ani' -- 730 bytes
+	'base/nav/flagship.ani' -- 416 bytes
+	'base/lander/orbit.ct' -- 6978 bytes
+	'base/nav/planets.ani' -- 2528 bytes
+	'base/nav/truespace.ct' -- 6978 bytes
+	'base/nav/truespacesun.ani' -- 154 bytes
+	'addons/3domusic/space.ogg' -- 2314527 bytes
+_GetMusicData(): loading addons/3domusic/space.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+	'base/lander/lander.ani' -- 1558 bytes
+	'base/lander/hazard/quake.ani' -- 506 bytes
+	'base/lander/hazard/lightning.ani' -- 460 bytes
+	'base/lander/hazard/lavaspot.ani' -- 338 bytes
+	'base/lander/shield.ani' -- 368 bytes
+	'base/lander/launch.ani' -- 758 bytes
+	'base/lander/return.ani' -- 561 bytes
+	'base/nav/orbview.ani' -- 475 bytes
+	'base/lander/lander.snd' -- 169 bytes
+_GetSoundBankData(): loading base/lander/land_bit.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 1433
+_GetSoundBankData(): loading base/lander/land_qua.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 6026 format 4352
+_GetSoundBankData(): decoded bytes 4811
+_GetSoundBankData(): loading base/lander/land_lig.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 9918
+_GetSoundBankData(): loading base/lander/land_hot.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 2100 format 4352
+_GetSoundBankData(): decoded bytes 865
+_GetSoundBankData(): loading base/lander/land_hrt.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 2696
+_GetSoundBankData(): loading base/lander/land_sht.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 1087
+_GetSoundBankData(): loading base/lander/land_hit.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8000 format 4353
+_GetSoundBankData(): decoded bytes 1888
+_GetSoundBankData(): loading base/lander/land_can.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 4181 format 4352
+_GetSoundBankData(): decoded bytes 1615
+_GetSoundBankData(): loading base/lander/land_get.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 2129
+_GetSoundBankData(): loading base/lander/land_ful.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 1804
+_GetSoundBankData(): loading base/lander/land_lau.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 8363 format 4352
+_GetSoundBankData(): decoded bytes 8341
+_GetSoundBankData(): loading base/lander/land_awa.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 4660 format 4352
+_GetSoundBankData(): decoded bytes 6396
+_GetSoundBankData(): loading base/lander/land_die.wav
+_GetSoundBankData(): decoder: Rust Wave, rate 4181 format 4352
+_GetSoundBankData(): decoded bytes 6887
+	'addons/3domusic/orbit1.ogg' -- 1263226 bytes
+_GetMusicData(): loading addons/3domusic/orbit1.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+	'addons/3domusic/orbit2.ogg' -- 1191873 bytes
+_GetMusicData(): loading addons/3domusic/orbit2.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+	'addons/3domusic/orbit3.ogg' -- 1312469 bytes
+_GetMusicData(): loading addons/3domusic/orbit3.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+	'addons/3domusic/orbit4.ogg' -- 1320368 bytes
+_GetMusicData(): loading addons/3domusic/orbit4.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+	'addons/3domusic/orbit5.ogg' -- 1302891 bytes
+_GetMusicData(): loading addons/3domusic/orbit5.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+SoundDecoder_Seek(): seekTime=0 freq=44100 start_sample=0 pcm_pos=0
+Thread 'Starcon2Main' blocking on 'DCQ'
+SoundDecoder_Seek(): seekTime=0 freq=44100 start_sample=0 pcm_pos=0
+	'base/fonts/player.fon' -- 1 bytes
+	'base/comm/urquan/urquan.ani' -- 1305 bytes
+	'base/fonts/urquan.fon' -- 1 bytes
+	'base/comm/urquan/urquan.ct' -- 1554 bytes
+	'base/comm/urquan/urquan.mod' -- 75885 bytes
+_GetMusicData(): loading base/comm/urquan/urquan.mod
+moda_Open(): could not load base/comm/urquan/urquan.mod
+SoundDecoder_Load(): MikMod decoder could not load base/comm/urquan/urquan.mod
+_GetMusicData(): couldn't load base/comm/urquan/urquan.mod
+	'base/comm/urquan/urquan.txt' -- conversation phrases -- 15307 bytes
+	'addons/3dovoice/urquan/' -- voice clip directory
+	'addons/3dovoice/urquan/urquan.ts' -- timestamps
+SpliceTrack(): loading addons/3dovoice/urquan/urquan-027.ogg
+SoundDecoder_Seek(): seekTime=0 freq=11025 start_sample=0 pcm_pos=0
+get_current_track_pos(): time_now=16874 start_time=16873 pos=1 tracks_length=62050
+get_current_track_pos(): time_now=16906 start_time=16873 pos=33 tracks_length=62050
+get_current_track_pos(): time_now=16938 start_time=16873 pos=65 tracks_length=62050
+get_current_track_pos(): time_now=16969 start_time=16873 pos=96 tracks_length=62050
+get_current_track_pos(): time_now=16999 start_time=16873 pos=126 tracks_length=62050
+get_current_track_pos(): time_now=17030 start_time=16873 pos=157 tracks_length=62050
+get_current_track_pos(): time_now=17061 start_time=16873 pos=188 tracks_length=62050
+get_current_track_pos(): time_now=17092 start_time=16873 pos=219 tracks_length=62050
+get_current_track_pos(): time_now=17121 start_time=16873 pos=248 tracks_length=62050
+get_current_track_pos(): time_now=17152 start_time=16873 pos=279 tracks_length=62050
+get_current_track_pos(): time_now=17183 start_time=16873 pos=310 tracks_length=62050
+get_current_track_pos(): time_now=17217 start_time=16873 pos=344 tracks_length=62050
+get_current_track_pos(): time_now=17249 start_time=16873 pos=376 tracks_length=62050
+get_current_track_pos(): time_now=17278 start_time=16873 pos=405 tracks_length=62050
+get_current_track_pos(): time_now=17309 start_time=16873 pos=436 tracks_length=62050
+get_current_track_pos(): time_now=17339 start_time=16873 pos=466 tracks_length=62050
+get_current_track_pos(): time_now=17372 start_time=16873 pos=499 tracks_length=62050
+get_current_track_pos(): time_now=17406 start_time=16873 pos=533 tracks_length=62050
+get_current_track_pos(): time_now=17439 start_time=16873 pos=566 tracks_length=62050
+Thread 'Unknown (probably renderer)' blocking on 'DCQ'
+get_current_track_pos(): time_now=17470 start_time=16873 pos=597 tracks_length=62050
+get_current_track_pos(): time_now=17503 start_time=16873 pos=630 tracks_length=62050
+get_current_track_pos(): time_now=17537 start_time=16873 pos=664 tracks_length=62050
+get_current_track_pos(): time_now=17565 start_time=16873 pos=692 tracks_length=62050
+get_current_track_pos(): time_now=17598 start_time=16873 pos=725 tracks_length=62050
+get_current_track_pos(): time_now=17629 start_time=16873 pos=756 tracks_length=62050
+get_current_track_pos(): time_now=17661 start_time=16873 pos=788 tracks_length=62050
+get_current_track_pos(): time_now=17692 start_time=16873 pos=819 tracks_length=62050
+get_current_track_pos(): time_now=17724 start_time=16873 pos=851 tracks_length=62050
+get_current_track_pos(): time_now=17755 start_time=16873 pos=882 tracks_length=62050
+get_current_track_pos(): time_now=17787 start_time=16873 pos=914 tracks_length=62050
+get_current_track_pos(): time_now=17819 start_time=16873 pos=946 tracks_length=62050
+get_current_track_pos(): time_now=17853 start_time=16873 pos=980 tracks_length=62050
+get_current_track_pos(): time_now=17881 start_time=16873 pos=1008 tracks_length=62050
+get_current_track_pos(): time_now=17916 start_time=16873 pos=1043 tracks_length=62050
+get_current_track_pos(): time_now=17945 start_time=16873 pos=1072 tracks_length=62050
+get_current_track_pos(): time_now=17976 start_time=16873 pos=1103 tracks_length=62050
+Thread 'Unknown (probably renderer)' blocking on 'DCQ'
+get_current_track_pos(): time_now=18005 start_time=16873 pos=1132 tracks_length=62050
+get_current_track_pos(): time_now=18037 start_time=16873 pos=1164 tracks_length=62050
+get_current_track_pos(): time_now=18067 start_time=16873 pos=1194 tracks_length=62050
+get_current_track_pos(): time_now=18098 start_time=16873 pos=1225 tracks_length=62050
+get_current_track_pos(): time_now=18131 start_time=16873 pos=1258 tracks_length=62050
+get_current_track_pos(): time_now=18163 start_time=16873 pos=1290 tracks_length=62050
+get_current_track_pos(): time_now=18197 start_time=16873 pos=1324 tracks_length=62050
+get_current_track_pos(): time_now=18227 start_time=16873 pos=1354 tracks_length=62050
+get_current_track_pos(): time_now=18256 start_time=16873 pos=1383 tracks_length=62050
+get_current_track_pos(): time_now=18285 start_time=16873 pos=1412 tracks_length=62050
+get_current_track_pos(): time_now=18317 start_time=16873 pos=1444 tracks_length=62050
+get_current_track_pos(): time_now=18348 start_time=16873 pos=1475 tracks_length=62050
+get_current_track_pos(): time_now=18364 start_time=16873 pos=1491 tracks_length=62050
+FastForward_Smooth(): cur_pos=1491 ACCEL=300
+seek_track(): offset=1791 ONE_SECOND=840 start_time=0.000000 seekTime=2132
+SoundDecoder_Seek(): seekTime=2132 freq=11025 start_sample=0 pcm_pos=23505
+get_current_track_pos(): time_now=18380 start_time=16573 pos=1807 tracks_length=62050
+FastForward_Smooth(): cur_pos=1807 ACCEL=300
+seek_track(): offset=2107 ONE_SECOND=840 start_time=0.000000 seekTime=2508
+SoundDecoder_Seek(): seekTime=2508 freq=11025 start_sample=0 pcm_pos=27650
+get_current_track_pos(): time_now=18380 start_time=16273 pos=2107 tracks_length=62050
+get_current_track_pos(): time_now=18397 start_time=16273 pos=2124 tracks_length=62050
+FastForward_Smooth(): cur_pos=2124 ACCEL=300
+seek_track(): offset=2424 ONE_SECOND=840 start_time=0.000000 seekTime=2885
+SoundDecoder_Seek(): seekTime=2885 freq=11025 start_sample=0 pcm_pos=31807
+get_current_track_pos(): time_now=18414 start_time=15973 pos=2441 tracks_length=62050
+FastForward_Smooth(): cur_pos=2441 ACCEL=300
+seek_track(): offset=2741 ONE_SECOND=840 start_time=0.000000 seekTime=3263
+SoundDecoder_Seek(): seekTime=3263 freq=11025 start_sample=0 pcm_pos=35974
+get_current_track_pos(): time_now=18414 start_time=15673 pos=2741 tracks_length=62050
+get_current_track_pos(): time_now=18431 start_time=15673 pos=2758 tracks_length=62050
+FastForward_Smooth(): cur_pos=2758 ACCEL=300
+seek_track(): offset=3058 ONE_SECOND=840 start_time=0.000000 seekTime=3640
+SoundDecoder_Seek(): seekTime=3640 freq=11025 start_sample=0 pcm_pos=40131
+get_current_track_pos(): time_now=18447 start_time=15373 pos=3074 tracks_length=62050
+FastForward_Smooth(): cur_pos=3074 ACCEL=300
+seek_track(): offset=3374 ONE_SECOND=840 start_time=0.000000 seekTime=4016
+SoundDecoder_Seek(): seekTime=4016 freq=11025 start_sample=0 pcm_pos=44276
+get_current_track_pos(): time_now=18447 start_time=15073 pos=3374 tracks_length=62050
+get_current_track_pos(): time_now=18477 start_time=15073 pos=3404 tracks_length=62050
+get_current_track_pos(): time_now=18510 start_time=15073 pos=3437 tracks_length=62050
+get_current_track_pos(): time_now=18540 start_time=15073 pos=3467 tracks_length=62050
+get_current_track_pos(): time_now=18572 start_time=15073 pos=3499 tracks_length=62050
+get_current_track_pos(): time_now=18600 start_time=15073 pos=3527 tracks_length=62050
+get_current_track_pos(): time_now=18633 start_time=15073 pos=3560 tracks_length=62050
+get_current_track_pos(): time_now=18664 start_time=15073 pos=3591 tracks_length=62050
+get_current_track_pos(): time_now=18694 start_time=15073 pos=3621 tracks_length=62050
+get_current_track_pos(): time_now=18711 start_time=15073 pos=3638 tracks_length=62050
+FastForward_Smooth(): cur_pos=3638 ACCEL=300
+seek_track(): offset=3938 ONE_SECOND=840 start_time=0.000000 seekTime=4688
+SoundDecoder_Seek(): seekTime=4688 freq=11025 start_sample=0 pcm_pos=51685
+get_current_track_pos(): time_now=18727 start_time=14773 pos=3954 tracks_length=62050
+FastForward_Smooth(): cur_pos=3954 ACCEL=300
+seek_track(): offset=4254 ONE_SECOND=840 start_time=0.000000 seekTime=5064
+SoundDecoder_Seek(): seekTime=5064 freq=11025 start_sample=0 pcm_pos=55830
+get_current_track_pos(): time_now=18728 start_time=14473 pos=4255 tracks_length=62050
+get_current_track_pos(): time_now=18742 start_time=14473 pos=4269 tracks_length=62050
+FastForward_Smooth(): cur_pos=4269 ACCEL=300
+seek_track(): offset=4569 ONE_SECOND=840 start_time=0.000000 seekTime=5439
+SoundDecoder_Seek(): seekTime=5439 freq=11025 start_sample=0 pcm_pos=59964
+get_current_track_pos(): time_now=18757 start_time=14173 pos=4584 tracks_length=62050
+FastForward_Smooth(): cur_pos=4584 ACCEL=300
+seek_track(): offset=4884 ONE_SECOND=840 start_time=5.748000 seekTime=66
+SoundDecoder_Seek(): seekTime=66 freq=11025 start_sample=63371 pcm_pos=727
+get_current_track_pos(): time_now=18757 start_time=13873 pos=4884 tracks_length=62050
+get_current_track_pos(): time_now=18771 start_time=13873 pos=4898 tracks_length=62050
+FastForward_Smooth(): cur_pos=4898 ACCEL=300
+seek_track(): offset=5198 ONE_SECOND=840 start_time=5.748000 seekTime=440
+SoundDecoder_Seek(): seekTime=440 freq=11025 start_sample=63371 pcm_pos=4851
+get_current_track_pos(): time_now=18785 start_time=13573 pos=5212 tracks_length=62050
+FastForward_Smooth(): cur_pos=5212 ACCEL=300
+seek_track(): offset=5512 ONE_SECOND=840 start_time=5.748000 seekTime=813
+SoundDecoder_Seek(): seekTime=813 freq=11025 start_sample=63371 pcm_pos=8963
+get_current_track_pos(): time_now=18785 start_time=13273 pos=5512 tracks_length=62050
+get_current_track_pos(): time_now=18801 start_time=13273 pos=5528 tracks_length=62050
+FastForward_Smooth(): cur_pos=5528 ACCEL=300
+seek_track(): offset=5828 ONE_SECOND=840 start_time=5.748000 seekTime=1190
+SoundDecoder_Seek(): seekTime=1190 freq=11025 start_sample=63371 pcm_pos=13119
+get_current_track_pos(): time_now=18817 start_time=12973 pos=5844 tracks_length=62050
+FastForward_Smooth(): cur_pos=5844 ACCEL=300
+seek_track(): offset=6144 ONE_SECOND=840 start_time=5.748000 seekTime=1566
+SoundDecoder_Seek(): seekTime=1566 freq=11025 start_sample=63371 pcm_pos=17265
+get_current_track_pos(): time_now=18817 start_time=12673 pos=6144 tracks_length=62050
+get_current_track_pos(): time_now=18848 start_time=12673 pos=6175 tracks_length=62050
+get_current_track_pos(): time_now=18879 start_time=12673 pos=6206 tracks_length=62050
+get_current_track_pos(): time_now=18910 start_time=12673 pos=6237 tracks_length=62050
+get_current_track_pos(): time_now=18943 start_time=12673 pos=6270 tracks_length=62050
+get_current_track_pos(): time_now=18977 start_time=12673 pos=6304 tracks_length=62050
+FastForward_Smooth(): cur_pos=6304 ACCEL=300
+seek_track(): offset=6604 ONE_SECOND=840 start_time=5.748000 seekTime=2113
+SoundDecoder_Seek(): seekTime=2113 freq=11025 start_sample=63371 pcm_pos=23295
+get_current_track_pos(): time_now=18978 start_time=12373 pos=6605 tracks_length=62050
+get_current_track_pos(): time_now=18993 start_time=12373 pos=6620 tracks_length=62050
+FastForward_Smooth(): cur_pos=6620 ACCEL=300
+seek_track(): offset=6920 ONE_SECOND=840 start_time=5.748000 seekTime=2490
+SoundDecoder_Seek(): seekTime=2490 freq=11025 start_sample=63371 pcm_pos=27452
+get_current_track_pos(): time_now=19010 start_time=12073 pos=6937 tracks_length=62050
+FastForward_Smooth(): cur_pos=6937 ACCEL=300
+seek_track(): offset=7237 ONE_SECOND=840 start_time=5.748000 seekTime=2867
+SoundDecoder_Seek(): seekTime=2867 freq=11025 start_sample=63371 pcm_pos=31608
+get_current_track_pos(): time_now=19010 start_time=11773 pos=7237 tracks_length=62050
+get_current_track_pos(): time_now=19027 start_time=11773 pos=7254 tracks_length=62050
+FastForward_Smooth(): cur_pos=7254 ACCEL=300
+seek_track(): offset=7554 ONE_SECOND=840 start_time=5.748000 seekTime=3244
+SoundDecoder_Seek(): seekTime=3244 freq=11025 start_sample=63371 pcm_pos=35765
+get_current_track_pos(): time_now=19044 start_time=11473 pos=7571 tracks_length=62050
+FastForward_Smooth(): cur_pos=7571 ACCEL=300
+seek_track(): offset=7871 ONE_SECOND=840 start_time=5.748000 seekTime=3622
+SoundDecoder_Seek(): seekTime=3622 freq=11025 start_sample=63371 pcm_pos=39932
+get_current_track_pos(): time_now=19044 start_time=11173 pos=7871 tracks_length=62050
+get_current_track_pos(): time_now=19060 start_time=11173 pos=7887 tracks_length=62050
+FastForward_Smooth(): cur_pos=7887 ACCEL=300
+seek_track(): offset=8187 ONE_SECOND=840 start_time=5.748000 seekTime=3998
+SoundDecoder_Seek(): seekTime=3998 freq=11025 start_sample=63371 pcm_pos=44077
+get_current_track_pos(): time_now=19075 start_time=10873 pos=8202 tracks_length=62050
+get_current_track_pos(): time_now=19103 start_time=10873 pos=8230 tracks_length=62050
+get_current_track_pos(): time_now=19135 start_time=10873 pos=8262 tracks_length=62050
+get_current_track_pos(): time_now=19166 start_time=10873 pos=8293 tracks_length=62050
+get_current_track_pos(): time_now=19195 start_time=10873 pos=8322 tracks_length=62050
+get_current_track_pos(): time_now=19211 start_time=10873 pos=8338 tracks_length=62050
+FastForward_Smooth(): cur_pos=8338 ACCEL=300
+seek_track(): offset=8638 ONE_SECOND=840 start_time=5.748000 seekTime=4535
+SoundDecoder_Seek(): seekTime=4535 freq=11025 start_sample=63371 pcm_pos=49998
+get_current_track_pos(): time_now=19227 start_time=10573 pos=8654 tracks_length=62050
+FastForward_Smooth(): cur_pos=8654 ACCEL=300
+seek_track(): offset=8954 ONE_SECOND=840 start_time=5.748000 seekTime=4911
+SoundDecoder_Seek(): seekTime=4911 freq=11025 start_sample=63371 pcm_pos=54143
+get_current_track_pos(): time_now=19227 start_time=10273 pos=8954 tracks_length=62050
+get_current_track_pos(): time_now=19242 start_time=10273 pos=8969 tracks_length=62050
+FastForward_Smooth(): cur_pos=8969 ACCEL=300
+seek_track(): offset=9269 ONE_SECOND=840 start_time=5.748000 seekTime=5286
+SoundDecoder_Seek(): seekTime=5286 freq=11025 start_sample=63371 pcm_pos=58278
+get_current_track_pos(): time_now=19258 start_time=9973 pos=9285 tracks_length=62050
+FastForward_Smooth(): cur_pos=9285 ACCEL=300
+seek_track(): offset=9585 ONE_SECOND=840 start_time=5.748000 seekTime=5662
+SoundDecoder_Seek(): seekTime=5662 freq=11025 start_sample=63371 pcm_pos=62423
+get_current_track_pos(): time_now=19258 start_time=9673 pos=9585 tracks_length=62050
+get_current_track_pos(): time_now=19272 start_time=9673 pos=9599 tracks_length=62050
+FastForward_Smooth(): cur_pos=9599 ACCEL=300
+seek_track(): offset=9899 ONE_SECOND=840 start_time=5.748000 seekTime=6036
+SoundDecoder_Seek(): seekTime=6036 freq=11025 start_sample=63371 pcm_pos=66546
+get_current_track_pos(): time_now=19289 start_time=9373 pos=9916 tracks_length=62050
+FastForward_Smooth(): cur_pos=9916 ACCEL=300
+seek_track(): offset=10216 ONE_SECOND=840 start_time=12.147000 seekTime=14
+SoundDecoder_Seek(): seekTime=14 freq=11025 start_sample=133920 pcm_pos=154
+get_current_track_pos(): time_now=19289 start_time=9073 pos=10216 tracks_length=62050
+get_current_track_pos(): time_now=19304 start_time=9073 pos=10231 tracks_length=62050
+FastForward_Smooth(): cur_pos=10231 ACCEL=300
+seek_track(): offset=10531 ONE_SECOND=840 start_time=12.147000 seekTime=389
+SoundDecoder_Seek(): seekTime=389 freq=11025 start_sample=133920 pcm_pos=4288
+get_current_track_pos(): time_now=19321 start_time=8773 pos=10548 tracks_length=62050
+get_current_track_pos(): time_now=19353 start_time=8773 pos=10580 tracks_length=62050
+get_current_track_pos(): time_now=19383 start_time=8773 pos=10610 tracks_length=62050
+get_current_track_pos(): time_now=19415 start_time=8773 pos=10642 tracks_length=62050
+FastForward_Smooth(): cur_pos=10642 ACCEL=300
+seek_track(): offset=10942 ONE_SECOND=840 start_time=12.147000 seekTime=879
+SoundDecoder_Seek(): seekTime=879 freq=11025 start_sample=133920 pcm_pos=9690
+get_current_track_pos(): time_now=19415 start_time=8473 pos=10942 tracks_length=62050
+get_current_track_pos(): time_now=19432 start_time=8473 pos=10959 tracks_length=62050
+FastForward_Smooth(): cur_pos=10959 ACCEL=300
+seek_track(): offset=11259 ONE_SECOND=840 start_time=12.147000 seekTime=1256
+SoundDecoder_Seek(): seekTime=1256 freq=11025 start_sample=133920 pcm_pos=13847
+get_current_track_pos(): time_now=19446 start_time=8173 pos=11273 tracks_length=62050
+FastForward_Smooth(): cur_pos=11273 ACCEL=300
+seek_track(): offset=11573 ONE_SECOND=840 start_time=12.147000 seekTime=1630
+SoundDecoder_Seek(): seekTime=1630 freq=11025 start_sample=133920 pcm_pos=17970
+get_current_track_pos(): time_now=19446 start_time=7873 pos=11573 tracks_length=62050
+get_current_track_pos(): time_now=19463 start_time=7873 pos=11590 tracks_length=62050
+FastForward_Smooth(): cur_pos=11590 ACCEL=300
+seek_track(): offset=11890 ONE_SECOND=840 start_time=12.147000 seekTime=2007
+SoundDecoder_Seek(): seekTime=2007 freq=11025 start_sample=133920 pcm_pos=22127
+get_current_track_pos(): time_now=19477 start_time=7574 pos=11903 tracks_length=62050
+FastForward_Smooth(): cur_pos=11903 ACCEL=300
+seek_track(): offset=12203 ONE_SECOND=840 start_time=12.147000 seekTime=2380
+SoundDecoder_Seek(): seekTime=2380 freq=11025 start_sample=133920 pcm_pos=26239
+get_current_track_pos(): time_now=19477 start_time=7274 pos=12203 tracks_length=62050
+get_current_track_pos(): time_now=19494 start_time=7274 pos=12220 tracks_length=62050
+FastForward_Smooth(): cur_pos=12220 ACCEL=300
+seek_track(): offset=12520 ONE_SECOND=840 start_time=12.147000 seekTime=2757
+SoundDecoder_Seek(): seekTime=2757 freq=11025 start_sample=133920 pcm_pos=30395
+get_current_track_pos(): time_now=19511 start_time=6974 pos=12537 tracks_length=62050
+FastForward_Smooth(): cur_pos=12537 ACCEL=300
+seek_track(): offset=12837 ONE_SECOND=840 start_time=12.147000 seekTime=3135
+SoundDecoder_Seek(): seekTime=3135 freq=11025 start_sample=133920 pcm_pos=34563
+get_current_track_pos(): time_now=19512 start_time=6675 pos=12837 tracks_length=62050
+get_current_track_pos(): time_now=19540 start_time=6675 pos=12865 tracks_length=62050
+get_current_track_pos(): time_now=19570 start_time=6675 pos=12895 tracks_length=62050
+get_current_track_pos(): time_now=19605 start_time=6675 pos=12930 tracks_length=62050
+get_current_track_pos(): time_now=19619 start_time=6675 pos=12944 tracks_length=62050
+FastForward_Smooth(): cur_pos=12944 ACCEL=300
+seek_track(): offset=13244 ONE_SECOND=840 start_time=12.147000 seekTime=3619
+SoundDecoder_Seek(): seekTime=3619 freq=11025 start_sample=133920 pcm_pos=39899
+get_current_track_pos(): time_now=19637 start_time=6375 pos=13262 tracks_length=62050
+FastForward_Smooth(): cur_pos=13262 ACCEL=300
+seek_track(): offset=13562 ONE_SECOND=840 start_time=12.147000 seekTime=3998
+SoundDecoder_Seek(): seekTime=3998 freq=11025 start_sample=133920 pcm_pos=44077
+get_current_track_pos(): time_now=19638 start_time=6076 pos=13562 tracks_length=62050
+get_current_track_pos(): time_now=19651 start_time=6076 pos=13575 tracks_length=62050
+FastForward_Smooth(): cur_pos=13575 ACCEL=300
+seek_track(): offset=13875 ONE_SECOND=840 start_time=12.147000 seekTime=4370
+SoundDecoder_Seek(): seekTime=4370 freq=11025 start_sample=133920 pcm_pos=48179
+get_current_track_pos(): time_now=19666 start_time=5776 pos=13890 tracks_length=62050
+FastForward_Smooth(): cur_pos=13890 ACCEL=300
+seek_track(): offset=14190 ONE_SECOND=840 start_time=12.147000 seekTime=4745
+SoundDecoder_Seek(): seekTime=4745 freq=11025 start_sample=133920 pcm_pos=52313
+get_current_track_pos(): time_now=19666 start_time=5476 pos=14190 tracks_length=62050
+get_current_track_pos(): time_now=19683 start_time=5476 pos=14207 tracks_length=62050
+FastForward_Smooth(): cur_pos=14207 ACCEL=300
+seek_track(): offset=14507 ONE_SECOND=840 start_time=16.974001 seekTime=296
+SoundDecoder_Seek(): seekTime=296 freq=11025 start_sample=187138 pcm_pos=3263
+get_current_track_pos(): time_now=19698 start_time=5176 pos=14522 tracks_length=62050
+FastForward_Smooth(): cur_pos=14522 ACCEL=300
+seek_track(): offset=14822 ONE_SECOND=840 start_time=16.974001 seekTime=671
+SoundDecoder_Seek(): seekTime=671 freq=11025 start_sample=187138 pcm_pos=7397
+get_current_track_pos(): time_now=19698 start_time=4876 pos=14822 tracks_length=62050
+get_current_track_pos(): time_now=19714 start_time=4876 pos=14838 tracks_length=62050
+FastForward_Smooth(): cur_pos=14838 ACCEL=300
+seek_track(): offset=15138 ONE_SECOND=840 start_time=16.974001 seekTime=1047
+SoundDecoder_Seek(): seekTime=1047 freq=11025 start_sample=187138 pcm_pos=11543
+get_current_track_pos(): time_now=19729 start_time=4576 pos=15153 tracks_length=62050
+get_current_track_pos(): time_now=19762 start_time=4576 pos=15186 tracks_length=62050
+get_current_track_pos(): time_now=19796 start_time=4576 pos=15220 tracks_length=62050
+get_current_track_pos(): time_now=19830 start_time=4576 pos=15254 tracks_length=62050
+FastForward_Smooth(): cur_pos=15254 ACCEL=300
+seek_track(): offset=15554 ONE_SECOND=840 start_time=16.974001 seekTime=1542
+SoundDecoder_Seek(): seekTime=1542 freq=11025 start_sample=187138 pcm_pos=17000
+get_current_track_pos(): time_now=19830 start_time=4276 pos=15554 tracks_length=62050
+get_current_track_pos(): time_now=19845 start_time=4276 pos=15569 tracks_length=62050
+FastForward_Smooth(): cur_pos=15569 ACCEL=300
+seek_track(): offset=15869 ONE_SECOND=840 start_time=16.974001 seekTime=1917
+SoundDecoder_Seek(): seekTime=1917 freq=11025 start_sample=187138 pcm_pos=21134
+get_current_track_pos(): time_now=19859 start_time=3976 pos=15883 tracks_length=62050
+FastForward_Smooth(): cur_pos=15883 ACCEL=300
+seek_track(): offset=16183 ONE_SECOND=840 start_time=16.974001 seekTime=2291
+SoundDecoder_Seek(): seekTime=2291 freq=11025 start_sample=187138 pcm_pos=25258
+get_current_track_pos(): time_now=19859 start_time=3676 pos=16183 tracks_length=62050
+get_current_track_pos(): time_now=19872 start_time=3676 pos=16196 tracks_length=62050
+FastForward_Smooth(): cur_pos=16196 ACCEL=300
+seek_track(): offset=16496 ONE_SECOND=840 start_time=16.974001 seekTime=2664
+SoundDecoder_Seek(): seekTime=2664 freq=11025 start_sample=187138 pcm_pos=29370
+get_current_track_pos(): time_now=19887 start_time=3376 pos=16511 tracks_length=62050
+FastForward_Smooth(): cur_pos=16511 ACCEL=300
+seek_track(): offset=16811 ONE_SECOND=840 start_time=16.974001 seekTime=3039
+SoundDecoder_Seek(): seekTime=3039 freq=11025 start_sample=187138 pcm_pos=33504
+get_current_track_pos(): time_now=19887 start_time=3076 pos=16811 tracks_length=62050
+get_current_track_pos(): time_now=19903 start_time=3076 pos=16827 tracks_length=62050
+FastForward_Smooth(): cur_pos=16827 ACCEL=300
+seek_track(): offset=17127 ONE_SECOND=840 start_time=16.974001 seekTime=3415
+SoundDecoder_Seek(): seekTime=3415 freq=11025 start_sample=187138 pcm_pos=37650
+get_current_track_pos(): time_now=19918 start_time=2776 pos=17142 tracks_length=62050
+get_current_track_pos(): time_now=19951 start_time=2776 pos=17175 tracks_length=62050
+get_current_track_pos(): time_now=19981 start_time=2776 pos=17205 tracks_length=62050
+get_current_track_pos(): time_now=20013 start_time=2776 pos=17237 tracks_length=62050
+FastForward_Smooth(): cur_pos=17237 ACCEL=300
+seek_track(): offset=17537 ONE_SECOND=840 start_time=16.974001 seekTime=3903
+SoundDecoder_Seek(): seekTime=3903 freq=11025 start_sample=187138 pcm_pos=43030
+get_current_track_pos(): time_now=20013 start_time=2476 pos=17537 tracks_length=62050
+get_current_track_pos(): time_now=20027 start_time=2476 pos=17551 tracks_length=62050
+FastForward_Smooth(): cur_pos=17551 ACCEL=300
+seek_track(): offset=17851 ONE_SECOND=840 start_time=16.974001 seekTime=4277
+SoundDecoder_Seek(): seekTime=4277 freq=11025 start_sample=187138 pcm_pos=47153
+get_current_track_pos(): time_now=20043 start_time=2176 pos=17867 tracks_length=62050
+FastForward_Smooth(): cur_pos=17867 ACCEL=300
+seek_track(): offset=18167 ONE_SECOND=840 start_time=16.974001 seekTime=4653
+SoundDecoder_Seek(): seekTime=4653 freq=11025 start_sample=187138 pcm_pos=51299
+get_current_track_pos(): time_now=20043 start_time=1876 pos=18167 tracks_length=62050
+get_current_track_pos(): time_now=20057 start_time=1876 pos=18181 tracks_length=62050
+FastForward_Smooth(): cur_pos=18181 ACCEL=300
+seek_track(): offset=18481 ONE_SECOND=840 start_time=16.974001 seekTime=5027
+SoundDecoder_Seek(): seekTime=5027 freq=11025 start_sample=187138 pcm_pos=55422
+get_current_track_pos(): time_now=20074 start_time=1576 pos=18498 tracks_length=62050
+FastForward_Smooth(): cur_pos=18498 ACCEL=300
+seek_track(): offset=18798 ONE_SECOND=840 start_time=16.974001 seekTime=5404
+SoundDecoder_Seek(): seekTime=5404 freq=11025 start_sample=187138 pcm_pos=59579
+get_current_track_pos(): time_now=20075 start_time=1276 pos=18799 tracks_length=62050
+get_current_track_pos(): time_now=20090 start_time=1276 pos=18814 tracks_length=62050
+FastForward_Smooth(): cur_pos=18814 ACCEL=300
+seek_track(): offset=19114 ONE_SECOND=840 start_time=16.974001 seekTime=5780
+SoundDecoder_Seek(): seekTime=5780 freq=11025 start_sample=187138 pcm_pos=63724
+get_current_track_pos(): time_now=20104 start_time=976 pos=19128 tracks_length=62050
+get_current_track_pos(): time_now=20133 start_time=976 pos=19157 tracks_length=62050
+get_current_track_pos(): time_now=20167 start_time=976 pos=19191 tracks_length=62050
+get_current_track_pos(): time_now=20198 start_time=976 pos=19222 tracks_length=62050
+FastForward_Smooth(): cur_pos=19222 ACCEL=300
+seek_track(): offset=19522 ONE_SECOND=840 start_time=23.223001 seekTime=17
+SoundDecoder_Seek(): seekTime=17 freq=11025 start_sample=256033 pcm_pos=187
+get_current_track_pos(): time_now=20198 start_time=676 pos=19522 tracks_length=62050
+get_current_track_pos(): time_now=20215 start_time=676 pos=19539 tracks_length=62050
+FastForward_Smooth(): cur_pos=19539 ACCEL=300
+seek_track(): offset=19839 ONE_SECOND=840 start_time=23.223001 seekTime=394
+SoundDecoder_Seek(): seekTime=394 freq=11025 start_sample=256033 pcm_pos=4343
+get_current_track_pos(): time_now=20230 start_time=376 pos=19854 tracks_length=62050
+FastForward_Smooth(): cur_pos=19854 ACCEL=300
+seek_track(): offset=20154 ONE_SECOND=840 start_time=23.223001 seekTime=769
+SoundDecoder_Seek(): seekTime=769 freq=11025 start_sample=256033 pcm_pos=8478
+get_current_track_pos(): time_now=20230 start_time=76 pos=20154 tracks_length=62050
+get_current_track_pos(): time_now=20246 start_time=76 pos=20170 tracks_length=62050
+FastForward_Smooth(): cur_pos=20170 ACCEL=300
+seek_track(): offset=20470 ONE_SECOND=840 start_time=23.223001 seekTime=1146
+SoundDecoder_Seek(): seekTime=1146 freq=11025 start_sample=256033 pcm_pos=12634
+get_current_track_pos(): time_now=20261 start_time=-224 pos=20485 tracks_length=62050
+FastForward_Smooth(): cur_pos=20485 ACCEL=300
+seek_track(): offset=20785 ONE_SECOND=840 start_time=23.223001 seekTime=1521
+SoundDecoder_Seek(): seekTime=1521 freq=11025 start_sample=256033 pcm_pos=16769
+get_current_track_pos(): time_now=20262 start_time=-524 pos=20786 tracks_length=62050
+get_current_track_pos(): time_now=20278 start_time=-524 pos=20802 tracks_length=62050
+FastForward_Smooth(): cur_pos=20802 ACCEL=300
+seek_track(): offset=21102 ONE_SECOND=840 start_time=23.223001 seekTime=1898
+SoundDecoder_Seek(): seekTime=1898 freq=11025 start_sample=256033 pcm_pos=20925
+get_current_track_pos(): time_now=20293 start_time=-824 pos=21117 tracks_length=62050
+get_current_track_pos(): time_now=20327 start_time=-824 pos=21151 tracks_length=62050
+get_current_track_pos(): time_now=20356 start_time=-824 pos=21180 tracks_length=62050
+FastForward_Smooth(): cur_pos=21180 ACCEL=300
+seek_track(): offset=21480 ONE_SECOND=840 start_time=23.223001 seekTime=2348
+SoundDecoder_Seek(): seekTime=2348 freq=11025 start_sample=256033 pcm_pos=25886
+get_current_track_pos(): time_now=20356 start_time=-1124 pos=21480 tracks_length=62050
+get_current_track_pos(): time_now=20369 start_time=-1124 pos=21493 tracks_length=62050
+FastForward_Smooth(): cur_pos=21493 ACCEL=300
+seek_track(): offset=21793 ONE_SECOND=840 start_time=23.223001 seekTime=2721
+SoundDecoder_Seek(): seekTime=2721 freq=11025 start_sample=256033 pcm_pos=29999
+get_current_track_pos(): time_now=20383 start_time=-1424 pos=21807 tracks_length=62050
+FastForward_Smooth(): cur_pos=21807 ACCEL=300
+seek_track(): offset=22107 ONE_SECOND=840 start_time=23.223001 seekTime=3094
+SoundDecoder_Seek(): seekTime=3094 freq=11025 start_sample=256033 pcm_pos=34111
+get_current_track_pos(): time_now=20383 start_time=-1724 pos=22107 tracks_length=62050
+get_current_track_pos(): time_now=20400 start_time=-1724 pos=22124 tracks_length=62050
+FastForward_Smooth(): cur_pos=22124 ACCEL=300
+seek_track(): offset=22424 ONE_SECOND=840 start_time=23.223001 seekTime=3472
+SoundDecoder_Seek(): seekTime=3472 freq=11025 start_sample=256033 pcm_pos=38278
+get_current_track_pos(): time_now=20415 start_time=-2024 pos=22439 tracks_length=62050
+FastForward_Smooth(): cur_pos=22439 ACCEL=300
+seek_track(): offset=22739 ONE_SECOND=840 start_time=23.223001 seekTime=3847
+SoundDecoder_Seek(): seekTime=3847 freq=11025 start_sample=256033 pcm_pos=42413
+get_current_track_pos(): time_now=20415 start_time=-2324 pos=22739 tracks_length=62050
+get_current_track_pos(): time_now=20430 start_time=-2324 pos=22754 tracks_length=62050
+FastForward_Smooth(): cur_pos=22754 ACCEL=300
+seek_track(): offset=23054 ONE_SECOND=840 start_time=23.223001 seekTime=4222
+SoundDecoder_Seek(): seekTime=4222 freq=11025 start_sample=256033 pcm_pos=46547
+get_current_track_pos(): time_now=20447 start_time=-2624 pos=23071 tracks_length=62050
+get_current_track_pos(): time_now=20477 start_time=-2624 pos=23101 tracks_length=62050
+get_current_track_pos(): time_now=20510 start_time=-2624 pos=23134 tracks_length=62050
+get_current_track_pos(): time_now=20541 start_time=-2624 pos=23165 tracks_length=62050
+FastForward_Smooth(): cur_pos=23165 ACCEL=300
+seek_track(): offset=23465 ONE_SECOND=840 start_time=23.223001 seekTime=4711
+SoundDecoder_Seek(): seekTime=4711 freq=11025 start_sample=256033 pcm_pos=51938
+get_current_track_pos(): time_now=20541 start_time=-2924 pos=23465 tracks_length=62050
+get_current_track_pos(): time_now=20558 start_time=-2924 pos=23482 tracks_length=62050
+FastForward_Smooth(): cur_pos=23482 ACCEL=300
+seek_track(): offset=23782 ONE_SECOND=840 start_time=23.223001 seekTime=5088
+SoundDecoder_Seek(): seekTime=5088 freq=11025 start_sample=256033 pcm_pos=56095
+get_current_track_pos(): time_now=20572 start_time=-3224 pos=23796 tracks_length=62050
+FastForward_Smooth(): cur_pos=23796 ACCEL=300
+seek_track(): offset=24096 ONE_SECOND=840 start_time=23.223001 seekTime=5462
+SoundDecoder_Seek(): seekTime=5462 freq=11025 start_sample=256033 pcm_pos=60218
+get_current_track_pos(): time_now=20572 start_time=-3524 pos=24096 tracks_length=62050
+get_current_track_pos(): time_now=20587 start_time=-3524 pos=24111 tracks_length=62050
+FastForward_Smooth(): cur_pos=24111 ACCEL=300
+seek_track(): offset=24411 ONE_SECOND=840 start_time=23.223001 seekTime=5837
+SoundDecoder_Seek(): seekTime=5837 freq=11025 start_sample=256033 pcm_pos=64352
+get_current_track_pos(): time_now=20604 start_time=-3824 pos=24428 tracks_length=62050
+FastForward_Smooth(): cur_pos=24428 ACCEL=300
+seek_track(): offset=24728 ONE_SECOND=840 start_time=23.223001 seekTime=6215
+SoundDecoder_Seek(): seekTime=6215 freq=11025 start_sample=256033 pcm_pos=68520
+get_current_track_pos(): time_now=20605 start_time=-4124 pos=24729 tracks_length=62050
+get_current_track_pos(): time_now=20637 start_time=-4124 pos=24761 tracks_length=62050
+get_current_track_pos(): time_now=20669 start_time=-4124 pos=24793 tracks_length=62050
+get_current_track_pos(): time_now=20702 start_time=-4124 pos=24826 tracks_length=62050
+FastForward_Smooth(): cur_pos=24826 ACCEL=300
+seek_track(): offset=25126 ONE_SECOND=840 start_time=29.793001 seekTime=118
+SoundDecoder_Seek(): seekTime=118 freq=11025 start_sample=328467 pcm_pos=1300
+get_current_track_pos(): time_now=20702 start_time=-4424 pos=25126 tracks_length=62050
+get_current_track_pos(): time_now=20717 start_time=-4424 pos=25141 tracks_length=62050
+FastForward_Smooth(): cur_pos=25141 ACCEL=300
+seek_track(): offset=25441 ONE_SECOND=840 start_time=29.793001 seekTime=493
+SoundDecoder_Seek(): seekTime=493 freq=11025 start_sample=328467 pcm_pos=5435
+get_current_track_pos(): time_now=20732 start_time=-4724 pos=25456 tracks_length=62050
+FastForward_Smooth(): cur_pos=25456 ACCEL=300
+seek_track(): offset=25756 ONE_SECOND=840 start_time=29.793001 seekTime=868
+SoundDecoder_Seek(): seekTime=868 freq=11025 start_sample=328467 pcm_pos=9569
+get_current_track_pos(): time_now=20732 start_time=-5024 pos=25756 tracks_length=62050
+get_current_track_pos(): time_now=20747 start_time=-5024 pos=25771 tracks_length=62050
+FastForward_Smooth(): cur_pos=25771 ACCEL=300
+seek_track(): offset=26071 ONE_SECOND=840 start_time=29.793001 seekTime=1243
+SoundDecoder_Seek(): seekTime=1243 freq=11025 start_sample=328467 pcm_pos=13704
+get_current_track_pos(): time_now=20762 start_time=-5324 pos=26086 tracks_length=62050
+FastForward_Smooth(): cur_pos=26086 ACCEL=300
+seek_track(): offset=26386 ONE_SECOND=840 start_time=29.793001 seekTime=1618
+SoundDecoder_Seek(): seekTime=1618 freq=11025 start_sample=328467 pcm_pos=17838
+get_current_track_pos(): time_now=20762 start_time=-5624 pos=26386 tracks_length=62050
+get_current_track_pos(): time_now=20775 start_time=-5624 pos=26399 tracks_length=62050
+FastForward_Smooth(): cur_pos=26399 ACCEL=300
+seek_track(): offset=26699 ONE_SECOND=840 start_time=29.793001 seekTime=1991
+SoundDecoder_Seek(): seekTime=1991 freq=11025 start_sample=328467 pcm_pos=21950
+get_current_track_pos(): time_now=20790 start_time=-5924 pos=26714 tracks_length=62050
+get_current_track_pos(): time_now=20822 start_time=-5924 pos=26746 tracks_length=62050
+get_current_track_pos(): time_now=20853 start_time=-5924 pos=26777 tracks_length=62050
+FastForward_Smooth(): cur_pos=26777 ACCEL=300
+seek_track(): offset=27077 ONE_SECOND=840 start_time=29.793001 seekTime=2441
+SoundDecoder_Seek(): seekTime=2441 freq=11025 start_sample=328467 pcm_pos=26912
+get_current_track_pos(): time_now=20853 start_time=-6224 pos=27077 tracks_length=62050
+get_current_track_pos(): time_now=20867 start_time=-6224 pos=27091 tracks_length=62050
+FastForward_Smooth(): cur_pos=27091 ACCEL=300
+seek_track(): offset=27391 ONE_SECOND=840 start_time=29.793001 seekTime=2815
+SoundDecoder_Seek(): seekTime=2815 freq=11025 start_sample=328467 pcm_pos=31035
+get_current_track_pos(): time_now=20883 start_time=-6524 pos=27407 tracks_length=62050
+FastForward_Smooth(): cur_pos=27407 ACCEL=300
+seek_track(): offset=27707 ONE_SECOND=840 start_time=29.793001 seekTime=3191
+SoundDecoder_Seek(): seekTime=3191 freq=11025 start_sample=328467 pcm_pos=35180
+get_current_track_pos(): time_now=20883 start_time=-6824 pos=27707 tracks_length=62050
+get_current_track_pos(): time_now=20899 start_time=-6824 pos=27723 tracks_length=62050
+FastForward_Smooth(): cur_pos=27723 ACCEL=300
+seek_track(): offset=28023 ONE_SECOND=840 start_time=29.793001 seekTime=3567
+SoundDecoder_Seek(): seekTime=3567 freq=11025 start_sample=328467 pcm_pos=39326
+get_current_track_pos(): time_now=20915 start_time=-7124 pos=28039 tracks_length=62050
+FastForward_Smooth(): cur_pos=28039 ACCEL=300
+seek_track(): offset=28339 ONE_SECOND=840 start_time=29.793001 seekTime=3943
+SoundDecoder_Seek(): seekTime=3943 freq=11025 start_sample=328467 pcm_pos=43471
+get_current_track_pos(): time_now=20915 start_time=-7424 pos=28339 tracks_length=62050
+get_current_track_pos(): time_now=20930 start_time=-7424 pos=28354 tracks_length=62050
+FastForward_Smooth(): cur_pos=28354 ACCEL=300
+seek_track(): offset=28654 ONE_SECOND=840 start_time=29.793001 seekTime=4318
+SoundDecoder_Seek(): seekTime=4318 freq=11025 start_sample=328467 pcm_pos=47605
+get_current_track_pos(): time_now=20945 start_time=-7724 pos=28669 tracks_length=62050
+get_current_track_pos(): time_now=20975 start_time=-7724 pos=28699 tracks_length=62050
+get_current_track_pos(): time_now=20989 start_time=-7724 pos=28713 tracks_length=62050
+FastForward_Smooth(): cur_pos=28713 ACCEL=300
+seek_track(): offset=29013 ONE_SECOND=840 start_time=29.793001 seekTime=4746
+SoundDecoder_Seek(): seekTime=4746 freq=11025 start_sample=328467 pcm_pos=52324
+get_current_track_pos(): time_now=21006 start_time=-8024 pos=29030 tracks_length=62050
+FastForward_Smooth(): cur_pos=29030 ACCEL=300
+seek_track(): offset=29330 ONE_SECOND=840 start_time=29.793001 seekTime=5123
+SoundDecoder_Seek(): seekTime=5123 freq=11025 start_sample=328467 pcm_pos=56481
+get_current_track_pos(): time_now=21007 start_time=-8324 pos=29331 tracks_length=62050
+get_current_track_pos(): time_now=21022 start_time=-8324 pos=29346 tracks_length=62050
+FastForward_Smooth(): cur_pos=29346 ACCEL=300
+seek_track(): offset=29646 ONE_SECOND=840 start_time=29.793001 seekTime=5499
+SoundDecoder_Seek(): seekTime=5499 freq=11025 start_sample=328467 pcm_pos=60626
+get_current_track_pos(): time_now=21037 start_time=-8624 pos=29661 tracks_length=62050
+FastForward_Smooth(): cur_pos=29661 ACCEL=300
+seek_track(): offset=29961 ONE_SECOND=840 start_time=29.793001 seekTime=5874
+SoundDecoder_Seek(): seekTime=5874 freq=11025 start_sample=328467 pcm_pos=64760
+get_current_track_pos(): time_now=21037 start_time=-8924 pos=29961 tracks_length=62050
+get_current_track_pos(): time_now=21052 start_time=-8924 pos=29976 tracks_length=62050
+FastForward_Smooth(): cur_pos=29976 ACCEL=300
+seek_track(): offset=30276 ONE_SECOND=840 start_time=29.793001 seekTime=6249
+SoundDecoder_Seek(): seekTime=6249 freq=11025 start_sample=328467 pcm_pos=68895
+get_current_track_pos(): time_now=21067 start_time=-9224 pos=30291 tracks_length=62050
+FastForward_Smooth(): cur_pos=30291 ACCEL=300
+seek_track(): offset=30591 ONE_SECOND=840 start_time=29.793001 seekTime=6624
+SoundDecoder_Seek(): seekTime=6624 freq=11025 start_sample=328467 pcm_pos=73029
+get_current_track_pos(): time_now=21068 start_time=-9524 pos=30592 tracks_length=62050
+get_current_track_pos(): time_now=21083 start_time=-9524 pos=30607 tracks_length=62050
+FastForward_Smooth(): cur_pos=30607 ACCEL=300
+seek_track(): offset=30907 ONE_SECOND=840 start_time=29.793001 seekTime=7001
+SoundDecoder_Seek(): seekTime=7001 freq=11025 start_sample=328467 pcm_pos=77186
+get_current_track_pos(): time_now=21097 start_time=-9824 pos=30921 tracks_length=62050
+get_current_track_pos(): time_now=21126 start_time=-9824 pos=30950 tracks_length=62050
+get_current_track_pos(): time_now=21159 start_time=-9824 pos=30983 tracks_length=62050
+get_current_track_pos(): time_now=21175 start_time=-9824 pos=30999 tracks_length=62050
+FastForward_Smooth(): cur_pos=30999 ACCEL=300
+seek_track(): offset=31299 ONE_SECOND=840 start_time=29.793001 seekTime=7467
+SoundDecoder_Seek(): seekTime=7467 freq=11025 start_sample=328467 pcm_pos=82323
+get_current_track_pos(): time_now=21189 start_time=-10124 pos=31313 tracks_length=62050
+FastForward_Smooth(): cur_pos=31313 ACCEL=300
+seek_track(): offset=31613 ONE_SECOND=840 start_time=29.793001 seekTime=7841
+SoundDecoder_Seek(): seekTime=7841 freq=11025 start_sample=328467 pcm_pos=86447
+get_current_track_pos(): time_now=21189 start_time=-10424 pos=31613 tracks_length=62050
+get_current_track_pos(): time_now=21203 start_time=-10424 pos=31627 tracks_length=62050
+FastForward_Smooth(): cur_pos=31627 ACCEL=300
+seek_track(): offset=31927 ONE_SECOND=840 start_time=29.793001 seekTime=8215
+SoundDecoder_Seek(): seekTime=8215 freq=11025 start_sample=328467 pcm_pos=90570
+get_current_track_pos(): time_now=21220 start_time=-10724 pos=31944 tracks_length=62050
+FastForward_Smooth(): cur_pos=31944 ACCEL=300
+seek_track(): offset=32244 ONE_SECOND=840 start_time=29.793001 seekTime=8592
+SoundDecoder_Seek(): seekTime=8592 freq=11025 start_sample=328467 pcm_pos=94726
+get_current_track_pos(): time_now=21220 start_time=-11024 pos=32244 tracks_length=62050
+get_current_track_pos(): time_now=21236 start_time=-11024 pos=32260 tracks_length=62050
+FastForward_Smooth(): cur_pos=32260 ACCEL=300
+seek_track(): offset=32560 ONE_SECOND=840 start_time=29.793001 seekTime=8968
+SoundDecoder_Seek(): seekTime=8968 freq=11025 start_sample=328467 pcm_pos=98872
+get_current_track_pos(): time_now=21252 start_time=-11324 pos=32576 tracks_length=62050
+FastForward_Smooth(): cur_pos=32576 ACCEL=300
+seek_track(): offset=32876 ONE_SECOND=840 start_time=29.793001 seekTime=9345
+SoundDecoder_Seek(): seekTime=9345 freq=11025 start_sample=328467 pcm_pos=103028
+get_current_track_pos(): time_now=21252 start_time=-11624 pos=32876 tracks_length=62050
+get_current_track_pos(): time_now=21285 start_time=-11624 pos=32909 tracks_length=62050
+get_current_track_pos(): time_now=21315 start_time=-11624 pos=32939 tracks_length=62050
+get_current_track_pos(): time_now=21349 start_time=-11624 pos=32973 tracks_length=62050
+get_current_track_pos(): time_now=21364 start_time=-11624 pos=32988 tracks_length=62050
+FastForward_Smooth(): cur_pos=32988 ACCEL=300
+seek_track(): offset=33288 ONE_SECOND=840 start_time=29.793001 seekTime=9835
+SoundDecoder_Seek(): seekTime=9835 freq=11025 start_sample=328467 pcm_pos=108430
+get_current_track_pos(): time_now=21379 start_time=-11924 pos=33303 tracks_length=62050
+FastForward_Smooth(): cur_pos=33303 ACCEL=300
+seek_track(): offset=33603 ONE_SECOND=840 start_time=39.957001 seekTime=46
+SoundDecoder_Seek(): seekTime=46 freq=11025 start_sample=440525 pcm_pos=507
+get_current_track_pos(): time_now=21379 start_time=-12224 pos=33603 tracks_length=62050
+get_current_track_pos(): time_now=21396 start_time=-12224 pos=33620 tracks_length=62050
+FastForward_Smooth(): cur_pos=33620 ACCEL=300
+seek_track(): offset=33920 ONE_SECOND=840 start_time=39.957001 seekTime=423
+SoundDecoder_Seek(): seekTime=423 freq=11025 start_sample=440525 pcm_pos=4663
+get_current_track_pos(): time_now=21412 start_time=-12524 pos=33936 tracks_length=62050
+FastForward_Smooth(): cur_pos=33936 ACCEL=300
+seek_track(): offset=34236 ONE_SECOND=840 start_time=39.957001 seekTime=800
+SoundDecoder_Seek(): seekTime=800 freq=11025 start_sample=440525 pcm_pos=8820
+get_current_track_pos(): time_now=21412 start_time=-12824 pos=34236 tracks_length=62050
+get_current_track_pos(): time_now=21428 start_time=-12824 pos=34252 tracks_length=62050
+FastForward_Smooth(): cur_pos=34252 ACCEL=300
+seek_track(): offset=34552 ONE_SECOND=840 start_time=39.957001 seekTime=1176
+SoundDecoder_Seek(): seekTime=1176 freq=11025 start_sample=440525 pcm_pos=12965
+get_current_track_pos(): time_now=21444 start_time=-13123 pos=34567 tracks_length=62050
+get_current_track_pos(): time_now=21476 start_time=-13123 pos=34599 tracks_length=62050
+get_current_track_pos(): time_now=21506 start_time=-13123 pos=34629 tracks_length=62050
+get_current_track_pos(): time_now=21535 start_time=-13123 pos=34658 tracks_length=62050
+FastForward_Smooth(): cur_pos=34658 ACCEL=300
+seek_track(): offset=34958 ONE_SECOND=840 start_time=39.957001 seekTime=1659
+SoundDecoder_Seek(): seekTime=1659 freq=11025 start_sample=440525 pcm_pos=18290
+get_current_track_pos(): time_now=21535 start_time=-13423 pos=34958 tracks_length=62050
+get_current_track_pos(): time_now=21548 start_time=-13423 pos=34971 tracks_length=62050
+FastForward_Smooth(): cur_pos=34971 ACCEL=300
+seek_track(): offset=35271 ONE_SECOND=840 start_time=39.957001 seekTime=2032
+SoundDecoder_Seek(): seekTime=2032 freq=11025 start_sample=440525 pcm_pos=22402
+get_current_track_pos(): time_now=21563 start_time=-13723 pos=35286 tracks_length=62050
+FastForward_Smooth(): cur_pos=35286 ACCEL=300
+seek_track(): offset=35586 ONE_SECOND=840 start_time=39.957001 seekTime=2407
+SoundDecoder_Seek(): seekTime=2407 freq=11025 start_sample=440525 pcm_pos=26537
+get_current_track_pos(): time_now=21563 start_time=-14023 pos=35586 tracks_length=62050
+get_current_track_pos(): time_now=21578 start_time=-14023 pos=35601 tracks_length=62050
+FastForward_Smooth(): cur_pos=35601 ACCEL=300
+seek_track(): offset=35901 ONE_SECOND=840 start_time=39.957001 seekTime=2782
+SoundDecoder_Seek(): seekTime=2782 freq=11025 start_sample=440525 pcm_pos=30671
+get_current_track_pos(): time_now=21594 start_time=-14322 pos=35916 tracks_length=62050
+FastForward_Smooth(): cur_pos=35916 ACCEL=300
+seek_track(): offset=36216 ONE_SECOND=840 start_time=39.957001 seekTime=3157
+SoundDecoder_Seek(): seekTime=3157 freq=11025 start_sample=440525 pcm_pos=34805
+get_current_track_pos(): time_now=21594 start_time=-14622 pos=36216 tracks_length=62050
+get_current_track_pos(): time_now=21610 start_time=-14622 pos=36232 tracks_length=62050
+FastForward_Smooth(): cur_pos=36232 ACCEL=300
+seek_track(): offset=36532 ONE_SECOND=840 start_time=39.957001 seekTime=3533
+SoundDecoder_Seek(): seekTime=3533 freq=11025 start_sample=440525 pcm_pos=38951
+get_current_track_pos(): time_now=21627 start_time=-14922 pos=36549 tracks_length=62050
+get_current_track_pos(): time_now=21659 start_time=-14922 pos=36581 tracks_length=62050
+get_current_track_pos(): time_now=21693 start_time=-14922 pos=36615 tracks_length=62050
+get_current_track_pos(): time_now=21706 start_time=-14922 pos=36628 tracks_length=62050
+FastForward_Smooth(): cur_pos=36628 ACCEL=300
+seek_track(): offset=36928 ONE_SECOND=840 start_time=39.957001 seekTime=4004
+SoundDecoder_Seek(): seekTime=4004 freq=11025 start_sample=440525 pcm_pos=44144
+get_current_track_pos(): time_now=21723 start_time=-15222 pos=36945 tracks_length=62050
+FastForward_Smooth(): cur_pos=36945 ACCEL=300
+seek_track(): offset=37245 ONE_SECOND=840 start_time=39.957001 seekTime=4382
+SoundDecoder_Seek(): seekTime=4382 freq=11025 start_sample=440525 pcm_pos=48311
+get_current_track_pos(): time_now=21724 start_time=-15521 pos=37245 tracks_length=62050
+get_current_track_pos(): time_now=21740 start_time=-15521 pos=37261 tracks_length=62050
+FastForward_Smooth(): cur_pos=37261 ACCEL=300
+seek_track(): offset=37561 ONE_SECOND=840 start_time=39.957001 seekTime=4758
+SoundDecoder_Seek(): seekTime=4758 freq=11025 start_sample=440525 pcm_pos=52456
+get_current_track_pos(): time_now=21755 start_time=-15816 pos=37571 tracks_length=62050
+FastForward_Smooth(): cur_pos=37571 ACCEL=300
+seek_track(): offset=37871 ONE_SECOND=840 start_time=39.957001 seekTime=5127
+SoundDecoder_Seek(): seekTime=5127 freq=11025 start_sample=440525 pcm_pos=56525
+get_current_track_pos(): time_now=21755 start_time=-16116 pos=37871 tracks_length=62050
+get_current_track_pos(): time_now=21769 start_time=-16116 pos=37885 tracks_length=62050
+FastForward_Smooth(): cur_pos=37885 ACCEL=300
+seek_track(): offset=38185 ONE_SECOND=840 start_time=45.435001 seekTime=23
+SoundDecoder_Seek(): seekTime=23 freq=11025 start_sample=500920 pcm_pos=253
+get_current_track_pos(): time_now=21784 start_time=-16416 pos=38200 tracks_length=62050
+FastForward_Smooth(): cur_pos=38200 ACCEL=300
+seek_track(): offset=38500 ONE_SECOND=840 start_time=45.435001 seekTime=398
+SoundDecoder_Seek(): seekTime=398 freq=11025 start_sample=500920 pcm_pos=4387
+get_current_track_pos(): time_now=21785 start_time=-16715 pos=38500 tracks_length=62050
+get_current_track_pos(): time_now=21816 start_time=-16715 pos=38531 tracks_length=62050
+get_current_track_pos(): time_now=21847 start_time=-16715 pos=38562 tracks_length=62050
+get_current_track_pos(): time_now=21862 start_time=-16715 pos=38577 tracks_length=62050
+FastForward_Smooth(): cur_pos=38577 ACCEL=300
+seek_track(): offset=38877 ONE_SECOND=840 start_time=45.435001 seekTime=847
+SoundDecoder_Seek(): seekTime=847 freq=11025 start_sample=500920 pcm_pos=9338
+get_current_track_pos(): time_now=21879 start_time=-17015 pos=38894 tracks_length=62050
+FastForward_Smooth(): cur_pos=38894 ACCEL=300
+seek_track(): offset=39194 ONE_SECOND=840 start_time=45.435001 seekTime=1224
+SoundDecoder_Seek(): seekTime=1224 freq=11025 start_sample=500920 pcm_pos=13494
+get_current_track_pos(): time_now=21879 start_time=-17315 pos=39194 tracks_length=62050
+get_current_track_pos(): time_now=21893 start_time=-17315 pos=39208 tracks_length=62050
+FastForward_Smooth(): cur_pos=39208 ACCEL=300
+seek_track(): offset=39508 ONE_SECOND=840 start_time=45.435001 seekTime=1598
+SoundDecoder_Seek(): seekTime=1598 freq=11025 start_sample=500920 pcm_pos=17617
+get_current_track_pos(): time_now=21908 start_time=-17615 pos=39523 tracks_length=62050
+FastForward_Smooth(): cur_pos=39523 ACCEL=300
+seek_track(): offset=39823 ONE_SECOND=840 start_time=45.435001 seekTime=1973
+SoundDecoder_Seek(): seekTime=1973 freq=11025 start_sample=500920 pcm_pos=21752
+get_current_track_pos(): time_now=21908 start_time=-17915 pos=39823 tracks_length=62050
+get_current_track_pos(): time_now=21924 start_time=-17915 pos=39839 tracks_length=62050
+FastForward_Smooth(): cur_pos=39839 ACCEL=300
+seek_track(): offset=40139 ONE_SECOND=840 start_time=45.435001 seekTime=2349
+SoundDecoder_Seek(): seekTime=2349 freq=11025 start_sample=500920 pcm_pos=25897
+get_current_track_pos(): time_now=21941 start_time=-18214 pos=40155 tracks_length=62050
+FastForward_Smooth(): cur_pos=40155 ACCEL=300
+seek_track(): offset=40455 ONE_SECOND=840 start_time=45.435001 seekTime=2725
+SoundDecoder_Seek(): seekTime=2725 freq=11025 start_sample=500920 pcm_pos=30043
+get_current_track_pos(): time_now=21942 start_time=-18514 pos=40456 tracks_length=62050
+get_current_track_pos(): time_now=21973 start_time=-18514 pos=40487 tracks_length=62050
+get_current_track_pos(): time_now=22005 start_time=-18514 pos=40519 tracks_length=62050
+get_current_track_pos(): time_now=22037 start_time=-18514 pos=40551 tracks_length=62050
+FastForward_Smooth(): cur_pos=40551 ACCEL=300
+seek_track(): offset=40851 ONE_SECOND=840 start_time=45.435001 seekTime=3197
+SoundDecoder_Seek(): seekTime=3197 freq=11025 start_sample=500920 pcm_pos=35246
+get_current_track_pos(): time_now=22037 start_time=-18814 pos=40851 tracks_length=62050
+get_current_track_pos(): time_now=22051 start_time=-18814 pos=40865 tracks_length=62050
+FastForward_Smooth(): cur_pos=40865 ACCEL=300
+seek_track(): offset=41165 ONE_SECOND=840 start_time=45.435001 seekTime=3570
+SoundDecoder_Seek(): seekTime=3570 freq=11025 start_sample=500920 pcm_pos=39359
+get_current_track_pos(): time_now=22065 start_time=-19114 pos=41179 tracks_length=62050
+FastForward_Smooth(): cur_pos=41179 ACCEL=300
+seek_track(): offset=41479 ONE_SECOND=840 start_time=45.435001 seekTime=3944
+SoundDecoder_Seek(): seekTime=3944 freq=11025 start_sample=500920 pcm_pos=43482
+get_current_track_pos(): time_now=22065 start_time=-19414 pos=41479 tracks_length=62050
+get_current_track_pos(): time_now=22083 start_time=-19414 pos=41497 tracks_length=62050
+FastForward_Smooth(): cur_pos=41497 ACCEL=300
+seek_track(): offset=41797 ONE_SECOND=840 start_time=45.435001 seekTime=4323
+SoundDecoder_Seek(): seekTime=4323 freq=11025 start_sample=500920 pcm_pos=47661
+get_current_track_pos(): time_now=22100 start_time=-19713 pos=41813 tracks_length=62050
+FastForward_Smooth(): cur_pos=41813 ACCEL=300
+seek_track(): offset=42113 ONE_SECOND=840 start_time=45.435001 seekTime=4699
+SoundDecoder_Seek(): seekTime=4699 freq=11025 start_sample=500920 pcm_pos=51806
+get_current_track_pos(): time_now=22100 start_time=-20013 pos=42113 tracks_length=62050
+get_current_track_pos(): time_now=22115 start_time=-20013 pos=42128 tracks_length=62050
+FastForward_Smooth(): cur_pos=42128 ACCEL=300
+seek_track(): offset=42428 ONE_SECOND=840 start_time=45.435001 seekTime=5074
+SoundDecoder_Seek(): seekTime=5074 freq=11025 start_sample=500920 pcm_pos=55940
+get_current_track_pos(): time_now=22129 start_time=-20313 pos=42442 tracks_length=62050
+get_current_track_pos(): time_now=22161 start_time=-20313 pos=42474 tracks_length=62050
+get_current_track_pos(): time_now=22176 start_time=-20313 pos=42489 tracks_length=62050
+FastForward_Smooth(): cur_pos=42489 ACCEL=300
+seek_track(): offset=42789 ONE_SECOND=840 start_time=45.435001 seekTime=5504
+SoundDecoder_Seek(): seekTime=5504 freq=11025 start_sample=500920 pcm_pos=60681
+get_current_track_pos(): time_now=22191 start_time=-20613 pos=42804 tracks_length=62050
+FastForward_Smooth(): cur_pos=42804 ACCEL=300
+seek_track(): offset=43104 ONE_SECOND=840 start_time=45.435001 seekTime=5879
+SoundDecoder_Seek(): seekTime=5879 freq=11025 start_sample=500920 pcm_pos=64815
+get_current_track_pos(): time_now=22191 start_time=-20913 pos=43104 tracks_length=62050
+get_current_track_pos(): time_now=22207 start_time=-20913 pos=43120 tracks_length=62050
+FastForward_Smooth(): cur_pos=43120 ACCEL=300
+seek_track(): offset=43420 ONE_SECOND=840 start_time=45.435001 seekTime=6255
+SoundDecoder_Seek(): seekTime=6255 freq=11025 start_sample=500920 pcm_pos=68961
+get_current_track_pos(): time_now=22223 start_time=-21213 pos=43436 tracks_length=62050
+FastForward_Smooth(): cur_pos=43436 ACCEL=300
+seek_track(): offset=43736 ONE_SECOND=840 start_time=45.435001 seekTime=6631
+SoundDecoder_Seek(): seekTime=6631 freq=11025 start_sample=500920 pcm_pos=73106
+get_current_track_pos(): time_now=22224 start_time=-21513 pos=43737 tracks_length=62050
+get_current_track_pos(): time_now=22239 start_time=-21513 pos=43752 tracks_length=62050
+FastForward_Smooth(): cur_pos=43752 ACCEL=300
+seek_track(): offset=44052 ONE_SECOND=840 start_time=52.075001 seekTime=367
+SoundDecoder_Seek(): seekTime=367 freq=11025 start_sample=574126 pcm_pos=4046
+get_current_track_pos(): time_now=22255 start_time=-21813 pos=44068 tracks_length=62050
+FastForward_Smooth(): cur_pos=44068 ACCEL=300
+seek_track(): offset=44368 ONE_SECOND=840 start_time=52.075001 seekTime=744
+SoundDecoder_Seek(): seekTime=744 freq=11025 start_sample=574126 pcm_pos=8202
+get_current_track_pos(): time_now=22256 start_time=-22113 pos=44369 tracks_length=62050
+get_current_track_pos(): time_now=22269 start_time=-22113 pos=44382 tracks_length=62050
+FastForward_Smooth(): cur_pos=44382 ACCEL=300
+seek_track(): offset=44682 ONE_SECOND=840 start_time=52.075001 seekTime=1117
+SoundDecoder_Seek(): seekTime=1117 freq=11025 start_sample=574126 pcm_pos=12314
+get_current_track_pos(): time_now=22284 start_time=-22413 pos=44697 tracks_length=62050
+get_current_track_pos(): time_now=22316 start_time=-22413 pos=44729 tracks_length=62050
+get_current_track_pos(): time_now=22344 start_time=-22413 pos=44757 tracks_length=62050
+get_current_track_pos(): time_now=22374 start_time=-22413 pos=44787 tracks_length=62050
+get_current_track_pos(): time_now=22403 start_time=-22413 pos=44816 tracks_length=62050
+FastForward_Smooth(): cur_pos=44816 ACCEL=300
+seek_track(): offset=45116 ONE_SECOND=840 start_time=52.075001 seekTime=1634
+SoundDecoder_Seek(): seekTime=1634 freq=11025 start_sample=574126 pcm_pos=18014
+get_current_track_pos(): time_now=22403 start_time=-22713 pos=45116 tracks_length=62050
+get_current_track_pos(): time_now=22418 start_time=-22713 pos=45131 tracks_length=62050
+FastForward_Smooth(): cur_pos=45131 ACCEL=300
+seek_track(): offset=45431 ONE_SECOND=840 start_time=52.075001 seekTime=2009
+SoundDecoder_Seek(): seekTime=2009 freq=11025 start_sample=574126 pcm_pos=22149
+get_current_track_pos(): time_now=22434 start_time=-23013 pos=45447 tracks_length=62050
+FastForward_Smooth(): cur_pos=45447 ACCEL=300
+seek_track(): offset=45747 ONE_SECOND=840 start_time=52.075001 seekTime=2385
+SoundDecoder_Seek(): seekTime=2385 freq=11025 start_sample=574126 pcm_pos=26294
+get_current_track_pos(): time_now=22434 start_time=-23313 pos=45747 tracks_length=62050
+get_current_track_pos(): time_now=22449 start_time=-23313 pos=45762 tracks_length=62050
+FastForward_Smooth(): cur_pos=45762 ACCEL=300
+seek_track(): offset=46062 ONE_SECOND=840 start_time=52.075001 seekTime=2760
+SoundDecoder_Seek(): seekTime=2760 freq=11025 start_sample=574126 pcm_pos=30429
+get_current_track_pos(): time_now=22468 start_time=-23613 pos=46081 tracks_length=62050
+FastForward_Smooth(): cur_pos=46081 ACCEL=300
+seek_track(): offset=46381 ONE_SECOND=840 start_time=52.075001 seekTime=3140
+SoundDecoder_Seek(): seekTime=3140 freq=11025 start_sample=574126 pcm_pos=34618
+get_current_track_pos(): time_now=22468 start_time=-23913 pos=46381 tracks_length=62050
+get_current_track_pos(): time_now=22499 start_time=-23913 pos=46412 tracks_length=62050
+get_current_track_pos(): time_now=22531 start_time=-23913 pos=46444 tracks_length=62050
+get_current_track_pos(): time_now=22563 start_time=-23913 pos=46476 tracks_length=62050
+FastForward_Smooth(): cur_pos=46476 ACCEL=300
+seek_track(): offset=46776 ONE_SECOND=840 start_time=52.075001 seekTime=3610
+SoundDecoder_Seek(): seekTime=3610 freq=11025 start_sample=574126 pcm_pos=39800
+get_current_track_pos(): time_now=22563 start_time=-24213 pos=46776 tracks_length=62050
+get_current_track_pos(): time_now=22580 start_time=-24213 pos=46793 tracks_length=62050
+FastForward_Smooth(): cur_pos=46793 ACCEL=300
+seek_track(): offset=47093 ONE_SECOND=840 start_time=52.075001 seekTime=3988
+SoundDecoder_Seek(): seekTime=3988 freq=11025 start_sample=574126 pcm_pos=43967
+get_current_track_pos(): time_now=22596 start_time=-24513 pos=47109 tracks_length=62050
+FastForward_Smooth(): cur_pos=47109 ACCEL=300
+seek_track(): offset=47409 ONE_SECOND=840 start_time=52.075001 seekTime=4364
+SoundDecoder_Seek(): seekTime=4364 freq=11025 start_sample=574126 pcm_pos=48113
+get_current_track_pos(): time_now=22596 start_time=-24813 pos=47409 tracks_length=62050
+get_current_track_pos(): time_now=22614 start_time=-24813 pos=47427 tracks_length=62050
+FastForward_Smooth(): cur_pos=47427 ACCEL=300
+seek_track(): offset=47727 ONE_SECOND=840 start_time=52.075001 seekTime=4742
+SoundDecoder_Seek(): seekTime=4742 freq=11025 start_sample=574126 pcm_pos=52280
+get_current_track_pos(): time_now=22630 start_time=-25113 pos=47743 tracks_length=62050
+get_current_track_pos(): time_now=22660 start_time=-25113 pos=47773 tracks_length=62050
+get_current_track_pos(): time_now=22692 start_time=-25113 pos=47805 tracks_length=62050
+get_current_track_pos(): time_now=22722 start_time=-25113 pos=47835 tracks_length=62050
+get_current_track_pos(): time_now=22737 start_time=-25113 pos=47850 tracks_length=62050
+FastForward_Smooth(): cur_pos=47850 ACCEL=300
+seek_track(): offset=48150 ONE_SECOND=840 start_time=52.075001 seekTime=5246
+SoundDecoder_Seek(): seekTime=5246 freq=11025 start_sample=574126 pcm_pos=57837
+get_current_track_pos(): time_now=22755 start_time=-25413 pos=48168 tracks_length=62050
+FastForward_Smooth(): cur_pos=48168 ACCEL=300
+seek_track(): offset=48468 ONE_SECOND=840 start_time=52.075001 seekTime=5625
+SoundDecoder_Seek(): seekTime=5625 freq=11025 start_sample=574126 pcm_pos=62015
+get_current_track_pos(): time_now=22755 start_time=-25713 pos=48468 tracks_length=62050
+get_current_track_pos(): time_now=22771 start_time=-25713 pos=48484 tracks_length=62050
+FastForward_Smooth(): cur_pos=48484 ACCEL=300
+seek_track(): offset=48784 ONE_SECOND=840 start_time=52.075001 seekTime=6001
+SoundDecoder_Seek(): seekTime=6001 freq=11025 start_sample=574126 pcm_pos=66161
+get_current_track_pos(): time_now=22785 start_time=-26013 pos=48798 tracks_length=62050
+FastForward_Smooth(): cur_pos=48798 ACCEL=300
+seek_track(): offset=49098 ONE_SECOND=840 start_time=52.075001 seekTime=6375
+SoundDecoder_Seek(): seekTime=6375 freq=11025 start_sample=574126 pcm_pos=70284
+get_current_track_pos(): time_now=22785 start_time=-26313 pos=49098 tracks_length=62050
+get_current_track_pos(): time_now=22800 start_time=-26313 pos=49113 tracks_length=62050
+FastForward_Smooth(): cur_pos=49113 ACCEL=300
+seek_track(): offset=49413 ONE_SECOND=840 start_time=52.075001 seekTime=6750
+SoundDecoder_Seek(): seekTime=6750 freq=11025 start_sample=574126 pcm_pos=74418
+get_current_track_pos(): time_now=22816 start_time=-26613 pos=49429 tracks_length=62050
+get_current_track_pos(): time_now=22850 start_time=-26613 pos=49463 tracks_length=62050
+get_current_track_pos(): time_now=22884 start_time=-26613 pos=49497 tracks_length=62050
+get_current_track_pos(): time_now=22914 start_time=-26613 pos=49527 tracks_length=62050
+FastForward_Smooth(): cur_pos=49527 ACCEL=300
+seek_track(): offset=49827 ONE_SECOND=840 start_time=52.075001 seekTime=7242
+SoundDecoder_Seek(): seekTime=7242 freq=11025 start_sample=574126 pcm_pos=79843
+get_current_track_pos(): time_now=22914 start_time=-26913 pos=49827 tracks_length=62050
+get_current_track_pos(): time_now=22929 start_time=-26913 pos=49842 tracks_length=62050
+FastForward_Smooth(): cur_pos=49842 ACCEL=300
+seek_track(): offset=50142 ONE_SECOND=840 start_time=59.654999 seekTime=37
+SoundDecoder_Seek(): seekTime=37 freq=11025 start_sample=657696 pcm_pos=407
+get_current_track_pos(): time_now=22942 start_time=-27213 pos=50155 tracks_length=62050
+FastForward_Smooth(): cur_pos=50155 ACCEL=300
+seek_track(): offset=50455 ONE_SECOND=840 start_time=59.654999 seekTime=410
+SoundDecoder_Seek(): seekTime=410 freq=11025 start_sample=657696 pcm_pos=4520
+get_current_track_pos(): time_now=22942 start_time=-27513 pos=50455 tracks_length=62050
+get_current_track_pos(): time_now=22956 start_time=-27513 pos=50469 tracks_length=62050
+FastForward_Smooth(): cur_pos=50469 ACCEL=300
+seek_track(): offset=50769 ONE_SECOND=840 start_time=59.654999 seekTime=784
+SoundDecoder_Seek(): seekTime=784 freq=11025 start_sample=657696 pcm_pos=8643
+get_current_track_pos(): time_now=22973 start_time=-27812 pos=50785 tracks_length=62050
+FastForward_Smooth(): cur_pos=50785 ACCEL=300
+seek_track(): offset=51085 ONE_SECOND=840 start_time=59.654999 seekTime=1160
+SoundDecoder_Seek(): seekTime=1160 freq=11025 start_sample=657696 pcm_pos=12789
+get_current_track_pos(): time_now=22973 start_time=-28112 pos=51085 tracks_length=62050
+get_current_track_pos(): time_now=23002 start_time=-28112 pos=51114 tracks_length=62050
+get_current_track_pos(): time_now=23034 start_time=-28112 pos=51146 tracks_length=62050
+get_current_track_pos(): time_now=23067 start_time=-28112 pos=51179 tracks_length=62050
+get_current_track_pos(): time_now=23082 start_time=-28112 pos=51194 tracks_length=62050
+FastForward_Smooth(): cur_pos=51194 ACCEL=300
+seek_track(): offset=51494 ONE_SECOND=840 start_time=59.654999 seekTime=1647
+SoundDecoder_Seek(): seekTime=1647 freq=11025 start_sample=657696 pcm_pos=18158
+get_current_track_pos(): time_now=23099 start_time=-28412 pos=51511 tracks_length=62050
+FastForward_Smooth(): cur_pos=51511 ACCEL=300
+seek_track(): offset=51811 ONE_SECOND=840 start_time=59.654999 seekTime=2024
+SoundDecoder_Seek(): seekTime=2024 freq=11025 start_sample=657696 pcm_pos=22314
+get_current_track_pos(): time_now=23099 start_time=-28712 pos=51811 tracks_length=62050
+get_current_track_pos(): time_now=23113 start_time=-28712 pos=51825 tracks_length=62050
+FastForward_Smooth(): cur_pos=51825 ACCEL=300
+seek_track(): offset=52125 ONE_SECOND=840 start_time=59.654999 seekTime=2398
+SoundDecoder_Seek(): seekTime=2398 freq=11025 start_sample=657696 pcm_pos=26437
+get_current_track_pos(): time_now=23129 start_time=-29012 pos=52141 tracks_length=62050
+FastForward_Smooth(): cur_pos=52141 ACCEL=300
+seek_track(): offset=52441 ONE_SECOND=840 start_time=59.654999 seekTime=2774
+SoundDecoder_Seek(): seekTime=2774 freq=11025 start_sample=657696 pcm_pos=30583
+get_current_track_pos(): time_now=23131 start_time=-29310 pos=52441 tracks_length=62050
+get_current_track_pos(): time_now=23147 start_time=-29310 pos=52457 tracks_length=62050
+FastForward_Smooth(): cur_pos=52457 ACCEL=300
+seek_track(): offset=52757 ONE_SECOND=840 start_time=59.654999 seekTime=3150
+SoundDecoder_Seek(): seekTime=3150 freq=11025 start_sample=657696 pcm_pos=34728
+get_current_track_pos(): time_now=23162 start_time=-29610 pos=52772 tracks_length=62050
+FastForward_Smooth(): cur_pos=52772 ACCEL=300
+seek_track(): offset=53072 ONE_SECOND=840 start_time=59.654999 seekTime=3525
+SoundDecoder_Seek(): seekTime=3525 freq=11025 start_sample=657696 pcm_pos=38863
+get_current_track_pos(): time_now=23162 start_time=-29910 pos=53072 tracks_length=62050
+get_current_track_pos(): time_now=23196 start_time=-29910 pos=53106 tracks_length=62050
+get_current_track_pos(): time_now=23229 start_time=-29910 pos=53139 tracks_length=62050
+get_current_track_pos(): time_now=23261 start_time=-29910 pos=53171 tracks_length=62050
+FastForward_Smooth(): cur_pos=53171 ACCEL=300
+seek_track(): offset=53471 ONE_SECOND=840 start_time=59.654999 seekTime=4000
+SoundDecoder_Seek(): seekTime=4000 freq=11025 start_sample=657696 pcm_pos=44100
+get_current_track_pos(): time_now=23261 start_time=-30210 pos=53471 tracks_length=62050
+get_current_track_pos(): time_now=23278 start_time=-30210 pos=53488 tracks_length=62050
+FastForward_Smooth(): cur_pos=53488 ACCEL=300
+seek_track(): offset=53788 ONE_SECOND=840 start_time=59.654999 seekTime=4378
+SoundDecoder_Seek(): seekTime=4378 freq=11025 start_sample=657696 pcm_pos=48267
+get_current_track_pos(): time_now=23294 start_time=-30510 pos=53804 tracks_length=62050
+FastForward_Smooth(): cur_pos=53804 ACCEL=300
+seek_track(): offset=54104 ONE_SECOND=840 start_time=59.654999 seekTime=4754
+SoundDecoder_Seek(): seekTime=4754 freq=11025 start_sample=657696 pcm_pos=52412
+get_current_track_pos(): time_now=23294 start_time=-30810 pos=54104 tracks_length=62050
+get_current_track_pos(): time_now=23310 start_time=-30810 pos=54120 tracks_length=62050
+FastForward_Smooth(): cur_pos=54120 ACCEL=300
+seek_track(): offset=54420 ONE_SECOND=840 start_time=59.654999 seekTime=5130
+SoundDecoder_Seek(): seekTime=5130 freq=11025 start_sample=657696 pcm_pos=56558
+get_current_track_pos(): time_now=23327 start_time=-31110 pos=54437 tracks_length=62050
+FastForward_Smooth(): cur_pos=54437 ACCEL=300
+seek_track(): offset=54737 ONE_SECOND=840 start_time=59.654999 seekTime=5508
+SoundDecoder_Seek(): seekTime=5508 freq=11025 start_sample=657696 pcm_pos=60725
+get_current_track_pos(): time_now=23327 start_time=-31410 pos=54737 tracks_length=62050
+get_current_track_pos(): time_now=23358 start_time=-31410 pos=54768 tracks_length=62050
+get_current_track_pos(): time_now=23392 start_time=-31410 pos=54802 tracks_length=62050
+get_current_track_pos(): time_now=23422 start_time=-31410 pos=54832 tracks_length=62050
+get_current_track_pos(): time_now=23436 start_time=-31410 pos=54846 tracks_length=62050
+FastForward_Smooth(): cur_pos=54846 ACCEL=300
+seek_track(): offset=55146 ONE_SECOND=840 start_time=59.654999 seekTime=5995
+SoundDecoder_Seek(): seekTime=5995 freq=11025 start_sample=657696 pcm_pos=66094
+get_current_track_pos(): time_now=23451 start_time=-31710 pos=55161 tracks_length=62050
+FastForward_Smooth(): cur_pos=55161 ACCEL=300
+seek_track(): offset=55461 ONE_SECOND=840 start_time=59.654999 seekTime=6370
+SoundDecoder_Seek(): seekTime=6370 freq=11025 start_sample=657696 pcm_pos=70229
+get_current_track_pos(): time_now=23451 start_time=-32010 pos=55461 tracks_length=62050
+get_current_track_pos(): time_now=23466 start_time=-32010 pos=55476 tracks_length=62050
+FastForward_Smooth(): cur_pos=55476 ACCEL=300
+seek_track(): offset=55776 ONE_SECOND=840 start_time=59.654999 seekTime=6745
+SoundDecoder_Seek(): seekTime=6745 freq=11025 start_sample=657696 pcm_pos=74363
+get_current_track_pos(): time_now=23480 start_time=-32310 pos=55790 tracks_length=62050
+FastForward_Smooth(): cur_pos=55790 ACCEL=300
+seek_track(): offset=56090 ONE_SECOND=840 start_time=59.654999 seekTime=7118
+SoundDecoder_Seek(): seekTime=7118 freq=11025 start_sample=657696 pcm_pos=78475
+get_current_track_pos(): time_now=23481 start_time=-32609 pos=56090 tracks_length=62050
+get_current_track_pos(): time_now=23496 start_time=-32609 pos=56105 tracks_length=62050
+FastForward_Smooth(): cur_pos=56105 ACCEL=300
+seek_track(): offset=56405 ONE_SECOND=840 start_time=59.654999 seekTime=7493
+SoundDecoder_Seek(): seekTime=7493 freq=11025 start_sample=657696 pcm_pos=82610
+get_current_track_pos(): time_now=23512 start_time=-32909 pos=56421 tracks_length=62050
+get_current_track_pos(): time_now=23543 start_time=-32909 pos=56452 tracks_length=62050
+get_current_track_pos(): time_now=23576 start_time=-32909 pos=56485 tracks_length=62050
+get_current_track_pos(): time_now=23589 start_time=-32909 pos=56498 tracks_length=62050
+FastForward_Smooth(): cur_pos=56498 ACCEL=300
+seek_track(): offset=56798 ONE_SECOND=840 start_time=67.427002 seekTime=189
+SoundDecoder_Seek(): seekTime=189 freq=11025 start_sample=743382 pcm_pos=2083
+get_current_track_pos(): time_now=23606 start_time=-33209 pos=56815 tracks_length=62050
+FastForward_Smooth(): cur_pos=56815 ACCEL=300
+seek_track(): offset=57115 ONE_SECOND=840 start_time=67.427002 seekTime=567
+SoundDecoder_Seek(): seekTime=567 freq=11025 start_sample=743382 pcm_pos=6251
+get_current_track_pos(): time_now=23606 start_time=-33509 pos=57115 tracks_length=62050
+get_current_track_pos(): time_now=23621 start_time=-33509 pos=57130 tracks_length=62050
+FastForward_Smooth(): cur_pos=57130 ACCEL=300
+seek_track(): offset=57430 ONE_SECOND=840 start_time=67.427002 seekTime=942
+SoundDecoder_Seek(): seekTime=942 freq=11025 start_sample=743382 pcm_pos=10385
+get_current_track_pos(): time_now=23637 start_time=-33809 pos=57446 tracks_length=62050
+FastForward_Smooth(): cur_pos=57446 ACCEL=300
+seek_track(): offset=57746 ONE_SECOND=840 start_time=67.427002 seekTime=1318
+SoundDecoder_Seek(): seekTime=1318 freq=11025 start_sample=743382 pcm_pos=14530
+get_current_track_pos(): time_now=23637 start_time=-34109 pos=57746 tracks_length=62050
+get_current_track_pos(): time_now=23654 start_time=-34109 pos=57763 tracks_length=62050
+FastForward_Smooth(): cur_pos=57763 ACCEL=300
+seek_track(): offset=58063 ONE_SECOND=840 start_time=67.427002 seekTime=1695
+SoundDecoder_Seek(): seekTime=1695 freq=11025 start_sample=743382 pcm_pos=18687
+get_current_track_pos(): time_now=23670 start_time=-34409 pos=58079 tracks_length=62050
+FastForward_Smooth(): cur_pos=58079 ACCEL=300
+seek_track(): offset=58379 ONE_SECOND=840 start_time=67.427002 seekTime=2071
+SoundDecoder_Seek(): seekTime=2071 freq=11025 start_sample=743382 pcm_pos=22832
+get_current_track_pos(): time_now=23670 start_time=-34709 pos=58379 tracks_length=62050
+get_current_track_pos(): time_now=23701 start_time=-34709 pos=58410 tracks_length=62050
+get_current_track_pos(): time_now=23735 start_time=-34709 pos=58444 tracks_length=62050
+get_current_track_pos(): time_now=23750 start_time=-34709 pos=58459 tracks_length=62050
+FastForward_Smooth(): cur_pos=58459 ACCEL=300
+seek_track(): offset=58759 ONE_SECOND=840 start_time=67.427002 seekTime=2524
+SoundDecoder_Seek(): seekTime=2524 freq=11025 start_sample=743382 pcm_pos=27827
+get_current_track_pos(): time_now=23765 start_time=-35009 pos=58774 tracks_length=62050
+FastForward_Smooth(): cur_pos=58774 ACCEL=300
+seek_track(): offset=59074 ONE_SECOND=840 start_time=67.427002 seekTime=2899
+SoundDecoder_Seek(): seekTime=2899 freq=11025 start_sample=743382 pcm_pos=31961
+get_current_track_pos(): time_now=23765 start_time=-35309 pos=59074 tracks_length=62050
+get_current_track_pos(): time_now=23782 start_time=-35309 pos=59091 tracks_length=62050
+FastForward_Smooth(): cur_pos=59091 ACCEL=300
+seek_track(): offset=59391 ONE_SECOND=840 start_time=67.427002 seekTime=3276
+SoundDecoder_Seek(): seekTime=3276 freq=11025 start_sample=743382 pcm_pos=36117
+get_current_track_pos(): time_now=23798 start_time=-35609 pos=59407 tracks_length=62050
+FastForward_Smooth(): cur_pos=59407 ACCEL=300
+seek_track(): offset=59707 ONE_SECOND=840 start_time=67.427002 seekTime=3652
+SoundDecoder_Seek(): seekTime=3652 freq=11025 start_sample=743382 pcm_pos=40263
+get_current_track_pos(): time_now=23798 start_time=-35909 pos=59707 tracks_length=62050
+get_current_track_pos(): time_now=23814 start_time=-35909 pos=59723 tracks_length=62050
+FastForward_Smooth(): cur_pos=59723 ACCEL=300
+seek_track(): offset=60023 ONE_SECOND=840 start_time=67.427002 seekTime=4028
+SoundDecoder_Seek(): seekTime=4028 freq=11025 start_sample=743382 pcm_pos=44408
+get_current_track_pos(): time_now=23832 start_time=-36209 pos=60041 tracks_length=62050
+FastForward_Smooth(): cur_pos=60041 ACCEL=300
+seek_track(): offset=60341 ONE_SECOND=840 start_time=67.427002 seekTime=4407
+SoundDecoder_Seek(): seekTime=4407 freq=11025 start_sample=743382 pcm_pos=48587
+get_current_track_pos(): time_now=23833 start_time=-36509 pos=60342 tracks_length=62050
+get_current_track_pos(): time_now=23846 start_time=-36509 pos=60355 tracks_length=62050
+FastForward_Smooth(): cur_pos=60355 ACCEL=300
+seek_track(): offset=60655 ONE_SECOND=840 start_time=67.427002 seekTime=4781
+SoundDecoder_Seek(): seekTime=4781 freq=11025 start_sample=743382 pcm_pos=52710
+get_current_track_pos(): time_now=23862 start_time=-36809 pos=60671 tracks_length=62050
+get_current_track_pos(): time_now=23892 start_time=-36809 pos=60701 tracks_length=62050
+get_current_track_pos(): time_now=23925 start_time=-36809 pos=60734 tracks_length=62050
+get_current_track_pos(): time_now=23955 start_time=-36809 pos=60764 tracks_length=62050
+FastForward_Smooth(): cur_pos=60764 ACCEL=300
+seek_track(): offset=61064 ONE_SECOND=840 start_time=67.427002 seekTime=5268
+SoundDecoder_Seek(): seekTime=5268 freq=11025 start_sample=743382 pcm_pos=58079
+get_current_track_pos(): time_now=23956 start_time=-37109 pos=61065 tracks_length=62050
+get_current_track_pos(): time_now=23971 start_time=-37109 pos=61080 tracks_length=62050
+FastForward_Smooth(): cur_pos=61080 ACCEL=300
+seek_track(): offset=61380 ONE_SECOND=840 start_time=67.427002 seekTime=5644
+SoundDecoder_Seek(): seekTime=5644 freq=11025 start_sample=743382 pcm_pos=62225
+get_current_track_pos(): time_now=23985 start_time=-37409 pos=61394 tracks_length=62050
+FastForward_Smooth(): cur_pos=61394 ACCEL=300
+seek_track(): offset=61694 ONE_SECOND=840 start_time=67.427002 seekTime=6018
+SoundDecoder_Seek(): seekTime=6018 freq=11025 start_sample=743382 pcm_pos=66348
+get_current_track_pos(): time_now=23985 start_time=-37709 pos=61694 tracks_length=62050
+SoundDecoder_Decode(): eof for addons/3dovoice/urquan/urquan-027.ogg
+get_current_track_pos(): time_now=24002 start_time=-37709 pos=61711 tracks_length=62050
+FastForward_Smooth(): cur_pos=61711 ACCEL=300
+seek_track(): offset=62011 ONE_SECOND=840 start_time=67.427002 seekTime=6395
+SoundDecoder_Seek(): seekTime=6395 freq=11025 start_sample=743382 pcm_pos=70504
+get_current_track_pos(): time_now=24018 start_time=-38009 pos=62027 tracks_length=62050
+FastForward_Smooth(): cur_pos=62027 ACCEL=300
+get_current_track_pos(): time_now=24019 start_time=-38032 pos=62051 tracks_length=62050
+get_current_track_pos(): time_now=24036 start_time=-38032 pos=62068 tracks_length=62050
+FastForward_Smooth(): cur_pos=62050 ACCEL=300
+get_current_track_pos(): time_now=24051 start_time=-38015 pos=62066 tracks_length=62050
+FastForward_Smooth(): cur_pos=62050 ACCEL=300
+get_current_track_pos(): time_now=24051 start_time=-38000 pos=62051 tracks_length=62050
+get_current_track_pos(): time_now=24068 start_time=-38000 pos=62068 tracks_length=62050
+FastForward_Smooth(): cur_pos=62050 ACCEL=300
+get_current_track_pos(): time_now=24082 start_time=-37982 pos=62064 tracks_length=62050
+get_current_track_pos(): time_now=24119 start_time=-37982 pos=62101 tracks_length=62050
+get_current_track_pos(): time_now=24163 start_time=-37982 pos=62145 tracks_length=62050
+get_current_track_pos(): time_now=24207 start_time=-37982 pos=62189 tracks_length=62050
+get_current_track_pos(): time_now=24254 start_time=-37982 pos=62236 tracks_length=62050
+get_current_track_pos(): time_now=24280 start_time=-37982 pos=62262 tracks_length=62050
+get_current_track_pos(): time_now=24307 start_time=-37982 pos=62289 tracks_length=62050
+get_current_track_pos(): time_now=24353 start_time=-37982 pos=62335 tracks_length=62050
+get_current_track_pos(): time_now=24395 start_time=-37982 pos=62377 tracks_length=62050
+get_current_track_pos(): time_now=24439 start_time=-37982 pos=62421 tracks_length=62050
+get_current_track_pos(): time_now=24486 start_time=-37982 pos=62468 tracks_length=62050
+get_current_track_pos(): time_now=24512 start_time=-37982 pos=62494 tracks_length=62050
+get_current_track_pos(): time_now=24538 start_time=-37982 pos=62520 tracks_length=62050
+get_current_track_pos(): time_now=24564 start_time=-37982 pos=62546 tracks_length=62050
+get_current_track_pos(): time_now=24611 start_time=-37982 pos=62593 tracks_length=62050
+get_current_track_pos(): time_now=24660 start_time=-37982 pos=62642 tracks_length=62050
+get_current_track_pos(): time_now=24702 start_time=-37982 pos=62684 tracks_length=62050
+get_current_track_pos(): time_now=24746 start_time=-37982 pos=62728 tracks_length=62050
+get_current_track_pos(): time_now=24790 start_time=-37982 pos=62772 tracks_length=62050
+get_current_track_pos(): time_now=24837 start_time=-37982 pos=62819 tracks_length=62050
+get_current_track_pos(): time_now=24885 start_time=-37982 pos=62867 tracks_length=62050
+get_current_track_pos(): time_now=24929 start_time=-37982 pos=62911 tracks_length=62050
+get_current_track_pos(): time_now=24975 start_time=-37982 pos=62957 tracks_length=62050
+get_current_track_pos(): time_now=25024 start_time=-37982 pos=63006 tracks_length=62050
+get_current_track_pos(): time_now=25070 start_time=-37982 pos=63052 tracks_length=62050
+get_current_track_pos(): time_now=25112 start_time=-37982 pos=63094 tracks_length=62050
+get_current_track_pos(): time_now=25158 start_time=-37982 pos=63140 tracks_length=62050
+get_current_track_pos(): time_now=25204 start_time=-37982 pos=63186 tracks_length=62050
+Thread 'Unknown (probably renderer)' blocking on 'DCQ'
+Thread 'Unknown (probably renderer)' blocking on 'DCQ'
+get_current_track_pos(): time_now=26208 start_time=-37982 pos=64190 tracks_length=62050
+get_current_track_pos(): time_now=26254 start_time=-37982 pos=64236 tracks_length=62050
+get_current_track_pos(): time_now=26299 start_time=-37982 pos=64281 tracks_length=62050
+get_current_track_pos(): time_now=26345 start_time=-37982 pos=64327 tracks_length=62050
+get_current_track_pos(): time_now=26390 start_time=-37982 pos=64372 tracks_length=62050
+get_current_track_pos(): time_now=26438 start_time=-37982 pos=64420 tracks_length=62050
+get_current_track_pos(): time_now=26482 start_time=-37982 pos=64464 tracks_length=62050
+get_current_track_pos(): time_now=26528 start_time=-37982 pos=64510 tracks_length=62050
+get_current_track_pos(): time_now=26573 start_time=-37982 pos=64555 tracks_length=62050
+get_current_track_pos(): time_now=26622 start_time=-37982 pos=64604 tracks_length=62050
+get_current_track_pos(): time_now=26665 start_time=-37982 pos=64647 tracks_length=62050
+get_current_track_pos(): time_now=26712 start_time=-37982 pos=64694 tracks_length=62050
+get_current_track_pos(): time_now=26761 start_time=-37982 pos=64743 tracks_length=62050
+get_current_track_pos(): time_now=26804 start_time=-37982 pos=64786 tracks_length=62050
+get_current_track_pos(): time_now=26847 start_time=-37982 pos=64829 tracks_length=62050
+get_current_track_pos(): time_now=26894 start_time=-37982 pos=64876 tracks_length=62050
+get_current_track_pos(): time_now=26941 start_time=-37982 pos=64923 tracks_length=62050
+get_current_track_pos(): time_now=26985 start_time=-37982 pos=64967 tracks_length=62050
+get_current_track_pos(): time_now=27034 start_time=-37982 pos=65016 tracks_length=62050
+get_current_track_pos(): time_now=27079 start_time=-37982 pos=65061 tracks_length=62050
+get_current_track_pos(): time_now=27106 start_time=-37982 pos=65088 tracks_length=62050
+get_current_track_pos(): time_now=27152 start_time=-37982 pos=65134 tracks_length=62050
+get_current_track_pos(): time_now=27201 start_time=-37982 pos=65183 tracks_length=62050
+get_current_track_pos(): time_now=27247 start_time=-37982 pos=65229 tracks_length=62050
+get_current_track_pos(): time_now=27294 start_time=-37982 pos=65276 tracks_length=62050
+get_current_track_pos(): time_now=27336 start_time=-37982 pos=65318 tracks_length=62050
+get_current_track_pos(): time_now=27378 start_time=-37982 pos=65360 tracks_length=62050
+get_current_track_pos(): time_now=27426 start_time=-37982 pos=65408 tracks_length=62050
+get_current_track_pos(): time_now=27452 start_time=-37982 pos=65434 tracks_length=62050
+get_current_track_pos(): time_now=27496 start_time=-37982 pos=65478 tracks_length=62050
+get_current_track_pos(): time_now=27541 start_time=-37982 pos=65523 tracks_length=62050
+get_current_track_pos(): time_now=27587 start_time=-37982 pos=65569 tracks_length=62050
+get_current_track_pos(): time_now=27635 start_time=-37982 pos=65617 tracks_length=62050
+get_current_track_pos(): time_now=27681 start_time=-37982 pos=65663 tracks_length=62050
+get_current_track_pos(): time_now=27730 start_time=-37982 pos=65712 tracks_length=62050
+get_current_track_pos(): time_now=27776 start_time=-37982 pos=65758 tracks_length=62050
+get_current_track_pos(): time_now=27819 start_time=-37982 pos=65801 tracks_length=62050
+get_current_track_pos(): time_now=27863 start_time=-37982 pos=65845 tracks_length=62050
+SoundDecoder_Seek(): seekTime=0 freq=44100 start_sample=0 pcm_pos=0
+	'base/ui/newgame.ani' -- 183 bytes
+	'addons/remix/4/01_-_Main_Menu_-_Control_the_Stars.ogg' -- 3762775 bytes
+_GetMusicData(): loading addons/remix/4/01_-_Main_Menu_-_Control_the_Stars.ogg
+    decoder: Rust Ogg Vorbis, rate 44100 format 17
+SoundDecoder_Seek(): seekTime=0 freq=44100 start_sample=0 pcm_pos=0
+Thread 'Starcon2Main' done (returned 0).
+Thread 'audio stream decoder' done (returned 0).

@@ -210,6 +210,8 @@ _GetSoundBankData (uio_Stream *fp, DWORD length)
 					filename);
 			continue;
 		}
+		log_add (log_Info, "_GetSoundBankData(): decoder: %s, rate %d format %d",
+				SoundDecoder_GetName(decoder), decoder->frequency, decoder->format);
 
 		// SFX samples don't have decoders, everything is pre-decoded below
 		sample = TFB_CreateSoundSample (NULL, 1, NULL);

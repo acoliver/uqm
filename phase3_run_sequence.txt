@@ -1,0 +1,50 @@
+# Phase 3 Run Sequence for Triggering File and Clock Operations
+
+## Objective
+Trigger both file operations and clock ticks during a single game session to verify Rust implementations.
+
+## Run Sequence Steps
+
+1. **Start the game**
+   ```bash
+   cd /Users/acoliver/projects/uqm/sc2
+   ./uqm-debug
+   ```
+
+2. **Navigate to Load Menu (triggers fileExists)**
+   - Press Enter to dismiss intro screens
+   - Navigate through menus until you see "Load Game" option
+   - This will trigger fileExists calls to check for save files
+   - Expected log marker: `RUST_FILE_EXISTS_CALLED`
+
+3. **Start a new game**
+   - Select "New Game" from main menu
+   - This triggers file operations to load game assets
+
+4. **Engage hyperspace (triggers clock ticks)**
+   - Once in-game, press SPACE or equivalent key to access starmap
+   - Select a destination and engage hyperspace
+   - Stay in hyperspace for ~5 seconds
+   - This triggers multiple GameClockTick calls
+   - Expected log marker: `RUST_CLOCK_TICK` (multiple times)
+
+5. **Exit cleanly**
+   - Press ESC or equivalent to return to main menu
+   - Select "Quit" or press appropriate key to exit
+   - Ensure clean shutdown
+
+## Expected Log Markers
+
+After following this sequence, rust-bridge.log should contain:
+- `RUST_BRIDGE_PHASE0_OK` - Initialization marker
+- `RUST_FILE_EXISTS_CALLED` - File operations triggered
+- `RUST_CLOCK_INIT` - Clock initialization (optional, may not be visible)
+- `RUST_CLOCK_TICK` - Clock ticks during hyperspace
+- Possibly `RUST_COPY_FILE_CALLED` if save game is created
+
+## Notes
+
+- The log file will be created in the current working directory (sc2/)
+- Each marker should appear with appropriate frequency
+- Hyperspace time is critical: stay for ~5 seconds to ensure multiple ticks
+- Load menu is the easiest way to trigger fileExists checks

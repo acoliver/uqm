@@ -137,6 +137,11 @@ impl SdlDriver {
         LOGICAL_WIDTH as usize * 4 // 4 bytes per pixel (RGBX)
     }
 
+    /// Set the active screen for rendering.
+    pub fn set_active_screen(&self, screen: Screen) {
+        self.active_screen.set(screen);
+    }
+
     /// Initialize SDL2 and create the window/renderer.
     fn init_sdl(&mut self, config: &DriverConfig) -> DriverResult<()> {
         log::info!("Initializing SDL2");

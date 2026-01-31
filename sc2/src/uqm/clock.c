@@ -16,6 +16,10 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+#ifdef USE_RUST_CLOCK
+#error "clock.c should not be compiled when USE_RUST_CLOCK is enabled"
+#endif
+
 #include <stdlib.h>
 #include "gameev.h"
 #include "globdata.h"

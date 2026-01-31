@@ -43,6 +43,7 @@ Aspect Ratio
 800x600
 1024x768
 1280x960
+960x720
 Custom
 
 #(CAT_0_OPT_0_DESC)
@@ -61,6 +62,9 @@ Custom
 1280x960 resolution.
 
 #(CAT_0_OPT_5_DESC)
+960x720 resolution (3x).
+
+#(CAT_0_OPT_6_DESC)
 Custom resolution set from the commandline.
 
 #(CAT_1_OPTS)
@@ -79,11 +83,9 @@ usually hardware-accelerated.
 
 #(CAT_2_OPTS)
 None
-Bilinear
-Biadapt
-Biadv
-Triscan
 HQ
+xBRZ 3x
+xBRZ 4x
 
 #(CAT_2_OPT_0_DESC)
 No scaling.
@@ -91,28 +93,16 @@ Simulates the original 320x240 display.
 Fastest, though least attractive, option.
 
 #(CAT_2_OPT_1_DESC)
-Bilinear average scaling.
-A simple, fast blending technique.
-Hardware-accelerated in OpenGL mode.
+HQ2x scaling.
+High quality 2x interpolation.
 
 #(CAT_2_OPT_2_DESC)
-Adaptive bilinear scaling.
-A slower, less blurry blending technique.
+High quality xBRZ scaling.
+3x magnification for crisp pixel art.
 
 #(CAT_2_OPT_3_DESC)
-Advanced bilinear scaling.
-Hand-weighted blend that produces smoother curves.
-The most expensive scaler.
-
-#(CAT_2_OPT_4_DESC)
-An interpolating scaler.
-Produces sharp edges, but at a higher resolution.
-Based on the Scale2x algorithm.
-
-#(CAT_2_OPT_5_DESC)
-A high quality, very expensive interpolating scaler.
-Produces sharp edges, but at a higher resolution.
-Based on the HQ2X algorithm.
+High quality xBRZ scaling.
+4x magnification for crisp pixel art.
 
 #(CAT_3_OPTS)
 Disabled

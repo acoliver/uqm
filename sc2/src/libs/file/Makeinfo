@@ -1,2 +1,7 @@
-uqm_CFILES="dirs.c files.c"
+# Phase 1: Conditionally exclude files.c when Rust bridge is enabled
+if [ "$USE_RUST_FILE" = "1" ] || [ "$uqm_USE_RUST_FILE" = "1" ]; then
+    uqm_CFILES="dirs.c"
+else
+    uqm_CFILES="dirs.c files.c"
+fi
 uqm_HFILES="filintrn.h"

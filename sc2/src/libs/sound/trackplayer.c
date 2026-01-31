@@ -641,9 +641,12 @@ seek_track (sint32 offset)
 
 	if (cur)
 	{
+		uint32 seekTime = (uint32) (((float)offset / ONE_SECOND
+				- cur->start_time) * 1000);
+		log_add (log_Debug, "seek_track(): offset=%d ONE_SECOND=%d start_time=%f seekTime=%u",
+				offset, ONE_SECOND, cur->start_time, seekTime);
 		cur_chunk = cur;
-		SoundDecoder_Seek (cur->decoder, (uint32) (((float)offset / ONE_SECOND
-				- cur->start_time) * 1000));
+		SoundDecoder_Seek (cur->decoder, seekTime);
 		sound_sample->decoder = cur->decoder;
 		
 		if (cur->tag_me)
@@ -663,7 +666,10 @@ static sint32
 get_current_track_pos (void)
 {
 	sint32 start_time = soundSource[SPEECH_SOURCE].start_time;
-	sint32 pos = GetTimeCounter () - start_time;
+	sint32 time_now = GetTimeCounter ();
+	sint32 pos = time_now - start_time;
+	log_add (log_Debug, "get_current_track_pos(): time_now=%d start_time=%d pos=%d tracks_length=%u",
+			time_now, start_time, pos, tracks_length);
 	if (pos < 0)
 		pos = 0;
 	else if ((uint32)pos > tracks_length)
@@ -702,6 +708,7 @@ FastForward_Smooth (void)
 	LockMutex (soundSource[SPEECH_SOURCE].stream_mutex);
 
 	offset = get_current_track_pos ();
+	log_add (log_Debug, "FastForward_Smooth(): cur_pos=%d ACCEL=%d", offset, ACCEL_SCROLL_SPEED);
 	offset += ACCEL_SCROLL_SPEED;
 	seek_track (offset);
 
