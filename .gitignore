@@ -9,3 +9,8 @@ rust/target
 
 sc2/uqm-wrapper
 sc2/uqm
+
+
+# Rust bridge logs
+rust-bridge.log
+sc2/rust-bridge.log
