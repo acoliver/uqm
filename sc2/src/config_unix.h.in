@@ -73,4 +73,6 @@
 /* Defined if using Rust UIO (Phase 3) */
 @SYMBOL_USE_RUST_UIO_DEF@
 
+/* Defined if using Rust audio backend (rodio) */
+@SYMBOL_USE_RUST_AUDIO_DEF@
 

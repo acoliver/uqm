@@ -10,6 +10,8 @@
 //! - `DecoderFormats` specifies the output audio format
 //! - Individual decoder implementations (Ogg, Wav, etc.)
 //! - FFI module provides C-compatible function pointers
+//! - `rodio_audio` module provides a simple rodio-based audio system
+//! - `rodio_backend` module provides OpenAL-compatible API using rodio
 
 pub mod decoder;
 pub mod ffi;
@@ -19,6 +21,8 @@ pub mod ogg;
 pub mod wav;
 pub mod wav_ffi;
 pub mod mixer;
+pub mod rodio_audio;
+pub mod rodio_backend;
 
 pub use decoder::{DecodeError, DecodeResult, SoundDecoder};
 pub use ffi::rust_ova_DecoderVtbl;

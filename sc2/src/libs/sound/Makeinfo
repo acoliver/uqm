@@ -5,5 +5,10 @@ else
 	uqm_SUBDIRS="mixer decoders"
 fi
 
-uqm_CFILES="audiocore.c fileinst.c resinst.c sound.c sfx.c music.c stream.c trackplayer.c"
+# Use Rust audio backend when USE_RUST_AUDIO is defined
+if [ -n "$USE_RUST_AUDIO" ]; then
+	uqm_CFILES="audiocore_rust.c fileinst.c resinst.c sound.c sfx.c music.c stream.c trackplayer.c"
+else
+	uqm_CFILES="audiocore.c fileinst.c resinst.c sound.c sfx.c music.c stream.c trackplayer.c"
+fi
 uqm_HFILES="audiocore.h sndintrn.h sound.h stream.h trackint.h trackplayer.h"

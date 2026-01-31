@@ -1,6 +1,3 @@
-if [ "$uqm_USE_RUST_INPUT" = 1 ]; then
-	uqm_CFILES="input.c keynames.c"
-else
-	uqm_CFILES="input.c keynames.c vcontrol.c"
-fi
-uqm_HFILES="input.h keynames.h vcontrol.h rust_vcontrol.h"
+# Always use the C vcontrol for now - Rust input not fully wired yet
+uqm_CFILES="input.c keynames.c vcontrol.c"
+uqm_HFILES="input.h keynames.h vcontrol.h"
