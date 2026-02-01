@@ -21,6 +21,10 @@
 #include "libs/log.h"
 #include "libs/memlib.h"
 
+#ifdef USE_RUST_VIDEO
+#include "rust_dukvid.h"
+#endif
+
 #define MAX_REG_DECODERS 31
 
 static bool vd_inited = false;
@@ -36,7 +40,11 @@ struct TFB_RegVideoDecoder
 };
 static TFB_RegVideoDecoder vd_decoders[MAX_REG_DECODERS + 1] = 
 {
+#ifdef USE_RUST_VIDEO
+	{true,  true,  "duk", &rust_dukv_DecoderVtbl},
+#else
 	{true,  true,  "duk", &dukv_DecoderVtbl},
+#endif
 	{false, false,  NULL, NULL}, // null term
 };
 

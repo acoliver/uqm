@@ -16,6 +16,9 @@
 
 #include "vidplayer.h"
 
+/* When USE_RUST_VIDEO is defined, rust_video.c provides these functions. */
+#ifndef USE_RUST_VIDEO
+
 #include "vidintrn.h"
 #include "libs/graphics/gfx_common.h"
 #include "libs/graphics/tfb_draw.h"
@@ -479,3 +482,4 @@ vp_QueueBuffer (TFB_SoundSample* sample, audio_Object buffer)
 			(intptr_t) SoundDecoder_GetFrame (decoder));
 }
 
+#endif /* !USE_RUST_VIDEO */

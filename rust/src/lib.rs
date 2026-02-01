@@ -18,7 +18,9 @@ pub mod memory;
 pub mod resource;
 pub mod sound;
 pub mod state;
+pub mod threading;
 pub mod time;
+pub mod video;
 
 pub use bridge_log::rust_bridge_log_msg;
 pub use cli::Cli;
