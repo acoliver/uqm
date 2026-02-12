@@ -113,7 +113,7 @@ int  VControl_GetLastGesture (VCONTROL_GESTURE *g);
  * VControl_BeginFrame() is called.  These constants are used to mask
  * out results if necessary. */
 
-#define VCONTROL_STARTBIT 0x10000
-#define VCONTROL_MASK     0x0FFFF
+#define VCONTROL_STARTBIT 0x100
+#define VCONTROL_MASK     0x0FF
 
 #endif /* LIBS_INPUT_SDL_VCONTROL_H_ */

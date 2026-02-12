@@ -262,6 +262,7 @@ DoBattle (BATTLE_STATE *bs)
 	RECT r;
 	BYTE battle_speed;
 
+	log_add(log_Debug, "BATTLE_DEBUG: DoBattle called, first_time=%d, CHECK_ABORT=%d", bs->first_time, (GLOBAL(CurrentActivity) & CHECK_ABORT) ? 1 : 0);
 	SetMenuSounds (MENU_SOUND_NONE, MENU_SOUND_NONE);
 
 #if defined (NETPLAY) && defined (NETPLAY_CHECKSUM)
@@ -444,11 +445,13 @@ Battle (BattleFrameCallback *callback)
 		setBattleStateConnections (&bs);
 #endif  /* NETPLAY */
 
+		log_add(log_Debug, "BATTLE_DEBUG: About to call selectAllShips, CHECK_ABORT=%d, IN_BATTLE=%d", (GLOBAL(CurrentActivity) & CHECK_ABORT) ? 1 : 0, (GLOBAL(CurrentActivity) & IN_BATTLE) ? 1 : 0);
 		if (!selectAllShips (num_ships)) {
 			GLOBAL (CurrentActivity) |= CHECK_ABORT;
 			goto AbortBattle;
 		}
 
+		log_add(log_Debug, "BATTLE_DEBUG: selectAllShips returned TRUE, calling BattleSong");
 		BattleSong (TRUE);
 		bs.NextTime = 0;
 #ifdef NETPLAY
@@ -465,7 +468,9 @@ Battle (BattleFrameCallback *callback)
 		bs.frame_cb = callback;
 		bs.first_time = inHQSpace ();
 
+		log_add(log_Debug, "BATTLE_DEBUG: About to call DoInput for battle loop");
 		DoInput (&bs, FALSE);
+		log_add(log_Debug, "BATTLE_DEBUG: DoInput returned, CHECK_ABORT=%d", (GLOBAL(CurrentActivity) & CHECK_ABORT) ? 1 : 0);
 
 AbortBattle:
 		if (LOBYTE (GLOBAL (CurrentActivity)) == SUPER_MELEE)

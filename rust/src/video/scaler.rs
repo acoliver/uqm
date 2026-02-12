@@ -17,6 +17,68 @@ use fast_image_resize::{
     FilterType, PixelType, ResizeOptions, Resizer,
 };
 
+/// Lanczos-based video scaler for direct window presentation
+///
+/// Extends the base VideoScaler with window-aware scaling to actual window dimensions.
+#[derive(Debug)]
+pub struct LanczosVideoScaler {
+    base_scaler: VideoScaler,
+    window_width: u32,
+    window_height: u32,
+}
+
+impl LanczosVideoScaler {
+    /// Creates a new window-aware scaler for video presentation
+    ///
+    /// # Arguments
+    /// * `src_width` - Source video frame width
+    /// * `src_height` - Source video frame height
+    /// * `window_width` - Actual window width for presentation
+    /// * `window_height` - Actual window height for presentation
+    pub fn new(src_width: u32, src_height: u32, window_width: u32, window_height: u32) -> Self {
+        // Calculate destination dimensions to maintain aspect ratio
+        let src_aspect = src_width as f32 / src_height as f32;
+        let window_aspect = window_width as f32 / window_height as f32;
+        
+        let (dst_width, dst_height) = if src_aspect > window_aspect {
+            // Video is wider than window - fit to width
+            (window_width, (window_width as f32 / src_aspect) as u32)
+        } else {
+            // Video is taller than window - fit to height
+            ((window_height as f32 * src_aspect) as u32, window_height)
+        };
+
+        let base_scaler = VideoScaler::new(src_width, src_height, dst_width, dst_height);
+        
+        Self {
+            base_scaler,
+            window_width,
+            window_height,
+        }
+    }
+    
+    /// Scale a video frame to window-appropriate size
+    ///
+    /// # Arguments
+    /// * `src_pixels` - Source pixel data as u32 RGBA values
+    ///
+    /// # Returns
+    /// Scaled pixel data as u32 RGBA values, or None on error
+    pub fn scale(&mut self, src_pixels: &[u32]) -> Option<Vec<u32>> {
+        self.base_scaler.scale(src_pixels)
+    }
+    
+    /// Get the destination dimensions after maintaining aspect ratio
+    pub fn dst_dimensions(&self) -> (u32, u32) {
+        self.base_scaler.dst_dimensions()
+    }
+    
+    /// Get the window dimensions
+    pub fn window_dimensions(&self) -> (u32, u32) {
+        (self.window_width, self.window_height)
+    }
+}
+
 /// Video frame scaler using Lanczos3 interpolation
 ///
 /// Reuses internal buffers for efficient repeated scaling of video frames.

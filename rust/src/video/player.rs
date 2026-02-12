@@ -1,9 +1,11 @@
 //! Video player with playback control, scaling, and direct SDL surface rendering.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{decoder::DukVideoDecoder, scaler::VideoScaler, VideoFrame, DUCK_FPS};
-use crate::video::ffi::{SDL_PixelFormat, SDL_Surface};
+use super::{decoder::DukVideoDecoder, scaler::{VideoScaler, LanczosVideoScaler}, VideoFrame, DUCK_FPS};
+use crate::bridge_log::rust_bridge_log_msg;
+use crate::video::ffi::SDL_Surface;
 
 /// Current state of video playback
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +26,7 @@ impl Default for PlaybackState {
 pub struct VideoPlayer {
     decoder: DukVideoDecoder,
     scaler: Option<VideoScaler>,
+    lanczos_scaler: Option<LanczosVideoScaler>,
 
     state: PlaybackState,
 
@@ -48,13 +51,19 @@ pub struct VideoPlayer {
 
     /// Last known playback position in milliseconds.
     pos_ms: u32,
+    
+    /// Whether to use direct window presentation (bypasses 320x240 surface)
+    direct_window_mode: bool,
 }
+
+static FRAME_LOG_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl VideoPlayer {
     pub fn new(decoder: DukVideoDecoder) -> Self {
         Self {
             decoder,
             scaler: None,
+            lanczos_scaler: None,
             state: PlaybackState::Stopped,
             dst_x: 0,
             dst_y: 0,
@@ -66,6 +75,7 @@ impl VideoPlayer {
             loop_playback: false,
             next_frame_due: None,
             pos_ms: 0,
+            direct_window_mode: false,
         }
     }
 
@@ -80,6 +90,18 @@ impl VideoPlayer {
 
     pub fn set_scaler(&mut self, scaler: Option<VideoScaler>) {
         self.scaler = scaler;
+    }
+    
+    pub fn set_lanczos_scaler(&mut self, scaler: Option<LanczosVideoScaler>) {
+        self.lanczos_scaler = scaler;
+    }
+    
+    pub fn set_direct_window_mode(&mut self, enabled: bool) {
+        self.direct_window_mode = enabled;
+    }
+    
+    pub fn direct_window_mode(&self) -> bool {
+        self.direct_window_mode
     }
 
     pub fn play(&mut self) {
@@ -153,7 +175,7 @@ impl VideoPlayer {
             }
         }
 
-        // Compute which frame we should be at based on wall time.
+        // Compute which frame we should be based on wall time.
         let elapsed = self.current_time_seconds();
         let mut target_frame = (elapsed * DUCK_FPS) as u32;
         let frame_count = self.decoder.frame_count();
@@ -180,7 +202,7 @@ impl VideoPlayer {
             return true;
         }
 
-        let frame = match self.decoder.decode_frame(self.current_frame) {
+        let mut frame = match self.decoder.decode_frame(self.current_frame) {
             Ok(f) => f,
             Err(_) => {
                 self.state = PlaybackState::Finished;
@@ -188,24 +210,112 @@ impl VideoPlayer {
             }
         };
 
-        // Optional Lanczos3 scaling.
-        let frame = if let Some(ref mut scaler) = self.scaler {
-            if let Some(scaled) = scaler.scale(&frame.data) {
-                let (dst_w, dst_h) = scaler.dst_dimensions();
-                VideoFrame {
-                    width: dst_w,
-                    height: dst_h,
-                    data: scaled,
-                    timestamp: frame.timestamp,
+        // Use Lanczos window scaler if in direct window mode
+        if self.direct_window_mode {
+            if let Some(ref mut lanczos_scaler) = self.lanczos_scaler {
+                if let Some(scaled) = lanczos_scaler.scale(&frame.data) {
+                    let (dst_w, dst_h) = lanczos_scaler.dst_dimensions();
+                    frame = VideoFrame {
+                        width: dst_w,
+                        height: dst_h,
+                        data: scaled,
+                        timestamp: frame.timestamp,
+                    };
+                    
+                    // Present directly to window instead of SDL surface
+                    if super::ffi::rust_present_video_to_window(
+                        frame.data.as_ptr() as *const u8,
+                        frame.width as i32,
+                        frame.height as i32,
+                        (frame.width * 4) as i32, // RGBA stride
+                    ) {
+                        rust_bridge_log_msg(&format!(
+                            "RUST_VIDEO: Direct window presentation frame {} ({}x{}), bypassing xBRZ/hq2x",
+                            self.current_frame,
+                            frame.width,
+                            frame.height
+                        ));
+                    } else {
+                        rust_bridge_log_msg("RUST_VIDEO: Direct window presentation failed; stopping playback");
+                        self.state = PlaybackState::Finished;
+                        return false;
+                    }
+                } else {
+                    // If Lanczos scaling fails, fall back to original frame
+                    rust_bridge_log_msg("RUST_VIDEO: Lanczos scaling failed, using original frame");
+
+                    if !super::ffi::rust_present_video_to_window(
+                        frame.data.as_ptr() as *const u8,
+                        frame.width as i32,
+                        frame.height as i32,
+                        (frame.width * 4) as i32,
+                    ) {
+                        rust_bridge_log_msg("RUST_VIDEO: Direct window presentation failed; stopping playback");
+                        self.state = PlaybackState::Finished;
+                        return false;
+                    }
                 }
             } else {
-                frame
+                // If no Lanczos scaler configured, still try direct presentation
+                // This bypasses the 320x240 pipeline completely
+                if super::ffi::rust_present_video_to_window(
+                    frame.data.as_ptr() as *const u8,
+                    frame.width as i32,
+                    frame.height as i32,
+                    (frame.width * 4) as i32,
+                ) {
+                    rust_bridge_log_msg(&format!(
+                        "RUST_VIDEO: Direct window presentation unscaled frame {} ({}x{}), bypassing xBRZ/hq2x",
+                        self.current_frame,
+                        frame.width,
+                        frame.height
+                    ));
+                } else {
+                    rust_bridge_log_msg("RUST_VIDEO: Direct window presentation failed; stopping playback");
+                    self.state = PlaybackState::Finished;
+                    return false;
+                }
             }
         } else {
-            frame
-        };
+            // Legacy path: use traditional SDL surface rendering
+            // Optional Lanczos3 scaling.
+            if let Some(ref mut scaler) = self.scaler {
+                if let Some(scaled) = scaler.scale(&frame.data) {
+                    let (dst_w, dst_h) = scaler.dst_dimensions();
+                    frame = VideoFrame {
+                        width: dst_w,
+                        height: dst_h,
+                        data: scaled,
+                        timestamp: frame.timestamp,
+                    };
+                }
+            }
+            
+            blit_frame_to_sdl_surface(dst_surface, &frame, self.dst_x, self.dst_y);
+        }
 
-        blit_frame_to_sdl_surface(dst_surface, &frame, self.dst_x, self.dst_y);
+        let log_index = FRAME_LOG_COUNTER.fetch_add(1, Ordering::Relaxed);
+        if log_index < 5 {
+            let sample = frame.data.get(0).copied().unwrap_or(0);
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: frame {} size={}x{} dst=({}, {}) sample=0x{:08x}",
+                self.current_frame,
+                frame.width,
+                frame.height,
+                self.dst_x,
+                self.dst_y,
+                sample
+            ));
+        }
+
+        if !self.direct_window_mode && log_index < 5 {
+            let post_sample = frame.data.get(0).copied().unwrap_or(0);
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: blit done frame {} sample=0x{:08x}",
+                self.current_frame,
+                post_sample
+            ));
+        }
 
         self.last_rendered_frame = Some(self.current_frame);
         self.schedule_next_frame(now);
@@ -266,6 +376,19 @@ unsafe fn blit_frame_to_sdl_surface(surface: *mut SDL_Surface, frame: &VideoFram
     if dst_w <= 0 || dst_h <= 0 || pitch < dst_w * 4 {
         super::ffi::tfb_drawcanvas_unlock(surface as *mut std::ffi::c_void);
         return;
+    }
+
+    let log_index = FRAME_LOG_COUNTER.load(Ordering::Relaxed);
+    if log_index < 5 {
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: surface w={} h={} pitch={} pixels={:p} dst=({}, {})",
+            dst_w,
+            dst_h,
+            pitch,
+            surf.pixels,
+            x0,
+            y0
+        ));
     }
 
     let src_w = frame.width as i32;

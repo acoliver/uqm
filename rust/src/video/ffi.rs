@@ -5,11 +5,11 @@ use std::ptr;
 use std::sync::Mutex;
 
 use crate::bridge_log::rust_bridge_log_msg;
-use crate::io::ffi::{stat, uio_DirHandle, uio_close, uio_fstat, uio_open, uio_read};
+use crate::io::ffi::{uio_close, uio_open, uio_read, uio_DirHandle, uio_Handle};
 
 use super::decoder::DukVideoDecoder;
 use super::player::VideoPlayer;
-use super::scaler::VideoScaler;
+use super::scaler::{LanczosVideoScaler, VideoScaler};
 use super::{DUCK_FPS, VideoError, VideoFrame};
 
 pub use crate::graphics::ffi::SDL_Surface;
@@ -32,9 +32,9 @@ extern "C" {
     // Provided by C SDL backend.
     static SDL_Screen: *mut SDL_Surface;
 
-    // Actual screen dimensions from gfx_common.h (display size, not internal 320x240)
-    static ScreenWidthActual: c_int;
-    static ScreenHeightActual: c_int;
+    // Logical screen dimensions from gfx_common.h (internal 320x240)
+    static ScreenWidth: c_int;
+    static ScreenHeight: c_int;
 }
 
 // Minimal SDL types needed for direct pixel writes.
@@ -78,54 +78,55 @@ pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
 
 // ============================================================================
 
-unsafe fn read_uio_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
-    let c_filename = std::ffi::CString::new(filename).ok()?;
-    let handle = uio_open(dir, c_filename.as_ptr(), 0 /* O_RDONLY */, 0);
-    if handle.is_null() {
-        log_msg(&format!("RUST_VIDEO: uio_open failed for {}", filename));
-        return None;
-    }
-
-    let mut stat_buf: stat = std::mem::zeroed();
-    if uio_fstat(handle, &mut stat_buf) != 0 {
-        log_msg(&format!("RUST_VIDEO: uio_fstat failed for {}", filename));
-        uio_close(handle);
-        return None;
-    }
-
-    let file_size = stat_buf.st_size as usize;
-    let mut data = vec![0u8; file_size];
-    let mut total_read = 0usize;
-    while total_read < file_size {
-        let n = uio_read(handle, data.as_mut_ptr().add(total_read), file_size - total_read);
+unsafe fn read_uio_handle(handle: *mut uio_Handle, label: &str) -> Option<Vec<u8>> {
+    let mut data = Vec::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = uio_read(handle, buf.as_mut_ptr(), buf.len());
         if n <= 0 {
+            if n < 0 {
+                log_msg(&format!("RUST_VIDEO: uio_read returned {} for {}", n, label));
+            }
             break;
         }
-        total_read += n as usize;
+        data.extend_from_slice(&buf[..n as usize]);
     }
 
     uio_close(handle);
 
-    if total_read == 0 {
-        log_msg(&format!("RUST_VIDEO: no data read from {}", filename));
+    if data.is_empty() {
+        log_msg(&format!("RUST_VIDEO: no data read from {}", label));
         return None;
     }
 
-    data.truncate(total_read);
     Some(data)
 }
 
-fn calculate_video_scale(src_w: u32, src_h: u32) -> u32 {
-    unsafe {
-        let screen_w = ScreenWidthActual as u32;
-        let screen_h = ScreenHeightActual as u32;
-        if screen_w == 0 || screen_h == 0 {
-            return 1;
+unsafe fn read_uio_file(dir: *mut uio_DirHandle, filename: &str) -> Option<Vec<u8>> {
+    log_msg(&format!("RUST_VIDEO: read_uio_file start {} dir={:?}", filename, dir));
+
+    let c_filename = std::ffi::CString::new(filename).ok()?;
+    let handle = uio_open(dir, c_filename.as_ptr(), 0 /* O_RDONLY */, 0);
+    log_msg(&format!("RUST_VIDEO: uio_open returned {:?} for {}", handle, filename));
+    if handle.is_null() {
+        log_msg(&format!("RUST_VIDEO: uio_open failed for {}", filename));
+
+        let c_filename_abs = std::ffi::CString::new(format!("/{}", filename)).ok()?;
+        let handle_abs = uio_open(dir, c_filename_abs.as_ptr(), 0 /* O_RDONLY */, 0);
+        log_msg(&format!("RUST_VIDEO: uio_open returned {:?} for /{}", handle_abs, filename));
+        if handle_abs.is_null() {
+            log_msg(&format!("RUST_VIDEO: uio_open failed for /{}", filename));
+            return None;
         }
-        let scale_w = screen_w / src_w;
-        let scale_h = screen_h / src_h;
-        scale_w.min(scale_h).max(1).min(8)
+        return read_uio_handle(handle_abs, filename);
     }
+
+    read_uio_handle(handle, filename)
+}
+
+
+fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
+    1
 }
 
 // ============================================================================
@@ -573,12 +574,16 @@ pub unsafe extern "C" fn rust_play_video(
     looping: bool,
 ) -> bool {
     if filename.is_null() {
+        rust_bridge_log_msg("RUST_VIDEO: rust_play_video called with null filename");
         return false;
     }
 
     let filename_str = match CStr::from_ptr(filename).to_str() {
         Ok(s) => s,
-        Err(_) => return false,
+        Err(_) => {
+            rust_bridge_log_msg("RUST_VIDEO: rust_play_video filename is not valid UTF-8");
+            return false;
+        }
     };
 
     let basename = filename_str.trim_end_matches(".duk");
@@ -607,7 +612,10 @@ pub unsafe extern "C" fn rust_play_video(
 
     let decoder = match DukVideoDecoder::open_from_data(&hdr_data, &tbl_data, &frm_data, &duk_data) {
         Ok(d) => d,
-        Err(_) => return false,
+        Err(e) => {
+            rust_bridge_log_msg(&format!("RUST_VIDEO: decoder init failed: {:?}", e));
+            return false;
+        }
     };
 
     let src_w = decoder.width();
@@ -623,6 +631,17 @@ pub unsafe extern "C" fn rust_play_video(
         let dst_h = src_h * scale;
         player.set_scaler(Some(VideoScaler::new(src_w, src_h, dst_w, dst_h)));
     }
+
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: play {} ({}x{}), scale={}, dst=({}, {}), looping={}",
+        filename_str,
+        src_w,
+        src_h,
+        scale,
+        x,
+        y,
+        looping
+    ));
 
     player.play();
 
@@ -654,6 +673,7 @@ pub extern "C" fn rust_video_playing() -> bool {
 pub unsafe extern "C" fn rust_process_video_frame() -> bool {
     let screen = SDL_Screen;
     if screen.is_null() {
+        rust_bridge_log_msg("RUST_VIDEO: SDL_Screen is null");
         return false;
     }
 
@@ -663,14 +683,158 @@ pub unsafe extern "C" fn rust_process_video_frame() -> bool {
         if let Some(ref mut p) = *guard {
             still_playing = p.process_frame(screen);
             if still_playing {
-                TFB_SwapBuffers(1);
+                if !p.direct_window_mode() {
+                    TFB_SwapBuffers(1);
+                }
             } else {
                 *guard = None;
             }
+        } else {
+            rust_bridge_log_msg("RUST_VIDEO: process_frame called with no active player");
         }
+    } else {
+        rust_bridge_log_msg("RUST_VIDEO: process_frame failed to lock player");
     }
 
     still_playing
+}
+
+/// Present a video frame directly to the window, bypassing the 320x240 SDL_Screen.
+/// The frame data should be RGBA format where frame.data[0] is the R component.
+/// Returns true on success, false on failure.
+#[no_mangle]
+pub unsafe extern "C" fn rust_present_video_to_window(
+    frame_data: *const u8,
+    width: c_int,
+    height: c_int,
+    stride: c_int, // row stride in bytes, typically width * 4 for RGBA
+) -> bool {
+    if frame_data.is_null() || width <= 0 || height <= 0 || stride <= 0 {
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: rust_present_video_to_window invalid params data={:p} w={} h={} stride={}",
+            frame_data, width, height, stride
+        ));
+        return false;
+    }
+
+    let frame_len = (height * stride) as usize;
+    let frame_slice = std::slice::from_raw_parts(frame_data, frame_len);
+
+    let mut presented = false;
+    let mut saw_state = false;
+    let mut log_line = None;
+
+    crate::graphics::ffi::with_gfx_state(|canvas, window_width, window_height| {
+        saw_state = true;
+        let texture_creator = canvas.texture_creator();
+        let mut texture = match texture_creator.create_texture_streaming(
+            sdl2::pixels::PixelFormatEnum::RGBX8888,
+            width as u32,
+            height as u32,
+        ) {
+            Ok(tex) => tex,
+            Err(e) => {
+                rust_bridge_log_msg(&format!(
+                    "RUST_VIDEO: Failed to create video texture: {}",
+                    e
+                ));
+                return;
+            }
+        };
+
+        let mut upload_buffer: Vec<u8>;
+        let upload_slice = if stride as usize == (width as usize * 4) {
+            upload_buffer = Vec::with_capacity(frame_len);
+            let pixels = frame_slice.chunks_exact(4);
+            for px in pixels {
+                let r = px[0];
+                let g = px[1];
+                let b = px[2];
+                upload_buffer.extend_from_slice(&[0, b, g, r]);
+            }
+            upload_buffer.as_slice()
+        } else {
+            upload_buffer = Vec::with_capacity((width as usize * height as usize) * 4);
+            for row in 0..height as usize {
+                let row_start = row * stride as usize;
+                let row_end = row_start + (width as usize * 4);
+                let row_slice = &frame_slice[row_start..row_end];
+                for px in row_slice.chunks_exact(4) {
+                    let r = px[0];
+                    let g = px[1];
+                    let b = px[2];
+                    upload_buffer.extend_from_slice(&[0, b, g, r]);
+                }
+            }
+            upload_buffer.as_slice()
+        };
+
+        if let Err(e) = texture.update(None, upload_slice, (width * 4) as usize) {
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: Failed to update video texture: {}",
+                e
+            ));
+            return;
+        }
+
+        let (old_logical_w, old_logical_h) = canvas.logical_size();
+        if let Err(e) = canvas.set_logical_size(window_width, window_height) {
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: Failed to set logical size {}x{}: {}",
+                window_width, window_height, e
+            ));
+            return;
+        }
+
+        let video_width = width as u32;
+        let video_height = height as u32;
+
+        let scale_x = window_width as f32 / video_width as f32;
+        let scale_y = window_height as f32 / video_height as f32;
+        let scale = scale_x.min(scale_y);
+
+        let scaled_width = (video_width as f32 * scale) as u32;
+        let scaled_height = (video_height as f32 * scale) as u32;
+
+        let dst_x = (window_width - scaled_width) / 2;
+        let dst_y = (window_height - scaled_height) / 2;
+
+        let dst_rect = sdl2::rect::Rect::new(dst_x as i32, dst_y as i32, scaled_width, scaled_height);
+
+        canvas.set_draw_color(sdl2::pixels::Color::BLACK);
+        canvas.clear();
+
+        if let Err(e) = canvas.copy(&texture, None, Some(dst_rect)) {
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: Failed to copy video texture: {}",
+                e
+            ));
+            let _ = canvas.set_logical_size(old_logical_w, old_logical_h);
+            return;
+        }
+
+        canvas.present();
+        let _ = canvas.set_logical_size(old_logical_w, old_logical_h);
+
+        presented = true;
+        log_line = Some(format!(
+            "RUST_VIDEO: Presented frame {}x{} stride={} scaled to {}x{} at ({},{}) window={}x{}",
+            width, height, stride, scaled_width, scaled_height, dst_x, dst_y, window_width, window_height
+        ));
+    });
+
+    if !presented {
+        if !saw_state {
+            rust_bridge_log_msg("RUST_VIDEO: rust_present_video_to_window no graphics state");
+        }
+        return false;
+    }
+
+    if let Some(line) = log_line {
+        rust_bridge_log_msg(&line);
+    }
+
+    true
 }
 
 #[no_mangle]
@@ -681,4 +845,101 @@ pub extern "C" fn rust_get_video_position() -> u32 {
         }
     }
     0
+}
+
+/// Enhanced video player that uses direct window presentation
+/// 
+/// This function creates a VideoPlayer that scales with Lanczos to the actual
+/// window size and presents directly to the window, bypassing the 320x240 surface
+/// and completely avoiding xBRZ/hq2x scaling which would corrupt the video.
+#[no_mangle]
+pub unsafe extern "C" fn rust_play_video_direct_window(
+    dir: *mut uio_DirHandle,
+    filename: *const c_char,
+    window_width: u32,
+    window_height: u32,
+    looping: bool,
+) -> bool {
+    if filename.is_null() {
+        rust_bridge_log_msg("RUST_VIDEO: rust_play_video_direct_window called with null filename");
+        return false;
+    }
+
+    let filename_str = match CStr::from_ptr(filename).to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            rust_bridge_log_msg("RUST_VIDEO: rust_play_video_direct_window filename is not valid UTF-8");
+            return false;
+        }
+    };
+
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: Direct window play {} (window {}x{}), looping={} - bypassing xBRZ/hq2x completely",
+        filename_str,
+        window_width,
+        window_height,
+        looping
+    ));
+
+    if crate::graphics::ffi::with_gfx_state(|_, _, _| {}).is_none() {
+        rust_bridge_log_msg("RUST_VIDEO: Direct window path unavailable (Rust gfx not initialized)");
+        return false;
+    }
+
+    let basename = filename_str.trim_end_matches(".duk");
+
+    let duk_file = format!("{}.duk", basename);
+    let frm_file = format!("{}.frm", basename);
+    let hdr_file = format!("{}.hdr", basename);
+    let tbl_file = format!("{}.tbl", basename);
+
+    let duk_data = match read_uio_file(dir, &duk_file) {
+        Some(d) => d,
+        None => return false,
+    };
+    let frm_data = match read_uio_file(dir, &frm_file) {
+        Some(d) => d,
+        None => return false,
+    };
+    let hdr_data = match read_uio_file(dir, &hdr_file) {
+        Some(d) => d,
+        None => return false,
+    };
+    let tbl_data = match read_uio_file(dir, &tbl_file) {
+        Some(d) => d,
+        None => return false,
+    };
+
+    let decoder = match DukVideoDecoder::open_from_data(&hdr_data, &tbl_data, &frm_data, &duk_data) {
+        Ok(d) => d,
+        Err(e) => {
+            rust_bridge_log_msg(&format!("RUST_VIDEO: decoder init failed: {:?}", e));
+            return false;
+        }
+    };
+
+    let src_w = decoder.width();
+    let src_h = decoder.height();
+    
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: Source video {}x{}, Lanczos scaling to window {}x{}",
+        src_w, src_h, window_width, window_height
+    ));
+
+    let lanczos_scaler = Some(LanczosVideoScaler::new(src_w, src_h, window_width, window_height));
+
+    let mut player = VideoPlayer::new(decoder);
+    player.set_position(0, 0); // Centered by renderer
+    player.set_loop(looping);
+    player.set_lanczos_scaler(lanczos_scaler);
+    player.set_direct_window_mode(true);
+
+    player.play();
+
+    if let Ok(mut guard) = PLAYER.lock() {
+        *guard = Some(player);
+    }
+
+    rust_bridge_log_msg("RUST_VIDEO: Direct window player initialized - video will bypass all gfx scaling");
+    true
 }

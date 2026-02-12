@@ -1253,7 +1253,8 @@ GetGlobalOptions (GLOBALOPTS *opts)
 	}
 	else
 	{
-		opts->scaler = OPTVAL_NO_SCALE;
+		// Default to xBRZ3 when no scaler flag is set
+		opts->scaler = OPTVAL_XBRZ3_SCALE;
 	}
 	opts->fullscreen = (GfxFlags & TFB_GFXFLAGS_FULLSCREEN) ?
 			OPTVAL_ENABLED : OPTVAL_DISABLED;

@@ -134,7 +134,7 @@ impl SourceState {
             position: [0.0, 0.0, 0.0],
             total_samples_queued: 0,
             samples_consumed: 0,
-            sample_rate: 44100,
+            sample_rate: 0,
             play_start_time: None,
             samples_played_before_pause: 0,
         }
@@ -142,6 +142,10 @@ impl SourceState {
     
     /// Estimate how many samples have been played based on elapsed time
     fn samples_played(&self) -> usize {
+        if self.sample_rate == 0 {
+            return self.samples_played_before_pause;
+        }
+
         if let Some(start) = self.play_start_time {
             let elapsed = start.elapsed();
             let samples_from_time = (elapsed.as_secs_f64() * self.sample_rate as f64) as usize;
@@ -180,10 +184,6 @@ impl SourceState {
             self.total_samples_queued = self.total_samples_queued.saturating_sub(consumed);
         }
         
-        if moved > 0 || self.queued_buffers.len() % 1000 == 0 {
-            eprintln!("RODIO: update_processed played={} target={} consumed={} moved={} queued={} processed={} remaining={}", 
-                played, target, consumed, moved, self.queued_buffers.len(), self.processed_buffers.len(), self.samples_remaining());
-        }
     }
 }
 
@@ -200,17 +200,12 @@ static NEXT_OBJECT_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomi
 // =============================================================================
 
 fn audio_thread_main(rx: Receiver<AudioCmd>) {
-    eprintln!("RODIO_BACKEND: audio thread starting");
     rust_bridge_log_msg("RODIO_BACKEND: audio thread starting");
 
     // Initialize audio output
     let (stream, stream_handle) = match OutputStream::try_default() {
-        Ok(s) => {
-            eprintln!("RODIO_BACKEND: audio output opened successfully");
-            s
-        }
+        Ok(s) => s,
         Err(e) => {
-            eprintln!("RODIO_BACKEND: failed to open audio - {}", e);
             rust_bridge_log_msg(&format!("RODIO_BACKEND: failed to open audio - {}", e));
             return;
         }
@@ -222,7 +217,6 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
     let mut sources: HashMap<AudioObject, SourceState> = HashMap::new();
     let mut buffers: HashMap<AudioObject, BufferData> = HashMap::new();
 
-    eprintln!("RODIO_BACKEND: audio thread ready");
     rust_bridge_log_msg("RODIO_BACKEND: audio thread ready");
 
     loop {
@@ -299,10 +293,6 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                                 // Check if sink is empty
                                 if let Some(ref sink) = src.sink {
                                     if sink.empty() {
-                                        // Sink finished - move all queued to processed
-                                        while let Some(buf) = src.queued_buffers.pop() {
-                                            src.processed_buffers.push(buf.id);
-                                        }
                                         src.state = AUDIO_STOPPED;
                                         src.play_start_time = None;
                                         AUDIO_STOPPED
@@ -317,15 +307,23 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                             }
                             AUDIO_BUFFERS_QUEUED => src.queued_buffers.len() as i32,
                             AUDIO_BUFFERS_PROCESSED => {
-                                // Update processed buffers based on timing
-                                let before = src.processed_buffers.len();
-                                src.update_processed_buffers();
-                                let after = src.processed_buffers.len();
-                                if before != after || src.queued_buffers.len() % 100 == 0 {
-                                    eprintln!("RODIO: BUFFERS_PROCESSED src={} play_start={:?} samples_played={} before={} after={}", 
-                                        id, src.play_start_time.is_some(), src.samples_played(), before, after);
+                                if let Some(ref sink) = src.sink {
+                                    if sink.empty() {
+                                        while let Some(buf) = src.queued_buffers.pop() {
+                                            src.processed_buffers.push(buf.id);
+                                        }
+                                        src.total_samples_queued = 0;
+                                        src.samples_consumed = 0;
+                                        src.play_start_time = None;
+                                    } else {
+                                        // Update processed buffers based on timing
+                                        src.update_processed_buffers();
+                                    }
+                                } else {
+                                    // Update processed buffers based on timing
+                                    src.update_processed_buffers();
                                 }
-                                after as i32
+                                src.processed_buffers.len() as i32
                             }
                             AUDIO_LOOPING => if src.looping { 1 } else { 0 },
                             _ => 0,
@@ -337,14 +335,15 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                 }
 
                 AudioCmd::SourcePlay(id) => {
-                    eprintln!("RODIO: SourcePlay id={}", id);
                     if let Some(src) = sources.get_mut(&id) {
                         // If we have a paused sink, resume it
                         if let Some(ref sink) = src.sink {
                             if sink.is_paused() {
                                 sink.play();
                                 src.state = AUDIO_PLAYING;
-                                src.play_start_time = Some(std::time::Instant::now());
+                                if src.sample_rate != 0 {
+                                    src.play_start_time = Some(std::time::Instant::now());
+                                }
                                 continue;
                             }
                         }
@@ -376,10 +375,11 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
 
                                 src.sink = Some(sink);
                                 src.state = AUDIO_PLAYING;
-                                src.play_start_time = Some(std::time::Instant::now());
+                                if src.sample_rate != 0 {
+                                    src.play_start_time = Some(std::time::Instant::now());
+                                }
                                 src.samples_played_before_pause = 0;
                                 src.samples_consumed = 0;
-                                eprintln!("RODIO: SourcePlay started, queued={} buffers", src.queued_buffers.len());
                             }
                         }
                     }
@@ -426,7 +426,6 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                 }
 
                 AudioCmd::SourceQueueBuffers(id, buf_ids) => {
-                    eprintln!("RODIO: queue_buffers src={} count={}", id, buf_ids.len());
                     if let Some(src) = sources.get_mut(&id) {
                         for buf_id in buf_ids {
                             let samples_in_buf = if let Some(buf) = buffers.get(&buf_id) {
@@ -438,8 +437,6 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                                 // If source is playing, append to sink
                                 if src.state == AUDIO_PLAYING {
                                     if let Some(ref sink) = src.sink {
-                                        eprintln!("RODIO: appending buffer {} to playing sink (freq={} ch={} samples={})", 
-                                            buf_id, buf.frequency, buf.channels, buf.samples.len());
                                         let source = SamplesBuffer::new(
                                             buf.channels,
                                             buf.frequency,
@@ -466,11 +463,8 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                 AudioCmd::SourceUnqueueBuffers(id, n, response) => {
                     let mut unqueued = Vec::new();
                     if let Some(src) = sources.get_mut(&id) {
-                        eprintln!("RODIO: unqueue_buffers src={} n={} processed={} queued={}", 
-                            id, n, src.processed_buffers.len(), src.queued_buffers.len());
                         for _ in 0..n {
                             if let Some(buf_id) = src.processed_buffers.pop() {
-                                eprintln!("RODIO: unqueued buffer {}", buf_id);
                                 unqueued.push(buf_id);
                             }
                         }
@@ -605,20 +599,17 @@ fn send_cmd_wait<T>(cmd_fn: impl FnOnce(Sender<T>) -> AudioCmd) -> Option<T> {
 /// Initialize the rodio audio backend
 #[no_mangle]
 pub extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
-    eprintln!("RODIO_BACKEND_INIT: starting...");
     rust_bridge_log_msg("RODIO_BACKEND_INIT");
 
     // Check if already running
     {
         let guard = match AUDIO_SENDER.lock() {
             Ok(g) => g,
-            Err(e) => {
-                eprintln!("RODIO_BACKEND_INIT: mutex poisoned: {}", e);
+            Err(_) => {
                 return 0;
             }
         };
         if guard.is_some() {
-            eprintln!("RODIO_BACKEND_INIT: already initialized");
             rust_bridge_log_msg("RODIO_BACKEND_INIT: already initialized");
             return 1;
         }
@@ -632,8 +623,6 @@ pub extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
         let mut guard = AUDIO_SENDER.lock().unwrap();
         *guard = Some(tx);
     }
-
-    eprintln!("RODIO_BACKEND_INIT: spawning audio thread...");
 
     // Spawn audio thread
     let handle = thread::spawn(move || {
@@ -649,7 +638,6 @@ pub extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
     // Give thread time to initialize
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    eprintln!("RODIO_BACKEND_INIT: success");
     rust_bridge_log_msg("RODIO_BACKEND_INIT: success");
     1
 }
@@ -724,12 +712,7 @@ pub extern "C" fn rust_audio_get_source_i(src: AudioObject, prop: i32, out: *mut
         unsafe {
             *out = value;
         }
-        // Debug log for state queries
-        if prop == AUDIO_SOURCE_STATE || prop == AUDIO_BUFFERS_PROCESSED || prop == AUDIO_BUFFERS_QUEUED {
-            eprintln!("RODIO: get_source_i src={} prop={} value={}", src, prop, value);
-        }
     } else {
-        eprintln!("RODIO: get_source_i TIMEOUT src={} prop={}", src, prop);
         // Return 0 on timeout
         unsafe {
             *out = 0;
@@ -739,7 +722,6 @@ pub extern "C" fn rust_audio_get_source_i(src: AudioObject, prop: i32, out: *mut
 
 #[no_mangle]
 pub extern "C" fn rust_audio_source_play(src: AudioObject) {
-    eprintln!("RODIO: source_play src={}", src);
     send_cmd(AudioCmd::SourcePlay(src));
 }
 
@@ -794,22 +776,16 @@ pub extern "C" fn rust_audio_source_unqueue_buffers(
 
 #[no_mangle]
 pub extern "C" fn rust_audio_gen_buffers(n: u32, out: *mut AudioObject) {
-    eprintln!("RODIO: gen_buffers n={} out={:?}", n, out);
-
     if out.is_null() {
-        eprintln!("RODIO: gen_buffers - null output pointer!");
         return;
     }
 
     if let Some(ids) = send_cmd_wait(|tx| AudioCmd::GenBuffers(n, tx)) {
-        eprintln!("RODIO: gen_buffers got {} ids", ids.len());
         for (i, id) in ids.into_iter().enumerate() {
             unsafe {
                 *out.add(i) = id;
             }
         }
-    } else {
-        eprintln!("RODIO: gen_buffers - no response from audio thread!");
     }
 }
 
@@ -832,18 +808,11 @@ pub extern "C" fn rust_audio_buffer_data(
     size: u32,
     freq: u32,
 ) {
-    rust_bridge_log_msg(&format!(
-        "RODIO: buffer_data buf={} format={} size={} freq={}",
-        buf, format, size, freq
-    ));
-
     if data.is_null() {
-        rust_bridge_log_msg("RODIO: buffer_data - null data pointer!");
         return;
     }
 
     if size == 0 {
-        rust_bridge_log_msg("RODIO: buffer_data - zero size!");
         return;
     }
 

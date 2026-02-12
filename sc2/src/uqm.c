@@ -248,7 +248,7 @@ main (int argc, char *argv[])
 		INIT_CONFIG_OPTION2( resolution,        1280, 960 ),  // 4x original (320x240)
 		INIT_CONFIG_OPTION(  fullscreen,        false ),
 		INIT_CONFIG_OPTION(  scanlines,         false ),      // No scanlines
-		INIT_CONFIG_OPTION(  scaler,            TFB_GFXFLAGS_SCALE_HQXX ),  // HQ scaler for crisp graphics
+		INIT_CONFIG_OPTION(  scaler,            TFB_GFXFLAGS_SCALE_XBRZ3 ),  // xBRZ3 scaler for crisp graphics
 		INIT_CONFIG_OPTION(  showFps,           false ),
 		INIT_CONFIG_OPTION(  keepAspectRatio,   true ),       // Preserve aspect ratio
 		INIT_CONFIG_OPTION(  gamma,             1.0f ),

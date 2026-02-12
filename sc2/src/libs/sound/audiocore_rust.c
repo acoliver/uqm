@@ -53,25 +53,6 @@ extern sint32 rust_audio_is_buffer(audio_Object bufobj);
 extern void rust_audio_get_buffer_i(audio_Object bufobj, sint32 pname, audio_IntVal *value);
 extern void rust_audio_buffer_data(audio_Object bufobj, uint32 format, void* data, uint32 size, uint32 freq);
 
-/* Debugging: log wrapper for GenBuffers */
-static void debug_GenBuffers(uint32 n, audio_Object *pbufobj)
-{
-	uint32 i;
-	log_add(log_Info, "DEBUG: rust_audio_gen_buffers n=%u pbufobj=%p", n, (void*)pbufobj);
-	rust_audio_gen_buffers(n, pbufobj);
-	for (i = 0; i < n; i++) {
-		log_add(log_Info, "DEBUG: buffer[%u] = %lu (0x%lx)", i, 
-			(unsigned long)pbufobj[i], (unsigned long)pbufobj[i]);
-	}
-}
-
-/* Debugging: log wrapper for BufferData */
-static void debug_BufferData(audio_Object bufobj, uint32 format, void* data, uint32 size, uint32 freq)
-{
-	log_add(log_Info, "DEBUG: rust_audio_buffer_data buf=%lu format=%u data=%p size=%u freq=%u",
-		(unsigned long)bufobj, format, data, size, freq);
-	rust_audio_buffer_data(bufobj, format, data, size, freq);
-}
 
 
 /*
@@ -291,7 +272,7 @@ audio_SourceUnqueueBuffers (audio_Object srcobj, uint32 n,
 void
 audio_GenBuffers (uint32 n, audio_Object *pbufobj)
 {
-	debug_GenBuffers(n, pbufobj);
+	rust_audio_gen_buffers(n, pbufobj);
 }
 
 void
@@ -317,7 +298,7 @@ void
 audio_BufferData (audio_Object bufobj, uint32 format, void* data,
 		uint32 size, uint32 freq)
 {
-	debug_BufferData(bufobj, format, data, size, freq);
+	rust_audio_buffer_data(bufobj, format, data, size, freq);
 }
 
 bool

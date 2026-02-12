@@ -7,5 +7,5 @@ case "$uqm_THREADLIB" in
 		;;
 esac
 
-uqm_CFILES="thrcommon.c"
-uqm_HFILES="thrcommon.h"
+uqm_CFILES="thrcommon.c rust_thrcommon.c"
+uqm_HFILES="thrcommon.h rust_threads.h"

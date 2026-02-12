@@ -117,6 +117,13 @@ fn get_gfx_state() -> Option<&'static mut RustGraphicsState> {
     unsafe { (*RUST_GFX.0.get()).as_mut() }
 }
 
+pub(crate) fn with_gfx_state<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&mut sdl2::render::Canvas<sdl2::video::Window>, u32, u32) -> R,
+{
+    get_gfx_state().map(|state| f(&mut state.canvas, state.width, state.height))
+}
+
 fn set_gfx_state(state: Option<RustGraphicsState>) {
     unsafe {
         *RUST_GFX.0.get() = state;
@@ -205,6 +212,14 @@ pub extern "C" fn rust_gfx_init(
         rust_bridge_log_msg(&format!("RUST_GFX_INIT: set_logical_size failed: {}", e));
         return -1;
     }
+
+    rust_bridge_log_msg(&format!(
+        "RUST_GFX_INIT: Logical size {}x{} (window {}x{})",
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        width,
+        height
+    ));
 
     rust_bridge_log_msg(&format!("RUST_GFX_INIT: Renderer: {}", canvas.info().name));
 

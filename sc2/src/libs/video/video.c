@@ -120,6 +120,10 @@ VidPlayEx (VIDEO_REF vid, MUSIC_REF AudRef, MUSIC_REF SpeechRef,
 	vid->loop_frame = LoopFrame;
 	vid->loop_to = 0;
 
+#ifdef USE_RUST_VIDEO
+	vid->data = SpeechRef;
+#endif
+
 	if (_cur_speech)
 		snd_StopSpeech ();
 	if (_cur_video)
@@ -135,7 +139,9 @@ VidPlayEx (VIDEO_REF vid, MUSIC_REF AudRef, MUSIC_REF SpeechRef,
 		ret = SOFTWARE_FMV;
 		if (SpeechRef)
 		{
+#ifndef USE_RUST_VIDEO
 			snd_PlaySpeech (SpeechRef);
+#endif
 			_cur_speech = SpeechRef;
 		}
 	}

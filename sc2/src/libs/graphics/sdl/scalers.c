@@ -210,6 +210,11 @@ Scale_PrepPlatform (int flags, const SDL_PixelFormat* fmt)
 
 	Scale_Platform = SCALEPLAT_NULL;
 
+#ifdef USE_RUST_GFX
+	// When using Rust graphics, C scalers are not used
+	// Skip platform detection and log messages
+	Scale_Platform = SCALEPLAT_C;
+#else
 	// first match wins
 	// add better platform techs to the top
 #ifdef MMX_ASM
@@ -271,6 +276,7 @@ Scale_PrepPlatform (int flags, const SDL_PixelFormat* fmt)
 		else
 			log_add (log_Info, "Screen scalers are using optimized C code");
 	}
+#endif /* USE_RUST_GFX */
 
 	// Lookup the scaling function
 	// First find the right platform

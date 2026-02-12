@@ -60,14 +60,14 @@ static const TFB_SoundCallbacks vp_AudioCBs =
 
 
 bool
-TFB_InitVideoPlayer (void)
+TFB_InitVideoPlayer_Legacy (void)
 {
 	// now just a stub
 	return true;
 }
 
 void
-TFB_UninitVideoPlayer (void)
+TFB_UninitVideoPlayer_Legacy (void)
 {
 	// now just a stub
 }
@@ -216,7 +216,7 @@ processMuteFrame (VIDEO_REF vid)
 }
 
 bool
-TFB_PlayVideo (VIDEO_REF vid, uint32 x, uint32 y)
+TFB_PlayVideo_Legacy (VIDEO_REF vid, uint32 x, uint32 y)
 {
 	RECT scrn_r;
 	RECT clip_r = {{0, 0}, {vid->w, vid->h}};
@@ -296,7 +296,7 @@ TFB_PlayVideo (VIDEO_REF vid, uint32 x, uint32 y)
 }
 
 void
-TFB_StopVideo (VIDEO_REF vid)
+TFB_StopVideo_Legacy (VIDEO_REF vid)
 {
 	if (!vid)
 		return;
@@ -321,7 +321,7 @@ TFB_StopVideo (VIDEO_REF vid)
 }
 
 bool
-TFB_VideoPlaying (VIDEO_REF vid)
+TFB_VideoPlaying_Legacy (VIDEO_REF vid)
 {
 	if (!vid)
 		return false;
@@ -330,7 +330,7 @@ TFB_VideoPlaying (VIDEO_REF vid)
 }
 
 bool
-TFB_ProcessVideoFrame (VIDEO_REF vid)
+TFB_ProcessVideoFrame_Legacy (VIDEO_REF vid)
 {
 	if (!vid)
 		return false;
@@ -342,11 +342,11 @@ TFB_ProcessVideoFrame (VIDEO_REF vid)
 }
 
 uint32
-TFB_GetVideoPosition (VIDEO_REF vid)
+TFB_GetVideoPosition_Legacy (VIDEO_REF vid)
 {
 	uint32 pos;
 
-	if (!TFB_VideoPlaying (vid))
+	if (!TFB_VideoPlaying_Legacy (vid))
 		return 0;
 
 	LockMutex (vid->guard);
@@ -357,9 +357,9 @@ TFB_GetVideoPosition (VIDEO_REF vid)
 }
 
 bool
-TFB_SeekVideo (VIDEO_REF vid, uint32 pos)
+TFB_SeekVideo_Legacy (VIDEO_REF vid, uint32 pos)
 {
-	if (!TFB_VideoPlaying (vid))
+	if (!TFB_VideoPlaying_Legacy (vid))
 		return false;
 
 	if (vid->decoder->audio_synced)
@@ -481,5 +481,7 @@ vp_QueueBuffer (TFB_SoundSample* sample, audio_Object buffer)
 	TFB_TagBuffer (sample, buffer,
 			(intptr_t) SoundDecoder_GetFrame (decoder));
 }
+
+
 
 #endif /* !USE_RUST_VIDEO */

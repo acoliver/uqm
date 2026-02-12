@@ -466,12 +466,15 @@ mod tests {
         let mut target: i32 = 0;
         vc.add_key_binding(32, &mut target as *mut i32 as usize);
 
+        // VCONTROL_STARTBIT (0x100) is set on key down, plus the count
+        const VCONTROL_MASK: i32 = 0xFF;
+
         unsafe {
             vc.handle_key_down(32);
-            assert_eq!(target, 1);
+            assert_eq!(target & VCONTROL_MASK, 1);
 
             vc.handle_key_up(32);
-            assert_eq!(target, 0);
+            assert_eq!(target & VCONTROL_MASK, 0);
         }
     }
 

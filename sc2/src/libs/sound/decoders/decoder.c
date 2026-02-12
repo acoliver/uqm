@@ -27,7 +27,9 @@
 #include "decoder.h"
 #include "wav.h"
 #include "dukaud.h"
-#include "modaud.h"
+#ifndef USE_RUST_MOD
+#	include "modaud.h"
+#endif  /* USE_RUST_MOD */
 #ifndef OVCODEC_NONE
 #	include "oggaud.h"
 #endif  /* OVCODEC_NONE */
@@ -37,6 +39,9 @@
 #ifdef USE_RUST_WAV
 #	include "rust_wav.h"
 #endif  /* USE_RUST_WAV */
+#ifdef USE_RUST_MOD
+#	include "rust_mod.h"
+#endif  /* USE_RUST_MOD */
 #include "aiffaud.h"
 
 
@@ -144,7 +149,12 @@ static TFB_RegSoundDecoder sd_decoders[MAX_REG_DECODERS + 1] =
 #else
 	{true,  true,  "wav", &wava_DecoderVtbl},
 #endif  /* USE_RUST_WAV */
+#ifdef USE_RUST_MOD
+	/* Use Rust MOD decoder (pure Rust, no libmikmod dependency) */
+	{true,  true,  "mod", &rust_mod_DecoderVtbl},
+#else
 	{true,  true,  "mod", &moda_DecoderVtbl},
+#endif  /* USE_RUST_MOD */
 #ifdef USE_RUST_OGG
 	/* Use Rust Ogg Vorbis decoder (pure Rust, no libvorbis dependency) */
 	{true,  true,  "ogg", &rust_ova_DecoderVtbl},

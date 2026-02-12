@@ -76,3 +76,30 @@
 /* Defined if using Rust audio backend (rodio) */
 @SYMBOL_USE_RUST_AUDIO_DEF@
 
+/* Defined if using Rust input/VControl */
+@SYMBOL_USE_RUST_INPUT_DEF@
+
+/* Defined if using Rust comm */
+@SYMBOL_USE_RUST_COMM_DEF@
+
+/* Defined if using Rust video */
+@SYMBOL_USE_RUST_VIDEO_DEF@
+
+/* Defined if using Rust graphics */
+@SYMBOL_USE_RUST_GFX_DEF@
+
+/* Defined if using Rust resources */
+@SYMBOL_USE_RUST_RESOURCE_DEF@
+
+/* Defined if using Rust MOD decoder */
+@SYMBOL_USE_RUST_MOD_DEF@
+
+/* Defined if using Rust WAV decoder */
+@SYMBOL_USE_RUST_WAV_DEF@
+
+/* Defined if using Rust threads */
+@SYMBOL_USE_RUST_THREADS_DEF@
+
+/* Defined if using Rust mixer */
+@SYMBOL_USE_RUST_MIXER_DEF@
+

@@ -132,28 +132,47 @@ impl KeyboardBindings {
         self.buckets.iter().map(|b| b.len()).sum()
     }
 
-    /// Handle key down event - sets all bound targets to 1
+    /// Handle key down event - increments target and sets STARTBIT
+    ///
+    /// This matches the C behavior:
+    /// `*(target) = (*(target)+1) | VCONTROL_STARTBIT`
+    ///
+    /// The STARTBIT (0x100) indicates this key was just pressed this frame.
+    /// The lower bits (VCONTROL_MASK = 0xFF) count how many times key is pressed
+    /// (for multiple bindings to the same key).
     ///
     /// # Safety
     /// Caller must ensure target addresses are valid writable i32 pointers
     pub unsafe fn handle_key_down(&self, keycode: i32) {
+        const VCONTROL_STARTBIT: i32 = 0x100;
         for binding in self.get_bindings(keycode) {
             let target_ptr = binding.target as *mut i32;
             if !target_ptr.is_null() {
-                *target_ptr = 1;
+                *target_ptr = (*target_ptr + 1) | VCONTROL_STARTBIT;
             }
         }
     }
 
-    /// Handle key up event - sets all bound targets to 0
+    /// Handle key up event - decrements target (keeping STARTBIT if present)
+    ///
+    /// This matches the C behavior:
+    /// ```c
+    /// int v = *(target) & VCONTROL_MASK;
+    /// if (v > 0) *(target) = (v-1) | (*(target) & VCONTROL_STARTBIT);
+    /// ```
     ///
     /// # Safety
     /// Caller must ensure target addresses are valid writable i32 pointers
     pub unsafe fn handle_key_up(&self, keycode: i32) {
+        const VCONTROL_STARTBIT: i32 = 0x100;
+        const VCONTROL_MASK: i32 = 0xFF;
         for binding in self.get_bindings(keycode) {
             let target_ptr = binding.target as *mut i32;
             if !target_ptr.is_null() {
-                *target_ptr = 0;
+                let v = *target_ptr & VCONTROL_MASK;
+                if v > 0 {
+                    *target_ptr = (v - 1) | (*target_ptr & VCONTROL_STARTBIT);
+                }
             }
         }
     }
@@ -280,12 +299,19 @@ mod tests {
 
         bindings.add_binding(32, target_addr);
 
+        // VCONTROL_STARTBIT (0x100) is set on key down, plus the count (1)
+        // So key down sets target to 0x101 (257)
+        // Key up decrements the count but preserves STARTBIT, so 0x100 (256)
+        const VCONTROL_STARTBIT: i32 = 0x100;
+        const VCONTROL_MASK: i32 = 0xFF;
+
         unsafe {
             bindings.handle_key_down(32);
-            assert_eq!(target, 1);
+            assert_eq!(target & VCONTROL_MASK, 1); // Count is 1
+            assert_ne!(target & VCONTROL_STARTBIT, 0); // STARTBIT is set
 
             bindings.handle_key_up(32);
-            assert_eq!(target, 0);
+            assert_eq!(target & VCONTROL_MASK, 0); // Count is 0
         }
     }
 
@@ -298,14 +324,16 @@ mod tests {
         bindings.add_binding(32, &mut target1 as *mut i32 as usize);
         bindings.add_binding(32, &mut target2 as *mut i32 as usize);
 
+        const VCONTROL_MASK: i32 = 0xFF;
+
         unsafe {
             bindings.handle_key_down(32);
-            assert_eq!(target1, 1);
-            assert_eq!(target2, 1);
+            assert_eq!(target1 & VCONTROL_MASK, 1);
+            assert_eq!(target2 & VCONTROL_MASK, 1);
 
             bindings.handle_key_up(32);
-            assert_eq!(target1, 0);
-            assert_eq!(target2, 0);
+            assert_eq!(target1 & VCONTROL_MASK, 0);
+            assert_eq!(target2 & VCONTROL_MASK, 0);
         }
     }
 

@@ -8,6 +8,7 @@
 use std::ffi::{c_char, c_int, c_uchar, c_void, CStr};
 use std::ptr;
 
+use super::keynames::{key_from_name, key_name};
 use super::vcontrol::{Gesture, VCONTROL};
 
 /// SDL HAT direction constants (matching SDL)
@@ -25,11 +26,46 @@ const VCONTROL_JOYHAT: c_int = 4;
 
 /// C-compatible gesture structure
 /// Must match the VCONTROL_GESTURE struct in rust_vcontrol.h
+/// The C struct has a union for gesture data that we represent as a nested
+/// struct for FFI compatibility.
 #[repr(C)]
 pub struct VCONTROL_GESTURE {
     pub gesture_type: c_int,
-    /// Union data - we use the largest variant size (3 ints for axis)
+    /// Gesture data union (nested struct matching C union)
+    pub gesture: GestureUnion,
+}
+
+/// Gesture union data - layout matches C union in rust_vcontrol.h
+#[repr(C)]
+pub union GestureUnion {
+    pub key: c_int,
+    pub axis: AxisData,
+    pub button: ButtonData,
+    pub hat: HatData,
     pub data: [c_int; 3],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct AxisData {
+    pub port: c_int,
+    pub index: c_int,
+    pub polarity: c_int,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct ButtonData {
+    pub port: c_int,
+    pub index: c_int,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct HatData {
+    pub port: c_int,
+    pub index: c_int,
+    pub dir: u8,
 }
 
 impl VCONTROL_GESTURE {
@@ -38,42 +74,61 @@ impl VCONTROL_GESTURE {
         match g {
             Gesture::Key(key) => VCONTROL_GESTURE {
                 gesture_type: VCONTROL_KEY,
-                data: [*key, 0, 0],
+                gesture: GestureUnion { data: [*key, 0, 0] },
             },
             Gesture::JoyAxis { port, axis, polarity } => VCONTROL_GESTURE {
                 gesture_type: VCONTROL_JOYAXIS,
-                data: [*port as c_int, *axis, *polarity],
+                gesture: GestureUnion { 
+                    axis: AxisData {
+                        port: *port as c_int,
+                        index: *axis,
+                        polarity: *polarity,
+                    }
+                },
             },
             Gesture::JoyButton { port, button } => VCONTROL_GESTURE {
                 gesture_type: VCONTROL_JOYBUTTON,
-                data: [*port as c_int, *button, 0],
+                gesture: GestureUnion {
+                    button: ButtonData {
+                        port: *port as c_int,
+                        index: *button,
+                    }
+                },
             },
             Gesture::JoyHat { port, hat, dir } => VCONTROL_GESTURE {
                 gesture_type: VCONTROL_JOYHAT,
-                data: [*port as c_int, *hat, *dir as c_int],
+                gesture: GestureUnion {
+                    hat: HatData {
+                        port: *port as c_int,
+                        index: *hat,
+                        dir: *dir,
+                    }
+                },
             },
         }
     }
     
     /// Convert from C VCONTROL_GESTURE to Rust Gesture
     pub fn to_gesture(&self) -> Option<Gesture> {
-        match self.gesture_type {
-            VCONTROL_KEY => Some(Gesture::Key(self.data[0])),
-            VCONTROL_JOYAXIS => Some(Gesture::JoyAxis {
-                port: self.data[0] as u32,
-                axis: self.data[1],
-                polarity: self.data[2],
-            }),
-            VCONTROL_JOYBUTTON => Some(Gesture::JoyButton {
-                port: self.data[0] as u32,
-                button: self.data[1],
-            }),
-            VCONTROL_JOYHAT => Some(Gesture::JoyHat {
-                port: self.data[0] as u32,
-                hat: self.data[1],
-                dir: self.data[2] as u8,
-            }),
-            _ => None,
+        unsafe {
+            match self.gesture_type {
+                VCONTROL_KEY => Some(Gesture::Key(self.gesture.key)),
+                VCONTROL_JOYAXIS => Some(Gesture::JoyAxis {
+                    port: self.gesture.axis.port as u32,
+                    axis: self.gesture.axis.index,
+                    polarity: self.gesture.axis.polarity,
+                }),
+                VCONTROL_JOYBUTTON => Some(Gesture::JoyButton {
+                    port: self.gesture.button.port as u32,
+                    button: self.gesture.button.index,
+                }),
+                VCONTROL_JOYHAT => Some(Gesture::JoyHat {
+                    port: self.gesture.hat.port as u32,
+                    hat: self.gesture.hat.index,
+                    dir: self.gesture.hat.dir,
+                }),
+                _ => None,
+            }
         }
     }
 }
@@ -119,6 +174,9 @@ pub extern "C" fn rust_VControl_ResetInput() {
 /// `target` must be a valid pointer to an i32 that lives as long as the binding
 #[no_mangle]
 pub extern "C" fn rust_VControl_AddKeyBinding(symbol: c_int, target: *mut c_int) -> c_int {
+    crate::bridge_log::rust_bridge_log_msg(&format!(
+        "RUST_INPUT: AddKeyBinding sym=0x{:X} target={:p}", symbol, target
+    ));
     let mut vc = VCONTROL.write();
     if vc.add_key_binding(symbol, target as usize) {
         0
@@ -148,6 +206,9 @@ pub extern "C" fn rust_VControl_ClearKeyBindings() {
 /// Handle key down event
 #[no_mangle]
 pub extern "C" fn rust_VControl_ProcessKeyDown(symbol: c_int) {
+    // Debug log for key presses
+    crate::bridge_log::rust_bridge_log_msg(&format!("RUST_INPUT: KeyDown sym=0x{:X}", symbol));
+    
     let vc = VCONTROL.read();
     unsafe {
         vc.handle_key_down(symbol);
@@ -157,6 +218,9 @@ pub extern "C" fn rust_VControl_ProcessKeyDown(symbol: c_int) {
 /// Handle key up event
 #[no_mangle]
 pub extern "C" fn rust_VControl_ProcessKeyUp(symbol: c_int) {
+    // Debug log for key releases
+    crate::bridge_log::rust_bridge_log_msg(&format!("RUST_INPUT: KeyUp sym=0x{:X}", symbol));
+    
     let vc = VCONTROL.read();
     unsafe {
         vc.handle_key_up(symbol);
@@ -427,6 +491,7 @@ pub extern "C" fn rust_VControl_GetLastGesture(g: *mut VCONTROL_GESTURE) -> c_in
 #[no_mangle]
 pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
     if e.is_null() {
+        crate::bridge_log::rust_bridge_log_msg("RUST_INPUT: HandleEvent got null event");
         return;
     }
     
@@ -434,38 +499,59 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
     // and then the specific event data based on type
     let event_type = *(e as *const u32);
     
+    crate::bridge_log::rust_bridge_log_msg(&format!(
+        "RUST_INPUT: HandleEvent event_type=0x{:X}", event_type
+    ));
+    
     match event_type {
         SDL_KEYDOWN => {
-            // SDL_KeyboardEvent: type(4) + timestamp(4) + windowID(4) + state(1) + repeat(1) + padding(2) + keysym
-            // keysym: scancode(4) + sym(4) + mod(2) + unused(4)
-            // We want keysym.sym which is at offset 20
-            let sym = *((e as *const u8).add(20) as *const i32);
-            let repeat = *((e as *const u8).add(13));
-            
+            // SAFETY: We interpret the incoming pointer as SDL2's SDL_Event.
+            // This is more robust than hardcoded byte offsets (which are easy to
+            // get wrong across platforms/ABIs).
+            let ev = &*(e as *const sdl2::sys::SDL_Event);
+            let sym = unsafe { ev.key.keysym.sym };
+            let repeat = unsafe { ev.key.repeat };
+
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_INPUT: HandleEvent KeyDown sym=0x{:X} repeat={}",
+                sym, repeat
+            ));
+
             if repeat == 0 {
                 let vc = VCONTROL.read();
-                vc.handle_key_down(sym);
+                unsafe {
+                    vc.handle_key_down(sym);
+                }
                 drop(vc);
-                
+
                 // Track gesture
                 let mut vc = VCONTROL.write();
                 vc.set_last_gesture(Gesture::Key(sym));
             }
         }
         SDL_KEYUP => {
-            let sym = *((e as *const u8).add(20) as *const i32);
+            let ev = &*(e as *const sdl2::sys::SDL_Event);
+            let sym = unsafe { ev.key.keysym.sym };
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_INPUT: HandleEvent KeyUp sym=0x{:X}",
+                sym
+            ));
             let vc = VCONTROL.read();
-            vc.handle_key_up(sym);
+            unsafe {
+                vc.handle_key_up(sym);
+            }
         }
         SDL_JOYAXISMOTION => {
-            // SDL_JoyAxisEvent: type(4) + timestamp(4) + which(4) + axis(1) + padding(3) + value(2)
-            let which = *((e as *const u8).add(8) as *const i32);
-            let axis = *((e as *const u8).add(12)) as i32;
-            let value = *((e as *const u8).add(16) as *const i16);
-            
+            let ev = &*(e as *const sdl2::sys::SDL_Event);
+            let which = unsafe { ev.jaxis.which };
+            let axis = unsafe { ev.jaxis.axis } as i32;
+            let value = unsafe { ev.jaxis.value };
+
             let mut vc = VCONTROL.write();
-            vc.handle_joy_axis(which as u32, axis, value);
-            
+            unsafe {
+                vc.handle_joy_axis(which as u32, axis, value);
+            }
+
             // Track gesture for significant axis movements
             if value > 15000 || value < -15000 {
                 let polarity = if value < 0 { -1 } else { 1 };
@@ -477,13 +563,15 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
             }
         }
         SDL_JOYHATMOTION => {
-            // SDL_JoyHatEvent: type(4) + timestamp(4) + which(4) + hat(1) + value(1)
-            let which = *((e as *const u8).add(8) as *const i32);
-            let hat = *((e as *const u8).add(12)) as i32;
-            let value = *((e as *const u8).add(13));
-            
+            let ev = &*(e as *const sdl2::sys::SDL_Event);
+            let which = unsafe { ev.jhat.which };
+            let hat = unsafe { ev.jhat.hat } as i32;
+            let value = unsafe { ev.jhat.value };
+
             let mut vc = VCONTROL.write();
-            vc.handle_joy_hat(which as u32, hat, value);
+            unsafe {
+                vc.handle_joy_hat(which as u32, hat, value);
+            }
             vc.set_last_gesture(Gesture::JoyHat {
                 port: which as u32,
                 hat,
@@ -491,14 +579,16 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
             });
         }
         SDL_JOYBUTTONDOWN => {
-            // SDL_JoyButtonEvent: type(4) + timestamp(4) + which(4) + button(1) + state(1)
-            let which = *((e as *const u8).add(8) as *const i32);
-            let button = *((e as *const u8).add(12)) as i32;
-            
+            let ev = &*(e as *const sdl2::sys::SDL_Event);
+            let which = unsafe { ev.jbutton.which };
+            let button = unsafe { ev.jbutton.button } as i32;
+
             let vc = VCONTROL.read();
-            vc.handle_joy_button(which as u32, button, true);
+            unsafe {
+                vc.handle_joy_button(which as u32, button, true);
+            }
             drop(vc);
-            
+
             let mut vc = VCONTROL.write();
             vc.set_last_gesture(Gesture::JoyButton {
                 port: which as u32,
@@ -506,11 +596,14 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
             });
         }
         SDL_JOYBUTTONUP => {
-            let which = *((e as *const u8).add(8) as *const i32);
-            let button = *((e as *const u8).add(12)) as i32;
-            
+            let ev = &*(e as *const sdl2::sys::SDL_Event);
+            let which = unsafe { ev.jbutton.which };
+            let button = unsafe { ev.jbutton.button } as i32;
+
             let vc = VCONTROL.read();
-            vc.handle_joy_button(which as u32, button, false);
+            unsafe {
+                vc.handle_joy_button(which as u32, button, false);
+            }
         }
         _ => {}
     }
@@ -521,53 +614,60 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
 #[no_mangle]
 pub extern "C" fn rust_VControl_AddGestureBinding(g: *mut VCONTROL_GESTURE, target: *mut c_int) -> c_int {
     if g.is_null() || target.is_null() {
+        crate::bridge_log::rust_bridge_log_msg("RUST_INPUT: AddGestureBinding got null pointer");
         return -1;
     }
     
     let gesture = unsafe { &*g };
     let mut vc = VCONTROL.write();
     
-    match gesture.gesture_type {
-        VCONTROL_KEY => {
-            if vc.add_key_binding(gesture.data[0], target as usize) {
-                0
-            } else {
-                -1
+    unsafe {
+        match gesture.gesture_type {
+            VCONTROL_KEY => {
+                crate::bridge_log::rust_bridge_log_msg(&format!(
+                    "RUST_INPUT: AddGestureBinding KEY sym=0x{:X} target={:p}",
+                    gesture.gesture.key, target
+                ));
+                if vc.add_key_binding(gesture.gesture.key, target as usize) {
+                    0
+                } else {
+                    -1
+                }
             }
-        }
-        VCONTROL_JOYAXIS => {
-            match vc.add_joy_axis_binding(
-                gesture.data[0] as u32,
-                gesture.data[1],
-                gesture.data[2],
-                target as usize,
-            ) {
-                Ok(_) => 0,
-                Err(_) => -1,
+            VCONTROL_JOYAXIS => {
+                match vc.add_joy_axis_binding(
+                    gesture.gesture.axis.port as u32,
+                    gesture.gesture.axis.index,
+                    gesture.gesture.axis.polarity,
+                    target as usize,
+                ) {
+                    Ok(_) => 0,
+                    Err(_) => -1,
+                }
             }
-        }
-        VCONTROL_JOYBUTTON => {
-            match vc.add_joy_button_binding(
-                gesture.data[0] as u32,
-                gesture.data[1],
-                target as usize,
-            ) {
-                Ok(_) => 0,
-                Err(_) => -1,
+            VCONTROL_JOYBUTTON => {
+                match vc.add_joy_button_binding(
+                    gesture.gesture.button.port as u32,
+                    gesture.gesture.button.index,
+                    target as usize,
+                ) {
+                    Ok(_) => 0,
+                    Err(_) => -1,
+                }
             }
-        }
-        VCONTROL_JOYHAT => {
-            match vc.add_joy_hat_binding(
-                gesture.data[0] as u32,
-                gesture.data[1],
-                gesture.data[2] as u8,
-                target as usize,
-            ) {
-                Ok(_) => 0,
-                Err(_) => -1,
+            VCONTROL_JOYHAT => {
+                match vc.add_joy_hat_binding(
+                    gesture.gesture.hat.port as u32,
+                    gesture.gesture.hat.index,
+                    gesture.gesture.hat.dir,
+                    target as usize,
+                ) {
+                    Ok(_) => 0,
+                    Err(_) => -1,
+                }
             }
+            _ => -1,
         }
-        _ => -1,
     }
 }
 
@@ -581,34 +681,36 @@ pub extern "C" fn rust_VControl_RemoveGestureBinding(g: *mut VCONTROL_GESTURE, t
     let gesture = unsafe { &*g };
     let mut vc = VCONTROL.write();
     
-    match gesture.gesture_type {
-        VCONTROL_KEY => {
-            vc.remove_key_binding(gesture.data[0], target as usize);
+    unsafe {
+        match gesture.gesture_type {
+            VCONTROL_KEY => {
+                vc.remove_key_binding(gesture.gesture.key, target as usize);
+            }
+            VCONTROL_JOYAXIS => {
+                let _ = vc.remove_joy_axis_binding(
+                    gesture.gesture.axis.port as u32,
+                    gesture.gesture.axis.index,
+                    gesture.gesture.axis.polarity,
+                    target as usize,
+                );
+            }
+            VCONTROL_JOYBUTTON => {
+                let _ = vc.remove_joy_button_binding(
+                    gesture.gesture.button.port as u32,
+                    gesture.gesture.button.index,
+                    target as usize,
+                );
+            }
+            VCONTROL_JOYHAT => {
+                let _ = vc.remove_joy_hat_binding(
+                    gesture.gesture.hat.port as u32,
+                    gesture.gesture.hat.index,
+                    gesture.gesture.hat.dir,
+                    target as usize,
+                );
+            }
+            _ => {}
         }
-        VCONTROL_JOYAXIS => {
-            let _ = vc.remove_joy_axis_binding(
-                gesture.data[0] as u32,
-                gesture.data[1],
-                gesture.data[2],
-                target as usize,
-            );
-        }
-        VCONTROL_JOYBUTTON => {
-            let _ = vc.remove_joy_button_binding(
-                gesture.data[0] as u32,
-                gesture.data[1],
-                target as usize,
-            );
-        }
-        VCONTROL_JOYHAT => {
-            let _ = vc.remove_joy_hat_binding(
-                gesture.data[0] as u32,
-                gesture.data[1],
-                gesture.data[2] as u8,
-                target as usize,
-            );
-        }
-        _ => {}
     }
 }
 
@@ -628,7 +730,7 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
     
     // Default to NONE
     (*g).gesture_type = VCONTROL_NONE;
-    (*g).data = [0, 0, 0];
+    (*g).gesture.data = [0, 0, 0];
     
     let tokens: Vec<&str> = spec_str.split_whitespace().collect();
     if tokens.is_empty() {
@@ -637,17 +739,10 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
     
     if tokens[0].eq_ignore_ascii_case("key") && tokens.len() >= 2 {
         // Parse key binding: "key KEYNAME"
-        // We need to call the C function VControl_name2code
-        extern "C" {
-            fn VControl_name2code(name: *const c_char) -> c_int;
-        }
-        
-        let key_name = std::ffi::CString::new(tokens[1]).unwrap();
-        let keycode = VControl_name2code(key_name.as_ptr());
-        
-        if keycode != 0 {
+        // Use Rust keyname lookup instead of C function
+        if let Some(keycode) = key_from_name(tokens[1]) {
             (*g).gesture_type = VCONTROL_KEY;
-            (*g).data[0] = keycode;
+            (*g).gesture.key = keycode;
         }
     } else if tokens[0].eq_ignore_ascii_case("joystick") && tokens.len() >= 4 {
         // Parse joystick binding
@@ -672,9 +767,11 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
             };
             
             (*g).gesture_type = VCONTROL_JOYAXIS;
-            (*g).data[0] = joy_num;
-            (*g).data[1] = axis_num;
-            (*g).data[2] = polarity;
+            (*g).gesture.axis = AxisData {
+                port: joy_num,
+                index: axis_num,
+                polarity,
+            };
         } else if tokens[2].eq_ignore_ascii_case("button") {
             // "joystick N button M"
             let button_num: c_int = match tokens[3].parse() {
@@ -683,8 +780,10 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
             };
             
             (*g).gesture_type = VCONTROL_JOYBUTTON;
-            (*g).data[0] = joy_num;
-            (*g).data[1] = button_num;
+            (*g).gesture.button = ButtonData {
+                port: joy_num,
+                index: button_num,
+            };
         } else if tokens[2].eq_ignore_ascii_case("hat") && tokens.len() >= 5 {
             // "joystick N hat M up/down/left/right"
             let hat_num: c_int = match tokens[3].parse() {
@@ -705,9 +804,11 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
             };
             
             (*g).gesture_type = VCONTROL_JOYHAT;
-            (*g).data[0] = joy_num;
-            (*g).data[1] = hat_num;
-            (*g).data[2] = dir as c_int;
+            (*g).gesture.hat = HatData {
+                port: joy_num,
+                index: hat_num,
+                dir,
+            };
         }
     }
 }
@@ -723,35 +824,26 @@ pub unsafe extern "C" fn rust_VControl_DumpGesture(buf: *mut c_char, n: c_int, g
     let gesture = &*g;
     let result = match gesture.gesture_type {
         VCONTROL_KEY => {
-            // Get key name from C function
-            extern "C" {
-                fn VControl_code2name(code: c_int) -> *const c_char;
-            }
-            
-            let name_ptr = VControl_code2name(gesture.data[0]);
-            if name_ptr.is_null() {
-                String::new()
-            } else {
-                let name = CStr::from_ptr(name_ptr).to_string_lossy();
-                format!("key {}", name)
-            }
+            // Use Rust keyname lookup instead of C function
+            let name = key_name(gesture.gesture.key);
+            format!("key {}", name)
         }
         VCONTROL_JOYAXIS => {
-            let polarity = if gesture.data[2] > 0 { "positive" } else { "negative" };
-            format!("joystick {} axis {} {}", gesture.data[0], gesture.data[1], polarity)
+            let polarity = if gesture.gesture.axis.polarity > 0 { "positive" } else { "negative" };
+            format!("joystick {} axis {} {}", gesture.gesture.axis.port, gesture.gesture.axis.index, polarity)
         }
         VCONTROL_JOYBUTTON => {
-            format!("joystick {} button {}", gesture.data[0], gesture.data[1])
+            format!("joystick {} button {}", gesture.gesture.button.port, gesture.gesture.button.index)
         }
         VCONTROL_JOYHAT => {
-            let dir = match gesture.data[2] as u8 {
+            let dir = match gesture.gesture.hat.dir {
                 SDL_HAT_UP => "up",
                 SDL_HAT_DOWN => "down",
                 SDL_HAT_LEFT => "left",
                 SDL_HAT_RIGHT => "right",
                 _ => "unknown",
             };
-            format!("joystick {} hat {} {}", gesture.data[0], gesture.data[1], dir)
+            format!("joystick {} hat {} {}", gesture.gesture.hat.port, gesture.gesture.hat.index, dir)
         }
         _ => {
             *buf = 0;
@@ -802,11 +894,15 @@ mod tests {
         let mut target: i32 = 0;
         assert_eq!(rust_VControl_AddKeyBinding(32, &mut target), 0);
 
+        // VCONTROL_STARTBIT (0x100) is set on key down, plus the count
+        // The test checks the count portion (VCONTROL_MASK = 0xFF)
+        const VCONTROL_MASK: i32 = 0xFF;
+
         rust_VControl_ProcessKeyDown(32);
-        assert_eq!(target, 1);
+        assert_eq!(target & VCONTROL_MASK, 1);
 
         rust_VControl_ProcessKeyUp(32);
-        assert_eq!(target, 0);
+        assert_eq!(target & VCONTROL_MASK, 0);
 
         assert_eq!(rust_VControl_RemoveKeyBinding(32, &mut target), 0);
         cleanup();

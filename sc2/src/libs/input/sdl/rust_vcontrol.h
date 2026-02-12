@@ -1,8 +1,12 @@
 /*
- *  Rust VControl bindings for C
+ * Rust VControl compatibility header
  *
- *  When USE_RUST_INPUT is defined, these Rust implementations replace
- *  the C VControl functions.
+ * When USE_RUST_INPUT is defined, this header provides macro mappings
+ * from the C VControl_* API to the Rust rust_VControl_* FFI functions.
+ * This allows existing C code to work with minimal changes.
+ *
+ * The pattern follows existing rust_oggaud.h approach: extern declarations
+ * for Rust vtable/functions when feature flag is enabled.
  */
 
 #ifndef LIBS_INPUT_SDL_RUST_VCONTROL_H_
@@ -13,13 +17,22 @@
 
 #ifdef USE_RUST_INPUT
 
+/* Include the Rust FFI declarations */
+#include "rust_input.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* === C VControl API -> Rust Mapping === */
+
 #if SDL_MAJOR_VERSION == 1
 typedef SDLKey sdl_key_t;
 #else
 typedef SDL_Keycode sdl_key_t;
 #endif
 
-/* Gesture type enum - must match C version */
+/* VCONTROL_GESTURE structure and types - must match C vcontrol.h */
 typedef enum {
 	VCONTROL_NONE,
 	VCONTROL_KEY,
@@ -29,94 +42,106 @@ typedef enum {
 	NUM_VCONTROL_GESTURES
 } VCONTROL_GESTURE_TYPE;
 
-/* Gesture structure - must match C version */
+/* This struct must be layout-compatible with both C and Rust FFI.
+ * The union is named both 'gesture' for C input.c and 'data' as an alias.
+ * The 'type' and 'gesture_type' fields share the same location. */
 typedef struct {
-	VCONTROL_GESTURE_TYPE type;
 	union {
-		sdl_key_t key;
+		VCONTROL_GESTURE_TYPE type;
+		VCONTROL_GESTURE_TYPE gesture_type;
+	};
+	union {
+		struct {
+			sdl_key_t key;
+		};
 		struct { int port, index, polarity; } axis;
 		struct { int port, index; } button;
 		struct { int port, index; Uint8 dir; } hat;
+		int data[3];
 	} gesture;
 } VCONTROL_GESTURE;
 
-/* Rust VControl FFI functions */
-extern int rust_VControl_Init(void);
-extern void rust_VControl_Uninit(void);
-extern void rust_VControl_ResetInput(void);
-extern void rust_VControl_BeginFrame(void);
-extern void rust_VControl_RemoveAllBindings(void);
+/* Map C API calls to Rust FFI functions */
+#define VControl_Init() rust_VControl_Init()
+#define VControl_Uninit() rust_VControl_Uninit()
+#define VControl_ResetInput() rust_VControl_ResetInput()
+#define VControl_BeginFrame() rust_VControl_BeginFrame()
 
-/* Key bindings */
-extern int rust_VControl_AddKeyBinding(int symbol, int *target);
-extern int rust_VControl_RemoveKeyBinding(int symbol, int *target);
-extern void rust_VControl_ClearKeyBindings(void);
-extern void rust_VControl_ProcessKeyDown(int symbol);
-extern void rust_VControl_ProcessKeyUp(int symbol);
+/* Keyboard bindings */
+#define VControl_AddKeyBinding(sym, target) \
+	rust_VControl_AddKeyBinding((sym), (target))
+#define VControl_RemoveKeyBinding(sym, target) \
+	rust_VControl_RemoveKeyBinding((sym), (target))
 
 /* Joystick management */
-extern int rust_VControl_InitJoystick(int index, const char *name, int num_axes, int num_buttons, int num_hats);
-extern int rust_VControl_UninitJoystick(int index);
-extern int rust_VControl_GetNumJoysticks(void);
+#define VControl_InitJoystick(idx, name, axes, buttons, hats) \
+	rust_VControl_InitJoystick((idx), (name), (axes), (buttons), (hats))
+#define VControl_UninitJoystick(idx) \
+	rust_VControl_UninitJoystick(idx)
+#define VControl_GetNumJoysticks() \
+	rust_VControl_GetNumJoysticks()
 
 /* Joystick bindings */
-extern int rust_VControl_AddJoyAxisBinding(int port, int axis, int polarity, int *target);
-extern int rust_VControl_RemoveJoyAxisBinding(int port, int axis, int polarity, int *target);
-extern int rust_VControl_AddJoyButtonBinding(int port, int button, int *target);
-extern int rust_VControl_RemoveJoyButtonBinding(int port, int button, int *target);
-extern int rust_VControl_AddJoyHatBinding(int port, int which, unsigned char dir, int *target);
-extern int rust_VControl_RemoveJoyHatBinding(int port, int which, unsigned char dir, int *target);
-extern int rust_VControl_SetJoyThreshold(int port, int threshold);
-extern int rust_VControl_ClearJoyBindings(int joy);
+#define VControl_AddJoyAxisBinding(port, axis, pol, target) \
+	rust_VControl_AddJoyAxisBinding((port), (axis), (pol), (target))
+#define VControl_RemoveJoyAxisBinding(port, axis, pol, target) \
+	rust_VControl_RemoveJoyAxisBinding((port), (axis), (pol), (target))
+#define VControl_SetJoyThreshold(port, thresh) \
+	rust_VControl_SetJoyThreshold((port), (thresh))
+#define VControl_AddJoyButtonBinding(port, button, target) \
+	rust_VControl_AddJoyButtonBinding((port), (button), (target))
+#define VControl_RemoveJoyButtonBinding(port, button, target) \
+	rust_VControl_RemoveJoyButtonBinding((port), (button), (target))
+#define VControl_AddJoyHatBinding(port, hat, dir, target) \
+	rust_VControl_AddJoyHatBinding((port), (hat), (dir), (target))
+#define VControl_RemoveJoyHatBinding(port, hat, dir, target) \
+	rust_VControl_RemoveJoyHatBinding((port), (hat), (dir), (target))
 
-/* Joystick event processing */
-extern void rust_VControl_ProcessJoyButtonDown(int port, int button);
-extern void rust_VControl_ProcessJoyButtonUp(int port, int button);
-extern void rust_VControl_ProcessJoyAxis(int port, int axis, int value);
-extern void rust_VControl_ProcessJoyHat(int port, int which, unsigned char value);
+/* Event processing */
+#define VControl_ProcessKeyDown(sym) rust_VControl_ProcessKeyDown(sym)
+#define VControl_ProcessKeyUp(sym) rust_VControl_ProcessKeyUp(sym)
+#define VControl_ProcessJoyButtonDown(port, button) \
+	rust_VControl_ProcessJoyButtonDown((port), (button))
+#define VControl_ProcessJoyButtonUp(port, button) \
+	rust_VControl_ProcessJoyButtonUp((port), (button))
+#define VControl_ProcessJoyAxis(port, axis, value) \
+	rust_VControl_ProcessJoyAxis((port), (axis), (value))
+#define VControl_ProcessJoyHat(port, hat, value) \
+	rust_VControl_ProcessJoyHat((port), (hat), (value))
 
-/* Gesture tracking and handling */
-extern void rust_VControl_ClearGesture(void);
-extern int rust_VControl_GetLastGesture(VCONTROL_GESTURE *g);
-extern void rust_VControl_HandleEvent(const SDL_Event *e);
-extern int rust_VControl_AddGestureBinding(VCONTROL_GESTURE *g, int *target);
-extern void rust_VControl_RemoveGestureBinding(VCONTROL_GESTURE *g, int *target);
-extern void rust_VControl_ParseGesture(VCONTROL_GESTURE *g, const char *spec);
-extern int rust_VControl_DumpGesture(char *buf, int n, VCONTROL_GESTURE *g);
+/* Gesture tracking */
+#define VControl_ClearGesture() rust_VControl_ClearGesture()
+#define VControl_GetLastGestureType() rust_VControl_GetLastGestureType()
 
-/* Map the C VControl_* names to rust_VControl_* when USE_RUST_INPUT is enabled */
-#define VControl_Init                   rust_VControl_Init
-#define VControl_Uninit                 rust_VControl_Uninit
-#define VControl_ResetInput             rust_VControl_ResetInput
-#define VControl_BeginFrame             rust_VControl_BeginFrame
-#define VControl_RemoveAllBindings      rust_VControl_RemoveAllBindings
+/* General */
+#define VControl_RemoveAllBindings() rust_VControl_RemoveAllBindings()
 
-#define VControl_AddKeyBinding(sym, tgt) rust_VControl_AddKeyBinding((int)(sym), (tgt))
-#define VControl_RemoveKeyBinding(sym, tgt) rust_VControl_RemoveKeyBinding((int)(sym), (tgt))
-#define VControl_ProcessKeyDown(sym)    rust_VControl_ProcessKeyDown((int)(sym))
-#define VControl_ProcessKeyUp(sym)      rust_VControl_ProcessKeyUp((int)(sym))
+/* VControl_HandleEvent needs special handling - implemented separately */
+void VControl_HandleEvent(const SDL_Event *e);
 
-#define VControl_AddJoyAxisBinding      rust_VControl_AddJoyAxisBinding
-#define VControl_RemoveJoyAxisBinding   rust_VControl_RemoveJoyAxisBinding
-#define VControl_SetJoyThreshold        rust_VControl_SetJoyThreshold
-#define VControl_AddJoyButtonBinding    rust_VControl_AddJoyButtonBinding
-#define VControl_RemoveJoyButtonBinding rust_VControl_RemoveJoyButtonBinding
-#define VControl_AddJoyHatBinding       rust_VControl_AddJoyHatBinding
-#define VControl_RemoveJoyHatBinding    rust_VControl_RemoveJoyHatBinding
+/* Gesture parsing/dumping use Rust keyname functions */
+extern int rust_VControl_name2code(const char *name);
+extern const char *rust_VControl_code2name(int code);
 
-#define VControl_ClearGesture           rust_VControl_ClearGesture
-#define VControl_GetLastGesture         rust_VControl_GetLastGesture
-#define VControl_HandleEvent            rust_VControl_HandleEvent
-#define VControl_AddGestureBinding      rust_VControl_AddGestureBinding
-#define VControl_RemoveGestureBinding   rust_VControl_RemoveGestureBinding
-#define VControl_ParseGesture           rust_VControl_ParseGesture
-#define VControl_DumpGesture            rust_VControl_DumpGesture
+/* C compatibility wrappers using Rust keynames */
+#define VControl_name2code(name) rust_VControl_name2code(name)
+#define VControl_code2name(code) rust_VControl_code2name(code)
 
-#define VControl_ProcessJoyButtonDown   rust_VControl_ProcessJoyButtonDown
-#define VControl_ProcessJoyButtonUp     rust_VControl_ProcessJoyButtonUp
-#define VControl_ProcessJoyAxis         rust_VControl_ProcessJoyAxis
-#define VControl_ProcessJoyHat          rust_VControl_ProcessJoyHat
+/* VControl_AddGestureBinding needs wrapper for gesture struct */
+int VControl_AddGestureBinding(VCONTROL_GESTURE *g, int *target);
+void VControl_RemoveGestureBinding(VCONTROL_GESTURE *g, int *target);
+int VControl_GetLastGesture(VCONTROL_GESTURE *g);
+void VControl_ParseGesture(VCONTROL_GESTURE *g, const char *spec);
+int VControl_DumpGesture(char *buf, int n, VCONTROL_GESTURE *g);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* USE_RUST_INPUT */
+
+/* VControl constants (always defined, regardless of Rust/C choice) */
+#define VCONTROL_STARTBIT 0x100
+#define VCONTROL_MASK     0x0FF
 
 #endif /* LIBS_INPUT_SDL_RUST_VCONTROL_H_ */

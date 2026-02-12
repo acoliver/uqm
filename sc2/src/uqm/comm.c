@@ -397,6 +397,7 @@ DrawSISComWindow (void)
 	}
 }
 
+#ifndef USE_RUST_COMM
 void
 init_communication (void)
 {
@@ -408,6 +409,7 @@ uninit_communication (void)
 {
 	// now a no-op
 }
+#endif
 
 static void
 RefreshResponses (ENCOUNTER_STATE *pES)

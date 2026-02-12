@@ -18,6 +18,12 @@ if [ "$uqm_USE_RUST_CLOCK" = "1" ]; then
 else
 	uqm_CFILES="$uqm_CFILES clock.c"
 fi
+
+# Exclude rust_comm.c when USE_RUST_COMM is disabled
+if [ "$uqm_USE_RUST_COMM" = "1" ]; then
+	uqm_CFILES="$uqm_CFILES rust_comm.c"
+fi
+
 uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		collide.h colors.h commanim.h commglue.h comm.h cons_res.h controls.h
 		corecode.h credits.h demo.h displist.h dummy.h element.h encount.h
@@ -27,6 +33,6 @@ uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		nameref.h oscill.h pickship.h process.h races.h resinst.h respkg.h
 		restart.h save.h settings.h setup.h setupmenu.h shipcont.h ship.h
 		sis.h sounds.h starbase.h starcon.h state.h status.h tactrans.h
-		starmap.h
+		starmap.h rust_comm.h
 		units.h uqmdebug.h util.h velocity.h weapon.h"
 

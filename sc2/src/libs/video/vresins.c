@@ -86,6 +86,11 @@ GetLegacyVideoData (const char *path, RESOURCE_DATA *resdata)
 		log_add (log_Info, "\t'%s' -- audio", audio_path);
 	else
 		log_add (log_Info, "\tNo associated audio");
+	log_add (log_Info, "RUST_VIDEO: legacy video parsed video='%s' audio='%s' speech='%s' loop='%s'",
+			 paths,
+			 audio_path ? audio_path : "(none)",
+			 speech_path ? speech_path : "(none)",
+			 loop_str ? loop_str : "(none)");
 	if (speech_path)
 		log_add (log_Info, "\t'%s' -- speech path", speech_path);
 	else

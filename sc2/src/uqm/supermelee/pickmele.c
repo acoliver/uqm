@@ -340,6 +340,7 @@ DoGetMelee (GETMELEE_STATE *gms)
 		goto aborted;
 #endif
 	
+	log_add(log_Debug, "PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=%d", (GLOBAL(CurrentActivity) & CHECK_ABORT) ? 1 : 0);
 	if (GLOBAL (CurrentActivity) & CHECK_ABORT)
 		goto aborted;
 

@@ -583,7 +583,7 @@ RemoveInputState (int templat, int control, int index)
 
 	VControl_RemoveGestureBinding (g,
 			(int *)(flight_vec + templat * num_flight + control));
-	g->type = VCONTROL_NONE;
+	g->gesture_type = VCONTROL_NONE;
 
 	snprintf (keybuf, 39, "keys.%d.%s.%d", templat+1, flight_res_names[control], index+1);
 	res_Remove (keybuf);
