@@ -963,3 +963,522 @@ Per the inventory (`inventory.md`):
 The compositing logic currently in Postprocess (surface read, pixel
 conversion, scaler invocation, texture upload, canvas copy) must be
 relocated to ScreenLayer. Postprocess must be reduced to presentation only.
+
+
+---
+
+## 8. FFI Bridge Architecture for Drawing Pipeline
+
+Sections 1–7 cover the presentation-layer FFI (the vtable). This section
+covers the FFI bridge needed to wire the Rust drawing pipeline into the
+C game engine — replacing C's DCQ, canvas, colormap, and context systems.
+
+### 8.1 Two Strategies
+
+**Strategy A — Export Rust functions to C callers:**
+
+Rust exports `#[no_mangle] pub extern "C" fn` equivalents of the C
+functions that game code currently calls. C callers are unchanged; they
+just link to Rust symbols instead of C symbols. Guard C implementations
+with `#ifdef USE_RUST_GFX`.
+
+Advantages:
+- Minimal changes to C game code
+- Incremental — can replace one function at a time
+- C callers don't need to know about Rust types
+
+Disadvantages:
+- Large FFI surface area (potentially 40+ exported functions)
+- Must translate between C types and Rust types at every call
+- Two DCQ instances risk if both C and Rust DCQ are partially active
+
+**Strategy B — Replace C callers entirely:**
+
+Port the C caller layers (tfb_prim.c, frame.c, font.c) to Rust. Game
+logic calls Rust directly through a thinner FFI. The entire drawing
+pipeline runs in Rust.
+
+Advantages:
+- Clean architecture — no dual-language drawing pipeline
+- Rust types flow end-to-end (no C↔Rust type conversion)
+- Fewer FFI boundary crossings
+
+Disadvantages:
+- Larger upfront effort
+- Must port all callers before any work (no incremental benefit)
+- Game logic still in C, needs FFI to call Rust frame/context
+
+**Recommended: Strategy A first, then B.** Start by exporting Rust
+functions to C, then incrementally port C callers to Rust.
+
+### 8.2 FFI Bridge for DCQ (Strategy A)
+
+The DCQ bridge replaces `TFB_DrawScreen_*` functions from `tfb_draw.c`
+(493 lines). Each C enqueue function has a Rust equivalent:
+
+```rust
+// In a new ffi_draw.rs or extension of ffi.rs
+
+#[no_mangle]
+pub extern "C" fn TFB_DrawScreen_Line(
+    x1: c_int, y1: c_int, x2: c_int, y2: c_int,
+    color: FfiColor, draw_mode: FfiDrawMode, dest: c_int
+) {
+    let cmd = DrawCommand::Line {
+        x1, y1, x2, y2,
+        color: color.into(),
+        draw_mode: draw_mode.into(),
+        dest: Screen::from_c(dest),
+    };
+    global_dcq().push(cmd).ok();
+}
+
+#[no_mangle]
+pub extern "C" fn TFB_DrawScreen_Rect(
+    rect: *const FfiRect, color: FfiColor,
+    draw_mode: FfiDrawMode, dest: c_int
+) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn TFB_DrawScreen_Image(
+    img: *mut FfiTfbImage, x: c_int, y: c_int,
+    scale: c_int, scalemode: c_int, colormap: *mut c_void,
+    draw_mode: FfiDrawMode, dest: c_int
+) { /* ... */ }
+
+// ... 12 more for all 15 command types
+```
+
+The C `tfb_draw.c` is guarded:
+```c
+#ifndef USE_RUST_GFX
+void TFB_DrawScreen_Line(...) { /* original C implementation */ }
+// ...
+#endif
+```
+
+### 8.3 FFI Bridge for DCQ Flush
+
+```rust
+#[no_mangle]
+pub extern "C" fn rust_dcq_flush_graphics() {
+    // Process all Rust DCQ commands
+    global_dcq().process_commands().ok();
+}
+```
+
+Called from within `TFB_FlushGraphics` (dcqueue.c):
+```c
+#ifdef USE_RUST_GFX
+    rust_dcq_flush_graphics();
+#else
+    // Original C command processing loop
+    while ((cmd = Pop()) != NULL) { ... }
+#endif
+```
+
+### 8.4 Canvas↔SDL_Surface Adapter
+
+The most critical bridge element. Rust `Canvas` must interoperate with
+`SDL_Surface` so that:
+1. Rust drawing operations produce pixels visible to the presentation
+   layer (which reads `SDL_Surface->pixels`)
+2. C code that still writes to `SDL_Surface` has its pixels visible to
+   Rust code
+
+#### 8.4.1 Adapter Design: Canvas Wrapping SDL_Surface
+
+```rust
+/// Canvas variant that wraps an SDL_Surface's pixel buffer
+pub struct SurfaceCanvas {
+    /// Raw pointer to SDL_Surface
+    surface: *mut SDL_Surface,
+    /// Cached dimensions (avoid repeated unsafe deref)
+    width: i32,
+    height: i32,
+    pitch: i32,
+    format: CanvasFormat,
+    scissor: RefCell<ScissorRect>,
+}
+
+impl SurfaceCanvas {
+    /// Create from an existing SDL_Surface (unsafe: caller must
+    /// guarantee surface lifetime exceeds SurfaceCanvas lifetime)
+    pub unsafe fn from_surface(surface: *mut SDL_Surface) -> Self {
+        let surf = &*surface;
+        Self {
+            surface,
+            width: surf.w,
+            height: surf.h,
+            pitch: surf.pitch,
+            format: CanvasFormat::from_sdl_surface(surf),
+            scissor: RefCell::new(ScissorRect::disabled()),
+        }
+    }
+
+    /// Get a mutable slice of the pixel data
+    pub fn pixels_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            let surf = &*self.surface;
+            std::slice::from_raw_parts_mut(
+                surf.pixels as *mut u8,
+                (surf.pitch * surf.h) as usize,
+            )
+        }
+    }
+}
+```
+
+The `SurfaceCanvas` implements the same drawing trait as `Canvas`, so
+all `tfb_draw.rs` functions work with either type. Screen canvases use
+`SurfaceCanvas` (wrapping the 3 SDL_Screens); image canvases use the
+existing owned `Canvas`.
+
+#### 8.4.2 Alternative: Pixel Sync
+
+```rust
+/// Sync Rust Canvas pixels to SDL_Surface at frame boundary
+pub fn sync_canvas_to_surface(canvas: &Canvas, surface: *mut SDL_Surface) {
+    unsafe {
+        let surf = &mut *surface;
+        let src = canvas.data();
+        let dst = std::slice::from_raw_parts_mut(
+            surf.pixels as *mut u8,
+            (surf.pitch * surf.h) as usize,
+        );
+        dst.copy_from_slice(src);
+    }
+}
+```
+
+Called from `TFB_FlushGraphics` after processing all draw commands and
+before `TFB_SwapBuffers`.
+
+### 8.5 FFI Bridge for Context
+
+The context bridge replaces `context.c` (404 lines):
+
+```rust
+#[no_mangle]
+pub extern "C" fn SetContext(context: *mut FfiContext) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn SetContextForeGroundColor(color: FfiColor) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn SetContextBackGroundColor(color: FfiColor) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn SetContextClipRect(rect: *const FfiRect) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn SetContextDrawMode(mode: FfiDrawMode) { /* ... */ }
+```
+
+### 8.6 FFI Bridge for Colormap
+
+The colormap bridge replaces `cmap.c` (663 lines):
+
+```rust
+#[no_mangle]
+pub extern "C" fn InitColorMaps() { /* init Rust ColorMapManager */ }
+
+#[no_mangle]
+pub extern "C" fn SetColorMap(cmap_ptr: *const c_void) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn FadeScreen(fade_type: c_int, seconds: c_int) { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn FlushFadeXForms() { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn XFormColorMap_step() -> c_int { /* ... */ }
+
+#[no_mangle]
+pub extern "C" fn GetColorMapAddress(index: c_int) -> *const c_void { /* ... */ }
+```
+
+### 8.7 Global DCQ Instance
+
+The Rust DCQ must be accessible from both Rust code and FFI functions:
+
+```rust
+static GLOBAL_DCQ: OnceLock<DrawCommandQueue> = OnceLock::new();
+
+fn global_dcq() -> &'static DrawCommandQueue {
+    GLOBAL_DCQ.get_or_init(|| {
+        DrawCommandQueue::with_config(
+            DcqConfig::standard(),
+            Arc::new(RwLock::new(RenderContext::new())),
+        )
+    })
+}
+```
+
+Initialized during `rust_gfx_init` (or lazily on first use). The same
+instance is used by both FFI `TFB_DrawScreen_*` wrappers and Rust-native
+callers.
+
+### 8.8 FFI Function Count Summary
+
+| Bridge Area | C Functions Replaced | Rust Exports Needed |
+|---|---|---|
+| DCQ enqueue (`tfb_draw.c`) | 15 | 15 (`TFB_DrawScreen_*`) |
+| DCQ flush (`dcqueue.c`) | 3 | 3 (`rust_dcq_flush_graphics`, `BatchGraphics`, `UnbatchGraphics`) |
+| Context (`context.c`) | ~10 | ~10 (`SetContext*`, `CreateContext`, etc.) |
+| Colormap (`cmap.c`) | ~8 | ~8 (`InitColorMaps`, `SetColorMap`, etc.) |
+| Canvas utility (`canvas.c`) | ~10 | ~10 (`New_TrueColorCanvas`, `Delete`, etc.) |
+| **Total** | **~46** | **~46** |
+
+---
+
+## 9. USE_RUST_GFX Guard Strategy
+
+### 9.1 Guard Placement Pattern
+
+Each C file to be replaced follows this pattern:
+
+```c
+// At the top of the file, after includes:
+#ifdef USE_RUST_GFX
+// Rust implementations are linked via the Rust library.
+// This file is excluded from compilation when USE_RUST_GFX is defined.
+#else
+
+// ... entire original C implementation ...
+
+#endif /* USE_RUST_GFX */
+```
+
+For files where only some functions are replaced:
+
+```c
+void always_needed_function(void) {
+    // This function is NOT replaced by Rust
+}
+
+#ifndef USE_RUST_GFX
+void replaced_function(void) {
+    // This function IS replaced by Rust
+}
+#endif
+```
+
+### 9.2 Dependency Graph for Guard Order
+
+Files must be guarded in dependency order — a file cannot be guarded if
+unguarded files depend on it:
+
+```
+Level 0 (no dependencies on other guarded files):
+  ├── sdl/primitives.c  (pixel ops — used by canvas.c only)
+  ├── sdl/hq2x.c        (scaler — used by scalers.c only)
+  ├── sdl/biadv2x.c     (scaler)
+  ├── sdl/bilinear2x.c  (scaler)
+  ├── sdl/nearest2x.c   (scaler)
+  ├── sdl/triscan2x.c   (scaler)
+  ├── sdl/2xscalers.c   (scaler dispatch)
+  └── sdl/rotozoom.c     (rotation)
+
+Level 1 (depends on Level 0):
+  ├── sdl/canvas.c       (depends on primitives.c)
+  └── sdl/scalers.c      (depends on 2xscaler files) [already partially guarded]
+
+Level 2 (depends on Level 1):
+  ├── dcqueue.c          (depends on canvas.c for dispatch)
+  ├── cmap.c             (standalone, but shares types)
+  └── context.c          (standalone state management)
+
+Level 3 (depends on Level 2):
+  ├── tfb_draw.c         (depends on dcqueue.c for enqueue)
+  ├── tfb_prim.c         (depends on tfb_draw.c for enqueue)
+  └── frame.c            (depends on tfb_prim.c)
+
+Level 4 (depends on Level 3):
+  ├── font.c             (depends on frame.c, context.c)
+  ├── drawable.c         (depends on frame.c, canvas.c)
+  └── gfx_common.c       (depends on dcqueue.c)
+
+Level 5 (depends on Level 4):
+  ├── gfxload.c          (depends on drawable.c, canvas.c)
+  └── widgets.c          (depends on context.c, frame.c, font.c)
+```
+
+**Guard bottom-up**: Start at Level 0, work up. Each level can be guarded
+independently once its level is fully implemented in Rust.
+
+### 9.3 Files That Can Be Guarded Independently
+
+These files have no reverse dependencies (nothing else in the graphics
+system calls them) and can be guarded in any order:
+
+- All Level 0 scaler files
+- `sdl/primitives.c` (only used by `canvas.c`)
+- `cmap.c` (called from game code, not from graphics internals)
+
+### 9.4 Files With Cross-Dependencies
+
+These files have bidirectional or complex dependencies:
+
+- `dcqueue.c` ↔ `tfb_draw.c`: DCQ pops commands that tfb_draw.c enqueued.
+  Must guard simultaneously.
+- `canvas.c` ↔ `dcqueue.c`: DCQ dispatches to canvas drawing functions.
+  Must guard simultaneously.
+- `context.c` ↔ `frame.c`: Frame functions read context state.
+  Should guard together.
+- `drawable.c` ↔ `canvas.c`: Drawable creation allocates canvases.
+  Should guard together.
+
+### 9.5 Header Files
+
+C header files (`.h`) do NOT need `USE_RUST_GFX` guards for type
+definitions — C code outside the graphics system may use these types.
+Only function declarations need guards if the C implementation is
+excluded:
+
+```c
+// tfb_draw.h
+// Type definitions — always available
+typedef struct tfb_image { ... } TFB_Image;
+
+// Function declarations — guarded
+#ifndef USE_RUST_GFX
+void TFB_DrawScreen_Line(int x1, int y1, int x2, int y2, ...);
+// ...
+#endif
+```
+
+However, when Rust exports the same symbol names, the declarations must
+remain (possibly with `extern` linkage) so C callers can reference them.
+
+### 9.6 Build System Integration
+
+The `USE_RUST_GFX` flag is defined in the build configuration. When set:
+1. C files guarded with `#ifndef USE_RUST_GFX` compile to empty
+   translation units
+2. The Rust library (`libuqm_rust.a`) provides the replacement symbols
+3. The linker resolves `TFB_DrawScreen_*` etc. from the Rust library
+
+Build system changes needed:
+- `Cargo.toml`: ensure all FFI exports are included in the library crate
+- C `Makefile`/`build.sh`: define `USE_RUST_GFX` as a compile flag
+- Linker: link `libuqm_rust.a` (or `.so`) with the C object files
+
+---
+
+## 10. Type Mapping
+
+### 10.1 Core Type Mappings
+
+| C Type | C File | Rust Type | Rust Module | Notes |
+|---|---|---|---|---|
+| `TFB_Image` | `tfb_draw.h` | `TFImage` | `tfb_draw.rs` | Image with canvas, hotspot, mipmap |
+| `TFB_Canvas` (`void*`) | `tfb_draw.h` | `Canvas` | `tfb_draw.rs` | Pixel buffer; C uses SDL_Surface* |
+| `TFB_Char` | `tfb_draw.h` | `TFChar` | `font.rs` | Font character glyph |
+| `RECT` | `gfx_common.h` | `Rect` | `dcqueue.rs` | `{corner: Point, extent: Extent}` |
+| `POINT` | `gfx_common.h` | `Point` | `dcqueue.rs` | `{x: i32, y: i32}` |
+| `EXTENT` | `gfx_common.h` | `Extent` | `dcqueue.rs` | `{width: i32, height: i32}` |
+| `Color` | `gfx_common.h` | `Color` | `dcqueue.rs` | `{r: u8, g: u8, b: u8, a: u8}` |
+| `DrawMode` | `gfx_common.h` | `DrawMode` | `context.rs` | `{kind: DrawKind, factor: i16}` |
+| `SCREEN` (`int`) | `tfb_draw.h` | `Screen` | `dcqueue.rs` | `enum { Main=0, Extra=1, Transition=2 }` |
+| `HOT_SPOT` | `tfb_draw.h` | `HotSpot` | `tfb_draw.rs` | `{x: i32, y: i32}` |
+| `COLORMAPPTR` | `cmap.h` | `ColorMapRef` | `dcqueue.rs` | Handle type `(u32)` |
+| `CONTEXT` | `context.h` | `DrawContext` | `context.rs` | Drawing state container |
+| `FRAME` | `drawable.h` | `Frame` (via DrawableRegistry) | `frame.rs` | Frame handle |
+| `DRAWABLE` | `drawable.h` | `Drawable` | `drawable.rs` | Multi-frame container |
+| `SDL_Surface*` | SDL2 | `*mut SDL_Surface` | `ffi.rs` | Raw pointer, `#[repr(C)]` |
+| `SDL_Rect` | SDL2 | `SDL_Rect` | `ffi.rs` | `#[repr(C)]` `{x, y, w, h}` |
+| `TFB_PixelFormat` | `tfb_draw.h` | `CanvasFormat` | `tfb_draw.rs` | `{kind, bpp, Bpp}` |
+
+### 10.2 FFI Repr Types
+
+For FFI boundary crossing, Rust types need `#[repr(C)]` equivalents:
+
+```rust
+/// FFI-safe Color matching C's Color struct
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct FfiColor {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl From<FfiColor> for crate::graphics::dcqueue::Color {
+    fn from(c: FfiColor) -> Self {
+        Self::new(c.r, c.g, c.b, c.a)
+    }
+}
+
+/// FFI-safe DrawMode matching C's DrawMode struct
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct FfiDrawMode {
+    pub kind: u8,   // 0=Replace, 1=Additive, 2=Alpha
+    pub factor: i16,
+}
+
+/// FFI-safe RECT matching C's RECT struct
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct FfiRect {
+    pub corner: FfiPoint,
+    pub extent: FfiExtent,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct FfiPoint {
+    pub x: c_int,
+    pub y: c_int,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct FfiExtent {
+    pub width: c_int,
+    pub height: c_int,
+}
+```
+
+### 10.3 Handle Types
+
+C uses opaque pointers (`FRAME`, `DRAWABLE`, `COLORMAP_REF`) that are
+actually integer handles or tagged pointers. Rust uses newtype wrappers:
+
+| C Handle | C Representation | Rust Handle | Conversion |
+|---|---|---|---|
+| `FRAME` | `void*` (tagged pointer with index) | `FrameRef(u32)` | Extract index from tag bits |
+| `DRAWABLE` | `void*` (pointer to DrawableDesc) | `DrawableRef(u32)` | Registry lookup by ID |
+| `COLORMAP_REF` | `COLORMAPPTR` (byte array pointer) | `ColorMapRef(u32)` | Registry index |
+
+### 10.4 Enum Mappings
+
+| C Enum/Define | Values | Rust Enum | Values |
+|---|---|---|---|
+| `TFB_SCREEN_MAIN` | 0 | `Screen::Main` | 0 |
+| `TFB_SCREEN_EXTRA` | 1 | `Screen::Extra` | 1 |
+| `TFB_SCREEN_TRANSITION` | 2 | `Screen::Transition` | 2 |
+| `DRAW_REPLACE` | 0 | `DrawKind::Replace` | 0 |
+| `DRAW_ADDITIVE` | 1 | `DrawKind::Additive` | 1 |
+| `DRAW_ALPHA` | 2 | `DrawKind::Alpha` | 2 |
+| `GSCALE_IDENTITY` | 256 | Scale 1:1 | `scale == GSCALE_IDENTITY` |
+| `TFB_SCALE_STEP` | 0 | `ScaleMode::Step` | 0 |
+| `TFB_SCALE_NEAREST` | 1 | `ScaleMode::Nearest` | 1 |
+| `TFB_SCALE_BILINEAR` | 2 | `ScaleMode::Bilinear` | 2 |
+| `TFB_SCALE_TRILINEAR` | 3 | `ScaleMode::Trilinear` | 3 |
+
+### 10.5 Struct Layout Verification
+
+Critical: C and Rust structs passed across FFI must have identical memory
+layout. Verification methods:
+
+1. **Compile-time**: `static_assert!(std::mem::size_of::<FfiColor>() == 4)`
+2. **Compile-time**: `static_assert!(std::mem::align_of::<FfiRect>() == 4)`
+3. **Test-time**: `assert_eq!(std::mem::offset_of!(FfiRect, extent), 8)`
+4. **C-side**: `_Static_assert(sizeof(Color) == 4, "Color size mismatch")`
+
+These assertions catch layout mismatches at compile time rather than
+causing silent corruption at runtime.

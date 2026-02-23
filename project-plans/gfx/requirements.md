@@ -979,3 +979,611 @@ and architecturally incorrect Postprocess. Implementing the compositing
 pipeline per these requirements is expected to resolve the black screen,
 but this must be verified at runtime. See Inventory §1 and Functional §1
 for additional context on the black screen analysis.
+
+
+---
+
+## 20. Draw Command Queue (DCQ) FFI Bridge
+
+> Requirements in this section cover the FFI bridge that exposes the Rust
+> DCQ (`dcqueue.rs`, 1,362 lines) to C callers, replacing the C DCQ
+> (`dcqueue.c`, 670 lines) and C enqueue functions (`tfb_draw.c`, 493 lines).
+
+### REQ-DCQ-010
+When `TFB_DrawScreen_Line` is called from C code, the Rust FFI bridge
+shall convert the C parameters (`x1`, `y1`, `x2`, `y2`, `Color`,
+`DrawMode`, `SCREEN dest`) to Rust types and push a `DrawCommand::Line`
+onto the Rust `DrawCommandQueue`.
+
+**Replaces**: C `TFB_DrawScreen_Line` (`tfb_draw.c` line 71)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::Line` variant
+
+### REQ-DCQ-020
+When `TFB_DrawScreen_Rect` is called from C code, the Rust FFI bridge
+shall convert the C `RECT*`, `Color`, `DrawMode`, and `SCREEN dest` to
+Rust types and push a `DrawCommand::Rect` onto the Rust
+`DrawCommandQueue`.
+
+**Replaces**: C `TFB_DrawScreen_Rect` (`tfb_draw.c` line 94)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::Rect` variant
+
+### REQ-DCQ-030
+When `TFB_DrawScreen_Image` is called from C code, the Rust FFI bridge
+shall convert the C `TFB_Image*`, coordinates, scale, scalemode,
+colormap, and draw mode to Rust types and push a `DrawCommand::Image`
+onto the Rust `DrawCommandQueue`.
+
+**Replaces**: C `TFB_DrawScreen_Image` (`tfb_draw.c` line 119)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::Image` variant
+
+### REQ-DCQ-040
+When `TFB_DrawScreen_FilledImage` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::FilledImage` with the converted color,
+coordinates, and scale parameters.
+
+**Replaces**: C `TFB_DrawScreen_FilledImage` (`tfb_draw.c` line 151)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::FilledImage` variant
+
+### REQ-DCQ-050
+When `TFB_DrawScreen_FontChar` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::FontChar` with the font character
+reference, backing image, position, and draw mode.
+
+**Replaces**: C `TFB_DrawScreen_FontChar` (`tfb_draw.c` line 182)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::FontChar` variant
+
+### REQ-DCQ-060
+When `TFB_DrawScreen_Copy` is called from C code, the Rust FFI bridge
+shall push a `DrawCommand::Copy` with the rectangle, source screen, and
+destination screen.
+
+**Replaces**: C `TFB_DrawScreen_Copy` (`tfb_draw.c` line 212)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::Copy` variant
+
+### REQ-DCQ-070
+When `TFB_DrawScreen_CopyToImage` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::CopyToImage` with the image reference,
+rectangle, and source screen.
+
+**Replaces**: C `TFB_DrawScreen_CopyToImage` (`tfb_draw.c` line 228)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::CopyToImage` variant
+
+### REQ-DCQ-080
+When `TFB_DrawScreen_SetMipmap` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::SetMipmap` with the image, mipmap
+image, and hot spot coordinates.
+
+**Replaces**: C `TFB_DrawScreen_SetMipmap` (`tfb_draw.c` line 243)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::SetMipmap` variant
+
+### REQ-DCQ-090
+When `TFB_DrawScreen_DeleteImage` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::DeleteImage` with the image reference.
+
+**Replaces**: C `TFB_DrawScreen_DeleteImage` (`tfb_draw.c` line 260)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::DeleteImage` variant
+
+### REQ-DCQ-100
+When `TFB_DrawScreen_WaitForSignal` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::SendSignal` with a shared
+`AtomicBool`, then block until the signal is set by the DCQ consumer.
+
+**Replaces**: C `TFB_DrawScreen_WaitForSignal` (`tfb_draw.c` line 273)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::SendSignal` variant
+
+### REQ-DCQ-110
+When `TFB_DrawScreen_ReinitVideo` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::ReinitVideo` with the driver, flags,
+width, and height parameters.
+
+**Replaces**: C `TFB_DrawScreen_ReinitVideo` (`tfb_draw.c` line 289)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::ReinitVideo` variant
+
+### REQ-DCQ-120
+When `TFB_DrawScreen_Callback` is called from C code, the Rust FFI
+bridge shall push a `DrawCommand::Callback` with the function pointer
+and argument.
+
+**Replaces**: C `TFB_DrawScreen_Callback` (`tfb_draw.c` line 304)
+**Rust implementation**: `dcqueue.rs` `DrawCommand::Callback` variant
+
+### REQ-DCQ-130
+The Rust DCQ flush function (`rust_dcq_flush_graphics`) shall be
+exported as `#[no_mangle] pub extern "C" fn` and shall process all
+pending draw commands by calling `DrawCommandQueue::process_commands()`.
+
+**Replaces**: C `TFB_FlushGraphics` command loop (`dcqueue.c` lines 280–620)
+**Rust implementation**: `dcqueue.rs` `process_commands()`
+
+### REQ-DCQ-140
+While the Rust DCQ has commands pending and `process_commands()` is
+called, the system shall dispatch each command to the corresponding Rust
+`tfb_draw` function via `handle_command()`. All 15 command types shall
+be dispatched.
+
+**Replaces**: C `TFB_FlushGraphics` switch statement (`dcqueue.c`)
+**Rust implementation**: `dcqueue.rs` `handle_command()` match arms
+
+### REQ-DCQ-150
+The Rust `DrawCommandQueue` shall be stored in a global static
+(`OnceLock` or equivalent) accessible from both FFI functions and
+Rust-native callers.
+
+### REQ-DCQ-160
+When `BatchGraphics` is called from C code, the Rust FFI bridge shall
+call `DrawCommandQueue::batch()` to enter batch mode.
+
+**Replaces**: C `BatchGraphics` (`gfx_common.c`)
+**Rust implementation**: `dcqueue.rs` `batch()`
+
+### REQ-DCQ-170
+When `UnbatchGraphics` is called from C code, the Rust FFI bridge shall
+call `DrawCommandQueue::unbatch()` to exit batch mode and synchronize
+the queue.
+
+**Replaces**: C `UnbatchGraphics` (`gfx_common.c`)
+**Rust implementation**: `dcqueue.rs` `unbatch()`
+
+### REQ-DCQ-180
+If the Rust DCQ `push()` call blocks (queue full), the blocking shall
+not exceed the C DCQ's equivalent behavior — the caller blocks until
+space is available, matching `TFB_WaitForSpace` semantics in C
+(`dcqueue.c` line 38).
+
+### REQ-DCQ-190
+The Rust DCQ shall support livelock detection: when
+`process_commands()` processes more than `livelock_max` commands in a
+single flush cycle, it shall log a warning and continue processing.
+
+**Replaces**: C livelock detection in `TFB_FlushGraphics` (`dcqueue.c`)
+**Rust implementation**: `dcqueue.rs` `process_commands()` counter check
+
+---
+
+## 21. Canvas Operation Requirements
+
+> Requirements in this section cover the Rust canvas drawing operations
+> (`tfb_draw.rs`, 3,405 lines) that replace C canvas operations
+> (`canvas.c`, 2,176 lines; `primitives.c`, 633 lines).
+
+### REQ-CANVAS-010
+When a `DrawCommand::Line` is dispatched, the Rust `draw_line()` function
+shall draw a line from `(x1, y1)` to `(x2, y2)` using Bresenham's
+algorithm, writing pixels of the specified color into the destination
+canvas.
+
+**Replaces**: C `TFB_DrawCanvas_Line` (`canvas.c`), which calls
+`putpixel` (`primitives.c`)
+**Rust implementation**: `tfb_draw.rs` `draw_line()`
+
+### REQ-CANVAS-020
+When a `DrawCommand::Rect` is dispatched, the Rust `draw_rect()` function
+shall draw an outlined rectangle by calling `draw_line()` for each of
+the four edges.
+
+**Replaces**: C `TFB_DrawCanvas_Rect` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `draw_rect()`
+
+### REQ-CANVAS-030
+When a `DrawCommand::Rect` with fill semantics is dispatched, the Rust
+`fill_rect()` function shall fill a rectangular region row-by-row with
+the specified color, respecting canvas bounds and scissor clipping.
+
+**Replaces**: C `TFB_DrawCanvas_Rect` (filled variant via
+`renderpixel_replace`, `primitives.c`)
+**Rust implementation**: `tfb_draw.rs` `fill_rect()`
+
+### REQ-CANVAS-040
+When a `DrawCommand::Image` is dispatched, the Rust `draw_scaled_image()`
+function shall blit the image's canvas to the destination canvas with
+hot spot offset applied, supporting scaled rendering.
+
+**Replaces**: C `TFB_DrawCanvas_Image` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `draw_scaled_image()`
+
+### REQ-CANVAS-050
+When a `DrawCommand::FilledImage` is dispatched, the Rust
+`draw_filled_image()` function shall render the image using a solid
+fill color, respecting the image's alpha mask.
+
+**Replaces**: C `TFB_DrawCanvas_FilledImage` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `draw_filled_image()`
+
+### REQ-CANVAS-060
+When a `DrawCommand::FontChar` is dispatched, the Rust `draw_fontchar()`
+function shall render a font character with proper alpha blending:
+`result = src * glyph_alpha * fg_alpha + dst * (1 - src_alpha)`.
+
+**Replaces**: C `TFB_DrawCanvas_FontChar` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `Canvas::draw_fontchar()` via
+`CanvasPrimitive` trait
+
+### REQ-CANVAS-070
+When a `DrawCommand::Copy` is dispatched, the Rust `copy_canvas()`
+function shall blit a rectangular region from a source canvas to a
+destination canvas, handling negative offsets, partial overlap, and
+format mismatch detection.
+
+**Replaces**: C `TFB_DrawCanvas_CopyRect` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `copy_canvas()`
+
+### REQ-CANVAS-080
+When a `DrawCommand::ScissorEnable` is dispatched, the Rust canvas shall
+set its scissor rectangle, restricting all subsequent drawing operations
+to the specified region until a `ScissorDisable` command.
+
+**Replaces**: C `TFB_DrawCanvas_SetClipRect` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `Canvas::set_scissor()`
+
+### REQ-CANVAS-090
+The Rust canvas `draw_line()` function shall clip pixels to the canvas
+bounds and active scissor rectangle. Pixels outside the scissor region
+shall not be written.
+
+### REQ-CANVAS-100
+The Rust canvas `fill_rect()` function shall perform early-exit
+optimization when the fill rectangle is entirely outside the canvas
+bounds or scissor rectangle.
+
+### REQ-CANVAS-110
+The Rust canvas shall support three pixel formats: RGBA (32bpp), RGB
+(24bpp), and Paletted (8bpp), matching C's canvas format variants.
+
+**Replaces**: C `New_TrueColorCanvas` and `New_PalettedCanvas` (`canvas.c`)
+**Rust implementation**: `tfb_draw.rs` `CanvasPixelFormat` enum
+
+### REQ-CANVAS-120
+The Rust `Canvas` type shall provide `SurfaceCanvas` variant (or adapter)
+that wraps an `SDL_Surface` pixel buffer, enabling zero-copy interop with
+the presentation layer (§1–10 ScreenLayer, which reads `SDL_Surface->pixels`).
+
+**Replaces**: C's direct `SDL_Surface` usage as `TFB_Canvas`
+**Rust implementation**: `tfb_draw.rs` or new `surface_canvas.rs`
+
+### REQ-CANVAS-130
+Where `SurfaceCanvas` wraps an `SDL_Surface`, pixel writes by Rust
+drawing functions shall be immediately visible to the presentation layer
+without an explicit sync/copy step.
+
+### REQ-CANVAS-140
+The Rust canvas system shall provide `New_TrueColorCanvas` and
+`Canvas_Delete` equivalents accessible from C via `#[no_mangle]` exports
+for canvas lifecycle management during the coexistence period.
+
+**Replaces**: C `New_TrueColorCanvas` (`canvas.c`), `TFB_DrawCanvas_Delete` (`canvas.c`)
+
+---
+
+## 22. Colormap FFI Requirements
+
+> Requirements in this section cover the FFI bridge for the Rust colormap
+> system (`cmap.rs`, 774 lines) replacing C `cmap.c` (663 lines).
+
+### REQ-CMAP-010
+When `InitColorMaps` is called during game startup, the Rust FFI bridge
+shall initialize the `ColorMapManager` with a pool of 250 colormap
+entries (`MAX_COLORMAPS`) plus 20 spare entries (`SPARE_COLORMAPS`).
+
+**Replaces**: C `InitColorMaps` (`cmap.c`)
+**Rust implementation**: `cmap.rs` `ColorMapManager::new()`
+
+### REQ-CMAP-020
+When `SetColorMap` is called with a `COLORMAPPTR`, the Rust FFI bridge
+shall decode the colormap data and apply it to the current drawable via
+the Rust `ColorMapManager`.
+
+**Replaces**: C `SetColorMap` (`cmap.c`)
+**Rust implementation**: `cmap.rs` `ColorMapManager` methods
+
+### REQ-CMAP-030
+When `FadeScreen` is called with a fade type and duration, the Rust FFI
+bridge shall initiate a fade transition via the `FadeController`, setting
+the `fade_amount` global variable that the presentation layer reads.
+
+**Replaces**: C `FadeScreen` (`cmap.c`)
+**Rust implementation**: `cmap.rs` `FadeController::start_fade()`
+
+### REQ-CMAP-040
+When `FlushFadeXForms` is called, the Rust FFI bridge shall process all
+pending fade/colormap transforms by stepping each active `XformState`.
+
+**Replaces**: C `FlushFadeXForms` (`cmap.c`)
+**Rust implementation**: `cmap.rs` `FadeController` step logic
+
+### REQ-CMAP-050
+The Rust `FadeController` shall maintain `fade_amount` in the range
+0–510 (`FADE_NO_INTENSITY` to `FADE_FULL_INTENSITY`), matching C's
+fade semantics where 255 = fully visible, <255 = fade to black,
+>255 = fade to white.
+
+### REQ-CMAP-060
+The Rust colormap system shall support up to 16 concurrent transform
+operations (`MAX_XFORMS = 16`), matching C's `XFORM_CONTROL` array.
+
+### REQ-CMAP-070
+The Rust `NativePalette` shall store exactly 256 color entries
+(`NUMBER_OF_PLUTVALS`), each with R, G, B, A components.
+
+**Replaces**: C palette arrays in `cmap.c`
+**Rust implementation**: `cmap.rs` `NativePalette`
+
+### REQ-CMAP-080
+When `GetColorMapAddress` is called with an index, the Rust FFI bridge
+shall return a pointer to the colormap data for the given index, or
+null if the index is out of range.
+
+**Replaces**: C `GetColorMapAddress` (`cmap.c`)
+**Rust implementation**: `cmap.rs` `ColorMapManager::get()`
+
+---
+
+## 23. Widget Porting Requirements
+
+> Requirements in this section cover the widget system (`widgets.c`,
+> 941 lines). Widgets are deferred from the initial Rust GFX port because
+> they are consumers of the graphics API, not part of the rendering
+> pipeline (see Functional §15).
+
+### REQ-WIDGET-010
+While the graphics context, frame, and font layers are being ported to
+Rust, the widget system (`widgets.c`) shall continue to function
+unchanged through the C API.
+
+### REQ-WIDGET-020
+Where `USE_RUST_GFX` is defined and the context/frame/font FFI bridges
+are active, `widgets.c` shall compile and link without modification —
+the Rust FFI bridge shall export the same function signatures that
+`widgets.c` calls (`SetContext`, `DrawRectangle`, `font_DrawText`, etc.).
+
+### REQ-WIDGET-030
+The widget system shall NOT be guarded with `USE_RUST_GFX` until all of
+its dependencies are fully ported to Rust: `context.c` (REQ-GUARD-030),
+`frame.c` (REQ-GUARD-040), `font.c` (REQ-GUARD-050), and
+`gfx_common.c` `BatchGraphics`/`UnbatchGraphics` (REQ-DCQ-160/170).
+
+### REQ-WIDGET-040 *(Non-Normative — Future Phase)*
+Where the widget system is ported to Rust in a future phase, it shall
+call the Rust context and frame APIs directly (not through FFI),
+eliminating the C→Rust→C round-trip for each drawing operation.
+
+---
+
+## 24. Graphics Resource Loading Requirements
+
+> Requirements in this section cover graphics resource loading
+> (`gfxload.c`, 597 lines; `filegfx.c`, `resgfx.c`, `loaddisp.c`).
+
+### REQ-GFXLOAD-010
+While `gfxload.c` remains in C, the Rust FFI bridge shall provide
+`rust_register_image(id, surface_ptr)` and `rust_register_font(id,
+fontpage_ptr)` functions that C resource loading code calls after each
+successful load, so the Rust `RenderContext` has a registry of all loaded
+resources.
+
+**Replaces**: implicit storage in C global arrays
+**Rust implementation**: `render_context.rs` `RenderContext::register_image()`
+
+### REQ-GFXLOAD-020
+When `rust_register_image` is called, the Rust FFI bridge shall create a
+`TFImage` from the provided surface pointer and register it in the
+global `RenderContext` with the specified ID.
+
+### REQ-GFXLOAD-030
+When `rust_register_font` is called, the Rust FFI bridge shall register
+the font page data in the global `RenderContext` for font character
+lookup during `DrawCommand::FontChar` processing.
+
+### REQ-GFXLOAD-040
+The Rust `RenderContext` shall support image lookup by ID for DCQ
+command dispatch: `get_image(ImageRef) -> Option<&TFImage>`.
+
+**Replaces**: C's direct pointer passing through `TFB_Image*` in DCQ commands
+**Rust implementation**: `render_context.rs` `RenderContext::get_image()`
+
+### REQ-GFXLOAD-050
+The Rust `RenderContext` shall support screen canvas lookup by screen
+type: `get_screen(ScreenType) -> Option<Arc<RwLock<Canvas>>>`.
+
+**Rust implementation**: `render_context.rs` `RenderContext::get_screen()`
+
+### REQ-GFXLOAD-060 *(Non-Normative — Future Phase)*
+Where resource loading is ported to Rust natively, the system shall
+read resource files (`.cel`, `.fnt`) directly, decode them, and create
+Rust `TFImage`/`TFChar`/`Canvas` objects without going through
+`SDL_Surface` format conversion.
+
+---
+
+## 25. C File Elimination Requirements (USE_RUST_GFX Guards)
+
+> Requirements in this section specify the `USE_RUST_GFX` guard strategy
+> for the 41 C files in `sc2/src/libs/graphics/`. See Functional §17
+> and Technical §9 for rationale and dependency analysis.
+
+### REQ-GUARD-010
+When `USE_RUST_GFX` is defined, the C file `dcqueue.c` (670 lines) shall
+be excluded from compilation via `#ifndef USE_RUST_GFX` / `#endif` guards
+wrapping the entire file body. The Rust `dcqueue.rs` provides the
+replacement implementation.
+
+### REQ-GUARD-020
+When `USE_RUST_GFX` is defined, the C file `tfb_draw.c` (493 lines) shall
+be excluded from compilation. The Rust FFI bridge provides replacement
+`TFB_DrawScreen_*` symbols (REQ-DCQ-010 through REQ-DCQ-120).
+
+### REQ-GUARD-030
+When `USE_RUST_GFX` is defined, the C file `context.c` (404 lines) shall
+be excluded from compilation. The Rust `context.rs` (1,011 lines) provides
+the replacement via FFI exports (Technical §8.5).
+
+### REQ-GUARD-040
+When `USE_RUST_GFX` is defined, the C file `frame.c` (266 lines) shall be
+excluded from compilation. The Rust `frame.rs` (490 lines) provides the
+replacement.
+
+### REQ-GUARD-050
+When `USE_RUST_GFX` is defined, the drawing functions in `font.c`
+(`font_DrawText`, `font_DrawTracedText`, `TextRect`) shall be excluded
+from compilation. Non-drawing font functions may remain if needed by
+other C code.
+
+### REQ-GUARD-060
+When `USE_RUST_GFX` is defined, the C file `drawable.c` (501 lines)
+shall be excluded from compilation. The Rust `drawable.rs` (861 lines)
+provides the replacement.
+
+### REQ-GUARD-070
+When `USE_RUST_GFX` is defined, the C file `sdl/canvas.c` (2,176 lines)
+shall be excluded from compilation. The Rust `tfb_draw.rs` (3,405 lines)
+provides all canvas drawing operations.
+
+### REQ-GUARD-080
+When `USE_RUST_GFX` is defined, the C file `sdl/primitives.c` (633 lines)
+shall be excluded from compilation. Pixel-level operations are integrated
+into the Rust `Canvas` type.
+
+### REQ-GUARD-090
+When `USE_RUST_GFX` is defined, the C file `tfb_prim.c` (237 lines) shall
+be excluded from compilation. Primitive dispatch is integrated into the
+Rust DCQ and context layers.
+
+### REQ-GUARD-100
+When `USE_RUST_GFX` is defined, the C file `cmap.c` (663 lines) shall be
+excluded from compilation. The Rust `cmap.rs` (774 lines) provides the
+replacement (REQ-CMAP-010 through REQ-CMAP-080).
+
+### REQ-GUARD-110
+When `USE_RUST_GFX` is defined, all C scaler files shall be excluded from
+compilation: `hq2x.c` (2,888 lines), `biadv2x.c` (532), `bilinear2x.c`
+(112), `nearest2x.c` (207), `triscan2x.c` (155), `2xscalers.c` (260),
+`rotozoom.c` (1,038), `2xscalers_sse.c`, `2xscalers_mmx.c`,
+`2xscalers_3dnow.c`. The Rust `scaling.rs` (3,470 lines) provides all
+scaling algorithms.
+
+### REQ-GUARD-120
+When `USE_RUST_GFX` is defined, the `FlushGraphics`, `BatchGraphics`,
+and `UnbatchGraphics` functions in `gfx_common.c` (196 lines) shall be
+excluded from compilation. The Rust DCQ provides replacements
+(REQ-DCQ-130, REQ-DCQ-160, REQ-DCQ-170).
+
+### REQ-GUARD-130
+When `USE_RUST_GFX` is defined, the C file `pixmap.c` shall be excluded
+from compilation. The Rust `pixmap.rs` (740 lines) provides the
+replacement.
+
+### REQ-GUARD-140
+When `USE_RUST_GFX` is defined and the resource loading FFI bridge is
+active, `gfxload.c` (597 lines) shall be excluded from compilation.
+This guard shall NOT be applied until REQ-GFXLOAD-010 through
+REQ-GFXLOAD-050 are implemented.
+
+### REQ-GUARD-150
+When `USE_RUST_GFX` is defined, the C file `sdl/palette.c` shall be
+excluded from compilation. The Rust `cmap.rs` `NativePalette` provides
+palette management.
+
+### REQ-GUARD-160
+Each C file guarded with `USE_RUST_GFX` shall compile to an empty
+translation unit when the flag is defined (no residual symbols).
+
+### REQ-GUARD-170
+The Rust library (`libuqm_rust.a`) shall export all symbols needed to
+satisfy linker resolution for functions removed by `USE_RUST_GFX` guards.
+An unresolved symbol at link time indicates a missing FFI export.
+
+### REQ-GUARD-180
+C header files (`.h`) shall NOT have `USE_RUST_GFX` guards on type
+definitions (`typedef struct`, `enum`, `#define` constants). Type
+definitions remain available to all C code regardless of the flag.
+Function declarations in headers shall be guarded only if needed to
+avoid duplicate symbol warnings.
+
+---
+
+## 26. Backward Compatibility Requirements
+
+> Requirements in this section ensure that C and Rust graphics code
+> coexist correctly during the incremental port.
+
+### REQ-COMPAT-010
+While both C and Rust drawing code paths exist, the system shall use
+exactly ONE draw command queue — either the C DCQ (`dcqueue.c`) or the
+Rust DCQ (`dcqueue.rs`), never both simultaneously. The active DCQ is
+selected by `USE_RUST_GFX`.
+
+### REQ-COMPAT-020
+While C game code writes to `SDL_Surface->pixels` and the Rust canvas
+wraps the same surface, the system shall not exhibit data races. The
+single-threaded graphics model (REQ-THR-010) ensures this: C writes
+happen during DCQ command processing, and presentation reads happen
+after processing completes.
+
+### REQ-COMPAT-030
+While `USE_RUST_GFX` is not defined, the system shall build and run
+using the original C graphics pipeline with no behavioral changes. The
+Rust library may be linked but its FFI exports shall not be called.
+
+### REQ-COMPAT-040
+When `USE_RUST_GFX` is defined, all existing game functionality shall
+produce visually identical output to the C pipeline. Pixel-exact match
+is not required, but all game elements (sprites, text, menus, starfields,
+planet surfaces, fades, transitions) shall be rendered correctly.
+
+### REQ-COMPAT-050
+Where Rust canvas operations replace C canvas operations, the Rust
+implementations shall handle all pixel formats that the C code handles:
+32bpp RGBA, 32bpp RGBX, 8bpp paletted with palette lookup.
+
+### REQ-COMPAT-060
+Where Rust FFI bridge functions replace C functions, the Rust functions
+shall accept the same parameter types and return the same value types as
+the C originals (ABI compatibility). The `#[repr(C)]` attribute shall be
+used on all struct types that cross the FFI boundary (see Technical §10.2).
+
+### REQ-COMPAT-070
+While the Rust port is incomplete (not all 41 C files guarded), the
+`USE_RUST_GFX` flag shall only be defined when all dependencies of the
+guarded files have Rust replacements. Partial guarding that leaves
+unresolved symbols shall not be permitted.
+
+### REQ-COMPAT-080
+The system shall provide a runtime fallback: if the Rust DCQ encounters
+an unimplemented command type, it shall log a warning and skip the
+command rather than crashing. This allows incremental command-type porting.
+
+### REQ-COMPAT-090
+Where C code passes `TFB_Image*` pointers through the DCQ and Rust code
+uses `ImageRef(u32)` handles, the FFI bridge shall maintain a bidirectional
+mapping between C pointers and Rust handles via the `RenderContext` registry
+(REQ-GFXLOAD-010, REQ-GFXLOAD-040).
+
+### REQ-COMPAT-100
+While the resource loading system remains in C, all images and fonts
+loaded by C code shall be registered in the Rust `RenderContext` before
+any draw commands referencing them are enqueued. This ordering is
+guaranteed by the single-threaded model: loading happens before drawing.
+
+---
+
+## Extended Traceability Matrix (Sections 20–26)
+
+| Requirement | Source (Functional) | Source (Technical) |
+|---|---|---|
+| REQ-DCQ-010..120 | §12.1–12.4 (DCQ command types, wiring gap) | §8.2 (FFI bridge for DCQ) |
+| REQ-DCQ-130..140 | §12.5 (DCQ flush integration) | §8.3 (FFI bridge for DCQ flush) |
+| REQ-DCQ-150 | §12.4 (integration strategy) | §8.7 (global DCQ instance) |
+| REQ-DCQ-160..170 | §12.5 (batch/unbatch) | §8.3 (flush integration) |
+| REQ-DCQ-180 | §12.3 (C DCQ semantics) | §8.2 (blocking behavior) |
+| REQ-DCQ-190 | §12.2 (Rust DCQ architecture) | §8.3 (livelock detection) |
+| REQ-CANVAS-010..070 | §13.1–13.2 (C/Rust canvas systems) | §8.4 (Canvas↔SDL_Surface adapter) |
+| REQ-CANVAS-080..100 | §13.2 (Rust canvas features) | §8.4 (scissor support) |
+| REQ-CANVAS-110 | §13.2 (canvas format) | §10.1 (type mappings) |
+| REQ-CANVAS-120..130 | §13.3 (canvas type mismatch) | §8.4.1 (SurfaceCanvas adapter) |
+| REQ-CANVAS-140 | §13.1 (C canvas lifecycle) | §8.4 (adapter design) |
+| REQ-CMAP-010..080 | §14.1–14.3 (C/Rust colormap systems) | §8.6 (FFI bridge for colormap) |
+| REQ-WIDGET-010..030 | §15.1–15.3 (widget dependencies, strategy) | §9.2 (guard dependency graph, Level 5) |
+| REQ-WIDGET-040 | §15.3 (porting strategy) | — (future phase) |
+| REQ-GFXLOAD-010..050 | §16.1–16.3 (resource loading) | §8.7 (global DCQ/context) |
+| REQ-GFXLOAD-060 | §16.3 (integration path) | — (future phase) |
+| REQ-GUARD-010..180 | §17.2–17.10 (C file elimination) | §9.1–9.6 (guard strategy) |
+| REQ-COMPAT-010..100 | §11.3 (architectural difference), §17.10 (order) | §8.1 (two strategies), §8.4 (adapter) |
