@@ -140,7 +140,7 @@ Future Phase" section.
 > bridged or replaced.
 
 ### Files to create
-- `rust/src/graphics/gfxload_ffi.rs` (new) — Frame/drawable FFI exports
+- `rust/src/graphics/frame_ffi.rs` (new) — Frame/drawable FFI exports
   - `rust_frame_create`, `rust_frame_destroy`
   - `catch_unwind` on all exports
   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P23`
@@ -149,7 +149,7 @@ Future Phase" section.
     are NOT included — they remain in C
 
 ### Files to modify
-- `rust/src/graphics/mod.rs` — Add `pub mod gfxload_ffi;` (new module)
+- `rust/src/graphics/mod.rs` — Add `pub mod frame_ffi;` (new module)
 - `sc2/src/libs/graphics/sdl/rust_gfx.h` — Add `rust_frame_*` declarations
 - `sc2/src/libs/graphics/widgets.c` — Add `USE_RUST_GFX` bridge or guard
 - `sc2/src/libs/graphics/frame.c` — Add `USE_RUST_GFX` guard (deferred from P21)
@@ -183,7 +183,7 @@ done
 # Expected: ~36 GUARDED, ~5 UNGUARDED (loader files + sdl_common.c stay unguarded)
 
 # Verify frame/drawable FFI exports
-grep -c '#\[no_mangle\]' rust/src/graphics/gfxload_ffi.rs
+grep -c '#\[no_mangle\]' rust/src/graphics/frame_ffi.rs
 # Expected: >= 2 (rust_frame_create, rust_frame_destroy)
 
 # Build with USE_RUST_GFX
@@ -198,10 +198,10 @@ grep -c 'error:' /tmp/build_c_path.log
 ```
 
 ## Structural Verification Checklist
-- [ ] `gfxload_ffi.rs` created with >= 2 `#[no_mangle]` exports
+- [ ] `frame_ffi.rs` created with >= 2 `#[no_mangle]` exports
 - [ ] All drawing-pipeline C files now have `USE_RUST_GFX` guards (~36; loader files excluded)
 - [ ] Widget bridge strategy implemented (bridge or guard)
-- [ ] `mod.rs` updated with `pub mod gfxload_ffi`
+- [ ] `mod.rs` updated with `pub mod frame_ffi`
 - [ ] `rust_gfx.h` updated with gfxload declarations
 - [ ] Both build paths compile without errors
 
@@ -214,7 +214,7 @@ grep -c 'error:' /tmp/build_c_path.log
 ## Deferred Implementation Detection (Mandatory)
 
 ```bash
-grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/gfxload_ffi.rs && echo "FAIL" || echo "CLEAN"
+grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/frame_ffi.rs && echo "FAIL" || echo "CLEAN"
 ```
 
 ## Success Criteria
@@ -242,7 +242,7 @@ Create: `project-plans/gfx/.completed/P23.md`
 Contents:
 - phase ID: P23
 - timestamp
-- files created: `rust/src/graphics/gfxload_ffi.rs`
+- files created: `rust/src/graphics/frame_ffi.rs`
 - files modified: 5 C files (widget-dependent guards), `mod.rs`, `rust_gfx.h`
 - C files guarded: ~36/41 drawing-pipeline files (4 loader files + sdl_common.c intentionally unguarded)
 - widget approach: bridge or port

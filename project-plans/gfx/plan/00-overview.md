@@ -226,8 +226,9 @@ These files stay **unguarded** and compile in both `USE_RUST_GFX=0` and
 | `filegfx.c` | File-based GFX loading helpers | Disk I/O utilities for resource pipeline |
 | `resgfx.c` | Resource GFX management (`_GetCelData`) | Resource handle management, no pixel ops |
 | `loaddisp.c` | Display loading (`LoadDisplay`) | Loads splash/loading screen assets |
+| `sdl/png2sdl.c` | PNG to SDL conversion | Image decode utility, no drawing |
 
-These 4 files interact with the Rust pipeline only by producing
+These 5 files interact with the Rust pipeline only by producing
 `SDL_Surface` or `FRAME` values that are then consumed by the drawing
 layer. They can be ported in a future phase without affecting drawing
 correctness.

@@ -90,12 +90,15 @@ bridge is complete.
 
 ### REQ-GUARD-050: USE_RUST_GFX Guards on SDL Backend Files
 **Requirement text**: SDL backend files (sdl2_pure.c, sdl2_common.c,
-sdl1_common.c, pure.c, opengl.c, sdluio.c) shall be wrapped in guards.
+sdl1_common.c, pure.c, sdluio.c) shall be wrapped in guards. `opengl.c`
+is guarded only if the GL backend is fully replaced by Rust; otherwise
+it remains unguarded as an optional backend.
 
 Behavior contract:
 - GIVEN: `USE_RUST_GFX` is defined
 - WHEN: The build system compiles the graphics library
-- THEN: The 6 SDL backend C files are excluded from compilation
+- THEN: The 5 mandatory SDL backend files are excluded from compilation;
+  `opengl.c` is excluded only if GL backend is replaced (otherwise kept)
 
 ## Guard Readiness Gate
 
