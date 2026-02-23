@@ -38,42 +38,58 @@ Behavior contract:
 - WHEN: A widget calls `TFB_DrawCanvas_FilledRect(canvas, ...)`
 - THEN: The call is redirected to `rust_canvas_fill_rect(canvas, ...)`
 
-### REQ-GFXLOAD-010: Graphics Resource Loading Bridge
-**Requirement text**: The Rust backend shall provide FFI functions for
-loading graphics resources (frames, fonts) into Rust-managed structures.
+### ~~REQ-GFXLOAD-010, -020, -030~~ (DEFERRED — OUT OF SCOPE)
+
+Loader functions (`LoadGraphic`, `LoadFont`, `TFB_LoadPNG`) and their
+source files (`gfxload.c`, `filegfx.c`, `resgfx.c`, `loaddisp.c`,
+`png2sdl.c`) remain in C and compile in both modes. They are **not
+bridged or replaced** in this plan. These requirements are deferred to
+a future phase.
+
+### REQ-GUARD-060: Widget-Dependent File Guards + Widget Guard
+**Requirement text**: After the widget bridge provides Rust replacements
+for the APIs that `widgets.c` depends on, the following files shall be
+wrapped in `USE_RUST_GFX` guards: `frame.c`, `font.c`, `context.c`,
+`drawable.c`, and `widgets.c` itself.
+
+These files were explicitly deferred from P21 because `widgets.c` calls
+into them (`DrawBatch`, `DrawStamp`, `font_DrawText`, `font_DrawTracedText`,
+`SetContext`, `SetContextForeGroundColor`, `GetFrameCount`). Guarding
+them before the widget bridge exists would break the widget system.
 
 Behavior contract:
-- GIVEN: C code loads a `.ani` or `.fon` resource
-- WHEN: `rust_gfxload_frame(data, size)` is called
-- THEN: The frame data is parsed and stored in Rust `Frame` / `Pixmap`
-
-### REQ-GFXLOAD-020: Font Loading Bridge
-**Requirement text**: The Rust backend shall provide FFI functions for
-loading font resources into Rust-managed font structures.
-
-Behavior contract:
-- GIVEN: C code loads a `.fon` resource
-- WHEN: `rust_gfxload_font(data, size)` is called
-- THEN: The font data is parsed into Rust `FontPage` structures
-
-### REQ-GFXLOAD-030: PNG to Surface Bridge
-**Requirement text**: The Rust backend shall provide a function that loads
-a PNG file into an SDL_Surface-compatible pixel buffer.
-
-Behavior contract:
-- GIVEN: A PNG file path
-- WHEN: `rust_gfxload_png(path)` is called
-- THEN: Returns `*mut SDL_Surface` with decoded pixel data
-
-### REQ-GUARD-060: Widget and GfxLoad Guards
-**Requirement text**: After bridging, `widgets.c`, `gfxload.c`, `resgfx.c`,
-`filegfx.c`, `loaddisp.c`, `sdl/png2sdl.c`, and `font.c` shall be
-wrapped in `USE_RUST_GFX` guards.
-
-Behavior contract:
-- GIVEN: `USE_RUST_GFX` is defined
+- GIVEN: `USE_RUST_GFX` is defined AND widget bridge is implemented
 - WHEN: The build system compiles the graphics library
-- THEN: The 7 remaining C files are excluded from compilation
+- THEN: `frame.c`, `font.c`, `context.c`, `drawable.c`, `widgets.c` are excluded
+
+**Loader files (gfxload.c, filegfx.c, resgfx.c, loaddisp.c, png2sdl.c)
+are NOT guarded — they remain compiled in both modes.** See `00-overview.md`
+"Deferred to Future Phase" section.
+
+## Guard Readiness Gate
+
+Before guarding frame.c/font.c/context.c/drawable.c/widgets.c, ALL
+of the following must be true:
+
+1. Every symbol below has a Rust FFI replacement with matching signature
+2. `cargo test` passes with all Rust replacements
+3. `widgets.c` compiles and links against Rust replacements
+4. Widget rendering visually verified (menus render correctly)
+5. Dual-path build: `USE_RUST_GFX=0` still compiles
+6. `nm` check: no undefined symbols in either build mode
+
+If any symbol lacks a Rust replacement, do NOT guard the corresponding
+C file. Widget functionality takes priority over guard coverage.
+
+### Per-File Readiness Checklist
+
+| C File | Key Symbols Requiring Rust Replacement | Rust Module |
+|--------|----------------------------------------|-------------|
+| `frame.c` | `ClearBackGround`, `DrawPoint`, `DrawRectangle`, `DrawFilledRectangle`, `DrawLine`, `DrawStamp`, `DrawFilledStamp`, `ClearDrawable`, `GetContextValidRect` | `frame_ffi.rs` |
+| `font.c` | `SetContextFont`, `DestroyFont`, `font_DrawText`, `font_DrawTracedText`, `TextRect`, `GetContextFontLeading`, `GetContextFontLeadingWidth` | `font_ffi.rs` |
+| `context.c` | `SetContext`, `CreateContextAux`, `DestroyContext`, `SetContextForeGroundColor`, `GetContextForeGroundColor`, `SetContextBackGroundColor`, `GetContextBackGroundColor`, `SetContextDrawMode`, `GetContextDrawMode`, `SetContextClipRect`, `GetContextClipRect`, `SetContextOrigin`, `SetContextFontEffect`, `FixContextFontEffect`, `CopyContextRect` | `context_ffi.rs` |
+| `drawable.c` | `SetContextFGFrame`, `GetContextFGFrame`, `request_drawable`, `CreateDisplay`, `AllocDrawable`, `CreateDrawable`, `DestroyDrawable`, `GetFrameRect`, `SetFrameHot`, `GetFrameHot`, `RotateFrame`, `RescaleFrame`, `CloneFrame`, `CopyFrameRect`, `SetFrameTransparentColor`, `GetFramePixel`, `ReadFramePixelColors`, `WriteFramePixelColors` | `drawable_ffi.rs` |
+| `widgets.c` | All `DrawWidget_*` functions (depend on frame/font/context APIs above) | `widget_ffi.rs` or left in C with Rust API calls |
 
 ## Implementation Tasks
 
@@ -93,21 +109,17 @@ The widget system in `widgets.c` contains:
 4. Alternative: guard the whole file and provide Rust FFI stubs that
    the remaining C code calls
 
-### GfxLoad Bridge
+### GfxLoad (Deferred — Out of Scope)
 
-C resource loading pipeline:
+C resource loading files remain unchanged. They compile in both modes:
 ```
 .ani file → gfxload.c:LoadGraphic() → SDL_Surface → frame.c:CreateFrame()
 .fon file → gfxload.c:LoadFont() → font.c:CreateFont()
 .png file → png2sdl.c:TFB_LoadPNG() → SDL_Surface
 ```
 
-Rust bridge:
-```
-.ani file → rust_gfxload_frame() → Rust Frame/Pixmap
-.fon file → rust_gfxload_font() → Rust FontPage
-.png file → rust_gfxload_png() → *mut SDL_Surface (via image crate or libpng FFI)
-```
+These are NOT replaced in this plan. See `00-overview.md` "Deferred to
+Future Phase" section.
 
 ### C functions replaced/bridged
 
@@ -119,30 +131,38 @@ Rust bridge:
 | `DrawWidget_Choice` | Bridge: redirect draw calls | Widget logic stays in C |
 | `DrawWidget_Button` | Bridge: redirect draw calls | Widget logic stays in C |
 | `DrawWidget_Label` | Bridge: redirect draw calls | Widget logic stays in C |
-| `LoadGraphic` | FFI bridge to Rust | `gfxload.c` → `rust_gfxload_frame` |
-| `LoadFont` | FFI bridge to Rust | `gfxload.c` → `rust_gfxload_font` |
-| `TFB_LoadPNG` | FFI bridge to Rust | `png2sdl.c` → `rust_gfxload_png` |
 | `_CreateFrame` | FFI bridge to Rust | `frame.c` → `rust_frame_create` |
 | `DestroyFrame` | FFI bridge to Rust | `frame.c` → `rust_frame_destroy` |
 
+> **Loader functions** (`LoadGraphic`, `LoadFont`, `TFB_LoadPNG`) remain
+> in C. Loader files (gfxload.c, filegfx.c, resgfx.c, loaddisp.c, png2sdl.c)
+> are OUT OF SCOPE for this plan — they compile in both modes and are not
+> bridged or replaced.
+
 ### Files to create
-- `rust/src/graphics/gfxload_ffi.rs` — GfxLoad FFI exports
-  - `rust_gfxload_frame`, `rust_gfxload_font`, `rust_gfxload_png`
+- `rust/src/graphics/gfxload_ffi.rs` (new) — Frame/drawable FFI exports
   - `rust_frame_create`, `rust_frame_destroy`
   - `catch_unwind` on all exports
   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P23`
-  - marker: `@requirement REQ-GFXLOAD-010..030, REQ-WIDGET-010..020, REQ-FFI-030`
+  - marker: `@requirement REQ-WIDGET-010..020, REQ-GUARD-060, REQ-FFI-030`
+  - Note: loader functions (`LoadGraphic`, `LoadFont`, `TFB_LoadPNG`)
+    are NOT included — they remain in C
 
 ### Files to modify
-- `rust/src/graphics/mod.rs` — Add `pub mod gfxload_ffi;`
-- `sc2/src/libs/graphics/sdl/rust_gfx.h` — Add `rust_gfxload_*` declarations
+- `rust/src/graphics/mod.rs` — Add `pub mod gfxload_ffi;` (new module)
+- `sc2/src/libs/graphics/sdl/rust_gfx.h` — Add `rust_frame_*` declarations
 - `sc2/src/libs/graphics/widgets.c` — Add `USE_RUST_GFX` bridge or guard
-- `sc2/src/libs/graphics/gfxload.c` — Add `USE_RUST_GFX` guard
-- `sc2/src/libs/graphics/resgfx.c` — Add `USE_RUST_GFX` guard
-- `sc2/src/libs/graphics/filegfx.c` — Add `USE_RUST_GFX` guard
-- `sc2/src/libs/graphics/loaddisp.c` — Add `USE_RUST_GFX` guard
-- `sc2/src/libs/graphics/sdl/png2sdl.c` — Add `USE_RUST_GFX` guard
-- `sc2/src/libs/graphics/font.c` — Add `USE_RUST_GFX` guard
+- `sc2/src/libs/graphics/frame.c` — Add `USE_RUST_GFX` guard (deferred from P21)
+- `sc2/src/libs/graphics/font.c` — Add `USE_RUST_GFX` guard (deferred from P21)
+- `sc2/src/libs/graphics/context.c` — Add `USE_RUST_GFX` guard (deferred from P21)
+- `sc2/src/libs/graphics/drawable.c` — Add `USE_RUST_GFX` guard (deferred from P21)
+
+**NOT guarded (loader files remain compiled in both modes):**
+- `sc2/src/libs/graphics/gfxload.c` — stays unguarded
+- `sc2/src/libs/graphics/resgfx.c` — stays unguarded
+- `sc2/src/libs/graphics/filegfx.c` — stays unguarded
+- `sc2/src/libs/graphics/loaddisp.c` — stays unguarded
+- `sc2/src/libs/graphics/sdl/png2sdl.c` — stays unguarded
 
 ## Verification Commands
 
@@ -152,7 +172,7 @@ cd rust && cargo fmt --all --check
 cd rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cd rust && cargo test --workspace --all-features
 
-# Verify all C files now guarded
+# Verify guard status of all C files
 for f in $(find sc2/src/libs/graphics -name '*.c' | sort); do
   if grep -q 'USE_RUST_GFX' "$f"; then
     echo "[GUARDED] $f"
@@ -160,11 +180,11 @@ for f in $(find sc2/src/libs/graphics -name '*.c' | sort); do
     echo "[UNGUARDED] $f"
   fi
 done
-# Expected: 41 GUARDED, 0 UNGUARDED
+# Expected: ~36 GUARDED, ~5 UNGUARDED (loader files + sdl_common.c stay unguarded)
 
-# Verify gfxload exports
+# Verify frame/drawable FFI exports
 grep -c '#\[no_mangle\]' rust/src/graphics/gfxload_ffi.rs
-# Expected: >= 5
+# Expected: >= 2 (rust_frame_create, rust_frame_destroy)
 
 # Build with USE_RUST_GFX
 cd sc2 && make clean && make USE_RUST_GFX=1 2>&1 | tee /tmp/build_full_rust.log
@@ -178,8 +198,8 @@ grep -c 'error:' /tmp/build_c_path.log
 ```
 
 ## Structural Verification Checklist
-- [ ] `gfxload_ffi.rs` created with >= 5 `#[no_mangle]` exports
-- [ ] All 41 C files now have `USE_RUST_GFX` guards
+- [ ] `gfxload_ffi.rs` created with >= 2 `#[no_mangle]` exports
+- [ ] All drawing-pipeline C files now have `USE_RUST_GFX` guards (~36; loader files excluded)
 - [ ] Widget bridge strategy implemented (bridge or guard)
 - [ ] `mod.rs` updated with `pub mod gfxload_ffi`
 - [ ] `rust_gfx.h` updated with gfxload declarations
@@ -187,11 +207,9 @@ grep -c 'error:' /tmp/build_c_path.log
 
 ## Semantic Verification Checklist (Mandatory)
 - [ ] Widget rendering produces visually correct output through bridge
-- [ ] GfxLoad correctly parses `.ani` frame data (or provides working stubs)
-- [ ] Font loading correctly parses `.fon` data (or provides working stubs)
-- [ ] PNG loading produces correct pixel data in SDL_Surface
 - [ ] No memory leaks from Rust-owned resources returned to C
 - [ ] Resource destruction functions (`rust_frame_destroy`) properly free Rust memory
+- [ ] Loader files (gfxload.c, filegfx.c, resgfx.c, loaddisp.c) remain unguarded and functional
 
 ## Deferred Implementation Detection (Mandatory)
 
@@ -200,11 +218,19 @@ grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/gfxload_ffi.
 ```
 
 ## Success Criteria
-- [ ] All 41 C files guarded
+- [ ] ~36 drawing-pipeline C files guarded (loader files stay unguarded)
+- [ ] Widget-dependent files (frame.c, font.c, context.c, drawable.c) now guarded
 - [ ] Widget bridge or port functional
-- [ ] GfxLoad FFI bridge functional
+- [ ] `rust_frame_create` / `rust_frame_destroy` functional
 - [ ] Both build paths work
 - [ ] All cargo gates pass
+
+## Dual-Path ABI Verification (Mandatory)
+```bash
+# Build with USE_RUST_GFX=0 and verify no undefined symbols
+cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
+# Expected: 0
+```
 
 ## Failure Recovery
 - rollback: `git stash`
@@ -217,8 +243,8 @@ Contents:
 - phase ID: P23
 - timestamp
 - files created: `rust/src/graphics/gfxload_ffi.rs`
-- files modified: 7 C files (remaining guards), `mod.rs`, `rust_gfx.h`
-- C files guarded: 41/41
+- files modified: 5 C files (widget-dependent guards), `mod.rs`, `rust_gfx.h`
+- C files guarded: ~36/41 drawing-pipeline files (4 loader files + sdl_common.c intentionally unguarded)
 - widget approach: bridge or port
-- gfxload exports: count
+- frame FFI exports: count
 - verification: both build paths successful

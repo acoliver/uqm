@@ -4,9 +4,9 @@
 `PLAN-20260223-GFX-FULL-PORT.P21`
 
 ## Prerequisites
-- Required: Phase P20a (Canvas Implementation Verification) completed
-- Expected: DCQ FFI bridge fully implemented (P17)
-- Expected: Canvas FFI bridge fully implemented (P20)
+- Required: Phase P20a (DCQ Implementation Verification) completed
+- Expected: Canvas FFI bridge fully implemented (P17)
+- Expected: DCQ FFI bridge fully implemented (P20)
 - Expected: Rust `cmap.rs` has colormap/fade support
 
 ## Requirements Implemented (Expanded)
@@ -67,14 +67,26 @@ Behavior contract:
 - WHEN: The build system compiles the graphics library
 - THEN: The 10 scaler C files are excluded from compilation
 
-### REQ-GUARD-040: USE_RUST_GFX Guards on Core Abstractions
-**Requirement text**: C files for core abstractions (context.c, drawable.c,
-frame.c, pixmap.c, intersec.c, gfx_common.c) shall be wrapped in guards.
+### REQ-GUARD-040: USE_RUST_GFX Guards on Core Abstractions (Non-Widget-Dependent Only)
+**Requirement text**: C files for core abstractions that have NO widget
+dependencies (pixmap.c, intersec.c, gfx_common.c) shall be wrapped in
+guards in this phase. Widget-dependent files (frame.c, font.c, context.c,
+drawable.c) are deferred to P23.
 
 Behavior contract:
 - GIVEN: `USE_RUST_GFX` is defined
 - WHEN: The build system compiles the graphics library
-- THEN: The 6 core abstraction C files are excluded from compilation
+- THEN: The 3 non-widget-dependent core abstraction C files are excluded
+
+** DEPENDENCY CONSTRAINT**: `frame.c`, `font.c`, `context.c`, and
+`drawable.c` must NOT be guarded in this phase. `widgets.c` calls
+`DrawBatch`, `DrawStamp` (from `frame.c`), `font_DrawText`,
+`font_DrawTracedText` (from `font.c`), `SetContext`,
+`SetContextForeGroundColor` (from `context.c`), and `GetFrameCount`
+(from `drawable.c`). If those files are guarded before P23 provides
+Rust replacements for the APIs widgets.c depends on, the widget system
+will fail to link. These 4 files are guarded in P23 after the widget
+bridge is complete.
 
 ### REQ-GUARD-050: USE_RUST_GFX Guards on SDL Backend Files
 **Requirement text**: SDL backend files (sdl2_pure.c, sdl2_common.c,
@@ -84,6 +96,38 @@ Behavior contract:
 - GIVEN: `USE_RUST_GFX` is defined
 - WHEN: The build system compiles the graphics library
 - THEN: The 6 SDL backend C files are excluded from compilation
+
+## Guard Readiness Gate
+
+Before guarding any file, verify:
+1. Every C symbol in the file has a Rust replacement with matching signature
+2. `cargo test` passes with the Rust replacement
+3. A test exists that exercises the Rust replacement through FFI
+4. Dual-path build: `USE_RUST_GFX=0` still compiles (C symbols unchanged)
+5. `nm` check: no undefined symbols in either build mode
+
+If any symbol lacks a Rust replacement, do NOT guard the file. Guard
+readiness is checked per-file, not per-group — a group can be partially
+guarded if some files are ready and others are not.
+
+### Per-File Readiness Checklist
+
+| C File | Key Symbols Requiring Rust Replacement | Rust Module |
+|--------|----------------------------------------|-------------|
+| `dcqueue.c` | `TFB_DrawCommandQueue_Push`, `TFB_DrawCommandQueue_Pop`, `TFB_FlushGraphics` | `dcq_ffi.rs` |
+| `tfb_draw.c` | `TFB_DrawScreen_Line`, `TFB_DrawScreen_Rect`, `TFB_DrawScreen_Image`, `TFB_DrawScreen_Copy`, `TFB_DrawScreen_FontChar` | `dcq_ffi.rs` |
+| `tfb_prim.c` | `TFB_Prim_Line`, `TFB_Prim_Rect`, `TFB_Prim_FillRect`, `TFB_Prim_Stamp` | `canvas_ffi.rs` |
+| `sdl/canvas.c` | `TFB_DrawCanvas_Line`, `TFB_DrawCanvas_Rect`, `TFB_DrawCanvas_Image`, `TFB_DrawCanvas_FontChar`, `TFB_DrawCanvas_CopyRect` | `canvas_ffi.rs` |
+| `sdl/primitives.c` | `putpixel_32`, `getpixel_32` (only 32bpp needed for RGBX8888) | `canvas_ffi.rs` |
+| `clipline.c` | `TFB_DrawCanvas_ClipLine` | `canvas_ffi.rs` |
+| `boxint.c` | `BoxIntersect`, `BoxUnion` | `canvas_ffi.rs` |
+| `bbox.c` | `TFB_BBox_Reset`, `TFB_BBox_RegisterPoint`, `TFB_BBox_GetClipRect` | `canvas_ffi.rs` |
+| `cmap.c` | `SetColorMap`, `FadeScreen`, `GetFadeAmount`, `init_colormap`, `uninit_colormap` | `cmap_ffi.rs` |
+| `sdl/palette.c` | `TFB_SetPalette`, `TFB_GetPaletteColor` | `cmap_ffi.rs` |
+| `pixmap.c` | `TFB_DrawCanvas_ToScreenFormat`, `TFB_DrawCanvas_Initialize` | `canvas_ffi.rs` |
+| `intersec.c` | `DrawablesIntersect` | `canvas_ffi.rs` |
+| `gfx_common.c` | `TFB_InitGraphics`, `TFB_UninitGraphics`, `TFB_ProcessEvents` | `ffi.rs` (existing) |
+| All scaler `.c` files | `Scale_HQ2X`, `Scale_BilinearFilter`, `Scale_Nearest`, etc. | `ffi.rs` (existing) |
 
 ## Implementation Tasks
 
@@ -133,13 +177,16 @@ Guard format for each file:
   `sdl/hq2x.c`, `sdl/nearest2x.c`, `sdl/triscan2x.c`, `sdl/rotozoom.c`
 - All replaced by `scaling.rs`
 
-**Group 4 — Core abstractions (6 files):**
-- `context.c` → replaced by `context.rs`
-- `drawable.c` → replaced by `drawable.rs`
-- `frame.c` → replaced by `frame.rs`
+**Group 4 — Core abstractions, non-widget-dependent only (3 files):**
 - `pixmap.c` → replaced by `pixmap.rs`
 - `intersec.c` → replaced by Rust intersection logic
 - `gfx_common.c` → replaced by `gfx_common.rs`
+
+**NOT guarded in this phase — widget-dependent (deferred to P23):**
+- `frame.c` — widgets.c calls `DrawBatch`, `DrawStamp`, `GetFrameBounds`
+- `font.c` — widgets.c calls `font_DrawText`, `font_DrawTracedText`, `GetCharExtent`
+- `context.c` — widgets.c calls `SetContext`, `SetContextForeGroundColor`, `SetContextBackGroundColor`, `SetContextClipRect`
+- `drawable.c` — widgets.c calls `GetFrameCount`, `CreateDrawable`
 
 **Group 5 — SDL backend (6 files):**
 - `sdl/sdl2_pure.c` → replaced by `ffi.rs` vtable
@@ -149,14 +196,22 @@ Guard format for each file:
 - `sdl/opengl.c` → not yet ported (may remain for now)
 - `sdl/sdluio.c` → replaced by Rust UIO
 
-**NOT guarded in this phase** (deferred to P23/P25):
-- `font.c` — complex, needs widget bridge first
-- `gfxload.c` — resource loading, needs gfxload bridge first
+**NOT guarded in this phase — widget-dependent (deferred to P23):**
+- `frame.c` — widgets.c depends on `DrawBatch`, `DrawStamp`, `GetFrameBounds`
+- `font.c` — widgets.c depends on `font_DrawText`, `font_DrawTracedText`
+- `context.c` — widgets.c depends on `SetContext`, `SetContextForeGroundColor`
+- `drawable.c` — widgets.c depends on `GetFrameCount`, `CreateDrawable`
+- `widgets.c` — widget system (941 lines), guarded after bridge provides replacements
+
+**NOT guarded in this phase — loader files (deferred indefinitely):**
+- `gfxload.c` — resource loading, pure I/O, no drawing
 - `resgfx.c` — resource management
 - `filegfx.c` — file loading
 - `loaddisp.c` — display loading
 - `sdl/png2sdl.c` — PNG conversion
-- `widgets.c` — widget system (941 lines)
+
+Loader files compile in both modes — see `00-overview.md` "Deferred to
+Future Phase" section.
 
 ### Files to create
 - `rust/src/graphics/cmap_ffi.rs` — Colormap FFI exports
@@ -185,7 +240,16 @@ grep -c '#\[no_mangle\]' rust/src/graphics/cmap_ffi.rs
 
 # Verify guard count in C files
 grep -rl 'USE_RUST_GFX' sc2/src/libs/graphics/ | wc -l
-# Expected: >= 34 (2 existing + 32 new)
+# Expected: >= 31 (2 existing + 29 new; widget-dependent files deferred to P23)
+
+# Verify widget-dependent files are NOT guarded yet
+for f in frame.c font.c context.c drawable.c; do
+  if grep -q 'USE_RUST_GFX' "sc2/src/libs/graphics/$f"; then
+    echo "FAIL: $f guarded too early — widgets.c depends on it"
+  else
+    echo "OK: $f not yet guarded (correct)"
+  fi
+done
 
 # Build with USE_RUST_GFX to verify guarded files are excluded
 cd sc2 && make USE_RUST_GFX=1 2>&1 | head -50
@@ -222,10 +286,17 @@ grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/cmap_ffi.rs 
 
 ## Success Criteria
 - [ ] Colormap FFI exports compile and link
-- [ ] 32 C files guarded
+- [ ] 29 C files guarded (widget-dependent files deferred to P23)
 - [ ] Build succeeds with `USE_RUST_GFX=1`
-- [ ] Build succeeds without `USE_RUST_GFX` (backward compatibility)
+- [ ] Build succeeds with `USE_RUST_GFX=0` — no undefined symbols
 - [ ] `cargo fmt`, `cargo clippy`, `cargo test` all pass
+
+## Dual-Path ABI Verification (Mandatory)
+```bash
+# Build with USE_RUST_GFX=0 and verify no undefined symbols
+cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
+# Expected: 0
+```
 
 ## Failure Recovery
 - rollback: `git stash` (many files modified)
@@ -238,7 +309,7 @@ Contents:
 - phase ID: P21
 - timestamp
 - files created: `rust/src/graphics/cmap_ffi.rs`
-- files modified: 32 C files (guards), `mod.rs`, `rust_gfx.h`
-- C files guarded: list
+- files modified: 29 C files (guards), `mod.rs`, `rust_gfx.h`
+- C files guarded: list (29 files; frame.c, font.c, context.c, drawable.c deferred to P23)
 - colormap exports: count
 - verification: build with and without `USE_RUST_GFX`

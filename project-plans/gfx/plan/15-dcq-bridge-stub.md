@@ -1,4 +1,8 @@
-# Phase 15: DCQ FFI Bridge — Stub
+> **NOTE**: This file's name is a historical artifact from a phase reorder.
+> Canonical: Phase P15 = Canvas Bridge — Stub (Slice B)
+
+
+# Phase 15: Canvas FFI Bridge — Stub
 
 ## Phase ID
 `PLAN-20260223-GFX-FULL-PORT.P15`
@@ -6,111 +10,135 @@
 ## Prerequisites
 - Required: Phase P14a (Vtable Integration Verification) completed
 - Expected: All vtable functions implemented and verified in ffi.rs
-- Expected: Rust dcqueue.rs (1,362 lines) implemented with 15 command types
+- Expected: Rust `tfb_draw.rs` (3,405 lines) has draw_line, draw_rect,
+  fill_rect, draw_image, draw_fontchar, copy_canvas, scissor support
 
 ## Requirements Implemented (Expanded)
 
-### REQ-DCQ-010: DCQ Global Instance
-**Requirement text**: The Rust GFX backend shall provide a global DCQ
-instance accessible from C via FFI, replacing the C `dcqueue.c` command
-queue.
+### REQ-CANVAS-010: SurfaceCanvas Adapter
+**Requirement text**: The Rust GFX backend shall provide a `SurfaceCanvas`
+adapter that wraps an `SDL_Surface` pointer and exposes it as a Rust
+`Canvas` for drawing operations.
 
 Behavior contract:
-- GIVEN: The Rust backend is initialized
-- WHEN: C code needs to enqueue draw commands
-- THEN: A global `DrawCommandQueue` is available via `unsafe` singleton access
+- GIVEN: A valid `*mut SDL_Surface` from C
+- WHEN: `rust_canvas_from_surface(surface)` is called
+- THEN: A `SurfaceCanvas` handle is returned that can be used for draw calls
 
-### REQ-DCQ-020: DCQ Push Commands
-**Requirement text**: When C code calls `rust_dcq_push_*` functions, the
-backend shall enqueue the corresponding draw command in the Rust DCQ.
-
-Behavior contract:
-- GIVEN: The DCQ is initialized
-- WHEN: `rust_dcq_push_drawline(x1, y1, x2, y2, color)` is called
-- THEN: A `DrawLine` command is enqueued with the given parameters
-
-### REQ-DCQ-030: DCQ Flush
-**Requirement text**: When `rust_dcq_flush` is called, the backend shall
-process all enqueued commands in FIFO order, executing the corresponding
-Rust drawing operations.
+### REQ-CANVAS-020: Draw Line Export
+**Requirement text**: When `rust_canvas_draw_line` is called, the backend
+shall draw a line on the target surface using Bresenham's algorithm from
+`tfb_draw.rs`.
 
 Behavior contract:
-- GIVEN: The DCQ has N enqueued commands
-- WHEN: `rust_dcq_flush` is called
-- THEN: All N commands are dequeued and executed in order, queue is empty after
+- GIVEN: A valid canvas handle and line coordinates
+- WHEN: `rust_canvas_draw_line(canvas, x1, y1, x2, y2, color)` is called
+- THEN: A line is drawn on the surface's pixel buffer
 
-### REQ-DCQ-040: DCQ Screen Binding
-**Requirement text**: When `rust_dcq_set_screen` is called, the backend
-shall direct subsequent draw commands to the specified screen surface.
-
-Behavior contract:
-- GIVEN: The DCQ is active
-- WHEN: `rust_dcq_set_screen(screen_index)` is called
-- THEN: Subsequent draw operations target `surfaces[screen_index]`
-
-### REQ-FFI-030: Panic Safety (catch_unwind)
-**Requirement text**: No `extern "C" fn` shall allow a Rust panic to
-propagate across the FFI boundary.
+### REQ-CANVAS-030: Draw Rect Export
+**Requirement text**: When `rust_canvas_draw_rect` / `rust_canvas_fill_rect`
+are called, the backend shall draw rectangles on the target surface.
 
 Behavior contract:
-- GIVEN: Any `rust_dcq_*` FFI function
-- WHEN: An internal Rust panic occurs
-- THEN: `catch_unwind` catches it; function returns a safe default
+- GIVEN: A valid canvas handle and rect coordinates
+- WHEN: `rust_canvas_fill_rect(canvas, x, y, w, h, color)` is called
+- THEN: A filled rectangle is drawn on the surface's pixel buffer
+
+### REQ-CANVAS-040: Draw Image Export
+**Requirement text**: When `rust_canvas_draw_image` is called, the backend
+shall blit image data onto the target surface.
+
+Behavior contract:
+- GIVEN: A valid canvas handle and image data
+- WHEN: `rust_canvas_draw_image(canvas, image, x, y, flags)` is called
+- THEN: The image is composited onto the surface's pixel buffer
+
+### REQ-CANVAS-050: Draw Fontchar Export
+**Requirement text**: When `rust_canvas_draw_fontchar` is called, the
+backend shall render a font glyph onto the target surface with alpha
+blending.
+
+Behavior contract:
+- GIVEN: A valid canvas handle and font character data
+- WHEN: `rust_canvas_draw_fontchar(canvas, page, char_idx, x, y, color)` is called
+- THEN: The glyph is rendered with proper alpha compositing
+
+### REQ-CANVAS-060: Scissor Rect Support
+**Requirement text**: When `rust_canvas_set_scissor` is called, subsequent
+draw operations shall be clipped to the scissor rectangle.
+
+Behavior contract:
+- GIVEN: A canvas with a scissor rect set
+- WHEN: Any draw operation is called
+- THEN: Pixels outside the scissor rect are not modified
+
+### REQ-CANVAS-070: Canvas Copy (Blit)
+**Requirement text**: When `rust_canvas_copy` is called, the backend shall
+copy pixels from one surface region to another.
+
+Behavior contract:
+- GIVEN: Source and destination surfaces
+- WHEN: `rust_canvas_copy(dst, src, src_rect, dst_x, dst_y)` is called
+- THEN: Pixels are copied with proper clipping
 
 ## Implementation Tasks
 
 ### C functions replaced by this phase
 
-These C functions from `dcqueue.c` will have Rust FFI equivalents:
+These C functions from `tfb_draw.c` and `sdl/canvas.c` will have Rust FFI equivalents:
 
-| C Function | Rust FFI Export | Purpose |
+| C Function | Rust FFI Export | Source Module |
 |---|---|---|
-| `TFB_DrawScreen_Line` | `rust_dcq_push_drawline` | Enqueue line draw |
-| `TFB_DrawScreen_Rect` | `rust_dcq_push_drawrect` | Enqueue rect draw |
-| `TFB_DrawScreen_FilledRect` | `rust_dcq_push_fillrect` | Enqueue filled rect |
-| `TFB_DrawScreen_Image` | `rust_dcq_push_drawimage` | Enqueue image blit |
-| `TFB_DrawScreen_Copy` | `rust_dcq_push_copy` | Enqueue screen copy |
-| `TFB_DrawScreen_SetPalette` | `rust_dcq_push_setpalette` | Enqueue palette set |
-| `TFB_DrawScreen_CopyToImage` | `rust_dcq_push_copytoimage` | Enqueue copy-to-image |
-| `TFB_DrawScreen_DeleteImage` | `rust_dcq_push_deleteimage` | Enqueue image deletion |
-| `TFB_DrawScreen_WaitForSignal` | `rust_dcq_push_waitsignal` | Enqueue wait-for-signal |
-| `TFB_DrawScreen_ReinitVideo` | `rust_dcq_push_reinitvideo` | Enqueue video reinit |
-| `TFB_FlushGraphics` | `rust_dcq_flush` | Flush/process all commands |
-| `TFB_BatchGraphics` / `TFB_UnbatchGraphics` | `rust_dcq_batch` / `rust_dcq_unbatch` | Batch mode control |
-| `TFB_GetScreenIndex` | `rust_dcq_get_screen` | Get current draw screen |
-| `TFB_SetScreenIndex` | `rust_dcq_set_screen` | Set current draw screen |
+| `TFB_DrawCanvas_Line` | `rust_canvas_draw_line` | tfb_draw.rs |
+| `TFB_DrawCanvas_Rect` | `rust_canvas_draw_rect` | tfb_draw.rs |
+| `TFB_DrawCanvas_FilledRect` | `rust_canvas_fill_rect` | tfb_draw.rs |
+| `TFB_DrawCanvas_Image` | `rust_canvas_draw_image` | tfb_draw.rs |
+| `TFB_DrawCanvas_FontChar` | `rust_canvas_draw_fontchar` | tfb_draw.rs |
+| `TFB_DrawCanvas_CopyRect` | `rust_canvas_copy` | tfb_draw.rs |
+| `TFB_DrawCanvas_SetClipRect` | `rust_canvas_set_scissor` | tfb_draw.rs |
+| `TFB_DrawCanvas_GetExtent` | `rust_canvas_get_extent` | tfb_draw.rs |
+| `SDL_CreateSurfaceCanvas` | `rust_canvas_from_surface` | canvas_ffi.rs |
+| `SDL_DestroySurfaceCanvas` | `rust_canvas_destroy` | canvas_ffi.rs |
 
 ### Files to create
-- `rust/src/graphics/dcq_ffi.rs` — New file for DCQ FFI exports
-  - Global `DrawCommandQueue` singleton using `UnsafeCell` pattern (like ffi.rs)
-  - All ~15 `#[no_mangle] pub extern "C" fn rust_dcq_*` stubs
-  - Each stub: `catch_unwind` wrapper, parameter validation, returns safe default
-  - Body: `todo!("DCQ FFI: <function_name>")` (allowed in stub phase)
+- `rust/src/graphics/canvas_ffi.rs` — New file for Canvas FFI exports
+  - `SurfaceCanvas` struct wrapping `*mut SDL_Surface` + Rust `Canvas`
+  - Handle-based API: C gets opaque `*mut SurfaceCanvas` handles
+  - All `#[no_mangle] pub extern "C" fn rust_canvas_*` stubs
+  - Each stub: `catch_unwind` wrapper, null check, returns safe default
+  - Body: `todo!("Canvas FFI: <function_name>")` (allowed in stub phase)
   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P15`
-  - marker: `@requirement REQ-DCQ-010, REQ-DCQ-020, REQ-DCQ-030, REQ-DCQ-040, REQ-FFI-030`
+  - marker: `@requirement REQ-CANVAS-010..070, REQ-FFI-030`
 
 ### Files to modify
 - `rust/src/graphics/mod.rs`
-  - Add `pub mod dcq_ffi;`
+  - Add `pub mod canvas_ffi;`
 - `sc2/src/libs/graphics/sdl/rust_gfx.h`
-  - Add `rust_dcq_*` function declarations
+  - Add `rust_canvas_*` function declarations
+  - Add `typedef struct SurfaceCanvas SurfaceCanvas;` opaque type
 
-### Integration Contract
+### Surface↔Canvas Adapter Design
 
-#### Who calls this new behavior?
-- C game code currently calls `TFB_DrawScreen_*` in `dcqueue.c`
-- These will be redirected to `rust_dcq_*` via `USE_RUST_GFX` guards (in P21)
-- For now, stubs are exported but not yet called from C
+The `SurfaceCanvas` adapter bridges C's `SDL_Surface` pixel buffers with
+Rust's `Canvas` abstraction from `tfb_draw.rs`:
 
-#### What old behavior gets replaced?
-- `dcqueue.c` implements a producer-consumer queue with condition variables
-- The Rust DCQ in `dcqueue.rs` has the same architecture
-- This phase creates the FFI bridge between them
+```
+C SDL_Surface (pixel buffer) ──→ SurfaceCanvas adapter ──→ Rust Canvas
+     ↑                                                        ↓
+     └──────────────── pixels written back ◄──────────────────┘
+```
 
-#### How is backward compatibility handled?
-- Stubs return safe defaults (0 or void)
-- `USE_RUST_GFX` guard not yet added to `dcqueue.c` — C path still active
-- Both paths can coexist during development
+Key design decisions:
+- Canvas wraps raw pixel pointer from `SDL_Surface.pixels`
+- Canvas dimensions from `SDL_Surface.w` / `SDL_Surface.h`
+- Canvas pitch from `SDL_Surface.pitch`
+- Canvas format derived from `SDL_Surface.format` masks
+- **No copy**: Canvas operates directly on surface pixel memory
+- **Lock/unlock**: May need `SDL_LockSurface` / `SDL_UnlockSurface` for
+  hardware surfaces (software surfaces don't need locking)
+
+See `technical.md` §8.7 for the full SurfaceCanvas adapter contract
+(lifetime, locking, aliasing, pitch, format, thread affinity).
 
 ## Verification Commands
 
@@ -120,52 +148,52 @@ cd rust && cargo fmt --all --check
 cd rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cd rust && cargo test --workspace --all-features
 
-# Verify all DCQ exports are present
-grep -c '#\[no_mangle\]' rust/src/graphics/dcq_ffi.rs
-# Expected: >= 15
+# Verify all canvas exports are present
+grep -c '#\[no_mangle\]' rust/src/graphics/canvas_ffi.rs
+# Expected: >= 10
 
 # Verify exports are linkable
 cd rust && cargo build --release
-nm -gU target/release/libuqm_rust.a 2>/dev/null | grep rust_dcq_ | wc -l
-# Expected: >= 15
+nm -gU target/release/libuqm_rust.a 2>/dev/null | grep rust_canvas_ | wc -l
+# Expected: >= 10
 
 # Verify catch_unwind on all exports
-grep -c 'catch_unwind' rust/src/graphics/dcq_ffi.rs
-# Expected: >= 15
+grep -c 'catch_unwind' rust/src/graphics/canvas_ffi.rs
+# Expected: >= 10
 ```
 
 ## Structural Verification Checklist
-- [ ] `dcq_ffi.rs` created with all ~15 `#[no_mangle]` exports
+- [ ] `canvas_ffi.rs` created with all ~10 `#[no_mangle]` exports
+- [ ] `SurfaceCanvas` struct defined with surface pointer + canvas fields
 - [ ] Each export has `catch_unwind` wrapper
-- [ ] Global DCQ singleton declared with `UnsafeCell` pattern
-- [ ] `mod.rs` updated with `pub mod dcq_ffi`
+- [ ] `mod.rs` updated with `pub mod canvas_ffi`
 - [ ] `rust_gfx.h` updated with C declarations
 - [ ] All stubs compile and link
 - [ ] Plan/requirement traceability comments present
 
 ## Semantic Verification Checklist (Mandatory)
-- [ ] Each stub has correct C-compatible parameter types
-- [ ] Return types match C expectations (0 for success, -1 for error, void)
-- [ ] `catch_unwind` returns safe default on panic (not UB)
-- [ ] No mutable global access without `UnsafeCell` pattern
-- [ ] Singleton follows same safety pattern as `GraphicsStateCell` in ffi.rs
+- [ ] `SurfaceCanvas` operates on surface pixel memory without copying
+- [ ] Handle-based API prevents C from accessing Rust internals
+- [ ] Null surface pointer handled in `rust_canvas_from_surface`
+- [ ] Canvas format derived correctly from SDL_Surface format masks
+- [ ] All parameter types are C-compatible
 
 ## Deferred Implementation Detection (Mandatory)
 
 ```bash
-# todo!() is ALLOWED in stub phase — but no other deferred patterns
-grep -n "FIXME\|HACK\|placeholder\|for now\|will be implemented" rust/src/graphics/dcq_ffi.rs && echo "FAIL" || echo "CLEAN"
+# todo!() is ALLOWED in stub phase
+grep -n "FIXME\|HACK\|placeholder\|for now\|will be implemented" rust/src/graphics/canvas_ffi.rs && echo "FAIL" || echo "CLEAN"
 ```
 
 ## Success Criteria
-- [ ] All ~15 DCQ FFI stubs compile
-- [ ] All exports are linkable (`nm` shows symbols)
+- [ ] All ~10 canvas FFI stubs compile
+- [ ] All exports are linkable
 - [ ] `cargo fmt`, `cargo clippy`, `cargo test` all pass
 - [ ] C header declarations added
 
 ## Failure Recovery
-- rollback: `git checkout -- rust/src/graphics/dcq_ffi.rs rust/src/graphics/mod.rs`
-- blocking issues: dcqueue.rs API incompatible with FFI signatures
+- rollback: `git checkout -- rust/src/graphics/canvas_ffi.rs rust/src/graphics/mod.rs`
+- blocking issues: tfb_draw.rs Canvas API incompatible with SDL_Surface layout
 
 ## Phase Completion Marker
 Create: `project-plans/gfx/.completed/P15.md`
@@ -173,7 +201,7 @@ Create: `project-plans/gfx/.completed/P15.md`
 Contents:
 - phase ID: P15
 - timestamp
-- files created: `rust/src/graphics/dcq_ffi.rs`
+- files created: `rust/src/graphics/canvas_ffi.rs`
 - files modified: `rust/src/graphics/mod.rs`, `sc2/src/libs/graphics/sdl/rust_gfx.h`
 - total `#[no_mangle]` exports: count
 - verification: cargo suite output

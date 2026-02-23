@@ -1,102 +1,95 @@
-# Phase 17: DCQ FFI Bridge — Implementation
+> **NOTE**: This file's name is a historical artifact from a phase reorder.
+> Canonical: Phase P17 = Canvas Bridge — Impl (Slice B)
+
+
+# Phase 17: Canvas FFI Bridge — Implementation
 
 ## Phase ID
 `PLAN-20260223-GFX-FULL-PORT.P17`
 
 ## Prerequisites
-- Required: Phase P16a (DCQ TDD Verification) completed
-- Expected: All DCQ tests written, stubs compile
-- Expected: `dcqueue.rs` provides `DrawCommandQueue` with push/flush/batch API
+- Required: Phase P16a (Canvas TDD Verification) completed
+- Expected: All canvas tests written, stubs compile
+- Expected: `tfb_draw.rs` provides draw_line, draw_rect, fill_rect,
+  draw_image, draw_fontchar, copy_canvas, scissor support
 
 ## Requirements Implemented (Expanded)
 
-### REQ-DCQ-010: DCQ Global Instance
-**Requirement text**: The Rust GFX backend shall provide a global DCQ
-instance accessible from C via FFI.
-
+### REQ-CANVAS-010: SurfaceCanvas Adapter (Full Implementation)
 Implementation:
-- Global `DCQ_STATE: DcqStateCell` using `UnsafeCell<Option<DcqState>>`
-- `DcqState` wraps `DrawCommandQueue` + current screen index + batch depth
-- `unsafe impl Sync for DcqStateCell` with safety proof (single-threaded per REQ-THR-010)
-- `rust_dcq_init()` creates the instance, `rust_dcq_uninit()` destroys it
-- Called from `rust_gfx_init()` / `rust_gfx_uninit()` respectively
+- `rust_canvas_from_surface(surface: *mut SDL_Surface) -> *mut SurfaceCanvas`
+  - Null check on surface pointer
+  - Read `w`, `h`, `pitch`, `pixels`, `format` from SDL_Surface
+  - Derive `CanvasFormat` from surface pixel format masks
+  - Create `Canvas` wrapping the raw pixel pointer
+  - Box and return raw pointer as opaque handle
+- `rust_canvas_destroy(canvas: *mut SurfaceCanvas)`
+  - Null check, `Box::from_raw`, drop
 
-### REQ-DCQ-020: DCQ Push Commands
-Implementation for each command type:
-- Translate C parameters (raw pointers, ints) to Rust types
-- Validate parameters (null checks, range checks)
-- Construct appropriate `DrawCommand` variant
-- Push onto `DrawCommandQueue`
-- Return 0 on success, -1 on error
+### REQ-CANVAS-020–070: All Draw Operations (Full Implementation)
+Each draw function:
+1. Null-check the canvas handle
+2. Dereference to get `&mut SurfaceCanvas`
+3. Call the corresponding `tfb_draw.rs` function on the inner `Canvas`
+4. Canvas writes directly to `SDL_Surface.pixels` memory
+5. Return 0 on success, -1 on error
 
-### REQ-DCQ-030: DCQ Flush
-Implementation:
-- Dequeue all commands in FIFO order
-- For each command, dispatch to the corresponding `tfb_draw.rs` function
-- Commands operate on the current screen's canvas/surface
-- Return number of commands processed (or 0 if empty)
+### Pixel Memory Safety
 
-### REQ-DCQ-040: DCQ Screen Binding
-Implementation:
-- Store current screen index in `DcqState`
-- Validate screen index range [0, TFB_GFX_NUMSCREENS)
-- Draw commands use `surfaces[current_screen]` as target
+The `SurfaceCanvas` adapter accesses `SDL_Surface.pixels` directly:
 
-### REQ-DCQ-050: DCQ Batch Mode
-Implementation:
-- `batch_depth: u32` counter in `DcqState`
-- `rust_dcq_batch()` increments depth
-- `rust_dcq_unbatch()` decrements depth; if depth reaches 0, auto-flush
-- `rust_dcq_flush()` is a no-op while `batch_depth > 0`
+```
+rust_canvas_draw_line(handle, x1, y1, x2, y2, color)
+  → handle.canvas.draw_line(x1, y1, x2, y2, color)
+    → writes to surface.pixels[y * pitch + x * bpp]
+```
 
-### REQ-FFI-030: Panic Safety
-Implementation:
-- Every `extern "C" fn` body wrapped in `std::panic::catch_unwind(AssertUnwindSafe(|| { ... }))`
-- Panic → return safe default (0 for int, void for void)
+Safety invariants:
+- Surface pointer is valid (created by SDL, not freed)
+- `pixels` pointer is non-null and properly aligned
+- Surface is not locked by another thread (single-threaded per REQ-THR-010)
+- Canvas bounds checking prevents out-of-buffer writes
+- `// SAFETY:` comments document each invariant
 
-## Implementation Tasks
+See `technical.md` §8.7 for the full SurfaceCanvas adapter contract
+(lifetime, locking, aliasing, pitch, format, thread affinity).
 
 ### C functions fully replaced
 
-| C Function (`dcqueue.c`) | Rust Implementation | Key Differences |
+| C Function | Rust Implementation | Notes |
 |---|---|---|
-| `TFB_DrawScreen_Line` | `rust_dcq_push_drawline` → `dcqueue.rs::push(DrawLine{...})` | Type-safe command enum |
-| `TFB_DrawScreen_Rect` | `rust_dcq_push_drawrect` → `dcqueue.rs::push(DrawRect{...})` | No raw pointer arithmetic |
-| `TFB_DrawScreen_FilledRect` | `rust_dcq_push_fillrect` → `dcqueue.rs::push(FillRect{...})` | Bounds-checked |
-| `TFB_DrawScreen_Image` | `rust_dcq_push_drawimage` → `dcqueue.rs::push(DrawImage{...})` | Lifetime-safe image refs |
-| `TFB_DrawScreen_Copy` | `rust_dcq_push_copy` → `dcqueue.rs::push(CopyScreen{...})` | Validated screen indices |
-| `TFB_DrawScreen_SetPalette` | `rust_dcq_push_setpalette` → `dcqueue.rs::push(SetPalette{...})` | Palette data copied |
-| `TFB_DrawScreen_CopyToImage` | `rust_dcq_push_copytoimage` → `dcqueue.rs::push(CopyToImage{...})` | Safe surface access |
-| `TFB_DrawScreen_DeleteImage` | `rust_dcq_push_deleteimage` → `dcqueue.rs::push(DeleteImage{...})` | RAII cleanup |
-| `TFB_DrawScreen_WaitForSignal` | `rust_dcq_push_waitsignal` → `dcqueue.rs::push(WaitSignal)` | Condvar signaling |
-| `TFB_DrawScreen_ReinitVideo` | `rust_dcq_push_reinitvideo` → `dcqueue.rs::push(ReinitVideo{...})` | Safe reinit |
-| `TFB_FlushGraphics` | `rust_dcq_flush` → `dcqueue.rs::flush()` | Batch-aware |
-| `TFB_BatchGraphics` | `rust_dcq_batch` → depth++ | Nestable |
-| `TFB_UnbatchGraphics` | `rust_dcq_unbatch` → depth--, auto-flush at 0 | Nestable |
+| `TFB_DrawCanvas_Line` | `rust_canvas_draw_line` → `Canvas::draw_line` | Bresenham's algorithm |
+| `TFB_DrawCanvas_Rect` | `rust_canvas_draw_rect` → `Canvas::draw_rect` | 4 lines |
+| `TFB_DrawCanvas_FilledRect` | `rust_canvas_fill_rect` → `Canvas::fill_rect` | Row-by-row fill |
+| `TFB_DrawCanvas_Image` | `rust_canvas_draw_image` → `Canvas::draw_image` | Hotspot + blit |
+| `TFB_DrawCanvas_FontChar` | `rust_canvas_draw_fontchar` → `Canvas::draw_fontchar` | Alpha compositing |
+| `TFB_DrawCanvas_CopyRect` | `rust_canvas_copy` → `Canvas::copy_canvas` | Region blit |
+| `TFB_DrawCanvas_SetClipRect` | `rust_canvas_set_scissor` → `Canvas::set_scissor` | Clip rect |
+| `TFB_DrawCanvas_GetExtent` | `rust_canvas_get_extent` → `Canvas::width/height` | Dimensions |
+| `SDL_CreateSurfaceCanvas` | `rust_canvas_from_surface` | Adapter creation |
+| `SDL_DestroySurfaceCanvas` | `rust_canvas_destroy` | Handle cleanup |
+
+## Implementation Tasks
 
 ### Files to modify
-- `rust/src/graphics/dcq_ffi.rs`
+- `rust/src/graphics/canvas_ffi.rs`
   - Replace all `todo!()` stubs with full implementations
-  - Wire DCQ commands to `dcqueue.rs` API
-  - Wire flush dispatch to `tfb_draw.rs` functions
+  - Implement `SurfaceCanvas::from_surface()` adapter
+  - Wire each draw export to `tfb_draw.rs` Canvas methods
   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P17`
-  - marker: `@requirement REQ-DCQ-010..050, REQ-FFI-030`
+  - marker: `@requirement REQ-CANVAS-010..070, REQ-FFI-030`
 
-- `rust/src/graphics/ffi.rs`
-  - Add `rust_dcq_init()` call inside `rust_gfx_init()`
-  - Add `rust_dcq_uninit()` call inside `rust_gfx_uninit()`
+### Integration with DCQ
 
-### Integration Contract
+After this phase, the DCQ bridge (P18–P20) can dispatch draw commands
+through the canvas FFI:
 
-#### Who calls this new behavior?
-- C game code → `TFB_DrawScreen_*` → (via `USE_RUST_GFX` guard, added in P21) → `rust_dcq_*`
-- `rust_gfx_init` / `rust_gfx_uninit` → `rust_dcq_init` / `rust_dcq_uninit`
+```
+DCQ flush → DrawLine command → rust_canvas_draw_line → Canvas::draw_line → pixels
+```
 
-#### How can a user trigger this end-to-end?
-1. Build with `USE_RUST_GFX` (after P21 adds guards to dcqueue.c)
-2. Game enqueues draw commands → Rust DCQ stores them
-3. `TFB_FlushGraphics` → `rust_dcq_flush` → Rust executes all draws
-4. Screen shows Rust-rendered primitives
+This is why Canvas must be implemented before DCQ — DCQ flush needs
+`SurfaceCanvas` to execute draw commands against the screen surfaces.
 
 ## Verification Commands
 
@@ -106,52 +99,53 @@ cd rust && cargo fmt --all --check
 cd rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cd rust && cargo test --workspace --all-features
 
-# All DCQ tests must pass now (no more todo!())
-cd rust && cargo test --lib -- dcq_ffi::tests --nocapture
-# Expected: all >= 15 tests pass
+# All canvas tests must pass now
+cd rust && cargo test --lib -- canvas_ffi::tests --nocapture
+# Expected: all >= 20 tests pass
 
 # Verify no deferred patterns
-grep -n "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/dcq_ffi.rs && echo "FAIL" || echo "CLEAN"
+grep -n "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/canvas_ffi.rs && echo "FAIL" || echo "CLEAN"
 
 # Verify all exports still linkable
 cd rust && cargo build --release
-nm -gU target/release/libuqm_rust.a 2>/dev/null | grep rust_dcq_ | wc -l
-# Expected: >= 15
+nm -gU target/release/libuqm_rust.a 2>/dev/null | grep rust_canvas_ | wc -l
+# Expected: >= 10
 ```
 
 ## Structural Verification Checklist
 - [ ] All `todo!()` stubs replaced with implementations
-- [ ] Global DCQ singleton properly initialized/torn down
-- [ ] All ~15 FFI functions have full implementations
+- [ ] `SurfaceCanvas` adapter correctly wraps SDL_Surface
+- [ ] All ~10 FFI functions have full implementations
 - [ ] `catch_unwind` on every `extern "C" fn`
-- [ ] `rust_dcq_init` called from `rust_gfx_init`
-- [ ] `rust_dcq_uninit` called from `rust_gfx_uninit`
-- [ ] Plan/requirement traceability comments present
+- [ ] Handle-based API prevents dangling references
+- [ ] No deferred patterns
 
 ## Semantic Verification Checklist (Mandatory)
-- [ ] Push functions correctly translate C types to Rust `DrawCommand` variants
-- [ ] Flush processes commands in FIFO order — verified by test
-- [ ] Batch mode correctly defers flush — verified by test
-- [ ] Screen binding validates index range — verified by test
-- [ ] Null pointer parameters handled safely (no UB)
-- [ ] `catch_unwind` returns safe defaults on panic — verified by test
+- [ ] `SurfaceCanvas::from_surface` reads correct fields from SDL_Surface
+- [ ] Canvas pixel writes go to `SDL_Surface.pixels` memory (no copy)
+- [ ] draw_line uses Bresenham's — verified by pixel-checking test
+- [ ] fill_rect fills correct pixel region — verified by pixel-checking test
+- [ ] draw_fontchar alpha blending matches C reference — verified by test
+- [ ] Scissor clipping restricts all draw operations — verified by test
+- [ ] Canvas copy handles overlapping regions — verified by test
+- [ ] Bounds checking prevents buffer overflows — verified by clipping tests
 
 ## Deferred Implementation Detection (Mandatory)
 
 ```bash
-grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" rust/src/graphics/dcq_ffi.rs && echo "FAIL" || echo "CLEAN"
+grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" rust/src/graphics/canvas_ffi.rs && echo "FAIL" || echo "CLEAN"
 ```
 
 ## Success Criteria
-- [ ] All DCQ FFI functions fully implemented
-- [ ] All >= 15 tests pass
-- [ ] DCQ init/uninit wired into GFX init/uninit
+- [ ] All canvas FFI functions fully implemented
+- [ ] All >= 20 tests pass
+- [ ] Pixel-level verification of draw operations
 - [ ] `cargo fmt`, `cargo clippy`, `cargo test` all pass
 - [ ] No deferred patterns
 
 ## Failure Recovery
-- rollback: `git checkout -- rust/src/graphics/dcq_ffi.rs rust/src/graphics/ffi.rs`
-- blocking issues: `dcqueue.rs` API doesn't support needed operations
+- rollback: `git checkout -- rust/src/graphics/canvas_ffi.rs`
+- blocking issues: tfb_draw.rs Canvas API doesn't match SDL_Surface layout
 
 ## Phase Completion Marker
 Create: `project-plans/gfx/.completed/P17.md`
@@ -159,8 +153,8 @@ Create: `project-plans/gfx/.completed/P17.md`
 Contents:
 - phase ID: P17
 - timestamp
-- files modified: `rust/src/graphics/dcq_ffi.rs`, `rust/src/graphics/ffi.rs`
+- files modified: `rust/src/graphics/canvas_ffi.rs`
 - total tests: count (all passing)
-- total `#[no_mangle]` DCQ exports: count
+- total `#[no_mangle]` canvas exports: count
 - verification: cargo suite output
-- semantic: DCQ push/flush/batch verified end-to-end
+- semantic: pixel-level draw verification confirmed

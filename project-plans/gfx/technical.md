@@ -1199,7 +1199,212 @@ pub extern "C" fn XFormColorMap_step() -> c_int { /* ... */ }
 pub extern "C" fn GetColorMapAddress(index: c_int) -> *const c_void { /* ... */ }
 ```
 
-### 8.7 Global DCQ Instance
+### 8.7 SurfaceCanvas Adapter Contract
+
+The `SurfaceCanvas` is the critical bridge between C's `SDL_Surface` pixel
+buffers and Rust's `Canvas` drawing abstraction. This section defines the
+precise contract for its ownership, lifetime, locking, aliasing, format,
+pitch, and thread affinity.
+
+#### 8.7.1 Ownership
+
+`SurfaceCanvas` **borrows** a `*mut SDL_Surface` — it does not own or
+free the surface. The surface is owned by `RustGraphicsState.surfaces[]`
+(created in `rust_gfx_init`, freed in `rust_gfx_uninit`). A
+`SurfaceCanvas` is created at the start of a DCQ flush and dropped at the
+end:
+
+```rust
+// During rust_dcq_flush:
+let surface: *mut SDL_Surface = state.surfaces[screen_index];
+{
+    // SAFETY: surface is valid for the duration of this block.
+    // SDL_LockSurface is called before, SDL_UnlockSurface after.
+    unsafe { SDL_LockSurface(surface); }
+    let canvas = unsafe { SurfaceCanvas::from_surface(surface) };
+    // ... dispatch all queued draw commands via canvas ...
+    drop(canvas);
+    unsafe { SDL_UnlockSurface(surface); }
+}
+```
+
+#### 8.7.2 Locking
+
+- `SDL_LockSurface(surface)` must be called **before** creating a
+  `SurfaceCanvas`. This ensures `surface->pixels` is a valid, stable
+  pointer for the duration of drawing.
+- `SDL_UnlockSurface(surface)` must be called **after** the
+  `SurfaceCanvas` is dropped.
+- Software surfaces (which all screen surfaces are) do not strictly
+  require locking, but the lock/unlock protocol is followed for
+  correctness if the surface type ever changes.
+- The lock/unlock pair brackets a single DCQ flush — NOT individual draw
+  commands. Locking per-command would be a performance disaster.
+- **RAII wrapper**: Implement a `LockedSurface<'a>` guard that calls
+  `SDL_LockSurface` on construction and `SDL_UnlockSurface` on `Drop`.
+  `SurfaceCanvas` is created from a `LockedSurface`, not directly from
+  a raw `*mut SDL_Surface`. This prevents forgetting the unlock:
+
+```rust
+struct LockedSurface<'a> {
+    surface: &'a mut SDL_Surface,
+}
+
+impl<'a> LockedSurface<'a> {
+    unsafe fn new(surface: *mut SDL_Surface) -> Self {
+        SDL_LockSurface(surface);
+        Self { surface: &mut *surface }
+    }
+    fn as_canvas(&mut self) -> SurfaceCanvas<'_> {
+        // borrows self, so canvas cannot outlive lock
+        SurfaceCanvas::from_locked(self)
+    }
+}
+
+impl Drop for LockedSurface<'_> {
+    fn drop(&mut self) {
+        unsafe { SDL_UnlockSurface(self.surface as *mut _); }
+    }
+}
+```
+
+#### 8.7.3 Aliasing
+
+- **No other code may access `surface->pixels` while a `SurfaceCanvas`
+  exists.** This is guaranteed by the main-thread-only flush model:
+  DCQ flush runs on the main/graphics thread (per REQ-THR-010), and no
+  other thread accesses screen surface pixels during flush.
+- C game threads enqueue draw commands (they do NOT touch pixels); only
+  the flush thread reads/writes pixels.
+- The presentation layer (`rust_gfx_screen`) reads `surface->pixels`
+  only during `TFB_SwapBuffers`, which runs AFTER flush completes.
+  There is no temporal overlap.
+
+#### 8.7.4 Pitch
+
+- `SurfaceCanvas` reads `surface->pitch` directly from the SDL_Surface
+  and uses it for all row-stride calculations.
+- Pitch is NOT assumed to equal `width * bytes_per_pixel`. SDL may add
+  padding for alignment (though in practice RGBX8888 at 320px width =
+  1280 bytes/row, which is already 16-byte aligned).
+- Pitch is cached at `SurfaceCanvas` creation time and used for all
+  subsequent pixel address calculations:
+  `pixel_addr = pixels + y * pitch + x * bpp`
+
+#### 8.7.5 Format
+
+- Only `SDL_PIXELFORMAT_RGBX8888` is supported. The SDL2 constant value
+  is `0x16261804`. The mask decomposition is:
+  R=0xFF000000, G=0x00FF0000, B=0x0000FF00, A=0x00000000.
+- The surface pixel format is validated at `SurfaceCanvas` construction
+  time. Construction **returns `Err(GraphicsError::UnsupportedFormat)`**
+  if the format doesn't match RGBX8888. This is validated by reading
+  `surface->format->format` (the `SDL_PixelFormatEnum` field), not by
+  inspecting individual masks.
+- Byte layout on little-endian: `[X, B, G, R]` per pixel (4 bytes).
+- Future expansion to support RGBA8888 (for alpha-channel surfaces) is
+  a documented TODO but not required for the initial port.
+
+#### 8.7.6 Thread Affinity
+
+- `SurfaceCanvas` is `!Send + !Sync`. It must NOT be sent to another
+  thread or shared across threads.
+- It is created and used exclusively on the DCQ consumer thread (which
+  is the main/graphics thread).
+- This is enforced by NOT implementing `Send` or `Sync` on
+  `SurfaceCanvas`. The raw pointer field (`*mut SDL_Surface`) already
+  prevents auto-impl of these traits.
+
+#### 8.7.7 Lifetime
+
+- `SurfaceCanvas<'a>` borrows the surface pointer. The lifetime `'a`
+  is tied to the flush scope — the canvas cannot outlive the
+  lock/unlock bracket.
+- Concretely:
+
+```rust
+struct SurfaceCanvas<'a> {
+    pixels: &'a mut [u8],   // borrows surface->pixels
+    width: i32,
+    height: i32,
+    pitch: i32,
+    format: CanvasFormat,
+    scissor: ScissorRect,
+}
+```
+
+- The `&'a mut [u8]` borrow prevents the `SurfaceCanvas` from outliving
+  the scope in which `surface->pixels` is valid (between lock/unlock).
+- If the Rust implementation uses a raw pointer instead of a reference
+  (for FFI ergonomics), the lifetime constraint must be enforced by
+  construction — `SurfaceCanvas` is created and dropped within the
+  same function scope as the lock/unlock calls.
+
+#### 8.7.8 Self-Blit Prohibition
+
+When a draw command copies pixels from one region of a surface to another
+region of the **same** surface (self-blit), the source and destination
+memory may overlap. Reading and writing overlapping `&mut [u8]` slices is
+undefined behavior in Rust.
+
+**Rule**: `SurfaceCanvas` does NOT support self-blit via raw pointer
+aliasing. If a draw command requires copying within the same surface:
+1. Allocate a temporary buffer (`Vec<u8>`) for the source region.
+2. Copy source pixels into the buffer.
+3. Copy buffer pixels to the destination region.
+
+This is the same approach used by `memmove` vs `memcpy` in C, but made
+explicit because Rust's borrow checker cannot enforce non-overlap of raw
+pointer-derived slices at compile time.
+
+The performance cost is acceptable: self-blits are rare (primarily
+`CopyContextRect` for scroll effects) and the temporary buffer is small
+(typically one screen-sized rect at most).
+
+#### 8.7.9 Summary Table
+
+| Property | Value |
+|---|---|
+| Ownership | Borrows `*mut SDL_Surface`, does not free |
+| Lock protocol | `SDL_LockSurface` before create, `SDL_UnlockSurface` after drop |
+| Aliasing | Exclusive pixel access during flush (main-thread-only) |
+| Pitch | Read from `surface->pitch`, NOT assumed `width * bpp` |
+| Format | RGBX8888 only (validated at init, cached) |
+| Thread affinity | `!Send + !Sync`, main/graphics thread only |
+| Lifetime | Cannot outlive the flush scope; tied to lock/unlock bracket |
+| Granularity | One lock/unlock per flush, NOT per draw command |
+| Mutable access | One row slice at a time via `row_mut(y)` |
+
+#### 8.7.9 Mutable Access
+
+`SurfaceCanvas` provides `&mut [u8]` access to pixel data. To prevent
+aliasing of overlapping rows when `pitch != width * bpp` (padding bytes
+between rows), mutable access is granted one row at a time:
+
+```rust
+impl<'a> SurfaceCanvas<'a> {
+    /// Returns a mutable slice for row `y` (width * bpp bytes).
+    /// Panics if `y >= height`.
+    pub fn row_mut(&mut self, y: i32) -> &mut [u8] {
+        let offset = (y as usize) * (self.pitch as usize);
+        let row_bytes = (self.width as usize) * self.bpp();
+        &mut self.pixels[offset..offset + row_bytes]
+    }
+}
+```
+
+The raw `pixels` field (`&'a mut [u8]`) covers the entire locked surface
+buffer (`pitch * height` bytes). `row_mut()` returns a sub-slice that
+does NOT include padding bytes. This means:
+- Two calls to `row_mut(y1)` and `row_mut(y2)` where `y1 != y2` produce
+  non-overlapping slices (safe).
+- Callers must NOT hold two `row_mut` borrows simultaneously (the
+  `&mut self` receiver prevents this at compile time).
+- Bulk operations that need multiple rows should use the raw `pixels`
+  slice directly (via an `unsafe` accessor) with appropriate safety
+  documentation.
+
+### 8.8 Global DCQ Instance
 
 The Rust DCQ must be accessible from both Rust code and FFI functions:
 
@@ -1220,7 +1425,7 @@ Initialized during `rust_gfx_init` (or lazily on first use). The same
 instance is used by both FFI `TFB_DrawScreen_*` wrappers and Rust-native
 callers.
 
-### 8.8 FFI Function Count Summary
+### 8.9 FFI Function Count Summary
 
 | Bridge Area | C Functions Replaced | Rust Exports Needed |
 |---|---|---|

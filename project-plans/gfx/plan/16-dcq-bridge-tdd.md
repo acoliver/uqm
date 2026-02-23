@@ -1,74 +1,88 @@
-# Phase 16: DCQ FFI Bridge — TDD
+> **NOTE**: This file's name is a historical artifact from a phase reorder.
+> Canonical: Phase P16 = Canvas Bridge — TDD (Slice B)
+
+
+# Phase 16: Canvas FFI Bridge — TDD
 
 ## Phase ID
 `PLAN-20260223-GFX-FULL-PORT.P16`
 
 ## Prerequisites
-- Required: Phase P15a (DCQ Stub Verification) completed
-- Expected: All `rust_dcq_*` stubs compile and link
-- Expected: Global DCQ singleton declared
+- Required: Phase P15a (Canvas Stub Verification) completed
+- Expected: All `rust_canvas_*` stubs compile and link
+- Expected: `SurfaceCanvas` adapter struct defined
 
 ## Requirements Implemented (Expanded)
 
-### REQ-DCQ-020: DCQ Push Commands (Test Coverage)
-**Requirement text**: When C code calls `rust_dcq_push_*` functions, the
-backend shall enqueue the corresponding draw command in the Rust DCQ.
-
+### REQ-CANVAS-010: SurfaceCanvas Adapter (Test Coverage)
 Test contracts:
-- `test_dcq_push_drawline` — push a line command, verify queue length is 1
-- `test_dcq_push_drawrect` — push a rect command, verify queue length is 1
-- `test_dcq_push_fillrect` — push a fill command, verify queue length is 1
-- `test_dcq_push_drawimage` — push an image command, verify enqueued
-- `test_dcq_push_multiple` — push 5 commands, verify queue length is 5
+- `test_canvas_from_null_surface` — null surface → returns null handle
+- `test_canvas_from_valid_surface` — valid surface → returns non-null handle
+- `test_canvas_destroy` — destroy handle, no crash, no double-free
+- `test_canvas_destroy_null` — destroy null handle, no crash
 
-### REQ-DCQ-030: DCQ Flush (Test Coverage)
-**Requirement text**: When `rust_dcq_flush` is called, the backend shall
-process all enqueued commands in FIFO order.
-
+### REQ-CANVAS-020: Draw Line (Test Coverage)
 Test contracts:
-- `test_dcq_flush_empty` — flush empty queue, no crash, returns 0
-- `test_dcq_flush_processes_all` — push 3 commands, flush, queue is empty
-- `test_dcq_flush_fifo_order` — push line then rect, verify line executes first
+- `test_canvas_draw_line_horizontal` — draw horizontal line, verify pixels
+- `test_canvas_draw_line_vertical` — draw vertical line, verify pixels
+- `test_canvas_draw_line_diagonal` — draw diagonal, verify start/end pixels
+- `test_canvas_draw_line_clipped` — line partially outside canvas bounds
 
-### REQ-DCQ-040: DCQ Screen Binding (Test Coverage)
-**Requirement text**: When `rust_dcq_set_screen` is called, the backend
-shall direct subsequent draw commands to the specified screen surface.
-
+### REQ-CANVAS-030: Draw Rect (Test Coverage)
 Test contracts:
-- `test_dcq_set_screen_valid` — set screen 0, get screen returns 0
-- `test_dcq_set_screen_invalid` — set screen 99, returns error
-- `test_dcq_set_screen_roundtrip` — set 2, get returns 2
+- `test_canvas_draw_rect_outline` — verify 4 edges drawn
+- `test_canvas_fill_rect_solid` — verify all pixels in rect filled
+- `test_canvas_fill_rect_clipped` — rect partially outside bounds
+- `test_canvas_fill_rect_zero_size` — zero width/height, no crash
 
-### REQ-DCQ-050: DCQ Batch Mode (Test Coverage)
-**Requirement text**: When batch mode is active, `rust_dcq_flush` shall
-defer processing until `rust_dcq_unbatch` is called.
-
+### REQ-CANVAS-040: Draw Image (Test Coverage)
 Test contracts:
-- `test_dcq_batch_defers_flush` — batch, push, flush is no-op, unbatch flushes
-- `test_dcq_nested_batch` — batch twice, unbatch once, still batched
-- `test_dcq_unbatch_without_batch` — unbatch without batch, no crash
+- `test_canvas_draw_image_basic` — blit test image, verify pixels
+- `test_canvas_draw_image_with_hotspot` — hotspot offset applied
+- `test_canvas_draw_image_clipped` — image partially outside bounds
 
-### REQ-FFI-030: Panic Safety (Test Coverage)
+### REQ-CANVAS-050: Draw Fontchar (Test Coverage)
 Test contracts:
-- `test_dcq_push_catches_panic` — verify catch_unwind prevents panic propagation
-- `test_dcq_flush_catches_panic` — verify flush handles internal errors gracefully
+- `test_canvas_draw_fontchar_opaque` — fully opaque glyph
+- `test_canvas_draw_fontchar_transparent` — alpha-blended glyph
+- `test_canvas_draw_fontchar_clipped` — glyph partially outside bounds
+
+### REQ-CANVAS-060: Scissor Rect (Test Coverage)
+Test contracts:
+- `test_canvas_scissor_clips_line` — line outside scissor not drawn
+- `test_canvas_scissor_clips_fill` — fill clipped to scissor
+- `test_canvas_scissor_disable` — disable scissor, full canvas writable
+
+### REQ-CANVAS-070: Canvas Copy (Test Coverage)
+Test contracts:
+- `test_canvas_copy_basic` — copy region, verify destination pixels
+- `test_canvas_copy_overlapping` — overlapping src/dst handled correctly
+- `test_canvas_copy_clipped` — copy clipped to destination bounds
 
 ## Implementation Tasks
 
-### Files to modify
-- `rust/src/graphics/dcq_ffi.rs`
-  - Add `#[cfg(test)] mod tests` block
-  - Add all test functions listed above
-  - Tests call the FFI functions directly (same-process, no actual C needed)
-  - Tests must reset global DCQ state between runs (test isolation)
-  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P16`
-  - marker: `@requirement REQ-DCQ-020, REQ-DCQ-030, REQ-DCQ-040, REQ-DCQ-050, REQ-FFI-030`
-
 ### Test Infrastructure
-- Each test must initialize and teardown the global DCQ singleton
-- Use a `reset_dcq()` helper for test isolation
-- Tests should be `#[serial]` if using `serial_test` crate, or use
-  internal locking to prevent test parallelism on the global singleton
+
+Tests use synthetic SDL_Surface-like buffers to avoid SDL initialization:
+
+```rust
+// Helper: create a test surface with known pixel data
+fn create_test_surface(w: i32, h: i32) -> TestSurface {
+    // Allocate pixel buffer, create SDL_Surface-compatible struct
+    // Populate with known pattern for verification
+}
+
+// Helper: read pixel at (x, y) from test surface
+fn read_pixel(surface: &TestSurface, x: i32, y: i32) -> u32 { ... }
+```
+
+### Files to modify
+- `rust/src/graphics/canvas_ffi.rs`
+  - Add `#[cfg(test)] mod tests` block
+  - Add all test functions listed above (~20 tests)
+  - Add test helper functions for surface creation and pixel verification
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P16`
+  - marker: `@requirement REQ-CANVAS-010..070`
 
 ## Verification Commands
 
@@ -79,42 +93,42 @@ cd rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cd rust && cargo test --workspace --all-features
 
 # Verify test count
-grep -c '#\[test\]' rust/src/graphics/dcq_ffi.rs
-# Expected: >= 15
+grep -c '#\[test\]' rust/src/graphics/canvas_ffi.rs
+# Expected: >= 20
 
-# Run DCQ tests specifically
-cd rust && cargo test --lib -- dcq_ffi::tests --nocapture
+# Run canvas tests specifically
+cd rust && cargo test --lib -- canvas_ffi::tests --nocapture
 ```
 
 ## Structural Verification Checklist
 - [ ] All test functions listed above are present
 - [ ] Tests are in `#[cfg(test)] mod tests` block
+- [ ] Test helper functions for surface creation and pixel reading
 - [ ] Each test has `@requirement` traceability comment
-- [ ] Test isolation: global state reset between tests
 - [ ] Tests compile (stubs may cause test failures — expected in TDD phase)
 
 ## Semantic Verification Checklist (Mandatory)
-- [ ] Tests cover push, flush, screen binding, batch mode, and panic safety
-- [ ] FIFO ordering test uses distinguishable command types
-- [ ] Batch mode test verifies commands accumulate during batch
-- [ ] Tests do not depend on SDL initialization (pure queue logic)
-- [ ] Each test function name clearly describes the behavior under test
+- [ ] Pixel verification tests check actual pixel buffer content
+- [ ] Clipping tests verify no out-of-bounds writes
+- [ ] Scissor tests verify draw restriction to scissor rect
+- [ ] Copy tests verify correct pixel transfer
+- [ ] Alpha blending tests use known color values for arithmetic verification
 
 ## Deferred Implementation Detection (Mandatory)
 
 ```bash
-grep -n "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" rust/src/graphics/dcq_ffi.rs | grep -v 'todo!(' || echo "CLEAN"
+grep -n "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" rust/src/graphics/canvas_ffi.rs | grep -v 'todo!(' || echo "CLEAN"
 ```
 
 ## Success Criteria
-- [ ] >= 15 test functions written
+- [ ] >= 20 test functions written
 - [ ] Tests compile (failures expected — stubs still have `todo!()`)
 - [ ] `cargo fmt` and `cargo clippy` pass
 - [ ] Test names are descriptive and traceable to requirements
 
 ## Failure Recovery
-- rollback: `git checkout -- rust/src/graphics/dcq_ffi.rs`
-- blocking issues: DCQ singleton initialization prevents test isolation
+- rollback: `git checkout -- rust/src/graphics/canvas_ffi.rs`
+- blocking issues: test surface creation incompatible with SurfaceCanvas adapter
 
 ## Phase Completion Marker
 Create: `project-plans/gfx/.completed/P16.md`
@@ -122,7 +136,7 @@ Create: `project-plans/gfx/.completed/P16.md`
 Contents:
 - phase ID: P16
 - timestamp
-- files modified: `rust/src/graphics/dcq_ffi.rs`
+- files modified: `rust/src/graphics/canvas_ffi.rs`
 - total tests: count
 - test results: all compile, expected failures from stubs noted
 - verification: cargo suite output

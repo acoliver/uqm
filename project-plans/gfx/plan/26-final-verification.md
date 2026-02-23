@@ -5,20 +5,24 @@
 
 ## Prerequisites
 - Required: Phase P25a (C Code Guarding Verification) completed
-- Expected: All 41 C graphics files guarded with USE_RUST_GFX
+- Expected: All ~37 C drawing-pipeline files guarded with USE_RUST_GFX
+  (4 loader files intentionally unguarded — see 00-overview.md)
 - Expected: Both Rust and C paths build and run
 - Expected: Game runs on Rust-only graphics path
 
 ## Requirements Verified
 
-### REQ-COMPAT-060: Complete Port Verification
-**Requirement text**: The Rust GFX backend shall handle all graphics
+### REQ-COMPAT-060: Drawing-Pipeline Port Verification
+**Requirement text**: The Rust GFX backend shall handle all drawing-pipeline
 operations that were previously performed by C code when `USE_RUST_GFX=1`.
+Resource-loading code (gfxload.c, filegfx.c, resgfx.c, loaddisp.c)
+remains in C and compiles in both modes.
 
 Verification:
-- Binary analysis confirms Rust provides all graphics symbols
+- Binary analysis confirms Rust provides all drawing-pipeline symbols
 - All rendering paths exercised
 - Game fully playable
+- Loader files compile and function in both modes
 
 ### REQ-COMPAT-070: Regression-Free
 **Requirement text**: The Rust GFX port shall not introduce any visual
@@ -41,15 +45,16 @@ cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm
 nm -gU rust/target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|gfxload)_' | wc -l
 # Expected: >= 55
 
-# Verify NO C graphics objects compiled
+# Verify NO C drawing-pipeline objects compiled (loaders are expected)
 find sc2/obj -name '*.o' 2>/dev/null | while read f; do
   base=$(basename "$f" .o)
   case "$base" in
-    dcqueue|tfb_draw|tfb_prim|canvas|primitives|cmap|context|drawable|frame)
-      echo "C GFX OBJECT FOUND: $f" ;;
+    dcqueue|tfb_draw|tfb_prim|canvas|primitives|cmap|context|drawable|frame|font|widgets|pixmap|gfx_common|clipline|boxint|bbox|intersec)
+      echo "C DRAWING-PIPELINE OBJECT FOUND: $f" ;;
   esac
 done
 # Expected: no output
+# Note: gfxload.o, filegfx.o, resgfx.o, loaddisp.o are EXPECTED (loader files)
 ```
 
 ### Task 2: Full Cargo Verification
@@ -153,7 +158,8 @@ grep -r '#\[test\]' rust/src/graphics/ | wc -l
 
 ## Structural Verification Checklist
 - [ ] >= 55 Rust FFI exports
-- [ ] Zero C graphics object files when USE_RUST_GFX=1
+- [ ] Zero C drawing-pipeline object files when USE_RUST_GFX=1
+- [ ] Loader .o files (gfxload, filegfx, resgfx, loaddisp) present in both modes
 - [ ] All cargo gates pass (fmt, clippy, test)
 - [ ] >= 80 total tests across graphics modules
 - [ ] Zero deferred patterns in Rust graphics code
@@ -171,19 +177,22 @@ grep -r '#\[test\]' rust/src/graphics/ | wc -l
 
 ## Success Criteria — Definition of Done
 
-The Full Rust GFX Port is **COMPLETE** when all of the following are true:
+The Full Rust GFX Drawing-Pipeline Port is **COMPLETE** when all of the
+following are true:
 
-1. **All C files guarded**: 41/41 C graphics files behind `#ifndef USE_RUST_GFX`
-2. **All tests pass**: `cargo test` + build gates green
-3. **Game playable**: Manual scene walkthrough completed on Rust path
-4. **C fallback works**: Toggling `USE_RUST_GFX=0` still builds and runs
-5. **No deferred patterns**: Zero `todo!`/`FIXME`/`HACK` in graphics code
-6. **Clean build**: No warnings from `cargo clippy` or C compiler
-7. **All FFI bridges complete**: vtable + DCQ + canvas + colormap + gfxload = ~55 exports
+1. **All drawing-pipeline C files guarded**: ~37 C files behind `#ifndef USE_RUST_GFX`
+2. **Loader files compile in both modes**: gfxload.c, filegfx.c, resgfx.c, loaddisp.c unguarded
+3. **All tests pass**: `cargo test` + build gates green
+4. **Game playable**: Manual scene walkthrough completed on Rust path
+5. **C fallback works**: Toggling `USE_RUST_GFX=0` still builds and runs
+6. **No deferred patterns**: Zero `todo!`/`FIXME`/`HACK` in graphics code
+7. **Clean build**: No warnings from `cargo clippy` or C compiler
+8. **All FFI bridges complete**: vtable + DCQ + canvas + colormap + gfxload = ~55 exports
 
-**Note**: C code is NOT deleted. It remains in the repository behind
-`#ifdef` guards for reference and fallback. Deletion is a future decision
-once the Rust path has proven stable in production.
+**Note**: Drawing-pipeline C code is NOT deleted. It remains in the
+repository behind `#ifdef` guards for reference and fallback. Loader code
+stays active. Deletion is a future decision once the Rust path has proven
+stable in production.
 
 ## Failure Recovery
 - rollback: restore `build.vars` to `USE_RUST_GFX='0'`
@@ -196,7 +205,7 @@ Create: `project-plans/gfx/.completed/P26.md`
 Contents:
 - phase ID: P26
 - timestamp: completion date
-- guard count: 41/41 C files guarded
+- guard count: ~37 drawing-pipeline C files guarded, 4 loader files unguarded
 - test count: total across all modules
 - scene walkthrough: all items checked
 - code metrics: Rust LoC, FFI export count

@@ -11,15 +11,20 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-GUARD-070: All C Graphics Files Guarded
-**Requirement text**: Every C graphics source file shall be wrapped in
-`#ifndef USE_RUST_GFX` / `#endif` guards so that setting `USE_RUST_GFX=1`
-in `build.vars` compiles zero C graphics code.
+### REQ-GUARD-070: All C Drawing-Pipeline Files Guarded
+**Requirement text**: Every C drawing-pipeline source file shall be wrapped
+in `#ifndef USE_RUST_GFX` / `#endif` guards so that setting
+`USE_RUST_GFX=1` in `build.vars` compiles zero C drawing-pipeline code.
+
+Loader files (gfxload.c, filegfx.c, resgfx.c, loaddisp.c) are explicitly
+excluded — they compile in both modes. See `00-overview.md` "Deferred to
+Future Phase" section.
 
 Behavior contract:
-- GIVEN: All 41 C graphics files have been identified
+- GIVEN: ~37 of 41 C graphics files have guards (4 loader files excluded)
 - WHEN: `USE_RUST_GFX` is defined in `build.vars`
-- THEN: No C graphics code compiles; all symbols provided by Rust
+- THEN: No C drawing-pipeline code compiles; all drawing symbols provided by Rust
+- THEN: Loader files still compile and provide resource-loading symbols
 
 ### REQ-GUARD-080: C Fallback Preserved
 **Requirement text**: The C graphics code shall remain in the repository,
@@ -42,11 +47,13 @@ Why it matters:
 Confirm every C graphics file has the `#ifndef USE_RUST_GFX` guard
 added in earlier phases. The 41 files to check:
 
-**Core graphics (sc2/src/libs/graphics/):**
+**Core graphics — drawing pipeline (sc2/src/libs/graphics/):**
 `dcqueue.c`, `tfb_draw.c`, `tfb_prim.c`, `cmap.c`, `context.c`,
-`drawable.c`, `frame.c`, `font.c`, `gfx_common.c`, `gfxload.c`,
-`pixmap.c`, `intersec.c`, `boxint.c`, `bbox.c`, `clipline.c`,
-`loaddisp.c`, `resgfx.c`, `filegfx.c`, `widgets.c`
+`drawable.c`, `frame.c`, `font.c`, `gfx_common.c`, `pixmap.c`,
+`intersec.c`, `boxint.c`, `bbox.c`, `clipline.c`, `widgets.c`
+
+**Core graphics — loader files (NOT guarded, compile in both modes):**
+`gfxload.c`, `resgfx.c`, `filegfx.c`, `loaddisp.c`
 
 **SDL backend (sc2/src/libs/graphics/sdl/):**
 `canvas.c`, `primitives.c`, `pure.c`, `sdl2_pure.c`, `sdl1_common.c`,
@@ -56,7 +63,12 @@ added in earlier phases. The 41 files to check:
 `rotozoom.c`, `scalers.c`
 
 **Keep unguarded (still needed with Rust):**
-`sdl_common.c` — thin vtable shim that forwards to `rust_gfx_*`
+- `sdl_common.c` — thin vtable shim that forwards to `rust_gfx_*`
+- `gfxload.c` — resource loading, pure I/O
+- `resgfx.c` — resource management
+- `filegfx.c` — file loading helpers
+- `loaddisp.c` — display loading
+- `sdl/png2sdl.c` — PNG to SDL_Surface conversion (loader pipeline)
 
 ### Step 2: Build with USE_RUST_GFX=1
 
@@ -99,13 +111,19 @@ grep -v 'Using Rust graphics driver' /tmp/uqm_c.log | grep -i 'graphics\|video' 
 
 ```bash
 # Count guarded files
+# Intentionally unguarded: sdl_common.c (vtable shim), loader files
+UNGUARDED_OK="sdl_common.c gfxload.c filegfx.c resgfx.c loaddisp.c png2sdl.c"
 echo "=== Guard audit ==="
 for f in sc2/src/libs/graphics/*.c sc2/src/libs/graphics/sdl/*.c; do
-  if [ "$(basename $f)" = "sdl_common.c" ]; then continue; fi
+  bn="$(basename $f)"
+  if echo "$UNGUARDED_OK" | grep -qw "$bn"; then
+    echo "  UNGUARDED (OK): $bn"
+    continue
+  fi
   if grep -q 'USE_RUST_GFX' "$f"; then
-    echo "  GUARDED: $(basename $f)"
+    echo "  GUARDED: $bn"
   else
-    echo "  UNGUARDED: $(basename $f) *** NEEDS GUARD ***"
+    echo "  UNGUARDED: $bn *** NEEDS GUARD ***"
   fi
 done
 
@@ -116,12 +134,20 @@ cd rust && cargo test --workspace --all-features
 ```
 
 ## Structural Verification Checklist
-- [ ] All 41 target C files have USE_RUST_GFX guards
+- [ ] ~37 drawing-pipeline C files have USE_RUST_GFX guards
 - [ ] sdl_common.c remains unguarded (vtable shim)
+- [ ] 5 loader files remain unguarded (gfxload.c, filegfx.c, resgfx.c, loaddisp.c, sdl/png2sdl.c)
 - [ ] Build succeeds with USE_RUST_GFX=1 (Rust path)
-- [ ] Build succeeds with USE_RUST_GFX=0 (C fallback)
+- [ ] Build succeeds with USE_RUST_GFX=0 (C fallback) — no undefined symbols
 - [ ] No undefined symbol errors either way
 - [ ] All cargo gates pass
+
+## Dual-Path ABI Verification (Mandatory)
+```bash
+# Build with USE_RUST_GFX=0 and verify no undefined symbols
+cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
+# Expected: 0
+```
 
 ## Semantic Verification Checklist (Mandatory)
 - [ ] Game starts and reaches main menu on Rust path
@@ -153,7 +179,8 @@ Create: `project-plans/gfx/.completed/P25.md`
 Contents:
 - phase ID: P25
 - timestamp
-- files guarded: list of all 41 C files
+- files guarded: list of ~37 drawing-pipeline C files
+- files intentionally unguarded: gfxload.c, filegfx.c, resgfx.c, loaddisp.c, sdl/png2sdl.c, sdl_common.c
 - build verification: both paths compile
 - game verification: both paths run
-- guard audit: 41/41 guarded
+- guard audit: ~37 drawing-pipeline files guarded, 4 loader files unguarded
