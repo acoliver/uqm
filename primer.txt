@@ -1,0 +1,272 @@
+UR-Quan Masters (UQM) Rust Port - Primer for Continuation
+=========================================================
+
+This is a continuation primer for UQM development on a new machine.
+
+## Project Overview
+
+The UR-Quan Masters is a classic space exploration/strategy game written in C.
+This project is porting major subsystems to Rust while maintaining compatibility
+with the existing C codebase. The port uses a hybrid C-Rust architecture with
+FFI bridges between the two languages.
+
+## Current State (as of Feb 12, 2026)
+
+### What's Recently Been Added
+
+The most recent commit introduces these major Rust subsystems:
+
+1. **Resource System** (rust/src/resource/)
+   - cache.rs, index.rs, loader.rs, tests.rs - Complete resource management
+   - Cache for reusable resources
+   - Index for tracking loaded resources
+   - Loader for efficient resource loading
+
+2. **MOD Audio Decoder** (rust/src/sound/mod_ffi.rs, mod_decoder.rs)
+   - Classic Amiga MOD music file support
+   - FFI bridge from C to Rust decoder
+
+3. **Threading System** (rust/src/threading/)
+   - mod.rs, tests.rs - Native Rust threading primitives
+   - Task scheduling and management
+   - Mutex, CondVar, Semaphore implementations
+
+4. **Video Subsystem Enhancements**
+   - threading support in rust/src/video/
+   - Enhanced scaler.rs, player.rs, ffi.rs
+
+5. **Input System Improvements**
+   - keyboard.rs, keynames.rs mappings
+   - vcontrol.rs refactoring
+
+6. **C-Rust Integration** (sc2/src/libs/*/rust_*.c/h)
+   - rust_threads.h/c - Threading bridge
+   - rust_resource.h/c - Resource bridge
+   - rust_mod.h - MOD decoder header
+   - rust_input.h - Input integration
+   - rust_vcontrol_impl.c - Virtual control implementation
+
+7. **3DO Video Content** (sc2/content/addons/3dovideo/)
+   - intro/, logo/, ships/, drumall/, victory/ assets
+   - Complete DukVid video sequences
+
+8. **Build Integration**
+   - Updated sc2/build.vars.in with all Rust flags
+   - Updated sc2/build/unix/build.config
+
+## Build System
+
+The project uses a hybrid build system:
+
+### Autoconf/C Make (C code)
+   - cd sc2/build/unix
+   - ./build.sh   (first time)
+   - ./rebuild.sh (subsequent builds)
+
+### Cargo (Rust code)
+   - cd rust
+   - cargo build (or cargo build --release)
+
+### Configure Flags (important!)
+The build system is configured with extensive Rust subsystem flags:
+
+--enable-rust-bridge     - Base Rust bridge infrastructure
+--enable-rust-file       - File I/O operations
+--enable-rust-clock      - Time/clock functions
+--enable-rust-uio        - User I/O
+--enable-rust-ogg        - OGG audio playback
+--enable-rust-audio      - Audio subsystem
+--enable-rust-comm       - Communication (Starport)
+--enable-rust-input      - Input handling
+--enable-rust-video      - Video playback
+--enable-rust-gfx        - Graphics (Phase 2)
+--enable-rust-resource   - Resource system
+--enable-rust-mod        - MOD music decoder
+--enable-rust-wav        - WAV audio support
+--enable-rust-threads    - Threading system
+--enable-rust-mixer      - Audio mixer
+
+A full configure command typically looks like:
+
+```
+./build.sh --enable-rust-bridge \
+           --enable-rust-file \
+           --enable-rust-clock \
+           --enable-rust-uio \
+           --enable-rust-audio \
+           --enable-rust-ogg \
+           --enable-rust-mod \
+           --enable-rust-wav \
+           --enable-rust-mixer \
+           --enable-rust-input \
+           --enable-rust-video \
+           --enable-rust-threads \
+           --enable-rust-resource \
+           --enable-rust-comm
+```
+
+## Known Compilation Issues
+
+**The user reports compilation failure but the exact error is unknown.**
+
+Common issues to check:
+
+1. **Dependencies Missing**
+   - SDL2 development libraries (libsdl2-dev)
+   - SDL2_mixer
+   - Ogg/Vorbis libraries (libogg, libvorbis)
+   - OpenGL development libraries
+   - Rust toolchain (1.70+ recommended)
+
+2. **Build Order**
+   - MUST build Rust code first: cd rust && cargo build
+   - Then build C code: cd sc2/build/unix && ./rebuild.sh
+
+3. **Header Mismatches**
+   - Check that C headers match Rust FFI signatures
+   - Headers in sc2/src/libs/*/rust_*.h must match
+   - Function signatures in c_bindings.rs
+
+4. **Linker Errors**
+   - Ensure Cargo builds static library
+   - Check that -L flags in Makefiles point to rust/target/debug or release
+
+## Key Directories
+
+- rust/src/           - All Rust source code
+- rust/src/graphics/  - Phase 2 graphics system (70-80% complete)
+- rust/src/resource/  - Resource system (cache/index/loader/tests)
+- rust/src/sound/     - Audio subsystem (mod, ogg, wav, rodio)
+- rust/src/threading/ - Threading primitives
+- rust/src/video/     - Video player/scaler
+- rust/src/input/     - Input handling, keynames
+- rust/src/comm/      - Starport communication
+- sc2/src/libs/       - C library code
+- sc2/src/uqm/        - Main C game code
+- sc2/build/unix/     - Unix build scripts
+
+## Architecture Pattern
+
+### FFI Bridge Pattern
+
+C code calls Rust through a consistent pattern:
+
+1. **C header** (e.g., rust_threads.h):
+```c
+#ifdef USE_RUST_THREADS
+void *rust_thread_create(void (*func)(void *), void *arg);
+void rust_thread_join(void *thread);
+#endif
+```
+
+2. **Rust FFI** (in threading/mod.rs):
+```rust
+#[no_mangle]
+pub extern "C" fn rust_thread_create(
+    func: extern "C" fn(*mut c_void),
+    arg: *mut c_void,
+) -> *mut c_void {
+    // Implementation
+}
+```
+
+3. **C wrapper** (rust_threads.c):
+```c
+#ifdef USE_RUST_THREADS
+#include "rust_threads.h"
+
+void *Thread_Create(void (*func)(void *), void *arg) {
+    return rust_thread_create(func, arg);
+}
+#endif
+```
+
+This pattern allows each subsystem to be optionally enabled via configure flags.
+
+## Phase 2 Graphics Status
+
+From .llxprt/LLXPRT.md memories:
+
+- Phase 2 Graphics is ~70-80% complete for primitives
+- Core modules: gfx_common, drawable/context, scaling/pixmap/frame, dcqueue
+- SDL2 and OpenGL drivers compile successfully
+- TFB Draw primitives implemented: draw_line(), draw_rect(), fill_rect(),
+  copy_canvas(), scissor support, draw_fontchar(), draw_image()
+- Remaining work (per roadmap):
+  - DCQ→TFBDraw integration (4-6 days)
+  - Driver→GfxCommon wiring (3-4 days)
+  - Resource management (2-3 days)
+  - Missing features (4-6 days)
+
+## Development Guidelines
+
+1. **Test-First Development**: All subsystems have comprehensive tests
+   - See rust/src/resource/tests.rs (953 lines)
+   - See rust/src/threading/tests.rs (723 lines)
+   - Write tests before implementing features
+
+2. **Error Handling**: Use Result<T, E> consistently, avoid unwrap()
+   - Check gfx_common.rs for proper error handling patterns
+
+3. **Documentation**: Each module should have:
+   - Module-level documentation
+   - Function documentation
+   - Safety notes for unsafe code
+
+4. **Follow Existing Conventions**:
+   - Match naming style from existing code
+   - Use same architecture patterns (FFI, error handling)
+   - Mimic test structure from similar modules
+
+5. **Parallel Tasks**: Use subagents for large code generation work
+
+## Getting Started Checklist
+
+1. Install dependencies (SDL2, SDL2_mixer, libogg, libvorbis, OpenGL)
+2. Clone the repository
+3. Build Rust code: cd rust && cargo build
+4. Try building C code: cd sc2/build/unix && ./rebuild.sh
+5. Note any compilation errors - this is your starting point
+6. Check the specific error messages and files involved
+7. Examine the FFI bridges in the failing subsystem
+8. Fix the issue (typically header mismatches or missing links)
+9. Rebuild and repeat
+
+## Recent History
+
+Last 3 commits:
+```
+6bedfaf45 Add resource cache, MOD decoder, threading, and 3DO video content
+8563d19e1 Add Rust video player and DukVid decoder path
+12c79ac08 WIP: rodio audio backend integration
+```
+
+The latest commit added:
+- 9,888 lines added, 591 lines removed
+- 199 files changed
+- All major Rust subsystems integrated
+
+## Common Pitfalls
+
+1. **Forgot to rebuild Rust after changes**: Rebuild with cargo
+2. **C headers out of sync with Rust FFI**: Compare signatures carefully
+3. **Missing configure flags**: Use full flag list for complete build
+4. **Wrong build order**: Rust first, then C
+5. **Stale object files**: use make clean or touch all
+
+## Large File Warning
+
+The file `sc2/content/addons/3dovideo/victory/victory.duk` is 55.17 MB.
+GitHub flagged it as large but push succeeded. Consider Git LFS for future
+large binary assets.
+
+## Next Steps for New Agent
+
+1. Attempt a full build and capture ALL error messages
+2. Categorize errors: linker? type mismatch? missing header?
+3. Start with the simplest error (often header mismatch)
+4. Work through errors systematically
+5. Document what you fix update this primer as needed
+
+Good luck! The foundation is solid and the architecture is sound.
+Focus on the FFI bridge integration and build system issues.
