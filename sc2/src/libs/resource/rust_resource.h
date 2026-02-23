@@ -29,21 +29,20 @@ extern char* rust_get_string_resource(const char* name);
 extern void rust_free_string(char* str);
 
 /* Resource Loader */
-extern int rust_resource_loader_init(const char* base_path, const char* index_path);
+extern int rust_resource_loader_init(const char* base_path);
 extern void rust_resource_loader_uninit(void);
-extern uint8* rust_resource_load(const char* name, size_t* out_size);
+extern uint8* rust_resource_load(const char* res_type, const char* res_name, size_t* out_size);
 extern void rust_resource_free(uint8* data, size_t size);
-extern int rust_resource_exists(const char* name);
 
 /* Resource Cache */
-extern int rust_cache_init(size_t max_size);
-extern void rust_cache_uninit(void);
-extern const uint8* rust_cache_get(const char* key, size_t* out_size);
-extern int rust_cache_insert(const char* key, const uint8* data, size_t size);
-extern void rust_cache_remove(const char* key);
-extern void rust_cache_clear(void);
-extern size_t rust_cache_size(void);
-extern size_t rust_cache_len(void);
+extern int rust_resource_cache_init(size_t max_size);
+extern void rust_resource_cache_uninit(void);
+extern const uint8* rust_resource_cache_get(const char* key, size_t* out_size);
+extern int rust_resource_cache_put(const char* key, const uint8* data, size_t size);
+extern void rust_resource_cache_remove(const char* key);
+extern void rust_resource_cache_clear(void);
+extern size_t rust_resource_cache_size(void);
+extern size_t rust_resource_cache_count(void);
 
 #endif /* USE_RUST_RESOURCE */
 
