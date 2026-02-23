@@ -21,7 +21,7 @@ excluded — they compile in both modes. See `00-overview.md` "Deferred to
 Future Phase" section.
 
 Behavior contract:
-- GIVEN: ~37 of 41 C graphics files have guards (4 loader files excluded)
+- GIVEN: 36 of 41 C graphics files have guards (5 loaders excluded, see Canonical File Count Matrix)
 - WHEN: `USE_RUST_GFX` is defined in `build.vars`
 - THEN: No C drawing-pipeline code compiles; all drawing symbols provided by Rust
 - THEN: Loader files still compile and provide resource-loading symbols
@@ -134,9 +134,9 @@ cd rust && cargo test --workspace --all-features
 ```
 
 ## Structural Verification Checklist
-- [ ] ~37 drawing-pipeline C files have USE_RUST_GFX guards
+- [ ] 36 drawing-pipeline C files have USE_RUST_GFX guards (2 pre-existing + 29 from P21 + 5 from P23)
 - [ ] sdl_common.c remains unguarded (vtable shim)
-- [ ] 5 loader files remain unguarded (gfxload.c, filegfx.c, resgfx.c, loaddisp.c, sdl/png2sdl.c)
+- [ ] 5 loader files remain unguarded (gfxload.c, resgfx.c, filegfx.c, loaddisp.c, sdl/png2sdl.c)
 - [ ] Build succeeds with USE_RUST_GFX=1 (Rust path)
 - [ ] Build succeeds with USE_RUST_GFX=0 (C fallback) — no undefined symbols
 - [ ] No undefined symbol errors either way
@@ -144,9 +144,9 @@ cd rust && cargo test --workspace --all-features
 
 ## Dual-Path ABI Verification (Mandatory)
 ```bash
-# Build with USE_RUST_GFX=0 and verify no undefined symbols
-cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
-# Expected: 0
+# Build with USE_RUST_GFX=0 (set in build.vars) and verify no undefined symbols
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | grep -c 'undefined'
+# Expected: 0 (exit code is authoritative)
 ```
 
 ## Semantic Verification Checklist (Mandatory)
@@ -179,8 +179,8 @@ Create: `project-plans/gfx/.completed/P25.md`
 Contents:
 - phase ID: P25
 - timestamp
-- files guarded: list of ~37 drawing-pipeline C files
-- files intentionally unguarded: gfxload.c, filegfx.c, resgfx.c, loaddisp.c, sdl/png2sdl.c, sdl_common.c
+- files guarded: 36 drawing-pipeline C files (list each)
+- files intentionally unguarded: sdl_common.c (vtable shim), 5 loaders (gfxload.c, resgfx.c, filegfx.c, loaddisp.c, sdl/png2sdl.c)
 - build verification: both paths compile
 - game verification: both paths run
-- guard audit: ~37 drawing-pipeline files guarded, 4 loader files unguarded
+- guard audit: 36 guarded, 5 loaders unguarded, sdl_common.c unguarded

@@ -158,7 +158,7 @@ grep -r '#\[test\]' rust/src/graphics/ | wc -l
 
 ## Structural Verification Checklist
 - [ ] >= 50 Rust FFI exports (drawing-pipeline only; loaders stay in C)
-- [ ] Zero C drawing-pipeline object files when USE_RUST_GFX=1
+- [ ] Zero C drawing-pipeline implementations active when USE_RUST_GFX=1 (36 files guarded, 5 loaders compile in both modes)
 - [ ] Loader .o files (gfxload, filegfx, resgfx, loaddisp) present in both modes
 - [ ] All cargo gates pass (fmt, clippy, test)
 - [ ] >= 80 total tests across graphics modules

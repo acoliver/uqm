@@ -128,7 +128,7 @@ guarded if some files are ready and others are not.
 | `cmap.c` | `SetColorMap`, `FadeScreen`, `GetFadeAmount`, `init_colormap`, `uninit_colormap` | `cmap_ffi.rs` |
 | `sdl/palette.c` | `TFB_SetPalette`, `TFB_GetPaletteColor` | `cmap_ffi.rs` |
 | `pixmap.c` | `TFB_DrawCanvas_ToScreenFormat`, `TFB_DrawCanvas_Initialize` | `canvas_ffi.rs` |
-| `intersec.c` | `DrawablesIntersect` | `canvas_ffi.rs` |
+| `intersec.c` | `DrawablesIntersect` | `drawable.rs` (geometry/intersection, internal) |
 | `gfx_common.c` | `TFB_InitGraphics`, `TFB_UninitGraphics`, `TFB_ProcessEvents` | `ffi.rs` (existing) |
 | All scaler `.c` files | `Scale_HQ2X`, `Scale_BilinearFilter`, `Scale_Nearest`, etc. | `ffi.rs` (existing) |
 
@@ -147,7 +147,11 @@ guarded if some files are ready and others are not.
 | `TFB_ColorMapFromIndex` | `rust_cmap_from_index` | Index → colormap |
 | `init_colormap` / `uninit_colormap` | `rust_cmap_init` / `rust_cmap_uninit` | Lifecycle |
 
-### C files to add guards (39 files across 5 groups)
+### C files to guard in this phase (29 files across 5 groups)
+
+Note: 5 widget-dependent files (context.c, drawable.c, frame.c, font.c, widgets.c)
+are deferred to P23. 5 loader files are deferred indefinitely. See overview
+Canonical File Count Matrix for the authoritative accounting.
 
 Guard format for each file:
 ```c
@@ -185,12 +189,6 @@ Guard format for each file:
 - `intersec.c` → replaced by Rust intersection logic
 - `gfx_common.c` → replaced by `gfx_common.rs`
 
-**NOT guarded in this phase — widget-dependent (deferred to P23):**
-- `frame.c` — widgets.c calls `DrawBatch`, `DrawStamp`, `GetFrameBounds`
-- `font.c` — widgets.c calls `font_DrawText`, `font_DrawTracedText`, `GetCharExtent`
-- `context.c` — widgets.c calls `SetContext`, `SetContextForeGroundColor`, `SetContextBackGroundColor`, `SetContextClipRect`
-- `drawable.c` — widgets.c calls `GetFrameCount`, `CreateDrawable`
-
 **Group 5 — SDL backend (6 files):**
 - `sdl/sdl2_pure.c` → replaced by `ffi.rs` vtable
 - `sdl/sdl2_common.c` → replaced by `ffi.rs` + `gfx_common.rs`
@@ -227,7 +225,7 @@ Future Phase" section.
 ### Files to modify
 - `rust/src/graphics/mod.rs` — Add `pub mod cmap_ffi;`
 - `sc2/src/libs/graphics/sdl/rust_gfx.h` — Add `rust_cmap_*` declarations
-- 32 C files — Add `USE_RUST_GFX` guards (groups 1–5 above)
+- 29 C files — Add `USE_RUST_GFX` guards (groups 1–5 above, excluding widget-dependent)
 
 ## Verification Commands
 
@@ -265,7 +263,7 @@ cd sc2 && make 2>&1 | head -50
 
 ## Structural Verification Checklist
 - [ ] `cmap_ffi.rs` created with ~8 `#[no_mangle]` exports
-- [ ] All 32 C files have `USE_RUST_GFX` guards
+- [ ] All 29 C files (non-widget-dependent) have `USE_RUST_GFX` guards
 - [ ] Guard format is consistent (`#ifdef USE_RUST_GFX` / `#else` / `#endif`)
 - [ ] Each guarded file has a comment pointing to Rust replacement
 - [ ] `mod.rs` updated with `pub mod cmap_ffi`

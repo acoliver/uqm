@@ -204,9 +204,30 @@ the screen surfaces.
 - `sdl/opengl.c` — OpenGL backend (may be dead code)
 - `sdl/sdluio.c` — SDL UIO integration
 
+## Canonical File Count Matrix
+
+| Category | Count | Files | Phase |
+|----------|-------|-------|-------|
+| Already guarded | 2 | sdl_common.c, scalers.c | Pre-plan |
+| Drawing layer | 8 | dcqueue.c, tfb_draw.c, tfb_prim.c, canvas.c, primitives.c, clipline.c, boxint.c, bbox.c | P21 |
+| Colormap/palette | 2 | cmap.c, palette.c | P21 |
+| Scalers | 10 | 2xscalers.c, 2xscalers_mmx.c, 2xscalers_sse.c, 2xscalers_3dnow.c, bilinear2x.c, biadv2x.c, hq2x.c, nearest2x.c, triscan2x.c, rotozoom.c | P21 |
+| Core (non-widget) | 3 | pixmap.c, intersec.c, gfx_common.c | P21 |
+| SDL backend | 6 | sdl2_pure.c, sdl2_common.c, sdl1_common.c, pure.c, opengl.c*, sdluio.c | P21 |
+| Widget-dependent | 5 | context.c, drawable.c, frame.c, font.c, widgets.c | P23 |
+| Deferred (loaders) | 5 | gfxload.c, resgfx.c, filegfx.c, loaddisp.c, png2sdl.c | Never |
+| **Total** | **41** | | |
+
+*opengl.c guard is conditional — only if GL backend fully replaced.
+
+**Phase snapshots:**
+- After P21: 31 guarded (2 pre-existing + 29 new), 5 deferred, 5 pending P23
+- After P23: 36 guarded (31 + 5 widget-dependent), 5 deferred
+- After P25: 36 guarded (verification only, no new guards), 5 deferred
+
 ## End-State Definition
 
-The goal of this plan is **"zero C drawing-pipeline code compiling"** when
+The goal of this plan is **"zero C drawing-pipeline implementations active"** when
 `USE_RUST_GFX=1` — NOT "zero C graphics code." The drawing pipeline
 (DCQ, tfb_draw, canvas, scalers, colormaps, context, drawable, frame,
 pixmap, gfx_common, primitives, clipping) is fully replaced by Rust.
@@ -377,9 +398,12 @@ USE_RUST_GFX=0: symbols from C column resolve (unchanged)
 > the symbol ledger. `LoadGraphic`, `LoadFont`, and `TFB_LoadPNG` remain
 > in C unconditionally.
 
-### P25 — SDL Backend File Guards
+### P25 — Guard Finalization and Dual-Path Validation
 
-**Symbols removed from C** (when `USE_RUST_GFX=1`):
+> Note: SDL backend files are guarded in **P21** (see Canonical File Count Matrix).
+> P25 verifies all guards work end-to-end and both paths build correctly.
+
+**SDL backend symbols guarded in P21** (ledger reference):
 
 | C File | Symbols Guarded | C-path owner (USE_RUST_GFX=0) |
 |---|---|---|

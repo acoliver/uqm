@@ -14,9 +14,10 @@
 ### REQ-GUARD-010–050: All C File Guards
 Verification:
 - Enumerate all 41 C files in `sc2/src/libs/graphics/`
-- Confirm 34 have `USE_RUST_GFX` guards (2 pre-existing + 32 from P21)
-- Confirm 7 deferred files (font.c, gfxload.c, resgfx.c, filegfx.c,
-  loaddisp.c, png2sdl.c, widgets.c) are identified for P23/P25
+- Confirm 31 have `USE_RUST_GFX` guards (2 pre-existing + 29 from P21)
+- Confirm 10 unguarded files are accounted for:
+  - 5 widget-dependent (context.c, drawable.c, frame.c, font.c, widgets.c) → deferred to P23
+  - 5 loaders (gfxload.c, resgfx.c, filegfx.c, loaddisp.c, png2sdl.c) → deferred indefinitely
 
 ### REQ-CMAP-010–030: Colormap FFI Correctness
 Verification:
@@ -62,27 +63,27 @@ Expected output: ~31 GUARDED, ~10 UNGUARDED (5 loaders + sdl_common.c + 4 widget
 ### Task 2: Build Verification — Rust Path
 
 ```bash
-# Full build with Rust GFX
-cd sc2 && make clean && make USE_RUST_GFX=1 2>&1 | tee /tmp/build_rust_gfx.log
+# Full build with Rust GFX (USE_RUST_GFX=1 in build.vars)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_rust_gfx.log
 
-# Verify no undefined symbols
+# Verify no undefined symbols (check exit code first, then grep)
+echo "Build exit code: $?"
 grep -c 'undefined reference\|undefined symbol' /tmp/build_rust_gfx.log
 # Expected: 0
 
-# Verify guarded files are NOT compiled
-grep -c 'dcqueue\.c\|tfb_draw\.c\|cmap\.c' /tmp/build_rust_gfx.log
-# Expected: 0 (these files should be empty/skipped)
+# Note: Guarded files may still appear in build logs as empty TUs.
+# The authoritative check is that no C drawing-pipeline object code is linked.
+# Verify via nm on the final binary (see Task 5).
 ```
 
 ### Task 3: Build Verification — C Path
 
 ```bash
-# Full build without Rust GFX (C fallback)
-cd sc2 && make clean && make 2>&1 | tee /tmp/build_c_gfx.log
+# Full build without Rust GFX (set USE_RUST_GFX='0' in build.vars first)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_c_gfx.log
 
-# Verify no errors
-grep -c 'error:' /tmp/build_c_gfx.log
-# Expected: 0
+# Verify build succeeded (exit code is authoritative, not grep)
+echo "Build exit code: $?"
 ```
 
 ### Task 4: Rust Test Suite
@@ -115,8 +116,8 @@ nm -gU target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|
 ```
 
 ## Structural Verification Checklist
-- [ ] 34 C files have `USE_RUST_GFX` guards
-- [ ] 7 files identified as deferred (font, gfxload, resgfx, filegfx, loaddisp, png2sdl, widgets)
+- [ ] 31 C files have `USE_RUST_GFX` guards (2 pre-existing + 29 new in P21)
+- [ ] 10 unguarded files accounted for (5 widget-dependent → P23, 5 loaders → deferred)
 - [ ] Build succeeds with `USE_RUST_GFX=1`
 - [ ] Build succeeds without `USE_RUST_GFX`
 - [ ] No undefined symbol errors in either build path
@@ -138,7 +139,7 @@ nm -gU target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|
 
 ## Failure Recovery
 - rollback: `git stash` (revert all guard additions)
-- blocking issues: missing Rust FFI symbols at link time — add stubs
+- blocking issues: missing Rust FFI symbols at link time — identify which C symbols lack Rust replacements and implement them (do NOT add empty stubs)
 
 ## Phase Completion Marker
 Create: `project-plans/gfx/.completed/P22.md`
@@ -146,7 +147,7 @@ Create: `project-plans/gfx/.completed/P22.md`
 Contents:
 - phase ID: P22
 - timestamp
-- guard audit: 34 guarded / 7 deferred
+- guard audit: 31 guarded (2 pre-existing + 29 new) / 10 unguarded (5 widget→P23, 5 loaders→deferred)
 - build verification: both paths successful
 - symbol count: N total Rust FFI exports
 - test results: all pass
