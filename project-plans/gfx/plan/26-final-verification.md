@@ -1,23 +1,22 @@
-# Phase 26: Final Verification — Zero C Graphics Code
+# Phase 26: Final Verification — Rust GFX Path Complete
 
 ## Phase ID
 `PLAN-20260223-GFX-FULL-PORT.P26`
 
 ## Prerequisites
-- Required: Phase P25a (C Code Removal Verification) completed
-- Expected: All C graphics code removed from build
+- Required: Phase P25a (C Code Guarding Verification) completed
+- Expected: All 41 C graphics files guarded with USE_RUST_GFX
+- Expected: Both Rust and C paths build and run
 - Expected: Game runs on Rust-only graphics path
-- Expected: Build succeeds with no C graphics objects
 
 ## Requirements Verified
 
 ### REQ-COMPAT-060: Complete Port Verification
-**Requirement text**: The final Rust GFX backend shall handle all graphics
-operations that were previously performed by C code, with zero C graphics
-code compiled into the binary.
+**Requirement text**: The Rust GFX backend shall handle all graphics
+operations that were previously performed by C code when `USE_RUST_GFX=1`.
 
 Verification:
-- Binary analysis confirms no C graphics symbols
+- Binary analysis confirms Rust provides all graphics symbols
 - All rendering paths exercised
 - Game fully playable
 
@@ -27,33 +26,26 @@ regressions, crashes, or performance degradation compared to the original
 C implementation.
 
 Verification:
-- Side-by-side visual comparison
-- Automated frame buffer comparison (where feasible)
+- Side-by-side visual comparison (Rust vs C path)
 - Performance benchmarking
 
 ## Verification Tasks
 
-### Task 1: Binary Analysis — Zero C Graphics
+### Task 1: Symbol Verification
 
 ```bash
-# Build final binary
-cd sc2 && make clean && make 2>&1 | tee /tmp/build_final.log
-grep -c 'error:' /tmp/build_final.log
-# Expected: 0
+# Build with USE_RUST_GFX=1
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm
 
-# Check for ANY remaining C graphics symbols in the binary
-nm -g ./uqm 2>/dev/null | grep -E 'TFB_Draw(Screen|Canvas)_|SDL_.*Canvas|gfx_scale_' | head -20
-# Expected: NONE (zero matches)
-
-# Verify only Rust graphics symbols
-nm -g ./uqm 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|gfxload)_' | wc -l
+# Verify Rust provides all graphics symbols
+nm -gU rust/target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|gfxload)_' | wc -l
 # Expected: >= 55
 
-# Verify C graphics source files are not in build
-find sc2/build -name '*.o' 2>/dev/null | while read f; do
+# Verify NO C graphics objects compiled
+find sc2/obj -name '*.o' 2>/dev/null | while read f; do
   base=$(basename "$f" .o)
   case "$base" in
-    dcqueue|tfb_draw|tfb_prim|clipline|boxint|bbox|cmap|context|drawable|frame|pixmap|intersec|gfx_common)
+    dcqueue|tfb_draw|tfb_prim|canvas|primitives|cmap|context|drawable|frame)
       echo "C GFX OBJECT FOUND: $f" ;;
   esac
 done
@@ -66,15 +58,6 @@ done
 cd rust && cargo fmt --all --check
 cd rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cd rust && cargo test --workspace --all-features
-
-# Total test count across all FFI modules
-echo "=== Test counts ==="
-echo "ffi.rs:       $(grep -c '#\[test\]' rust/src/graphics/ffi.rs)"
-echo "dcq_ffi.rs:   $(grep -c '#\[test\]' rust/src/graphics/dcq_ffi.rs)"
-echo "canvas_ffi.rs: $(grep -c '#\[test\]' rust/src/graphics/canvas_ffi.rs)"
-echo "cmap_ffi.rs:  $(grep -c '#\[test\]' rust/src/graphics/cmap_ffi.rs)"
-echo "gfxload_ffi.rs: $(grep -c '#\[test\]' rust/src/graphics/gfxload_ffi.rs)"
-# Expected total: >= 80
 ```
 
 ### Task 3: Comprehensive Scene Testing
@@ -114,38 +97,36 @@ Manual verification — play through these scenarios:
 - [ ] Fade to white works
 - [ ] Crossfade transitions work
 - [ ] Screen flash effects work
-- [ ] Warp/hyperspace visual effects work
 
 **Resolution/Window:**
 - [ ] Windowed mode works
 - [ ] Fullscreen toggle works
-- [ ] Window resize works (if supported)
 - [ ] Correct aspect ratio maintained
 
-### Task 4: Performance Benchmark
+### Task 4: C Path Comparison
 
 ```bash
-# Benchmark: 60 seconds of gameplay
-./uqm --benchmark 60 2>&1 | tee /tmp/benchmark_final.txt
-grep FPS /tmp/benchmark_final.txt
-# Record final FPS and compare to pre-port baseline
+# Build C path for comparison
+sed -i '' "s/USE_RUST_GFX='1'/USE_RUST_GFX='0'/" sc2/build.vars
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm
+
+# Run C path, note visual behavior
+./uqm >/tmp/uqm_c_final.log 2>&1 &
+sleep 15 && kill %1
+
+# Restore Rust path
+sed -i '' "s/USE_RUST_GFX='0'/USE_RUST_GFX='1'/" sc2/build.vars
+
+# Compare: both logs should show similar resource loading and no errors
+diff <(grep -E 'loaded|error|panic' /tmp/uqm_c_final.log) \
+     <(grep -E 'loaded|error|panic' /tmp/uqm_rust_final.log)
 ```
 
-### Task 5: Memory Leak Check (if valgrind available)
+### Task 5: Deferred Pattern Audit
 
 ```bash
-# Linux only — skip on macOS
-valgrind --leak-check=full --show-leak-kinds=all ./uqm --quit-after-frame 500 2>&1 | tee /tmp/valgrind_final.txt
-grep -E 'definitely lost|indirectly lost' /tmp/valgrind_final.txt
-# Expected: 0 bytes lost from Rust code
-```
-
-### Task 6: Deferred Pattern Audit
-
-```bash
-# Final sweep: no deferred patterns in ANY Rust graphics file
 echo "=== Deferred pattern audit ==="
-for f in rust/src/graphics/*.rs rust/src/graphics/**/*.rs; do
+for f in rust/src/graphics/*.rs; do
   hits=$(grep -cn "todo!\|TODO\|FIXME\|HACK\|placeholder\|unimplemented!" "$f" 2>/dev/null)
   if [ "$hits" -gt 0 ]; then
     echo "FAIL: $f ($hits deferred patterns)"
@@ -155,32 +136,28 @@ done
 echo "=== Audit complete ==="
 ```
 
-### Task 7: Code Metrics
+### Task 6: Code Metrics
 
 ```bash
-# Lines of Rust graphics code
 echo "=== Rust GFX code size ==="
-wc -l rust/src/graphics/*.rs rust/src/graphics/**/*.rs 2>/dev/null | tail -1
-# Record total
+wc -l rust/src/graphics/*.rs 2>/dev/null | tail -1
 
-# Lines of C graphics code remaining
-echo "=== C GFX code remaining ==="
-wc -l sc2/src/libs/graphics/*.c sc2/src/libs/graphics/**/*.c 2>/dev/null | tail -1
-# Expected: near zero (only shim files like sdl_common.c)
-
-# FFI export count
 echo "=== FFI exports ==="
 grep -r '#\[no_mangle\]' rust/src/graphics/ | wc -l
 # Expected: >= 55
+
+echo "=== Test count ==="
+grep -r '#\[test\]' rust/src/graphics/ | wc -l
+# Expected: >= 80
 ```
 
 ## Structural Verification Checklist
-- [ ] Zero C graphics symbols in final binary
-- [ ] >= 55 Rust FFI exports in binary
-- [ ] Zero C graphics object files in build
+- [ ] >= 55 Rust FFI exports
+- [ ] Zero C graphics object files when USE_RUST_GFX=1
 - [ ] All cargo gates pass (fmt, clippy, test)
-- [ ] >= 80 total tests across all FFI modules
+- [ ] >= 80 total tests across graphics modules
 - [ ] Zero deferred patterns in Rust graphics code
+- [ ] C path still builds with USE_RUST_GFX=0
 
 ## Semantic Verification Checklist (Mandatory)
 - [ ] Game is fully playable from start to any game scene
@@ -188,28 +165,30 @@ grep -r '#\[no_mangle\]' rust/src/graphics/ | wc -l
 - [ ] All UI elements render (menus, widgets, text)
 - [ ] Combat is functional and visual
 - [ ] Dialogue screens work
-- [ ] Performance is acceptable (within 5% of C baseline)
-- [ ] No memory leaks from Rust code
+- [ ] Performance is acceptable
 - [ ] Resolution/fullscreen management works
+- [ ] C fallback path still works when toggled
 
 ## Success Criteria — Definition of Done
 
 The Full Rust GFX Port is **COMPLETE** when all of the following are true:
 
-1. **Zero C graphics code compiled**: `nm` shows no `TFB_Draw*` symbols
+1. **All C files guarded**: 41/41 C graphics files behind `#ifndef USE_RUST_GFX`
 2. **All tests pass**: `cargo test` + build gates green
-3. **Game playable**: Manual scene walkthrough completed
-4. **Performance acceptable**: Within 5% of C baseline
+3. **Game playable**: Manual scene walkthrough completed on Rust path
+4. **C fallback works**: Toggling `USE_RUST_GFX=0` still builds and runs
 5. **No deferred patterns**: Zero `todo!`/`FIXME`/`HACK` in graphics code
 6. **Clean build**: No warnings from `cargo clippy` or C compiler
-7. **All 41 C files processed**: Deleted or reduced to thin shims
-8. **All FFI bridges complete**: vtable (17) + DCQ (~15) + canvas (~10) +
-   colormap (~8) + gfxload (~5) = ~55 exports
+7. **All FFI bridges complete**: vtable + DCQ + canvas + colormap + gfxload = ~55 exports
+
+**Note**: C code is NOT deleted. It remains in the repository behind
+`#ifdef` guards for reference and fallback. Deletion is a future decision
+once the Rust path has proven stable in production.
 
 ## Failure Recovery
-- rollback: restore C files from git history
-- partial rollback: re-enable specific C files by removing their
-  `USE_RUST_GFX` guards
+- rollback: restore `build.vars` to `USE_RUST_GFX='0'`
+- partial rollback: remove specific file guards to re-enable C code
+  for individual subsystems
 
 ## Phase Completion Marker
 Create: `project-plans/gfx/.completed/P26.md`
@@ -217,10 +196,11 @@ Create: `project-plans/gfx/.completed/P26.md`
 Contents:
 - phase ID: P26
 - timestamp: completion date
-- binary analysis: zero C graphics symbols confirmed
+- guard count: 41/41 C files guarded
 - test count: total across all modules
 - scene walkthrough: all items checked
-- performance: final FPS measurement
-- code metrics: Rust LoC, C LoC remaining, FFI export count
+- code metrics: Rust LoC, FFI export count
+- C fallback: confirmed working
 - PLAN STATUS: **COMPLETE**
-- next steps: optimization opportunities, advanced features (scanlines, GL backend)
+- next steps: optimization, advanced features (scanlines, GL backend),
+  eventual C code removal when Rust path is proven

@@ -1,4 +1,4 @@
-# Phase 25: C Code Removal
+# Phase 25: C Code Guarding — Complete USE_RUST_GFX Coverage
 
 ## Phase ID
 `PLAN-20260223-GFX-FULL-PORT.P25`
@@ -11,194 +11,141 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-GUARD-070: Remove C Fallback Path
-**Requirement text**: After integration verification confirms the Rust path
-is functionally equivalent, the `#ifndef USE_RUST_GFX` fallback code in
-guarded C files shall be removed.
+### REQ-GUARD-070: All C Graphics Files Guarded
+**Requirement text**: Every C graphics source file shall be wrapped in
+`#ifndef USE_RUST_GFX` / `#endif` guards so that setting `USE_RUST_GFX=1`
+in `build.vars` compiles zero C graphics code.
 
 Behavior contract:
-- GIVEN: The Rust path is verified working
-- WHEN: C fallback code is removed
-- THEN: `USE_RUST_GFX` is always defined; C graphics code is deleted
+- GIVEN: All 41 C graphics files have been identified
+- WHEN: `USE_RUST_GFX` is defined in `build.vars`
+- THEN: No C graphics code compiles; all symbols provided by Rust
 
-### REQ-GUARD-080: Unconditional Rust Path
-**Requirement text**: After C code removal, `USE_RUST_GFX` shall be
-defined unconditionally (or the guards removed entirely), making the Rust
-path the only graphics implementation.
+### REQ-GUARD-080: C Fallback Preserved
+**Requirement text**: The C graphics code shall remain in the repository,
+guarded but not deleted. Setting `USE_RUST_GFX=0` in `build.vars` shall
+compile the original C graphics path as a fallback.
 
 Behavior contract:
-- GIVEN: All C graphics fallback code is removed
+- GIVEN: `USE_RUST_GFX` is set to `'0'` in `build.vars`
 - WHEN: The project is built
-- THEN: Only Rust graphics code compiles; no C graphics objects produced
+- THEN: The C graphics path compiles and the game runs on C graphics
+
+Why it matters:
+- Preserves ability to bisect regressions against C baseline
+- No irreversible changes until the Rust path is proven in production
 
 ## Implementation Tasks
 
-### Step 1: Make USE_RUST_GFX unconditional
+### Step 1: Verify all guards from P21/P23
 
-Modify the build system to always define `USE_RUST_GFX`:
+Confirm every C graphics file has the `#ifndef USE_RUST_GFX` guard
+added in earlier phases. The 41 files to check:
+
+**Core graphics (sc2/src/libs/graphics/):**
+`dcqueue.c`, `tfb_draw.c`, `tfb_prim.c`, `cmap.c`, `context.c`,
+`drawable.c`, `frame.c`, `font.c`, `gfx_common.c`, `gfxload.c`,
+`pixmap.c`, `intersec.c`, `boxint.c`, `bbox.c`, `clipline.c`,
+`loaddisp.c`, `resgfx.c`, `filegfx.c`, `widgets.c`
+
+**SDL backend (sc2/src/libs/graphics/sdl/):**
+`canvas.c`, `primitives.c`, `pure.c`, `sdl2_pure.c`, `sdl1_common.c`,
+`sdl2_common.c`, `opengl.c`, `palette.c`, `png2sdl.c`, `sdluio.c`,
+`2xscalers.c`, `2xscalers_mmx.c`, `2xscalers_sse.c`, `2xscalers_3dnow.c`,
+`bilinear2x.c`, `biadv2x.c`, `hq2x.c`, `nearest2x.c`, `triscan2x.c`,
+`rotozoom.c`, `scalers.c`
+
+**Keep unguarded (still needed with Rust):**
+`sdl_common.c` — thin vtable shim that forwards to `rust_gfx_*`
+
+### Step 2: Build with USE_RUST_GFX=1
 
 ```bash
-# In Makefile / build.sh / CMakeLists.txt:
-# Remove: -DUSE_RUST_GFX (optional flag)
-# Add: -DUSE_RUST_GFX=1 (always defined)
-# Or: remove all #ifdef USE_RUST_GFX guards entirely
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_rust_gfx.log
+grep -c 'error:\|undefined' /tmp/build_rust_gfx.log
+# Expected: 0
 ```
 
-### Step 2: Remove guarded C code
+### Step 3: Build with USE_RUST_GFX=0
 
-For each of the 41 guarded C files, remove the `#ifndef USE_RUST_GFX` block:
+```bash
+# Temporarily disable Rust GFX
+sed -i '' "s/USE_RUST_GFX='1'/USE_RUST_GFX='0'/" sc2/build.vars
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_c_gfx.log
+grep -c 'error:\|undefined' /tmp/build_c_gfx.log
+# Expected: 0
 
-**Before:**
-```c
-#ifdef USE_RUST_GFX
-/* Replaced by Rust implementation */
-#else
-/* ... hundreds of lines of C code ... */
-#endif
+# Restore
+sed -i '' "s/USE_RUST_GFX='0'/USE_RUST_GFX='1'/" sc2/build.vars
 ```
 
-**After:**
-```c
-/* This file's functionality is now provided by the Rust GFX backend.
- * See rust/src/graphics/ for the implementation.
- * 
- * Original C implementation removed in PLAN-20260223-GFX-FULL-PORT.P25.
- */
+### Step 4: Verify both paths run
+
+```bash
+# Rust path
+./uqm >/tmp/uqm_rust.log 2>&1 &
+sleep 12 && kill %1
+grep 'Using Rust graphics driver' /tmp/uqm_rust.log
+# Expected: present
+
+# C path (after toggling flag)
+./uqm >/tmp/uqm_c.log 2>&1 &
+sleep 12 && kill %1
+grep -v 'Using Rust graphics driver' /tmp/uqm_c.log | grep -i 'graphics\|video' | head -5
+# Expected: C graphics init messages
 ```
-
-### Step 3: Remove or minimize C files
-
-For files that become empty stubs after guard removal:
-- **Option A**: Delete the file entirely and remove from build system
-- **Option B**: Keep a tombstone comment (as shown above) for git history
-
-Recommended: Option A for most files, Option B for `sdl_common.c` (which
-still has vtable wiring) and any file that still has unguarded code.
-
-### C files to process (41 total)
-
-**Delete entirely (pure C graphics, fully replaced):**
-- `dcqueue.c` — replaced by `dcqueue.rs` + `dcq_ffi.rs`
-- `tfb_draw.c` — replaced by `tfb_draw.rs` + `canvas_ffi.rs`
-- `tfb_prim.c` — replaced by `tfb_draw.rs`
-- `clipline.c` — replaced by `tfb_draw.rs`
-- `boxint.c` — replaced by `tfb_draw.rs`
-- `bbox.c` — replaced by `tfb_draw.rs`
-- `cmap.c` — replaced by `cmap.rs` + `cmap_ffi.rs`
-- `context.c` — replaced by `context.rs`
-- `drawable.c` — replaced by `drawable.rs`
-- `frame.c` — replaced by `frame.rs`
-- `pixmap.c` — replaced by `pixmap.rs`
-- `intersec.c` — replaced by Rust intersection logic
-- `gfx_common.c` — replaced by `gfx_common.rs`
-- `sdl/canvas.c` — replaced by `canvas_ffi.rs`
-- `sdl/primitives.c` — replaced by `tfb_draw.rs`
-- `sdl/2xscalers.c` — replaced by `scaling.rs`
-- `sdl/2xscalers_mmx.c` — replaced by `scaling.rs`
-- `sdl/2xscalers_sse.c` — replaced by `scaling.rs`
-- `sdl/2xscalers_3dnow.c` — replaced by `scaling.rs`
-- `sdl/bilinear2x.c` — replaced by `scaling.rs`
-- `sdl/biadv2x.c` — replaced by `scaling.rs`
-- `sdl/hq2x.c` — replaced by `scaling.rs`
-- `sdl/nearest2x.c` — replaced by `scaling.rs`
-- `sdl/triscan2x.c` — replaced by `scaling.rs`
-- `sdl/rotozoom.c` — replaced by `scaling.rs`
-- `sdl/sdl2_pure.c` — replaced by `ffi.rs`
-- `sdl/sdl1_common.c` — dead code
-- `sdl/pure.c` — replaced by `ffi.rs`
-- `gfxload.c` — replaced by `gfxload_ffi.rs`
-- `resgfx.c` — replaced by Rust resource management
-- `filegfx.c` — replaced by Rust file loading
-- `loaddisp.c` — replaced by Rust display loading
-- `sdl/png2sdl.c` — replaced by Rust PNG loading
-- `font.c` — replaced by Rust font system
-- `widgets.c` — bridged or ported in P23
-
-**Keep but simplify (still have non-graphics code or vtable wiring):**
-- `sdl/sdl_common.c` — vtable wiring (thin shim calling Rust)
-- `sdl/scalers.c` — may have non-graphics scaler selection logic
-- `sdl/sdl2_common.c` — may have shared SDL2 utilities
-- `sdl/opengl.c` — may be needed for future GL support
-- `sdl/sdluio.c` — UIO integration (may have non-graphics parts)
-- `sdl/palette.c` — may have shared palette utilities
-
-### Build system changes
-
-Remove deleted files from:
-- `Makefile` / `CMakeLists.txt` / `Makefile.build` (depending on build system)
-- Any `SOURCES` or `OBJS` lists
-
-Update link order to ensure `libuqm_rust.a` provides all symbols.
 
 ## Verification Commands
 
 ```bash
-# Build without any C graphics files
-cd sc2 && make clean && make 2>&1 | tee /tmp/build_no_c_gfx.log
-grep -c 'error:\|undefined' /tmp/build_no_c_gfx.log
-# Expected: 0
-
-# Verify no C graphics objects
-find sc2/build -name '*.o' | while read f; do
-  if nm "$f" 2>/dev/null | grep -q 'TFB_DrawScreen_\|TFB_DrawCanvas_'; then
-    echo "FOUND C GFX: $f"
+# Count guarded files
+echo "=== Guard audit ==="
+for f in sc2/src/libs/graphics/*.c sc2/src/libs/graphics/sdl/*.c; do
+  if [ "$(basename $f)" = "sdl_common.c" ]; then continue; fi
+  if grep -q 'USE_RUST_GFX' "$f"; then
+    echo "  GUARDED: $(basename $f)"
+  else
+    echo "  UNGUARDED: $(basename $f) *** NEEDS GUARD ***"
   fi
 done
-# Expected: no output
-
-# Verify Rust provides all symbols
-cd rust && cargo build --release
-nm -gU target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|gfxload)_' | wc -l
-# Expected: >= 55
 
 # Full test suite
 cd rust && cargo fmt --all --check
 cd rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 cd rust && cargo test --workspace --all-features
-
-# Game smoke test
-./uqm --logfile /tmp/uqm_no_c_gfx.log 2>&1 &
-sleep 15 && kill %1
-grep -ic 'error\|panic\|crash' /tmp/uqm_no_c_gfx.log
-# Expected: 0
 ```
 
 ## Structural Verification Checklist
-- [ ] All target C files deleted or emptied
-- [ ] Build system updated (removed deleted files from source lists)
-- [ ] Build succeeds without deleted C files
-- [ ] No undefined symbol errors at link time
-- [ ] `USE_RUST_GFX` defined unconditionally (or guards removed)
+- [ ] All 41 target C files have USE_RUST_GFX guards
+- [ ] sdl_common.c remains unguarded (vtable shim)
+- [ ] Build succeeds with USE_RUST_GFX=1 (Rust path)
+- [ ] Build succeeds with USE_RUST_GFX=0 (C fallback)
+- [ ] No undefined symbol errors either way
 - [ ] All cargo gates pass
 
 ## Semantic Verification Checklist (Mandatory)
-- [ ] Game starts and reaches main menu
-- [ ] No C graphics code compiled into final binary
-- [ ] All rendering handled by Rust path
+- [ ] Game starts and reaches main menu on Rust path
+- [ ] Game starts and reaches main menu on C path
+- [ ] Both paths play music and render correctly
+- [ ] Toggle between paths is clean (just build.vars change + rebuild)
 - [ ] No regressions from P24 integration testing
-- [ ] Build is simpler (fewer files to compile)
-- [ ] Git history preserves C code for reference
 
 ## Deferred Implementation Detection (Mandatory)
 
 ```bash
-# No deferred patterns in any Rust FFI file
-for f in rust/src/graphics/*_ffi.rs; do
-  echo "=== $f ==="
-  grep -n "todo!\|TODO\|FIXME\|HACK\|placeholder" "$f" && echo "FAIL" || echo "CLEAN"
-done
+grep -rn "TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/*_ffi.rs 2>/dev/null
+# Expected: 0 matches
 ```
 
 ## Success Criteria
-- [ ] Build succeeds with zero C graphics object files
-- [ ] Game runs correctly
-- [ ] All tests pass
-- [ ] C code cleanly removed (not just commented out)
-- [ ] Build system updated
+- [ ] Both build paths compile cleanly
+- [ ] Both paths run the game
+- [ ] All guards in place
+- [ ] C code preserved but inactive when USE_RUST_GFX=1
 
 ## Failure Recovery
-- rollback: `git revert` the removal commit
-- blocking issues: hidden dependencies on deleted C functions
+- rollback: `git restore sc2/src/libs/graphics/`
+- blocking issues: missing Rust symbol exports
 
 ## Phase Completion Marker
 Create: `project-plans/gfx/.completed/P25.md`
@@ -206,8 +153,7 @@ Create: `project-plans/gfx/.completed/P25.md`
 Contents:
 - phase ID: P25
 - timestamp
-- files deleted: list of removed C files
-- files modified: build system files
-- build verification: success
-- game verification: runs correctly
-- C graphics objects: 0
+- files guarded: list of all 41 C files
+- build verification: both paths compile
+- game verification: both paths run
+- guard audit: 41/41 guarded
