@@ -10,7 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "libs/threadlib.h"
+#include "libs/timelib.h"
 #include "libs/log.h"
+#include "libs/async.h"
+#include "libs/memlib.h"
+#include "thrcommon.h"
 #include "rust_threads.h"
 
 /* Forward declarations of Rust FFI functions */
@@ -54,7 +58,7 @@ UnInitThreadSystem (void)
 }
 
 Thread
-CreateThread (ThreadFunction func, void *data, SDWORD stackSize, const char *name)
+CreateThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char *name)
 {
 	(void)stackSize; /* Rust manages its own stack */
 	return (Thread)rust_thread_spawn(name, (void (*)(void*))func, data);
@@ -94,7 +98,7 @@ WaitThread (Thread thread, int *status)
 }
 
 Mutex
-CreateMutex (const char *name, DWORD syncClass)
+CreateMutex_Core (const char *name, DWORD syncClass)
 {
 	(void)syncClass;
 	return (Mutex)rust_mutex_create(name);
@@ -119,7 +123,7 @@ UnlockMutex (Mutex m)
 }
 
 Semaphore
-CreateSemaphore (DWORD initial, const char *name, DWORD syncClass)
+CreateSemaphore_Core (DWORD initial, const char *name, DWORD syncClass)
 {
 	(void)syncClass;
 	return (Semaphore)rust_semaphore_create((uint32)initial, name);
@@ -144,7 +148,7 @@ ClearSemaphore (Semaphore s)
 }
 
 CondVar
-CreateCondVar (const char *name, DWORD syncClass)
+CreateCondVar_Core (const char *name, DWORD syncClass)
 {
 	(void)syncClass;
 	return (CondVar)rust_condvar_create(name);
@@ -176,10 +180,9 @@ BroadcastCondVar (CondVar c)
 }
 
 RecursiveMutex
-CreateRecursiveMutex (const char *name, DWORD syncClass)
+CreateRecursiveMutex_Core (const char *name, DWORD syncClass)
 {
 	/* Rust std::sync::Mutex is not recursive; for now use regular mutex */
-	/* TODO: Implement proper recursive mutex if needed */
 	(void)syncClass;
 	return (RecursiveMutex)rust_mutex_create(name);
 }
@@ -206,6 +209,81 @@ int
 TryLockRecursiveMutex (RecursiveMutex m)
 {
 	return rust_mutex_try_lock((RustMutex*)m);
+}
+
+int
+GetRecursiveMutexDepth (RecursiveMutex m)
+{
+	/* Rust mutexes don't track recursion depth */
+	(void)m;
+	return 0;
+}
+
+void
+StartThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char *name)
+{
+	/* Fire-and-forget thread spawn */
+	(void)stackSize;
+	rust_thread_spawn(name, (void (*)(void*))func, data);
+}
+
+void
+FinishThread (Thread thread)
+{
+	/* Mark thread for cleanup; in Rust threads clean up on drop */
+	(void)thread;
+}
+
+void
+ProcessThreadLifecycles (void)
+{
+	/* Rust threads are self-managing; nothing to do */
+}
+
+void
+DestroyThread (Thread t)
+{
+	/* Rust threads clean up on join/drop */
+	(void)t;
+}
+
+ThreadLocal *
+CreateThreadLocal (void)
+{
+	ThreadLocal *tl = HMalloc (sizeof (ThreadLocal));
+	tl->flushSem = CreateSemaphore (0, "FlushGraphics", SYNC_CLASS_VIDEO);
+	return tl;
+}
+
+void
+DestroyThreadLocal (ThreadLocal *tl)
+{
+	DestroySemaphore (tl->flushSem);
+	HFree (tl);
+}
+
+ThreadLocal *
+GetMyThreadLocal (void)
+{
+	/* Fall through to the native SDL implementation for TLS */
+	return NativeGetMyThreadLocal ();
+}
+
+void
+HibernateThread (TimePeriod timePeriod)
+{
+	uint32 msecs = (uint32)(timePeriod * 1000 / ONE_SECOND);
+	rust_hibernate_thread(msecs);
+}
+
+void
+HibernateThreadUntil (TimeCount wakeTime)
+{
+	TimeCount now = GetTimeCounter();
+	if (wakeTime > now)
+	{
+		HibernateThread(wakeTime - now);
+	}
 }
 
 #endif /* USE_RUST_THREADS */

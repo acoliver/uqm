@@ -14,6 +14,8 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+#ifndef USE_RUST_THREADS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "libs/threadlib.h"
@@ -449,3 +451,5 @@ GetRecursiveMutexDepth (RecursiveMutex mutex)
 {
 	return NativeGetRecursiveMutexDepth (mutex);
 }
+
+#endif /* !USE_RUST_THREADS */
