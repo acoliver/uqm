@@ -1,4 +1,4 @@
-# Plan: Full Rust GFX Port — Eliminate C Graphics Code
+# Plan: Full Rust GFX Drawing-Pipeline Port
 
 Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Generated: 2026-02-23
@@ -72,7 +72,7 @@ The implementation is divided into these logical slices:
 | E | C File Guards | Add `USE_RUST_GFX` guards to all 39 unguarded C files |
 | F | Widget Bridge | Either port widgets or bridge them through Rust context |
 | G | GfxLoad Bridge | Wire Rust resource loading to graphics frame/font loading |
-| H | Integration + Cleanup | End-to-end verification, remove C fallback code |
+| H | Integration + Verification | End-to-end verification, guard finalization, dual-path validation |
 
 Slice A is covered by existing phases P03–P14.
 Slice B (Canvas) is P15–P17, Slice C (DCQ) is P18–P20.
@@ -143,7 +143,7 @@ the screen surfaces.
 | P23a | Verification | F+G | Widget + GfxLoad verification |
 | P24 | Integration | H | End-to-end testing, visual equivalence |
 | P24a | Verification | H | Integration verification |
-| P25 | Impl | H | C code removal — delete guarded C fallback paths |
+| P25 | Impl | H | Guard finalization — all drawing-pipeline C files guarded |
 | P25a | Verification | H | C removal verification |
 | P26 | Integration | H | Final verification — zero C graphics code compiled |
 

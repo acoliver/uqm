@@ -5,7 +5,7 @@
 
 ## Prerequisites
 - Required: Phase P21a completed
-- Expected: All 32 C files guarded with `USE_RUST_GFX`
+- Expected: ~29 drawing-pipeline C files newly guarded in P21 (total ~31 including 2 pre-existing)
 - Expected: Colormap FFI exports compiled and linked
 - Expected: Build succeeds with and without `USE_RUST_GFX`
 
@@ -57,7 +57,7 @@ for f in $(find sc2/src/libs/graphics -name '*.c' | sort); do
 done
 ```
 
-Expected output: 34 GUARDED, 7 UNGUARDED (deferred files)
+Expected output: ~31 GUARDED, ~10 UNGUARDED (5 loaders + sdl_common.c + 4 widget-dependent files deferred to P23)
 
 ### Task 2: Build Verification — Rust Path
 
@@ -130,7 +130,7 @@ nm -gU target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|
 - [ ] Rust path links and loads without missing symbols
 
 ## Success Criteria
-- [ ] 34/41 C files guarded
+- [ ] ~31/41 C files guarded (widget-dependent files deferred to P23, loaders unguarded)
 - [ ] Both build paths compile without errors
 - [ ] Link succeeds with Rust providing all replaced symbols
 - [ ] Colormap FFI tests pass

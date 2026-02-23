@@ -42,8 +42,8 @@ Verification:
 cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm
 
 # Verify Rust provides all graphics symbols
-nm -gU rust/target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|gfxload)_' | wc -l
-# Expected: >= 55
+nm -gU rust/target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|frame|context|drawable|font)_' | wc -l
+# Expected: >= 50
 
 # Verify NO C drawing-pipeline objects compiled (loaders are expected)
 find sc2/obj -name '*.o' 2>/dev/null | while read f; do
@@ -149,7 +149,7 @@ wc -l rust/src/graphics/*.rs 2>/dev/null | tail -1
 
 echo "=== FFI exports ==="
 grep -r '#\[no_mangle\]' rust/src/graphics/ | wc -l
-# Expected: >= 55
+# Expected: >= 50
 
 echo "=== Test count ==="
 grep -r '#\[test\]' rust/src/graphics/ | wc -l
@@ -157,7 +157,7 @@ grep -r '#\[test\]' rust/src/graphics/ | wc -l
 ```
 
 ## Structural Verification Checklist
-- [ ] >= 55 Rust FFI exports
+- [ ] >= 50 Rust FFI exports (drawing-pipeline only; loaders stay in C)
 - [ ] Zero C drawing-pipeline object files when USE_RUST_GFX=1
 - [ ] Loader .o files (gfxload, filegfx, resgfx, loaddisp) present in both modes
 - [ ] All cargo gates pass (fmt, clippy, test)
@@ -187,7 +187,7 @@ following are true:
 5. **C fallback works**: Toggling `USE_RUST_GFX=0` still builds and runs
 6. **No deferred patterns**: Zero `todo!`/`FIXME`/`HACK` in graphics code
 7. **Clean build**: No warnings from `cargo clippy` or C compiler
-8. **All FFI bridges complete**: vtable + DCQ + canvas + colormap + gfxload = ~55 exports
+8. **All drawing-pipeline FFI bridges complete**: vtable (17) + DCQ (~12) + canvas (~10) + colormap (~8) + frame/context/drawable (~28) = ~75 exports (loader bridges deferred)
 
 **Note**: Drawing-pipeline C code is NOT deleted. It remains in the
 repository behind `#ifdef` guards for reference and fallback. Loader code

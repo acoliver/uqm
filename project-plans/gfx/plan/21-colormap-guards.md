@@ -121,10 +121,10 @@ guarded if some files are ready and others are not.
 | `tfb_draw.c` | `TFB_DrawScreen_Line`, `TFB_DrawScreen_Rect`, `TFB_DrawScreen_Image`, `TFB_DrawScreen_Copy`, `TFB_DrawScreen_FontChar` | `dcq_ffi.rs` |
 | `tfb_prim.c` | `TFB_Prim_Line`, `TFB_Prim_Rect`, `TFB_Prim_FillRect`, `TFB_Prim_Stamp` | `canvas_ffi.rs` |
 | `sdl/canvas.c` | `TFB_DrawCanvas_Line`, `TFB_DrawCanvas_Rect`, `TFB_DrawCanvas_Image`, `TFB_DrawCanvas_FontChar`, `TFB_DrawCanvas_CopyRect` | `canvas_ffi.rs` |
-| `sdl/primitives.c` | `putpixel_32`, `getpixel_32` (only 32bpp needed for RGBX8888) | `canvas_ffi.rs` |
-| `clipline.c` | `TFB_DrawCanvas_ClipLine` | `canvas_ffi.rs` |
-| `boxint.c` | `BoxIntersect`, `BoxUnion` | `canvas_ffi.rs` |
-| `bbox.c` | `TFB_BBox_Reset`, `TFB_BBox_RegisterPoint`, `TFB_BBox_GetClipRect` | `canvas_ffi.rs` |
+| `sdl/primitives.c` | `putpixel_32`, `getpixel_32` (only 32bpp needed for RGBX8888) | `tfb_draw.rs` (internal, no FFI needed — used by canvas adapter) |
+| `clipline.c` | `TFB_DrawCanvas_ClipLine` | `tfb_draw.rs` (line clipping is internal to draw_line) |
+| `boxint.c` | `BoxIntersect`, `BoxUnion` | `tfb_draw.rs` (geometry utils, internal) |
+| `bbox.c` | `TFB_BBox_Reset`, `TFB_BBox_RegisterPoint`, `TFB_BBox_GetClipRect` | `tfb_draw.rs` (bounding box tracking, internal) |
 | `cmap.c` | `SetColorMap`, `FadeScreen`, `GetFadeAmount`, `init_colormap`, `uninit_colormap` | `cmap_ffi.rs` |
 | `sdl/palette.c` | `TFB_SetPalette`, `TFB_GetPaletteColor` | `cmap_ffi.rs` |
 | `pixmap.c` | `TFB_DrawCanvas_ToScreenFormat`, `TFB_DrawCanvas_Initialize` | `canvas_ffi.rs` |

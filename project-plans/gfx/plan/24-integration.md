@@ -5,8 +5,8 @@
 
 ## Prerequisites
 - Required: Phase P23a (Widget + GfxLoad Verification) completed
-- Expected: All 41 C files guarded
-- Expected: All FFI bridges implemented (vtable, DCQ, canvas, colormap, gfxload)
+- Expected: All ~35 drawing-pipeline C files guarded (5 loader files + sdl_common.c unguarded)
+- Expected: All drawing-pipeline FFI bridges implemented (vtable, DCQ, canvas, colormap, frame/context/drawable)
 - Expected: Build succeeds with `USE_RUST_GFX=1`
 
 ## Requirements Implemented (Expanded)
@@ -57,7 +57,7 @@ Behavior contract:
 
 ```bash
 # Clean build with full Rust GFX
-cd sc2 && make clean && make USE_RUST_GFX=1 2>&1 | tee /tmp/build_integration.log
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_integration.log
 grep -c 'error:\|undefined' /tmp/build_integration.log
 # Expected: 0
 
@@ -71,9 +71,9 @@ find sc2/build -name '*.o' | xargs nm 2>/dev/null | grep -c 'TFB_DrawScreen_Line
 ```bash
 # All Rust FFI symbols
 cd rust && cargo build --release
-nm -gU target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|gfxload)_' | sort | tee /tmp/rust_symbols.txt
+nm -gU target/release/libuqm_rust.a 2>/dev/null | grep -E 'rust_(gfx|dcq|canvas|cmap|frame|context|drawable|font)_' | sort | tee /tmp/rust_symbols.txt
 wc -l /tmp/rust_symbols.txt
-# Expected: >= 55 symbols
+# Expected: >= 50 drawing-pipeline symbols (loaders excluded)
 
 # Cross-reference with C declarations
 grep 'rust_' sc2/src/libs/graphics/sdl/rust_gfx.h | grep -v '//' | wc -l
@@ -104,17 +104,16 @@ Run with `SDL_VIDEODRIVER=dummy` (headless) if available, or use
 screenshot comparison:
 
 ```bash
-# Capture reference frame from C path
-make clean && make
-./uqm --screenshot /tmp/frame_c.bmp --quit-after-frame 100
-
-# Capture test frame from Rust path
-make clean && make USE_RUST_GFX=1
-./uqm --screenshot /tmp/frame_rust.bmp --quit-after-frame 100
-
-# Compare (if imagemagick available)
-compare -metric RMSE /tmp/frame_c.bmp /tmp/frame_rust.bmp /tmp/frame_diff.bmp 2>&1
-# Expected: RMSE < 1.0 (nearly identical)
+# Visual equivalence is verified MANUALLY by running both paths
+# and comparing the same game scene side-by-side.
+# UQM does not currently have --screenshot or --quit-after-frame flags.
+#
+# Procedure:
+# 1. Build C path (USE_RUST_GFX=0), run, navigate to test scene, take OS screenshot
+# 2. Build Rust path (USE_RUST_GFX=1), run same scene, take OS screenshot
+# 3. Compare visually (or with imagemagick if screenshots captured)
+#
+# If automated visual testing is needed, add a screenshot harness first.
 ```
 
 ### Task 5: Scene Walkthrough
@@ -132,16 +131,13 @@ Manual verification checklist (requires display):
 ### Task 6: Performance Comparison
 
 ```bash
-# C path FPS
-make clean && make
-./uqm --benchmark 60 2>&1 | grep FPS
-# Record: C_FPS
-
-# Rust path FPS
-make clean && make USE_RUST_GFX=1
-./uqm --benchmark 60 2>&1 | grep FPS
-# Record: RUST_FPS
-# Assert: RUST_FPS >= 0.95 * C_FPS
+# UQM does not currently have a --benchmark flag.
+# Performance comparison is done manually:
+# 1. Build C path, run, observe SHOWFPS output in log (if enabled)
+# 2. Build Rust path, run same scene, observe SHOWFPS output
+# 3. Compare FPS values; Rust should be within 5% of C
+#
+# If automated benchmarking is needed, add a benchmark harness first.
 ```
 
 ### Task 7: Cargo Gates
@@ -154,7 +150,7 @@ cd rust && cargo test --workspace --all-features
 
 ## Structural Verification Checklist
 - [ ] Build with `USE_RUST_GFX=1` succeeds with zero errors
-- [ ] All expected Rust symbols exported (>= 55)
+- [ ] All expected Rust symbols exported (>= 50 drawing-pipeline)
 - [ ] C header declarations match Rust exports
 - [ ] No C graphics object code in `USE_RUST_GFX=1` build
 - [ ] All cargo gates pass
