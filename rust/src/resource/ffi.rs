@@ -44,6 +44,15 @@ pub unsafe extern "C" fn rust_init_resource_system(base_path: *const c_char) -> 
     }
 }
 
+/// Uninitialize the global resource system
+///
+/// Drops the resource system state. Safe to call multiple times.
+#[no_mangle]
+pub extern "C" fn rust_uninit_resource_system() {
+    let mut system = GLOBAL_RESOURCE_SYSTEM.lock().unwrap();
+    *system = None;
+}
+
 /// Load an index file
 ///
 /// # Safety
@@ -241,6 +250,15 @@ pub unsafe extern "C" fn rust_resource_loader_init(
     let mut guard = get_loader_mutex().lock().unwrap();
     *guard = Some(loader);
     1
+}
+
+/// Uninitialize the global resource loader
+///
+/// Drops the loader state. Safe to call multiple times.
+#[no_mangle]
+pub extern "C" fn rust_resource_loader_uninit() {
+    let mut guard = get_loader_mutex().lock().unwrap();
+    *guard = None;
 }
 
 /// Load a resource as raw bytes

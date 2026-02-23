@@ -13,26 +13,6 @@
 #include "libs/log.h"
 #include "rust_resource.h"
 
-/* Forward declarations of Rust FFI functions */
-extern int rust_init_resource_system(const char* base_path);
-extern int rust_uninit_resource_system(void);
-extern int rust_load_index(const char* path);
-extern char* rust_get_string_resource(const char* name);
-extern void rust_free_string(char* str);
-extern int rust_resource_loader_init(const char* base_path, const char* index_path);
-extern void rust_resource_loader_uninit(void);
-extern uint8* rust_resource_load(const char* name, size_t* out_size);
-extern void rust_resource_free(uint8* data, size_t size);
-extern int rust_resource_exists(const char* name);
-extern int rust_cache_init(size_t max_size);
-extern void rust_cache_uninit(void);
-extern const uint8* rust_cache_get(const char* key, size_t* out_size);
-extern int rust_cache_insert(const char* key, const uint8* data, size_t size);
-extern void rust_cache_remove(const char* key);
-extern void rust_cache_clear(void);
-extern size_t rust_cache_size(void);
-extern size_t rust_cache_len(void);
-
 static int resourceSystemInitialized = 0;
 
 BOOLEAN
@@ -51,7 +31,7 @@ InitResourceSystem (const char *basePath, const char *indexPath)
 	if (!rust_cache_init(64 * 1024 * 1024))
 	{
 		log_add(log_Warning, "Failed to initialize Rust resource cache");
-		/* Continue without cache */
+		/* Continue without cache — loader still works */
 	}
 
 	resourceSystemInitialized = 1;
@@ -65,7 +45,7 @@ UninitResourceSystem (void)
 	if (!resourceSystemInitialized)
 		return;
 
-	rust_cache_uninit();
+	rust_cache_clear();
 	rust_resource_loader_uninit();
 	resourceSystemInitialized = 0;
 }
