@@ -202,7 +202,7 @@ grep -c 'error:' /tmp/build_c_path.log
 - [ ] All drawing-pipeline C files now have `USE_RUST_GFX` guards (~36; loader files excluded)
 - [ ] Widget bridge strategy implemented (bridge or guard)
 - [ ] `mod.rs` updated with `pub mod frame_ffi`
-- [ ] `rust_gfx.h` updated with gfxload declarations
+- [ ] `rust_gfx.h` updated with frame/widget FFI declarations
 - [ ] Both build paths compile without errors
 
 ## Semantic Verification Checklist (Mandatory)
@@ -244,7 +244,7 @@ Contents:
 - timestamp
 - files created: `rust/src/graphics/frame_ffi.rs`
 - files modified: 5 C files (widget-dependent guards), `mod.rs`, `rust_gfx.h`
-- C files guarded: ~36/41 drawing-pipeline files (4 loader files + sdl_common.c intentionally unguarded)
+- C files guarded: ~35/41 drawing-pipeline files (5 loader files + sdl_common.c intentionally unguarded)
 - widget approach: bridge or port
 - frame FFI exports: count
 - verification: both build paths successful
