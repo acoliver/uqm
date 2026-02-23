@@ -23,7 +23,7 @@ Future Phase" section.
 Behavior contract:
 - GIVEN: 36 of 41 C graphics files have guards (5 loaders excluded, see Canonical File Count Matrix)
 - WHEN: `USE_RUST_GFX` is defined in `build.vars`
-- THEN: No C drawing-pipeline code compiles; all drawing symbols provided by Rust
+- THEN: No C drawing-pipeline implementations are active; all drawing symbols provided by Rust
 - THEN: Loader files still compile and provide resource-loading symbols
 
 ### REQ-GUARD-080: C Fallback Preserved

@@ -145,7 +145,7 @@ the screen surfaces.
 | P24a | Verification | H | Integration verification |
 | P25 | Impl | H | Guard finalization — all drawing-pipeline C files guarded |
 | P25a | Verification | H | C removal verification |
-| P26 | Integration | H | Final verification — zero C graphics code compiled |
+| P26 | Integration | H | Final verification — zero C drawing-pipeline implementations active |
 
 ## C File Inventory (41 files)
 
