@@ -1,8 +1,11 @@
 /*
  *  Rust Resource System wrapper
  *  
- *  When USE_RUST_RESOURCE is defined, this file provides the resource
- *  loading implementation via the Rust FFI bindings.
+ *  When USE_RUST_RESOURCE is defined, this file provides a Rust-backed
+ *  resource cache layer that integrates with the existing C resource system.
+ *  The C resource system (resinit.c) remains the authority for
+ *  InitResourceSystem / UninitResourceSystem; we hook into its lifecycle
+ *  to also bring up the Rust cache and loader.
  */
 
 #ifdef USE_RUST_RESOURCE
@@ -13,51 +16,51 @@
 #include "libs/log.h"
 #include "rust_resource.h"
 
-static int resourceSystemInitialized = 0;
+static int rustResourceInitialized = 0;
 
-BOOLEAN
-InitResourceSystem (const char *basePath, const char *indexPath)
+/*
+ * Initialize the Rust resource cache.
+ * Called after the C resource system is already up.
+ */
+void
+RustResourceInit (void)
 {
-	if (resourceSystemInitialized)
-		return TRUE;
-
-	if (!rust_resource_loader_init(basePath, indexPath))
-	{
-		log_add(log_Warning, "Failed to initialize Rust resource loader");
-		return FALSE;
-	}
+	if (rustResourceInitialized)
+		return;
 
 	/* Initialize cache with 64MB limit */
 	if (!rust_cache_init(64 * 1024 * 1024))
 	{
 		log_add(log_Warning, "Failed to initialize Rust resource cache");
-		/* Continue without cache — loader still works */
+		/* Continue without cache — not fatal */
 	}
 
-	resourceSystemInitialized = 1;
-	log_add(log_Debug, "Rust resource system initialized");
-	return TRUE;
+	rustResourceInitialized = 1;
+	log_add(log_Debug, "Rust resource cache initialized (64 MB)");
 }
 
 void
-UninitResourceSystem (void)
+RustResourceUninit (void)
 {
-	if (!resourceSystemInitialized)
+	if (!rustResourceInitialized)
 		return;
 
 	rust_cache_clear();
-	rust_resource_loader_uninit();
-	resourceSystemInitialized = 0;
+	rustResourceInitialized = 0;
 }
 
-/* Load a resource by name */
+/*
+ * Cache-aware resource loading.
+ * Falls through to the Rust loader if available, otherwise returns NULL
+ * and lets the C resource system handle it.
+ */
 void*
-LoadResource (const char *name, size_t *size)
+RustResourceLoad (const char *name, size_t *size)
 {
 	size_t sz = 0;
 	uint8 *data;
 
-	if (!name || !resourceSystemInitialized)
+	if (!name || !rustResourceInitialized)
 		return NULL;
 
 	/* Check cache first */
@@ -68,7 +71,7 @@ LoadResource (const char *name, size_t *size)
 		return data;
 	}
 
-	/* Load from disk */
+	/* Load from Rust loader */
 	data = rust_resource_load(name, &sz);
 	if (!data)
 	{
@@ -84,7 +87,7 @@ LoadResource (const char *name, size_t *size)
 }
 
 void
-FreeResource (void *data, size_t size)
+RustResourceFree (void *data, size_t size)
 {
 	if (data)
 	{
@@ -93,50 +96,32 @@ FreeResource (void *data, size_t size)
 }
 
 BOOLEAN
-ResourceExists (const char *name)
+RustResourceExists (const char *name)
 {
-	if (!name || !resourceSystemInitialized)
+	if (!name || !rustResourceInitialized)
 		return FALSE;
 
 	return rust_resource_exists(name) != 0;
 }
 
-/* Get a string resource (caller must free with FreeStringResource) */
-char*
-GetStringResource (const char *name)
-{
-	if (!name || !resourceSystemInitialized)
-		return NULL;
-
-	return rust_get_string_resource(name);
-}
-
-void
-FreeStringResource (char *str)
-{
-	if (str)
-	{
-		rust_free_string(str);
-	}
-}
-
 /* Cache management */
 void
-ClearResourceCache (void)
+RustResourceCacheClear (void)
 {
-	rust_cache_clear();
+	if (rustResourceInitialized)
+		rust_cache_clear();
 }
 
 size_t
-GetResourceCacheSize (void)
+RustResourceCacheSize (void)
 {
-	return rust_cache_size();
+	return rustResourceInitialized ? rust_cache_size() : 0;
 }
 
 size_t
-GetResourceCacheCount (void)
+RustResourceCacheCount (void)
 {
-	return rust_cache_len();
+	return rustResourceInitialized ? rust_cache_len() : 0;
 }
 
 #endif /* USE_RUST_RESOURCE */
