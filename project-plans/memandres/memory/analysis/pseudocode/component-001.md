@@ -52,32 +52,47 @@
 45: ENDIF
 ```
 
-## Component 4: Config Flag (`config_unix.h`)
+## Component 4: Config Flag (`config_unix.h`, `config_unix.h.in`, `build.vars.in`)
 
 ```text
 50: FILE sc2/config_unix.h
 51: APPEND after existing USE_RUST_* block:
 52:   DEFINE USE_RUST_MEM
 53:   COMMENT "Defined if using Rust memory allocator"
+54:
+55: FILE sc2/src/config_unix.h.in
+56: APPEND after existing @SYMBOL_USE_RUST_*_DEF@ block:
+57:   PLACEHOLDER @SYMBOL_USE_RUST_MEM_DEF@
+58:   COMMENT "Defined if using Rust memory allocator"
+59:
+60: FILE sc2/build.vars.in
+61: IN uqm_USE_RUST_* block: ADD uqm_USE_RUST_MEM='@USE_RUST_MEM@'
+62: IN USE_RUST_* block: ADD USE_RUST_MEM='@USE_RUST_MEM@'
+63: IN uqm_USE_RUST_* export line: APPEND uqm_USE_RUST_MEM
+64: IN USE_RUST_* export line: APPEND USE_RUST_MEM
+65: IN uqm_SYMBOL_*_DEF block: ADD uqm_SYMBOL_USE_RUST_MEM_DEF='@SYMBOL_USE_RUST_MEM_DEF@'
+66: IN SYMBOL_*_DEF block: ADD SYMBOL_USE_RUST_MEM_DEF='@SYMBOL_USE_RUST_MEM_DEF@'
+67: IN uqm_SYMBOL_*_DEF export line: APPEND uqm_SYMBOL_USE_RUST_MEM_DEF
+68: IN SYMBOL_*_DEF export line: APPEND SYMBOL_USE_RUST_MEM_DEF
 ```
 
 ## Component 5: Rust LogLevel Fatal Alias (`logging.rs`)
 
 ```text
-60: FILE rust/src/logging.rs
-61: IN LogLevel enum impl block:
-62:   ADD constant Fatal = LogLevel::User
-63:   COMMENT "Alias for User — matches C log_Fatal == log_User"
+70: FILE rust/src/logging.rs
+71: IN LogLevel enum impl block:
+72:   ADD constant Fatal = LogLevel::User
+73:   COMMENT "Alias for User — matches C log_Fatal == log_User"
 ```
 
 ## Component 6: Rust memory.rs Log Level Update (`memory.rs`)
 
 ```text
-70: FILE rust/src/memory.rs
-71: REPLACE all LogLevel::User in OOM paths WITH LogLevel::Fatal
-72:   LINE rust_hmalloc OOM: LogLevel::User -> LogLevel::Fatal
-73:   LINE rust_hcalloc OOM: LogLevel::User -> LogLevel::Fatal
-74:   LINE rust_hrealloc OOM: LogLevel::User -> LogLevel::Fatal
+80: FILE rust/src/memory.rs
+81: REPLACE all LogLevel::User in OOM paths WITH LogLevel::Fatal
+82:   LINE rust_hmalloc OOM: LogLevel::User -> LogLevel::Fatal
+83:   LINE rust_hcalloc OOM: LogLevel::User -> LogLevel::Fatal
+84:   LINE rust_hrealloc OOM: LogLevel::User -> LogLevel::Fatal
 ```
 
 ## Traceability
@@ -87,7 +102,7 @@
 | 01-26 | REQ-MEM-001 (Header Macro Redirect) |
 | 30-34 | REQ-MEM-002 (C Source Guard) |
 | 40-45 | REQ-MEM-003 (Build System Conditional) |
-| 50-53 | REQ-MEM-004 (Config Flag) |
-| 60-63, 70-74 | REQ-MEM-005 (OOM Log Level Correctness) |
+| 50-68 | REQ-MEM-004 (Config Flag) |
+| 70-73, 80-84 | REQ-MEM-005 (OOM Log Level Correctness) |
 | All | REQ-MEM-006 (Behavioral Equivalence) |
-| 01-26, 40-45 | REQ-MEM-007 (Build Both Paths) |
+| 01-26, 40-45, 50-68 | REQ-MEM-007 (Build Both Paths) |

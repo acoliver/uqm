@@ -12,7 +12,9 @@
 ### REQ-RES-034-040: res_FreeResource — Decrement, free at zero
 ### REQ-RES-041-046: res_DetachResource — Ownership transfer
 ### REQ-RES-083-085: res_Remove — Cleanup and removal
-### REQ-RES-031-033: LoadResourceFromPath — File open, length, load
+**Note**: `LoadResourceFromPath` (REQ-RES-031-033) is explicitly deferred to P20
+where UIO integration is available. This phase implements all dispatch functions
+EXCEPT `LoadResourceFromPath`.
 
 ## Implementation Tasks
 
@@ -48,14 +50,6 @@
     - Return success
     - marker: `@requirement REQ-RES-083-085`
   
-  - Implement `load_resource_from_path(path, load_fn)`:
-    - Initially: stub that sets up for UIO integration (Phase 18)
-    - Will call `res_OpenResFile(contentDir, path, "rb")`
-    - Get length, set _cur_resfile_name, call load_fn, clear _cur_resfile_name
-    - Close file
-    - Note: Full UIO integration is in Phase 18. This phase implements
-      the dispatch logic with a placeholder for file I/O.
-  
   - Implement `get_int_resource`, `get_boolean_resource`, `get_resource_type`
 
 ### Pseudocode traceability
@@ -64,7 +58,7 @@
 - free_resource: component-003.md lines 57-83
 - detach_resource: component-003.md lines 84-108
 - remove_resource: component-003.md lines 109-124
-- load_resource_from_path: component-003.md lines 125-145
+- load_resource_from_path: component-003.md lines 125-145 (deferred to P20)
 
 ### Critical: unsafe boundaries
 All C function pointer calls (loadFun, freeFun) are `unsafe`. Each call
@@ -82,7 +76,7 @@ cargo test --workspace --all-features
 ```
 
 ## Structural Verification Checklist
-- [ ] All dispatch functions implemented
+- [ ] All dispatch functions implemented (except LoadResourceFromPath, deferred to P20)
 - [ ] No `todo!()` markers remain
 - [ ] All unsafe blocks documented
 - [ ] Plan markers present
@@ -99,7 +93,7 @@ cargo test --workspace --all-features
 
 ```bash
 grep -RIn "TODO\|FIXME\|HACK\|placeholder" rust/src/resource/dispatch.rs
-# Expected: 0 matches (except LoadResourceFromPath UIO note, which is addressed in P18)
+# Expected: 0 matches
 ```
 
 ## Success Criteria

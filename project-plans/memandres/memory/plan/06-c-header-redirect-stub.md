@@ -99,6 +99,28 @@ Why it matters:
    - marker: `@plan PLAN-20260224-MEM-SWAP.P06`
    - marker: `@requirement REQ-MEM-004`
 
+5. **`sc2/build.vars.in`**
+   - Add `USE_RUST_MEM` entries following the exact pattern of `USE_RUST_FILE`:
+     - In the `uqm_USE_RUST_*` block (after `uqm_USE_RUST_MIXER`): add `uqm_USE_RUST_MEM='@USE_RUST_MEM@'`
+     - In the `USE_RUST_*` block (after `USE_RUST_MIXER`): add `USE_RUST_MEM='@USE_RUST_MEM@'`
+     - In the `uqm_USE_RUST_*` export line: append `uqm_USE_RUST_MEM`
+     - In the `USE_RUST_*` export line: append `USE_RUST_MEM`
+     - In the `uqm_SYMBOL_*_DEF` block (after `uqm_SYMBOL_USE_RUST_MIXER_DEF`): add `uqm_SYMBOL_USE_RUST_MEM_DEF='@SYMBOL_USE_RUST_MEM_DEF@'`
+     - In the `SYMBOL_*_DEF` block (after `SYMBOL_USE_RUST_MIXER_DEF`): add `SYMBOL_USE_RUST_MEM_DEF='@SYMBOL_USE_RUST_MEM_DEF@'`
+     - In the `uqm_SYMBOL_*_DEF` export line: append `uqm_SYMBOL_USE_RUST_MEM_DEF`
+     - In the `SYMBOL_*_DEF` export line: append `SYMBOL_USE_RUST_MEM_DEF`
+   - marker: `@plan PLAN-20260224-MEM-SWAP.P06`
+   - marker: `@requirement REQ-MEM-004`
+
+6. **`sc2/src/config_unix.h.in`**
+   - Add `@SYMBOL_USE_RUST_MEM_DEF@` line after the existing `USE_RUST_*` block (after `@SYMBOL_USE_RUST_MIXER_DEF@`):
+     ```c
+     /* Defined if using Rust memory allocator */
+     @SYMBOL_USE_RUST_MEM_DEF@
+     ```
+   - marker: `@plan PLAN-20260224-MEM-SWAP.P06`
+   - marker: `@requirement REQ-MEM-004`
+
 ### Pseudocode traceability
 - Uses pseudocode lines: 01-26 (header redirect), 30-34 (source guard), 40-45 (Makeinfo), 50-53 (config flag)
 
@@ -118,6 +140,8 @@ grep 'USE_RUST_MEM' sc2/src/libs/memlib.h
 grep 'USE_RUST_MEM' sc2/src/libs/memory/w_memlib.c
 grep 'USE_RUST_MEM' sc2/src/libs/memory/Makeinfo
 grep 'USE_RUST_MEM' sc2/config_unix.h
+grep 'USE_RUST_MEM' sc2/build.vars.in
+grep 'USE_RUST_MEM' sc2/src/config_unix.h.in
 ```
 
 ## Structural Verification Checklist
@@ -125,6 +149,8 @@ grep 'USE_RUST_MEM' sc2/config_unix.h
 - [ ] `w_memlib.c` has `#ifdef USE_RUST_MEM` / `#error` at top
 - [ ] `Makeinfo` has conditional checking `USE_RUST_MEM` / `uqm_USE_RUST_MEM`
 - [ ] `config_unix.h` has commented-out `USE_RUST_MEM` define
+- [ ] `build.vars.in` has `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines
+- [ ] `config_unix.h.in` has `@SYMBOL_USE_RUST_MEM_DEF@` after existing `USE_RUST_*` block
 - [ ] Build succeeds with the flag commented out (C path active)
 - [ ] Plan/requirement traceability present in all modified files
 
@@ -138,18 +164,18 @@ grep 'USE_RUST_MEM' sc2/config_unix.h
 ## Deferred Implementation Detection (Mandatory)
 
 ```bash
-grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" sc2/src/libs/memlib.h sc2/src/libs/memory/w_memlib.c sc2/src/libs/memory/Makeinfo
+grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" sc2/src/libs/memlib.h sc2/src/libs/memory/w_memlib.c sc2/src/libs/memory/Makeinfo sc2/build.vars.in sc2/src/config_unix.h.in
 ```
 
 ## Success Criteria
-- [ ] All 4 files modified correctly
+- [ ] All 6 files modified correctly
 - [ ] Build succeeds with flag off (C path)
 - [ ] All verification commands pass
 
 ## Failure Recovery
 - Rollback:
   ```bash
-  git checkout sc2/src/libs/memlib.h sc2/src/libs/memory/w_memlib.c sc2/src/libs/memory/Makeinfo sc2/config_unix.h
+  git checkout sc2/src/libs/memlib.h sc2/src/libs/memory/w_memlib.c sc2/src/libs/memory/Makeinfo sc2/config_unix.h sc2/build.vars.in sc2/src/config_unix.h.in
   ```
 - Blocking issues: if build fails with flag off, the `#else` branch has an error
 
@@ -159,7 +185,7 @@ Create: `project-plans/memandres/memory/.completed/P06.md`
 Contents:
 - phase ID
 - timestamp
-- files changed: `memlib.h`, `w_memlib.c`, `Makeinfo`, `config_unix.h`
+- files changed: `memlib.h`, `w_memlib.c`, `Makeinfo`, `config_unix.h`, `build.vars.in`, `config_unix.h.in`
 - tests added/updated: none (C-side changes)
 - verification outputs (build log)
 - semantic verification summary

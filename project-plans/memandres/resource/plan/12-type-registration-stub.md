@@ -48,6 +48,11 @@ Type registration is called from C via FFI. C subsystem init code
 pointers to Rust. These function pointers are stored and later called
 when `res_GetResource` triggers lazy loading.
 
+**REQ-RES-090-095 (CONVERSATION, 3DOVID, SHIP special types)**: These
+requirements are satisfied by C loaders calling through the Rust-stored
+function pointers registered via `InstallResTypeVectors`. The Rust type
+registry is type-agnostic — it stores whatever C registers.
+
 ## Verification Commands
 
 ```bash

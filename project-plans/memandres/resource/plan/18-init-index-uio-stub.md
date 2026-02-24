@@ -10,7 +10,7 @@
 ## Requirements Implemented (Expanded)
 
 ### REQ-RES-002-003: InitResourceSystem
-**Requirement text**: Allocate index, register 14 types. If already initialized, return existing.
+**Requirement text**: Allocate index, register 5 built-in value types (STRING, INT32, BOOLEAN, COLOR, UNKNOWNRES). The remaining 9 heap types are registered later by C subsystem code via `InstallResTypeVectors`. If already initialized, return existing.
 
 ### REQ-RES-088: UninitResourceSystem
 **Requirement text**: Free all resources, drop index, set to None.
@@ -21,6 +21,8 @@
 ### REQ-RES-075-079: File I/O Wrappers
 **Requirement text**: res_OpenResFile, res_CloseResFile, LengthResFile, etc.
 
+### REQ-RES-108-110: GetResourceData / FreeResourceData
+### REQ-RES-113-115: File I/O Layer Details
 ### REQ-RES-R001: No Panic Across FFI
 ### REQ-RES-R002: NULL Pointer Validation
 ### REQ-RES-R003: Interior Mutability

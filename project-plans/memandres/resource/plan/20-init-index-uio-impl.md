@@ -8,17 +8,20 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-RES-002: InitResourceSystem — Allocate, Register 14 Types
+### REQ-RES-002: InitResourceSystem — Allocate, Register 5 Value Types
 ### REQ-RES-003: Idempotent Init
 ### REQ-RES-088: UninitResourceSystem — Cleanup
 ### REQ-RES-005: LoadResourceIndex — File Read + Parse
 ### REQ-RES-082: Auto-Init on API Call
 ### REQ-RES-089: Multiple LoadResourceIndex Accumulation
 ### REQ-RES-075-079: File I/O Wrappers (UIO Delegation)
+### REQ-RES-108-110: GetResourceData / FreeResourceData
+### REQ-RES-113-115: File I/O Layer Details
 ### REQ-RES-R001: No Panic Across FFI
 ### REQ-RES-R002: NULL Pointer Validation
 ### REQ-RES-R003: Interior Mutability (Mutex)
 ### REQ-RES-R004: Poisoned Lock Recovery
+### REQ-RES-031-033: LoadResourceFromPath — File open, length, load (deferred from P17)
 
 ## Implementation Tasks
 
@@ -57,6 +60,17 @@
   - `GetResourceData`: Read DWORD prefix, check for ~0, read uncompressed
   - `FreeResourceData`: Free via Rust allocator
   
+  **LoadResourceFromPath (deferred from P17 — requires UIO):**
+  - `LoadResourceFromPath(path, load_fn)`:
+    - Call `res_OpenResFile(contentDir, path, "rb")`
+    - Get file length via `LengthResFile`
+    - Set `_cur_resfile_name` to path
+    - Call `load_fn(file_handle, length)` via unsafe
+    - Clear `_cur_resfile_name`
+    - Close file via `res_CloseResFile`
+    - Return loaded data pointer
+    - marker: `@requirement REQ-RES-031-033`
+  
   **Error handling pattern for all functions:**
   ```rust
   #[no_mangle]
@@ -88,8 +102,16 @@
 Must be accessible from C during `LoadResourceFromPath`:
 ```rust
 #[no_mangle]
+#[allow(non_upper_case_globals)]
 pub static mut _cur_resfile_name: *const c_char = std::ptr::null();
 ```
+**Single-threaded invariant**: `_cur_resfile_name` is only accessed from the
+main thread during `LoadResourceFromPath` calls. All C callers are
+single-threaded. The `static mut` is safe under this invariant. The
+`#[allow(non_upper_case_globals)]` suppresses the clippy lint for the
+C-mandated symbol name. If multi-threaded access is ever needed, replace
+with `AtomicPtr<c_char>` which satisfies Rust's safety model without
+runtime cost.
 
 ### Sentinel value
 ```rust
@@ -113,7 +135,7 @@ cargo test --workspace --all-features
 
 ## Semantic Verification Checklist
 - [ ] All P19 tests pass (GREEN)
-- [ ] Init registers 5 value types
+- [ ] Init registers 5 value types; the remaining 9 are registered by C subsystem code via InstallResTypeVectors (tested in P12-P14)
 - [ ] Init is idempotent
 - [ ] Uninit cleans up properly
 - [ ] LoadResourceIndex parses files correctly

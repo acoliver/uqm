@@ -6,7 +6,7 @@
 ## Prerequisites
 - Required: Phase 07a (TDD Verification) completed
 - Both build paths tested and working
-- Expected files: `memlib.h`, `w_memlib.c`, `Makeinfo`, `config_unix.h` all modified
+- Expected files: `memlib.h`, `w_memlib.c`, `Makeinfo`, `config_unix.h`, `build.vars.in`, `config_unix.h.in` all modified
 
 ## Requirements Implemented (Expanded)
 
@@ -69,6 +69,8 @@ cargo test --workspace --all-features
 
 ## Structural Verification Checklist
 - [ ] `config_unix.h` has `#define USE_RUST_MEM` (uncommented)
+- [ ] `build.vars.in` has `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines
+- [ ] `config_unix.h.in` has `@SYMBOL_USE_RUST_MEM_DEF@` after existing `USE_RUST_*` block
 - [ ] Full build succeeds
 - [ ] `w_memlib.c` is not compiled (not in build output)
 - [ ] No linker errors
@@ -103,7 +105,7 @@ grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" sc2/src
   ```
 - Blocking issues:
   - Linker error: verify `rust_hmalloc` etc. are in `libuqm_rust.a` (`nm libuqm_rust.a | grep rust_hmalloc`)
-  - Build system not propagating flag: check `build.sh` and `Makefile` for `USE_RUST_MEM` propagation
+  - Build system not propagating flag: check `build.vars.in` entries, `config_unix.h.in` template, `build.sh` and `Makefile` for `USE_RUST_MEM` propagation
 
 ## Phase Completion Marker
 Create: `project-plans/memandres/memory/.completed/P08.md`

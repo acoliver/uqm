@@ -6,7 +6,7 @@
 ## Prerequisites
 - Required: Phase 06a (Stub Verification) completed
 - All C-side changes in place, build succeeds with flag off
-- Expected files from previous phase: modified `memlib.h`, `w_memlib.c`, `Makeinfo`, `config_unix.h`
+- Expected files from previous phase: modified `memlib.h`, `w_memlib.c`, `Makeinfo`, `config_unix.h`, `build.vars.in`, `config_unix.h.in`
 
 ## Requirements Implemented (Expanded)
 
@@ -84,6 +84,8 @@ cargo test --workspace --all-features
 - [ ] Rust path build tested and succeeds
 - [ ] `#error` guard tested and fires correctly
 - [ ] Flag re-commented after Rust path test
+- [ ] `build.vars.in` has `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines
+- [ ] `config_unix.h.in` has `@SYMBOL_USE_RUST_MEM_DEF@` after existing `USE_RUST_*` block
 
 ## Semantic Verification Checklist (Mandatory)
 - [ ] C path produces a working binary (game can launch)
@@ -110,7 +112,7 @@ grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" sc2/src
   ```
 - Blocking issues:
   - Linker error on Rust path: check that `rust_hmalloc` etc. are exported from `libuqm_rust.a`
-  - Build system doesn't pass `USE_RUST_MEM` to Makeinfo: check `build.sh` variable propagation
+  - Build system doesn't pass `USE_RUST_MEM` to Makeinfo: check `build.vars.in` entries, `build.sh` variable propagation, and `config_unix.h.in` template
 
 ## Phase Completion Marker
 Create: `project-plans/memandres/memory/.completed/P07.md`

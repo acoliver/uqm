@@ -90,6 +90,15 @@ verification.
 5. Compare: Must be identical (config values, resource loading, gameplay)
 ```
 
+## Diagnostic Strategy
+
+If behavioral parity fails, enable logging in all FFI bridge functions
+(add `eprintln!` or `log::debug!` at entry/exit of each `extern "C"` function
+with argument values and return values). Run both C and Rust builds through
+the same scenario, diff the log output to identify divergent function calls.
+This narrows the bug to a specific function without requiring bisection of
+all 38 exports.
+
 ## Verification Commands
 
 ```bash

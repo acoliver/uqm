@@ -48,6 +48,8 @@
 | `sc2/src/libs/memory/w_memlib.c` | Added `#ifdef USE_RUST_MEM` / `#error` guard |
 | `sc2/src/libs/memory/Makeinfo` | Added conditional to exclude `w_memlib.c` |
 | `sc2/config_unix.h` | Added `#define USE_RUST_MEM` |
+| `sc2/build.vars.in` | Added `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines |
+| `sc2/src/config_unix.h.in` | Added `@SYMBOL_USE_RUST_MEM_DEF@` placeholder |
 
 ## Plan Evaluation Checklist (Gate Before Marking Complete)
 

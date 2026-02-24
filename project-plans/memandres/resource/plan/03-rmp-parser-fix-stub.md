@@ -49,6 +49,12 @@ Why it matters:
     - Handles inline `#` comments
     - Handles bare-key-at-EOF and key-without-value warnings
     - Handles prefix prepending (limited to 255 chars)
+  - Before deprecating, audit for existing callers:
+    ```bash
+    grep -rn 'PropertyFile' rust/src/ --include='*.rs'
+    ```
+    If external callers exist outside the resource module, provide a migration
+    path or keep the old API as a thin wrapper around `parse_propfile()`.
   - Mark existing `PropertyFile::from_string` as `#[deprecated]`
   - Stub body: `todo!("Parse propfile — see component-001.md")`
   - marker: `@plan PLAN-20260224-RES-SWAP.P03`

@@ -16,6 +16,9 @@
 ### REQ-RES-004: 14 Built-in Types
 ### REQ-RES-R008: C Function Pointer Safety via Option<fn>
 
+**Note**: REQ-RES-090-095 (CONVERSATION, 3DOVID, SHIP special types) are satisfied
+by C loaders calling through the Rust-stored function pointers registered here.
+
 ## Implementation Tasks
 
 ### Files to modify

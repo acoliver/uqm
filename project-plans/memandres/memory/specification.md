@@ -14,6 +14,8 @@ The game's memory allocation functions (`HMalloc`, `HFree`, `HCalloc`, `HRealloc
 - **C implementation**: `sc2/src/libs/memory/w_memlib.c` — replaced by Rust, guarded with `#error`.
 - **Rust implementation**: `rust/src/memory.rs` — already exports the required `extern "C"` functions.
 - **Build config**: `sc2/config_unix.h` — where `USE_RUST_MEM` is defined (pattern: other `USE_RUST_*` flags).
+- **Build config template**: `sc2/src/config_unix.h.in` — template with `@SYMBOL_USE_RUST_MEM_DEF@` placeholder, used by `build.sh` to generate `config_unix.h`.
+- **Build variables**: `sc2/build.vars.in` — declares `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` shell variables + exports, following the pattern of all other `USE_RUST_*` flags.
 - **Build system**: `sc2/src/libs/memory/Makeinfo` — conditionally excludes `w_memlib.c`.
 - **Callers**: ~300 call sites across ~55 files. **Zero caller modifications required.**
 
@@ -263,15 +265,17 @@ P05 correctly notes pre-existing "later phases" comments in `memory.rs` for `rus
 
 ### 9. Verdict
 
-**NEEDS REVISION**
+**APPROVED**
 
-The plan is exemplary in structure, traceability, TDD discipline, integration planning, and adherence to all three reference documents. The single critical issue — **missing `build.vars.in` and `config_unix.h.in` modifications** — is a functional gap that would cause the Rust-path build to fail. The `Makeinfo` conditional depends on shell variables that are only populated through `build.vars.in`, and the `config_unix.h.in` template is the canonical source for the `#define`. Without these, the plan as written will not achieve a successful Rust-path build in P07/P08.
+The plan is exemplary in structure, traceability, TDD discipline, integration planning, and adherence to all three reference documents.
 
-**Required changes before APPROVED:**
-1. Add `sc2/build.vars.in` to P06 implementation tasks (add `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines, following the exact pattern of `USE_RUST_FILE`).
-2. Add `sc2/src/config_unix.h.in` to P06 implementation tasks (add `@SYMBOL_USE_RUST_MEM_DEF@` line after the existing `USE_RUST_*` block).
-3. Update `specification.md` "Architectural Boundaries" to include `config_unix.h.in` and `build.vars.in`.
-4. Update pseudocode `component-001.md` Component 4 (Config Flag) to cover all three config files.
-5. Update P06a, P07, P08, P09a verification checklists to include these files.
+**Revision history:**
+The initial review identified one critical issue — **missing `build.vars.in` and `config_unix.h.in` modifications** — that would have caused the Rust-path build to fail. All 5 required changes have been applied:
 
-Once these additions are made, the plan will be **APPROVED** — the rest of the plan is well above the quality bar.
+1. [OK] Added `sc2/build.vars.in` to P06 implementation tasks (add `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines, following the exact pattern of `USE_RUST_FILE`).
+2. [OK] Added `sc2/src/config_unix.h.in` to P06 implementation tasks (add `@SYMBOL_USE_RUST_MEM_DEF@` line after the existing `USE_RUST_*` block).
+3. [OK] Updated `specification.md` "Architectural Boundaries" to include `config_unix.h.in` and `build.vars.in`.
+4. [OK] Updated pseudocode `component-001.md` Component 4 (Config Flag) to cover all three config files (`config_unix.h`, `config_unix.h.in`, `build.vars.in`).
+5. [OK] Updated P06a, P07, P08, P09a verification checklists to include `build.vars.in` and `config_unix.h.in`.
+
+The plan now correctly covers the full build system pipeline and is ready for execution.

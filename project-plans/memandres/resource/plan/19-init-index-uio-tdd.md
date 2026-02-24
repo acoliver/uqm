@@ -23,11 +23,12 @@ Note: These tests operate on the internal Rust APIs, not via FFI
 
 #### Init/Uninit tests
 ```
-test_init_creates_index_with_14_types
+test_init_creates_index_with_5_value_types
   InitResourceSystem()
-  CountResourceTypes() → 14
+  CountResourceTypes() → 5
   Verify: UNKNOWNRES, STRING, INT32, BOOLEAN, COLOR registered
-  (Heap types registered by C — not present in pure Rust init test)
+  (The remaining 9 heap types are registered by C subsystem code
+   via InstallResTypeVectors, tested in P12-P14)
 
 test_init_idempotent
   ptr1 = InitResourceSystem()

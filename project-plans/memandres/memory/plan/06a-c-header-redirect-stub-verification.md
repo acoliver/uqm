@@ -5,7 +5,7 @@
 
 ## Prerequisites
 - Required: Phase 06 completed
-- All 4 C-side files modified
+- All 6 C-side/build-system files modified
 
 ## Verification Checks
 
@@ -16,6 +16,8 @@
 - [ ] `w_memlib.c` has `#ifdef USE_RUST_MEM` / `#error` before any code
 - [ ] `Makeinfo` has conditional shell logic for `USE_RUST_MEM` / `uqm_USE_RUST_MEM`
 - [ ] `config_unix.h` has `/* #define USE_RUST_MEM */` (commented out)
+- [ ] `build.vars.in` has `USE_RUST_MEM`/`uqm_USE_RUST_MEM`/`SYMBOL_USE_RUST_MEM_DEF` entries + export lines
+- [ ] `config_unix.h.in` has `@SYMBOL_USE_RUST_MEM_DEF@` after existing `USE_RUST_*` block
 
 ### Semantic — C Path (flag OFF)
 - [ ] Full build succeeds: `cd sc2 && ./build.sh uqm`
@@ -43,6 +45,8 @@ grep -A 20 'USE_RUST_MEM' sc2/src/libs/memlib.h
 grep 'USE_RUST_MEM' sc2/src/libs/memory/w_memlib.c
 cat sc2/src/libs/memory/Makeinfo
 grep 'USE_RUST_MEM' sc2/config_unix.h
+grep 'USE_RUST_MEM' sc2/build.vars.in
+grep 'USE_RUST_MEM' sc2/src/config_unix.h.in
 
 # Rust checks
 cargo fmt --all --check

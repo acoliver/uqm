@@ -7,6 +7,9 @@
 - Required: Phase 20a (Init/Index/UIO Implementation Verification) completed
 - Expected: All 38 Rust `extern "C"` functions implemented and tested
 
+**Note**: Stub→TDD→Impl cycle is N/A for this phase — it is pure C preprocessor
+guard insertion (`#ifndef USE_RUST_RESOURCE`), not new Rust behavior.
+
 ## Requirements Implemented (Expanded)
 
 ### REQ-RES-R014: Compiled as Part of libuqm_rust.a

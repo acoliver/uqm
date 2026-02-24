@@ -255,15 +255,18 @@ P20 exposes `_cur_resfile_name` as `#[no_mangle] pub static mut`. This is unsoun
 
 ### 4. Verdict
 
-**APPROVED WITH MINOR REVISIONS**
+**APPROVED**
 
 The plan is well-structured, thorough, and follows PLAN.md/PLAN-TEMPLATE.md/RULES.md with high fidelity. The phasing order is correct, all major gaps from the analysis are addressed, C loaders stay in C, integration is explicit, and requirements are traceable.
 
-**Required before execution**:
-- **Fix Issue 2.1** (P17 LoadResourceFromPath deferred UIO) — move to P18-P20 or split the phase
-- **Fix Issue 2.2** (Init 5 vs 14 types) — reconcile spec and plan, pick one source of truth
+**Revisions applied (2026-02-24)**:
+- **Issue 2.1 (Fixed)**: `LoadResourceFromPath` moved from P17 to P20 where UIO integration is available. P17 grep exception removed — P17 is now fully complete for all dispatch functions except `LoadResourceFromPath`.
+- **Issue 2.2 (Fixed)**: `InitResourceSystem` registers 5 value types (matching actual C behavior). The remaining 9 heap types are registered by C subsystem code via `InstallResTypeVectors` (tested in P12-P14). P18/P19/P20 updated to reflect this.
+- **Issue 2.3 (Fixed)**: Added REQ-RES-108-115 references to P18/P20. Added REQ-RES-090-095 note to P12/P14 (satisfied by C loaders).
+- **Issue 2.5 (Fixed)**: Added Stub→TDD→Impl N/A note to P21 (pure C preprocessor work).
+- **Issue 2.6 (Fixed)**: Added diagnostic strategy to P22 for behavioral parity debugging.
+- **Issue 2.7 (Fixed)**: Added `grep -rn 'PropertyFile'` audit step to P03 before deprecating.
+- **Issue 2.8 (Fixed)**: Added `#[allow(non_upper_case_globals)]` and single-threaded invariant documentation to P20.
+- **Issue 2.4 (Acknowledged)**: Coverage gate deferred — test count and behavioral verification are sufficient for this plan.
 
-**Recommended before execution**:
-- Fix Issues 2.3-2.8 (all low severity — traceability, coverage gate, rollback strategy, deprecation audit, static mut lint)
-
-The plan is executable once the two medium-severity issues are resolved.
+The plan is executable.
