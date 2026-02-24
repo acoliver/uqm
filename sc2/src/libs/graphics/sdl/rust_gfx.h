@@ -74,6 +74,34 @@ int rust_canvas_clear_scissor(SurfaceCanvas *canvas);
 /* Query */
 int rust_canvas_get_extent(SurfaceCanvas *canvas, int *w, int *h);
 
+/* ---- DCQ FFI Bridge (P18-P20) ---- */
+
+/* Lifecycle */
+int rust_dcq_init(void);
+void rust_dcq_uninit(void);
+
+/* Push draw commands */
+int rust_dcq_push_drawline(int x1, int y1, int x2, int y2, Uint32 color);
+int rust_dcq_push_drawrect(int x, int y, int w, int h, Uint32 color);
+int rust_dcq_push_fillrect(int x, int y, int w, int h, Uint32 color);
+int rust_dcq_push_drawimage(Uint32 image_id, int x, int y);
+int rust_dcq_push_copy(const SDL_Rect *src_rect, int src_screen, int dst_x, int dst_y);
+int rust_dcq_push_copytoimage(Uint32 image_id, const SDL_Rect *src_rect);
+int rust_dcq_push_deleteimage(Uint32 image_id);
+int rust_dcq_push_waitsignal(void);
+int rust_dcq_push_reinitvideo(int driver, int flags, int width, int height);
+int rust_dcq_push_setpalette(Uint32 colormap_id);
+int rust_dcq_push_scissor_enable(int x, int y, int w, int h);
+int rust_dcq_push_scissor_disable(void);
+
+/* Flush / batch / screen */
+int rust_dcq_flush(void);
+int rust_dcq_batch(void);
+int rust_dcq_unbatch(void);
+int rust_dcq_set_screen(int index);
+int rust_dcq_get_screen(void);
+int rust_dcq_len(void);
+
 #ifdef __cplusplus
 }
 #endif
