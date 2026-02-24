@@ -698,4 +698,131 @@ mod tests {
     fn test_sdl_rect_size() {
         assert_eq!(std::mem::size_of::<SDL_Rect>(), 16);
     }
+
+    // ========================================================================
+    // Phase P04 Tests: Preprocess/Postprocess TDD
+    // @plan PLAN-20260223-GFX-FULL-PORT.P04
+    // @requirement REQ-PRE-050, REQ-POST-030, REQ-INV-050,
+    //              REQ-INIT-030, REQ-INIT-080, REQ-INIT-060, REQ-INIT-095
+    // ========================================================================
+
+    /// REQ-PRE-050: Preprocess returns immediately when uninitialized.
+    /// GIVEN: The backend is not initialized (no rust_gfx_init called)
+    /// WHEN:  rust_gfx_preprocess is called
+    /// THEN:  Returns immediately with no side effects (no panic/crash)
+    #[test]
+    fn test_preprocess_uninitialized_no_panic() {
+        // Ensure uninitialized state
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        // Call preprocess — must not panic or crash
+        rust_gfx_preprocess(0, 0, 0);
+    }
+
+    /// REQ-POST-030: Postprocess returns immediately when uninitialized.
+    /// GIVEN: The backend is not initialized
+    /// WHEN:  rust_gfx_postprocess is called
+    /// THEN:  Returns immediately with no side effects (no panic/crash)
+    #[test]
+    fn test_postprocess_uninitialized_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        rust_gfx_postprocess();
+    }
+
+    /// Verify SDL_Rect::default() produces zeroed fields.
+    /// This is important because C code depends on zero-initialized rects.
+    #[test]
+    fn test_sdl_rect_default() {
+        let rect = SDL_Rect::default();
+        assert_eq!(rect.x, 0);
+        assert_eq!(rect.y, 0);
+        assert_eq!(rect.w, 0);
+        assert_eq!(rect.h, 0);
+    }
+
+    /// REQ-INIT-095: Calling init when already initialized returns -1.
+    /// GIVEN: rust_gfx_init has been called successfully
+    /// WHEN:  rust_gfx_init is called again
+    /// THEN:  Returns -1 without modifying existing state
+    ///
+    /// Requires SDL2 display server — ignored on headless CI.
+    #[test]
+    #[ignore]
+    fn test_init_already_initialized_returns_neg1() {
+        // First init should succeed
+        let result1 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+        assert_eq!(result1, 0, "first init should succeed");
+
+        // Second init should return -1
+        let result2 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+        assert_eq!(result2, -1, "second init must return -1 (REQ-INIT-095)");
+
+        // Cleanup
+        rust_gfx_uninit();
+    }
+
+    /// REQ-INIT-080: Successful init returns 0.
+    /// Requires SDL2 display server — ignored on headless CI.
+    #[test]
+    #[ignore]
+    fn test_init_returns_zero() {
+        let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+        assert_eq!(result, 0, "init should return 0 on success (REQ-INIT-080)");
+        rust_gfx_uninit();
+    }
+
+    /// REQ-INIT-030: After init, get_screen_surface(0..2) returns non-null.
+    /// Requires SDL2 display server — ignored on headless CI.
+    #[test]
+    #[ignore]
+    fn test_init_creates_surfaces() {
+        let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+        assert_eq!(result, 0, "init must succeed");
+
+        for i in 0..TFB_GFX_NUMSCREENS as c_int {
+            let surface = rust_gfx_get_screen_surface(i);
+            assert!(
+                !surface.is_null(),
+                "screen surface {} must be non-null after init (REQ-INIT-030)",
+                i
+            );
+        }
+
+        rust_gfx_uninit();
+    }
+
+    /// REQ-INIT-060: Init with soft-scaler flags allocates scaled buffers.
+    /// Requires SDL2 display server — ignored on headless CI.
+    #[test]
+    #[ignore]
+    fn test_init_scaling_buffers() {
+        // Flag bit 7 = SCALE_HQXX (triggers soft scaler allocation)
+        let hqxx_flag: c_int = 1 << 7;
+        let result = rust_gfx_init(0, hqxx_flag, std::ptr::null(), 640, 480);
+        assert_eq!(result, 0, "init with SCALE_HQXX must succeed");
+
+        if let Some(state) = get_gfx_state() {
+            for i in 0..TFB_GFX_NUMSCREENS {
+                assert!(
+                    state.scaled_buffers[i].is_some(),
+                    "scaled_buffer[{}] must be allocated when soft scaler is active (REQ-INIT-060)",
+                    i
+                );
+            }
+        } else {
+            panic!("state must be Some after successful init");
+        }
+
+        rust_gfx_uninit();
+    }
+
+    // NOTE: test_init_partial_failure_cleanup (REQ-INIT-090) deferred to P13 (Error Handling)
+    //       — requires error injection points that are too complex for this phase.
+
+    // NOTE: test_init_logs_on_failure (REQ-INIT-100) verified by code inspection:
+    //       every failure path in rust_gfx_init calls rust_bridge_log_msg before returning -1.
+    //       Building a test logger sink is out of scope for this phase.
+
+    // NOTE: Postprocess texture_creator usage (REQ-POST-020/REQ-INV-010) is a static
+    //       analysis check, not a runtime test. The texture upload block is documented as
+    //       retained until ScreenLayer (P06-P08) and marked with @plan P05 for removal.
 }
