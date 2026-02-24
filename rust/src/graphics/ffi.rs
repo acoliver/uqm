@@ -405,17 +405,20 @@ pub extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 
 /// Preprocess - called before rendering. Sets blend mode to None and clears.
 ///
-/// @plan PLAN-20260223-GFX-FULL-PORT.P03
-/// @requirement REQ-PRE-010
+/// @plan PLAN-20260223-GFX-FULL-PORT.P03, PLAN-20260223-GFX-FULL-PORT.P05
+/// @requirement REQ-PRE-010, REQ-PRE-020, REQ-PRE-040
 #[no_mangle]
 pub extern "C" fn rust_gfx_preprocess(
     _force_redraw: c_int,
     _transition_amount: c_int,
     _fade_amount: c_int,
 ) {
+    // REQ-PRE-040: transition_amount and fade_amount are intentionally ignored
+    // (handled by ScreenLayer/ColorLayer in P06-P08)
     if let Some(state) = get_gfx_state() {
         // REQ-PRE-010: Reset blend mode before clearing for clean renderer state
         state.canvas.set_blend_mode(BlendMode::None);
+        // REQ-PRE-020: Clear to opaque black
         state.canvas.set_draw_color(sdl2::pixels::Color::BLACK);
         state.canvas.clear();
     }
@@ -423,18 +426,18 @@ pub extern "C" fn rust_gfx_preprocess(
 
 /// Postprocess - called after rendering, does the actual display.
 ///
-/// @plan PLAN-20260223-GFX-FULL-PORT.P03
+/// @plan PLAN-20260223-GFX-FULL-PORT.P03, PLAN-20260223-GFX-FULL-PORT.P05
 /// @requirement REQ-POST-010, REQ-POST-020, REQ-INV-010
 ///
 /// Per REQ-POST-020 / REQ-INV-010, the end-state for postprocess is
 /// present-only (no texture creation, no surface upload, no canvas.copy).
-/// The upload/scaling logic below is retained until ScreenLayer (P06-P08)
+/// The upload/scaling logic below is retained until ScreenLayer (P08)
 /// takes over compositing; removing it now would produce a black screen.
-/// @plan remove upload/scaling block in P05 once ScreenLayer composites.
+/// @plan remove upload/scaling block in P08 once ScreenLayer composites.
 #[no_mangle]
 pub extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
-        // @plan P05: Remove this texture upload block once ScreenLayer composites.
+        // @plan P08: Remove this texture upload block once ScreenLayer composites.
         // Get pixels from the main screen surface and upload to texture
         let texture_creator = state.canvas.texture_creator();
 
