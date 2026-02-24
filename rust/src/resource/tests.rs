@@ -818,6 +818,7 @@ mod resource_type_tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_color_from_hex_rgb() {
         let color = ColorResource::from_hex("#FF8040").unwrap();
         assert_eq!(color, ColorResource::rgb(255, 128, 64));
@@ -828,6 +829,7 @@ mod resource_type_tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_color_from_hex_rgba() {
         let color = ColorResource::from_hex("#FF804080").unwrap();
         assert_eq!(color.red, 255);
@@ -837,6 +839,7 @@ mod resource_type_tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_color_from_hex_invalid() {
         assert!(ColorResource::from_hex("GG8040").is_err());
         assert!(ColorResource::from_hex("FF80").is_err()); // Too short

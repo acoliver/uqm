@@ -244,6 +244,7 @@ impl ResourceSystem {
             ResourceType::Color => {
                 let content =
                     std::fs::read_to_string(path).map_err(|_| ResourceError::LoadFailed)?;
+                #[allow(deprecated)]
                 let color = super::resource_type::ColorResource::from_hex(content.trim())
                     .map_err(|_| ResourceError::InvalidFormat)?;
                 Ok(ResourceValue::Color(color))
