@@ -440,26 +440,17 @@ pub extern "C" fn rust_gfx_preprocess(
 pub extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
         // @plan P08: Remove this texture upload block once ScreenLayer composites.
-        // Get pixels from the main screen surface and upload to texture
         let texture_creator = state.canvas.texture_creator();
 
-        // Surface is 32bpp RGBX (R=0xFF000000, G=0x00FF0000, B=0x0000FF00, A=0x00000000)
-        // Use RGBX8888 texture format which matches this layout
         let use_soft_scaler = state.scaled_buffers[0].is_some();
-        let scale_factor = if (state.flags & (1 << 8)) != 0 {
-            3
-        } else if (state.flags & (1 << 9)) != 0 {
-            4
-        } else {
-            2
-        };
+        let factor = scale_factor_from_flags(state.flags).unwrap_or(1) as usize;
         let tex_w = if use_soft_scaler {
-            SCREEN_WIDTH * scale_factor
+            SCREEN_WIDTH * factor as u32
         } else {
             SCREEN_WIDTH
         };
         let tex_h = if use_soft_scaler {
-            SCREEN_HEIGHT * scale_factor
+            SCREEN_HEIGHT * factor as u32
         } else {
             SCREEN_HEIGHT
         };
@@ -473,16 +464,15 @@ pub extern "C" fn rust_gfx_postprocess() {
             let mut uploaded = false;
 
             if use_soft_scaler {
-                let scale_factor = if (state.flags & (1 << 8)) != 0 {
-                    3
-                } else if (state.flags & (1 << 9)) != 0 {
-                    4
-                } else {
-                    2
-                };
                 let using_xbrz = (state.flags & ((1 << 8) | (1 << 9))) != 0;
                 if using_xbrz {
-                    // Log once per run
+                    if !state.xbrz_logged {
+                        rust_bridge_log_msg(&format!(
+                            "RUST_GFX: xBRZ scaler active ({}x)",
+                            factor
+                        ));
+                        state.xbrz_logged = true;
+                    }
                 } else if !state.hq2x_logged {
                     rust_bridge_log_msg("RUST_GFX: HQ2x scaler active");
                     state.hq2x_logged = true;
@@ -493,12 +483,11 @@ pub extern "C" fn rust_gfx_postprocess() {
                             let surf = &*src_surface;
                             if !surf.pixels.is_null() && surf.pitch > 0 {
                                 let src_pitch = surf.pitch as usize;
-                                let src_width = SCREEN_WIDTH as usize;
-                                let src_height = SCREEN_HEIGHT as usize;
-                                let src_size = src_pitch * src_height;
+                                let src_w = SCREEN_WIDTH as usize;
+                                let src_h = SCREEN_HEIGHT as usize;
                                 let src_bytes = std::slice::from_raw_parts(
                                     surf.pixels as *const u8,
-                                    src_size,
+                                    src_pitch * src_h,
                                 );
 
                                 let mut pixmap = Pixmap::new(
@@ -506,82 +495,42 @@ pub extern "C" fn rust_gfx_postprocess() {
                                     SCREEN_WIDTH,
                                     SCREEN_HEIGHT,
                                     PixmapFormat::Rgba32,
-                                ).unwrap();
-                                let dst_bytes = pixmap.data_mut();
+                                )
+                                .unwrap();
 
-                                // Source is RGBX8888 in memory: bytes are [X, B, G, R] on little-endian
-                                // xBRZ expects RGBA: bytes are [R, G, B, A]
-                                for y in 0..src_height {
-                                    let src_row = &src_bytes[y * src_pitch..(y * src_pitch + src_width * 4)];
-                                    let dst_row = &mut dst_bytes[y * src_width * 4..(y + 1) * src_width * 4];
-                                    for x in 0..src_width {
-                                        let s = &src_row[x * 4..x * 4 + 4];
-                                        let d = &mut dst_row[x * 4..x * 4 + 4];
-                                        // RGBX8888 memory [X,B,G,R] -> RGBA [R,G,B,A]
-                                        d[0] = s[3]; // R
-                                        d[1] = s[2]; // G
-                                        d[2] = s[1]; // B
-                                        d[3] = 0xFF; // A (opaque)
-                                    }
-                                }
+                                convert_rgbx_to_rgba(
+                                    src_bytes,
+                                    pixmap.data_mut(),
+                                    src_w,
+                                    src_h,
+                                    src_pitch,
+                                );
 
                                 if using_xbrz {
                                     let scaled_bytes =
-                                        scale_rgba(dst_bytes, src_width, src_height, scale_factor);
-                                    let dst_width = SCREEN_WIDTH as usize * scale_factor;
-                                    let dst_height = SCREEN_HEIGHT as usize * scale_factor;
-                                    let dst_stride = dst_width * 4;
-                                    
-                                    if !state.xbrz_logged {
-                                        rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaler active ({}x)", scale_factor));
-                                        rust_bridge_log_msg(&format!("RUST_GFX: xBRZ input size {}x{}, output size {}x{}, stride {}", 
-                                            src_width, src_height, dst_width, dst_height, dst_stride));
-                                        rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaled_bytes len={}, buffer len={}", 
-                                            scaled_bytes.len(), buffer.len()));
-                                        state.xbrz_logged = true;
-                                    }
+                                        scale_rgba(pixmap.data(), src_w, src_h, factor);
+                                    let dst_w = src_w * factor;
+                                    let dst_h = src_h * factor;
+                                    let dst_stride = dst_w * 4;
 
-                                    // xBRZ outputs RGBA [R,G,B,A], texture is RGBX8888 [X,B,G,R] in memory
-                                    for y in 0..dst_height {
-                                        let src_row =
-                                            &scaled_bytes[y * dst_stride..(y + 1) * dst_stride];
-                                        let dst_row =
-                                            &mut buffer[y * dst_stride..(y + 1) * dst_stride];
-                                        for x in 0..dst_width {
-                                            let s = &src_row[x * 4..x * 4 + 4];
-                                            let d = &mut dst_row[x * 4..x * 4 + 4];
-                                            // RGBA [R,G,B,A] -> RGBX8888 memory [X,B,G,R]
-                                            d[0] = 0xFF; // X (padding)
-                                            d[1] = s[2]; // B
-                                            d[2] = s[1]; // G
-                                            d[3] = s[0]; // R
-                                        }
-                                    }
+                                    convert_rgba_to_rgbx(&scaled_bytes, buffer, dst_w, dst_h);
 
                                     let _ = texture.update(None, buffer, dst_stride);
                                     uploaded = true;
                                 } else {
-                                    let params = ScaleParams::new(512, RustScaleMode::Hq2x);
+                                    let params =
+                                        ScaleParams::new(512, RustScaleMode::Hq2x);
                                     if let Ok(scaled) = state.hq2x.scale(&pixmap, params) {
-                                        let scaled_bytes = scaled.data();
-                                        let dst_width = SCREEN_WIDTH as usize * 2;
-                                        let dst_height = SCREEN_HEIGHT as usize * 2;
-                                        let dst_stride = dst_width * 4;
+                                        let dst_w = src_w * 2;
+                                        let dst_h = src_h * 2;
+                                        let dst_stride = dst_w * 4;
 
-                                        for y in 0..dst_height {
-                                            let src_row = &scaled_bytes
-                                                [y * dst_stride..(y + 1) * dst_stride];
-                                            let dst_row = &mut buffer
-                                                [y * dst_stride..(y + 1) * dst_stride];
-                                            for x in 0..dst_width {
-                                                let s = &src_row[x * 4..x * 4 + 4];
-                                                let d = &mut dst_row[x * 4..x * 4 + 4];
-                                                d[0] = s[3]; // X
-                                                d[1] = s[2]; // B
-                                                d[2] = s[1]; // G
-                                                d[3] = s[0]; // R
-                                            }
-                                        }
+                                        convert_rgba_to_rgbx(
+                                            scaled.data(),
+                                            buffer,
+                                            dst_w,
+                                            dst_h,
+                                        );
 
                                         let _ = texture.update(None, buffer, dst_stride);
                                         uploaded = true;
@@ -599,8 +548,7 @@ pub extern "C" fn rust_gfx_postprocess() {
                         let surf = &*src_surface;
                         if !surf.pixels.is_null() && surf.pitch > 0 {
                             let pitch = surf.pitch as usize;
-                            let height = SCREEN_HEIGHT as usize;
-                            let total_size = pitch * height;
+                            let total_size = pitch * SCREEN_HEIGHT as usize;
                             let pixel_data = std::slice::from_raw_parts(
                                 surf.pixels as *const u8,
                                 total_size,
@@ -610,7 +558,7 @@ pub extern "C" fn rust_gfx_postprocess() {
                     }
                 }
             }
-            
+
             let _ = state.canvas.copy(&texture, None, None);
         }
 
@@ -655,7 +603,8 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
     }
 
     // REQ-SCR-110: null surface guard
-    let src_surface = state.surfaces[screen as usize];
+    let screen_idx = screen as usize;
+    let src_surface = state.surfaces[screen_idx];
     if src_surface.is_null() {
         return;
     }
@@ -663,55 +612,165 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
     // REQ-SCR-160: convert C rect (NULL → None for full-screen)
     let sdl_rect = convert_c_rect(rect);
 
-    // REQ-SCR-070 / REQ-FMT-020: create per-call streaming texture (RGBX8888)
-    let texture_creator = state.canvas.texture_creator();
-    let mut texture = match texture_creator.create_texture_streaming(
-        PixelFormatEnum::RGBX8888,
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-    ) {
-        Ok(t) => t,
-        // REQ-SCR-130: texture creation failure — return immediately
-        Err(_) => return,
-    };
+    // REQ-SCALE-020/025: determine software scaling from flags
+    let sw_scale = scale_factor_from_flags(state.flags);
+    let use_soft_scaler = sw_scale.is_some() && state.scaled_buffers[screen_idx].is_some();
 
-    // SAFETY: src_surface was checked non-null above and is owned by RustGraphicsState.
-    // The surface was created by SDL_CreateRGBSurface during init and remains valid
-    // for the lifetime of the graphics state. We only read from the surface pixels.
-    unsafe {
-        let surf = &*src_surface;
+    if use_soft_scaler {
+        // ---- Scaled path ----
+        // @plan PLAN-20260223-GFX-FULL-PORT.P12
+        // @requirement REQ-SCALE-010, REQ-SCALE-020, REQ-SCALE-030, REQ-SCALE-040,
+        //              REQ-SCALE-050, REQ-SCALE-055, REQ-WIN-030
+        let factor = sw_scale.unwrap();
+        let src_w = SCREEN_WIDTH as usize;
+        let src_h = SCREEN_HEIGHT as usize;
 
-        // REQ-SCR-120: validate pixel pointer and pitch
-        if surf.pixels.is_null() || surf.pitch <= 0 {
-            return;
+        // SAFETY: src_surface was checked non-null above and is owned by RustGraphicsState.
+        let src_pitch = unsafe {
+            let surf = &*src_surface;
+            if surf.pixels.is_null() || surf.pitch <= 0 {
+                return;
+            }
+            surf.pitch as usize
+        };
+
+        // Step 1: Convert RGBX→RGBA into a Pixmap
+        let mut pixmap = match Pixmap::new(
+            std::num::NonZeroU32::new(1).unwrap(),
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+            PixmapFormat::Rgba32,
+        ) {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+
+        unsafe {
+            let surf = &*src_surface;
+            let src_bytes = std::slice::from_raw_parts(
+                surf.pixels as *const u8,
+                src_pitch * src_h,
+            );
+            convert_rgbx_to_rgba(src_bytes, pixmap.data_mut(), src_w, src_h, src_pitch);
         }
 
-        // REQ-SCR-075 / REQ-SCR-170: construct pixel slice using surface pitch
-        let pitch = surf.pitch as usize;
-        let total_size = pitch * SCREEN_HEIGHT as usize;
+        // Step 2: Run scaler
+        let using_xbrz = (state.flags & ((1 << 8) | (1 << 9))) != 0;
+        let scaled_rgba: Vec<u8>;
+        let scaled_w: usize;
+        let scaled_h: usize;
 
-        // SAFETY: pixels is non-null (checked above), surface was created with
-        // SCREEN_WIDTH × SCREEN_HEIGHT at 32bpp, so pitch * SCREEN_HEIGHT bytes
-        // are valid. We construct a read-only slice — surface pixels are not modified.
-        let pixel_data = std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
-
-        // REQ-SCR-020: full surface upload every call
-        // REQ-ERR-065: if update fails, return immediately (no canvas.copy)
-        if texture.update(None, pixel_data, pitch).is_err() {
-            return;
+        if using_xbrz {
+            if !state.xbrz_logged {
+                rust_bridge_log_msg(&format!(
+                    "RUST_GFX: xBRZ scaler active ({}x)",
+                    factor
+                ));
+                state.xbrz_logged = true;
+            }
+            scaled_rgba = scale_rgba(pixmap.data(), src_w, src_h, factor as usize);
+            scaled_w = src_w * factor as usize;
+            scaled_h = src_h * factor as usize;
+        } else {
+            if !state.hq2x_logged {
+                rust_bridge_log_msg("RUST_GFX: HQ2x scaler active");
+                state.hq2x_logged = true;
+            }
+            let params = ScaleParams::new(512, RustScaleMode::Hq2x);
+            match state.hq2x.scale(&pixmap, params) {
+                Ok(scaled_pixmap) => {
+                    scaled_rgba = scaled_pixmap.data().to_vec();
+                    scaled_w = src_w * 2;
+                    scaled_h = src_h * 2;
+                }
+                Err(_) => return,
+            }
         }
-    }
 
-    // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
-    if alpha == 255 {
-        texture.set_blend_mode(BlendMode::None);
+        // Step 3: Convert RGBA→RGBX into the scaled buffer
+        if let Some(buffer) = state.scaled_buffers[screen_idx].as_mut() {
+            let out_stride = scaled_w * 4;
+            let needed = out_stride * scaled_h;
+            if buffer.len() < needed {
+                return;
+            }
+            convert_rgba_to_rgbx(&scaled_rgba, buffer, scaled_w, scaled_h);
+
+            // Step 4: Create texture at scaled dimensions
+            // REQ-SCALE-040: texture dimensions = SCREEN_WIDTH*factor × SCREEN_HEIGHT*factor
+            let texture_creator = state.canvas.texture_creator();
+            let mut texture = match texture_creator.create_texture_streaming(
+                PixelFormatEnum::RGBX8888,
+                scaled_w as u32,
+                scaled_h as u32,
+            ) {
+                Ok(t) => t,
+                Err(_) => return,
+            };
+
+            // Step 5: Upload scaled buffer
+            if texture.update(None, buffer, out_stride).is_err() {
+                return;
+            }
+
+            // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
+            if alpha == 255 {
+                texture.set_blend_mode(BlendMode::None);
+            } else {
+                texture.set_blend_mode(BlendMode::Blend);
+                texture.set_alpha_mod(alpha);
+            }
+
+            // Step 6: Compute scaled source rect (multiply by factor)
+            // REQ-SCALE-050 / REQ-WIN-030 / REQ-SCALE-055:
+            // src_rect coords × factor, dst_rect stays unscaled
+            let src_rect = sdl_rect.map(|r| {
+                sdl2::rect::Rect::new(
+                    r.x() * factor as i32,
+                    r.y() * factor as i32,
+                    r.width() * factor,
+                    r.height() * factor,
+                )
+            });
+            let _ = state.canvas.copy(&texture, src_rect, sdl_rect);
+        }
     } else {
-        texture.set_blend_mode(BlendMode::Blend);
-        texture.set_alpha_mod(alpha);
-    }
+        // ---- Unscaled path (original P08 implementation) ----
+        let texture_creator = state.canvas.texture_creator();
+        let mut texture = match texture_creator.create_texture_streaming(
+            PixelFormatEnum::RGBX8888,
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        ) {
+            Ok(t) => t,
+            Err(_) => return,
+        };
 
-    // REQ-SCR-050 / REQ-SCR-060 / REQ-SCR-150: render with src_rect == dst_rect
-    let _ = state.canvas.copy(&texture, sdl_rect, sdl_rect);
+        unsafe {
+            let surf = &*src_surface;
+            if surf.pixels.is_null() || surf.pitch <= 0 {
+                return;
+            }
+            let pitch = surf.pitch as usize;
+            let total_size = pitch * SCREEN_HEIGHT as usize;
+            let pixel_data =
+                std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
+            if texture.update(None, pixel_data, pitch).is_err() {
+                return;
+            }
+        }
+
+        // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
+        if alpha == 255 {
+            texture.set_blend_mode(BlendMode::None);
+        } else {
+            texture.set_blend_mode(BlendMode::Blend);
+            texture.set_alpha_mod(alpha);
+        }
+
+        // REQ-SCR-050 / REQ-SCR-060 / REQ-SCR-150: render with src_rect == dst_rect
+        let _ = state.canvas.copy(&texture, sdl_rect, sdl_rect);
+    }
 
     // REQ-NP-025: texture is dropped here (end of scope, Rust ownership)
 }
@@ -775,6 +834,90 @@ pub extern "C" fn rust_gfx_process_events() -> c_int {
 // ============================================================================
 // Utility / helper functions
 // ============================================================================
+
+/// Determine software scale factor from GFX flags.
+///
+/// - Bit 8 = xBRZ 3× (factor 3)
+/// - Bit 9 = xBRZ 4× (factor 4)
+/// - Bit 7 = HQ2x   (factor 2)
+/// - Otherwise = 1 (no software scaling)
+///
+/// Returns `Some(factor)` when a software scaler is active, `None` when only
+/// bilinear or no scaling is requested.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P12
+/// @requirement REQ-SCALE-020, REQ-SCALE-025
+fn scale_factor_from_flags(flags: c_int) -> Option<u32> {
+    let scale_any =
+        flags & ((1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9));
+    let bilinear_only = scale_any != 0 && (flags & (1 << 3)) != 0
+        && (flags & ((1 << 7) | (1 << 8) | (1 << 9))) == 0;
+    if scale_any == 0 || bilinear_only {
+        return None;
+    }
+    if (flags & (1 << 8)) != 0 {
+        Some(3)
+    } else if (flags & (1 << 9)) != 0 {
+        Some(4)
+    } else {
+        Some(2)
+    }
+}
+
+/// Convert RGBX8888 surface data to RGBA pixel buffer.
+///
+/// Source is RGBX8888 on little-endian: bytes `[X, B, G, R]` per pixel.
+/// Destination is RGBA: bytes `[R, G, B, 0xFF]` per pixel.
+/// The source may have a larger pitch (row stride) than `width * 4`.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P12
+/// @requirement REQ-SCALE-010, REQ-SCALE-060
+fn convert_rgbx_to_rgba(
+    src: &[u8],
+    dst: &mut [u8],
+    width: usize,
+    height: usize,
+    pitch: usize,
+) {
+    for y in 0..height {
+        let src_row = &src[y * pitch..y * pitch + width * 4];
+        let dst_row = &mut dst[y * width * 4..(y + 1) * width * 4];
+        for x in 0..width {
+            let s = &src_row[x * 4..x * 4 + 4];
+            let d = &mut dst_row[x * 4..x * 4 + 4];
+            // RGBX8888 memory [X,B,G,R] -> RGBA [R,G,B,A]
+            d[0] = s[3]; // R
+            d[1] = s[2]; // G
+            d[2] = s[1]; // B
+            d[3] = 0xFF; // A (opaque)
+        }
+    }
+}
+
+/// Convert RGBA pixel buffer to RGBX8888 format.
+///
+/// Source is RGBA: bytes `[R, G, B, A]` per pixel.
+/// Destination is RGBX8888 on little-endian: bytes `[0xFF, B, G, R]` per pixel.
+/// Both buffers use a tightly-packed stride of `width * 4`.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P12
+/// @requirement REQ-SCALE-030, REQ-SCALE-070
+fn convert_rgba_to_rgbx(src: &[u8], dst: &mut [u8], width: usize, height: usize) {
+    let stride = width * 4;
+    for y in 0..height {
+        let src_row = &src[y * stride..(y + 1) * stride];
+        let dst_row = &mut dst[y * stride..(y + 1) * stride];
+        for x in 0..width {
+            let s = &src_row[x * 4..x * 4 + 4];
+            let d = &mut dst_row[x * 4..x * 4 + 4];
+            // RGBA [R,G,B,A] -> RGBX8888 memory [X,B,G,R]
+            d[0] = 0xFF; // X (padding)
+            d[1] = s[2]; // B
+            d[2] = s[1]; // G
+            d[3] = s[0]; // R
+        }
+    }
+}
 
 /// Convert a C `SDL_Rect` pointer to an `Option<sdl2::rect::Rect>`.
 ///
@@ -1076,58 +1219,154 @@ mod tests {
 
 
     // ========================================================================
-    // Phase P07 Tests: Screen Compositing TDD — Pixel Conversion
-    // @plan PLAN-20260223-GFX-FULL-PORT.P07
-    // @requirement REQ-SCALE-060, REQ-SCALE-070
+    // Phase P12 Tests: Scaling Integration — Pixel Conversion Helpers
+    // @plan PLAN-20260223-GFX-FULL-PORT.P12
+    // @requirement REQ-SCALE-010, REQ-SCALE-020, REQ-SCALE-025, REQ-SCALE-030,
+    //              REQ-SCALE-060, REQ-SCALE-070
     // ========================================================================
 
-    /// REQ-SCALE-060: RGBX8888-to-RGBA conversion.
+    /// REQ-SCALE-060: convert_rgbx_to_rgba basic test.
     ///
-    /// RGBX8888 memory layout on little-endian: bytes [X, B, G, R].
-    /// RGBA memory layout: bytes [R, G, B, A].
-    /// Conversion: src[3]→dst[0] (R), src[2]→dst[1] (G), src[1]→dst[2] (B), 0xFF→dst[3] (A).
-    ///
-    /// This matches the inline swizzle in `rust_gfx_postprocess` (the xBRZ input path).
+    /// RGBX8888 `[X, B, G, R]` → RGBA `[R, G, B, 0xFF]`.
     #[test]
-    fn test_rgbx_to_rgba_conversion() {
-        // RGBX8888 pixel: [X=0xFF, B=0x00, G=0x80, R=0xC0]
-        let rgbx: [u8; 4] = [0xFF, 0x00, 0x80, 0xC0];
-
-        // Apply the same swizzle as postprocess:
-        //   RGBX8888 memory [X,B,G,R] -> RGBA [R,G,B,A]
-        let rgba: [u8; 4] = [
-            rgbx[3], // R
-            rgbx[2], // G
-            rgbx[1], // B
-            0xFF,    // A (opaque)
+    fn test_convert_rgbx_to_rgba_basic() {
+        // Two pixels, tightly packed (pitch == width * 4)
+        let src: [u8; 8] = [
+            0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
+            0x00, 0x33, 0x66, 0x99, // pixel 1: X=0x00, B=0x33, G=0x66, R=0x99
         ];
+        let mut dst = [0u8; 8];
+        convert_rgbx_to_rgba(&src, &mut dst, 2, 1, 8);
 
-        assert_eq!(rgba, [0xC0, 0x80, 0x00, 0xFF],
-            "RGBX8888 [0xFF,0x00,0x80,0xC0] must convert to RGBA [0xC0,0x80,0x00,0xFF]");
+        assert_eq!(
+            dst,
+            [
+                0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
+                0x99, 0x66, 0x33, 0xFF, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xFF
+            ]
+        );
     }
 
-    /// REQ-SCALE-070: RGBA-to-RGBX8888 conversion.
-    ///
-    /// RGBA memory layout: bytes [R, G, B, A].
-    /// RGBX8888 memory layout on little-endian: bytes [X, B, G, R].
-    /// Conversion: 0xFF→dst[0] (X), src[2]→dst[1] (B), src[1]→dst[2] (G), src[0]→dst[3] (R).
-    ///
-    /// This matches the inline swizzle in `rust_gfx_postprocess` (the xBRZ/HQ2x output path).
+    /// REQ-SCALE-060: convert_rgbx_to_rgba with pitch > width*4.
     #[test]
-    fn test_rgba_to_rgbx_conversion() {
-        // RGBA pixel: [R=0xC0, G=0x80, B=0x00, A=0xFF]
-        let rgba: [u8; 4] = [0xC0, 0x80, 0x00, 0xFF];
-
-        // Apply the same swizzle as postprocess:
-        //   RGBA [R,G,B,A] -> RGBX8888 memory [X,B,G,R]
-        let rgbx: [u8; 4] = [
-            0xFF,    // X (padding)
-            rgba[2], // B
-            rgba[1], // G
-            rgba[0], // R
+    fn test_convert_rgbx_to_rgba_with_pitch() {
+        // 1 pixel wide, pitch=8 (4 bytes padding per row)
+        let src: [u8; 16] = [
+            0xAA, 0x11, 0x22, 0x33, 0xDE, 0xAD, 0xBE, 0xEF, // row 0 + padding
+            0xBB, 0x44, 0x55, 0x66, 0xCA, 0xFE, 0xBA, 0xBE, // row 1 + padding
         ];
+        let mut dst = [0u8; 8];
+        convert_rgbx_to_rgba(&src, &mut dst, 1, 2, 8);
 
-        assert_eq!(rgbx, [0xFF, 0x00, 0x80, 0xC0],
-            "RGBA [0xC0,0x80,0x00,0xFF] must convert to RGBX8888 [0xFF,0x00,0x80,0xC0]");
+        assert_eq!(
+            dst,
+            [
+                0x33, 0x22, 0x11, 0xFF, // row 0: R=0x33, G=0x22, B=0x11, A=0xFF
+                0x66, 0x55, 0x44, 0xFF, // row 1: R=0x66, G=0x55, B=0x44, A=0xFF
+            ]
+        );
+    }
+
+    /// REQ-SCALE-070: convert_rgba_to_rgbx basic test.
+    ///
+    /// RGBA `[R, G, B, A]` → RGBX8888 `[0xFF, B, G, R]`.
+    #[test]
+    fn test_convert_rgba_to_rgbx_basic() {
+        let src: [u8; 8] = [
+            0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
+            0x99, 0x66, 0x33, 0xAA, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xAA
+        ];
+        let mut dst = [0u8; 8];
+        convert_rgba_to_rgbx(&src, &mut dst, 2, 1);
+
+        assert_eq!(
+            dst,
+            [
+                0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
+                0xFF, 0x33, 0x66, 0x99, // pixel 1: X=0xFF, B=0x33, G=0x66, R=0x99
+            ]
+        );
+    }
+
+    /// REQ-SCALE-060/070: RGBX→RGBA→RGBX roundtrip preserves R, G, B channels.
+    ///
+    /// The X channel is set to 0xFF on output (not preserved from input), and
+    /// the A channel is always 0xFF in the intermediate RGBA. This is correct
+    /// because screen surfaces have no meaningful alpha.
+    #[test]
+    fn test_convert_rgbx_rgba_roundtrip() {
+        // 2×2 image, tightly packed
+        let original: [u8; 16] = [
+            0x00, 0x11, 0x22, 0x33, // pixel (0,0)
+            0xAA, 0xBB, 0xCC, 0xDD, // pixel (1,0)
+            0x12, 0x34, 0x56, 0x78, // pixel (0,1)
+            0x9A, 0xBC, 0xDE, 0xF0, // pixel (1,1)
+        ];
+        let mut rgba = [0u8; 16];
+        let mut roundtrip = [0u8; 16];
+
+        convert_rgbx_to_rgba(&original, &mut rgba, 2, 2, 8);
+        convert_rgba_to_rgbx(&rgba, &mut roundtrip, 2, 2);
+
+        // R, G, B channels must survive the roundtrip; X becomes 0xFF
+        for i in 0..4 {
+            let off = i * 4;
+            assert_eq!(
+                roundtrip[off + 1], original[off + 1],
+                "pixel {} B channel mismatch",
+                i
+            );
+            assert_eq!(
+                roundtrip[off + 2], original[off + 2],
+                "pixel {} G channel mismatch",
+                i
+            );
+            assert_eq!(
+                roundtrip[off + 3], original[off + 3],
+                "pixel {} R channel mismatch",
+                i
+            );
+            assert_eq!(roundtrip[off], 0xFF, "pixel {} X channel must be 0xFF", i);
+        }
+    }
+
+    /// REQ-SCALE-020: scale_factor_from_flags returns correct factors.
+    ///
+    /// Bit 7 = HQ2x (factor 2), bit 8 = xBRZ3 (factor 3), bit 9 = xBRZ4 (factor 4).
+    #[test]
+    fn test_scale_factor_from_flags() {
+        // No scaling flags → None
+        assert_eq!(scale_factor_from_flags(0), None);
+
+        // HQ2x (bit 7) → Some(2)
+        assert_eq!(scale_factor_from_flags(1 << 7), Some(2));
+
+        // xBRZ3 (bit 8) → Some(3)
+        assert_eq!(scale_factor_from_flags(1 << 8), Some(3));
+
+        // xBRZ4 (bit 9) → Some(4)
+        assert_eq!(scale_factor_from_flags(1 << 9), Some(4));
+
+        // xBRZ3 takes priority over HQ2x when both set
+        assert_eq!(scale_factor_from_flags((1 << 7) | (1 << 8)), Some(3));
+    }
+
+    /// REQ-SCALE-025: bilinear-only does NOT trigger software scaling.
+    ///
+    /// When only SCALE_BILINEAR (bit 3) is set without any of the software
+    /// scaler bits (7/8/9), the unscaled path should be used.
+    #[test]
+    fn test_bilinear_only_no_software_scale() {
+        // Bilinear only (bit 3) → None (no software scaling)
+        assert_eq!(scale_factor_from_flags(1 << 3), None);
+
+        // Bilinear + biadapt (bits 3+4), no soft scaler → None
+        assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 4)), None);
+
+        // Bilinear + HQ2x → Some(2) (HQ2x wins)
+        assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 7)), Some(2));
+
+        // Bilinear + xBRZ3 → Some(3)
+        assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 8)), Some(3));
     }
 }
