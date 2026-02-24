@@ -626,13 +626,18 @@ pub extern "C" fn rust_gfx_upload_transition_screen() {
 
 /// Draw a screen layer — composites screen surface onto the renderer.
 ///
-/// Guards: uninitialized, out-of-range screen, extra-screen skip, null surface.
-/// Stub body logs and returns — full compositing is deferred to P08.
+/// Reads pixel data from `surfaces[screen]`, uploads to a temporary streaming
+/// texture, and renders it onto the current frame with the requested alpha
+/// and clipping rect.
 ///
-/// @plan PLAN-20260223-GFX-FULL-PORT.P06
-/// @requirement REQ-SCR-140, REQ-SCR-100, REQ-SCR-090, REQ-SCR-110
+/// @plan PLAN-20260223-GFX-FULL-PORT.P08
+/// @requirement REQ-SCR-010, REQ-SCR-020, REQ-SCR-030, REQ-SCR-040,
+///              REQ-SCR-050, REQ-SCR-060, REQ-SCR-070, REQ-SCR-075,
+///              REQ-SCR-090, REQ-SCR-100, REQ-SCR-110, REQ-SCR-130,
+///              REQ-SCR-140, REQ-SCR-150, REQ-SCR-170,
+///              REQ-FMT-020, REQ-ERR-065, REQ-NP-025
 #[no_mangle]
-pub extern "C" fn rust_gfx_screen(screen: c_int, _alpha: u8, _rect: *const SDL_Rect) {
+pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rect) {
     // REQ-SCR-140: uninitialized guard
     let state = match get_gfx_state() {
         Some(s) => s,
@@ -650,17 +655,65 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, _alpha: u8, _rect: *const SDL_R
     }
 
     // REQ-SCR-110: null surface guard
-    let surface = state.surfaces[screen as usize];
-    if surface.is_null() {
+    let src_surface = state.surfaces[screen as usize];
+    if src_surface.is_null() {
         return;
     }
 
-    // Stub: screen compositing not yet implemented (deferred to P08).
-    // The postprocess upload logic currently handles rendering.
-    rust_bridge_log_msg(&format!(
-        "RUST_GFX_SCREEN: screen={} compositing not yet implemented (stub)",
-        screen
-    ));
+    // REQ-SCR-160: convert C rect (NULL → None for full-screen)
+    let sdl_rect = convert_c_rect(rect);
+
+    // REQ-SCR-070 / REQ-FMT-020: create per-call streaming texture (RGBX8888)
+    let texture_creator = state.canvas.texture_creator();
+    let mut texture = match texture_creator.create_texture_streaming(
+        PixelFormatEnum::RGBX8888,
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+    ) {
+        Ok(t) => t,
+        // REQ-SCR-130: texture creation failure — return immediately
+        Err(_) => return,
+    };
+
+    // SAFETY: src_surface was checked non-null above and is owned by RustGraphicsState.
+    // The surface was created by SDL_CreateRGBSurface during init and remains valid
+    // for the lifetime of the graphics state. We only read from the surface pixels.
+    unsafe {
+        let surf = &*src_surface;
+
+        // REQ-SCR-120: validate pixel pointer and pitch
+        if surf.pixels.is_null() || surf.pitch <= 0 {
+            return;
+        }
+
+        // REQ-SCR-075 / REQ-SCR-170: construct pixel slice using surface pitch
+        let pitch = surf.pitch as usize;
+        let total_size = pitch * SCREEN_HEIGHT as usize;
+
+        // SAFETY: pixels is non-null (checked above), surface was created with
+        // SCREEN_WIDTH × SCREEN_HEIGHT at 32bpp, so pitch * SCREEN_HEIGHT bytes
+        // are valid. We construct a read-only slice — surface pixels are not modified.
+        let pixel_data = std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
+
+        // REQ-SCR-020: full surface upload every call
+        // REQ-ERR-065: if update fails, return immediately (no canvas.copy)
+        if texture.update(None, pixel_data, pitch).is_err() {
+            return;
+        }
+    }
+
+    // REQ-SCR-030 / REQ-SCR-040: set blend mode based on alpha
+    if alpha == 255 {
+        texture.set_blend_mode(BlendMode::None);
+    } else {
+        texture.set_blend_mode(BlendMode::Blend);
+        texture.set_alpha_mod(alpha);
+    }
+
+    // REQ-SCR-050 / REQ-SCR-060 / REQ-SCR-150: render with src_rect == dst_rect
+    let _ = state.canvas.copy(&texture, sdl_rect, sdl_rect);
+
+    // REQ-NP-025: texture is dropped here (end of scope, Rust ownership)
 }
 
 /// Draw a color layer (for fades)
