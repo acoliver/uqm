@@ -9,6 +9,7 @@ use std::ffi::{c_char, c_int, c_void};
 use std::ptr;
 
 use sdl2::pixels::PixelFormatEnum;
+use sdl2::render::BlendMode;
 
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::graphics::pixmap::{Pixmap, PixmapFormat};
@@ -136,6 +137,11 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 
 /// Initialize Rust graphics - creates window, renderer, real SDL surfaces.
 /// Returns 0 on success, -1 on failure.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P03
+/// @requirement REQ-INIT-095, REQ-INIT-015, REQ-INIT-020, REQ-INIT-030,
+///              REQ-INIT-040, REQ-INIT-050, REQ-INIT-055, REQ-INIT-060,
+///              REQ-INIT-080, REQ-INIT-090, REQ-INIT-100, REQ-FMT-030
 #[no_mangle]
 pub extern "C" fn rust_gfx_init(
     _driver: c_int,
@@ -144,6 +150,12 @@ pub extern "C" fn rust_gfx_init(
     width: c_int,
     height: c_int,
 ) -> c_int {
+    // REQ-INIT-095: Already-initialized guard — prevent double-init
+    if get_gfx_state().is_some() {
+        rust_bridge_log_msg("RUST_GFX_INIT: Already initialized, returning -1");
+        return -1;
+    }
+
     rust_bridge_log_msg(&format!(
         "RUST_GFX_INIT: flags=0x{:x} ({}) width={} height={}",
         flags, flags, width, height
@@ -391,24 +403,38 @@ pub extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 // TFB_GRAPHICS_BACKEND vtable functions
 // ============================================================================
 
-/// Preprocess - called before rendering
+/// Preprocess - called before rendering. Sets blend mode to None and clears.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P03
+/// @requirement REQ-PRE-010
 #[no_mangle]
 pub extern "C" fn rust_gfx_preprocess(
     _force_redraw: c_int,
     _transition_amount: c_int,
     _fade_amount: c_int,
 ) {
-    // Clear the canvas at start of frame
     if let Some(state) = get_gfx_state() {
+        // REQ-PRE-010: Reset blend mode before clearing for clean renderer state
+        state.canvas.set_blend_mode(BlendMode::None);
         state.canvas.set_draw_color(sdl2::pixels::Color::BLACK);
         state.canvas.clear();
     }
 }
 
-/// Postprocess - called after rendering, does the actual display
+/// Postprocess - called after rendering, does the actual display.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P03
+/// @requirement REQ-POST-010, REQ-POST-020, REQ-INV-010
+///
+/// Per REQ-POST-020 / REQ-INV-010, the end-state for postprocess is
+/// present-only (no texture creation, no surface upload, no canvas.copy).
+/// The upload/scaling logic below is retained until ScreenLayer (P06-P08)
+/// takes over compositing; removing it now would produce a black screen.
+/// @plan remove upload/scaling block in P05 once ScreenLayer composites.
 #[no_mangle]
 pub extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
+        // @plan P05: Remove this texture upload block once ScreenLayer composites.
         // Get pixels from the main screen surface and upload to texture
         let texture_creator = state.canvas.texture_creator();
 
