@@ -15,7 +15,8 @@ pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
     let ptr = libc::malloc(size);
     if ptr.is_null() {
         // Log fatal error if allocation failed
-        log_add(LogLevel::User, "HMalloc() FATAL: out of memory.");
+        // @plan PLAN-20260224-MEM-SWAP.P05 @requirement REQ-MEM-005
+            log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
         std::process::abort();
     }
     ptr
@@ -47,7 +48,7 @@ pub unsafe extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
 
     let ptr = libc::malloc(size);
     if ptr.is_null() {
-        log_add(LogLevel::User, "HCalloc() FATAL: out of memory.");
+        log_add(LogLevel::Fatal, "HCalloc() FATAL: out of memory.");
         std::process::abort();
     }
     libc::memset(ptr, 0, size);
@@ -70,7 +71,7 @@ pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_
 
     let new_ptr = libc::realloc(ptr, size);
     if new_ptr.is_null() && size > 0 {
-        log_add(LogLevel::User, "HRealloc() FATAL: out of memory.");
+        log_add(LogLevel::Fatal, "HRealloc() FATAL: out of memory.");
         std::process::abort();
     }
     new_ptr

@@ -15,6 +15,13 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
+    /// Semantic alias for `User` matching C's `log_Fatal = log_User`.
+    /// OOM handlers and other fatal-error paths should use this for clarity.
+    /// @plan PLAN-20260224-MEM-SWAP.P03
+    /// @requirement REQ-MEM-005
+    #[allow(dead_code, non_upper_case_globals)]
+    pub const Fatal: LogLevel = LogLevel::User;
+
     /// Create a LogLevel from an integer
     #[allow(dead_code)]
     pub fn from_i32(level: i32) -> Self {
@@ -187,5 +194,13 @@ mod tests {
         log_warning!("Warning!");
         log_debug!("Debug info");
         log_fatal!("Fatal error");
+    }
+
+    /// @plan PLAN-20260224-MEM-SWAP.P04
+    /// @requirement REQ-MEM-005
+    #[test]
+    fn test_fatal_alias() {
+        assert_eq!(LogLevel::Fatal, LogLevel::User);
+        assert_eq!(LogLevel::Fatal.as_i32(), 1);
     }
 }
