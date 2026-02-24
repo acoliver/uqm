@@ -15,6 +15,7 @@ pub mod scaling;
 pub mod tfb_draw;
 
 pub mod canvas_ffi;
+pub mod cmap_ffi;
 pub mod dcq_ffi;
 pub mod sdl;
 

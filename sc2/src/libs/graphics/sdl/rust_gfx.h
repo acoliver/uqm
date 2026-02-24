@@ -74,6 +74,28 @@ int rust_canvas_clear_scissor(SurfaceCanvas *canvas);
 /* Query */
 int rust_canvas_get_extent(SurfaceCanvas *canvas, int *w, int *h);
 
+/* ---- Colormap FFI Bridge (P21) ---- */
+
+/* Lifecycle */
+int rust_cmap_init(void);
+void rust_cmap_uninit(void);
+
+/* Colormap set/get */
+int rust_cmap_set(int index, const Uint8 *data, int len);
+const Uint8* rust_cmap_get(int index);
+int rust_cmap_from_index(int index);
+
+/* Fade operations */
+int rust_cmap_fade_screen(int direction, int steps);
+int rust_cmap_get_fade_amount(void);
+
+/* Color transform operations */
+int rust_cmap_xform_step(void);
+int rust_cmap_flush_xforms(void);
+
+/* Palette operations */
+int rust_cmap_set_palette(const Uint8 *palette_data, int num_colors);
+
 /* ---- DCQ FFI Bridge (P18-P20) ---- */
 
 /* Lifecycle */
