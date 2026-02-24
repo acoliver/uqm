@@ -2,6 +2,7 @@
 // Handles loading and caching of game resources
 
 pub mod cache;
+pub mod config_api;
 pub mod ffi;
 pub mod index;
 pub mod loader;
