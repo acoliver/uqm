@@ -273,10 +273,7 @@ pub extern "C" fn rust_resource_loader_uninit() {
 /// Pointer to the loaded bytes, or null on failure.
 /// The size is written to `out_size` if non-null.
 #[no_mangle]
-pub unsafe extern "C" fn rust_resource_load(
-    name: *const c_char,
-    out_size: *mut usize,
-) -> *mut u8 {
+pub unsafe extern "C" fn rust_resource_load(name: *const c_char, out_size: *mut usize) -> *mut u8 {
     let resource_name = match cstr_to_string(name) {
         Some(s) => s,
         None => return ptr::null_mut(),
@@ -416,10 +413,7 @@ pub extern "C" fn rust_cache_init(max_size_bytes: usize) -> c_int {
 /// The size is written to `out_size` if non-null.
 /// The returned pointer must be freed with `rust_resource_free`.
 #[no_mangle]
-pub unsafe extern "C" fn rust_cache_get(
-    name: *const c_char,
-    out_size: *mut usize,
-) -> *mut u8 {
+pub unsafe extern "C" fn rust_cache_get(name: *const c_char, out_size: *mut usize) -> *mut u8 {
     let key = match cstr_to_string(name) {
         Some(s) => s,
         None => return ptr::null_mut(),
@@ -465,11 +459,7 @@ pub unsafe extern "C" fn rust_cache_get(
 /// - `data` must point to `size` bytes of valid memory or be null (with size=0)
 /// - The data is copied into the cache
 #[no_mangle]
-pub unsafe extern "C" fn rust_cache_insert(
-    name: *const c_char,
-    data: *const u8,
-    size: usize,
-) {
+pub unsafe extern "C" fn rust_cache_insert(name: *const c_char, data: *const u8, size: usize) {
     let key = match cstr_to_string(name) {
         Some(s) => s,
         None => return,

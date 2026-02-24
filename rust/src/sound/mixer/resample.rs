@@ -8,9 +8,9 @@
 //! - Linear: Linear interpolation (medium quality)
 //! - Cubic: Cubic interpolation (high quality)
 
-use crate::sound::mixer::types::*;
-use crate::sound::mixer::source::MixerSource;
 use crate::sound::mixer::buffer::MixerBuffer;
+use crate::sound::mixer::source::MixerSource;
+use crate::sound::mixer::types::*;
 
 /// Resample without conversion (same frequency)
 ///

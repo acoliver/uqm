@@ -16,25 +16,25 @@
 pub mod decoder;
 pub mod ffi;
 pub mod formats;
-pub mod null;
-pub mod ogg;
-pub mod wav;
-pub mod wav_ffi;
+pub mod mixer;
 pub mod mod_decoder;
 pub mod mod_ffi;
-pub mod mixer;
+pub mod null;
+pub mod ogg;
 pub mod rodio_audio;
 pub mod rodio_backend;
+pub mod wav;
+pub mod wav_ffi;
 
 pub use decoder::{DecodeError, DecodeResult, SoundDecoder};
 pub use ffi::rust_ova_DecoderVtbl;
 pub use formats::{AudioFormat, DecoderFormats};
+pub use mod_decoder::ModDecoder;
+pub use mod_ffi::rust_mod_DecoderVtbl;
 pub use null::NullDecoder;
 pub use ogg::OggDecoder;
 pub use wav::WavDecoder;
 pub use wav_ffi::rust_wav_DecoderVtbl;
-pub use mod_decoder::ModDecoder;
-pub use mod_ffi::rust_mod_DecoderVtbl;
 
 #[cfg(test)]
 mod tests {

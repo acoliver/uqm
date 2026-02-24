@@ -285,10 +285,7 @@ impl DukVideoDecoder {
             return Err(VideoError::BadFile("Frame data too short".into()));
         }
 
-        let ver = u16::from_be_bytes([
-            self.duk_data[data_start],
-            self.duk_data[data_start + 1],
-        ]);
+        let ver = u16::from_be_bytes([self.duk_data[data_start], self.duk_data[data_start + 1]]);
 
         // Decode into internal buffer (frame data starts at offset 0x10)
         if frame_size < 0x10 {
@@ -427,7 +424,6 @@ impl DukVideoDecoder {
 
         Ok(data)
     }
-
 
     /// Converts decode buffer (packed pairs) to output VideoFrame
     ///
@@ -701,7 +697,7 @@ mod tests {
         hdr_data[8..12].copy_from_slice(&0u32.to_be_bytes()); // scrn_y_ofs
         hdr_data[12..14].copy_from_slice(&wb.to_be_bytes()); // width in blocks
         hdr_data[14..16].copy_from_slice(&hb.to_be_bytes()); // height in blocks
-        // lumas and chromas default to 0
+                                                             // lumas and chromas default to 0
         std::fs::write(dir.join(format!("{}.hdr", basename)), &hdr_data).unwrap();
 
         // Create .tbl file (256 * 16 bytes)
@@ -719,7 +715,7 @@ mod tests {
             // Frame header: vofs=0, vsize=0x20
             duk_data.extend_from_slice(&0u32.to_be_bytes()); // vofs
             duk_data.extend_from_slice(&0x20u32.to_be_bytes()); // vsize
-            // Frame data (version + padding + payload)
+                                                                // Frame data (version + padding + payload)
             duk_data.extend_from_slice(&0x0300u16.to_be_bytes()); // V3 version
             for _ in 0..0x1E {
                 duk_data.push(0);

@@ -211,14 +211,14 @@ pub fn mixer_buffer_data(
     buf.org_data = Some(data.to_vec());
     buf.org_freq = freq;
     buf.org_size = data.len() as u32;
-    
+
     // The format coming from C is MIX_FORMAT_MAKE encoded:
     // MIX_FORMAT_DUMMYID (0x00170000) | bytes_per_channel | (channels << 8)
     // For MIX_FORMAT_MONO16: 0x170102 = bpc=2, chans=1
     // For MIX_FORMAT_STEREO16: 0x170202 = bpc=2, chans=2
     let src_bpc = (format & 0xFF) as u32;
     let src_chans = ((format >> 8) & 0xFF) as u32;
-    
+
     // Validate the format - if either is 0, something is wrong
     if src_bpc == 0 || src_chans == 0 {
         // Log the issue and return error
@@ -228,7 +228,7 @@ pub fn mixer_buffer_data(
         ));
         return Err(MixerError::InvalidValue);
     }
-    
+
     buf.org_channels = src_chans;
     buf.org_chansize = src_bpc;
 
@@ -250,7 +250,7 @@ pub fn mixer_buffer_data(
 
     // Check if format is compatible (same bpc, same or fewer channels)
     let format_compatible = src_bpc == dst_bpc && src_chans <= dst_chans_raw;
-    
+
     let (converted_data, final_size) = if format_compatible {
         // Just copy the data - it's already in the right format
         let mut d = data.to_vec();
@@ -266,14 +266,14 @@ pub fn mixer_buffer_data(
         let dst_size = num_samples * buf.sampsize as usize;
         // Need to convert
         let mut converted = vec![0u8; dst_size];
-        
-        let needs_size_up = src_bpc < dst_bpc;  // 8-bit to 16-bit
-        let needs_size_down = src_bpc > dst_bpc;  // 16-bit to 8-bit
-        let needs_stereo_down = src_chans > dst_chans;  // stereo to mono
-        
+
+        let needs_size_up = src_bpc < dst_bpc; // 8-bit to 16-bit
+        let needs_size_down = src_bpc > dst_bpc; // 16-bit to 8-bit
+        let needs_stereo_down = src_chans > dst_chans; // stereo to mono
+
         let mut src_idx = 0usize;
         let mut dst_idx = 0usize;
-        
+
         for _ in 0..num_samples {
             // For each output channel
             for _ch in 0..dst_chans {
@@ -294,7 +294,7 @@ pub fn mixer_buffer_data(
                     }
                 };
                 src_idx += src_bpc as usize;
-                
+
                 // Handle stereo downmix
                 if needs_stereo_down {
                     let samp2: i32 = if src_bpc == 2 {
@@ -313,7 +313,7 @@ pub fn mixer_buffer_data(
                     src_idx += src_bpc as usize;
                     samp = (samp + samp2) / 2;
                 }
-                
+
                 // Convert sample size
                 if needs_size_up {
                     // 8-bit to 16-bit: shift left 8 bits
@@ -322,7 +322,7 @@ pub fn mixer_buffer_data(
                     // 16-bit to 8-bit: shift right 8 bits
                     samp >>= 8;
                 }
-                
+
                 // Write to destination
                 if dst_bpc == 2 {
                     let s = (samp as i16).to_le_bytes();
@@ -337,7 +337,7 @@ pub fn mixer_buffer_data(
                 }
                 dst_idx += dst_bpc as usize;
             }
-            
+
             // Skip extra source channels if not downmixing
             if !needs_stereo_down && src_chans > dst_chans {
                 src_idx += (src_chans - dst_chans) as usize * src_bpc as usize;

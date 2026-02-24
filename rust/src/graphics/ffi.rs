@@ -29,11 +29,11 @@ const SCREEN_HEIGHT: u32 = 240;
 // The C code (sdl2_pure.c lines 48-52) uses these masks on little-endian (Mac):
 //   A_MASK = 0x000000ff, B_MASK = 0x0000ff00, G_MASK = 0x00ff0000, R_MASK = 0xff000000
 // Screen surfaces MUST be non-alpha for DRAW_ALPHA support (gfxlib.h)
-const R_MASK: u32 = 0xFF000000;  // R in bits 24-31
-const G_MASK: u32 = 0x00FF0000;  // G in bits 16-23
-const B_MASK: u32 = 0x0000FF00;  // B in bits 8-15
+const R_MASK: u32 = 0xFF000000; // R in bits 24-31
+const G_MASK: u32 = 0x00FF0000; // G in bits 16-23
+const B_MASK: u32 = 0x0000FF00; // B in bits 8-15
 const A_MASK_SCREEN: u32 = 0x00000000; // no alpha on screen surfaces
-const A_MASK_ALPHA: u32 = 0x000000FF;  // alpha mask for format_conv_surf (font backing)
+const A_MASK_ALPHA: u32 = 0x000000FF; // alpha mask for format_conv_surf (font backing)
 
 // Real SDL_Surface structure layout from SDL2
 #[repr(C)]
@@ -80,7 +80,9 @@ extern "C" {
 /// Thread-local graphics state wrapper
 struct GraphicsStateCell(UnsafeCell<Option<RustGraphicsState>>);
 
-// Safety: Graphics is only accessed from main thread
+// SAFETY: All FFI functions are called exclusively from the C graphics thread.
+// The UQM C code guarantees single-threaded access to the TFB_GRAPHICS_BACKEND
+// vtable. No Rust-side threading is used (REQ-THR-010, REQ-THR-030, REQ-THR-035).
 unsafe impl Sync for GraphicsStateCell {}
 
 /// The Rust graphics state - owns everything
@@ -144,6 +146,9 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 /// @requirement REQ-INIT-095, REQ-INIT-015, REQ-INIT-020, REQ-INIT-030,
 ///              REQ-INIT-040, REQ-INIT-050, REQ-INIT-055, REQ-INIT-060,
 ///              REQ-INIT-080, REQ-INIT-090, REQ-INIT-100, REQ-FMT-030
+// PANIC-FREE: All fallible operations use match/if-let with early return -1.
+// No .unwrap(), .expect(), or panicking indexing. format!() is the only
+// theoretical panic source (OOM), which is non-recoverable regardless.
 #[no_mangle]
 pub extern "C" fn rust_gfx_init(
     _driver: c_int,
@@ -162,15 +167,29 @@ pub extern "C" fn rust_gfx_init(
         "RUST_GFX_INIT: flags=0x{:x} ({}) width={} height={}",
         flags, flags, width, height
     ));
-    
+
     // Log scaler flags for debugging
-    if (flags & (1 << 3)) != 0 { rust_bridge_log_msg("  SCALE_BILINEAR set"); }
-    if (flags & (1 << 4)) != 0 { rust_bridge_log_msg("  SCALE_BIADAPT set"); }
-    if (flags & (1 << 5)) != 0 { rust_bridge_log_msg("  SCALE_BIADAPTADV set"); }
-    if (flags & (1 << 6)) != 0 { rust_bridge_log_msg("  SCALE_TRISCAN set"); }
-    if (flags & (1 << 7)) != 0 { rust_bridge_log_msg("  SCALE_HQXX set"); }
-    if (flags & (1 << 8)) != 0 { rust_bridge_log_msg("  SCALE_XBRZ3 set"); }
-    if (flags & (1 << 9)) != 0 { rust_bridge_log_msg("  SCALE_XBRZ4 set"); }
+    if (flags & (1 << 3)) != 0 {
+        rust_bridge_log_msg("  SCALE_BILINEAR set");
+    }
+    if (flags & (1 << 4)) != 0 {
+        rust_bridge_log_msg("  SCALE_BIADAPT set");
+    }
+    if (flags & (1 << 5)) != 0 {
+        rust_bridge_log_msg("  SCALE_BIADAPTADV set");
+    }
+    if (flags & (1 << 6)) != 0 {
+        rust_bridge_log_msg("  SCALE_TRISCAN set");
+    }
+    if (flags & (1 << 7)) != 0 {
+        rust_bridge_log_msg("  SCALE_HQXX set");
+    }
+    if (flags & (1 << 8)) != 0 {
+        rust_bridge_log_msg("  SCALE_XBRZ3 set");
+    }
+    if (flags & (1 << 9)) != 0 {
+        rust_bridge_log_msg("  SCALE_XBRZ4 set");
+    }
 
     let fullscreen = (flags & 0x01) != 0;
 
@@ -197,8 +216,11 @@ pub extern "C" fn rust_gfx_init(
     ));
 
     // Create window
-    let mut window_builder =
-        video.window("The Ur-Quan Masters v0.8.0 (Rust)", width as u32, height as u32);
+    let mut window_builder = video.window(
+        "The Ur-Quan Masters v0.8.0 (Rust)",
+        width as u32,
+        height as u32,
+    );
     window_builder.position_centered();
 
     let window = match window_builder.build() {
@@ -229,10 +251,7 @@ pub extern "C" fn rust_gfx_init(
 
     rust_bridge_log_msg(&format!(
         "RUST_GFX_INIT: Logical size {}x{} (window {}x{})",
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        width,
-        height
+        SCREEN_WIDTH, SCREEN_HEIGHT, width, height
     ));
 
     rust_bridge_log_msg(&format!("RUST_GFX_INIT: Renderer: {}", canvas.info().name));
@@ -276,13 +295,15 @@ pub extern "C" fn rust_gfx_init(
         }
 
         surfaces[i] = surface;
-        rust_bridge_log_msg(&format!("RUST_GFX_INIT: Created surface {}: {:p}", i, surface));
+        rust_bridge_log_msg(&format!(
+            "RUST_GFX_INIT: Created surface {}: {:p}",
+            i, surface
+        ));
     }
 
     // Create format conversion surface (same format)
-    let format_conv_surf = unsafe {
-        SDL_CreateRGBSurface(0, 0, 0, 32, R_MASK, G_MASK, B_MASK, A_MASK_ALPHA)
-    };
+    let format_conv_surf =
+        unsafe { SDL_CreateRGBSurface(0, 0, 0, 32, R_MASK, G_MASK, B_MASK, A_MASK_ALPHA) };
 
     if format_conv_surf.is_null() {
         rust_bridge_log_msg("RUST_GFX_INIT: Failed to create format_conv_surf");
@@ -312,10 +333,17 @@ pub extern "C" fn rust_gfx_init(
     };
 
     // Configure soft scaling when requested (HQ2x or xBRZ)
-    let scale_any = flags & ((1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9));
+    let scale_any =
+        flags & ((1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9));
     let use_soft_scaler = scale_any != 0 && (flags & (1 << 3)) == 0; // SOFT_ONLY = SCALE_ANY & ~BILINEAR
     if use_soft_scaler {
-        let scale_factor = if (flags & (1 << 8)) != 0 { 3 } else if (flags & (1 << 9)) != 0 { 4 } else { 2 };
+        let scale_factor = if (flags & (1 << 8)) != 0 {
+            3
+        } else if (flags & (1 << 9)) != 0 {
+            4
+        } else {
+            2
+        };
         let buffer_size = (SCREEN_WIDTH * scale_factor * SCREEN_HEIGHT * scale_factor * 4) as usize;
         for i in 0..TFB_GFX_NUMSCREENS {
             state.scaled_buffers[i] = Some(vec![0u8; buffer_size]);
@@ -329,13 +357,15 @@ pub extern "C" fn rust_gfx_init(
 }
 
 /// Uninitialize graphics
+// PANIC-FREE: Uses if-let guard, null checks, and explicit drops only.
+// Safe to call when never initialized (REQ-ERR-050, REQ-UNINIT-030).
 #[no_mangle]
 pub extern "C" fn rust_gfx_uninit() {
     rust_bridge_log_msg("RUST_GFX_UNINIT");
 
     // Take ownership of the state so we can control drop order
     let state_opt = unsafe { (*RUST_GFX.0.get()).take() };
-    
+
     if let Some(mut state) = state_opt {
         // Free SDL surfaces BEFORE dropping the SDL context
         // The surfaces must be freed while SDL is still initialized
@@ -352,14 +382,14 @@ pub extern "C" fn rust_gfx_uninit() {
             unsafe { SDL_FreeSurface(state.format_conv_surf) };
             state.format_conv_surf = std::ptr::null_mut();
         }
-        
+
         // Drop canvas first, then video, then sdl_context
         // We need to be explicit about drop order
         drop(state.canvas);
         drop(state.video);
         drop(state.sdl_context);
     }
-    
+
     rust_bridge_log_msg("RUST_GFX_UNINIT: Done");
 }
 
@@ -368,18 +398,21 @@ pub extern "C" fn rust_gfx_uninit() {
 // ============================================================================
 
 /// Get SDL_Screen pointer for C code (main screen = 0)
+// PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
 #[no_mangle]
 pub extern "C" fn rust_gfx_get_sdl_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(0)
 }
 
 /// Get TransitionScreen pointer for C code (screen = 2)
+// PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
 #[no_mangle]
 pub extern "C" fn rust_gfx_get_transition_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(2)
 }
 
 /// Get SDL_Screens[i] pointer for C code
+// PANIC-FREE: Range check before indexing, if-let guard for uninitialized state.
 #[no_mangle]
 pub extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface {
     if screen < 0 || screen >= TFB_GFX_NUMSCREENS as c_int {
@@ -393,6 +426,7 @@ pub extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface
 }
 
 /// Get format_conv_surf for C code
+// PANIC-FREE: if-let guard returns null when uninitialized, no indexing.
 #[no_mangle]
 pub extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
     if let Some(state) = get_gfx_state() {
@@ -409,6 +443,8 @@ pub extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 ///
 /// @plan PLAN-20260223-GFX-FULL-PORT.P03, PLAN-20260223-GFX-FULL-PORT.P05
 /// @requirement REQ-PRE-010, REQ-PRE-020, REQ-PRE-040
+// PANIC-FREE: if-let guard for uninitialized state. SDL2 set_blend_mode,
+// set_draw_color, and clear do not panic.
 #[no_mangle]
 pub extern "C" fn rust_gfx_preprocess(
     _force_redraw: c_int,
@@ -436,6 +472,8 @@ pub extern "C" fn rust_gfx_preprocess(
 /// The upload/scaling logic below is retained until ScreenLayer (P08)
 /// takes over compositing; removing it now would produce a black screen.
 /// @plan remove upload/scaling block in P08 once ScreenLayer composites.
+// PANIC-FREE: if-let guard for uninitialized state. All SDL operations use
+// if-let/let-discard patterns. NonZeroU32 and Pixmap use match with early return.
 #[no_mangle]
 pub extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
@@ -455,11 +493,9 @@ pub extern "C" fn rust_gfx_postprocess() {
             SCREEN_HEIGHT
         };
 
-        if let Ok(mut texture) = texture_creator.create_texture_streaming(
-            PixelFormatEnum::RGBX8888,
-            tex_w,
-            tex_h,
-        ) {
+        if let Ok(mut texture) =
+            texture_creator.create_texture_streaming(PixelFormatEnum::RGBX8888, tex_w, tex_h)
+        {
             let src_surface = state.surfaces[0];
             let mut uploaded = false;
 
@@ -467,10 +503,7 @@ pub extern "C" fn rust_gfx_postprocess() {
                 let using_xbrz = (state.flags & ((1 << 8) | (1 << 9))) != 0;
                 if using_xbrz {
                     if !state.xbrz_logged {
-                        rust_bridge_log_msg(&format!(
-                            "RUST_GFX: xBRZ scaler active ({}x)",
-                            factor
-                        ));
+                        rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaler active ({}x)", factor));
                         state.xbrz_logged = true;
                     }
                 } else if !state.hq2x_logged {
@@ -490,13 +523,19 @@ pub extern "C" fn rust_gfx_postprocess() {
                                     src_pitch * src_h,
                                 );
 
-                                let mut pixmap = Pixmap::new(
-                                    std::num::NonZeroU32::new(1).unwrap(),
+                                let nz_one = match std::num::NonZeroU32::new(1) {
+                                    Some(v) => v,
+                                    None => return, // unreachable: 1 != 0
+                                };
+                                let mut pixmap = match Pixmap::new(
+                                    nz_one,
                                     SCREEN_WIDTH,
                                     SCREEN_HEIGHT,
                                     PixmapFormat::Rgba32,
-                                )
-                                .unwrap();
+                                ) {
+                                    Ok(p) => p,
+                                    Err(_) => return,
+                                };
 
                                 convert_rgbx_to_rgba(
                                     src_bytes,
@@ -518,19 +557,13 @@ pub extern "C" fn rust_gfx_postprocess() {
                                     let _ = texture.update(None, buffer, dst_stride);
                                     uploaded = true;
                                 } else {
-                                    let params =
-                                        ScaleParams::new(512, RustScaleMode::Hq2x);
+                                    let params = ScaleParams::new(512, RustScaleMode::Hq2x);
                                     if let Ok(scaled) = state.hq2x.scale(&pixmap, params) {
                                         let dst_w = src_w * 2;
                                         let dst_h = src_h * 2;
                                         let dst_stride = dst_w * 4;
 
-                                        convert_rgba_to_rgbx(
-                                            scaled.data(),
-                                            buffer,
-                                            dst_w,
-                                            dst_h,
-                                        );
+                                        convert_rgba_to_rgbx(scaled.data(), buffer, dst_w, dst_h);
 
                                         let _ = texture.update(None, buffer, dst_stride);
                                         uploaded = true;
@@ -549,10 +582,8 @@ pub extern "C" fn rust_gfx_postprocess() {
                         if !surf.pixels.is_null() && surf.pitch > 0 {
                             let pitch = surf.pitch as usize;
                             let total_size = pitch * SCREEN_HEIGHT as usize;
-                            let pixel_data = std::slice::from_raw_parts(
-                                surf.pixels as *const u8,
-                                total_size,
-                            );
+                            let pixel_data =
+                                std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
                             let _ = texture.update(None, pixel_data, pitch);
                         }
                     }
@@ -566,10 +597,21 @@ pub extern "C" fn rust_gfx_postprocess() {
     }
 }
 
-/// Upload transition screen (for transition effects)
+/// Upload transition screen — intentional no-op.
+///
+/// In the C backend, this uploads `surfaces[2]` into a dedicated transition
+/// texture. The Rust backend uses unconditional full-surface upload in
+/// `rust_gfx_screen()` (ScreenLayer), which already composites the transition
+/// surface when called with `screen == 2`. This makes a separate upload step
+/// unnecessary — the architectural invariant of per-frame full-surface upload
+/// eliminates the need for a cached transition texture (REQ-UTS-010).
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P13
+/// @requirement REQ-UTS-010
+// PANIC-FREE: Empty function body, no operations.
 #[no_mangle]
 pub extern "C" fn rust_gfx_upload_transition_screen() {
-    // No-op for now
+    // Intentional no-op: see doc comment above.
 }
 
 /// Draw a screen layer — composites screen surface onto the renderer.
@@ -584,6 +626,8 @@ pub extern "C" fn rust_gfx_upload_transition_screen() {
 ///              REQ-SCR-090, REQ-SCR-100, REQ-SCR-110, REQ-SCR-130,
 ///              REQ-SCR-140, REQ-SCR-150, REQ-SCR-170,
 ///              REQ-FMT-020, REQ-ERR-065, REQ-NP-025
+// PANIC-FREE: match/if-let guards throughout. Range check before array indexing.
+// All SDL operations use is_err()/let-discard. No .unwrap() or .expect().
 #[no_mangle]
 pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rect) {
     // REQ-SCR-140: uninitialized guard
@@ -621,7 +665,10 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
         // @plan PLAN-20260223-GFX-FULL-PORT.P12
         // @requirement REQ-SCALE-010, REQ-SCALE-020, REQ-SCALE-030, REQ-SCALE-040,
         //              REQ-SCALE-050, REQ-SCALE-055, REQ-WIN-030
-        let factor = sw_scale.unwrap();
+        let factor = match sw_scale {
+            Some(f) => f,
+            None => return, // unreachable: guarded by use_soft_scaler
+        };
         let src_w = SCREEN_WIDTH as usize;
         let src_h = SCREEN_HEIGHT as usize;
 
@@ -635,22 +682,19 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
         };
 
         // Step 1: Convert RGBX→RGBA into a Pixmap
-        let mut pixmap = match Pixmap::new(
-            std::num::NonZeroU32::new(1).unwrap(),
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
-            PixmapFormat::Rgba32,
-        ) {
-            Ok(p) => p,
-            Err(_) => return,
+        let nz_one = match std::num::NonZeroU32::new(1) {
+            Some(v) => v,
+            None => return, // unreachable: 1 != 0
         };
+        let mut pixmap =
+            match Pixmap::new(nz_one, SCREEN_WIDTH, SCREEN_HEIGHT, PixmapFormat::Rgba32) {
+                Ok(p) => p,
+                Err(_) => return,
+            };
 
         unsafe {
             let surf = &*src_surface;
-            let src_bytes = std::slice::from_raw_parts(
-                surf.pixels as *const u8,
-                src_pitch * src_h,
-            );
+            let src_bytes = std::slice::from_raw_parts(surf.pixels as *const u8, src_pitch * src_h);
             convert_rgbx_to_rgba(src_bytes, pixmap.data_mut(), src_w, src_h, src_pitch);
         }
 
@@ -662,10 +706,7 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
 
         if using_xbrz {
             if !state.xbrz_logged {
-                rust_bridge_log_msg(&format!(
-                    "RUST_GFX: xBRZ scaler active ({}x)",
-                    factor
-                ));
+                rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaler active ({}x)", factor));
                 state.xbrz_logged = true;
             }
             scaled_rgba = scale_rgba(pixmap.data(), src_w, src_h, factor as usize);
@@ -753,8 +794,7 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
             }
             let pitch = surf.pitch as usize;
             let total_size = pitch * SCREEN_HEIGHT as usize;
-            let pixel_data =
-                std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
+            let pixel_data = std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
             if texture.update(None, pixel_data, pitch).is_err() {
                 return;
             }
@@ -780,6 +820,8 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
 /// @plan PLAN-20260223-GFX-FULL-PORT.P11
 /// @requirement REQ-CLR-010, REQ-CLR-020, REQ-CLR-030, REQ-CLR-040, REQ-CLR-050,
 ///              REQ-CLR-055, REQ-CLR-060
+// PANIC-FREE: match guard for uninitialized state. Null check on rect pointer.
+// SDL fill_rect result discarded. No .unwrap() or .expect().
 #[no_mangle]
 pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
     // REQ-CLR-060: uninitialized guard
@@ -806,7 +848,9 @@ pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Re
     }
 
     // REQ-CLR-010: set draw color
-    state.canvas.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, a));
+    state
+        .canvas
+        .set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, a));
 
     // REQ-CLR-040/050: fill entire screen (null) or specified rect
     let sdl_rect = convert_c_rect(rect);
@@ -818,6 +862,8 @@ pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Re
 // ============================================================================
 
 /// Process SDL events, returns 1 if quit requested
+// PANIC-FREE: if-let guard for uninitialized state. poll_iter and match
+// on event variants do not panic.
 #[no_mangle]
 pub extern "C" fn rust_gfx_process_events() -> c_int {
     if let Some(state) = get_gfx_state() {
@@ -850,7 +896,8 @@ pub extern "C" fn rust_gfx_process_events() -> c_int {
 fn scale_factor_from_flags(flags: c_int) -> Option<u32> {
     let scale_any =
         flags & ((1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9));
-    let bilinear_only = scale_any != 0 && (flags & (1 << 3)) != 0
+    let bilinear_only = scale_any != 0
+        && (flags & (1 << 3)) != 0
         && (flags & ((1 << 7) | (1 << 8) | (1 << 9))) == 0;
     if scale_any == 0 || bilinear_only {
         return None;
@@ -872,13 +919,7 @@ fn scale_factor_from_flags(flags: c_int) -> Option<u32> {
 ///
 /// @plan PLAN-20260223-GFX-FULL-PORT.P12
 /// @requirement REQ-SCALE-010, REQ-SCALE-060
-fn convert_rgbx_to_rgba(
-    src: &[u8],
-    dst: &mut [u8],
-    width: usize,
-    height: usize,
-    pitch: usize,
-) {
+fn convert_rgbx_to_rgba(src: &[u8], dst: &mut [u8], width: usize, height: usize, pitch: usize) {
     for y in 0..height {
         let src_row = &src[y * pitch..y * pitch + width * 4];
         let dst_row = &mut dst[y * width * 4..(y + 1) * width * 4];
@@ -938,6 +979,8 @@ fn convert_c_rect(rect: *const SDL_Rect) -> Option<sdl2::rect::Rect> {
 }
 
 /// Toggle fullscreen
+// PANIC-FREE: if-let guard for uninitialized state. Bool flip and conditional
+// return value, no fallible operations.
 #[no_mangle]
 pub extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
@@ -948,6 +991,7 @@ pub extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
 }
 
 /// Check if fullscreen
+// PANIC-FREE: if-let guard for uninitialized state. Bool read only.
 #[no_mangle]
 pub extern "C" fn rust_gfx_is_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
@@ -957,18 +1001,21 @@ pub extern "C" fn rust_gfx_is_fullscreen() -> c_int {
 }
 
 /// Set gamma (not supported in software mode)
+// PANIC-FREE: Returns constant -1, no operations.
 #[no_mangle]
 pub extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
     -1 // Not supported
 }
 
 /// Get screen width
+// PANIC-FREE: Returns constant, no operations.
 #[no_mangle]
 pub extern "C" fn rust_gfx_get_width() -> c_int {
     SCREEN_WIDTH as c_int
 }
 
 /// Get screen height
+// PANIC-FREE: Returns constant, no operations.
 #[no_mangle]
 pub extern "C" fn rust_gfx_get_height() -> c_int {
     SCREEN_HEIGHT as c_int
@@ -997,7 +1044,10 @@ mod tests {
     #[test]
     fn test_preprocess_uninitialized_no_panic() {
         // Ensure uninitialized state
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         // Call preprocess — must not panic or crash
         rust_gfx_preprocess(0, 0, 0);
     }
@@ -1008,7 +1058,10 @@ mod tests {
     /// THEN:  Returns immediately with no side effects (no panic/crash)
     #[test]
     fn test_postprocess_uninitialized_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         rust_gfx_postprocess();
     }
 
@@ -1119,14 +1172,20 @@ mod tests {
     /// REQ-SCR-140: rust_gfx_screen returns immediately when uninitialized.
     #[test]
     fn test_gfx_screen_uninitialized_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         rust_gfx_screen(0, 255, std::ptr::null());
     }
 
     /// REQ-SCR-100: rust_gfx_screen returns for out-of-range screen indices.
     #[test]
     fn test_gfx_screen_out_of_range_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         rust_gfx_screen(-1, 255, std::ptr::null());
         rust_gfx_screen(3, 255, std::ptr::null());
         rust_gfx_screen(100, 255, std::ptr::null());
@@ -1135,7 +1194,10 @@ mod tests {
     /// REQ-SCR-090: rust_gfx_screen(1, ...) returns immediately (extra screen skip).
     #[test]
     fn test_gfx_screen_extra_skip_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         rust_gfx_screen(TFB_SCREEN_EXTRA, 128, std::ptr::null());
     }
 
@@ -1148,7 +1210,12 @@ mod tests {
     /// REQ-SCR-160: convert_c_rect non-null → Some with correct values.
     #[test]
     fn test_convert_c_rect_valid_rect() {
-        let c_rect = SDL_Rect { x: 10, y: 20, w: 100, h: 50 };
+        let c_rect = SDL_Rect {
+            x: 10,
+            y: 20,
+            w: 100,
+            h: 50,
+        };
         let result = convert_c_rect(&c_rect as *const SDL_Rect);
         assert!(result.is_some());
         let r = result.unwrap();
@@ -1163,7 +1230,12 @@ mod tests {
     /// that the clamped-to-0 value becomes 1 after sdl2's own clamp.
     #[test]
     fn test_convert_c_rect_negative_dimensions_clamped() {
-        let c_rect = SDL_Rect { x: 5, y: 5, w: -10, h: -20 };
+        let c_rect = SDL_Rect {
+            x: 5,
+            y: 5,
+            w: -10,
+            h: -20,
+        };
         let result = convert_c_rect(&c_rect as *const SDL_Rect);
         assert!(result.is_some());
         let r = result.unwrap();
@@ -1178,7 +1250,12 @@ mod tests {
     /// sdl2::rect::Rect clamps minimum dimension to 1.
     #[test]
     fn test_convert_c_rect_zero_size() {
-        let c_rect = SDL_Rect { x: 0, y: 0, w: 0, h: 0 };
+        let c_rect = SDL_Rect {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+        };
         let result = convert_c_rect(&c_rect as *const SDL_Rect);
         assert!(result.is_some());
         let r = result.unwrap();
@@ -1196,27 +1273,40 @@ mod tests {
     /// REQ-CLR-060: rust_gfx_color returns immediately when uninitialized.
     #[test]
     fn test_gfx_color_uninitialized_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         rust_gfx_color(255, 0, 0, 128, std::ptr::null());
     }
 
     /// REQ-CLR-055: rust_gfx_color returns for negative rect dimensions.
     #[test]
     fn test_gfx_color_negative_rect_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         // Negative rect dimensions — returns at uninitialized guard first,
         // but verifies no panic with bad rect data
-        let bad_rect = SDL_Rect { x: 0, y: 0, w: -10, h: -20 };
+        let bad_rect = SDL_Rect {
+            x: 0,
+            y: 0,
+            w: -10,
+            h: -20,
+        };
         rust_gfx_color(255, 128, 0, 200, &bad_rect as *const SDL_Rect);
     }
 
     /// rust_gfx_color with null rect does not panic when uninitialized.
     #[test]
     fn test_gfx_color_null_rect_no_panic() {
-        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
         rust_gfx_color(0, 0, 0, 0, std::ptr::null());
     }
-
 
     // ========================================================================
     // Phase P12 Tests: Scaling Integration — Pixel Conversion Helpers
@@ -1312,17 +1402,20 @@ mod tests {
         for i in 0..4 {
             let off = i * 4;
             assert_eq!(
-                roundtrip[off + 1], original[off + 1],
+                roundtrip[off + 1],
+                original[off + 1],
                 "pixel {} B channel mismatch",
                 i
             );
             assert_eq!(
-                roundtrip[off + 2], original[off + 2],
+                roundtrip[off + 2],
+                original[off + 2],
                 "pixel {} G channel mismatch",
                 i
             );
             assert_eq!(
-                roundtrip[off + 3], original[off + 3],
+                roundtrip[off + 3],
+                original[off + 3],
                 "pixel {} R channel mismatch",
                 i
             );
@@ -1368,5 +1461,231 @@ mod tests {
 
         // Bilinear + xBRZ3 → Some(3)
         assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 8)), Some(3));
+    }
+
+    // ========================================================================
+    // Phase P13 Tests: Error Handling Hardening
+    // @plan PLAN-20260223-GFX-FULL-PORT.P13
+    // @requirement REQ-ERR-050, REQ-UTS-010, REQ-SEQ-070, REQ-INV-040,
+    //              REQ-INV-050, REQ-SURF-030, REQ-AUX-060, REQ-ERR-010
+    // ========================================================================
+
+    /// REQ-ERR-050: rust_gfx_uninit is safe when never initialized.
+    /// GIVEN: Backend was never initialized
+    /// WHEN:  rust_gfx_uninit is called
+    /// THEN:  No-op, no crash
+    #[test]
+    fn test_uninit_without_init_no_panic() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+        rust_gfx_uninit();
+        // Calling twice is also safe
+        rust_gfx_uninit();
+    }
+
+    /// REQ-UTS-010: upload_transition_screen is a no-op and never panics.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  rust_gfx_upload_transition_screen is called
+    /// THEN:  No-op, no crash
+    #[test]
+    fn test_upload_transition_screen_no_panic() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+        rust_gfx_upload_transition_screen();
+        // Multiple calls are safe
+        rust_gfx_upload_transition_screen();
+        rust_gfx_upload_transition_screen();
+    }
+
+    /// REQ-SEQ-070: Out-of-sequence vtable calls do not crash.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  screen, color, and postprocess are called without preprocess
+    /// THEN:  No crash, no state corruption
+    #[test]
+    fn test_out_of_sequence_no_crash() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+        // Call screen without preceding preprocess
+        rust_gfx_screen(0, 255, std::ptr::null());
+        // Call color without preceding preprocess
+        rust_gfx_color(255, 0, 0, 128, std::ptr::null());
+        // Call postprocess without preceding preprocess
+        rust_gfx_postprocess();
+        // Reverse order
+        rust_gfx_postprocess();
+        rust_gfx_color(0, 255, 0, 64, std::ptr::null());
+        rust_gfx_screen(2, 128, std::ptr::null());
+    }
+
+    /// REQ-INV-040: Repeated postprocess calls do not corrupt state.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  rust_gfx_postprocess is called multiple times without preprocess
+    /// THEN:  No crash, no corruption
+    #[test]
+    fn test_repeated_postprocess_no_crash() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+        for _ in 0..10 {
+            rust_gfx_postprocess();
+        }
+    }
+
+    /// REQ-INV-050: Repeated preprocess calls each clear to black.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  rust_gfx_preprocess is called multiple times without postprocess
+    /// THEN:  No crash (each clears renderer when initialized)
+    #[test]
+    fn test_repeated_preprocess_no_crash() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+        for _ in 0..10 {
+            rust_gfx_preprocess(0, 0, 0);
+        }
+    }
+
+    /// REQ-SURF-030: All surface accessors return null when uninitialized.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  Surface accessor functions are called
+    /// THEN:  All return null pointers
+    #[test]
+    fn test_surface_accessors_uninitialized() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+
+        // get_sdl_screen → null
+        assert!(
+            rust_gfx_get_sdl_screen().is_null(),
+            "get_sdl_screen must return null when uninitialized"
+        );
+
+        // get_transition_screen → null
+        assert!(
+            rust_gfx_get_transition_screen().is_null(),
+            "get_transition_screen must return null when uninitialized"
+        );
+
+        // get_screen_surface for all valid indices → null
+        for i in 0..TFB_GFX_NUMSCREENS as c_int {
+            assert!(
+                rust_gfx_get_screen_surface(i).is_null(),
+                "get_screen_surface({}) must return null when uninitialized",
+                i
+            );
+        }
+
+        // get_screen_surface out-of-range → null
+        assert!(
+            rust_gfx_get_screen_surface(-1).is_null(),
+            "get_screen_surface(-1) must return null"
+        );
+        assert!(
+            rust_gfx_get_screen_surface(3).is_null(),
+            "get_screen_surface(3) must return null"
+        );
+
+        // get_format_conv_surf → null
+        assert!(
+            rust_gfx_get_format_conv_surf().is_null(),
+            "get_format_conv_surf must return null when uninitialized"
+        );
+    }
+
+    /// REQ-AUX-060: Auxiliary functions return safe defaults when uninitialized.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  Auxiliary query/operation functions are called
+    /// THEN:  Return safe defaults (0 for queries, -1 for operations)
+    #[test]
+    fn test_aux_functions_uninitialized() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+
+        // toggle_fullscreen → -1 (operation failed)
+        assert_eq!(
+            rust_gfx_toggle_fullscreen(),
+            -1,
+            "toggle_fullscreen must return -1 when uninitialized"
+        );
+
+        // is_fullscreen → 0 (safe default)
+        assert_eq!(
+            rust_gfx_is_fullscreen(),
+            0,
+            "is_fullscreen must return 0 when uninitialized"
+        );
+
+        // set_gamma → -1 (always unsupported)
+        assert_eq!(rust_gfx_set_gamma(1.0), -1, "set_gamma must return -1");
+
+        // get_width → 320 (constant, not state-dependent)
+        assert_eq!(
+            rust_gfx_get_width(),
+            SCREEN_WIDTH as c_int,
+            "get_width must return 320"
+        );
+
+        // get_height → 240 (constant, not state-dependent)
+        assert_eq!(
+            rust_gfx_get_height(),
+            SCREEN_HEIGHT as c_int,
+            "get_height must return 240"
+        );
+
+        // process_events → 0 (no quit)
+        assert_eq!(
+            rust_gfx_process_events(),
+            0,
+            "process_events must return 0 when uninitialized"
+        );
+    }
+
+    /// REQ-ERR-010: All FFI functions return safe defaults when uninitialized.
+    /// Comprehensive test covering every exported function.
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  Every FFI function is called
+    /// THEN:  No crash, returns safe default value
+    #[test]
+    fn test_all_ffi_functions_uninitialized_defaults() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+
+        // Void-returning functions — just must not crash
+        rust_gfx_preprocess(1, 128, 64);
+        rust_gfx_postprocess();
+        rust_gfx_screen(0, 255, std::ptr::null());
+        rust_gfx_screen(1, 128, std::ptr::null());
+        rust_gfx_screen(2, 0, std::ptr::null());
+        rust_gfx_color(255, 255, 255, 255, std::ptr::null());
+        rust_gfx_upload_transition_screen();
+        rust_gfx_uninit();
+
+        // Pointer-returning functions → null
+        assert!(rust_gfx_get_sdl_screen().is_null());
+        assert!(rust_gfx_get_transition_screen().is_null());
+        assert!(rust_gfx_get_screen_surface(0).is_null());
+        assert!(rust_gfx_get_format_conv_surf().is_null());
+
+        // Int-returning functions → safe defaults
+        assert_eq!(rust_gfx_toggle_fullscreen(), -1);
+        assert_eq!(rust_gfx_is_fullscreen(), 0);
+        assert_eq!(rust_gfx_set_gamma(2.0), -1);
+        assert_eq!(rust_gfx_get_width(), 320);
+        assert_eq!(rust_gfx_get_height(), 240);
+        assert_eq!(rust_gfx_process_events(), 0);
     }
 }

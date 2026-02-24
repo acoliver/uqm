@@ -43,23 +43,23 @@ pub struct uio_DirHandle {
 pub struct TFB_SoundDecoder {
     // decoder virtual funcs - R/O
     pub funcs: *const TFB_SoundDecoderFuncs,
-    
+
     // public R/O, set by decoder
     pub format: u32,
     pub frequency: u32,
     pub length: f32,
-    pub is_null: bool,      // C bool
-    pub need_swap: bool,    // C bool
-    
-    // public R/O, set by wrapper  
+    pub is_null: bool,   // C bool
+    pub need_swap: bool, // C bool
+
+    // public R/O, set by wrapper
     pub buffer: *mut c_void,
     pub buffer_size: u32,
-    pub error: i32,         // sint32
+    pub error: i32, // sint32
     pub bytes_per_samp: u32,
-    
+
     // public R/W
-    pub looping: bool,      // C bool
-    
+    pub looping: bool, // C bool
+
     // semi-private - padding may be needed
     pub dir: *mut uio_DirHandle,
     pub filename: *mut c_char,
@@ -79,9 +79,14 @@ pub struct TFB_SoundDecoderFuncs {
     pub GetError: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> c_int,
     pub Init: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> c_int,
     pub Term: extern "C" fn(decoder: *mut TFB_SoundDecoder),
-    pub Open: extern "C" fn(decoder: *mut TFB_SoundDecoder, dir: *mut uio_DirHandle, filename: *const c_char) -> c_int,
+    pub Open: extern "C" fn(
+        decoder: *mut TFB_SoundDecoder,
+        dir: *mut uio_DirHandle,
+        filename: *const c_char,
+    ) -> c_int,
     pub Close: extern "C" fn(decoder: *mut TFB_SoundDecoder),
-    pub Decode: extern "C" fn(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int,
+    pub Decode:
+        extern "C" fn(decoder: *mut TFB_SoundDecoder, buf: *mut c_void, bufsize: i32) -> c_int,
     pub Seek: extern "C" fn(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32,
     pub GetFrame: extern "C" fn(decoder: *mut TFB_SoundDecoder) -> u32,
 }
@@ -115,11 +120,11 @@ extern "C" fn rust_ova_GetName() -> *const c_char {
 
 extern "C" fn rust_ova_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
     rust_bridge_log_msg("RUST_OGG_INIT_MODULE");
-    
+
     if fmts.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let c_fmts = &*fmts;
         rust_bridge_log_msg(&format!(
@@ -134,19 +139,19 @@ extern "C" fn rust_ova_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats)
             mono16: c_fmts.mono16,
             stereo16: c_fmts.stereo16,
         };
-        
+
         if let Ok(mut guard) = RUST_OGG_FORMATS.lock() {
             *guard = Some(formats);
         }
     }
-    
+
     let _ = flags; // unused for now
     1 // success
 }
 
 extern "C" fn rust_ova_TermModule() {
     rust_bridge_log_msg("RUST_OGG_TERM_MODULE");
-    
+
     if let Ok(mut guard) = RUST_OGG_FORMATS.lock() {
         *guard = None;
     }
@@ -160,13 +165,13 @@ extern "C" fn rust_ova_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return -1;
         }
-        
+
         let ogg = &mut *((*rust_dec).rust_decoder as *mut OggDecoder);
         ogg.get_error()
     }
@@ -174,40 +179,40 @@ extern "C" fn rust_ova_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
 
 extern "C" fn rust_ova_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     rust_bridge_log_msg("RUST_OGG_INIT");
-    
+
     if decoder.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
-        
+
         // Create new Rust OggDecoder
         let mut ogg = Box::new(OggDecoder::new());
-        
+
         // Initialize with stored formats
         if let Ok(guard) = RUST_OGG_FORMATS.lock() {
             if let Some(ref formats) = *guard {
                 ogg.init_module(0, formats);
             }
         }
-        
+
         ogg.init();
-        
+
         (*rust_dec).rust_decoder = Box::into_raw(ogg) as *mut c_void;
         (*decoder).need_swap = false;
     }
-    
+
     1 // success
 }
 
 extern "C" fn rust_ova_Term(decoder: *mut TFB_SoundDecoder) {
     rust_bridge_log_msg("RUST_OGG_TERM");
-    
+
     if decoder.is_null() {
         return;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if !(*rust_dec).rust_decoder.is_null() {
@@ -220,7 +225,12 @@ extern "C" fn rust_ova_Term(decoder: *mut TFB_SoundDecoder) {
 
 // Import uio_open and uio_read from our io module
 extern "C" {
-    fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut c_void;
+    fn uio_open(
+        dir: *mut uio_DirHandle,
+        path: *const c_char,
+        flags: c_int,
+        mode: c_int,
+    ) -> *mut c_void;
     fn uio_read(handle: *mut c_void, buf: *mut u8, count: usize) -> isize;
     fn uio_close(handle: *mut c_void) -> c_int;
     fn uio_fstat(handle: *mut c_void, stat_buf: *mut libc::stat) -> c_int;
@@ -234,32 +244,35 @@ extern "C" fn rust_ova_Open(
     if decoder.is_null() || filename.is_null() {
         return 0;
     }
-    
+
     let filename_str = unsafe {
         match CStr::from_ptr(filename).to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         }
     };
-    
+
     rust_bridge_log_msg(&format!("RUST_OGG_OPEN: {} (dir={:?})", filename_str, dir));
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return 0;
         }
-        
+
         let ogg = &mut *((*rust_dec).rust_decoder as *mut OggDecoder);
-        
+
         // Use UIO to open and read the file through the virtual filesystem
         // This handles addons, zip files, and path resolution correctly
         let handle = uio_open(dir, filename, 0 /* O_RDONLY */, 0);
         if handle.is_null() {
-            rust_bridge_log_msg(&format!("RUST_OGG_OPEN_FAILED: uio_open returned null for {}", filename_str));
+            rust_bridge_log_msg(&format!(
+                "RUST_OGG_OPEN_FAILED: uio_open returned null for {}",
+                filename_str
+            ));
             return 0;
         }
-        
+
         // Get file size via fstat
         let mut stat_buf: libc::stat = std::mem::zeroed();
         if uio_fstat(handle, &mut stat_buf) != 0 {
@@ -269,32 +282,42 @@ extern "C" fn rust_ova_Open(
         }
         let file_size = stat_buf.st_size as usize;
         rust_bridge_log_msg(&format!("RUST_OGG_OPEN: file size = {} bytes", file_size));
-        
+
         // Read entire file into memory
         let mut data = vec![0u8; file_size];
         let mut total_read = 0usize;
         while total_read < file_size {
-            let n = uio_read(handle, data.as_mut_ptr().add(total_read), file_size - total_read);
+            let n = uio_read(
+                handle,
+                data.as_mut_ptr().add(total_read),
+                file_size - total_read,
+            );
             if n <= 0 {
                 break;
             }
             total_read += n as usize;
         }
         uio_close(handle);
-        
+
         if total_read == 0 {
-            rust_bridge_log_msg(&format!("RUST_OGG_OPEN_FAILED: could not read any data from {}", filename_str));
+            rust_bridge_log_msg(&format!(
+                "RUST_OGG_OPEN_FAILED: could not read any data from {}",
+                filename_str
+            ));
             return 0;
         }
-        
-        rust_bridge_log_msg(&format!("RUST_OGG_OPEN: read {} bytes from UIO", total_read));
-        
+
+        rust_bridge_log_msg(&format!(
+            "RUST_OGG_OPEN: read {} bytes from UIO",
+            total_read
+        ));
+
         // Open from bytes instead of path
         match ogg.open_from_bytes(&data[..total_read], filename_str) {
             Ok(()) => {
                 // Update base decoder fields
                 (*decoder).frequency = ogg.frequency();
-                
+
                 // Get format codes from stored formats (set during InitModule)
                 // These are the audio_FORMAT_* enum values passed from C
                 let format_code = if let Ok(guard) = RUST_OGG_FORMATS.lock() {
@@ -307,11 +330,13 @@ extern "C" fn rust_ova_Open(
                         }
                     } else {
                         // Fallback - shouldn't happen if InitModule was called
-                        rust_bridge_log_msg("RUST_OGG_OPEN: WARNING - no formats set, using fallback");
+                        rust_bridge_log_msg(
+                            "RUST_OGG_OPEN: WARNING - no formats set, using fallback",
+                        );
                         match ogg.format() {
-                            super::formats::AudioFormat::Mono8 => 24,    // audio_FORMAT_MONO8
-                            super::formats::AudioFormat::Mono16 => 22,   // audio_FORMAT_MONO16  
-                            super::formats::AudioFormat::Stereo8 => 25,  // audio_FORMAT_STEREO8
+                            super::formats::AudioFormat::Mono8 => 24, // audio_FORMAT_MONO8
+                            super::formats::AudioFormat::Mono16 => 22, // audio_FORMAT_MONO16
+                            super::formats::AudioFormat::Stereo8 => 25, // audio_FORMAT_STEREO8
                             super::formats::AudioFormat::Stereo16 => 23, // audio_FORMAT_STEREO16
                         }
                     }
@@ -319,15 +344,17 @@ extern "C" fn rust_ova_Open(
                     rust_bridge_log_msg("RUST_OGG_OPEN: WARNING - could not lock formats");
                     23 // audio_FORMAT_STEREO16 as default
                 };
-                
+
                 (*decoder).format = format_code;
                 (*decoder).length = ogg.length();
                 (*decoder).is_null = false;
                 (*decoder).need_swap = ogg.needs_swap();
-                
+
                 rust_bridge_log_msg(&format!(
                     "RUST_OGG_OPEN_SUCCESS: freq={} format={} length={}",
-                    (*decoder).frequency, (*decoder).format, (*decoder).length
+                    (*decoder).frequency,
+                    (*decoder).format,
+                    (*decoder).length
                 ));
                 1 // success
             }
@@ -341,11 +368,11 @@ extern "C" fn rust_ova_Open(
 
 extern "C" fn rust_ova_Close(decoder: *mut TFB_SoundDecoder) {
     rust_bridge_log_msg("RUST_OGG_CLOSE");
-    
+
     if decoder.is_null() {
         return;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if !(*rust_dec).rust_decoder.is_null() {
@@ -363,16 +390,16 @@ extern "C" fn rust_ova_Decode(
     if decoder.is_null() || buf.is_null() || bufsize <= 0 {
         return -1;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return -1;
         }
-        
+
         let ogg = &mut *((*rust_dec).rust_decoder as *mut OggDecoder);
         let buffer = std::slice::from_raw_parts_mut(buf as *mut u8, bufsize as usize);
-        
+
         match ogg.decode(buffer) {
             Ok(bytes) => {
                 rust_bridge_log_msg(&format!("RUST_OGG_DECODE: {} bytes", bytes));
@@ -392,17 +419,17 @@ extern "C" fn rust_ova_Decode(
 
 extern "C" fn rust_ova_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32 {
     rust_bridge_log_msg(&format!("RUST_OGG_SEEK: pcm_pos={}", pcm_pos));
-    
+
     if decoder.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return 0;
         }
-        
+
         let ogg = &mut *((*rust_dec).rust_decoder as *mut OggDecoder);
         match ogg.seek(pcm_pos) {
             Ok(pos) => {
@@ -421,13 +448,13 @@ extern "C" fn rust_ova_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
     if decoder.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustOggDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return 0;
         }
-        
+
         let ogg = &*((*rust_dec).rust_decoder as *mut OggDecoder);
         ogg.get_frame()
     }
@@ -463,7 +490,7 @@ mod tests {
         // Verify the vtable is properly initialized
         let name_ptr = (rust_ova_DecoderVtbl.GetName)();
         assert!(!name_ptr.is_null());
-        
+
         let name = unsafe { CStr::from_ptr(name_ptr) };
         assert_eq!(name.to_str().unwrap(), "Rust Ogg Vorbis");
     }
@@ -486,10 +513,10 @@ mod tests {
             mono16: 0x1101,
             stereo16: 0x1103,
         };
-        
+
         let result = rust_ova_InitModule(0, &formats);
         assert_eq!(result, 1);
-        
+
         rust_ova_TermModule();
     }
 

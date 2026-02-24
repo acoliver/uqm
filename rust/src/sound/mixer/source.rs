@@ -5,8 +5,8 @@
 //! Sources represent playback instances that can have buffers queued to them.
 //! They support playing, pausing, stopping, and gain control.
 
+use crate::sound::mixer::buffer::mixer_get_buffer;
 use crate::sound::mixer::types::*;
-use crate::sound::mixer::buffer::{mixer_get_buffer};
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -176,13 +176,13 @@ pub fn mixer_get_source(handle: usize) -> Option<Arc<Mutex<MixerSource>>> {
 pub fn get_all_sources() -> Vec<(usize, Arc<Mutex<MixerSource>>)> {
     let pool = SOURCE_POOL.lock();
     let mut result = Vec::new();
-    
+
     for (i, slot) in pool.iter().enumerate() {
         if let Some(source) = slot {
             result.push((i, Arc::clone(source)));
         }
     }
-    
+
     result
 }
 
@@ -282,7 +282,7 @@ pub fn mixer_source_play(handle: usize) -> Result<(), MixerError> {
     }
 
     src.state = SourceState::Playing as u32;
-    
+
     Ok(())
 }
 
@@ -394,10 +394,7 @@ pub fn mixer_source_queue_buffers(
 }
 
 /// Unqueue processed buffers from a source
-pub fn mixer_source_unqueue_buffers(
-    handle: usize,
-    n: u32,
-) -> Result<Vec<usize>, MixerError> {
+pub fn mixer_source_unqueue_buffers(handle: usize, n: u32) -> Result<Vec<usize>, MixerError> {
     let source = mixer_get_source(handle).ok_or(MixerError::InvalidName)?;
     let mut src = source.lock();
 
@@ -426,7 +423,9 @@ pub fn mixer_source_unqueue_buffers(
 
         // Remove buffer from queue
         if src.next_queued == Some(buf_handle) {
-            src.next_queued = src.next_queued.and_then(|h| mixer_get_buffer(h).and_then(|b| b.lock().next));
+            src.next_queued = src
+                .next_queued
+                .and_then(|h| mixer_get_buffer(h).and_then(|b| b.lock().next));
         }
         if src.prev_queued == Some(buf_handle) {
             src.prev_queued = None;
@@ -435,7 +434,9 @@ pub fn mixer_source_unqueue_buffers(
             src.last_queued = None;
         }
 
-        src.first_queued = src.first_queued.and_then(|h| mixer_get_buffer(h).and_then(|b| b.lock().next));
+        src.first_queued = src
+            .first_queued
+            .and_then(|h| mixer_get_buffer(h).and_then(|b| b.lock().next));
         src.queued_count -= 1;
 
         // Mark buffer as filled
@@ -458,7 +459,7 @@ pub fn mixer_source_unqueue_buffers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sound::mixer::buffer::{mixer_gen_buffers, mixer_buffer_data};
+    use crate::sound::mixer::buffer::{mixer_buffer_data, mixer_gen_buffers};
 
     #[test]
     fn test_gen_sources() {
@@ -503,10 +504,16 @@ mod tests {
 
         // Test looping
         mixer_source_i(handles[0], SourceProp::Looping, 1).unwrap();
-        assert_eq!(mixer_get_source_i(handles[0], SourceProp::Looping).unwrap(), 1);
+        assert_eq!(
+            mixer_get_source_i(handles[0], SourceProp::Looping).unwrap(),
+            1
+        );
 
         mixer_source_i(handles[0], SourceProp::Looping, 0).unwrap();
-        assert_eq!(mixer_get_source_i(handles[0], SourceProp::Looping).unwrap(), 0);
+        assert_eq!(
+            mixer_get_source_i(handles[0], SourceProp::Looping).unwrap(),
+            0
+        );
 
         // Test gain
         mixer_source_f(handles[0], SourceProp::Gain, 0.5).unwrap();

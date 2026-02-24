@@ -5,10 +5,13 @@
 //! This module provides the core mixing functionality that combines multiple
 //! audio sources into a single output stream.
 
-use crate::sound::mixer::types::*;
-use crate::sound::mixer::source::{MixerSource, mixer_get_source};
 use crate::sound::mixer::buffer::MixerBuffer;
-use crate::sound::mixer::resample::{get_sample_int, put_sample_int, resample_none, resample_nearest, resample_linear, resample_cubic};
+use crate::sound::mixer::resample::{
+    get_sample_int, put_sample_int, resample_cubic, resample_linear, resample_nearest,
+    resample_none,
+};
+use crate::sound::mixer::source::{mixer_get_source, MixerSource};
+use crate::sound::mixer::types::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
@@ -105,7 +108,10 @@ pub fn mixer_is_initialized() -> bool {
 /// Get the mixer format
 pub fn mixer_get_format() -> MixerFormat {
     let state = MIXER_STATE.lock();
-    state.as_ref().map(|s| s.format).unwrap_or(MixerFormat::Stereo16)
+    state
+        .as_ref()
+        .map(|s| s.format)
+        .unwrap_or(MixerFormat::Stereo16)
 }
 
 /// Get the mixer frequency
@@ -135,7 +141,10 @@ pub fn mixer_get_sampsize() -> u32 {
 /// Get the mixer quality
 pub fn mixer_get_quality() -> MixerQuality {
     let state = MIXER_STATE.lock();
-    state.as_ref().map(|s| s.quality).unwrap_or(MixerQuality::Medium)
+    state
+        .as_ref()
+        .map(|s| s.quality)
+        .unwrap_or(MixerQuality::Medium)
 }
 
 /// Get the mixer flags
@@ -280,10 +289,10 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
 
     // Get all sources ONCE at the start (like C code does with its mutex)
     let sources = crate::sound::mixer::source::get_all_sources();
-    
+
     // mixer_sampsize is the size of one complete sample (all channels)
     let mixer_sampsize = (chansize * channels) as u32;
-    
+
     let mut stream_idx = 0;
     let mut left = true;
 
@@ -332,8 +341,12 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
             let mixer_freq = crate::sound::mixer::mix::mixer_get_frequency();
 
             // Debug: log first time we see music buffer (44100 Hz stereo)
-            static LOGGED_MUSIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-            if buf_org_freq == 44100 && buf_org_channels == 2 && !LOGGED_MUSIC.load(std::sync::atomic::Ordering::Relaxed) {
+            static LOGGED_MUSIC: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
+            if buf_org_freq == 44100
+                && buf_org_channels == 2
+                && !LOGGED_MUSIC.load(std::sync::atomic::Ordering::Relaxed)
+            {
                 LOGGED_MUSIC.store(true, std::sync::atomic::Ordering::Relaxed);
                 if let Some(ref data) = buf_guard.data {
                     crate::bridge_log::rust_bridge_log_msg(&format!(
@@ -541,7 +554,13 @@ mod tests {
     #[serial]
     fn test_mixer_init() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Stereo16, MixerQuality::Medium, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Stereo16,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
         assert!(mixer_is_initialized());
         mixer_uninit().unwrap();
     }
@@ -552,7 +571,13 @@ mod tests {
         let _ = mixer_uninit();
         assert!(!mixer_is_initialized());
 
-        mixer_init(48000, MixerFormat::Mono16, MixerQuality::High, MixerFlags::None).unwrap();
+        mixer_init(
+            48000,
+            MixerFormat::Mono16,
+            MixerQuality::High,
+            MixerFlags::None,
+        )
+        .unwrap();
         assert!(mixer_is_initialized());
         assert_eq!(mixer_get_frequency(), 48000);
         assert_eq!(mixer_get_format(), MixerFormat::Mono16);
@@ -566,8 +591,20 @@ mod tests {
     #[serial]
     fn test_mixer_reinit() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Stereo16, MixerQuality::Medium, MixerFlags::None).unwrap();
-        mixer_init(48000, MixerFormat::Mono16, MixerQuality::High, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Stereo16,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
+        mixer_init(
+            48000,
+            MixerFormat::Mono16,
+            MixerQuality::High,
+            MixerFlags::None,
+        )
+        .unwrap();
 
         assert_eq!(mixer_get_frequency(), 48000);
         assert_eq!(mixer_get_format(), MixerFormat::Mono16);
@@ -579,7 +616,13 @@ mod tests {
     #[serial]
     fn test_mixer_get_params() {
         let _ = mixer_uninit();
-        mixer_init(22050, MixerFormat::Stereo8, MixerQuality::Low, MixerFlags::FakeData).unwrap();
+        mixer_init(
+            22050,
+            MixerFormat::Stereo8,
+            MixerQuality::Low,
+            MixerFlags::FakeData,
+        )
+        .unwrap();
 
         assert_eq!(mixer_get_frequency(), 22050);
         assert_eq!(mixer_get_format(), MixerFormat::Stereo8);
@@ -596,7 +639,13 @@ mod tests {
     #[serial]
     fn test_mixer_error() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Stereo16, MixerQuality::Medium, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Stereo16,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
 
         // Mix without initialization should succeed and output silence
         mixer_uninit().unwrap();
@@ -611,7 +660,13 @@ mod tests {
     #[serial]
     fn test_mixer_mix_channels_empty() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Mono8, MixerQuality::Medium, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Mono8,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
 
         let mut stream = vec![0u8; 10];
         mixer_mix_channels(&mut stream).unwrap();
@@ -629,7 +684,13 @@ mod tests {
     #[serial]
     fn test_mixer_mix_fake() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Mono8, MixerQuality::Medium, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Mono8,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
 
         let mut stream = vec![0u8; 10];
         mixer_mix_fake(&mut stream).unwrap();
@@ -646,7 +707,13 @@ mod tests {
     #[serial]
     fn test_mixer_mix_channels_mono16() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Mono16, MixerQuality::Medium, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Mono16,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
 
         let mut stream = vec![0u8; 20]; // 10 samples
         mixer_mix_channels(&mut stream).unwrap();
@@ -664,7 +731,13 @@ mod tests {
     #[serial]
     fn test_mixer_mix_channels_stereo16() {
         let _ = mixer_uninit();
-        mixer_init(44100, MixerFormat::Stereo16, MixerQuality::Medium, MixerFlags::None).unwrap();
+        mixer_init(
+            44100,
+            MixerFormat::Stereo16,
+            MixerQuality::Medium,
+            MixerFlags::None,
+        )
+        .unwrap();
 
         let mut stream = vec![0u8; 40]; // 10 stereo samples
         mixer_mix_channels(&mut stream).unwrap();

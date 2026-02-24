@@ -196,7 +196,10 @@ fn test_mutex_try_lock() {
 
     // The thread should have seen the lock as held
     let was_locked = handle.join().expect("Thread should not panic");
-    assert!(was_locked, "try_lock should have failed while lock was held");
+    assert!(
+        was_locked,
+        "try_lock should have failed while lock was held"
+    );
 }
 
 /// Test mutex contention

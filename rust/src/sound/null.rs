@@ -235,7 +235,7 @@ mod tests {
         decoder.init();
 
         let mut buf = [0u8; 1024];
-        
+
         // First decode should work
         let result = decoder.decode(&mut buf);
         assert!(result.is_ok());

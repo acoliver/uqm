@@ -39,7 +39,7 @@ impl LanczosVideoScaler {
         // Calculate destination dimensions to maintain aspect ratio
         let src_aspect = src_width as f32 / src_height as f32;
         let window_aspect = window_width as f32 / window_height as f32;
-        
+
         let (dst_width, dst_height) = if src_aspect > window_aspect {
             // Video is wider than window - fit to width
             (window_width, (window_width as f32 / src_aspect) as u32)
@@ -49,14 +49,14 @@ impl LanczosVideoScaler {
         };
 
         let base_scaler = VideoScaler::new(src_width, src_height, dst_width, dst_height);
-        
+
         Self {
             base_scaler,
             window_width,
             window_height,
         }
     }
-    
+
     /// Scale a video frame to window-appropriate size
     ///
     /// # Arguments
@@ -67,12 +67,12 @@ impl LanczosVideoScaler {
     pub fn scale(&mut self, src_pixels: &[u32]) -> Option<Vec<u32>> {
         self.base_scaler.scale(src_pixels)
     }
-    
+
     /// Get the destination dimensions after maintaining aspect ratio
     pub fn dst_dimensions(&self) -> (u32, u32) {
         self.base_scaler.dst_dimensions()
     }
-    
+
     /// Get the window dimensions
     pub fn window_dimensions(&self) -> (u32, u32) {
         (self.window_width, self.window_height)
@@ -111,7 +111,7 @@ impl VideoScaler {
     pub fn new(src_width: u32, src_height: u32, dst_width: u32, dst_height: u32) -> Self {
         // Create resizer
         let resizer = Resizer::new();
-        
+
         // Pre-allocate destination buffer
         let dst_image = Image::new(
             dst_width.try_into().unwrap_or(1),
@@ -120,9 +120,9 @@ impl VideoScaler {
         );
 
         // Configure Lanczos3 algorithm
-        let options = ResizeOptions::new().resize_alg(
-            fast_image_resize::ResizeAlg::Convolution(FilterType::Lanczos3)
-        );
+        let options = ResizeOptions::new().resize_alg(fast_image_resize::ResizeAlg::Convolution(
+            FilterType::Lanczos3,
+        ));
 
         Self {
             src_width,
@@ -169,7 +169,8 @@ impl VideoScaler {
             self.src_height.try_into().ok()?,
             &src_bytes,
             PixelType::U8x4,
-        ).ok()?;
+        )
+        .ok()?;
 
         // Perform the resize with Lanczos3
         self.resizer
@@ -233,13 +234,13 @@ mod tests {
     #[test]
     fn test_scaler_scale_2x() {
         let mut scaler = VideoScaler::new(4, 4, 8, 8);
-        
+
         // Create a simple 4x4 red image
         let src: Vec<u32> = vec![0xFF0000FF; 16]; // Red with full alpha
-        
+
         let dst = scaler.scale(&src).unwrap();
         assert_eq!(dst.len(), 64); // 8x8
-        
+
         // Should still be predominantly red
         for pixel in &dst {
             let r = pixel & 0xFF;
@@ -250,7 +251,7 @@ mod tests {
     #[test]
     fn test_scaler_wrong_input_size() {
         let mut scaler = VideoScaler::new(280, 200, 560, 400);
-        
+
         // Wrong size input
         let src: Vec<u32> = vec![0; 100];
         assert!(scaler.scale(&src).is_none());
@@ -268,7 +269,7 @@ mod tests {
     #[test]
     fn test_scaler_gradient() {
         let mut scaler = VideoScaler::new(4, 4, 8, 8);
-        
+
         // Create a gradient (black to white diagonal)
         let mut src = Vec::with_capacity(16);
         for y in 0..4u32 {
@@ -278,10 +279,10 @@ mod tests {
                 src.push(pixel);
             }
         }
-        
+
         let dst = scaler.scale(&src).unwrap();
         assert_eq!(dst.len(), 64);
-        
+
         // Lanczos should produce smooth interpolation
         // Check that output has varied values (not all same)
         let unique: std::collections::HashSet<u32> = dst.iter().copied().collect();

@@ -107,9 +107,9 @@ impl<T> Thread<T> {
             builder = builder.name(n.to_string());
         }
 
-        let handle = builder.spawn(f).map_err(|e| {
-            ThreadError::SpawnFailed(format!("Failed to spawn thread: {}", e))
-        })?;
+        let handle = builder
+            .spawn(f)
+            .map_err(|e| ThreadError::SpawnFailed(format!("Failed to spawn thread: {}", e)))?;
 
         Ok(Self {
             handle: Some(handle),
@@ -126,12 +126,10 @@ impl<T> Thread<T> {
     /// Returns `ThreadError::JoinFailed` if the thread panicked
     pub fn join(mut self) -> Result<T> {
         match self.handle.take() {
-            Some(handle) => handle.join().map_err(|_| {
-                ThreadError::JoinFailed("Thread panicked".to_string())
-            }),
-            None => Err(ThreadError::JoinFailed(
-                "Thread already joined".to_string(),
-            )),
+            Some(handle) => handle
+                .join()
+                .map_err(|_| ThreadError::JoinFailed("Thread panicked".to_string())),
+            None => Err(ThreadError::JoinFailed("Thread already joined".to_string())),
         }
     }
 
@@ -255,9 +253,10 @@ impl UqmCondVar {
     /// # Errors
     /// Returns `ThreadError::CondVarError` if the wait fails
     pub fn wait(&self) -> Result<()> {
-        let mut state = self.state.lock().map_err(|_| {
-            ThreadError::CondVarError("Internal mutex poisoned".to_string())
-        })?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ThreadError::CondVarError("Internal mutex poisoned".to_string()))?;
 
         let my_generation = state.generation;
 
@@ -272,9 +271,10 @@ impl UqmCondVar {
                 state.pending_signals -= 1;
                 return Ok(());
             }
-            state = self.inner.wait(state).map_err(|_| {
-                ThreadError::CondVarError("Condvar wait failed".to_string())
-            })?;
+            state = self
+                .inner
+                .wait(state)
+                .map_err(|_| ThreadError::CondVarError("Condvar wait failed".to_string()))?;
         }
     }
 
@@ -289,9 +289,10 @@ impl UqmCondVar {
     /// # Errors
     /// Returns `ThreadError::CondVarError` if the wait fails
     pub fn wait_timeout(&self, timeout: Duration) -> Result<bool> {
-        let mut state = self.state.lock().map_err(|_| {
-            ThreadError::CondVarError("Internal mutex poisoned".to_string())
-        })?;
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ThreadError::CondVarError("Internal mutex poisoned".to_string()))?;
 
         let my_generation = state.generation;
 
@@ -301,9 +302,10 @@ impl UqmCondVar {
             return Ok(true);
         }
 
-        let (guard, result) = self.inner.wait_timeout(state, timeout).map_err(|_| {
-            ThreadError::CondVarError("Condvar wait_timeout failed".to_string())
-        })?;
+        let (guard, result) = self
+            .inner
+            .wait_timeout(state, timeout)
+            .map_err(|_| ThreadError::CondVarError("Condvar wait_timeout failed".to_string()))?;
 
         state = guard;
 
@@ -390,15 +392,17 @@ impl Semaphore {
     /// # Errors
     /// Returns `ThreadError::SemaphoreError` if the operation fails
     pub fn acquire(&self) -> Result<()> {
-        let mut count = self.count.lock().map_err(|_| {
-            ThreadError::SemaphoreError("Semaphore mutex poisoned".to_string())
-        })?;
+        let mut count = self
+            .count
+            .lock()
+            .map_err(|_| ThreadError::SemaphoreError("Semaphore mutex poisoned".to_string()))?;
 
         // Wait until count > 0
         while *count == 0 {
-            count = self.condvar.wait(count).map_err(|_| {
-                ThreadError::SemaphoreError("Condvar wait failed".to_string())
-            })?;
+            count = self
+                .condvar
+                .wait(count)
+                .map_err(|_| ThreadError::SemaphoreError("Condvar wait failed".to_string()))?;
         }
 
         // Decrement the count
@@ -724,7 +728,11 @@ pub extern "C" fn rust_uninit_thread_system() {
 /// Safe to call from C.
 #[no_mangle]
 pub extern "C" fn rust_is_thread_system_initialized() -> c_int {
-    if is_thread_system_initialized() { 1 } else { 0 }
+    if is_thread_system_initialized() {
+        1
+    } else {
+        0
+    }
 }
 
 // --- Thread Operations ---
@@ -763,8 +771,7 @@ pub unsafe extern "C" fn rust_thread_spawn(
     match Thread::spawn(name_str, move || {
         // Safety: We're reconstructing the original function pointer and data pointer
         // inside the spawned thread. The caller guarantees data remains valid.
-        let func: unsafe extern "C" fn(*mut c_void) =
-            unsafe { std::mem::transmute(func_ptr) };
+        let func: unsafe extern "C" fn(*mut c_void) = unsafe { std::mem::transmute(func_ptr) };
         let data = data_ptr as *mut c_void;
         unsafe { func(data) }
     }) {
@@ -1105,7 +1112,11 @@ pub unsafe extern "C" fn rust_semaphore_try_acquire(sem: *mut RustSemaphore) -> 
     }
 
     let sem = &*(sem as *mut Semaphore);
-    if sem.try_acquire() { 1 } else { 0 }
+    if sem.try_acquire() {
+        1
+    } else {
+        0
+    }
 }
 
 /// Release a semaphore permit

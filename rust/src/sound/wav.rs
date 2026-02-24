@@ -15,7 +15,7 @@ use super::formats::{AudioFormat, DecoderFormats};
 // WAV format constants (little-endian IDs)
 const RIFF_ID: u32 = 0x46464952; // "RIFF"
 const WAVE_ID: u32 = 0x45564157; // "WAVE"
-const FMT_ID: u32 = 0x20746d66;  // "fmt "
+const FMT_ID: u32 = 0x20746d66; // "fmt "
 const DATA_ID: u32 = 0x61746164; // "data"
 
 // WAV format codes
@@ -24,20 +24,20 @@ const WAVE_FORMAT_PCM: u16 = 1;
 /// WAV file header
 #[derive(Debug, Default)]
 struct WavFileHeader {
-    id: u32,       // "RIFF"
-    size: u32,     // File size - 8
-    format: u32,   // "WAVE"
+    id: u32,     // "RIFF"
+    size: u32,   // File size - 8
+    format: u32, // "WAVE"
 }
 
 /// WAV format chunk
 #[derive(Debug, Default)]
 struct WavFormatHeader {
-    format: u16,           // 1 = PCM
-    channels: u16,         // 1 = mono, 2 = stereo
-    sample_rate: u32,      // Samples per second
-    byte_rate: u32,        // bytes per second
-    block_align: u16,      // bytes per sample frame
-    bits_per_sample: u16,  // 8 or 16
+    format: u16,          // 1 = PCM
+    channels: u16,        // 1 = mono, 2 = stereo
+    sample_rate: u32,     // Samples per second
+    byte_rate: u32,       // bytes per second
+    block_align: u16,     // bytes per sample frame
+    bits_per_sample: u16, // 8 or 16
 }
 
 /// WAV chunk header
@@ -91,18 +91,18 @@ impl WavDecoder {
     /// Read a little-endian u16
     fn read_le_u16(cursor: &mut Cursor<&[u8]>) -> DecodeResult<u16> {
         let mut buf = [0u8; 2];
-        cursor.read_exact(&mut buf).map_err(|e| {
-            DecodeError::InvalidData(format!("Failed to read u16: {}", e))
-        })?;
+        cursor
+            .read_exact(&mut buf)
+            .map_err(|e| DecodeError::InvalidData(format!("Failed to read u16: {}", e)))?;
         Ok(u16::from_le_bytes(buf))
     }
 
     /// Read a little-endian u32
     fn read_le_u32(cursor: &mut Cursor<&[u8]>) -> DecodeResult<u32> {
         let mut buf = [0u8; 4];
-        cursor.read_exact(&mut buf).map_err(|e| {
-            DecodeError::InvalidData(format!("Failed to read u32: {}", e))
-        })?;
+        cursor
+            .read_exact(&mut buf)
+            .map_err(|e| DecodeError::InvalidData(format!("Failed to read u32: {}", e)))?;
         Ok(u32::from_le_bytes(buf))
     }
 
@@ -132,7 +132,9 @@ impl WavDecoder {
     /// Parse format chunk
     fn parse_format_header(cursor: &mut Cursor<&[u8]>, size: u32) -> DecodeResult<WavFormatHeader> {
         if size < 16 {
-            return Err(DecodeError::InvalidData("Format chunk too small".to_string()));
+            return Err(DecodeError::InvalidData(
+                "Format chunk too small".to_string(),
+            ));
         }
 
         let format = Self::read_le_u16(cursor)?;
@@ -144,26 +146,31 @@ impl WavDecoder {
 
         // Skip any extra format bytes
         if size > 16 {
-            cursor.seek(SeekFrom::Current((size - 16) as i64)).map_err(|e| {
-                DecodeError::InvalidData(format!("Failed to skip format bytes: {}", e))
-            })?;
+            cursor
+                .seek(SeekFrom::Current((size - 16) as i64))
+                .map_err(|e| {
+                    DecodeError::InvalidData(format!("Failed to skip format bytes: {}", e))
+                })?;
         }
 
         if format != WAVE_FORMAT_PCM {
             return Err(DecodeError::InvalidData(format!(
-                "Unsupported WAV format: {} (only PCM supported)", format
+                "Unsupported WAV format: {} (only PCM supported)",
+                format
             )));
         }
 
         if channels != 1 && channels != 2 {
             return Err(DecodeError::InvalidData(format!(
-                "Unsupported channel count: {}", channels
+                "Unsupported channel count: {}",
+                channels
             )));
         }
 
         if bits_per_sample != 8 && bits_per_sample != 16 {
             return Err(DecodeError::InvalidData(format!(
-                "Unsupported bits per sample: {}", bits_per_sample
+                "Unsupported bits per sample: {}",
+                bits_per_sample
             )));
         }
 
@@ -230,10 +237,9 @@ impl SoundDecoder for WavDecoder {
     }
 
     fn open(&mut self, path: &std::path::Path) -> DecodeResult<()> {
-        let data = std::fs::read(path).map_err(|e| {
-            DecodeError::NotFound(format!("{}: {}", path.display(), e))
-        })?;
-        
+        let data = std::fs::read(path)
+            .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
+
         self.open_from_bytes(&data, path.to_str().unwrap_or("unknown"))
     }
 
@@ -250,7 +256,7 @@ impl SoundDecoder for WavDecoder {
 
         while (cursor.position() as usize) < data.len() {
             let chunk = Self::parse_chunk_header(&mut cursor)?;
-            
+
             match chunk.id {
                 FMT_ID => {
                     self.fmt_header = Self::parse_format_header(&mut cursor, chunk.size)?;
@@ -264,15 +270,19 @@ impl SoundDecoder for WavDecoder {
                 }
                 _ => {
                     // Skip unknown chunk
-                    cursor.seek(SeekFrom::Current(chunk.size as i64)).map_err(|e| {
-                        DecodeError::InvalidData(format!("Failed to skip chunk: {}", e))
-                    })?;
+                    cursor
+                        .seek(SeekFrom::Current(chunk.size as i64))
+                        .map_err(|e| {
+                            DecodeError::InvalidData(format!("Failed to skip chunk: {}", e))
+                        })?;
                 }
             }
         }
 
         if !fmt_found {
-            return Err(DecodeError::InvalidData("No format chunk found".to_string()));
+            return Err(DecodeError::InvalidData(
+                "No format chunk found".to_string(),
+            ));
         }
 
         if data_offset == 0 || data_size == 0 {
@@ -425,22 +435,34 @@ mod tests {
     #[test]
     fn test_wav_audio_format_from_header() {
         let mut header = WavFormatHeader::default();
-        
+
         header.channels = 1;
         header.bits_per_sample = 8;
-        assert_eq!(WavDecoder::audio_format_from_header(&header), AudioFormat::Mono8);
+        assert_eq!(
+            WavDecoder::audio_format_from_header(&header),
+            AudioFormat::Mono8
+        );
 
         header.channels = 2;
         header.bits_per_sample = 8;
-        assert_eq!(WavDecoder::audio_format_from_header(&header), AudioFormat::Stereo8);
+        assert_eq!(
+            WavDecoder::audio_format_from_header(&header),
+            AudioFormat::Stereo8
+        );
 
         header.channels = 1;
         header.bits_per_sample = 16;
-        assert_eq!(WavDecoder::audio_format_from_header(&header), AudioFormat::Mono16);
+        assert_eq!(
+            WavDecoder::audio_format_from_header(&header),
+            AudioFormat::Mono16
+        );
 
         header.channels = 2;
         header.bits_per_sample = 16;
-        assert_eq!(WavDecoder::audio_format_from_header(&header), AudioFormat::Stereo16);
+        assert_eq!(
+            WavDecoder::audio_format_from_header(&header),
+            AudioFormat::Stereo16
+        );
     }
 
     #[test]
@@ -454,12 +476,12 @@ mod tests {
             // fmt chunk
             0x66, 0x6d, 0x74, 0x20, // "fmt "
             0x10, 0x00, 0x00, 0x00, // chunk size = 16
-            0x01, 0x00,             // format = PCM
-            0x01, 0x00,             // channels = 1
+            0x01, 0x00, // format = PCM
+            0x01, 0x00, // channels = 1
             0x22, 0x56, 0x00, 0x00, // sample rate = 22050
             0x22, 0x56, 0x00, 0x00, // byte rate = 22050
-            0x01, 0x00,             // block align = 1
-            0x08, 0x00,             // bits per sample = 8
+            0x01, 0x00, // block align = 1
+            0x08, 0x00, // bits per sample = 8
             // data chunk
             0x64, 0x61, 0x74, 0x61, // "data"
             0x04, 0x00, 0x00, 0x00, // data size = 4
@@ -468,10 +490,10 @@ mod tests {
 
         let mut decoder = WavDecoder::new();
         decoder.init();
-        
+
         let result = decoder.open_from_bytes(&wav_data, "test.wav");
         assert!(result.is_ok(), "Failed to open WAV: {:?}", result);
-        
+
         assert_eq!(decoder.frequency(), 22050);
         assert_eq!(decoder.format(), AudioFormat::Mono8);
         assert!(decoder.length() > 0.0);
@@ -481,12 +503,10 @@ mod tests {
     fn test_wav_decoder_decode_valid() {
         // Minimal valid WAV file with known data
         let wav_data: Vec<u8> = vec![
-            0x52, 0x49, 0x46, 0x46, 0x28, 0x00, 0x00, 0x00,
-            0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
-            0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
-            0x22, 0x56, 0x00, 0x00, 0x22, 0x56, 0x00, 0x00,
-            0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61,
-            0x04, 0x00, 0x00, 0x00, 0x10, 0x20, 0x30, 0x40,
+            0x52, 0x49, 0x46, 0x46, 0x28, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6d,
+            0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x22, 0x56, 0x00, 0x00,
+            0x22, 0x56, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61, 0x04, 0x00,
+            0x00, 0x00, 0x10, 0x20, 0x30, 0x40,
         ];
 
         let mut decoder = WavDecoder::new();
@@ -503,13 +523,10 @@ mod tests {
     #[test]
     fn test_wav_decoder_seek() {
         let wav_data: Vec<u8> = vec![
-            0x52, 0x49, 0x46, 0x46, 0x2c, 0x00, 0x00, 0x00,
-            0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20,
-            0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
-            0x22, 0x56, 0x00, 0x00, 0x22, 0x56, 0x00, 0x00,
-            0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61,
-            0x08, 0x00, 0x00, 0x00, 0x10, 0x20, 0x30, 0x40,
-            0x50, 0x60, 0x70, 0x80,
+            0x52, 0x49, 0x46, 0x46, 0x2c, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6d,
+            0x74, 0x20, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x22, 0x56, 0x00, 0x00,
+            0x22, 0x56, 0x00, 0x00, 0x01, 0x00, 0x08, 0x00, 0x64, 0x61, 0x74, 0x61, 0x08, 0x00,
+            0x00, 0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
         ];
 
         let mut decoder = WavDecoder::new();

@@ -1,17 +1,17 @@
 // Minimal stdio-backed UIO implementation
 // Reference: sc2/src/libs/uio/io.h, uiostream.h
 
-use std::os::raw::{c_char, c_int, c_long};
+use crate::bridge_log::rust_bridge_log_msg;
+use libc::{mode_t, off_t, size_t};
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
-use libc::{size_t, off_t, mode_t};
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::raw::{c_char, c_int, c_long};
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
 use std::sync::Mutex;
-use std::collections::HashMap;
 use std::sync::OnceLock;
-use crate::bridge_log::rust_bridge_log_msg;
 
 // =============================================================================
 // Mount Point Registry
@@ -19,7 +19,7 @@ use crate::bridge_log::rust_bridge_log_msg;
 
 struct MountInfo {
     source_path: PathBuf,
-    base_dir: PathBuf,  // Base directory for this mount
+    base_dir: PathBuf, // Base directory for this mount
 }
 
 static MOUNT_REGISTRY: OnceLock<Mutex<HashMap<String, MountInfo>>> = OnceLock::new();
@@ -35,8 +35,8 @@ pub struct uio_DirHandle {
     path: PathBuf,
     refcount: std::sync::atomic::AtomicI32,
     repository: *mut uio_Repository,
-    root_end: PathBuf,  // Emulating rootEnd pointer
-    // Additional fields would go here for full implementation
+    root_end: PathBuf, // Emulating rootEnd pointer
+                       // Additional fields would go here for full implementation
 }
 
 #[repr(C)]
@@ -61,24 +61,24 @@ pub unsafe extern "C" fn uio_rename(
     new_path: *const c_char,
 ) -> c_int {
     log_marker("uio_rename called");
-    
+
     if old_dir.is_null() || new_dir.is_null() {
         return -1;
     }
-    
+
     let old_dir_path = &(*old_dir).path;
     let new_dir_path = &(*new_dir).path;
-    
+
     let old_full = match cstr_to_pathbuf(old_path) {
         Some(p) => resolve_path(old_dir_path, &p),
         None => return -1,
     };
-    
+
     let new_full = match cstr_to_pathbuf(new_path) {
         Some(p) => resolve_path(new_dir_path, &p),
         None => return -1,
     };
-    
+
     match fs::rename(&old_full, &new_full) {
         Ok(_) => 0,
         Err(_) => -1,
@@ -92,17 +92,17 @@ pub unsafe extern "C" fn uio_access(
     _mode: c_int,
 ) -> c_int {
     log_marker("uio_access called");
-    
+
     if dir.is_null() {
         return -1;
     }
-    
+
     let dir_path = &(*dir).path;
     let full_path = match cstr_to_pathbuf(path) {
         Some(p) => resolve_path(dir_path, &p),
         None => return -1,
     };
-    
+
     // Simple existence check
     match full_path.exists() {
         true => 0,
@@ -117,22 +117,26 @@ pub unsafe extern "C" fn uio_stat(
     stat_buf: *mut stat,
 ) -> c_int {
     log_marker("uio_stat called");
-    
+
     if dir.is_null() || stat_buf.is_null() {
         return -1;
     }
-    
+
     let dir_path = &(*dir).path;
     let full_path = match cstr_to_pathbuf(path) {
         Some(p) => resolve_path(dir_path, &p),
         None => return -1,
     };
-    
+
     match fs::metadata(&full_path) {
         Ok(meta) => {
             (*stat_buf).st_size = meta.len() as i64;
             (*stat_buf).st_mode = if meta.is_file() { 0o100000 } else { 0o040000 };
-            (*stat_buf).st_mode |= if meta.permissions().readonly() { 0o444 } else { 0o666 };
+            (*stat_buf).st_mode |= if meta.permissions().readonly() {
+                0o444
+            } else {
+                0o666
+            };
             0 // Success
         }
         Err(_) => -1,
@@ -146,17 +150,17 @@ pub unsafe extern "C" fn uio_mkdir(
     _mode: mode_t,
 ) -> c_int {
     log_marker("uio_mkdir called");
-    
+
     if dir.is_null() {
         return -1;
     }
-    
+
     let dir_path = &(*dir).path;
     let full_path = match cstr_to_pathbuf(path) {
         Some(p) => resolve_path(dir_path, &p),
         None => return -1,
     };
-    
+
     match fs::create_dir(&full_path) {
         Ok(_) => 0,
         Err(_) => -1,
@@ -164,22 +168,19 @@ pub unsafe extern "C" fn uio_mkdir(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_rmdir(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-) -> c_int {
+pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
     log_marker("uio_rmdir called");
-    
+
     if dir.is_null() {
         return -1;
     }
-    
+
     let dir_path = &(*dir).path;
     let full_path = match cstr_to_pathbuf(path) {
         Some(p) => resolve_path(dir_path, &p),
         None => return -1,
     };
-    
+
     match fs::remove_dir(&full_path) {
         Ok(_) => 0,
         Err(_) => -1,
@@ -187,31 +188,27 @@ pub unsafe extern "C" fn uio_rmdir(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_lseek(
-    handle: *mut uio_Handle,
-    offset: off_t,
-    whence: c_int,
-) -> c_int {
+pub unsafe extern "C" fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whence: c_int) -> c_int {
     log_marker("uio_lseek called");
-    
+
     if handle.is_null() {
         return -1;
     }
-    
+
     // handle is a Mutex<File>
     let file = &(*handle);
     let mut guard = match file.lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
-    
+
     let seek_from = match whence {
         SEEK_SET => SeekFrom::Start(offset as u64),
         SEEK_CUR => SeekFrom::Current(offset as i64),
         SEEK_END => SeekFrom::End(offset as i64),
         _ => return -1,
     };
-    
+
     match guard.seek(seek_from) {
         Ok(_) => 0,
         Err(_) => -1,
@@ -257,7 +254,7 @@ pub struct uio_Stream {
 }
 
 // =============================================================================
-// uio_getFileLocation / uio_unmountDir / uio_unmountAllDirs / 
+// uio_getFileLocation / uio_unmountDir / uio_unmountAllDirs /
 // uio_getMountFileSystemType / uio_transplantDir
 // =============================================================================
 
@@ -293,9 +290,7 @@ pub unsafe extern "C" fn uio_unmountAllDirs(_repository: *mut uio_Repository) ->
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_getMountFileSystemType(
-    _mountHandle: *mut uio_MountHandle,
-) -> c_int {
+pub unsafe extern "C" fn uio_getMountFileSystemType(_mountHandle: *mut uio_MountHandle) -> c_int {
     log_marker("uio_getMountFileSystemType called - stub");
     0 // Return a dummy filesystem ID
 }
@@ -328,7 +323,7 @@ pub unsafe extern "C" fn uio_fgets(
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         uio_fgets_inner(buf, size, stream)
     }));
-    
+
     match result {
         Ok(ptr) => ptr,
         Err(_) => {
@@ -338,11 +333,7 @@ pub unsafe extern "C" fn uio_fgets(
     }
 }
 
-unsafe fn uio_fgets_inner(
-    buf: *mut c_char,
-    size: c_int,
-    stream: *mut uio_Stream,
-) -> *mut c_char {
+unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream) -> *mut c_char {
     rust_bridge_log_msg("RUST_UIO: uio_fgets entry");
     if stream.is_null() || buf.is_null() || size <= 0 {
         rust_bridge_log_msg("RUST_UIO: uio_fgets invalid args");
@@ -481,17 +472,17 @@ pub unsafe extern "C" fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return -1;
     }
-    
+
     let s = &*stream;
     if s.handle.is_null() {
         return -1;
     }
-    
+
     let handle_ptr = s.handle as *mut Mutex<std::fs::File>;
     let file_mutex = &*handle_ptr;
-    
+
     let byte = c as u8;
-    
+
     if let Ok(mut file) = file_mutex.lock() {
         use std::io::Write;
         match file.write_all(&[byte]) {
@@ -508,18 +499,18 @@ pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) ->
     if stream.is_null() || s.is_null() {
         return -1;
     }
-    
+
     let s_stream = &*stream;
     if s_stream.handle.is_null() {
         return -1;
     }
-    
+
     let handle_ptr = s_stream.handle as *mut Mutex<std::fs::File>;
     let file_mutex = &*handle_ptr;
-    
+
     let cstr = std::ffi::CStr::from_ptr(s);
     let bytes = cstr.to_bytes();
-    
+
     if let Ok(mut file) = file_mutex.lock() {
         use std::io::Write;
         match file.write_all(bytes) {
@@ -536,15 +527,15 @@ pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return 0; // Flushing NULL stream is a no-op success
     }
-    
+
     let s = &*stream;
     if s.handle.is_null() {
         return 0;
     }
-    
+
     let handle_ptr = s.handle as *mut Mutex<std::fs::File>;
     let file_mutex = &*handle_ptr;
-    
+
     if let Ok(mut file) = file_mutex.lock() {
         use std::io::Write;
         match file.flush() {
@@ -578,22 +569,22 @@ pub unsafe extern "C" fn uio_fwrite(
     if stream.is_null() || ptr.is_null() {
         return 0;
     }
-    
+
     let s = &*stream;
     if s.handle.is_null() {
         return 0;
     }
-    
+
     let total_bytes = size * nmemb;
     if total_bytes == 0 {
         return nmemb; // Writing 0 items is always successful
     }
-    
+
     let handle_ptr = s.handle as *mut Mutex<std::fs::File>;
     let file_mutex = &*handle_ptr;
-    
+
     let data = std::slice::from_raw_parts(ptr as *const u8, total_bytes);
-    
+
     if let Ok(mut file) = file_mutex.lock() {
         use std::io::Write;
         match file.write_all(data) {
@@ -611,7 +602,6 @@ pub unsafe extern "C" fn uio_clearerr(_stream: *mut uio_Stream) {
 }
 
 #[no_mangle]
-
 // =============================================================================
 // uio_openFileBlock / uio_closeFileBlock / uio_accessFileBlock /
 // uio_copyFileBlock / uio_setFileBlockUsageHint / uio_openFileBlock2
@@ -621,7 +611,6 @@ pub unsafe extern "C" fn uio_clearerr(_stream: *mut uio_Stream) {
 // uio_openFileBlock / uio_closeFileBlock / uio_accessFileBlock /
 // uio_copyFileBlock / uio_setFileBlockUsageHint / uio_openFileBlock2
 // =============================================================================
-
 #[repr(C)]
 pub struct uio_FileBlock {
     _private: [u8; 0],
@@ -896,9 +885,7 @@ pub unsafe extern "C" fn uio_Handle_new(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(
-    _pRoot: *mut uio_PRoot,
-) -> *mut uio_PDirHandle {
+pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(_pRoot: *mut uio_PRoot) -> *mut uio_PDirHandle {
     log_marker("uio_PRoot_getRootDirHandle called - stub");
     let handle = Box::new(uio_PDirHandle { _private: [] });
     Box::leak(handle) as *mut uio_PDirHandle
@@ -940,9 +927,7 @@ pub unsafe extern "C" fn uio_printMounts(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_streamHandle(
-    stream: *mut uio_Stream,
-) -> *mut uio_Handle {
+pub unsafe extern "C" fn uio_streamHandle(stream: *mut uio_Stream) -> *mut uio_Handle {
     log_marker("uio_streamHandle called");
     if stream.is_null() {
         return ptr::null_mut();
@@ -951,7 +936,6 @@ pub unsafe extern "C" fn uio_streamHandle(
 }
 
 pub type stat = libc::stat;
-
 
 // Constants
 const O_RDONLY: c_int = 0;
@@ -966,27 +950,25 @@ const SEEK_CUR: c_int = 1;
 const SEEK_END: c_int = 2;
 
 /// Log a message to the Rust bridge log file (C-ABI function for use by C).
-/// 
+///
 /// # Safety
 /// The message pointer must be a valid null-terminated C string.
-/// 
+///
 /// Returns 0 on success, -1 on failure.
 #[no_mangle]
-pub unsafe extern "C" fn rust_bridge_log_msg_c(
-    message: *const c_char,
-) -> c_int {
+pub unsafe extern "C" fn rust_bridge_log_msg_c(message: *const c_char) -> c_int {
     use crate::bridge_log::rust_bridge_log_msg;
-    
+
     if message.is_null() {
         return -1;
     }
-    
+
     let c_str = std::ffi::CStr::from_ptr(message);
     let message_str = match c_str.to_str() {
         Ok(s) => s,
         Err(_) => return -1,
     };
-    
+
     rust_bridge_log_msg(message_str);
     0
 }
@@ -1095,9 +1077,9 @@ pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
 // Helper: Resolve path through mount registry
 fn resolve_mount_path(path: &Path) -> PathBuf {
     let path_str = path.to_string_lossy();
-    
+
     rust_bridge_log_msg(&format!("RUST_UIO: resolve_mount_path input: {:?}", path));
-    
+
     // CRITICAL: If path is an absolute filesystem path (starts with /Users, /home, /tmp, etc.)
     // it should NOT be resolved through the virtual mount system. Return as-is.
     // The virtual mount "/" is for UIO virtual paths, not real filesystem paths.
@@ -1109,78 +1091,105 @@ fn resolve_mount_path(path: &Path) -> PathBuf {
         if let Some(comp) = first_component {
             let comp_str = comp.as_os_str().to_string_lossy();
             // Common real filesystem prefixes
-            if comp_str == "Users" || comp_str == "home" || comp_str == "tmp" || 
-               comp_str == "var" || comp_str == "opt" || comp_str == "private" ||
-               comp_str == "System" || comp_str == "Library" || comp_str == "Applications" {
-                rust_bridge_log_msg(&format!("RUST_UIO: path {:?} is real filesystem path, returning as-is", path));
+            if comp_str == "Users"
+                || comp_str == "home"
+                || comp_str == "tmp"
+                || comp_str == "var"
+                || comp_str == "opt"
+                || comp_str == "private"
+                || comp_str == "System"
+                || comp_str == "Library"
+                || comp_str == "Applications"
+            {
+                rust_bridge_log_msg(&format!(
+                    "RUST_UIO: path {:?} is real filesystem path, returning as-is",
+                    path
+                ));
                 return path.to_path_buf();
             }
         }
     }
-    
+
     // IMPORTANT: Check if path is already an absolute path under any mount's base_dir or source_path
     // This prevents duplicating /Users/... segments when paths have already been resolved
     let registry = get_mount_registry().lock().unwrap();
     for (_mount_point, mount_info) in registry.iter() {
         let base_dir_str = mount_info.base_dir.to_string_lossy();
         let source_path_str = mount_info.source_path.to_string_lossy();
-        
+
         rust_bridge_log_msg(&format!("RUST_UIO: resolve_mount_path checking: path_str={:?} base_dir_str={:?} source_path_str={:?}", 
             path_str, base_dir_str, source_path_str));
-        
+
         // Check if path already starts with base_dir (e.g., "/Users/acoliver/...")
         if path_str.starts_with(base_dir_str.as_ref()) {
-            rust_bridge_log_msg(&format!("RUST_UIO: path {:?} already under base_dir {:?}, returning as-is", path, mount_info.base_dir));
+            rust_bridge_log_msg(&format!(
+                "RUST_UIO: path {:?} already under base_dir {:?}, returning as-is",
+                path, mount_info.base_dir
+            ));
             return path.to_path_buf();
         }
-        
+
         // Check if path already starts with source_path
         if path_str.starts_with(source_path_str.as_ref()) {
-            rust_bridge_log_msg(&format!("RUST_UIO: path {:?} already under source_path {:?}, returning as-is", path, mount_info.source_path));
+            rust_bridge_log_msg(&format!(
+                "RUST_UIO: path {:?} already under source_path {:?}, returning as-is",
+                path, mount_info.source_path
+            ));
             return path.to_path_buf();
         }
     }
     // Drop the lock before we potentially re-acquire it below
     drop(registry);
-    
+
     // Try to find a matching mount point (longest match wins)
     let registry = get_mount_registry().lock().unwrap();
     let mut best_mount: Option<String> = None;
     let mut best_mount_len = 0;
-    
+
     for mount_point in registry.keys() {
         if path_str.starts_with(mount_point) && mount_point.len() > best_mount_len {
             best_mount = Some(mount_point.clone());
             best_mount_len = mount_point.len();
         }
     }
-    
+
     if let Some(mount_point) = best_mount {
         if let Some(mount_info) = registry.get(&mount_point) {
             // Special handling for "/" mount point
             if mount_point == "/" {
                 // For root mount, the path relative to "/" is appended to base_dir
-                let suffix = &path_str[best_mount_len..];  // Skip the "/"
+                let suffix = &path_str[best_mount_len..]; // Skip the "/"
                 let resolved = if suffix.is_empty() || suffix == "/" {
                     mount_info.base_dir.clone()
                 } else {
                     // Remove leading slash from suffix if present
-                    let suffix_clean = if suffix.starts_with('/') { &suffix[1..] } else { suffix };
+                    let suffix_clean = if suffix.starts_with('/') {
+                        &suffix[1..]
+                    } else {
+                        suffix
+                    };
                     if suffix_clean.is_empty() {
                         mount_info.base_dir.clone()
                     } else {
                         mount_info.base_dir.join(suffix_clean)
                     }
                 };
-                rust_bridge_log_msg(&format!("RUST_UIO: resolved {:?} -> {:?} (mount: {})", path, resolved, mount_point));
+                rust_bridge_log_msg(&format!(
+                    "RUST_UIO: resolved {:?} -> {:?} (mount: {})",
+                    path, resolved, mount_point
+                ));
                 return resolved;
             }
-            
+
             // For other mount points, use original logic
             let suffix = &path_str[best_mount_len..];
             let resolved = if suffix.is_empty() || suffix.starts_with('/') {
                 // Remove leading slash from suffix if present
-                let suffix_clean = if suffix.starts_with('/') { &suffix[1..] } else { suffix };
+                let suffix_clean = if suffix.starts_with('/') {
+                    &suffix[1..]
+                } else {
+                    suffix
+                };
                 if suffix_clean.is_empty() {
                     mount_info.source_path.clone()
                 } else {
@@ -1189,13 +1198,19 @@ fn resolve_mount_path(path: &Path) -> PathBuf {
             } else {
                 mount_info.source_path.join(suffix)
             };
-            rust_bridge_log_msg(&format!("RUST_UIO: resolved {:?} -> {:?} (mount: {})", path, resolved, mount_point));
+            rust_bridge_log_msg(&format!(
+                "RUST_UIO: resolved {:?} -> {:?} (mount: {})",
+                path, resolved, mount_point
+            ));
             return resolved;
         }
     }
-    
+
     // No mount matched, return original
-    rust_bridge_log_msg(&format!("RUST_UIO: no mount match for {:?}, returning original", path));
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: no mount match for {:?}, returning original",
+        path
+    ));
     path.to_path_buf()
 }
 
@@ -1212,22 +1227,28 @@ pub unsafe extern "C" fn uio_openDir(
             return ptr::null_mut();
         }
     };
-    
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_openDir called with path: {:?}", c_path));
+
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_openDir called with path: {:?}",
+        c_path
+    ));
     eprintln!("RUST_UIO: uio_openDir called with path: {:?}", c_path);
-    
+
     // Resolve through mount registry
     let resolved = resolve_mount_path(&c_path);
-    
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_openDir resolved to: {:?}", resolved));
+
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_openDir resolved to: {:?}",
+        resolved
+    ));
     eprintln!("RUST_UIO: uio_openDir resolved to: {:?}", resolved);
-    
+
     // Create directory handle (don't fail if it doesn't exist - may be created later)
-    let handle = Box::new(uio_DirHandle { 
+    let handle = Box::new(uio_DirHandle {
         path: resolved.clone(),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: _repository,
-        root_end: resolved.clone(),  // For now, root_end = full path
+        root_end: resolved.clone(), // For now, root_end = full path
     });
     Box::leak(handle) as *mut uio_DirHandle
 }
@@ -1237,7 +1258,9 @@ pub unsafe extern "C" fn uio_closeDir(dir: *mut uio_DirHandle) -> c_int {
     log_marker("uio_closeDir called");
     if !dir.is_null() {
         // Decrement refcount
-        let old_ref = (*dir).refcount.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        let old_ref = (*dir)
+            .refcount
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         if old_ref == 1 {
             // Refcount went to 0, free the handle
             let _ = Box::from_raw(dir);
@@ -1265,10 +1288,12 @@ pub unsafe extern "C" fn uio_mountDir(
             return ptr::null_mut();
         }
     };
-    
+
     // Log raw pointer value for debugging
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_mountDir called: mountPoint={}, inPath ptr={:?}, sourceDir={:?}", 
-        mount_point, inPath, sourceDir));
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_mountDir called: mountPoint={}, inPath ptr={:?}, sourceDir={:?}",
+        mount_point, inPath, sourceDir
+    ));
 
     if !sourceDir.is_null() {
         let base_path = (*sourceDir).path.clone();
@@ -1278,13 +1303,18 @@ pub unsafe extern "C" fn uio_mountDir(
         } else {
             resolve_path(&base_path, &rel_path)
         };
-        rust_bridge_log_msg(&format!("RUST_UIO: uio_mountDir: sourceDir set, sourcePath {:?} -> {:?}", rel_path, source_path));
-        rust_bridge_log_msg("RUST_UIO: uio_mountDir: skipping registry update for sourceDir mounts");
+        rust_bridge_log_msg(&format!(
+            "RUST_UIO: uio_mountDir: sourceDir set, sourcePath {:?} -> {:?}",
+            rel_path, source_path
+        ));
+        rust_bridge_log_msg(
+            "RUST_UIO: uio_mountDir: skipping registry update for sourceDir mounts",
+        );
 
         let handle = Box::new(uio_MountHandle { _private: [] });
         return Box::leak(handle) as *mut uio_MountHandle;
     }
-    
+
     // Determine the actual source path:
     // IMPORTANT: The parameter names from C are confusing:
     // - sourceDir: directory handle for the source (NULL for STDIO mounts)
@@ -1301,11 +1331,16 @@ pub unsafe extern "C" fn uio_mountDir(
         match cstr_to_pathbuf(inPath) {
             Some(path) => {
                 let path_str = path.to_string_lossy().to_string();
-                rust_bridge_log_msg(&format!("RUST_UIO: uio_mountDir: using inPath '{}' as source", path_str));
+                rust_bridge_log_msg(&format!(
+                    "RUST_UIO: uio_mountDir: using inPath '{}' as source",
+                    path_str
+                ));
                 (path.clone(), path)
             }
             None => {
-                rust_bridge_log_msg("RUST_UIO: uio_mountDir: inPath conversion failed, using empty path");
+                rust_bridge_log_msg(
+                    "RUST_UIO: uio_mountDir: inPath conversion failed, using empty path",
+                );
                 (PathBuf::new(), PathBuf::new())
             }
         }
@@ -1315,23 +1350,34 @@ pub unsafe extern "C" fn uio_mountDir(
         (PathBuf::new(), PathBuf::new())
     };
 
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_mountDir: mounting source='{:?}' base_dir='{:?}' at '{}'", 
-        source_path, base_dir, mount_point));
-    
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_mountDir: mounting source='{:?}' base_dir='{:?}' at '{}'",
+        source_path, base_dir, mount_point
+    ));
+
     // Store mount mapping
     {
         let mut registry = get_mount_registry().lock().unwrap();
-        registry.insert(mount_point.clone(), MountInfo {
-            source_path: source_path.clone(),
-            base_dir: base_dir.clone(),
-        });
-        rust_bridge_log_msg(&format!("RUST_UIO: mount registry now has {} entries", registry.len()));
+        registry.insert(
+            mount_point.clone(),
+            MountInfo {
+                source_path: source_path.clone(),
+                base_dir: base_dir.clone(),
+            },
+        );
+        rust_bridge_log_msg(&format!(
+            "RUST_UIO: mount registry now has {} entries",
+            registry.len()
+        ));
         for (k, v) in registry.iter() {
-            rust_bridge_log_msg(&format!("RUST_UIO:   registry['{}'] = source='{:?}' base='{:?}", k, v.source_path, v.base_dir));
+            rust_bridge_log_msg(&format!(
+                "RUST_UIO:   registry['{}'] = source='{:?}' base='{:?}",
+                k, v.source_path, v.base_dir
+            ));
         }
     }
-    
-    // Return a non-null dummy handle to indicate "success" 
+
+    // Return a non-null dummy handle to indicate "success"
     let handle = Box::new(uio_MountHandle { _private: [] });
     Box::leak(handle) as *mut uio_MountHandle
 }
@@ -1343,22 +1389,24 @@ pub unsafe extern "C" fn uio_openDirRelative(
     _flags: c_int,
 ) -> *mut uio_DirHandle {
     log_marker("uio_openDirRelative called");
-    
+
     if base.is_null() {
         return ptr::null_mut();
     }
-    
+
     let base_path = &(*base).path;
     let rel_path = match cstr_to_pathbuf(path) {
         Some(p) => p,
         None => return ptr::null_mut(),
     };
-    
+
     // Log before moving rel_path
     let is_abs = rel_path.is_absolute();
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_openDirRelative: base={:?} path={:?} (is_absolute={})", 
-        base_path, rel_path, is_abs));
-    
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_openDirRelative: base={:?} path={:?} (is_absolute={})",
+        base_path, rel_path, is_abs
+    ));
+
     // If rel_path is already absolute, it's been resolved by caller - skip resolve_mount_path
     // This prevents double-resolution that causes path duplication
     let resolved = if is_abs {
@@ -1367,12 +1415,15 @@ pub unsafe extern "C" fn uio_openDirRelative(
     } else {
         // Only join if rel_path is actually relative
         let joined = resolve_path(base_path, &rel_path);
-        rust_bridge_log_msg(&format!("RUST_UIO: uio_openDirRelative: joined {:?} + {:?} = {:?}", base_path, rel_path, joined));
+        rust_bridge_log_msg(&format!(
+            "RUST_UIO: uio_openDirRelative: joined {:?} + {:?} = {:?}",
+            base_path, rel_path, joined
+        ));
         // Then resolve through mount registry
         resolve_mount_path(&joined)
     };
-    
-    let handle = Box::new(uio_DirHandle { 
+
+    let handle = Box::new(uio_DirHandle {
         path: resolved.clone(),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: (*base).repository,
@@ -1393,41 +1444,52 @@ pub unsafe extern "C" fn uio_open(
     _mode: c_int,
 ) -> *mut uio_Handle {
     rust_bridge_log_msg(&format!("RUST_UIO: uio_open called with flags {}", flags));
-    
+
     if dir.is_null() {
         return ptr::null_mut();
     }
-    
+
     let dir_path = &(*dir).path;
     let file_path = match cstr_to_pathbuf(path) {
         Some(p) => resolve_path(dir_path, &p),
         None => return ptr::null_mut(),
     };
-    
+
     let mut opts = OpenOptions::new();
-    
+
     match flags & 3 {
-        O_RDONLY => { opts.read(true); }
-        O_WRONLY => { opts.write(true); }
-        O_RDWR => { opts.read(true).write(true); }
-        _ => { opts.read(true); }
+        O_RDONLY => {
+            opts.read(true);
+        }
+        O_WRONLY => {
+            opts.write(true);
+        }
+        O_RDWR => {
+            opts.read(true).write(true);
+        }
+        _ => {
+            opts.read(true);
+        }
     }
-    
+
     if (flags & O_CREAT) != 0 {
         opts.create(true);
     }
     if (flags & O_TRUNC) != 0 {
         opts.truncate(true);
     }
-    
+
     let file = match opts.open(&file_path) {
         Ok(f) => f,
         Err(err) => {
-            log_marker(&format!("uio_open failed: path={:?} err={}", file_path, err));
+            log_marker(&format!(
+                "uio_open failed: path={:?} err={}",
+                file_path, err
+            ));
             return ptr::null_mut();
         }
     };
-    
+
     // Return Mutex<File> directly as uio_Handle (type-aliased)
     Box::leak(Box::new(Mutex::new(file))) as *mut uio_Handle
 }
@@ -1443,22 +1505,18 @@ pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_read(
-    handle: *mut uio_Handle,
-    buf: *mut u8,
-    count: size_t,
-) -> isize {
+pub unsafe extern "C" fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: size_t) -> isize {
     if handle.is_null() || buf.is_null() || count == 0 {
         return -1;
     }
-    
+
     // handle is a Mutex<File>
     let file = &(*handle);
     let mut guard = match file.lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
-    
+
     let buffer = slice::from_raw_parts_mut(buf, count);
     match guard.read(buffer) {
         Ok(n) => n as isize,
@@ -1475,14 +1533,14 @@ pub unsafe extern "C" fn uio_write(
     if handle.is_null() || buf.is_null() || count == 0 {
         return -1;
     }
-    
+
     // handle is a Mutex<File>
     let file = &(*handle);
     let mut guard = match file.lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
-    
+
     let buffer = slice::from_raw_parts(buf, count);
     match guard.write_all(buffer) {
         Ok(_) => count as isize,
@@ -1491,21 +1549,18 @@ pub unsafe extern "C" fn uio_write(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_fstat(
-    handle: *mut uio_Handle,
-    stat_buf: *mut stat,
-) -> c_int {
+pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int {
     if handle.is_null() || stat_buf.is_null() {
         return -1;
     }
-    
+
     // handle is a Mutex<File>
     let file = &(*handle);
     let guard = match file.lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
-    
+
     match guard.metadata() {
         Ok(meta) => {
             (*stat_buf).st_size = meta.len() as i64;
@@ -1517,22 +1572,19 @@ pub unsafe extern "C" fn uio_fstat(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_unlink(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-) -> c_int {
+pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
     log_marker("uio_unlink called");
-    
+
     if dir.is_null() {
         return -1;
     }
-    
+
     let dir_path = &(*dir).path;
     let file_path = match cstr_to_pathbuf(path) {
         Some(p) => resolve_path(dir_path, &p),
         None => return -1,
     };
-    
+
     match fs::remove_file(&file_path) {
         Ok(_) => 0,
         Err(_) => -1,
@@ -1551,7 +1603,7 @@ pub unsafe extern "C" fn uio_fopen(
 ) -> *mut uio_Stream {
     rust_bridge_log_msg("RUST_UIO: uio_fopen entry");
     log_marker("uio_fopen called");
-    
+
     if dir.is_null() {
         rust_bridge_log_msg("RUST_UIO: uio_fopen null dir");
         return ptr::null_mut();
@@ -1571,11 +1623,14 @@ pub unsafe extern "C" fn uio_fopen(
     };
 
     let mode_str = std::ffi::CStr::from_ptr(mode).to_string_lossy();
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_fopen path={:?} mode={}", file_path, mode_str));
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_fopen path={:?} mode={}",
+        file_path, mode_str
+    ));
 
     let mut opts = OpenOptions::new();
     let mut open_flags = 0i32;
-    
+
     if mode_str.contains("r") {
         opts.read(true);
         open_flags = O_RDONLY;
@@ -1590,27 +1645,34 @@ pub unsafe extern "C" fn uio_fopen(
     if mode_str.contains("+") {
         opts.read(true).write(true);
     }
-    
+
     let file = match opts.open(&file_path) {
         Ok(f) => f,
         Err(err) => {
-            log_marker(&format!("uio_open failed: path={:?} err={}", file_path, err));
+            log_marker(&format!(
+                "uio_open failed: path={:?} err={}",
+                file_path, err
+            ));
             return ptr::null_mut();
         }
     };
-    
+
     let stream = Box::new(uio_Stream {
         buf: ptr::null_mut(),
         data_start: ptr::null_mut(),
         data_end: ptr::null_mut(),
         buf_end: ptr::null_mut(),
-        handle: Box::leak(Box::new(Mutex::new(file))) as *mut Mutex<std::fs::File> as *mut uio_Handle,
-        status: 0,  // uio_Stream_STATUS_OK
-        operation: 0,  // uio_StreamOperation_none
+        handle: Box::leak(Box::new(Mutex::new(file))) as *mut Mutex<std::fs::File>
+            as *mut uio_Handle,
+        status: 0,    // uio_Stream_STATUS_OK
+        operation: 0, // uio_StreamOperation_none
         open_flags: open_flags,
     });
     let stream_ptr = Box::leak(stream) as *mut uio_Stream;
-    rust_bridge_log_msg(&format!("RUST_UIO: uio_fopen returning stream={:?}", stream_ptr));
+    rust_bridge_log_msg(&format!(
+        "RUST_UIO: uio_fopen returning stream={:?}",
+        stream_ptr
+    ));
     stream_ptr
 }
 
@@ -1659,60 +1721,64 @@ pub unsafe extern "C" fn rust_uio_fread(
         ));
         return 0;
     }
-    
+
     let s = &mut *stream;
-    
+
     // Check if stream has a valid handle pointer
     if s.handle.is_null() {
         rust_bridge_log_msg("RUST_UIO: uio_fread handle is null");
         return 0;
     }
-    
+
     // Validate the handle pointer is properly aligned and not obviously corrupted
     let handle_addr = s.handle as usize;
     if handle_addr < 4096 {
         // Pointer is too small to be valid
-        rust_bridge_log_msg(&format!("RUST_UIO: uio_fread invalid handle pointer: 0x{:x}", handle_addr));
+        rust_bridge_log_msg(&format!(
+            "RUST_UIO: uio_fread invalid handle pointer: 0x{:x}",
+            handle_addr
+        ));
         return 0;
     }
-    
+
     // Try to safely dereference the handle
-    let file_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        &*s.handle
-    }));
-    
+    let file_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| &*s.handle));
+
     let file = match file_result {
         Ok(f) => f,
         Err(_) => {
             rust_bridge_log_msg("RUST_UIO: uio_fread panic when dereferencing handle");
-            s.status = 2;  // uio_Stream_STATUS_ERROR
+            s.status = 2; // uio_Stream_STATUS_ERROR
             return 0;
         }
     };
-    
+
     let mut guard = match file.lock() {
         Ok(g) => g,
         Err(_) => {
             rust_bridge_log_msg("RUST_UIO: uio_fread failed to lock mutex");
-            s.status = 2;  // uio_Stream_STATUS_ERROR
+            s.status = 2; // uio_Stream_STATUS_ERROR
             return 0;
         }
     };
-    
+
     let total_bytes = size * nmemb;
     let buffer = slice::from_raw_parts_mut(buf as *mut u8, total_bytes);
     match guard.read(buffer) {
         Ok(n) => {
-            s.operation = 1;  // uio_StreamOperation_read
+            s.operation = 1; // uio_StreamOperation_read
             if n < total_bytes {
-                s.status = 1;  // uio_Stream_STATUS_EOF
+                s.status = 1; // uio_Stream_STATUS_EOF
             }
-            rust_bridge_log_msg(&format!("RUST_UIO: uio_fread requested={} read={}", total_bytes, n));
+            rust_bridge_log_msg(&format!(
+                "RUST_UIO: uio_fread requested={} read={}",
+                total_bytes, n
+            ));
             n / size
         }
         Err(err) => {
             rust_bridge_log_msg(&format!("RUST_UIO: uio_fread error: {}", err));
-            s.status = 2;  // uio_Stream_STATUS_ERROR
+            s.status = 2; // uio_Stream_STATUS_ERROR
             0
         }
     }
@@ -1727,21 +1793,21 @@ pub unsafe extern "C" fn uio_fseek(
     if stream.is_null() {
         return -1;
     }
-    
+
     let s = &*stream;
     let file = &(*s.handle);
     let mut guard = match file.lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
-    
+
     let seek_from = match whence {
         SEEK_SET => SeekFrom::Start(offset as u64),
         SEEK_CUR => SeekFrom::Current(offset as i64),
         SEEK_END => SeekFrom::End(offset as i64),
         _ => return -1,
     };
-    
+
     match guard.seek(seek_from) {
         Ok(_) => 0,
         Err(_) => -1,
@@ -1753,14 +1819,14 @@ pub unsafe extern "C" fn uio_ftell(stream: *mut uio_Stream) -> c_long {
     if stream.is_null() {
         return -1;
     }
-    
+
     let s = &*stream;
     let file = &(*s.handle);
     let mut guard = match file.lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
-    
+
     match guard.seek(SeekFrom::Current(0)) {
         Ok(pos) => pos as c_long,
         Err(_) => -1,
@@ -1780,9 +1846,7 @@ pub unsafe extern "C" fn uio_getDirList(
 ) -> *mut uio_DirList {
     log_marker(&format!(
         "uio_getDirList called: dir=0x{:x} path=0x{:x} pattern=0x{:x}",
-        dir as usize,
-        path as usize,
-        _pattern as usize
+        dir as usize, path as usize, _pattern as usize
     ));
 
     if dir.is_null() {
@@ -1798,7 +1862,10 @@ pub unsafe extern "C" fn uio_getDirList(
             return ptr::null_mut();
         }
     };
-    log_marker(&format!("uio_getDirList: dir_path={:?} rel_path={:?}", dir_path, rel_path));
+    log_marker(&format!(
+        "uio_getDirList: dir_path={:?} rel_path={:?}",
+        dir_path, rel_path
+    ));
     let list_path = resolve_path(dir_path, &rel_path);
 
     let pattern_str = if _pattern.is_null() {
@@ -1819,7 +1886,10 @@ pub unsafe extern "C" fn uio_getDirList(
     let entries = match fs::read_dir(&list_path) {
         Ok(e) => e,
         Err(err) => {
-            log_marker(&format!("uio_getDirList: read_dir failed for {:?}: {}", list_path, err));
+            log_marker(&format!(
+                "uio_getDirList: read_dir failed for {:?}: {}",
+                list_path, err
+            ));
             return ptr::null_mut();
         }
     };
@@ -1835,9 +1905,12 @@ pub unsafe extern "C" fn uio_getDirList(
             }
         }
     }
-    
+
     if name_strings.is_empty() {
-        log_marker(&format!("uio_getDirList: no matches for pattern '{}' in {:?}", pattern_str, list_path));
+        log_marker(&format!(
+            "uio_getDirList: no matches for pattern '{}' in {:?}",
+            pattern_str, list_path
+        ));
         // Return empty DirList - allocate a zeroed struct
         let dirlist = Box::new(uio_DirList {
             names: ptr::null_mut(),
@@ -1847,8 +1920,13 @@ pub unsafe extern "C" fn uio_getDirList(
         return Box::leak(dirlist) as *mut uio_DirList;
     }
 
-    log_marker(&format!("uio_getDirList: {} matches for pattern '{}' in {:?}", name_strings.len(), pattern_str, list_path));
-    
+    log_marker(&format!(
+        "uio_getDirList: {} matches for pattern '{}' in {:?}",
+        name_strings.len(),
+        pattern_str,
+        list_path
+    ));
+
     // Allocate a single contiguous buffer for all strings
     let total_size: usize = name_strings.iter().map(|s| s.len() + 1).sum();
     let buffer_layout = std::alloc::Layout::from_size_align(total_size, 1).unwrap();
@@ -1856,34 +1934,34 @@ pub unsafe extern "C" fn uio_getDirList(
     if buffer_ptr.is_null() {
         return ptr::null_mut();
     }
-    
+
     // Register the buffer size for later deallocation
     register_buffer_size(buffer_ptr, total_size);
-    
+
     // Allocate array of pointers using Vec for capacity tracking
     let num_names = name_strings.len();
     let mut names_vec: Vec<*mut c_char> = Vec::with_capacity(num_names);
-    
+
     // Copy strings into buffer and collect pointers
     let mut offset = 0;
     for (i, name) in name_strings.iter().enumerate() {
         let name_bytes = name.as_bytes();
         let dst = buffer_ptr.add(offset);
-        
+
         // Copy string bytes including null terminator
         std::ptr::copy_nonoverlapping(name_bytes.as_ptr() as *const c_char, dst, name_bytes.len());
         std::ptr::write(dst.add(name_bytes.len()), 0); // Null terminate
-        
+
         // Store pointer in names array
         names_vec.push(dst);
-        
+
         offset += name_bytes.len() + 1;
     }
-    
+
     // Convert Vec to boxed slice, then leak to get stable pointer
     let names_ptr = names_vec.into_boxed_slice();
     let names_ptr_leaked = Box::leak(names_ptr) as *mut [*mut c_char] as *mut *mut c_char;
-    
+
     let dirlist = Box::new(uio_DirList {
         names: names_ptr_leaked,
         numNames: num_names as c_int,
@@ -1897,10 +1975,10 @@ pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
     log_marker("uio_DirList_free called");
     if !dirlist.is_null() {
         let list = &*dirlist;
-        
+
         // IMPORTANT: The C uio_DirList struct doesn't store capacity information,
         // so we need to reconstruct it from what we know about our allocation strategy.
-        // 
+        //
         // Our allocation strategy in uio_getDirList:
         // 1. buffer: allocated with Layout::from_size_align(total_size, 1)
         // 2. names: allocated via Vec::with_capacity() then converted to boxed slice
@@ -1909,13 +1987,13 @@ pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
         // 1. Free the buffer first (names pointers point into it)
         // 2. Reconstruct the names slice from the raw pointer
         // 3. Free the names allocation
-        
+
         // Step 1: Free the buffer
         if !list.buffer.is_null() {
             // We need to know the buffer size. Since we don't store it in the C struct,
             // we have a problem. However, looking at the C code, it also doesn't store
             // the buffer size - it just calls uio_free() which knows the size.
-            // 
+            //
             // For Rust, we need the size. Let's work around this by:
             // 1. NOT using the standard allocator directly
             // 2. Instead, use Box<[u8]> which can be reconstructed from raw ptr + size
@@ -1929,7 +2007,7 @@ pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
             // modify the C struct definition (it must match C exactly), we need to
             // track the buffer size elsewhere. We'll use a global HashMap keyed by
             // the buffer pointer address.
-            
+
             // For now, use a workaround: try to find buffer size in our registry
             let buffer_size = get_buffer_size(list.buffer);
             if let Some(size) = buffer_size {
@@ -1939,7 +2017,7 @@ pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
             }
             // If size not found in registry, we have a leak - but better than double-free!
         }
-        
+
         // Step 2: Free the names array
         // We need to reconstruct the Box<[T]> from the raw pointer.
         // Since we used Vec::into_boxed_slice(), we need to use from_raw_parts.
@@ -1950,7 +2028,7 @@ pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
             let names_box: Box<[*mut c_char]> = names_slice.into();
             drop(names_box);
         }
-        
+
         // Step 3: Free the DirList struct itself
         let _ = Box::from_raw(dirlist);
     }
@@ -1995,7 +2073,6 @@ fn remove_buffer_size(ptr: *mut c_char) {
     registry.remove(&addr);
 }
 
-
 // =============================================================================
 // Unit Tests
 // =============================================================================
@@ -2028,10 +2105,10 @@ mod tests {
     #[test]
     fn test_mount_registry_basic() {
         clear_mount_registry();
-        
+
         // Add a mount
         add_test_mount("/content", "/tmp/content", "/tmp/content");
-        
+
         // Verify it's stored
         {
             let registry = get_mount_registry().lock().unwrap();
@@ -2040,54 +2117,54 @@ mod tests {
             assert_eq!(info.source_path, PathBuf::from("/tmp/content"));
             assert_eq!(info.base_dir, PathBuf::from("/tmp/content"));
         }
-        
+
         clear_mount_registry();
     }
 
     #[test]
     fn test_resolve_mount_path_with_mount() {
         clear_mount_registry();
-        
+
         // Add root mount
         add_test_mount("/", "/Users/test/game", "/Users/test/game");
-        
+
         // Test resolution
         let path = PathBuf::from("/content/packages");
         let resolved = resolve_mount_path(&path);
-        
+
         // Should resolve to base_dir + subpath
         assert_eq!(resolved, PathBuf::from("/Users/test/game/content/packages"));
-        
+
         clear_mount_registry();
     }
 
     #[test]
     fn test_resolve_mount_path_no_mount() {
         clear_mount_registry();
-        
+
         // No mounts registered, path should pass through
         let path = PathBuf::from("/some/random/path");
         let resolved = resolve_mount_path(&path);
-        
+
         assert_eq!(resolved, path);
-        
+
         clear_mount_registry();
     }
 
     #[test]
     fn test_resolve_mount_path_absolute_fs_path() {
         clear_mount_registry();
-        
+
         // Add a root mount
         add_test_mount("/", "/Users/test/game", "/Users/test/game");
-        
+
         // An absolute filesystem path under /Users should NOT be double-resolved
         let path = PathBuf::from("/Users/acoliver/projects/uqm/content");
         let resolved = resolve_mount_path(&path);
-        
+
         // Should return as-is because it starts with /Users
         assert_eq!(resolved, path);
-        
+
         clear_mount_registry();
     }
 
@@ -2095,7 +2172,7 @@ mod tests {
     fn test_cstr_to_pathbuf_valid() {
         let test_path = CString::new("/test/path").unwrap();
         let result = unsafe { cstr_to_pathbuf(test_path.as_ptr()) };
-        
+
         assert!(result.is_some());
         assert_eq!(result.unwrap(), PathBuf::from("/test/path"));
     }
@@ -2110,7 +2187,7 @@ mod tests {
     fn test_resolve_path_relative() {
         let base = PathBuf::from("/home/user");
         let rel = PathBuf::from("documents/file.txt");
-        
+
         let result = resolve_path(&base, &rel);
         assert_eq!(result, PathBuf::from("/home/user/documents/file.txt"));
     }
@@ -2119,7 +2196,7 @@ mod tests {
     fn test_resolve_path_absolute() {
         let base = PathBuf::from("/home/user");
         let abs = PathBuf::from("/etc/config");
-        
+
         let result = resolve_path(&base, &abs);
         // Absolute paths should be returned as-is
         assert_eq!(result, PathBuf::from("/etc/config"));
@@ -2155,16 +2232,36 @@ mod tests {
         // Test the .rmp regex pattern
         assert!(matches_pattern("file.rmp", r"\.[rR][mM][pP]$", MATCH_REGEX));
         assert!(matches_pattern("file.RMP", r"\.[rR][mM][pP]$", MATCH_REGEX));
-        assert!(!matches_pattern("file.txt", r"\.[rR][mM][pP]$", MATCH_REGEX));
+        assert!(!matches_pattern(
+            "file.txt",
+            r"\.[rR][mM][pP]$",
+            MATCH_REGEX
+        ));
     }
 
     #[test]
     fn test_matches_pattern_regex_zip_uqm() {
         // Test the .zip/.uqm regex pattern
-        assert!(matches_pattern("file.zip", r"\.([zZ][iI][pP]|[uU][qQ][mM])$", MATCH_REGEX));
-        assert!(matches_pattern("file.uqm", r"\.([zZ][iI][pP]|[uU][qQ][mM])$", MATCH_REGEX));
-        assert!(matches_pattern("file.ZIP", r"\.([zZ][iI][pP]|[uU][qQ][mM])$", MATCH_REGEX));
-        assert!(!matches_pattern("file.txt", r"\.([zZ][iI][pP]|[uU][qQ][mM])$", MATCH_REGEX));
+        assert!(matches_pattern(
+            "file.zip",
+            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+            MATCH_REGEX
+        ));
+        assert!(matches_pattern(
+            "file.uqm",
+            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+            MATCH_REGEX
+        ));
+        assert!(matches_pattern(
+            "file.ZIP",
+            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+            MATCH_REGEX
+        ));
+        assert!(!matches_pattern(
+            "file.txt",
+            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+            MATCH_REGEX
+        ));
     }
 
     #[test]
@@ -2177,17 +2274,17 @@ mod tests {
     #[test]
     fn test_buffer_size_registry() {
         let test_ptr = 0x12345678 as *mut c_char;
-        
+
         // Register a size
         register_buffer_size(test_ptr, 1024);
-        
+
         // Verify we can retrieve it
         let size = get_buffer_size(test_ptr);
         assert_eq!(size, Some(1024));
-        
+
         // Remove it
         remove_buffer_size(test_ptr);
-        
+
         // Verify it's gone
         let size = get_buffer_size(test_ptr);
         assert_eq!(size, None);

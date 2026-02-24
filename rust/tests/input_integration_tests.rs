@@ -36,11 +36,7 @@ extern "C" {
     ) -> c_int;
     fn rust_VControl_UninitJoystick(index: c_int) -> c_int;
     fn rust_VControl_GetNumJoysticks() -> c_int;
-    fn rust_VControl_AddJoyButtonBinding(
-        port: c_int,
-        button: c_int,
-        target: *mut c_int,
-    ) -> c_int;
+    fn rust_VControl_AddJoyButtonBinding(port: c_int, button: c_int, target: *mut c_int) -> c_int;
     fn rust_VControl_AddJoyAxisBinding(
         port: c_int,
         axis: c_int,
@@ -115,10 +111,7 @@ fn test_ffi_joystick() {
         rust_VControl_Init();
 
         let name = CString::new("Test Joystick").unwrap();
-        assert_eq!(
-            rust_VControl_InitJoystick(0, name.as_ptr(), 2, 10, 1),
-            0
-        );
+        assert_eq!(rust_VControl_InitJoystick(0, name.as_ptr(), 2, 10, 1), 0);
 
         assert_eq!(rust_VControl_GetNumJoysticks(), 1);
 

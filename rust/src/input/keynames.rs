@@ -143,132 +143,490 @@ struct KeyName {
 /// Key name table matching the C keynames.c implementation
 /// The names are case-insensitive when compared but formatted nicely for output
 static KEYNAMES: &[KeyName] = &[
-    KeyName { name: "Backspace", code: SDLK_BACKSPACE },
-    KeyName { name: "Tab", code: SDLK_TAB },
-    KeyName { name: "Clear", code: SDLK_CLEAR },
-    KeyName { name: "Return", code: SDLK_RETURN },
-    KeyName { name: "Pause", code: SDLK_PAUSE },
-    KeyName { name: "Escape", code: SDLK_ESCAPE },
-    KeyName { name: "Space", code: SDLK_SPACE },
-    KeyName { name: "!", code: SDLK_EXCLAIM },
-    KeyName { name: "\"", code: SDLK_QUOTEDBL },
-    KeyName { name: "Hash", code: SDLK_HASH },
-    KeyName { name: "$", code: SDLK_DOLLAR },
-    KeyName { name: "&", code: SDLK_AMPERSAND },
-    KeyName { name: "'", code: SDLK_QUOTE },
-    KeyName { name: "(", code: SDLK_LEFTPAREN },
-    KeyName { name: ")", code: SDLK_RIGHTPAREN },
-    KeyName { name: "*", code: SDLK_ASTERISK },
-    KeyName { name: "+", code: SDLK_PLUS },
-    KeyName { name: ",", code: SDLK_COMMA },
-    KeyName { name: "-", code: SDLK_MINUS },
-    KeyName { name: ".", code: SDLK_PERIOD },
-    KeyName { name: "/", code: SDLK_SLASH },
-    KeyName { name: "0", code: SDLK_0 },
-    KeyName { name: "1", code: SDLK_1 },
-    KeyName { name: "2", code: SDLK_2 },
-    KeyName { name: "3", code: SDLK_3 },
-    KeyName { name: "4", code: SDLK_4 },
-    KeyName { name: "5", code: SDLK_5 },
-    KeyName { name: "6", code: SDLK_6 },
-    KeyName { name: "7", code: SDLK_7 },
-    KeyName { name: "8", code: SDLK_8 },
-    KeyName { name: "9", code: SDLK_9 },
-    KeyName { name: ":", code: SDLK_COLON },
-    KeyName { name: ";", code: SDLK_SEMICOLON },
-    KeyName { name: "<", code: SDLK_LESS },
-    KeyName { name: "=", code: SDLK_EQUALS },
-    KeyName { name: ">", code: SDLK_GREATER },
-    KeyName { name: "?", code: SDLK_QUESTION },
-    KeyName { name: "@", code: SDLK_AT },
-    KeyName { name: "[", code: SDLK_LEFTBRACKET },
-    KeyName { name: "\\", code: SDLK_BACKSLASH },
-    KeyName { name: "]", code: SDLK_RIGHTBRACKET },
-    KeyName { name: "^", code: SDLK_CARET },
-    KeyName { name: "_", code: SDLK_UNDERSCORE },
-    KeyName { name: "`", code: SDLK_BACKQUOTE },
-    KeyName { name: "a", code: SDLK_A },
-    KeyName { name: "b", code: SDLK_B },
-    KeyName { name: "c", code: SDLK_C },
-    KeyName { name: "d", code: SDLK_D },
-    KeyName { name: "e", code: SDLK_E },
-    KeyName { name: "f", code: SDLK_F },
-    KeyName { name: "g", code: SDLK_G },
-    KeyName { name: "h", code: SDLK_H },
-    KeyName { name: "i", code: SDLK_I },
-    KeyName { name: "j", code: SDLK_J },
-    KeyName { name: "k", code: SDLK_K },
-    KeyName { name: "l", code: SDLK_L },
-    KeyName { name: "m", code: SDLK_M },
-    KeyName { name: "n", code: SDLK_N },
-    KeyName { name: "o", code: SDLK_O },
-    KeyName { name: "p", code: SDLK_P },
-    KeyName { name: "q", code: SDLK_Q },
-    KeyName { name: "r", code: SDLK_R },
-    KeyName { name: "s", code: SDLK_S },
-    KeyName { name: "t", code: SDLK_T },
-    KeyName { name: "u", code: SDLK_U },
-    KeyName { name: "v", code: SDLK_V },
-    KeyName { name: "w", code: SDLK_W },
-    KeyName { name: "x", code: SDLK_X },
-    KeyName { name: "y", code: SDLK_Y },
-    KeyName { name: "z", code: SDLK_Z },
-    KeyName { name: "Delete", code: SDLK_DELETE },
+    KeyName {
+        name: "Backspace",
+        code: SDLK_BACKSPACE,
+    },
+    KeyName {
+        name: "Tab",
+        code: SDLK_TAB,
+    },
+    KeyName {
+        name: "Clear",
+        code: SDLK_CLEAR,
+    },
+    KeyName {
+        name: "Return",
+        code: SDLK_RETURN,
+    },
+    KeyName {
+        name: "Pause",
+        code: SDLK_PAUSE,
+    },
+    KeyName {
+        name: "Escape",
+        code: SDLK_ESCAPE,
+    },
+    KeyName {
+        name: "Space",
+        code: SDLK_SPACE,
+    },
+    KeyName {
+        name: "!",
+        code: SDLK_EXCLAIM,
+    },
+    KeyName {
+        name: "\"",
+        code: SDLK_QUOTEDBL,
+    },
+    KeyName {
+        name: "Hash",
+        code: SDLK_HASH,
+    },
+    KeyName {
+        name: "$",
+        code: SDLK_DOLLAR,
+    },
+    KeyName {
+        name: "&",
+        code: SDLK_AMPERSAND,
+    },
+    KeyName {
+        name: "'",
+        code: SDLK_QUOTE,
+    },
+    KeyName {
+        name: "(",
+        code: SDLK_LEFTPAREN,
+    },
+    KeyName {
+        name: ")",
+        code: SDLK_RIGHTPAREN,
+    },
+    KeyName {
+        name: "*",
+        code: SDLK_ASTERISK,
+    },
+    KeyName {
+        name: "+",
+        code: SDLK_PLUS,
+    },
+    KeyName {
+        name: ",",
+        code: SDLK_COMMA,
+    },
+    KeyName {
+        name: "-",
+        code: SDLK_MINUS,
+    },
+    KeyName {
+        name: ".",
+        code: SDLK_PERIOD,
+    },
+    KeyName {
+        name: "/",
+        code: SDLK_SLASH,
+    },
+    KeyName {
+        name: "0",
+        code: SDLK_0,
+    },
+    KeyName {
+        name: "1",
+        code: SDLK_1,
+    },
+    KeyName {
+        name: "2",
+        code: SDLK_2,
+    },
+    KeyName {
+        name: "3",
+        code: SDLK_3,
+    },
+    KeyName {
+        name: "4",
+        code: SDLK_4,
+    },
+    KeyName {
+        name: "5",
+        code: SDLK_5,
+    },
+    KeyName {
+        name: "6",
+        code: SDLK_6,
+    },
+    KeyName {
+        name: "7",
+        code: SDLK_7,
+    },
+    KeyName {
+        name: "8",
+        code: SDLK_8,
+    },
+    KeyName {
+        name: "9",
+        code: SDLK_9,
+    },
+    KeyName {
+        name: ":",
+        code: SDLK_COLON,
+    },
+    KeyName {
+        name: ";",
+        code: SDLK_SEMICOLON,
+    },
+    KeyName {
+        name: "<",
+        code: SDLK_LESS,
+    },
+    KeyName {
+        name: "=",
+        code: SDLK_EQUALS,
+    },
+    KeyName {
+        name: ">",
+        code: SDLK_GREATER,
+    },
+    KeyName {
+        name: "?",
+        code: SDLK_QUESTION,
+    },
+    KeyName {
+        name: "@",
+        code: SDLK_AT,
+    },
+    KeyName {
+        name: "[",
+        code: SDLK_LEFTBRACKET,
+    },
+    KeyName {
+        name: "\\",
+        code: SDLK_BACKSLASH,
+    },
+    KeyName {
+        name: "]",
+        code: SDLK_RIGHTBRACKET,
+    },
+    KeyName {
+        name: "^",
+        code: SDLK_CARET,
+    },
+    KeyName {
+        name: "_",
+        code: SDLK_UNDERSCORE,
+    },
+    KeyName {
+        name: "`",
+        code: SDLK_BACKQUOTE,
+    },
+    KeyName {
+        name: "a",
+        code: SDLK_A,
+    },
+    KeyName {
+        name: "b",
+        code: SDLK_B,
+    },
+    KeyName {
+        name: "c",
+        code: SDLK_C,
+    },
+    KeyName {
+        name: "d",
+        code: SDLK_D,
+    },
+    KeyName {
+        name: "e",
+        code: SDLK_E,
+    },
+    KeyName {
+        name: "f",
+        code: SDLK_F,
+    },
+    KeyName {
+        name: "g",
+        code: SDLK_G,
+    },
+    KeyName {
+        name: "h",
+        code: SDLK_H,
+    },
+    KeyName {
+        name: "i",
+        code: SDLK_I,
+    },
+    KeyName {
+        name: "j",
+        code: SDLK_J,
+    },
+    KeyName {
+        name: "k",
+        code: SDLK_K,
+    },
+    KeyName {
+        name: "l",
+        code: SDLK_L,
+    },
+    KeyName {
+        name: "m",
+        code: SDLK_M,
+    },
+    KeyName {
+        name: "n",
+        code: SDLK_N,
+    },
+    KeyName {
+        name: "o",
+        code: SDLK_O,
+    },
+    KeyName {
+        name: "p",
+        code: SDLK_P,
+    },
+    KeyName {
+        name: "q",
+        code: SDLK_Q,
+    },
+    KeyName {
+        name: "r",
+        code: SDLK_R,
+    },
+    KeyName {
+        name: "s",
+        code: SDLK_S,
+    },
+    KeyName {
+        name: "t",
+        code: SDLK_T,
+    },
+    KeyName {
+        name: "u",
+        code: SDLK_U,
+    },
+    KeyName {
+        name: "v",
+        code: SDLK_V,
+    },
+    KeyName {
+        name: "w",
+        code: SDLK_W,
+    },
+    KeyName {
+        name: "x",
+        code: SDLK_X,
+    },
+    KeyName {
+        name: "y",
+        code: SDLK_Y,
+    },
+    KeyName {
+        name: "z",
+        code: SDLK_Z,
+    },
+    KeyName {
+        name: "Delete",
+        code: SDLK_DELETE,
+    },
     // SDL2 keypad
-    KeyName { name: "Keypad-0", code: SDLK_KP_0 },
-    KeyName { name: "Keypad-1", code: SDLK_KP_1 },
-    KeyName { name: "Keypad-2", code: SDLK_KP_2 },
-    KeyName { name: "Keypad-3", code: SDLK_KP_3 },
-    KeyName { name: "Keypad-4", code: SDLK_KP_4 },
-    KeyName { name: "Keypad-5", code: SDLK_KP_5 },
-    KeyName { name: "Keypad-6", code: SDLK_KP_6 },
-    KeyName { name: "Keypad-7", code: SDLK_KP_7 },
-    KeyName { name: "Keypad-8", code: SDLK_KP_8 },
-    KeyName { name: "Keypad-9", code: SDLK_KP_9 },
-    KeyName { name: "Keypad-.", code: SDLK_KP_PERIOD },
-    KeyName { name: "Keypad-/", code: SDLK_KP_DIVIDE },
-    KeyName { name: "Keypad-*", code: SDLK_KP_MULTIPLY },
-    KeyName { name: "Keypad--", code: SDLK_KP_MINUS },
-    KeyName { name: "Keypad-+", code: SDLK_KP_PLUS },
-    KeyName { name: "Keypad-Enter", code: SDLK_KP_ENTER },
-    KeyName { name: "Keypad-=", code: SDLK_KP_EQUALS },
-    KeyName { name: "Up", code: SDLK_UP },
-    KeyName { name: "Down", code: SDLK_DOWN },
-    KeyName { name: "Right", code: SDLK_RIGHT },
-    KeyName { name: "Left", code: SDLK_LEFT },
-    KeyName { name: "Insert", code: SDLK_INSERT },
-    KeyName { name: "Home", code: SDLK_HOME },
-    KeyName { name: "End", code: SDLK_END },
-    KeyName { name: "PageUp", code: SDLK_PAGEUP },
-    KeyName { name: "PageDown", code: SDLK_PAGEDOWN },
-    KeyName { name: "F1", code: SDLK_F1 },
-    KeyName { name: "F2", code: SDLK_F2 },
-    KeyName { name: "F3", code: SDLK_F3 },
-    KeyName { name: "F4", code: SDLK_F4 },
-    KeyName { name: "F5", code: SDLK_F5 },
-    KeyName { name: "F6", code: SDLK_F6 },
-    KeyName { name: "F7", code: SDLK_F7 },
-    KeyName { name: "F8", code: SDLK_F8 },
-    KeyName { name: "F9", code: SDLK_F9 },
-    KeyName { name: "F10", code: SDLK_F10 },
-    KeyName { name: "F11", code: SDLK_F11 },
-    KeyName { name: "F12", code: SDLK_F12 },
-    KeyName { name: "F13", code: SDLK_F13 },
-    KeyName { name: "F14", code: SDLK_F14 },
-    KeyName { name: "F15", code: SDLK_F15 },
-    KeyName { name: "RightShift", code: SDLK_RSHIFT },
-    KeyName { name: "LeftShift", code: SDLK_LSHIFT },
-    KeyName { name: "RightControl", code: SDLK_RCTRL },
-    KeyName { name: "LeftControl", code: SDLK_LCTRL },
-    KeyName { name: "RightAlt", code: SDLK_RALT },
-    KeyName { name: "LeftAlt", code: SDLK_LALT },
+    KeyName {
+        name: "Keypad-0",
+        code: SDLK_KP_0,
+    },
+    KeyName {
+        name: "Keypad-1",
+        code: SDLK_KP_1,
+    },
+    KeyName {
+        name: "Keypad-2",
+        code: SDLK_KP_2,
+    },
+    KeyName {
+        name: "Keypad-3",
+        code: SDLK_KP_3,
+    },
+    KeyName {
+        name: "Keypad-4",
+        code: SDLK_KP_4,
+    },
+    KeyName {
+        name: "Keypad-5",
+        code: SDLK_KP_5,
+    },
+    KeyName {
+        name: "Keypad-6",
+        code: SDLK_KP_6,
+    },
+    KeyName {
+        name: "Keypad-7",
+        code: SDLK_KP_7,
+    },
+    KeyName {
+        name: "Keypad-8",
+        code: SDLK_KP_8,
+    },
+    KeyName {
+        name: "Keypad-9",
+        code: SDLK_KP_9,
+    },
+    KeyName {
+        name: "Keypad-.",
+        code: SDLK_KP_PERIOD,
+    },
+    KeyName {
+        name: "Keypad-/",
+        code: SDLK_KP_DIVIDE,
+    },
+    KeyName {
+        name: "Keypad-*",
+        code: SDLK_KP_MULTIPLY,
+    },
+    KeyName {
+        name: "Keypad--",
+        code: SDLK_KP_MINUS,
+    },
+    KeyName {
+        name: "Keypad-+",
+        code: SDLK_KP_PLUS,
+    },
+    KeyName {
+        name: "Keypad-Enter",
+        code: SDLK_KP_ENTER,
+    },
+    KeyName {
+        name: "Keypad-=",
+        code: SDLK_KP_EQUALS,
+    },
+    KeyName {
+        name: "Up",
+        code: SDLK_UP,
+    },
+    KeyName {
+        name: "Down",
+        code: SDLK_DOWN,
+    },
+    KeyName {
+        name: "Right",
+        code: SDLK_RIGHT,
+    },
+    KeyName {
+        name: "Left",
+        code: SDLK_LEFT,
+    },
+    KeyName {
+        name: "Insert",
+        code: SDLK_INSERT,
+    },
+    KeyName {
+        name: "Home",
+        code: SDLK_HOME,
+    },
+    KeyName {
+        name: "End",
+        code: SDLK_END,
+    },
+    KeyName {
+        name: "PageUp",
+        code: SDLK_PAGEUP,
+    },
+    KeyName {
+        name: "PageDown",
+        code: SDLK_PAGEDOWN,
+    },
+    KeyName {
+        name: "F1",
+        code: SDLK_F1,
+    },
+    KeyName {
+        name: "F2",
+        code: SDLK_F2,
+    },
+    KeyName {
+        name: "F3",
+        code: SDLK_F3,
+    },
+    KeyName {
+        name: "F4",
+        code: SDLK_F4,
+    },
+    KeyName {
+        name: "F5",
+        code: SDLK_F5,
+    },
+    KeyName {
+        name: "F6",
+        code: SDLK_F6,
+    },
+    KeyName {
+        name: "F7",
+        code: SDLK_F7,
+    },
+    KeyName {
+        name: "F8",
+        code: SDLK_F8,
+    },
+    KeyName {
+        name: "F9",
+        code: SDLK_F9,
+    },
+    KeyName {
+        name: "F10",
+        code: SDLK_F10,
+    },
+    KeyName {
+        name: "F11",
+        code: SDLK_F11,
+    },
+    KeyName {
+        name: "F12",
+        code: SDLK_F12,
+    },
+    KeyName {
+        name: "F13",
+        code: SDLK_F13,
+    },
+    KeyName {
+        name: "F14",
+        code: SDLK_F14,
+    },
+    KeyName {
+        name: "F15",
+        code: SDLK_F15,
+    },
+    KeyName {
+        name: "RightShift",
+        code: SDLK_RSHIFT,
+    },
+    KeyName {
+        name: "LeftShift",
+        code: SDLK_LSHIFT,
+    },
+    KeyName {
+        name: "RightControl",
+        code: SDLK_RCTRL,
+    },
+    KeyName {
+        name: "LeftControl",
+        code: SDLK_LCTRL,
+    },
+    KeyName {
+        name: "RightAlt",
+        code: SDLK_RALT,
+    },
+    KeyName {
+        name: "LeftAlt",
+        code: SDLK_LALT,
+    },
     // Sentinel - must be last, code 0
-    KeyName { name: "Unknown", code: 0 },
+    KeyName {
+        name: "Unknown",
+        code: 0,
+    },
 ];
 
 /// SDL keycode to name mapping (lazy initialized from KEYNAMES)
 static KEY_NAMES: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(|| {
-    KEYNAMES.iter()
+    KEYNAMES
+        .iter()
         .filter(|k| k.code != 0)
         .map(|k| (k.code, k.name))
         .collect()
@@ -276,7 +634,8 @@ static KEY_NAMES: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(|| {
 
 /// Name to SDL keycode mapping (reverse lookup)
 static NAME_TO_KEY: LazyLock<HashMap<&'static str, i32>> = LazyLock::new(|| {
-    KEYNAMES.iter()
+    KEYNAMES
+        .iter()
         .filter(|k| k.code != 0)
         .map(|k| (k.name, k.code))
         .collect()
@@ -316,7 +675,7 @@ pub extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {
     if name.is_null() {
         return 0;
     }
-    
+
     match unsafe { CStr::from_ptr(name) }.to_str() {
         Ok(name_str) => key_from_name(name_str).unwrap_or(0),
         Err(_) => 0,
@@ -326,32 +685,130 @@ pub extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {
 /// C-compatible null-terminated key name strings
 /// These must be static C strings for FFI use
 static CSTR_KEYNAMES: &[&'static [u8]] = &[
-    b"Backspace\0", b"Tab\0", b"Clear\0", b"Return\0", b"Pause\0", b"Escape\0",
-    b"Space\0", b"!\0", b"\"\0", b"Hash\0", b"$\0", b"&\0", b"'\0", b"(\0", b")\0",
-    b"*\0", b"+\0", b",\0", b"-\0", b".\0", b"/\0",
-    b"0\0", b"1\0", b"2\0", b"3\0", b"4\0", b"5\0", b"6\0", b"7\0", b"8\0", b"9\0",
-    b":\0", b";\0", b"<\0", b"=\0", b">\0", b"?\0", b"@\0",
-    b"[\0", b"\\\0", b"]\0", b"^\0", b"_\0", b"`\0",
-    b"a\0", b"b\0", b"c\0", b"d\0", b"e\0", b"f\0", b"g\0", b"h\0", b"i\0", b"j\0",
-    b"k\0", b"l\0", b"m\0", b"n\0", b"o\0", b"p\0", b"q\0", b"r\0", b"s\0", b"t\0",
-    b"u\0", b"v\0", b"w\0", b"x\0", b"y\0", b"z\0",
+    b"Backspace\0",
+    b"Tab\0",
+    b"Clear\0",
+    b"Return\0",
+    b"Pause\0",
+    b"Escape\0",
+    b"Space\0",
+    b"!\0",
+    b"\"\0",
+    b"Hash\0",
+    b"$\0",
+    b"&\0",
+    b"'\0",
+    b"(\0",
+    b")\0",
+    b"*\0",
+    b"+\0",
+    b",\0",
+    b"-\0",
+    b".\0",
+    b"/\0",
+    b"0\0",
+    b"1\0",
+    b"2\0",
+    b"3\0",
+    b"4\0",
+    b"5\0",
+    b"6\0",
+    b"7\0",
+    b"8\0",
+    b"9\0",
+    b":\0",
+    b";\0",
+    b"<\0",
+    b"=\0",
+    b">\0",
+    b"?\0",
+    b"@\0",
+    b"[\0",
+    b"\\\0",
+    b"]\0",
+    b"^\0",
+    b"_\0",
+    b"`\0",
+    b"a\0",
+    b"b\0",
+    b"c\0",
+    b"d\0",
+    b"e\0",
+    b"f\0",
+    b"g\0",
+    b"h\0",
+    b"i\0",
+    b"j\0",
+    b"k\0",
+    b"l\0",
+    b"m\0",
+    b"n\0",
+    b"o\0",
+    b"p\0",
+    b"q\0",
+    b"r\0",
+    b"s\0",
+    b"t\0",
+    b"u\0",
+    b"v\0",
+    b"w\0",
+    b"x\0",
+    b"y\0",
+    b"z\0",
     b"Delete\0",
-    b"Keypad-0\0", b"Keypad-1\0", b"Keypad-2\0", b"Keypad-3\0", b"Keypad-4\0",
-    b"Keypad-5\0", b"Keypad-6\0", b"Keypad-7\0", b"Keypad-8\0", b"Keypad-9\0",
-    b"Keypad-.\0", b"Keypad-/\0", b"Keypad-*\0", b"Keypad--\0", b"Keypad-+\0",
-    b"Keypad-Enter\0", b"Keypad-=\0",
-    b"Up\0", b"Down\0", b"Right\0", b"Left\0",
-    b"Insert\0", b"Home\0", b"End\0", b"PageUp\0", b"PageDown\0",
-    b"F1\0", b"F2\0", b"F3\0", b"F4\0", b"F5\0", b"F6\0", b"F7\0", b"F8\0",
-    b"F9\0", b"F10\0", b"F11\0", b"F12\0", b"F13\0", b"F14\0", b"F15\0",
-    b"RightShift\0", b"LeftShift\0", b"RightControl\0", b"LeftControl\0",
-    b"RightAlt\0", b"LeftAlt\0",
+    b"Keypad-0\0",
+    b"Keypad-1\0",
+    b"Keypad-2\0",
+    b"Keypad-3\0",
+    b"Keypad-4\0",
+    b"Keypad-5\0",
+    b"Keypad-6\0",
+    b"Keypad-7\0",
+    b"Keypad-8\0",
+    b"Keypad-9\0",
+    b"Keypad-.\0",
+    b"Keypad-/\0",
+    b"Keypad-*\0",
+    b"Keypad--\0",
+    b"Keypad-+\0",
+    b"Keypad-Enter\0",
+    b"Keypad-=\0",
+    b"Up\0",
+    b"Down\0",
+    b"Right\0",
+    b"Left\0",
+    b"Insert\0",
+    b"Home\0",
+    b"End\0",
+    b"PageUp\0",
+    b"PageDown\0",
+    b"F1\0",
+    b"F2\0",
+    b"F3\0",
+    b"F4\0",
+    b"F5\0",
+    b"F6\0",
+    b"F7\0",
+    b"F8\0",
+    b"F9\0",
+    b"F10\0",
+    b"F11\0",
+    b"F12\0",
+    b"F13\0",
+    b"F14\0",
+    b"F15\0",
+    b"RightShift\0",
+    b"LeftShift\0",
+    b"RightControl\0",
+    b"LeftControl\0",
+    b"RightAlt\0",
+    b"LeftAlt\0",
     b"Unknown\0",
 ];
 
 /// C-compatible wrapper for key_name
 /// Returns pointer to static null-terminated string
-/// 
+///
 /// # Safety
 /// The returned pointer is valid for the lifetime of the program
 #[no_mangle]
@@ -402,7 +859,7 @@ mod tests {
         assert_eq!(key_name(32), "Space");
         assert_eq!(key_name(27), "Escape");
         assert_eq!(key_name(13), "Return");
-        assert_eq!(key_name(97), "a");  // Lowercase in KEYNAMES table
+        assert_eq!(key_name(97), "a"); // Lowercase in KEYNAMES table
     }
 
     #[test]
@@ -414,7 +871,7 @@ mod tests {
     fn test_key_from_name_exact() {
         assert_eq!(key_from_name("Space"), Some(32));
         assert_eq!(key_from_name("Escape"), Some(27));
-        assert_eq!(key_from_name("a"), Some(97));  // Match KEYNAMES table
+        assert_eq!(key_from_name("a"), Some(97)); // Match KEYNAMES table
     }
 
     #[test]

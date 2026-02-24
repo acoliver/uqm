@@ -7,18 +7,15 @@
 
 use crate::sound::mixer::types::*;
 use crate::sound::mixer::{
-    mixer_init, mixer_uninit, mixer_get_error,
-    mixer_gen_sources, mixer_delete_sources, mixer_is_source,
-    mixer_source_i, mixer_source_f, mixer_get_source_i, mixer_get_source_f,
-    mixer_source_play, mixer_source_pause, mixer_source_stop, mixer_source_rewind,
-    mixer_source_queue_buffers, mixer_source_unqueue_buffers,
-    mixer_gen_buffers, mixer_delete_buffers, mixer_is_buffer,
-    mixer_buffer_data, mixer_get_buffer_i,
-    mixer_mix_channels, mixer_mix_fake,
-    mixer_get_frequency, mixer_get_format,
+    mixer_buffer_data, mixer_delete_buffers, mixer_delete_sources, mixer_gen_buffers,
+    mixer_gen_sources, mixer_get_buffer_i, mixer_get_error, mixer_get_format, mixer_get_frequency,
+    mixer_get_source_f, mixer_get_source_i, mixer_init, mixer_is_buffer, mixer_is_source,
+    mixer_mix_channels, mixer_mix_fake, mixer_source_f, mixer_source_i, mixer_source_pause,
+    mixer_source_play, mixer_source_queue_buffers, mixer_source_rewind, mixer_source_stop,
+    mixer_source_unqueue_buffers, mixer_uninit,
 };
 use std::ffi::c_void;
-use std::os::raw::{c_int, c_uint, c_char};
+use std::os::raw::{c_char, c_int, c_uint};
 use std::ptr;
 
 /// Mixer object handle type (matches C's intptr_t)
@@ -32,7 +29,7 @@ fn decode_c_format(format: c_uint) -> MixerFormat {
     // C format: bits 0-7 = bytes per channel, bits 8-15 = channels
     let bpc = format & 0xFF;
     let chans = (format >> 8) & 0xFF;
-    
+
     match (bpc, chans) {
         (1, 1) => MixerFormat::Mono8,
         (1, 2) => MixerFormat::Stereo8,
@@ -55,13 +52,13 @@ pub extern "C" fn rust_mixer_Init(
         "RUST_MIXER_INIT: freq={} format=0x{:x} quality={} flags={}",
         frequency, format, quality, flags
     ));
-    
+
     let mixer_format = decode_c_format(format);
     crate::bridge_log::rust_bridge_log_msg(&format!(
         "RUST_MIXER_INIT: decoded format={:?}",
         mixer_format
     ));
-    
+
     let result = mixer_init(
         frequency,
         mixer_format,
@@ -105,7 +102,7 @@ pub extern "C" fn rust_mixer_GetError() -> c_uint {
 #[no_mangle]
 pub extern "C" fn rust_mixer_GenSources(n: c_uint, psrcobj: *mut MixerObject) {
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenSources: n={}", n));
-    
+
     if n == 0 {
         return;
     }
@@ -117,7 +114,10 @@ pub extern "C" fn rust_mixer_GenSources(n: c_uint, psrcobj: *mut MixerObject) {
 
     match mixer_gen_sources(n) {
         Ok(handles) => {
-            crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenSources: created {:?}", handles));
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_MIXER_GenSources: created {:?}",
+                handles
+            ));
             for (i, handle) in handles.iter().enumerate() {
                 unsafe {
                     *psrcobj.add(i) = *handle as MixerObject;
@@ -125,7 +125,10 @@ pub extern "C" fn rust_mixer_GenSources(n: c_uint, psrcobj: *mut MixerObject) {
             }
         }
         Err(e) => {
-            crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenSources: error {:?}", e));
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_MIXER_GenSources: error {:?}",
+                e
+            ));
         }
     }
 }
@@ -279,7 +282,7 @@ pub extern "C" fn rust_mixer_SourceQueueBuffers(
         "RUST_MIXER_SourceQueueBuffers: src={} n={}",
         srcobj, n
     ));
-    
+
     if n == 0 {
         return;
     }
@@ -306,7 +309,10 @@ pub extern "C" fn rust_mixer_SourceQueueBuffers(
             crate::bridge_log::rust_bridge_log_msg("RUST_MIXER_SourceQueueBuffers: success");
         }
         Err(e) => {
-            crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_SourceQueueBuffers: error {:?}", e));
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_MIXER_SourceQueueBuffers: error {:?}",
+                e
+            ));
         }
     }
 }
@@ -342,7 +348,7 @@ pub extern "C" fn rust_mixer_SourceUnqueueBuffers(
 #[no_mangle]
 pub extern "C" fn rust_mixer_GenBuffers(n: c_uint, pbufobj: *mut MixerObject) {
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenBuffers: n={}", n));
-    
+
     if n == 0 {
         return;
     }
@@ -354,7 +360,10 @@ pub extern "C" fn rust_mixer_GenBuffers(n: c_uint, pbufobj: *mut MixerObject) {
 
     match mixer_gen_buffers(n) {
         Ok(handles) => {
-            crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenBuffers: created {:?}", handles));
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_MIXER_GenBuffers: created {:?}",
+                handles
+            ));
             for (i, handle) in handles.iter().enumerate() {
                 unsafe {
                     *pbufobj.add(i) = *handle as MixerObject;
@@ -362,7 +371,10 @@ pub extern "C" fn rust_mixer_GenBuffers(n: c_uint, pbufobj: *mut MixerObject) {
             }
         }
         Err(e) => {
-            crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_GenBuffers: error {:?}", e));
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_MIXER_GenBuffers: error {:?}",
+                e
+            ));
         }
     }
 }
@@ -445,7 +457,7 @@ pub extern "C" fn rust_mixer_BufferData(
         "RUST_MIXER_BufferData: buf={} format=0x{:x} size={} freq={}",
         bufobj, format, size, freq
     ));
-    
+
     if data.is_null() || size == 0 {
         crate::bridge_log::rust_bridge_log_msg("RUST_MIXER_BufferData: null data or zero size");
         return;
@@ -469,7 +481,10 @@ pub extern "C" fn rust_mixer_BufferData(
             crate::bridge_log::rust_bridge_log_msg("RUST_MIXER_BufferData: success");
         }
         Err(e) => {
-            crate::bridge_log::rust_bridge_log_msg(&format!("RUST_MIXER_BufferData: error {:?}", e));
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_MIXER_BufferData: error {:?}",
+                e
+            ));
         }
     }
 }
@@ -519,7 +534,15 @@ mod tests {
     #[serial]
     fn test_ffi_init_uninit() {
         rust_mixer_Uninit();
-        assert_eq!(rust_mixer_Init(44100, MixerFormat::Stereo16 as u32, MixerQuality::Medium as u32, MixerFlags::None as u32), 1);
+        assert_eq!(
+            rust_mixer_Init(
+                44100,
+                MixerFormat::Stereo16 as u32,
+                MixerQuality::Medium as u32,
+                MixerFlags::None as u32
+            ),
+            1
+        );
         rust_mixer_Uninit();
     }
 
@@ -527,7 +550,12 @@ mod tests {
     #[serial]
     fn test_ffi_gen_sources() {
         rust_mixer_Uninit();
-        rust_mixer_Init(44100, MixerFormat::Stereo16 as u32, MixerQuality::Medium as u32, MixerFlags::None as u32);
+        rust_mixer_Init(
+            44100,
+            MixerFormat::Stereo16 as u32,
+            MixerQuality::Medium as u32,
+            MixerFlags::None as u32,
+        );
 
         let mut handles = [0isize; 3];
         rust_mixer_GenSources(3, handles.as_mut_ptr());
@@ -548,7 +576,12 @@ mod tests {
     #[serial]
     fn test_ffi_gen_buffers() {
         rust_mixer_Uninit();
-        rust_mixer_Init(44100, MixerFormat::Stereo16 as u32, MixerQuality::Medium as u32, MixerFlags::None as u32);
+        rust_mixer_Init(
+            44100,
+            MixerFormat::Stereo16 as u32,
+            MixerQuality::Medium as u32,
+            MixerFlags::None as u32,
+        );
 
         let mut handles = [0isize; 2];
         rust_mixer_GenBuffers(2, handles.as_mut_ptr());
@@ -567,7 +600,12 @@ mod tests {
     #[serial]
     fn test_ffi_source_properties() {
         rust_mixer_Uninit();
-        rust_mixer_Init(44100, MixerFormat::Stereo16 as u32, MixerQuality::Medium as u32, MixerFlags::None as u32);
+        rust_mixer_Init(
+            44100,
+            MixerFormat::Stereo16 as u32,
+            MixerQuality::Medium as u32,
+            MixerFlags::None as u32,
+        );
 
         let mut src_handles = [0isize; 1];
         rust_mixer_GenSources(1, src_handles.as_mut_ptr());
@@ -593,13 +631,24 @@ mod tests {
     #[serial]
     fn test_ffi_buffer_data() {
         rust_mixer_Uninit();
-        rust_mixer_Init(44100, MixerFormat::Mono8 as u32, MixerQuality::Medium as u32, MixerFlags::None as u32);
+        rust_mixer_Init(
+            44100,
+            MixerFormat::Mono8 as u32,
+            MixerQuality::Medium as u32,
+            MixerFlags::None as u32,
+        );
 
         let mut buf_handles = [0isize; 1];
         rust_mixer_GenBuffers(1, buf_handles.as_mut_ptr());
 
         let data: [u8; 100] = [128; 100];
-        rust_mixer_BufferData(buf_handles[0], MixerFormat::Mono8 as u32, data.as_ptr(), 100, 44100);
+        rust_mixer_BufferData(
+            buf_handles[0],
+            MixerFormat::Mono8 as u32,
+            data.as_ptr(),
+            100,
+            44100,
+        );
 
         let mut freq: MixerIntVal = 0;
         rust_mixer_GetBufferi(buf_handles[0], BufferProp::Frequency as u32, &mut freq);

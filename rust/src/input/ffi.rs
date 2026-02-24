@@ -76,14 +76,18 @@ impl VCONTROL_GESTURE {
                 gesture_type: VCONTROL_KEY,
                 gesture: GestureUnion { data: [*key, 0, 0] },
             },
-            Gesture::JoyAxis { port, axis, polarity } => VCONTROL_GESTURE {
+            Gesture::JoyAxis {
+                port,
+                axis,
+                polarity,
+            } => VCONTROL_GESTURE {
                 gesture_type: VCONTROL_JOYAXIS,
-                gesture: GestureUnion { 
+                gesture: GestureUnion {
                     axis: AxisData {
                         port: *port as c_int,
                         index: *axis,
                         polarity: *polarity,
-                    }
+                    },
                 },
             },
             Gesture::JoyButton { port, button } => VCONTROL_GESTURE {
@@ -92,7 +96,7 @@ impl VCONTROL_GESTURE {
                     button: ButtonData {
                         port: *port as c_int,
                         index: *button,
-                    }
+                    },
                 },
             },
             Gesture::JoyHat { port, hat, dir } => VCONTROL_GESTURE {
@@ -102,12 +106,12 @@ impl VCONTROL_GESTURE {
                         port: *port as c_int,
                         index: *hat,
                         dir: *dir,
-                    }
+                    },
                 },
             },
         }
     }
-    
+
     /// Convert from C VCONTROL_GESTURE to Rust Gesture
     pub fn to_gesture(&self) -> Option<Gesture> {
         unsafe {
@@ -175,7 +179,8 @@ pub extern "C" fn rust_VControl_ResetInput() {
 #[no_mangle]
 pub extern "C" fn rust_VControl_AddKeyBinding(symbol: c_int, target: *mut c_int) -> c_int {
     crate::bridge_log::rust_bridge_log_msg(&format!(
-        "RUST_INPUT: AddKeyBinding sym=0x{:X} target={:p}", symbol, target
+        "RUST_INPUT: AddKeyBinding sym=0x{:X} target={:p}",
+        symbol, target
     ));
     let mut vc = VCONTROL.write();
     if vc.add_key_binding(symbol, target as usize) {
@@ -208,7 +213,7 @@ pub extern "C" fn rust_VControl_ClearKeyBindings() {
 pub extern "C" fn rust_VControl_ProcessKeyDown(symbol: c_int) {
     // Debug log for key presses
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_INPUT: KeyDown sym=0x{:X}", symbol));
-    
+
     let vc = VCONTROL.read();
     unsafe {
         vc.handle_key_down(symbol);
@@ -220,7 +225,7 @@ pub extern "C" fn rust_VControl_ProcessKeyDown(symbol: c_int) {
 pub extern "C" fn rust_VControl_ProcessKeyUp(symbol: c_int) {
     // Debug log for key releases
     crate::bridge_log::rust_bridge_log_msg(&format!("RUST_INPUT: KeyUp sym=0x{:X}", symbol));
-    
+
     let vc = VCONTROL.read();
     unsafe {
         vc.handle_key_up(symbol);
@@ -472,7 +477,7 @@ pub extern "C" fn rust_VControl_GetLastGesture(g: *mut VCONTROL_GESTURE) -> c_in
     if g.is_null() {
         return 0;
     }
-    
+
     let vc = VCONTROL.read();
     match vc.get_last_gesture() {
         Some(gesture) => {
@@ -494,15 +499,16 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
         crate::bridge_log::rust_bridge_log_msg("RUST_INPUT: HandleEvent got null event");
         return;
     }
-    
+
     // SDL_Event is a union, but we only care about the type field (first 4 bytes)
     // and then the specific event data based on type
     let event_type = *(e as *const u32);
-    
+
     crate::bridge_log::rust_bridge_log_msg(&format!(
-        "RUST_INPUT: HandleEvent event_type=0x{:X}", event_type
+        "RUST_INPUT: HandleEvent event_type=0x{:X}",
+        event_type
     ));
-    
+
     match event_type {
         SDL_KEYDOWN => {
             // SAFETY: We interpret the incoming pointer as SDL2's SDL_Event.
@@ -612,15 +618,18 @@ pub unsafe extern "C" fn rust_VControl_HandleEvent(e: *const c_void) {
 /// Add a gesture binding
 /// Maps a gesture to a target address
 #[no_mangle]
-pub extern "C" fn rust_VControl_AddGestureBinding(g: *mut VCONTROL_GESTURE, target: *mut c_int) -> c_int {
+pub extern "C" fn rust_VControl_AddGestureBinding(
+    g: *mut VCONTROL_GESTURE,
+    target: *mut c_int,
+) -> c_int {
     if g.is_null() || target.is_null() {
         crate::bridge_log::rust_bridge_log_msg("RUST_INPUT: AddGestureBinding got null pointer");
         return -1;
     }
-    
+
     let gesture = unsafe { &*g };
     let mut vc = VCONTROL.write();
-    
+
     unsafe {
         match gesture.gesture_type {
             VCONTROL_KEY => {
@@ -677,10 +686,10 @@ pub extern "C" fn rust_VControl_RemoveGestureBinding(g: *mut VCONTROL_GESTURE, t
     if g.is_null() || target.is_null() {
         return;
     }
-    
+
     let gesture = unsafe { &*g };
     let mut vc = VCONTROL.write();
-    
+
     unsafe {
         match gesture.gesture_type {
             VCONTROL_KEY => {
@@ -715,28 +724,28 @@ pub extern "C" fn rust_VControl_RemoveGestureBinding(g: *mut VCONTROL_GESTURE, t
 }
 
 /// Parse a gesture from a string specification
-/// Format: "key KEYNAME" or "joystick N axis M positive/negative" or 
+/// Format: "key KEYNAME" or "joystick N axis M positive/negative" or
 ///         "joystick N button M" or "joystick N hat M up/down/left/right"
 #[no_mangle]
 pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, spec: *const c_char) {
     if g.is_null() || spec.is_null() {
         return;
     }
-    
+
     let spec_str = match CStr::from_ptr(spec).to_str() {
         Ok(s) => s,
         Err(_) => return,
     };
-    
+
     // Default to NONE
     (*g).gesture_type = VCONTROL_NONE;
     (*g).gesture.data = [0, 0, 0];
-    
+
     let tokens: Vec<&str> = spec_str.split_whitespace().collect();
     if tokens.is_empty() {
         return;
     }
-    
+
     if tokens[0].eq_ignore_ascii_case("key") && tokens.len() >= 2 {
         // Parse key binding: "key KEYNAME"
         // Use Rust keyname lookup instead of C function
@@ -750,14 +759,14 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
             Ok(n) => n,
             Err(_) => return,
         };
-        
+
         if tokens[2].eq_ignore_ascii_case("axis") && tokens.len() >= 5 {
             // "joystick N axis M positive/negative"
             let axis_num: c_int = match tokens[3].parse() {
                 Ok(n) => n,
                 Err(_) => return,
             };
-            
+
             let polarity = if tokens[4].eq_ignore_ascii_case("positive") {
                 1
             } else if tokens[4].eq_ignore_ascii_case("negative") {
@@ -765,7 +774,7 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
             } else {
                 return;
             };
-            
+
             (*g).gesture_type = VCONTROL_JOYAXIS;
             (*g).gesture.axis = AxisData {
                 port: joy_num,
@@ -778,7 +787,7 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
                 Ok(n) => n,
                 Err(_) => return,
             };
-            
+
             (*g).gesture_type = VCONTROL_JOYBUTTON;
             (*g).gesture.button = ButtonData {
                 port: joy_num,
@@ -790,7 +799,7 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
                 Ok(n) => n,
                 Err(_) => return,
             };
-            
+
             let dir = if tokens[4].eq_ignore_ascii_case("up") {
                 SDL_HAT_UP
             } else if tokens[4].eq_ignore_ascii_case("down") {
@@ -802,7 +811,7 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
             } else {
                 return;
             };
-            
+
             (*g).gesture_type = VCONTROL_JOYHAT;
             (*g).gesture.hat = HatData {
                 port: joy_num,
@@ -816,11 +825,15 @@ pub unsafe extern "C" fn rust_VControl_ParseGesture(g: *mut VCONTROL_GESTURE, sp
 /// Dump a gesture to a string buffer
 /// Returns the number of characters written (excluding null terminator)
 #[no_mangle]
-pub unsafe extern "C" fn rust_VControl_DumpGesture(buf: *mut c_char, n: c_int, g: *mut VCONTROL_GESTURE) -> c_int {
+pub unsafe extern "C" fn rust_VControl_DumpGesture(
+    buf: *mut c_char,
+    n: c_int,
+    g: *mut VCONTROL_GESTURE,
+) -> c_int {
     if buf.is_null() || g.is_null() || n <= 0 {
         return 0;
     }
-    
+
     let gesture = &*g;
     let result = match gesture.gesture_type {
         VCONTROL_KEY => {
@@ -829,11 +842,21 @@ pub unsafe extern "C" fn rust_VControl_DumpGesture(buf: *mut c_char, n: c_int, g
             format!("key {}", name)
         }
         VCONTROL_JOYAXIS => {
-            let polarity = if gesture.gesture.axis.polarity > 0 { "positive" } else { "negative" };
-            format!("joystick {} axis {} {}", gesture.gesture.axis.port, gesture.gesture.axis.index, polarity)
+            let polarity = if gesture.gesture.axis.polarity > 0 {
+                "positive"
+            } else {
+                "negative"
+            };
+            format!(
+                "joystick {} axis {} {}",
+                gesture.gesture.axis.port, gesture.gesture.axis.index, polarity
+            )
         }
         VCONTROL_JOYBUTTON => {
-            format!("joystick {} button {}", gesture.gesture.button.port, gesture.gesture.button.index)
+            format!(
+                "joystick {} button {}",
+                gesture.gesture.button.port, gesture.gesture.button.index
+            )
         }
         VCONTROL_JOYHAT => {
             let dir = match gesture.gesture.hat.dir {
@@ -843,20 +866,23 @@ pub unsafe extern "C" fn rust_VControl_DumpGesture(buf: *mut c_char, n: c_int, g
                 SDL_HAT_RIGHT => "right",
                 _ => "unknown",
             };
-            format!("joystick {} hat {} {}", gesture.gesture.hat.port, gesture.gesture.hat.index, dir)
+            format!(
+                "joystick {} hat {} {}",
+                gesture.gesture.hat.port, gesture.gesture.hat.index, dir
+            )
         }
         _ => {
             *buf = 0;
             return 0;
         }
     };
-    
+
     let bytes = result.as_bytes();
     let copy_len = std::cmp::min(bytes.len(), (n - 1) as usize);
-    
+
     ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
     *buf.add(copy_len) = 0;
-    
+
     copy_len as c_int
 }
 

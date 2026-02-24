@@ -3,7 +3,11 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use super::{decoder::DukVideoDecoder, scaler::{VideoScaler, LanczosVideoScaler}, VideoFrame, DUCK_FPS};
+use super::{
+    decoder::DukVideoDecoder,
+    scaler::{LanczosVideoScaler, VideoScaler},
+    VideoFrame, DUCK_FPS,
+};
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::video::ffi::SDL_Surface;
 
@@ -51,7 +55,7 @@ pub struct VideoPlayer {
 
     /// Last known playback position in milliseconds.
     pos_ms: u32,
-    
+
     /// Whether to use direct window presentation (bypasses 320x240 surface)
     direct_window_mode: bool,
 }
@@ -91,15 +95,15 @@ impl VideoPlayer {
     pub fn set_scaler(&mut self, scaler: Option<VideoScaler>) {
         self.scaler = scaler;
     }
-    
+
     pub fn set_lanczos_scaler(&mut self, scaler: Option<LanczosVideoScaler>) {
         self.lanczos_scaler = scaler;
     }
-    
+
     pub fn set_direct_window_mode(&mut self, enabled: bool) {
         self.direct_window_mode = enabled;
     }
-    
+
     pub fn direct_window_mode(&self) -> bool {
         self.direct_window_mode
     }
@@ -221,7 +225,7 @@ impl VideoPlayer {
                         data: scaled,
                         timestamp: frame.timestamp,
                     };
-                    
+
                     // Present directly to window instead of SDL surface
                     if super::ffi::rust_present_video_to_window(
                         frame.data.as_ptr() as *const u8,
@@ -236,7 +240,9 @@ impl VideoPlayer {
                             frame.height
                         ));
                     } else {
-                        rust_bridge_log_msg("RUST_VIDEO: Direct window presentation failed; stopping playback");
+                        rust_bridge_log_msg(
+                            "RUST_VIDEO: Direct window presentation failed; stopping playback",
+                        );
                         self.state = PlaybackState::Finished;
                         return false;
                     }
@@ -250,7 +256,9 @@ impl VideoPlayer {
                         frame.height as i32,
                         (frame.width * 4) as i32,
                     ) {
-                        rust_bridge_log_msg("RUST_VIDEO: Direct window presentation failed; stopping playback");
+                        rust_bridge_log_msg(
+                            "RUST_VIDEO: Direct window presentation failed; stopping playback",
+                        );
                         self.state = PlaybackState::Finished;
                         return false;
                     }
@@ -271,7 +279,9 @@ impl VideoPlayer {
                         frame.height
                     ));
                 } else {
-                    rust_bridge_log_msg("RUST_VIDEO: Direct window presentation failed; stopping playback");
+                    rust_bridge_log_msg(
+                        "RUST_VIDEO: Direct window presentation failed; stopping playback",
+                    );
                     self.state = PlaybackState::Finished;
                     return false;
                 }
@@ -290,7 +300,7 @@ impl VideoPlayer {
                     };
                 }
             }
-            
+
             blit_frame_to_sdl_surface(dst_surface, &frame, self.dst_x, self.dst_y);
         }
 
@@ -299,12 +309,7 @@ impl VideoPlayer {
             let sample = frame.data.get(0).copied().unwrap_or(0);
             rust_bridge_log_msg(&format!(
                 "RUST_VIDEO: frame {} size={}x{} dst=({}, {}) sample=0x{:08x}",
-                self.current_frame,
-                frame.width,
-                frame.height,
-                self.dst_x,
-                self.dst_y,
-                sample
+                self.current_frame, frame.width, frame.height, self.dst_x, self.dst_y, sample
             ));
         }
 
@@ -312,8 +317,7 @@ impl VideoPlayer {
             let post_sample = frame.data.get(0).copied().unwrap_or(0);
             rust_bridge_log_msg(&format!(
                 "RUST_VIDEO: blit done frame {} sample=0x{:08x}",
-                self.current_frame,
-                post_sample
+                self.current_frame, post_sample
             ));
         }
 
@@ -353,7 +357,12 @@ impl VideoPlayer {
 /// Minimal SDL_Surface declaration for blitting.
 ///
 /// This matches SDL1/SDL2 surface layout sufficiently for width/height/pitch/pixels.
-unsafe fn blit_frame_to_sdl_surface(surface: *mut SDL_Surface, frame: &VideoFrame, x0: i32, y0: i32) {
+unsafe fn blit_frame_to_sdl_surface(
+    surface: *mut SDL_Surface,
+    frame: &VideoFrame,
+    x0: i32,
+    y0: i32,
+) {
     if surface.is_null() {
         return;
     }
@@ -382,12 +391,7 @@ unsafe fn blit_frame_to_sdl_surface(surface: *mut SDL_Surface, frame: &VideoFram
     if log_index < 5 {
         rust_bridge_log_msg(&format!(
             "RUST_VIDEO: surface w={} h={} pitch={} pixels={:p} dst=({}, {})",
-            dst_w,
-            dst_h,
-            pitch,
-            surf.pixels,
-            x0,
-            y0
+            dst_w, dst_h, pitch, surf.pixels, x0, y0
         ));
     }
 

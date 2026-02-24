@@ -420,9 +420,7 @@ mod tests {
         let mut state = CommState::new();
         state.init().unwrap();
 
-        state
-            .track_mut()
-            .splice_track(1, Some("Hello"), 0.0, 2.0);
+        state.track_mut().splice_track(1, Some("Hello"), 0.0, 2.0);
 
         assert!(state.start_track().is_ok());
         assert!(state.is_talking());
@@ -540,9 +538,7 @@ mod tests {
         let mut state = CommState::new();
         state.init().unwrap();
 
-        state
-            .track_mut()
-            .splice_track(1, Some("Test"), 0.0, 1.0);
+        state.track_mut().splice_track(1, Some("Test"), 0.0, 1.0);
         state.start_track().unwrap();
 
         state.update(0.5);

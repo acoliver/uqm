@@ -18,25 +18,25 @@ fn calculate_ogg_duration<R: Read + Seek>(data: &mut R, sample_rate: u32) -> f32
     if data.seek(SeekFrom::End(0)).is_err() {
         return 0.0;
     }
-    
+
     let file_size = match data.stream_position() {
         Ok(pos) => pos,
         Err(_) => return 0.0,
     };
-    
+
     // Search backwards for "OggS" page marker in the last 64KB
     let search_size = std::cmp::min(65536, file_size) as usize;
     let search_start = file_size - search_size as u64;
-    
+
     if data.seek(SeekFrom::Start(search_start)).is_err() {
         return 0.0;
     }
-    
+
     let mut buffer = vec![0u8; search_size];
     if data.read_exact(&mut buffer).is_err() {
         return 0.0;
     }
-    
+
     // Search backwards for last "OggS" marker
     let mut last_granule: Option<u64> = None;
     for i in (0..buffer.len().saturating_sub(27)).rev() {
@@ -45,8 +45,14 @@ fn calculate_ogg_duration<R: Read + Seek>(data: &mut R, sample_rate: u32) -> f32
             // Granule position is at offset 6-13 (8 bytes, little-endian)
             if i + 14 <= buffer.len() {
                 let granule = u64::from_le_bytes([
-                    buffer[i + 6], buffer[i + 7], buffer[i + 8], buffer[i + 9],
-                    buffer[i + 10], buffer[i + 11], buffer[i + 12], buffer[i + 13],
+                    buffer[i + 6],
+                    buffer[i + 7],
+                    buffer[i + 8],
+                    buffer[i + 9],
+                    buffer[i + 10],
+                    buffer[i + 11],
+                    buffer[i + 12],
+                    buffer[i + 13],
                 ]);
                 // Granule position of -1 (0xFFFFFFFFFFFFFFFF) means "no granule"
                 if granule != u64::MAX {
@@ -56,10 +62,10 @@ fn calculate_ogg_duration<R: Read + Seek>(data: &mut R, sample_rate: u32) -> f32
             }
         }
     }
-    
+
     // Reset to beginning for normal reading
     let _ = data.seek(SeekFrom::Start(0));
-    
+
     match last_granule {
         Some(granule) if sample_rate > 0 => granule as f32 / sample_rate as f32,
         _ => 0.0,
@@ -125,7 +131,10 @@ impl OggDecoder {
                 Ok(None) => None,
                 Err(e) => {
                     self.last_error = -1;
-                    return Err(DecodeError::DecoderError(format!("Ogg decode error: {:?}", e)));
+                    return Err(DecodeError::DecoderError(format!(
+                        "Ogg decode error: {:?}",
+                        e
+                    )));
                 }
             }
         } else if let Some(ref mut reader) = self.reader_bytes {
@@ -134,7 +143,10 @@ impl OggDecoder {
                 Ok(None) => None,
                 Err(e) => {
                     self.last_error = -1;
-                    return Err(DecodeError::DecoderError(format!("Ogg decode error: {:?}", e)));
+                    return Err(DecodeError::DecoderError(format!(
+                        "Ogg decode error: {:?}",
+                        e
+                    )));
                 }
             }
         } else {
@@ -192,14 +204,12 @@ impl SoundDecoder for OggDecoder {
     }
 
     fn open(&mut self, path: &Path) -> DecodeResult<()> {
-        let file = File::open(path).map_err(|e| {
-            DecodeError::NotFound(format!("{}: {}", path.display(), e))
-        })?;
-        
+        let file = File::open(path)
+            .map_err(|e| DecodeError::NotFound(format!("{}: {}", path.display(), e)))?;
+
         let reader = BufReader::new(file);
-        let ogg_reader = OggStreamReader::new(reader).map_err(|e| {
-            DecodeError::InvalidData(format!("Failed to open Ogg stream: {:?}", e))
-        })?;
+        let ogg_reader = OggStreamReader::new(reader)
+            .map_err(|e| DecodeError::InvalidData(format!("Failed to open Ogg stream: {:?}", e)))?;
 
         self.frequency = ogg_reader.ident_hdr.audio_sample_rate;
         self.format = if ogg_reader.ident_hdr.audio_channels == 1 {
@@ -225,10 +235,10 @@ impl SoundDecoder for OggDecoder {
     fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
         // Store original data for seeking/rewind
         let data_vec = data.to_vec();
-        
+
         // Calculate duration from the raw data before creating the reader
         let mut cursor_for_duration = Cursor::new(data_vec.clone());
-        
+
         // First pass: get sample rate from headers
         let temp_cursor = Cursor::new(data_vec.clone());
         let temp_reader = OggStreamReader::new(temp_cursor).map_err(|e| {
@@ -237,10 +247,10 @@ impl SoundDecoder for OggDecoder {
         let sample_rate = temp_reader.ident_hdr.audio_sample_rate;
         let channels = temp_reader.ident_hdr.audio_channels;
         drop(temp_reader);
-        
+
         // Calculate duration
         let duration = calculate_ogg_duration(&mut cursor_for_duration, sample_rate);
-        
+
         // Now create the actual reader
         let cursor = Cursor::new(data_vec.clone());
         let ogg_reader = OggStreamReader::new(cursor).map_err(|e| {
@@ -331,15 +341,15 @@ impl SoundDecoder for OggDecoder {
         // lewton doesn't support native seeking, so we implement it by:
         // 1. Rewinding to start (reopening the stream)
         // 2. Decoding and discarding samples until we reach the target position
-        
+
         let target_pcm = pcm_pos as u64;
-        
+
         // If seeking backwards or to start, we need to rewind first
         if target_pcm <= self.current_pcm || pcm_pos == 0 {
             self.sample_buffer.clear();
             self.buffer_pos = 0;
             self.current_pcm = 0;
-            
+
             // Reopen from original data if we have it (bytes mode)
             if let Some(ref data) = self.original_data {
                 let cursor = Cursor::new(data.clone());
@@ -348,17 +358,20 @@ impl SoundDecoder for OggDecoder {
                         self.reader_bytes = Some(ogg_reader);
                     }
                     Err(e) => {
-                        return Err(DecodeError::SeekFailed(format!("Failed to rewind: {:?}", e)));
+                        return Err(DecodeError::SeekFailed(format!(
+                            "Failed to rewind: {:?}",
+                            e
+                        )));
                     }
                 }
             }
             // For file mode, we'd need to reopen the file - not implemented yet
-            
+
             if pcm_pos == 0 {
                 return Ok(0);
             }
         }
-        
+
         // Now skip forward by decoding and discarding until we reach target
         let channels = self.format.channels() as u64;
         while self.current_pcm < target_pcm {
@@ -368,9 +381,9 @@ impl SoundDecoder for OggDecoder {
                     // Calculate how many PCM frames are in this buffer
                     let samples_in_buffer = self.sample_buffer.len() as u64;
                     let frames_in_buffer = samples_in_buffer / channels;
-                    
+
                     let remaining_to_skip = target_pcm - self.current_pcm;
-                    
+
                     if frames_in_buffer <= remaining_to_skip {
                         // Skip entire buffer
                         self.current_pcm += frames_in_buffer;
@@ -387,11 +400,14 @@ impl SoundDecoder for OggDecoder {
                     return Ok(self.current_pcm as u32);
                 }
                 Err(e) => {
-                    return Err(DecodeError::SeekFailed(format!("Seek failed during skip: {}", e)));
+                    return Err(DecodeError::SeekFailed(format!(
+                        "Seek failed during skip: {}",
+                        e
+                    )));
                 }
             }
         }
-        
+
         Ok(self.current_pcm as u32)
     }
 

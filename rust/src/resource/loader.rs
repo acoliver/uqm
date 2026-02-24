@@ -167,7 +167,11 @@ impl ResourceLoader {
         // Load the file
         if entry.file_offset > 0 || entry.file_size > 0 {
             // Packed resource with offset/size
-            self.load_partial(&full_path, entry.file_offset as u64, entry.file_size as usize)
+            self.load_partial(
+                &full_path,
+                entry.file_offset as u64,
+                entry.file_size as usize,
+            )
         } else {
             // Whole file
             fs::read(&full_path).map_err(LoaderError::from)
@@ -317,7 +321,9 @@ mod tests {
     fn test_load_string() {
         let (_temp_dir, loader) = setup_test_env();
 
-        let content = loader.load_string("test.resource").expect("Should load string");
+        let content = loader
+            .load_string("test.resource")
+            .expect("Should load string");
         assert_eq!(content, "Hello, World!");
     }
 
@@ -357,7 +363,9 @@ mod tests {
     fn test_loader_with_subdirectories() {
         let (_temp_dir, loader) = setup_test_env();
 
-        let content = loader.load_string("nested.resource").expect("Should load nested");
+        let content = loader
+            .load_string("nested.resource")
+            .expect("Should load nested");
         assert_eq!(content, "Nested content");
     }
 
@@ -424,10 +432,17 @@ mod tests {
 
         // Create index with offset and size
         let mut index = ResourceIndex::new();
-        index.insert(ResourceEntry::with_offset("partial.resource", "packed.dat", 10, 20));
+        index.insert(ResourceEntry::with_offset(
+            "partial.resource",
+            "packed.dat",
+            10,
+            20,
+        ));
 
         let loader = ResourceLoader::new(base_path, index);
-        let data = loader.load("partial.resource").expect("Should load partial");
+        let data = loader
+            .load("partial.resource")
+            .expect("Should load partial");
 
         // Should get bytes 10-29 (20 bytes starting at offset 10)
         let expected: Vec<u8> = (10..30).collect();

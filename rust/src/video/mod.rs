@@ -206,7 +206,7 @@ impl PixelFormat {
         let r = ((pix >> 7) & 0xf8) as u32;
         let g = ((pix >> 2) & 0xf8) as u32;
         let b = ((pix << 3) & 0xf8) as u32;
-        
+
         // Full alpha (0xFF) for opaque pixels
         let a = 0xFF_u32;
 
@@ -430,8 +430,14 @@ impl DukVideoDeltas {
 impl fmt::Debug for DukVideoDeltas {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DukVideoDeltas")
-            .field("lumas", &format!("[{}x{} array]", NUM_VECTORS, NUM_VEC_ITEMS))
-            .field("chromas", &format!("[{}x{} array]", NUM_VECTORS, NUM_VEC_ITEMS))
+            .field(
+                "lumas",
+                &format!("[{}x{} array]", NUM_VECTORS, NUM_VEC_ITEMS),
+            )
+            .field(
+                "chromas",
+                &format!("[{}x{} array]", NUM_VECTORS, NUM_VEC_ITEMS),
+            )
             .finish()
     }
 }

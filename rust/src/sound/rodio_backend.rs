@@ -31,31 +31,31 @@ pub type AudioIntVal = isize;
 // audio_NO_ERROR = 0, audio_INVALID_NAME = 1, ... audio_DRIVER_FAILURE = 6
 
 /// Source properties (starting at enum value 7)
-pub const AUDIO_POSITION: i32 = 7;          // audio_POSITION
-pub const AUDIO_LOOPING: i32 = 8;           // audio_LOOPING
-pub const AUDIO_BUFFER: i32 = 9;            // audio_BUFFER
-pub const AUDIO_GAIN: i32 = 10;             // audio_GAIN
-pub const AUDIO_SOURCE_STATE: i32 = 11;     // audio_SOURCE_STATE
-pub const AUDIO_BUFFERS_QUEUED: i32 = 12;   // audio_BUFFERS_QUEUED
+pub const AUDIO_POSITION: i32 = 7; // audio_POSITION
+pub const AUDIO_LOOPING: i32 = 8; // audio_LOOPING
+pub const AUDIO_BUFFER: i32 = 9; // audio_BUFFER
+pub const AUDIO_GAIN: i32 = 10; // audio_GAIN
+pub const AUDIO_SOURCE_STATE: i32 = 11; // audio_SOURCE_STATE
+pub const AUDIO_BUFFERS_QUEUED: i32 = 12; // audio_BUFFERS_QUEUED
 pub const AUDIO_BUFFERS_PROCESSED: i32 = 13; // audio_BUFFERS_PROCESSED
 
 /// Source states (starting at enum value 14)
-pub const AUDIO_INITIAL: i32 = 14;          // audio_INITIAL
-pub const AUDIO_STOPPED: i32 = 15;          // audio_STOPPED
-pub const AUDIO_PLAYING: i32 = 16;          // audio_PLAYING
-pub const AUDIO_PAUSED: i32 = 17;           // audio_PAUSED
+pub const AUDIO_INITIAL: i32 = 14; // audio_INITIAL
+pub const AUDIO_STOPPED: i32 = 15; // audio_STOPPED
+pub const AUDIO_PLAYING: i32 = 16; // audio_PLAYING
+pub const AUDIO_PAUSED: i32 = 17; // audio_PAUSED
 
 /// Buffer properties (starting at enum value 18)
-pub const AUDIO_FREQUENCY: i32 = 18;        // audio_FREQUENCY
-pub const AUDIO_BITS: i32 = 19;             // audio_BITS
-pub const AUDIO_CHANNELS: i32 = 20;         // audio_CHANNELS
-pub const AUDIO_SIZE: i32 = 21;             // audio_SIZE
+pub const AUDIO_FREQUENCY: i32 = 18; // audio_FREQUENCY
+pub const AUDIO_BITS: i32 = 19; // audio_BITS
+pub const AUDIO_CHANNELS: i32 = 20; // audio_CHANNELS
+pub const AUDIO_SIZE: i32 = 21; // audio_SIZE
 
 /// Buffer formats (starting at enum value 22)
-pub const AUDIO_FORMAT_MONO16: u32 = 22;    // audio_FORMAT_MONO16
-pub const AUDIO_FORMAT_STEREO16: u32 = 23;  // audio_FORMAT_STEREO16
-pub const AUDIO_FORMAT_MONO8: u32 = 24;     // audio_FORMAT_MONO8
-pub const AUDIO_FORMAT_STEREO8: u32 = 25;   // audio_FORMAT_STEREO8
+pub const AUDIO_FORMAT_MONO16: u32 = 22; // audio_FORMAT_MONO16
+pub const AUDIO_FORMAT_STEREO16: u32 = 23; // audio_FORMAT_STEREO16
+pub const AUDIO_FORMAT_MONO8: u32 = 24; // audio_FORMAT_MONO8
+pub const AUDIO_FORMAT_STEREO8: u32 = 25; // audio_FORMAT_STEREO8
 
 // =============================================================================
 // Internal Types
@@ -139,7 +139,7 @@ impl SourceState {
             samples_played_before_pause: 0,
         }
     }
-    
+
     /// Estimate how many samples have been played based on elapsed time
     fn samples_played(&self) -> usize {
         if self.sample_rate == 0 {
@@ -157,16 +157,17 @@ impl SourceState {
 
     /// Remaining samples queued to sink (estimate)
     fn samples_remaining(&self) -> usize {
-        self.total_samples_queued.saturating_sub(self.samples_consumed)
+        self.total_samples_queued
+            .saturating_sub(self.samples_consumed)
     }
-    
+
     /// Move buffers from queued to processed based on estimated playback position
     fn update_processed_buffers(&mut self) {
         let played = self.samples_played();
         let target = played.saturating_sub(self.samples_consumed);
         let mut consumed = 0usize;
         let mut moved = 0;
-        
+
         while !self.queued_buffers.is_empty() {
             let buf = &self.queued_buffers[0];
             if consumed + buf.samples <= target {
@@ -178,12 +179,11 @@ impl SourceState {
                 break;
             }
         }
-        
+
         if moved > 0 {
             self.samples_consumed += consumed;
             self.total_samples_queued = self.total_samples_queued.saturating_sub(consumed);
         }
-        
     }
 }
 
@@ -325,7 +325,13 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                                 }
                                 src.processed_buffers.len() as i32
                             }
-                            AUDIO_LOOPING => if src.looping { 1 } else { 0 },
+                            AUDIO_LOOPING => {
+                                if src.looping {
+                                    1
+                                } else {
+                                    0
+                                }
+                            }
                             _ => 0,
                         }
                     } else {
@@ -433,7 +439,7 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                                 if src.sample_rate == 0 {
                                     src.sample_rate = buf.frequency;
                                 }
-                                
+
                                 // If source is playing, append to sink
                                 if src.state == AUDIO_PLAYING {
                                     if let Some(ref sink) = src.sink {
@@ -450,7 +456,7 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                             } else {
                                 0
                             };
-                            
+
                             src.total_samples_queued += samples_in_buf;
                             src.queued_buffers.push(QueuedBuffer {
                                 id: buf_id,
@@ -687,8 +693,7 @@ pub extern "C" fn rust_audio_delete_sources(n: u32, ids: *const AudioObject) {
         return;
     }
 
-    let ids_vec: Vec<AudioObject> =
-        unsafe { std::slice::from_raw_parts(ids, n as usize) }.to_vec();
+    let ids_vec: Vec<AudioObject> = unsafe { std::slice::from_raw_parts(ids, n as usize) }.to_vec();
     send_cmd(AudioCmd::DeleteSources(ids_vec));
 }
 
@@ -741,7 +746,11 @@ pub extern "C" fn rust_audio_source_rewind(src: AudioObject) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_queue_buffers(src: AudioObject, n: u32, bufs: *const AudioObject) {
+pub extern "C" fn rust_audio_source_queue_buffers(
+    src: AudioObject,
+    n: u32,
+    bufs: *const AudioObject,
+) {
     if bufs.is_null() {
         return;
     }
@@ -795,8 +804,7 @@ pub extern "C" fn rust_audio_delete_buffers(n: u32, ids: *const AudioObject) {
         return;
     }
 
-    let ids_vec: Vec<AudioObject> =
-        unsafe { std::slice::from_raw_parts(ids, n as usize) }.to_vec();
+    let ids_vec: Vec<AudioObject> = unsafe { std::slice::from_raw_parts(ids, n as usize) }.to_vec();
     send_cmd(AudioCmd::DeleteBuffers(ids_vec));
 }
 

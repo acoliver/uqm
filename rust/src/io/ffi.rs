@@ -80,11 +80,20 @@ pub struct stat {
 // FFI bindings to C uio_* functions
 extern "C" {
     // uio_fopen/uio_fclose - for fileExists2
-    pub fn uio_fopen(dir: *mut uio_DirHandle, path: *const c_char, mode: *const c_char) -> *mut uio_Stream;
+    pub fn uio_fopen(
+        dir: *mut uio_DirHandle,
+        path: *const c_char,
+        mode: *const c_char,
+    ) -> *mut uio_Stream;
     pub fn uio_fclose(stream: *mut uio_Stream) -> c_int;
 
     // uio_open/uio_close - for copyFile
-    pub fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut uio_Handle;
+    pub fn uio_open(
+        dir: *mut uio_DirHandle,
+        path: *const c_char,
+        flags: c_int,
+        mode: c_int,
+    ) -> *mut uio_Handle;
     pub fn uio_close(handle: *mut uio_Handle) -> c_int;
 
     // uio_read/uio_write - for copyFile
@@ -170,8 +179,6 @@ pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const 
     {
         let _ = writeln!(file, "RUST_FILE_EXISTS2_CALLED");
     }
-
-
 
     // Check for null parameters
     if dir.is_null() || file_name.is_null() {
@@ -335,11 +342,11 @@ pub unsafe extern "C" fn rust_copy_file(src_path: *const c_char, dst_path: *cons
 mod tests {
     use super::*;
     use std::env;
+    use std::ffi::CString;
     use std::fs;
     use std::path::Path;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::ffi::CString;
     use std::ptr;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
 

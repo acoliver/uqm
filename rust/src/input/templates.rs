@@ -222,7 +222,10 @@ mod tests {
         template.add_key("Up", "thrust");
 
         assert_eq!(template.key_bindings.len(), 2);
-        assert_eq!(template.key_bindings.get("Space"), Some(&"fire".to_string()));
+        assert_eq!(
+            template.key_bindings.get("Space"),
+            Some(&"fire".to_string())
+        );
     }
 
     #[test]

@@ -31,35 +31,34 @@
 //! mixer_uninit().unwrap();
 //! ```
 
-pub mod types;
 pub mod buffer;
-pub mod source;
-pub mod resample;
-pub mod mix;
 pub mod ffi;
+pub mod mix;
+pub mod resample;
+pub mod source;
+pub mod types;
 
 // Re-export common types for convenience
 pub use types::{
-    MixerError, MixerFormat, MixerQuality, MixerFlags,
-    SourceState, BufferState, SourceProp, BufferProp,
-    MIXER_BUF_MAGIC, MIXER_SRC_MAGIC, MAX_SOURCES,
-    MIX_GAIN_ADJ, SINT16_MAX, SINT16_MIN, SINT8_MAX, SINT8_MIN,
+    BufferProp, BufferState, MixerError, MixerFlags, MixerFormat, MixerQuality, SourceProp,
+    SourceState, MAX_SOURCES, MIXER_BUF_MAGIC, MIXER_SRC_MAGIC, MIX_GAIN_ADJ, SINT16_MAX,
+    SINT16_MIN, SINT8_MAX, SINT8_MIN,
 };
 
 // Global mixer state (stored in the mix module)
-pub use mix::{
-    mixer_init,
-    mixer_uninit,
-    mixer_get_error,
-    mixer_is_initialized,
-};
+pub use mix::{mixer_get_error, mixer_init, mixer_is_initialized, mixer_uninit};
 
-pub use buffer::{MixerBuffer, mixer_gen_buffers, mixer_delete_buffers, mixer_is_buffer, mixer_buffer_data, mixer_get_buffer_i};
-pub use source::{MixerSource, mixer_gen_sources, mixer_delete_sources, mixer_is_source,
-                 mixer_source_i, mixer_source_f, mixer_get_source_i, mixer_get_source_f,
-                 mixer_source_play, mixer_source_pause, mixer_source_stop, mixer_source_rewind,
-                 mixer_source_queue_buffers, mixer_source_unqueue_buffers};
-pub use mix::{mixer_mix_channels, mixer_mix_fake, mixer_get_frequency, mixer_get_format};
+pub use buffer::{
+    mixer_buffer_data, mixer_delete_buffers, mixer_gen_buffers, mixer_get_buffer_i,
+    mixer_is_buffer, MixerBuffer,
+};
+pub use mix::{mixer_get_format, mixer_get_frequency, mixer_mix_channels, mixer_mix_fake};
+pub use source::{
+    mixer_delete_sources, mixer_gen_sources, mixer_get_source_f, mixer_get_source_i,
+    mixer_is_source, mixer_source_f, mixer_source_i, mixer_source_pause, mixer_source_play,
+    mixer_source_queue_buffers, mixer_source_rewind, mixer_source_stop,
+    mixer_source_unqueue_buffers, MixerSource,
+};
 
 #[cfg(test)]
 mod tests {

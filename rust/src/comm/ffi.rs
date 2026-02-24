@@ -174,10 +174,7 @@ pub extern "C" fn rust_GetSubtitle() -> *const c_char {
 /// Enable/disable subtitles
 #[no_mangle]
 pub extern "C" fn rust_SetSubtitlesEnabled(enabled: c_int) {
-    COMM_STATE
-        .write()
-        .subtitles_mut()
-        .set_enabled(enabled != 0);
+    COMM_STATE.write().subtitles_mut().set_enabled(enabled != 0);
 }
 
 /// Check if subtitles are enabled

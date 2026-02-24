@@ -56,7 +56,7 @@ impl Default for AudioFormat {
 ///
 /// Matches C `TFB_DecoderFormats` structure. Specifies which audio formats
 /// the decoder should use for output.
-/// 
+///
 /// IMPORTANT: Field order MUST match C struct:
 ///   bool big_endian; bool want_big_endian;
 ///   uint32 mono8; uint32 stereo8; uint32 mono16; uint32 stereo16;
@@ -171,15 +171,27 @@ mod tests {
     #[test]
     fn test_decoder_formats_format_code() {
         let formats = DecoderFormats::default();
-        assert_eq!(formats.format_code(AudioFormat::Mono8), AudioFormat::Mono8 as u32);
-        assert_eq!(formats.format_code(AudioFormat::Stereo16), AudioFormat::Stereo16 as u32);
+        assert_eq!(
+            formats.format_code(AudioFormat::Mono8),
+            AudioFormat::Mono8 as u32
+        );
+        assert_eq!(
+            formats.format_code(AudioFormat::Stereo16),
+            AudioFormat::Stereo16 as u32
+        );
     }
 
     #[test]
     fn test_decoder_formats_audio_format() {
         let formats = DecoderFormats::default();
-        assert_eq!(formats.audio_format(AudioFormat::Mono8 as u32), Some(AudioFormat::Mono8));
-        assert_eq!(formats.audio_format(AudioFormat::Stereo16 as u32), Some(AudioFormat::Stereo16));
+        assert_eq!(
+            formats.audio_format(AudioFormat::Mono8 as u32),
+            Some(AudioFormat::Mono8)
+        );
+        assert_eq!(
+            formats.audio_format(AudioFormat::Stereo16 as u32),
+            Some(AudioFormat::Stereo16)
+        );
         assert_eq!(formats.audio_format(0x9999), None);
     }
 }

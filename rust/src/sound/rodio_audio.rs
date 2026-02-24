@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
@@ -116,15 +116,49 @@ fn audio_thread_main(rx: Receiver<AudioCommand>) {
         match rx.recv() {
             Ok(cmd) => match cmd {
                 AudioCommand::PlayWav(data, category, looping, response) => {
-                    let handle = play_decoded(&stream_handle, &data, category, looping, &volumes, &mut sinks, "WAV");
+                    let handle = play_decoded(
+                        &stream_handle,
+                        &data,
+                        category,
+                        looping,
+                        &volumes,
+                        &mut sinks,
+                        "WAV",
+                    );
                     let _ = response.send(handle);
                 }
                 AudioCommand::PlayOgg(data, category, looping, response) => {
-                    let handle = play_decoded(&stream_handle, &data, category, looping, &volumes, &mut sinks, "OGG");
+                    let handle = play_decoded(
+                        &stream_handle,
+                        &data,
+                        category,
+                        looping,
+                        &volumes,
+                        &mut sinks,
+                        "OGG",
+                    );
                     let _ = response.send(handle);
                 }
-                AudioCommand::PlayRaw(data, sample_rate, channels, bits, category, looping, response) => {
-                    let handle = play_raw(&stream_handle, &data, sample_rate, channels, bits, category, looping, &volumes, &mut sinks);
+                AudioCommand::PlayRaw(
+                    data,
+                    sample_rate,
+                    channels,
+                    bits,
+                    category,
+                    looping,
+                    response,
+                ) => {
+                    let handle = play_raw(
+                        &stream_handle,
+                        &data,
+                        sample_rate,
+                        channels,
+                        bits,
+                        category,
+                        looping,
+                        &volumes,
+                        &mut sinks,
+                    );
                     let _ = response.send(handle);
                 }
                 AudioCommand::Stop(handle) => {
@@ -502,7 +536,11 @@ pub extern "C" fn rust_audio_set_speech_volume(volume: f32) {
 pub extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
     let (tx, rx) = mpsc::channel();
     if send_command(AudioCommand::IsPlaying(handle, tx)) {
-        if rx.recv().unwrap_or(false) { 1 } else { 0 }
+        if rx.recv().unwrap_or(false) {
+            1
+        } else {
+            0
+        }
     } else {
         0
     }

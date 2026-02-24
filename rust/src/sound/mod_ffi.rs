@@ -14,11 +14,16 @@ use super::formats::DecoderFormats;
 use super::mod_decoder::ModDecoder;
 
 // Import types from the main ffi module
-use super::ffi::{TFB_DecoderFormats, TFB_SoundDecoder, TFB_SoundDecoderFuncs, uio_DirHandle};
+use super::ffi::{uio_DirHandle, TFB_DecoderFormats, TFB_SoundDecoder, TFB_SoundDecoderFuncs};
 
 // External C functions for file I/O
 extern "C" {
-    fn uio_open(dir: *mut uio_DirHandle, path: *const c_char, flags: c_int, mode: c_int) -> *mut c_void;
+    fn uio_open(
+        dir: *mut uio_DirHandle,
+        path: *const c_char,
+        flags: c_int,
+        mode: c_int,
+    ) -> *mut c_void;
     fn uio_read(handle: *mut c_void, buf: *mut u8, count: usize) -> isize;
     fn uio_close(handle: *mut c_void) -> c_int;
     fn uio_fstat(handle: *mut c_void, stat_buf: *mut libc::stat) -> c_int;
@@ -51,19 +56,25 @@ extern "C" fn rust_mod_GetName() -> *const c_char {
 }
 
 extern "C" fn rust_mod_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats) -> c_int {
-    rust_bridge_log_msg(&format!("RUST_MOD_INIT_MODULE: flags={} fmts={:?}", flags, fmts));
-    
+    rust_bridge_log_msg(&format!(
+        "RUST_MOD_INIT_MODULE: flags={} fmts={:?}",
+        flags, fmts
+    ));
+
     if fmts.is_null() {
         rust_bridge_log_msg("RUST_MOD_INIT_MODULE: ERROR - fmts is null!");
         return 0;
     }
-    
+
     unsafe {
         rust_bridge_log_msg(&format!(
             "RUST_MOD_INIT_MODULE: formats mono8={} stereo8={} mono16={} stereo16={}",
-            (*fmts).mono8, (*fmts).stereo8, (*fmts).mono16, (*fmts).stereo16
+            (*fmts).mono8,
+            (*fmts).stereo8,
+            (*fmts).mono16,
+            (*fmts).stereo16
         ));
-        
+
         let formats = DecoderFormats {
             big_endian: (*fmts).big_endian,
             want_big_endian: (*fmts).want_big_endian,
@@ -72,7 +83,7 @@ extern "C" fn rust_mod_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats)
             mono16: (*fmts).mono16,
             stereo16: (*fmts).stereo16,
         };
-        
+
         if let Ok(mut guard) = RUST_MOD_FORMATS.lock() {
             *guard = Some(formats);
             rust_bridge_log_msg("RUST_MOD_INIT_MODULE: formats stored successfully");
@@ -80,13 +91,13 @@ extern "C" fn rust_mod_InitModule(flags: c_int, fmts: *const TFB_DecoderFormats)
             rust_bridge_log_msg("RUST_MOD_INIT_MODULE: ERROR - failed to lock RUST_MOD_FORMATS");
         }
     }
-    
+
     1 // success
 }
 
 extern "C" fn rust_mod_TermModule() {
     rust_bridge_log_msg("RUST_MOD_TERM_MODULE");
-    
+
     if let Ok(mut guard) = RUST_MOD_FORMATS.lock() {
         *guard = None;
     }
@@ -100,13 +111,13 @@ extern "C" fn rust_mod_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return -1;
         }
-        
+
         let mod_dec = &mut *((*rust_dec).rust_decoder as *mut ModDecoder);
         mod_dec.get_error()
     }
@@ -114,40 +125,40 @@ extern "C" fn rust_mod_GetError(decoder: *mut TFB_SoundDecoder) -> c_int {
 
 extern "C" fn rust_mod_Init(decoder: *mut TFB_SoundDecoder) -> c_int {
     rust_bridge_log_msg("RUST_MOD_INIT");
-    
+
     if decoder.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
-        
+
         // Create new Rust ModDecoder
         let mut mod_dec = Box::new(ModDecoder::new());
-        
+
         // Initialize with stored formats
         if let Ok(guard) = RUST_MOD_FORMATS.lock() {
             if let Some(formats) = guard.as_ref() {
                 mod_dec.init_module(0, formats);
             }
         }
-        
+
         mod_dec.init();
-        
+
         (*rust_dec).rust_decoder = Box::into_raw(mod_dec) as *mut c_void;
         (*decoder).need_swap = false;
     }
-    
+
     1 // success
 }
 
 extern "C" fn rust_mod_Term(decoder: *mut TFB_SoundDecoder) {
     rust_bridge_log_msg("RUST_MOD_TERM");
-    
+
     if decoder.is_null() {
         return;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if !(*rust_dec).rust_decoder.is_null() {
@@ -166,30 +177,33 @@ extern "C" fn rust_mod_Open(
     if decoder.is_null() || filename.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let filename_str = match CStr::from_ptr(filename).to_str() {
             Ok(s) => s,
             Err(_) => return 0,
         };
-        
+
         rust_bridge_log_msg(&format!("RUST_MOD_OPEN: {} (dir={:?})", filename_str, dir));
-        
+
         // Open file via UIO
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return 0;
         }
-        
+
         let mod_dec = &mut *((*rust_dec).rust_decoder as *mut ModDecoder);
-        
+
         // Use UIO to read the file
         let handle = uio_open(dir, filename, 0, 0); // O_RDONLY = 0
         if handle.is_null() {
-            rust_bridge_log_msg(&format!("RUST_MOD_OPEN_FAILED: uio_open returned null for {}", filename_str));
+            rust_bridge_log_msg(&format!(
+                "RUST_MOD_OPEN_FAILED: uio_open returned null for {}",
+                filename_str
+            ));
             return 0;
         }
-        
+
         // Get file size
         let mut stat_buf: libc::stat = std::mem::zeroed();
         if uio_fstat(handle, &mut stat_buf) != 0 {
@@ -199,31 +213,41 @@ extern "C" fn rust_mod_Open(
         }
         let file_size = stat_buf.st_size as usize;
         rust_bridge_log_msg(&format!("RUST_MOD_OPEN: file size = {} bytes", file_size));
-        
+
         // Read entire file into memory
         let mut data = vec![0u8; file_size];
         let mut total_read = 0usize;
         while total_read < file_size {
-            let bytes_read = uio_read(handle, data.as_mut_ptr().add(total_read), file_size - total_read);
+            let bytes_read = uio_read(
+                handle,
+                data.as_mut_ptr().add(total_read),
+                file_size - total_read,
+            );
             if bytes_read <= 0 {
                 break;
             }
             total_read += bytes_read as usize;
         }
         uio_close(handle);
-        
+
         if total_read == 0 {
-            rust_bridge_log_msg(&format!("RUST_MOD_OPEN_FAILED: could not read any data from {}", filename_str));
+            rust_bridge_log_msg(&format!(
+                "RUST_MOD_OPEN_FAILED: could not read any data from {}",
+                filename_str
+            ));
             return 0;
         }
-        rust_bridge_log_msg(&format!("RUST_MOD_OPEN: read {} bytes from UIO", total_read));
-        
+        rust_bridge_log_msg(&format!(
+            "RUST_MOD_OPEN: read {} bytes from UIO",
+            total_read
+        ));
+
         // Parse MOD data
         match mod_dec.open_from_bytes(&data[..total_read], filename_str) {
             Ok(()) => {
                 // Update base decoder fields
                 (*decoder).frequency = mod_dec.frequency();
-                
+
                 // MOD files are always stereo 16-bit
                 let format_val = if let Ok(guard) = RUST_MOD_FORMATS.lock() {
                     if let Some(ref formats) = *guard {
@@ -234,15 +258,17 @@ extern "C" fn rust_mod_Open(
                 } else {
                     23
                 };
-                
+
                 (*decoder).format = format_val;
                 (*decoder).length = mod_dec.length();
                 (*decoder).is_null = false;
                 (*decoder).need_swap = mod_dec.needs_swap();
-                
+
                 rust_bridge_log_msg(&format!(
                     "RUST_MOD_OPEN_SUCCESS: freq={} format={} length={}",
-                    (*decoder).frequency, (*decoder).format, (*decoder).length
+                    (*decoder).frequency,
+                    (*decoder).format,
+                    (*decoder).length
                 ));
                 1
             }
@@ -256,11 +282,11 @@ extern "C" fn rust_mod_Open(
 
 extern "C" fn rust_mod_Close(decoder: *mut TFB_SoundDecoder) {
     rust_bridge_log_msg("RUST_MOD_CLOSE");
-    
+
     if decoder.is_null() {
         return;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if !(*rust_dec).rust_decoder.is_null() {
@@ -278,16 +304,16 @@ extern "C" fn rust_mod_Decode(
     if decoder.is_null() || buf.is_null() || bufsize <= 0 {
         return -1;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return -1;
         }
-        
+
         let mod_dec = &mut *((*rust_dec).rust_decoder as *mut ModDecoder);
         let buffer = std::slice::from_raw_parts_mut(buf as *mut u8, bufsize as usize);
-        
+
         match mod_dec.decode(buffer) {
             Ok(bytes) => {
                 // Log sparingly to avoid spam
@@ -312,13 +338,13 @@ extern "C" fn rust_mod_Seek(decoder: *mut TFB_SoundDecoder, pcm_pos: u32) -> u32
     if decoder.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return 0;
         }
-        
+
         let mod_dec = &mut *((*rust_dec).rust_decoder as *mut ModDecoder);
         match mod_dec.seek(pcm_pos) {
             Ok(pos) => pos,
@@ -331,13 +357,13 @@ extern "C" fn rust_mod_GetFrame(decoder: *mut TFB_SoundDecoder) -> u32 {
     if decoder.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let rust_dec = decoder as *mut TFB_RustModDecoder;
         if (*rust_dec).rust_decoder.is_null() {
             return 0;
         }
-        
+
         let mod_dec = &*((*rust_dec).rust_decoder as *mut ModDecoder);
         mod_dec.get_frame()
     }
@@ -372,7 +398,7 @@ mod tests {
     fn test_mod_vtable_exists() {
         let name_ptr = (rust_mod_DecoderVtbl.GetName)();
         assert!(!name_ptr.is_null());
-        
+
         let name = unsafe { CStr::from_ptr(name_ptr) };
         assert_eq!(name.to_str().unwrap(), "Rust MOD");
     }

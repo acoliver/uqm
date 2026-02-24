@@ -160,8 +160,7 @@ impl Animation {
         }
 
         // Adjust delta by speed
-        let adjusted_delta =
-            Duration::from_secs_f32(delta.as_secs_f32() * self.desc.speed);
+        let adjusted_delta = Duration::from_secs_f32(delta.as_secs_f32() * self.desc.speed);
         self.frame_time += adjusted_delta;
 
         // Check if we should advance frame
@@ -207,8 +206,8 @@ impl Animation {
             }
             AnimPlayMode::Random => {
                 // Simple pseudo-random (not cryptographic)
-                self.current_frame = (self.current_frame * 1103515245 + 12345)
-                    % self.desc.frame_count;
+                self.current_frame =
+                    (self.current_frame * 1103515245 + 12345) % self.desc.frame_count;
             }
         }
     }
@@ -301,8 +300,7 @@ impl AnimContext {
             return;
         }
 
-        let scaled_delta =
-            Duration::from_secs_f32(delta.as_secs_f32() * self.time_scale);
+        let scaled_delta = Duration::from_secs_f32(delta.as_secs_f32() * self.time_scale);
 
         for anim in &mut self.animations {
             anim.update(scaled_delta);

@@ -30,7 +30,12 @@ impl SoundChunk {
     }
 
     /// Create a sound chunk with subtitle
-    pub fn with_subtitle(audio_handle: u32, start_time: f32, duration: f32, subtitle: &str) -> Self {
+    pub fn with_subtitle(
+        audio_handle: u32,
+        start_time: f32,
+        duration: f32,
+        subtitle: &str,
+    ) -> Self {
         Self {
             audio_handle,
             start_time,

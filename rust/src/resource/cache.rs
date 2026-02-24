@@ -303,13 +303,7 @@ impl ResourceCache {
 
     /// Get all keys currently in the cache
     pub fn keys(&self) -> Vec<String> {
-        self.inner
-            .read()
-            .unwrap()
-            .entries
-            .keys()
-            .cloned()
-            .collect()
+        self.inner.read().unwrap().entries.keys().cloned().collect()
     }
 }
 
@@ -351,7 +345,9 @@ mod tests {
         assert_eq!(cache.size_bytes(), 5);
         assert!(cache.contains("test.resource"));
 
-        let retrieved = cache.get("test.resource").expect("Should get cached resource");
+        let retrieved = cache
+            .get("test.resource")
+            .expect("Should get cached resource");
         assert_eq!(retrieved.data, data);
         assert_eq!(retrieved.size, 5);
     }

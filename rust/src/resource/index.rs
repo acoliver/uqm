@@ -274,13 +274,19 @@ resource.three = third/file.dat
         let index = ResourceIndex::from_str(rmp_content).expect("Should parse");
         assert_eq!(index.len(), 3);
 
-        let entry1 = index.lookup("resource.one").expect("Should find resource.one");
+        let entry1 = index
+            .lookup("resource.one")
+            .expect("Should find resource.one");
         assert_eq!(entry1.file_path, "path/to/first.ext");
 
-        let entry2 = index.lookup("resource.two").expect("Should find resource.two");
+        let entry2 = index
+            .lookup("resource.two")
+            .expect("Should find resource.two");
         assert_eq!(entry2.file_path, "another/path.ext");
 
-        let entry3 = index.lookup("resource.three").expect("Should find resource.three");
+        let entry3 = index
+            .lookup("resource.three")
+            .expect("Should find resource.three");
         assert_eq!(entry3.file_path, "third/file.dat");
     }
 
@@ -302,7 +308,7 @@ resource.three = third/file.dat
     #[test]
     fn test_resource_index_lookup_nonexistent() {
         let index = ResourceIndex::new();
-        
+
         assert!(index.lookup("nonexistent").is_none());
         assert!(!index.contains("nonexistent"));
 
@@ -320,10 +326,10 @@ res.c = c.txt
 "#;
 
         let index = ResourceIndex::from_str(rmp_content).expect("Should parse");
-        
+
         let names: Vec<&str> = index.names().collect();
         assert_eq!(names.len(), 3);
-        
+
         // Check all resources are present (order may vary due to HashMap)
         assert!(index.contains("res.a"));
         assert!(index.contains("res.b"));
@@ -373,7 +379,7 @@ res.c = c.txt
 
         let mut index2 = ResourceIndex::new();
         index2.insert(ResourceEntry::new("res.a", "a2.txt")); // Override
-        index2.insert(ResourceEntry::new("res.c", "c.txt"));  // New
+        index2.insert(ResourceEntry::new("res.c", "c.txt")); // New
 
         index1.merge(index2);
 
@@ -387,7 +393,7 @@ res.c = c.txt
     fn test_resource_index_parse_with_spaces() {
         let rmp_content = "  spaced.resource  =  path/with spaces.txt  ";
         let index = ResourceIndex::from_str(rmp_content).expect("Should parse");
-        
+
         let entry = index.lookup("spaced.resource").expect("Should find");
         assert_eq!(entry.file_path, "path/with spaces.txt");
     }
@@ -396,7 +402,7 @@ res.c = c.txt
     fn test_resource_index_iter() {
         let rmp_content = "a = 1\nb = 2\nc = 3";
         let index = ResourceIndex::from_str(rmp_content).expect("Should parse");
-        
+
         let entries: Vec<_> = index.iter().collect();
         assert_eq!(entries.len(), 3);
     }

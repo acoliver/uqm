@@ -46,7 +46,11 @@ fn test_ogg_decoder_open_real_file() {
 
     // Check that frequency is reasonable (should be 22050, 44100, or 48000 typically)
     let freq = decoder.frequency();
-    assert!(freq > 8000 && freq <= 48000, "Unexpected frequency: {}", freq);
+    assert!(
+        freq > 8000 && freq <= 48000,
+        "Unexpected frequency: {}",
+        freq
+    );
 
     // Check format
     let format = decoder.format();
@@ -137,7 +141,10 @@ fn test_ogg_decoder_multiple_decode_calls() {
         }
     }
 
-    assert!(total_bytes > 4096, "Expected to decode more than one buffer");
+    assert!(
+        total_bytes > 4096,
+        "Expected to decode more than one buffer"
+    );
 
     decoder.close();
     decoder.term();
@@ -190,7 +197,11 @@ fn test_ogg_decoder_error_recovery() {
     // Should be able to try opening another file
     if let Some(path) = get_test_ogg_path() {
         let result = decoder.open(&path);
-        assert!(result.is_ok(), "Should be able to open after error: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "Should be able to open after error: {:?}",
+            result
+        );
         decoder.close();
     }
 
@@ -218,10 +229,7 @@ fn test_ogg_decoder_format_detection() {
     let format = decoder.format();
     let freq = decoder.frequency();
 
-    println!(
-        "Detected format: {:?}, frequency: {} Hz",
-        format, freq
-    );
+    println!("Detected format: {:?}, frequency: {} Hz", format, freq);
 
     // Verify bytes per sample makes sense for format
     let bytes_per_sample = format.bytes_per_sample();

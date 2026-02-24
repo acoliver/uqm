@@ -57,45 +57,42 @@ impl ModDecoder {
         // Actually, let's check the API...
         // The mod_player crate has read_mod_file which takes a path
         // We need to write to a temp file or find another way
-        
+
         // For now, let's try parsing directly - mod_player has internal parsing
         // Looking at the mod_player source, it reads the file directly
         // We'll need to write a temp file approach or fork the crate
-        
+
         // Actually, let's use a cursor approach - mod_player::Song can be created
         // by parsing the MOD format ourselves, but that's complex.
-        
+
         // Simpler approach: write to temp file, load, delete
         use std::io::Write;
         let temp_path = std::env::temp_dir().join(format!("uqm_mod_{}.mod", std::process::id()));
-        
+
         {
             let mut file = std::fs::File::create(&temp_path)
                 .map_err(|e| DecodeError::IoError(e.to_string()))?;
             file.write_all(data)
                 .map_err(|e| DecodeError::IoError(e.to_string()))?;
         }
-        
+
         let result = self.load_from_path(&temp_path);
-        
+
         // Clean up temp file
         let _ = std::fs::remove_file(&temp_path);
-        
+
         result
     }
 
     /// Load a MOD file from a path
     fn load_from_path(&mut self, path: &Path) -> DecodeResult<()> {
         let path_str = path.to_string_lossy();
-        
+
         let song = mod_player::read_mod_file(&path_str);
-        
+
         // Initialize player state
-        let player_state = mod_player::PlayerState::new(
-            song.format.num_channels,
-            self.frequency,
-        );
-        
+        let player_state = mod_player::PlayerState::new(song.format.num_channels, self.frequency);
+
         // Estimate song length based on actual song structure
         // num_used_patterns = number of positions in the song order table
         // Each pattern has 64 rows
@@ -111,11 +108,11 @@ impl ModDecoder {
         let ms_per_row = 120.0; // Default timing, actual varies with tempo changes
         self.length = (total_rows as f32) * ms_per_row / 1000.0;
         self.total_pcm = (self.length * self.frequency as f32) as u64;
-        
+
         self.song = Some(song);
         self.player_state = Some(player_state);
         self.current_pcm = 0;
-        
+
         Ok(())
     }
 }
@@ -177,7 +174,10 @@ impl SoundDecoder for ModDecoder {
         }
 
         let song = self.song.as_ref().ok_or(DecodeError::NotInitialized)?;
-        let player_state = self.player_state.as_mut().ok_or(DecodeError::NotInitialized)?;
+        let player_state = self
+            .player_state
+            .as_mut()
+            .ok_or(DecodeError::NotInitialized)?;
 
         // Check if song has truly ended (not just looped)
         // song_has_ended means the song order list is exhausted
@@ -234,8 +234,10 @@ impl SoundDecoder for ModDecoder {
                 return Ok(0);
             }
         }
-        
-        Err(DecodeError::SeekFailed("MOD seeking not fully supported".to_string()))
+
+        Err(DecodeError::SeekFailed(
+            "MOD seeking not fully supported".to_string(),
+        ))
     }
 
     fn get_frame(&self) -> u32 {
