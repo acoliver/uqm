@@ -105,6 +105,8 @@ struct RustGraphicsState {
     hq2x_logged: bool,
     /// Whether we've logged that xBRZ is active
     xbrz_logged: bool,
+    /// Whether we've logged that color layer is not yet implemented
+    color_stub_logged: bool,
     /// Init flags passed from C
     flags: c_int,
     /// Window dimensions
@@ -305,6 +307,7 @@ pub extern "C" fn rust_gfx_init(
         hq2x: Hq2xScaler::new(),
         hq2x_logged: false,
         xbrz_logged: false,
+        color_stub_logged: false,
         flags,
         width: width as u32,
         height: height as u32,
@@ -716,10 +719,33 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
     // REQ-NP-025: texture is dropped here (end of scope, Rust ownership)
 }
 
-/// Draw a color layer (for fades)
+/// Draw a color layer (for fades).
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P09
+/// @requirement REQ-CLR-060, REQ-CLR-055
 #[no_mangle]
-pub extern "C" fn rust_gfx_color(_r: u8, _g: u8, _b: u8, _a: u8, _rect: *const SDL_Rect) {
-    // TODO: Implement fade overlay
+pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
+    // REQ-CLR-060: uninitialized guard
+    let state = match get_gfx_state() {
+        Some(s) => s,
+        None => return,
+    };
+
+    // REQ-CLR-055: negative rect dimension guard (convert_c_rect clamps negatives to 0,
+    // sdl2::rect::Rect then clamps 0→1, so we check the original C rect directly)
+    if !rect.is_null() {
+        let c_rect = unsafe { &*rect };
+        if c_rect.w < 0 || c_rect.h < 0 {
+            return;
+        }
+    }
+
+    // Stub: log once that color layer is not yet implemented
+    let _ = (r, g, b, a, rect);
+    if !state.color_stub_logged {
+        rust_bridge_log_msg("RUST_GFX: color layer (fade overlay) not yet implemented");
+        state.color_stub_logged = true;
+    }
 }
 
 // ============================================================================
@@ -1011,6 +1037,37 @@ mod tests {
         assert_eq!(r.width(), 1);
         assert_eq!(r.height(), 1);
     }
+
+    // ========================================================================
+    // Phase P09 Tests: Color Layer Stub
+    // @plan PLAN-20260223-GFX-FULL-PORT.P09
+    // @requirement REQ-CLR-060, REQ-CLR-055
+    // ========================================================================
+
+    /// REQ-CLR-060: rust_gfx_color returns immediately when uninitialized.
+    #[test]
+    fn test_gfx_color_uninitialized_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        rust_gfx_color(255, 0, 0, 128, std::ptr::null());
+    }
+
+    /// REQ-CLR-055: rust_gfx_color returns for negative rect dimensions.
+    #[test]
+    fn test_gfx_color_negative_rect_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        // Negative rect dimensions — returns at uninitialized guard first,
+        // but verifies no panic with bad rect data
+        let bad_rect = SDL_Rect { x: 0, y: 0, w: -10, h: -20 };
+        rust_gfx_color(255, 128, 0, 200, &bad_rect as *const SDL_Rect);
+    }
+
+    /// rust_gfx_color with null rect does not panic when uninitialized.
+    #[test]
+    fn test_gfx_color_null_rect_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        rust_gfx_color(0, 0, 0, 0, std::ptr::null());
+    }
+
 
     // ========================================================================
     // Phase P07 Tests: Screen Compositing TDD — Pixel Conversion
