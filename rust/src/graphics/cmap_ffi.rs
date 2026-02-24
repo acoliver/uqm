@@ -785,9 +785,8 @@ mod tests {
         palette_data[0] = 0xFF;
         palette_data[1] = 0x00;
         palette_data[2] = 0x80;
-        let rc = unsafe {
-            rust_cmap_set_palette(palette_data.as_ptr(), NUMBER_OF_PLUTVALS as c_int)
-        };
+        let rc =
+            unsafe { rust_cmap_set_palette(palette_data.as_ptr(), NUMBER_OF_PLUTVALS as c_int) };
         assert_eq!(rc, 0);
 
         // Verify via get
@@ -862,13 +861,8 @@ mod tests {
     fn test_cmap_set_out_of_range_index() {
         assert_eq!(init_cmap(), 0);
         let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-        let rc = unsafe {
-            rust_cmap_set(
-                MAX_COLORMAPS as c_int,
-                data.as_ptr(),
-                data.len() as c_int,
-            )
-        };
+        let rc =
+            unsafe { rust_cmap_set(MAX_COLORMAPS as c_int, data.as_ptr(), data.len() as c_int) };
         assert_eq!(rc, -1);
         reset_cmap();
     }

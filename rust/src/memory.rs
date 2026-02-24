@@ -16,7 +16,7 @@ pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
     if ptr.is_null() {
         // Log fatal error if allocation failed
         // @plan PLAN-20260224-MEM-SWAP.P05 @requirement REQ-MEM-005
-            log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
+        log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
         std::process::abort();
     }
     ptr

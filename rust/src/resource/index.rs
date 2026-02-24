@@ -444,4 +444,87 @@ res.c = c.txt
         let msg2 = format!("{}", err2);
         assert!(msg2.contains("Parse error"));
     }
+
+    // @plan PLAN-20260224-RES-SWAP.P04
+    // @requirement REQ-RES-018, REQ-RES-019
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_gfxres() {
+        let (res_type, path) = parse_type_path("GFXRES:base/comm/arilou/arilou.ani");
+        assert_eq!(res_type, Some("GFXRES"));
+        assert_eq!(path, "base/comm/arilou/arilou.ani");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_string() {
+        let (res_type, path) = parse_type_path("STRING:key Up");
+        assert_eq!(res_type, Some("STRING"));
+        assert_eq!(path, "key Up");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_boolean() {
+        let (res_type, path) = parse_type_path("BOOLEAN:true");
+        assert_eq!(res_type, Some("BOOLEAN"));
+        assert_eq!(path, "true");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_int32() {
+        let (res_type, path) = parse_type_path("INT32:20");
+        assert_eq!(res_type, Some("INT32"));
+        assert_eq!(path, "20");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_color() {
+        let (res_type, path) = parse_type_path("COLOR:rgb(0x1a, 0x00, 0x1a)");
+        assert_eq!(res_type, Some("COLOR"));
+        assert_eq!(path, "rgb(0x1a, 0x00, 0x1a)");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_3dovid_multi_colon() {
+        let input = "3DOVID:addons/3dovideo/ships/ship00.duk:addons/3dovideo/ships/spin.aif:89";
+        let (res_type, path) = parse_type_path(input);
+        assert_eq!(res_type, Some("3DOVID"));
+        assert_eq!(
+            path,
+            "addons/3dovideo/ships/ship00.duk:addons/3dovideo/ships/spin.aif:89"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_conversation_multi_colon() {
+        let input = "CONVERSATION:addons/3dovoice/arilou/arilou.txt:addons/3dovoice/arilou/:addons/3dovoice/arilou/arilou.ts";
+        let (res_type, path) = parse_type_path(input);
+        assert_eq!(res_type, Some("CONVERSATION"));
+        assert_eq!(
+            path,
+            "addons/3dovoice/arilou/arilou.txt:addons/3dovoice/arilou/:addons/3dovoice/arilou/arilou.ts"
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_no_colon() {
+        let (res_type, path) = parse_type_path("Some string value");
+        assert_eq!(res_type, None);
+        assert_eq!(path, "Some string value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_parse_type_path_empty_path() {
+        let (res_type, path) = parse_type_path("STRING:");
+        assert_eq!(res_type, Some("STRING"));
+        assert_eq!(path, "");
+    }
 }

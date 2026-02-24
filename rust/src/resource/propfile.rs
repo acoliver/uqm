@@ -452,4 +452,257 @@ KEY3 = VALUE3
         let err = PropertyError::FileNotFound;
         assert!(format!("{}", err).contains("not found"));
     }
+
+    // @plan PLAN-20260224-RES-SWAP.P04
+    // @requirement REQ-RES-006-012, REQ-RES-018, REQ-RES-R007
+
+    #[test]
+    #[ignore]
+    fn test_propfile_basic_keyvalue() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "key = GFXRES:path/to/file",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "GFXRES:path/to/file");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_preserves_key_case() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "comm.Arilou.Graphics = GFXRES:path",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "comm.Arilou.Graphics");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_comment_line() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "# this is a comment
+key = value",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_inline_comment() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "key = value # inline comment",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_whitespace_trimming() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "  key  =  value  ",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_blank_lines() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "
+
+
+key = value
+
+",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_key_without_value() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "barekey
+key = value",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_bare_key_at_eof() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "barekey",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 0);
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_prefix_prepended() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "sfxvol = INT32:20",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            Some("config."),
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "config.sfxvol");
+        assert_eq!(calls[0].1, "INT32:20");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_null_prefix() {
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "key = value",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "key");
+        assert_eq!(calls[0].1, "value");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_prefix_length_limit() {
+        let long_prefix = "a".repeat(250);
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            "longkey123 = value",
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            Some(&long_prefix),
+        );
+        assert_eq!(calls.len(), 1);
+        // 250 prefix + 10 key = 260, should be truncated to 255
+        assert!(calls[0].0.len() <= 255);
+        assert!(calls[0].0.starts_with(&long_prefix[..245]));
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_multiple_entries() {
+        let input = "\
+comm.Arilou.Graphics = GFXRES:base/comm/arilou/arilou.ani
+comm.Arilou.Speech = SNDRES:base/comm/arilou/arilou.snd
+comm.Arilou.Conversation = STRTAB:base/comm/arilou/arilou.txt
+config.sfxvol = INT32:20
+config.smooth = BOOLEAN:true";
+
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            input,
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+
+        assert_eq!(calls.len(), 5);
+        assert_eq!(calls[0].0, "comm.Arilou.Graphics");
+        assert_eq!(calls[0].1, "GFXRES:base/comm/arilou/arilou.ani");
+        assert_eq!(calls[1].0, "comm.Arilou.Speech");
+        assert_eq!(calls[1].1, "SNDRES:base/comm/arilou/arilou.snd");
+        assert_eq!(calls[2].0, "comm.Arilou.Conversation");
+        assert_eq!(calls[2].1, "STRTAB:base/comm/arilou/arilou.txt");
+        assert_eq!(calls[3].0, "config.sfxvol");
+        assert_eq!(calls[3].1, "INT32:20");
+        assert_eq!(calls[4].0, "config.smooth");
+        assert_eq!(calls[4].1, "BOOLEAN:true");
+    }
+
+    #[test]
+    #[ignore]
+    fn test_propfile_real_rmp_content() {
+        let rmp_content = "\
+# UQM Resource Map
+comm.Arilou.Graphics = GFXRES:base/comm/arilou/arilou.ani
+comm.Arilou.Speech = SNDRES:base/comm/arilou/arilou.snd
+comm.Arilou.Conversation = STRTAB:base/comm/arilou/arilou.txt
+comm.Chmmr.Graphics = GFXRES:base/comm/chmmr/chmmr.ani
+comm.Chmmr.Speech = SNDRES:base/comm/chmmr/chmmr.snd
+comm.Chmmr.Conversation = STRTAB:base/comm/chmmr/chmmr.txt
+config.textSpeed = INT32:40
+config.3doMusic = BOOLEAN:true
+config.resolutionFactor = INT32:0";
+
+        let mut calls: Vec<(String, String)> = Vec::new();
+        parse_propfile(
+            rmp_content,
+            &mut |k, v| {
+                calls.push((k.to_string(), v.to_string()));
+            },
+            None,
+        );
+
+        assert_eq!(calls.len(), 9);
+        // Verify first entry
+        assert_eq!(calls[0].0, "comm.Arilou.Graphics");
+        assert_eq!(calls[0].1, "GFXRES:base/comm/arilou/arilou.ani");
+        // Verify a config entry
+        assert_eq!(calls[7].0, "config.textSpeed");
+        assert_eq!(calls[7].1, "INT32:40");
+        // Verify last entry
+        assert_eq!(calls[8].0, "config.resolutionFactor");
+        assert_eq!(calls[8].1, "INT32:0");
+    }
 }
