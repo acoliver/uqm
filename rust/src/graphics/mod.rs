@@ -14,6 +14,7 @@ pub mod render_context;
 pub mod scaling;
 pub mod tfb_draw;
 
+pub mod canvas_ffi;
 pub mod sdl;
 
 // Re-export public items from dcqueue module

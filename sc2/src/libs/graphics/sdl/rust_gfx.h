@@ -47,6 +47,33 @@ int rust_gfx_is_fullscreen(void);
 int rust_gfx_get_width(void);
 int rust_gfx_get_height(void);
 
+/* ---- Canvas FFI Bridge (P15) ---- */
+
+/* Opaque handle for Rust canvas operations on an SDL_Surface */
+typedef struct SurfaceCanvas SurfaceCanvas;
+
+/* Lifecycle */
+SurfaceCanvas* rust_canvas_from_surface(SDL_Surface *surface);
+void rust_canvas_destroy(SurfaceCanvas *canvas);
+
+/* Drawing operations (stubs — returns 0 success, -1 error) */
+int rust_canvas_draw_line(SurfaceCanvas *canvas, int x1, int y1, int x2, int y2, Uint32 color);
+int rust_canvas_draw_rect(SurfaceCanvas *canvas, int x, int y, int w, int h, Uint32 color);
+int rust_canvas_fill_rect(SurfaceCanvas *canvas, int x, int y, int w, int h, Uint32 color);
+int rust_canvas_copy(SurfaceCanvas *dst, const SurfaceCanvas *src, const SDL_Rect *src_rect,
+                     int dst_x, int dst_y);
+int rust_canvas_draw_image(SurfaceCanvas *canvas, const Uint8 *image_data,
+                           int image_w, int image_h, int x, int y);
+int rust_canvas_draw_fontchar(SurfaceCanvas *canvas, const Uint8 *glyph_data,
+                              int glyph_w, int glyph_h, int x, int y, Uint32 color);
+
+/* Scissor (clipping) */
+int rust_canvas_set_scissor(SurfaceCanvas *canvas, int x, int y, int w, int h);
+int rust_canvas_clear_scissor(SurfaceCanvas *canvas);
+
+/* Query */
+int rust_canvas_get_extent(SurfaceCanvas *canvas, int *w, int *h);
+
 #ifdef __cplusplus
 }
 #endif
