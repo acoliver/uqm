@@ -5,6 +5,7 @@ pub mod cache;
 pub mod config_api;
 pub mod dispatch;
 pub mod ffi;
+pub mod ffi_bridge;
 pub mod ffi_types;
 pub mod index;
 pub mod loader;
