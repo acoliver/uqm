@@ -20,6 +20,7 @@
 #include "libs/memlib.h"
 #include "libs/log.h"
 
+#ifndef USE_RUST_RESOURCE
 
 void *
 GetResourceData (uio_Stream *fp, DWORD length)
@@ -52,3 +53,5 @@ GetResourceData (uio_Stream *fp, DWORD length)
 
 	return result;
 }
+
+#endif /* !USE_RUST_RESOURCE */

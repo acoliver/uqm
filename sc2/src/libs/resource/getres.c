@@ -23,6 +23,8 @@
 #include "libs/log.h"
 #include "libs/uio/charhashtable.h"
 
+#ifndef USE_RUST_RESOURCE
+
 const char *_cur_resfile_name;
 // When a file is being loaded, _cur_resfile_name is set to its name.
 // At other times, it is NULL.
@@ -255,3 +257,5 @@ FreeResourceData (void *data)
 	HFree (data);
 	return TRUE;
 }
+
+#endif /* !USE_RUST_RESOURCE */

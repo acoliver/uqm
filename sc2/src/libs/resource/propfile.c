@@ -23,6 +23,8 @@
 #include "propfile.h"
 #include "libs/reslib.h"
 
+#ifndef USE_RUST_RESOURCE
+
 void
 PropFile_from_string (char *d, PROPERTY_HANDLER handler, const char *prefix)
 {
@@ -127,3 +129,5 @@ PropFile_from_filename (uio_DirHandle *path, const char *fname, PROPERTY_HANDLER
 	PropFile_from_file (f, handler, prefix);
 	res_CloseResFile(f);
 }
+
+#endif /* !USE_RUST_RESOURCE */

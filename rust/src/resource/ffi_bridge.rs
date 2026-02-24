@@ -31,8 +31,8 @@ extern "C" {
     fn uio_fwrite(buf: *const c_void, size: usize, count: usize, fp: *mut c_void) -> usize;
     fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int;
     fn uio_ftell(fp: *mut c_void) -> c_long;
-    fn uio_getc(fp: *mut c_void) -> c_int;
-    fn uio_putc(c: c_int, fp: *mut c_void) -> c_int;
+    fn uio_fgetc(fp: *mut c_void) -> c_int;
+    fn uio_fputc(c: c_int, fp: *mut c_void) -> c_int;
     fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int;
 
     static contentDir: *mut c_void;
@@ -53,9 +53,9 @@ unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int 
 #[cfg(test)]
 unsafe fn uio_ftell(_fp: *mut c_void) -> c_long { 0 }
 #[cfg(test)]
-unsafe fn uio_getc(_fp: *mut c_void) -> c_int { -1 }
+unsafe fn uio_fgetc(_fp: *mut c_void) -> c_int { -1 }
 #[cfg(test)]
-unsafe fn uio_putc(_c: c_int, _fp: *mut c_void) -> c_int { -1 }
+unsafe fn uio_fputc(_c: c_int, _fp: *mut c_void) -> c_int { -1 }
 #[cfg(test)]
 unsafe fn uio_unlink(_dir: *mut c_void, _path: *const c_char) -> c_int { -1 }
 #[cfg(test)]
@@ -878,7 +878,7 @@ pub unsafe extern "C" fn GetResFileChar(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_getc(fp)
+    uio_fgetc(fp)
 }
 
 /// Put a character to a resource file.
@@ -887,7 +887,7 @@ pub unsafe extern "C" fn PutResFileChar(ch: c_char, fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_putc(ch as c_int, fp)
+    uio_fputc(ch as c_int, fp)
 }
 
 /// Write a newline to a resource file.
@@ -896,7 +896,7 @@ pub unsafe extern "C" fn PutResFileNewline(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return -1; // EOF
     }
-    uio_putc(b'\n' as c_int, fp)
+    uio_fputc(b'\n' as c_int, fp)
 }
 
 /// Seek in a resource file.

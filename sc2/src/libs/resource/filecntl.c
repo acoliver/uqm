@@ -27,6 +27,8 @@
 #include "resintrn.h"
 #include "libs/uio.h"
 
+#ifndef USE_RUST_RESOURCE
+
 uio_Stream *
 res_OpenResFile (uio_DirHandle *dir, const char *filename, const char *mode)
 {
@@ -143,4 +145,4 @@ LengthResFile (uio_Stream *fp)
 	return sb.st_size;
 }
 
-
+#endif /* !USE_RUST_RESOURCE */

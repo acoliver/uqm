@@ -31,6 +31,8 @@
 // XXX: we should not include anything from uqm/ inside libs/
 #include "uqm/coderes.h"
 
+#ifndef USE_RUST_RESOURCE
+
 static RESOURCE_INDEX
 allocResourceIndex (void) {
 	RESOURCE_INDEX ndx = HMalloc (sizeof (RESOURCE_INDEX_DESC));
@@ -649,3 +651,5 @@ res_Remove (const char *key)
 	}
 	return CharHashTable_remove (map, key);
 }
+
+#endif /* !USE_RUST_RESOURCE */
