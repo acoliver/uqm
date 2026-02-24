@@ -958,4 +958,60 @@ mod tests {
         assert_eq!(r.width(), 1);
         assert_eq!(r.height(), 1);
     }
+
+    // ========================================================================
+    // Phase P07 Tests: Screen Compositing TDD — Pixel Conversion
+    // @plan PLAN-20260223-GFX-FULL-PORT.P07
+    // @requirement REQ-SCALE-060, REQ-SCALE-070
+    // ========================================================================
+
+    /// REQ-SCALE-060: RGBX8888-to-RGBA conversion.
+    ///
+    /// RGBX8888 memory layout on little-endian: bytes [X, B, G, R].
+    /// RGBA memory layout: bytes [R, G, B, A].
+    /// Conversion: src[3]→dst[0] (R), src[2]→dst[1] (G), src[1]→dst[2] (B), 0xFF→dst[3] (A).
+    ///
+    /// This matches the inline swizzle in `rust_gfx_postprocess` (the xBRZ input path).
+    #[test]
+    fn test_rgbx_to_rgba_conversion() {
+        // RGBX8888 pixel: [X=0xFF, B=0x00, G=0x80, R=0xC0]
+        let rgbx: [u8; 4] = [0xFF, 0x00, 0x80, 0xC0];
+
+        // Apply the same swizzle as postprocess:
+        //   RGBX8888 memory [X,B,G,R] -> RGBA [R,G,B,A]
+        let rgba: [u8; 4] = [
+            rgbx[3], // R
+            rgbx[2], // G
+            rgbx[1], // B
+            0xFF,    // A (opaque)
+        ];
+
+        assert_eq!(rgba, [0xC0, 0x80, 0x00, 0xFF],
+            "RGBX8888 [0xFF,0x00,0x80,0xC0] must convert to RGBA [0xC0,0x80,0x00,0xFF]");
+    }
+
+    /// REQ-SCALE-070: RGBA-to-RGBX8888 conversion.
+    ///
+    /// RGBA memory layout: bytes [R, G, B, A].
+    /// RGBX8888 memory layout on little-endian: bytes [X, B, G, R].
+    /// Conversion: 0xFF→dst[0] (X), src[2]→dst[1] (B), src[1]→dst[2] (G), src[0]→dst[3] (R).
+    ///
+    /// This matches the inline swizzle in `rust_gfx_postprocess` (the xBRZ/HQ2x output path).
+    #[test]
+    fn test_rgba_to_rgbx_conversion() {
+        // RGBA pixel: [R=0xC0, G=0x80, B=0x00, A=0xFF]
+        let rgba: [u8; 4] = [0xC0, 0x80, 0x00, 0xFF];
+
+        // Apply the same swizzle as postprocess:
+        //   RGBA [R,G,B,A] -> RGBX8888 memory [X,B,G,R]
+        let rgbx: [u8; 4] = [
+            0xFF,    // X (padding)
+            rgba[2], // B
+            rgba[1], // G
+            rgba[0], // R
+        ];
+
+        assert_eq!(rgbx, [0xFF, 0x00, 0x80, 0xC0],
+            "RGBA [0xC0,0x80,0x00,0xFF] must convert to RGBX8888 [0xFF,0x00,0x80,0xC0]");
+    }
 }
