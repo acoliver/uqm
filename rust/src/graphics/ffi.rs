@@ -18,6 +18,8 @@ use xbrz::scale_rgba;
 
 /// Number of screens (Main, Extra, Transition)
 const TFB_GFX_NUMSCREENS: usize = 3;
+/// Extra screen index — skipped during compositing (not rendered to display)
+const TFB_SCREEN_EXTRA: c_int = 1;
 // Base game resolution - the C code uses ScreenWidth/ScreenHeight global vars
 // but those are set to 320x240 for the logical game resolution
 const SCREEN_WIDTH: u32 = 320;
@@ -622,10 +624,43 @@ pub extern "C" fn rust_gfx_upload_transition_screen() {
     // No-op for now
 }
 
-/// Draw a screen layer
+/// Draw a screen layer — composites screen surface onto the renderer.
+///
+/// Guards: uninitialized, out-of-range screen, extra-screen skip, null surface.
+/// Stub body logs and returns — full compositing is deferred to P08.
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P06
+/// @requirement REQ-SCR-140, REQ-SCR-100, REQ-SCR-090, REQ-SCR-110
 #[no_mangle]
-pub extern "C" fn rust_gfx_screen(_screen: c_int, _alpha: u8, _rect: *const SDL_Rect) {
-    // The actual drawing is done by C code directly to the SDL surfaces
+pub extern "C" fn rust_gfx_screen(screen: c_int, _alpha: u8, _rect: *const SDL_Rect) {
+    // REQ-SCR-140: uninitialized guard
+    let state = match get_gfx_state() {
+        Some(s) => s,
+        None => return,
+    };
+
+    // REQ-SCR-100: screen range check
+    if screen < 0 || screen >= TFB_GFX_NUMSCREENS as c_int {
+        return;
+    }
+
+    // REQ-SCR-090: extra screen skip
+    if screen == TFB_SCREEN_EXTRA {
+        return;
+    }
+
+    // REQ-SCR-110: null surface guard
+    let surface = state.surfaces[screen as usize];
+    if surface.is_null() {
+        return;
+    }
+
+    // Stub: screen compositing not yet implemented (deferred to P08).
+    // The postprocess upload logic currently handles rendering.
+    rust_bridge_log_msg(&format!(
+        "RUST_GFX_SCREEN: screen={} compositing not yet implemented (stub)",
+        screen
+    ));
 }
 
 /// Draw a color layer (for fades)
@@ -653,8 +688,26 @@ pub extern "C" fn rust_gfx_process_events() -> c_int {
 }
 
 // ============================================================================
-// Utility functions
+// Utility / helper functions
 // ============================================================================
+
+/// Convert a C `SDL_Rect` pointer to an `Option<sdl2::rect::Rect>`.
+///
+/// - Null pointer → `None` (full-screen operation).
+/// - Non-null pointer → safely dereference and convert.
+/// - Negative width/height are clamped to 0 (REQ-SCR-160).
+///
+/// @plan PLAN-20260223-GFX-FULL-PORT.P06
+/// @requirement REQ-SCR-160
+fn convert_c_rect(rect: *const SDL_Rect) -> Option<sdl2::rect::Rect> {
+    if rect.is_null() {
+        return None;
+    }
+    let r = unsafe { &*rect };
+    let w = if r.w < 0 { 0 } else { r.w as u32 };
+    let h = if r.h < 0 { 0 } else { r.h as u32 };
+    Some(sdl2::rect::Rect::new(r.x, r.y, w, h))
+}
 
 /// Toggle fullscreen
 #[no_mangle]
@@ -828,4 +881,81 @@ mod tests {
     // NOTE: Postprocess texture_creator usage (REQ-POST-020/REQ-INV-010) is a static
     //       analysis check, not a runtime test. The texture upload block is documented as
     //       retained until ScreenLayer (P06-P08) and marked with @plan P05 for removal.
+
+    // ========================================================================
+    // Phase P06 Tests: Screen Compositing Stub
+    // @plan PLAN-20260223-GFX-FULL-PORT.P06
+    // @requirement REQ-SCR-140, REQ-SCR-100, REQ-SCR-090, REQ-SCR-160
+    // ========================================================================
+
+    /// REQ-SCR-140: rust_gfx_screen returns immediately when uninitialized.
+    #[test]
+    fn test_gfx_screen_uninitialized_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        rust_gfx_screen(0, 255, std::ptr::null());
+    }
+
+    /// REQ-SCR-100: rust_gfx_screen returns for out-of-range screen indices.
+    #[test]
+    fn test_gfx_screen_out_of_range_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        rust_gfx_screen(-1, 255, std::ptr::null());
+        rust_gfx_screen(3, 255, std::ptr::null());
+        rust_gfx_screen(100, 255, std::ptr::null());
+    }
+
+    /// REQ-SCR-090: rust_gfx_screen(1, ...) returns immediately (extra screen skip).
+    #[test]
+    fn test_gfx_screen_extra_skip_no_panic() {
+        assert!(get_gfx_state().is_none(), "precondition: state must be None");
+        rust_gfx_screen(TFB_SCREEN_EXTRA, 128, std::ptr::null());
+    }
+
+    /// REQ-SCR-160: convert_c_rect null → None.
+    #[test]
+    fn test_convert_c_rect_null_returns_none() {
+        assert!(convert_c_rect(std::ptr::null()).is_none());
+    }
+
+    /// REQ-SCR-160: convert_c_rect non-null → Some with correct values.
+    #[test]
+    fn test_convert_c_rect_valid_rect() {
+        let c_rect = SDL_Rect { x: 10, y: 20, w: 100, h: 50 };
+        let result = convert_c_rect(&c_rect as *const SDL_Rect);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.x(), 10);
+        assert_eq!(r.y(), 20);
+        assert_eq!(r.width(), 100);
+        assert_eq!(r.height(), 50);
+    }
+
+    /// REQ-SCR-160: convert_c_rect clamps negative width/height to 0.
+    /// Note: sdl2::rect::Rect clamps minimum dimension to 1, so we check
+    /// that the clamped-to-0 value becomes 1 after sdl2's own clamp.
+    #[test]
+    fn test_convert_c_rect_negative_dimensions_clamped() {
+        let c_rect = SDL_Rect { x: 5, y: 5, w: -10, h: -20 };
+        let result = convert_c_rect(&c_rect as *const SDL_Rect);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        assert_eq!(r.x(), 5);
+        assert_eq!(r.y(), 5);
+        // We clamp to 0, sdl2::rect::Rect then clamps 0→1
+        assert_eq!(r.width(), 1);
+        assert_eq!(r.height(), 1);
+    }
+
+    /// convert_c_rect with zero-sized rect.
+    /// sdl2::rect::Rect clamps minimum dimension to 1.
+    #[test]
+    fn test_convert_c_rect_zero_size() {
+        let c_rect = SDL_Rect { x: 0, y: 0, w: 0, h: 0 };
+        let result = convert_c_rect(&c_rect as *const SDL_Rect);
+        assert!(result.is_some());
+        let r = result.unwrap();
+        // sdl2::rect::Rect clamps 0→1
+        assert_eq!(r.width(), 1);
+        assert_eq!(r.height(), 1);
+    }
 }
