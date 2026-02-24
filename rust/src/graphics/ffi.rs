@@ -105,8 +105,6 @@ struct RustGraphicsState {
     hq2x_logged: bool,
     /// Whether we've logged that xBRZ is active
     xbrz_logged: bool,
-    /// Whether we've logged that color layer is not yet implemented
-    color_stub_logged: bool,
     /// Init flags passed from C
     flags: c_int,
     /// Window dimensions
@@ -307,7 +305,6 @@ pub extern "C" fn rust_gfx_init(
         hq2x: Hq2xScaler::new(),
         hq2x_logged: false,
         xbrz_logged: false,
-        color_stub_logged: false,
         flags,
         width: width as u32,
         height: height as u32,
@@ -721,8 +718,9 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
 
 /// Draw a color layer (for fades).
 ///
-/// @plan PLAN-20260223-GFX-FULL-PORT.P09
-/// @requirement REQ-CLR-060, REQ-CLR-055
+/// @plan PLAN-20260223-GFX-FULL-PORT.P11
+/// @requirement REQ-CLR-010, REQ-CLR-020, REQ-CLR-030, REQ-CLR-040, REQ-CLR-050,
+///              REQ-CLR-055, REQ-CLR-060
 #[no_mangle]
 pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
     // REQ-CLR-060: uninitialized guard
@@ -734,18 +732,26 @@ pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Re
     // REQ-CLR-055: negative rect dimension guard (convert_c_rect clamps negatives to 0,
     // sdl2::rect::Rect then clamps 0→1, so we check the original C rect directly)
     if !rect.is_null() {
+        // SAFETY: caller guarantees rect points to a valid SDL_Rect when non-null
         let c_rect = unsafe { &*rect };
         if c_rect.w < 0 || c_rect.h < 0 {
             return;
         }
     }
 
-    // Stub: log once that color layer is not yet implemented
-    let _ = (r, g, b, a, rect);
-    if !state.color_stub_logged {
-        rust_bridge_log_msg("RUST_GFX: color layer (fade overlay) not yet implemented");
-        state.color_stub_logged = true;
+    // REQ-CLR-020/030: opaque overwrites, translucent blends
+    if a == 255 {
+        state.canvas.set_blend_mode(BlendMode::None);
+    } else {
+        state.canvas.set_blend_mode(BlendMode::Blend);
     }
+
+    // REQ-CLR-010: set draw color
+    state.canvas.set_draw_color(sdl2::pixels::Color::RGBA(r, g, b, a));
+
+    // REQ-CLR-040/050: fill entire screen (null) or specified rect
+    let sdl_rect = convert_c_rect(rect);
+    let _ = state.canvas.fill_rect(sdl_rect);
 }
 
 // ============================================================================
