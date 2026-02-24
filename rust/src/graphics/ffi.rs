@@ -1652,6 +1652,104 @@ mod tests {
         );
     }
 
+    // ========================================================================
+    // Phase P14 Tests: Integration Verification
+    // @plan PLAN-20260223-GFX-FULL-PORT.P14
+    // @requirement REQ-SEQ-010, REQ-SEQ-020, REQ-SEQ-030, REQ-SEQ-040,
+    //              REQ-SEQ-065, REQ-ASM-050
+    // ========================================================================
+
+    /// REQ-SEQ-010/020/030: Full vtable sequence without init — no crash.
+    ///
+    /// Calls every vtable function in the exact order that `TFB_SwapBuffers`
+    /// would invoke them: preprocess → screen(MAIN) → screen(TRANSITION) →
+    /// color → screen(MAIN, clip) → postprocess → upload_transition_screen.
+    /// Plus all accessors and aux functions. None may panic.
+    ///
+    /// GIVEN: Backend is not initialized (no rust_gfx_init called)
+    /// WHEN:  Every vtable function is called in compositing order
+    /// THEN:  No crash, no panic, safe defaults returned
+    #[test]
+    fn test_full_vtable_sequence_uninitialized() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+
+        // --- Full compositing sequence (TFB_SwapBuffers order) ---
+        rust_gfx_preprocess(0, 128, 64);
+        rust_gfx_screen(0, 255, std::ptr::null()); // MAIN, opaque
+        rust_gfx_screen(2, 128, std::ptr::null()); // TRANSITION, blended
+        rust_gfx_color(0, 0, 0, 64, std::ptr::null()); // fade
+        let clip = SDL_Rect {
+            x: 10,
+            y: 10,
+            w: 300,
+            h: 220,
+        };
+        rust_gfx_screen(0, 255, &clip as *const SDL_Rect); // MAIN with clip
+        rust_gfx_postprocess();
+        rust_gfx_upload_transition_screen();
+
+        // --- Surface accessors ---
+        assert!(rust_gfx_get_sdl_screen().is_null());
+        assert!(rust_gfx_get_transition_screen().is_null());
+        for i in 0..TFB_GFX_NUMSCREENS as c_int {
+            assert!(rust_gfx_get_screen_surface(i).is_null());
+        }
+        assert!(rust_gfx_get_format_conv_surf().is_null());
+
+        // --- Auxiliary functions ---
+        assert_eq!(rust_gfx_process_events(), 0);
+        assert_eq!(rust_gfx_toggle_fullscreen(), -1);
+        assert_eq!(rust_gfx_is_fullscreen(), 0);
+        assert_eq!(rust_gfx_set_gamma(1.5), -1);
+        assert_eq!(rust_gfx_get_width(), 320);
+        assert_eq!(rust_gfx_get_height(), 240);
+
+        // --- Uninit without init ---
+        rust_gfx_uninit();
+    }
+
+    /// REQ-ASM-050: Constants match C-side definitions.
+    ///
+    /// GIVEN: Rust constants TFB_GFX_NUMSCREENS, SCREEN_WIDTH, SCREEN_HEIGHT
+    /// WHEN:  Compared against known C values
+    /// THEN:  TFB_GFX_NUMSCREENS == 3, SCREEN_WIDTH == 320, SCREEN_HEIGHT == 240
+    #[test]
+    fn test_constants_match_c() {
+        assert_eq!(TFB_GFX_NUMSCREENS, 3, "TFB_GFX_NUMSCREENS must be 3");
+        assert_eq!(SCREEN_WIDTH, 320, "SCREEN_WIDTH must be 320");
+        assert_eq!(SCREEN_HEIGHT, 240, "SCREEN_HEIGHT must be 240");
+
+        // Verify through the FFI accessor functions too
+        assert_eq!(rust_gfx_get_width(), 320);
+        assert_eq!(rust_gfx_get_height(), 240);
+    }
+
+    /// REQ-SEQ-040/050/060/065: Preprocess with different force_redraw values — no crash.
+    ///
+    /// The backend always does a full repaint regardless of redraw mode, so
+    /// all values (NO=0, YES=1, FADING=2, EXPOSE=3) produce identical behavior.
+    ///
+    /// GIVEN: Backend is not initialized
+    /// WHEN:  preprocess called with force_redraw values 0, 1, 2, 3
+    /// THEN:  No crash, no panic
+    #[test]
+    fn test_redraw_mode_invariance() {
+        assert!(
+            get_gfx_state().is_none(),
+            "precondition: state must be None"
+        );
+
+        // TFB_REDRAW_NO = 0, TFB_REDRAW_YES = 1, TFB_REDRAW_FADING = 2, EXPOSE = 3
+        for redraw_mode in 0..=3 {
+            rust_gfx_preprocess(redraw_mode, 128, 64);
+            rust_gfx_screen(0, 255, std::ptr::null());
+            rust_gfx_postprocess();
+        }
+    }
+
     /// REQ-ERR-010: All FFI functions return safe defaults when uninitialized.
     /// Comprehensive test covering every exported function.
     /// GIVEN: Backend is not initialized
