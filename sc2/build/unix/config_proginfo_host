@@ -45,6 +45,7 @@ USE_RUST_BRIDGE=1
 USE_RUST_FILE=1
 USE_RUST_CLOCK=1
 USE_RUST_UIO=1
+USE_RUST_MEM=1
 
 
 ##############################################################################
@@ -98,6 +99,9 @@ SYMBOL_USE_RUST_CLOCK="$USE_RUST_CLOCK"
 
 SYMBOL_USE_RUST_UIO_DEFNAME="USE_RUST_UIO"
 SYMBOL_USE_RUST_UIO="$USE_RUST_UIO"
+
+SYMBOL_USE_RUST_MEM_DEFNAME="USE_RUST_MEM"
+SYMBOL_USE_RUST_MEM="$USE_RUST_MEM"
 
 
 ##############################################################################

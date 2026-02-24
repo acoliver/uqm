@@ -24,6 +24,9 @@ fi
 if [ "$uqm_USE_RUST_UIO" = "1" ]; then
 	export USE_RUST_UIO=1
 fi
+if [ "$uqm_USE_RUST_MEM" = "1" ]; then
+	export USE_RUST_MEM=1
+fi
 
 export uqm_OGGVORBIS
 export uqm_USE_ZIP_IO

@@ -1,1 +1,5 @@
-uqm_CFILES="w_memlib.c"
+if [ "$USE_RUST_MEM" = "1" ] || [ "$uqm_USE_RUST_MEM" = "1" ]; then
+    uqm_CFILES=""
+else
+    uqm_CFILES="w_memlib.c"
+fi

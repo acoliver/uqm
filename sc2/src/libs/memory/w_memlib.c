@@ -1,3 +1,7 @@
+#ifdef USE_RUST_MEM
+#error "w_memlib.c should not be compiled when USE_RUST_MEM is enabled"
+#endif
+
 //Copyright Paul Reiche, Fred Ford. 1992-2002
 
 /*

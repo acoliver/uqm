@@ -27,6 +27,23 @@
 extern "C" {
 #endif
 
+#ifdef USE_RUST_MEM
+/* Rust memory allocator — extern declarations for rust_* functions */
+extern void *rust_hmalloc (size_t size);
+extern void rust_hfree (void *p);
+extern void *rust_hcalloc (size_t size);
+extern void *rust_hrealloc (void *p, size_t size);
+extern bool rust_mem_init (void);
+extern bool rust_mem_uninit (void);
+
+#define HMalloc(s) rust_hmalloc(s)
+#define HFree(p) rust_hfree(p)
+#define HCalloc(s) rust_hcalloc(s)
+#define HRealloc(p, s) rust_hrealloc(p, s)
+#define mem_init() rust_mem_init()
+#define mem_uninit() rust_mem_uninit()
+#else
+/* C memory allocator */
 extern bool mem_init (void);
 extern bool mem_uninit (void);
 
@@ -34,6 +51,7 @@ extern void *HMalloc (size_t size);
 extern void HFree (void *p);
 extern void *HCalloc (size_t size);
 extern void *HRealloc (void *p, size_t size);
+#endif /* USE_RUST_MEM */
 
 #if defined(__cplusplus)
 }

@@ -103,3 +103,6 @@
 /* Defined if using Rust mixer */
 #define USE_RUST_MIXER
 
+/* Defined if using Rust memory allocator */
+#define USE_RUST_MEM
+
