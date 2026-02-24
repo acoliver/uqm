@@ -23,10 +23,96 @@ use std::env;
 /// * `handler` - Callback invoked with `(key, value)` for each entry
 /// * `prefix` - Optional prefix to prepend to all keys (total key length capped at 255)
 ///
-/// @plan PLAN-20260224-RES-SWAP.P03
+/// @plan PLAN-20260224-RES-SWAP.P05
 /// @requirement REQ-RES-018, REQ-RES-R007, REQ-RES-006-012
-pub fn parse_propfile(_data: &str, _handler: &mut dyn FnMut(&str, &str), _prefix: Option<&str>) {
-    todo!("Parse propfile — see component-001.md")
+pub fn parse_propfile(data: &str, handler: &mut dyn FnMut(&str, &str), prefix: Option<&str>) {
+    const NL: u8 = b'\x0A';
+    const HASH: u8 = b'#';
+    const EQ: u8 = b'=';
+
+    let bytes = data.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        while i < len && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= len {
+            break;
+        }
+
+        if bytes[i] == HASH {
+            while i < len && bytes[i] != NL {
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+
+        let key_start = i;
+        while i < len && bytes[i] != EQ && bytes[i] != NL && bytes[i] != HASH {
+            i += 1;
+        }
+
+        if i >= len {
+            log::warn!("Bare keyword at EOF");
+            break;
+        }
+
+        if bytes[i] != EQ {
+            log::warn!("Key without value");
+            while i < len && bytes[i] != NL {
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+
+        let mut key_end = i;
+        while key_end > key_start && bytes[key_end - 1].is_ascii_whitespace() {
+            key_end -= 1;
+        }
+        let key = &data[key_start..key_end];
+
+        i += 1;
+
+        while i < len && bytes[i] != HASH && bytes[i] != NL && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        let value_start = i;
+
+        while i < len && bytes[i] != HASH && bytes[i] != NL {
+            i += 1;
+        }
+        let mut value_end = i;
+
+        while value_end > value_start && bytes[value_end - 1].is_ascii_whitespace() {
+            value_end -= 1;
+        }
+        let value = &data[value_start..value_end];
+
+        while i < len && bytes[i] != NL {
+            i += 1;
+        }
+        if i < len {
+            i += 1;
+        }
+
+        if let Some(pfx) = prefix {
+            let mut full_key = format!("{}{}", pfx, key);
+            if full_key.len() > 255 {
+                full_key.truncate(255);
+            }
+            handler(&full_key, value);
+        } else {
+            handler(key, value);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -457,7 +543,6 @@ KEY3 = VALUE3
     // @requirement REQ-RES-006-012, REQ-RES-018, REQ-RES-R007
 
     #[test]
-    #[ignore]
     fn test_propfile_basic_keyvalue() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -473,7 +558,6 @@ KEY3 = VALUE3
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_preserves_key_case() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -488,7 +572,6 @@ KEY3 = VALUE3
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_comment_line() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -505,7 +588,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_inline_comment() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -521,7 +603,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_whitespace_trimming() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -537,7 +618,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_blank_lines() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -558,7 +638,6 @@ key = value
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_key_without_value() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -575,7 +654,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_bare_key_at_eof() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -589,7 +667,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_prefix_prepended() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -605,7 +682,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_null_prefix() {
         let mut calls: Vec<(String, String)> = Vec::new();
         parse_propfile(
@@ -621,7 +697,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_prefix_length_limit() {
         let long_prefix = "a".repeat(250);
         let mut calls: Vec<(String, String)> = Vec::new();
@@ -639,7 +714,6 @@ key = value",
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_multiple_entries() {
         let input = "\
 comm.Arilou.Graphics = GFXRES:base/comm/arilou/arilou.ani
@@ -671,7 +745,6 @@ config.smooth = BOOLEAN:true";
     }
 
     #[test]
-    #[ignore]
     fn test_propfile_real_rmp_content() {
         let rmp_content = "\
 # UQM Resource Map
@@ -698,9 +771,9 @@ config.resolutionFactor = INT32:0";
         // Verify first entry
         assert_eq!(calls[0].0, "comm.Arilou.Graphics");
         assert_eq!(calls[0].1, "GFXRES:base/comm/arilou/arilou.ani");
-        // Verify a config entry
-        assert_eq!(calls[7].0, "config.textSpeed");
-        assert_eq!(calls[7].1, "INT32:40");
+        // Verify a config entry (index 6: textSpeed is the 7th entry after 6 comm entries)
+        assert_eq!(calls[6].0, "config.textSpeed");
+        assert_eq!(calls[6].1, "INT32:40");
         // Verify last entry
         assert_eq!(calls[8].0, "config.resolutionFactor");
         assert_eq!(calls[8].1, "INT32:0");

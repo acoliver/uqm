@@ -104,10 +104,13 @@ impl ResourceEntry {
 ///
 /// If there is no `:`, the entire value is the path and the type is `None`.
 ///
-/// @plan PLAN-20260224-RES-SWAP.P03
+/// @plan PLAN-20260224-RES-SWAP.P05
 /// @requirement REQ-RES-018
-pub fn parse_type_path(_value: &str) -> (Option<&str>, &str) {
-    todo!("Split value on first ':' — see component-001.md")
+pub fn parse_type_path(value: &str) -> (Option<&str>, &str) {
+    match value.split_once(':') {
+        Some((type_name, rest)) => (Some(type_name), rest),
+        None => (None, value),
+    }
 }
 
 /// Resource index - maps resource names to file locations
@@ -449,7 +452,6 @@ res.c = c.txt
     // @requirement REQ-RES-018, REQ-RES-019
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_gfxres() {
         let (res_type, path) = parse_type_path("GFXRES:base/comm/arilou/arilou.ani");
         assert_eq!(res_type, Some("GFXRES"));
@@ -457,7 +459,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_string() {
         let (res_type, path) = parse_type_path("STRING:key Up");
         assert_eq!(res_type, Some("STRING"));
@@ -465,7 +466,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_boolean() {
         let (res_type, path) = parse_type_path("BOOLEAN:true");
         assert_eq!(res_type, Some("BOOLEAN"));
@@ -473,7 +473,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_int32() {
         let (res_type, path) = parse_type_path("INT32:20");
         assert_eq!(res_type, Some("INT32"));
@@ -481,7 +480,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_color() {
         let (res_type, path) = parse_type_path("COLOR:rgb(0x1a, 0x00, 0x1a)");
         assert_eq!(res_type, Some("COLOR"));
@@ -489,7 +487,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_3dovid_multi_colon() {
         let input = "3DOVID:addons/3dovideo/ships/ship00.duk:addons/3dovideo/ships/spin.aif:89";
         let (res_type, path) = parse_type_path(input);
@@ -501,7 +498,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_conversation_multi_colon() {
         let input = "CONVERSATION:addons/3dovoice/arilou/arilou.txt:addons/3dovoice/arilou/:addons/3dovoice/arilou/arilou.ts";
         let (res_type, path) = parse_type_path(input);
@@ -513,7 +509,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_no_colon() {
         let (res_type, path) = parse_type_path("Some string value");
         assert_eq!(res_type, None);
@@ -521,7 +516,6 @@ res.c = c.txt
     }
 
     #[test]
-    #[ignore]
     fn test_parse_type_path_empty_path() {
         let (res_type, path) = parse_type_path("STRING:");
         assert_eq!(res_type, Some("STRING"));
