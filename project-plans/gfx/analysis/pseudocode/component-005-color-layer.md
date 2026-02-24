@@ -1,6 +1,6 @@
 # Pseudocode: Component 005 — ColorLayer
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-CLR-010..070, REQ-CLR-055, REQ-FFI-010
 
 ---

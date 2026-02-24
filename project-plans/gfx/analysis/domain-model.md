@@ -1,6 +1,6 @@
-# Domain Model — GFX Vtable Fix
+# Domain Model — GFX Drawing-Pipeline Port
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 
 ---
 
@@ -244,3 +244,4 @@ Add `set_blend_mode(None)` before clear. Minor 2-line change.
 Replace "No-op for now" comment with a proper documentation comment
 explaining the architectural invariant (no-op because ScreenLayer
 unconditionally uploads).
+y uploads).

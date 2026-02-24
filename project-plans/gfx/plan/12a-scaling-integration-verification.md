@@ -1,7 +1,7 @@
 # Phase 12a: Scaling Integration — Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P12a`
+`PLAN-20260223-GFX-FULL-PORT.P12a`
 
 ## Prerequisites
 - Required: Phase P12 completed

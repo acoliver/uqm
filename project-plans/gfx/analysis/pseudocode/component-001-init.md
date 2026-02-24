@@ -1,6 +1,6 @@
 # Pseudocode: Component 001 — Initialization & Teardown
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-INIT-010..100, REQ-UNINIT-010..030, REQ-INIT-095, REQ-INIT-096, REQ-INIT-097
 
 ---

@@ -1,7 +1,7 @@
 # Phase 09: Color Layer — Stub
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P09`
+`PLAN-20260223-GFX-FULL-PORT.P09`
 
 ## Prerequisites
 - Required: Phase P08a (Screen Compositing Verification) completed
@@ -33,7 +33,7 @@ Behavior contract:
     - Guard: uninitialized check
     - Guard: negative rect dimension check
     - Body: `todo!("ColorLayer blend+fill")` (allowed in stub phase)
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P09`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P09`
   - marker: `@requirement REQ-CLR-060, REQ-CLR-055`
 
 ### Pseudocode traceability

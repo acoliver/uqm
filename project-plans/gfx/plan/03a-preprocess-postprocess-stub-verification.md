@@ -1,7 +1,7 @@
 # Phase 03a: Preprocess Fix + Postprocess Refactor — Stub Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P03a`
+`PLAN-20260223-GFX-FULL-PORT.P03a`
 
 ## Prerequisites
 - Required: Phase P03 completed

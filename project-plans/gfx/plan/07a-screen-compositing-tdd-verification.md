@@ -1,7 +1,7 @@
 # Phase 07a: Screen Compositing — TDD Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P07a`
+`PLAN-20260223-GFX-FULL-PORT.P07a`
 
 ## Prerequisites
 - Required: Phase P07 completed

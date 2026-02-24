@@ -1,6 +1,6 @@
 # Pseudocode: Component 007 — Surface Access & Auxiliary Functions
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-SURF-010..070, REQ-AUX-010..060, REQ-ERR-011..014
 
 ---

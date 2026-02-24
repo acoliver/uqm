@@ -253,11 +253,13 @@ for f in frame.c font.c context.c drawable.c; do
 done
 
 # Build with USE_RUST_GFX to verify guarded files are excluded
-cd sc2 && make USE_RUST_GFX=1 2>&1 | head -50
+# (ensure build.vars has USE_RUST_GFX=1)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | head -50
 # Should compile without the guarded C files
 
 # Build WITHOUT USE_RUST_GFX to verify C path still works
-cd sc2 && make 2>&1 | head -50
+# (ensure build.vars has USE_RUST_GFX=0)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | head -50
 # Should compile normally with all C files
 ```
 
@@ -295,7 +297,8 @@ grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/cmap_ffi.rs 
 ## Dual-Path ABI Verification (Mandatory)
 ```bash
 # Build with USE_RUST_GFX=0 and verify no undefined symbols
-cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
+# (ensure build.vars has USE_RUST_GFX=0)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | grep -c 'undefined'
 # Expected: 0
 ```
 

@@ -1,7 +1,7 @@
 # Phase 02: Pseudocode
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P02`
+`PLAN-20260223-GFX-FULL-PORT.P02`
 
 ## Prerequisites
 - Required: Phase P01a (Analysis Verification) completed
@@ -17,19 +17,19 @@ implemented in subsequent phases.
 
 ### Files to create
 - `analysis/pseudocode/component-001-init.md` — Init & teardown algorithms
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 - `analysis/pseudocode/component-002-preprocess.md` — Preprocess algorithm
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 - `analysis/pseudocode/component-003-screen-layer.md` — ScreenLayer unscaled
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 - `analysis/pseudocode/component-004-screen-layer-scaled.md` — ScreenLayer scaled
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 - `analysis/pseudocode/component-005-color-layer.md` — ColorLayer algorithm
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 - `analysis/pseudocode/component-006-postprocess.md` — Postprocess + UploadTransitionScreen
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 - `analysis/pseudocode/component-007-surface-access.md` — Surface access & aux
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P02`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P02`
 
 ### Files to modify
 - None (pseudocode phase only)

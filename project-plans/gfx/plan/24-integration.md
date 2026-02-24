@@ -173,7 +173,7 @@ cd rust && cargo test --workspace --all-features
 - [ ] Scene walkthrough checklist completed
 
 ## Failure Recovery
-- rollback: switch to C path (`make clean && make`)
+- rollback: switch to C path (`rm -rf obj/release/src/libs/graphics && ./build.sh uqm`)
 - blocking issues: visual differences → compare frame buffers pixel-by-pixel
   to identify which rendering stage diverges
 

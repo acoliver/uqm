@@ -1,7 +1,7 @@
 # Phase 08a: Screen Compositing — Implementation Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P08a`
+`PLAN-20260223-GFX-FULL-PORT.P08a`
 
 ## Prerequisites
 - Required: Phase P08 completed

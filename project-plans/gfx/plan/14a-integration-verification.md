@@ -1,7 +1,7 @@
 # Phase 14a: Integration — Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P14a`
+`PLAN-20260223-GFX-FULL-PORT.P14a`
 
 ## Prerequisites
 - Required: Phase P14 completed
@@ -116,7 +116,7 @@ wc -l rust/src/graphics/ffi.rs
 
 ## Plan Completion Summary
 
-When this phase passes, the plan `PLAN-20260223-GFX-VTABLE-FIX` is complete.
+When this phase passes, the plan `PLAN-20260223-GFX-FULL-PORT` is complete.
 
 ### What was done
 1. **Preprocess**: Added blend mode reset (REQ-PRE-010)

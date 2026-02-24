@@ -1,7 +1,7 @@
 # Phase 11: Color Layer — Implementation
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P11`
+`PLAN-20260223-GFX-FULL-PORT.P11`
 
 ## Prerequisites
 - Required: Phase P10a (TDD Verification) completed
@@ -60,7 +60,7 @@ Behavior contract:
     4. Fill rect: None for null rect, Some(converted) for non-null — REQ-CLR-040/050
   - Reuse `convert_c_rect` helper from P06
   - Add `// SAFETY:` comment for rect pointer dereference
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P11`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P11`
   - marker: `@requirement REQ-CLR-010..050`
 
 ### Pseudocode traceability

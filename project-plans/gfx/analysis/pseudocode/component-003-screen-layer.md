@@ -1,6 +1,6 @@
 # Pseudocode: Component 003 — ScreenLayer (Unscaled Path)
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-SCR-010..170, REQ-NP-010, REQ-NP-020, REQ-NP-025,
               REQ-FFI-010, REQ-FFI-020, REQ-FFI-050
 

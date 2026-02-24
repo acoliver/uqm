@@ -424,7 +424,8 @@ Verification: After this phase, both builds must succeed:
 **Verification step for each guard phase (P21, P23, P25)**:
 ```bash
 # Build with USE_RUST_GFX=0 and verify no undefined symbols
-cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
+# (ensure build.vars has USE_RUST_GFX=0)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | grep -c 'undefined'
 # Expected: 0
 ```
 

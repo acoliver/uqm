@@ -1,7 +1,7 @@
 # Phase 0.5: Preflight Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P00.5`
+`PLAN-20260223-GFX-FULL-PORT.P00.5`
 
 ## Purpose
 Verify assumptions before implementation.

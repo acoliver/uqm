@@ -1,6 +1,6 @@
-# Specification: GFX Vtable Fix (Black Screen Bug)
+# Specification: GFX Drawing-Pipeline Port
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 
 ## Reference
 

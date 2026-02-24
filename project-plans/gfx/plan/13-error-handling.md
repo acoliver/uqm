@@ -1,7 +1,7 @@
 # Phase 13: Error Handling Hardening — Stub + TDD + Implementation
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P13`
+`PLAN-20260223-GFX-FULL-PORT.P13`
 
 ## Prerequisites
 - Required: Phase P12a (Scaling Verification) completed
@@ -359,7 +359,7 @@ grep -A2 'unsafe impl Sync' rust/src/graphics/ffi.rs | grep -i 'SAFETY' || echo 
     - `test_all_exports_have_no_mangle` — @requirement REQ-FFI-040 (grep-based: every extern "C" has #[no_mangle])
     - `test_no_reentrant_ffi_calls` — @requirement REQ-FFI-060 (grep-based: no rust_gfx_* calls inside function bodies)
   - **Verify no-panic safety**: Audit all FFI functions for potential panic paths. Ensure all match/unwrap/expect are in non-production test code only.
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P13`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P13`
   - marker: `@requirement REQ-INIT-095, REQ-INIT-096, REQ-ERR-010, REQ-ERR-020, REQ-ERR-030, REQ-ERR-040, REQ-ERR-050, REQ-ERR-060, REQ-INV-060, REQ-INV-061, REQ-FFI-030, REQ-FFI-040, REQ-FFI-050, REQ-FFI-060, REQ-THR-010, REQ-THR-020, REQ-THR-030, REQ-THR-035, REQ-SEQ-070, REQ-INV-040, REQ-INV-050, REQ-UNINIT-020, REQ-UNINIT-030, REQ-SURF-020, REQ-SURF-030, REQ-SURF-040, REQ-SURF-050, REQ-SURF-060, REQ-SURF-070, REQ-AUX-020, REQ-AUX-030, REQ-AUX-040, REQ-AUX-041, REQ-AUX-050, REQ-AUX-060`
 
 ### Pseudocode traceability

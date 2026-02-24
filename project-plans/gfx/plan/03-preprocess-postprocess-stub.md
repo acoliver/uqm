@@ -1,7 +1,7 @@
 # Phase 03: Preprocess Fix + Postprocess Refactor — Stub
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P03`
+`PLAN-20260223-GFX-FULL-PORT.P03`
 
 ## Prerequisites
 - Required: Phase P02a (Pseudocode Verification) completed
@@ -173,7 +173,7 @@ Behavior contract:
   - **Postprocess**: Replace entire body with `state.canvas.present()` only
   - **Init guard (REQ-INIT-095)**: Verify `get_gfx_state().is_some()` guard exists at top of `rust_gfx_init`. If not, add: `if get_gfx_state().is_some() { return -1; }` before any initialization logic.
   - Note: In this stub phase, Postprocess is reduced to present-only. ScreenLayer is still a no-op. This means the screen will be black (only clearing + presenting). This is intentional — ScreenLayer is implemented in P06-P08.
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P03`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P03`
   - marker: `@requirement REQ-PRE-010, REQ-POST-010, REQ-POST-020, REQ-INV-010, REQ-INIT-095, REQ-INIT-015, REQ-INIT-020, REQ-INIT-030, REQ-INIT-040, REQ-INIT-050, REQ-INIT-055, REQ-INIT-060, REQ-INIT-080, REQ-INIT-090, REQ-INIT-100, REQ-FMT-030`
 
 ### Pseudocode traceability

@@ -1,7 +1,7 @@
 # Phase 04a: Preprocess Fix + Postprocess Refactor — TDD Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P04a`
+`PLAN-20260223-GFX-FULL-PORT.P04a`
 
 ## Prerequisites
 - Required: Phase P04 completed

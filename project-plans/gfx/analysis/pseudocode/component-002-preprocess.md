@@ -1,6 +1,6 @@
 # Pseudocode: Component 002 — Preprocess
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-PRE-010..050
 
 ---

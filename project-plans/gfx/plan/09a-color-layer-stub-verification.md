@@ -1,7 +1,7 @@
 # Phase 09a: Color Layer — Stub Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P09a`
+`PLAN-20260223-GFX-FULL-PORT.P09a`
 
 ## Prerequisites
 - Required: Phase P09 completed

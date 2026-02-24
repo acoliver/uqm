@@ -1,6 +1,6 @@
 # Pseudocode: Component 006 — Postprocess
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-POST-010..030, REQ-INV-010
 
 ---

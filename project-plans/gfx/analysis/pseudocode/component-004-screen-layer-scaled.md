@@ -1,6 +1,6 @@
 # Pseudocode: Component 004 — ScreenLayer (Scaled Path)
 
-Plan ID: `PLAN-20260223-GFX-VTABLE-FIX`
+Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Requirements: REQ-SCALE-010..070, REQ-SCALE-025, REQ-SCALE-055,
               REQ-SCR-070, REQ-SCR-075, REQ-NP-025
 

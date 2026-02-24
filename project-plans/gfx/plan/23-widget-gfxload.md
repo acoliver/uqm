@@ -187,12 +187,14 @@ grep -c '#\[no_mangle\]' rust/src/graphics/frame_ffi.rs
 # Expected: >= 2 (rust_frame_create, rust_frame_destroy)
 
 # Build with USE_RUST_GFX
-cd sc2 && make clean && make USE_RUST_GFX=1 2>&1 | tee /tmp/build_full_rust.log
+# (ensure build.vars has USE_RUST_GFX=1)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_full_rust.log
 grep -c 'error:' /tmp/build_full_rust.log
 # Expected: 0
 
 # Build without USE_RUST_GFX (backward compat)
-cd sc2 && make clean && make 2>&1 | tee /tmp/build_c_path.log
+# (ensure build.vars has USE_RUST_GFX=0)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | tee /tmp/build_c_path.log
 grep -c 'error:' /tmp/build_c_path.log
 # Expected: 0
 ```
@@ -228,7 +230,8 @@ grep -RIn "todo!\|TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/frame_ffi.rs
 ## Dual-Path ABI Verification (Mandatory)
 ```bash
 # Build with USE_RUST_GFX=0 and verify no undefined symbols
-cd sc2 && make clean && make USE_RUST_GFX=0 2>&1 | grep -c 'undefined'
+# (ensure build.vars has USE_RUST_GFX=0)
+cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | grep -c 'undefined'
 # Expected: 0
 ```
 
@@ -246,5 +249,8 @@ Contents:
 - files modified: 5 C files (widget-dependent guards), `mod.rs`, `rust_gfx.h`
 - C files guarded: ~35/41 drawing-pipeline files (5 loader files + sdl_common.c intentionally unguarded)
 - widget approach: bridge or port
+- frame FFI exports: count
+- verification: both build paths successful
+ port
 - frame FFI exports: count
 - verification: both build paths successful

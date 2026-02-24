@@ -1,7 +1,7 @@
 # Phase 12: Scaling Integration — Stub + TDD + Implementation
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P12`
+`PLAN-20260223-GFX-FULL-PORT.P12`
 
 ## Prerequisites
 - Required: Phase P11a (ColorLayer Verification) completed
@@ -104,7 +104,7 @@ needs to be adapted from single-screen to per-screen operation.
     - `test_convert_rgbx_rgba_roundtrip` — verify conversion roundtrip fidelity
     - `test_scale_factor_determination` — @requirement REQ-INIT-070
     - `test_bilinear_only_no_software_scale` — @requirement REQ-SCALE-025
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P12`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P12`
   - marker: `@requirement REQ-SCALE-010..070, REQ-SCALE-025, REQ-SCALE-055, REQ-WIN-030`
 
 ### Pseudocode traceability

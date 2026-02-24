@@ -1,7 +1,7 @@
 # Phase 10a: Color Layer — TDD Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P10a`
+`PLAN-20260223-GFX-FULL-PORT.P10a`
 
 ## Prerequisites
 - Required: Phase P10 completed

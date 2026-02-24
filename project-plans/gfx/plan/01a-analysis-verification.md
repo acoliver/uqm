@@ -1,7 +1,7 @@
 # Phase 01a: Analysis Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P01a`
+`PLAN-20260223-GFX-FULL-PORT.P01a`
 
 ## Prerequisites
 - Required: Phase P01 completed

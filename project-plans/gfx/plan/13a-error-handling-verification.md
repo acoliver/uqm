@@ -1,7 +1,7 @@
 # Phase 13a: Error Handling Hardening — Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P13a`
+`PLAN-20260223-GFX-FULL-PORT.P13a`
 
 ## Prerequisites
 - Required: Phase P13 completed

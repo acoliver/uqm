@@ -1,7 +1,7 @@
 # Phase 05a: Preprocess Fix + Postprocess Refactor — Implementation Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P05a`
+`PLAN-20260223-GFX-FULL-PORT.P05a`
 
 ## Prerequisites
 - Required: Phase P05 completed

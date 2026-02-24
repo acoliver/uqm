@@ -1,7 +1,7 @@
 # Phase 06a: Screen Compositing — Stub Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P06a`
+`PLAN-20260223-GFX-FULL-PORT.P06a`
 
 ## Prerequisites
 - Required: Phase P06 completed

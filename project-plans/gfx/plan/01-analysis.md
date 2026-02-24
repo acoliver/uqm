@@ -1,7 +1,7 @@
 # Phase 01: Analysis
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P01`
+`PLAN-20260223-GFX-FULL-PORT.P01`
 
 ## Prerequisites
 - Required: Phase P00.5 (Preflight) completed
@@ -31,7 +31,7 @@ The following requirement groups are analyzed:
 
 ### Files to create
 - `project-plans/gfx/analysis/domain-model.md` — Entity model, state transitions, error map
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P01`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P01`
 
 ### Files to modify
 - None (analysis phase only)

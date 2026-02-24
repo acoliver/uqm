@@ -1,7 +1,7 @@
 # Phase 05: Preprocess Fix + Postprocess Refactor — Implementation
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P05`
+`PLAN-20260223-GFX-FULL-PORT.P05`
 
 ## Prerequisites
 - Required: Phase P04a (TDD Verification) completed
@@ -61,7 +61,7 @@ Behavior contract:
     - Body: `if let Some(state) = get_gfx_state() { state.canvas.present(); }`
   - **Cleanup**: Remove any unused imports that were only used by old postprocess code
     (e.g., `Pixmap`, `PixmapFormat`, `Hq2xScaler`, `ScaleParams`, `Scaler`, `scale_rgba` — only if they are no longer used anywhere in the file. They WILL be re-used by ScreenLayer in P08, so defer removal.)
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P05`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P05`
   - marker: `@requirement REQ-PRE-010, REQ-PRE-020, REQ-PRE-040, REQ-POST-010, REQ-POST-020`
 
 ### Pseudocode traceability

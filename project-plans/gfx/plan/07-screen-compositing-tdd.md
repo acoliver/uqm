@@ -1,7 +1,7 @@
 # Phase 07: Screen Compositing — TDD
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P07`
+`PLAN-20260223-GFX-FULL-PORT.P07`
 
 ## Prerequisites
 - Required: Phase P06a (Stub Verification) completed
@@ -65,7 +65,7 @@
     - `test_rgbx_to_rgba_conversion` — @requirement REQ-SCALE-060
     - `test_rgba_to_rgbx_conversion` — @requirement REQ-SCALE-070
     - `test_screen_negative_rect_no_panic` — @requirement REQ-SCR-160
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P07`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P07`
 
 ### Pseudocode traceability
 - Tests validate: component-003 lines 3–10 (guards)

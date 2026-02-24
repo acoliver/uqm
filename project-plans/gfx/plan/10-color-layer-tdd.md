@@ -1,7 +1,7 @@
 # Phase 10: Color Layer — TDD
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P10`
+`PLAN-20260223-GFX-FULL-PORT.P10`
 
 ## Prerequisites
 - Required: Phase P09a (Stub Verification) completed
@@ -28,7 +28,7 @@
   - Add tests to `#[cfg(test)] mod tests`:
     - `test_color_uninitialized_no_panic` — @requirement REQ-CLR-060
     - `test_color_negative_rect_no_panic` — @requirement REQ-CLR-055
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P10`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P10`
 
 ### Pseudocode traceability
 - Tests validate: component-005 lines 2–10 (guards)

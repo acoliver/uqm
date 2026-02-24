@@ -1,7 +1,7 @@
 # Phase 11a: Color Layer — Implementation Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P11a`
+`PLAN-20260223-GFX-FULL-PORT.P11a`
 
 ## Prerequisites
 - Required: Phase P11 completed

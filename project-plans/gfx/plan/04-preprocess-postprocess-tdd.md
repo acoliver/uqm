@@ -1,7 +1,7 @@
 # Phase 04: Preprocess Fix + Postprocess Refactor — TDD
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P04`
+`PLAN-20260223-GFX-FULL-PORT.P04`
 
 ## Prerequisites
 - Required: Phase P03a (Stub Verification) completed
@@ -52,7 +52,7 @@ Behavior contract:
       - Harness: Uses a test-only error injection point: pass an invalid display index or impossible resolution to force SDL init failure. Verify surfaces created before failure point are freed.
     - `test_init_logs_on_failure` — a failing init path emits a diagnostic via rust_bridge_log_msg — @requirement REQ-INIT-100
       - Harness: Uses a test logger sink (Vec<String> behind Mutex) registered before test. After forcing init failure, assert log buffer contains expected diagnostic message.
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P04`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P04`
   - marker: `@requirement REQ-PRE-050, REQ-POST-030, REQ-INV-050, REQ-INIT-020, REQ-INIT-030, REQ-INIT-050, REQ-INIT-060, REQ-INIT-080, REQ-INIT-090, REQ-INIT-100`
 
 ### Pseudocode traceability

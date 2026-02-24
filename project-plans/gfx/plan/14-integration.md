@@ -1,7 +1,7 @@
 # Phase 14: Integration
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P14`
+`PLAN-20260223-GFX-FULL-PORT.P14`
 
 ## Prerequisites
 - Required: Phase P13a (Error Handling Verification) completed
@@ -222,7 +222,7 @@ inspection during integration:
 ### Files to modify
 - `rust/src/graphics/ffi.rs`
   - Add integration-level tests to `#[cfg(test)] mod tests`
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P14`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P14`
   - marker: `@requirement REQ-SEQ-010, REQ-SEQ-020, REQ-SEQ-030, REQ-SEQ-040, REQ-SEQ-050, REQ-SEQ-060, REQ-SEQ-065, REQ-ASM-050, REQ-THR-010, REQ-THR-020, REQ-THR-030, REQ-THR-035, REQ-FFI-040, REQ-FFI-060`
 
 ### Pseudocode traceability

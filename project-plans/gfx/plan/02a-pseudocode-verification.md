@@ -1,7 +1,7 @@
 # Phase 02a: Pseudocode Verification
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P02a`
+`PLAN-20260223-GFX-FULL-PORT.P02a`
 
 ## Prerequisites
 - Required: Phase P02 completed

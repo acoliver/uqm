@@ -1,7 +1,7 @@
 # Phase 08: Screen Compositing — Implementation
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P08`
+`PLAN-20260223-GFX-FULL-PORT.P08`
 
 ## Prerequisites
 - Required: Phase P07a (TDD Verification) completed
@@ -122,7 +122,7 @@ Behavior contract:
     9. Set blend mode + alpha mod — REQ-SCR-030/040
     10. Call canvas.copy with src=dst rect — REQ-SCR-060
   - Add `// SAFETY:` comments for all unsafe blocks — REQ-FFI-020
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P08`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P08`
   - marker: `@requirement REQ-SCR-010..170, REQ-SCR-130, REQ-SCR-150, REQ-FMT-020`
 
 ### Mutable state access pattern

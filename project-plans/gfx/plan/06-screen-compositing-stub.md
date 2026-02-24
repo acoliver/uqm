@@ -1,7 +1,7 @@
 # Phase 06: Screen Compositing — Stub
 
 ## Phase ID
-`PLAN-20260223-GFX-VTABLE-FIX.P06`
+`PLAN-20260223-GFX-FULL-PORT.P06`
 
 ## Prerequisites
 - Required: Phase P05a (Preprocess/Postprocess Verification) completed
@@ -44,7 +44,7 @@ Behavior contract:
     - Guard: null surface check
     - Body: `todo!("ScreenLayer upload+render")` (allowed in stub phase)
   - Add helper function `convert_c_rect` for SDL_Rect → sdl2::rect::Rect
-  - marker: `@plan PLAN-20260223-GFX-VTABLE-FIX.P06`
+  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P06`
   - marker: `@requirement REQ-SCR-140, REQ-SCR-100, REQ-SCR-090, REQ-SCR-110`
 
 ### Pseudocode traceability
