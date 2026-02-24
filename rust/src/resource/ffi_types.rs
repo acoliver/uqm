@@ -22,7 +22,8 @@ pub union ResourceData {
 
 impl Default for ResourceData {
     fn default() -> Self {
-        ResourceData { num: 0 }
+        // Zero all 8 bytes of the union to ensure ptr reads as null
+        ResourceData { ptr: std::ptr::null_mut() }
     }
 }
 

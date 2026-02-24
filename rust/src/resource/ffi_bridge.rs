@@ -36,6 +36,13 @@ extern "C" {
     fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int;
 
     static contentDir: *mut c_void;
+
+    // C subsystem type registration functions — called from InitResourceSystem
+    fn InstallGraphicResTypes() -> c_int;
+    fn InstallStringTableResType() -> c_int;
+    fn InstallAudioResTypes() -> c_int;
+    fn InstallVideoResType() -> c_int;
+    fn InstallCodeResType() -> c_int;
 }
 
 // Test stubs for UIO functions — these are never actually called in tests
@@ -72,6 +79,8 @@ struct ResourceState {
     string_cache: std::collections::HashMap<String, CString>,
     /// CString returned by res_GetResourceType — kept alive for pointer stability
     type_cache: std::collections::HashMap<String, CString>,
+    /// Whether C subsystem type registration has been performed
+    c_types_registered: bool,
 }
 
 static RESOURCE_STATE: Mutex<Option<ResourceState>> = Mutex::new(None);
@@ -124,6 +133,7 @@ fn create_initial_state() -> ResourceState {
         dispatch,
         string_cache: std::collections::HashMap::new(),
         type_cache: std::collections::HashMap::new(),
+        c_types_registered: false,
     }
 }
 
@@ -162,8 +172,31 @@ pub extern "C" fn InitResourceSystem() -> *mut c_void {
         *guard = Some(create_initial_state());
     }
 
+    // Check if C subsystem types need registration
+    let needs_c_registration = guard.as_ref().map_or(false, |s| !s.c_types_registered);
+    if needs_c_registration {
+        // Mark as registered BEFORE dropping lock to prevent re-entry
+        if let Some(ref mut state) = *guard {
+            state.c_types_registered = true;
+        }
+        // Must drop the lock before calling C subsystem registration,
+        // because they will call InstallResTypeVectors which needs the lock
+        drop(guard);
+
+        // Register the 9 heap types via C subsystem init functions
+        // (same calls as C InitResourceSystem in resinit.c)
+        #[cfg(not(test))]
+        unsafe {
+            InstallGraphicResTypes();
+            InstallStringTableResType();
+            InstallAudioResTypes();
+            InstallVideoResType();
+            InstallCodeResType();
+        }
+    }
+
     // Return a non-null sentinel (not actually dereferenceable by C)
-    guard.as_ref().map(|_| 1usize as *mut c_void).unwrap_or(ptr::null_mut())
+    1usize as *mut c_void
 }
 
 /// Uninitialize the resource system. Drops all state.
@@ -999,10 +1032,14 @@ pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c
         return ptr::null_mut();
     }
 
-    // Read the 4-byte prefix
-    let mut prefix: u32 = 0;
+    // Read the 4-byte length prefix (legacy format)
+    // Resource data used to be prefixed by its length in package files.
+    // A valid length prefix indicated LZ-compressed data, and
+    // a length prefix ~0 (0xFFFFFFFF) meant uncompressed.
+    // Currently, .ct and .xlt files still carry a ~0 prefix.
+    let mut comp_len: u32 = 0;
     let read = uio_fread(
-        &mut prefix as *mut u32 as *mut c_void,
+        &mut comp_len as *mut u32 as *mut c_void,
         std::mem::size_of::<u32>(),
         1,
         fp,
@@ -1011,41 +1048,30 @@ pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c
         return ptr::null_mut();
     }
 
-    if prefix == 0xFFFFFFFF {
-        // Uncompressed: seek back 4 bytes, read entire chunk
-        uio_fseek(fp, -4, 1); // SEEK_CUR = 1
-        let layout = std::alloc::Layout::from_size_align(length as usize, 1)
-            .unwrap_or_else(|_| std::alloc::Layout::from_size_align(1, 1).unwrap());
-        let buf = std::alloc::alloc(layout);
-        if buf.is_null() {
-            return ptr::null_mut();
-        }
-        let bytes_read = uio_fread(buf as *mut c_void, 1, length as usize, fp);
-        if bytes_read < length as usize {
-            log::warn!(
-                "GetResourceData: short read ({} of {} bytes)",
-                bytes_read,
-                length
-            );
-        }
-        buf as *mut c_void
-    } else {
-        // Compressed data — for now, allocate and read remaining
-        let data_len = length as usize;
-        let layout = std::alloc::Layout::from_size_align(data_len, 1)
-            .unwrap_or_else(|_| std::alloc::Layout::from_size_align(1, 1).unwrap());
-        let buf = std::alloc::alloc(layout);
-        if buf.is_null() {
-            return ptr::null_mut();
-        }
-        // Write the prefix bytes first
-        let prefix_bytes = prefix.to_ne_bytes();
-        ptr::copy_nonoverlapping(prefix_bytes.as_ptr(), buf, 4.min(data_len));
-        if data_len > 4 {
-            uio_fread(buf.add(4) as *mut c_void, 1, data_len - 4, fp);
-        }
-        buf as *mut c_void
+    if comp_len != 0xFFFFFFFF {
+        log::warn!("LZ-compressed binary data not supported");
+        return ptr::null_mut();
     }
+
+    // Uncompressed: subtract the 4-byte prefix from the total length
+    let data_len = (length as usize).saturating_sub(4);
+    if data_len == 0 {
+        return ptr::null_mut();
+    }
+
+    // Allocate via HMalloc (matching C's AllocResourceData)
+    let buf = libc::malloc(data_len) as *mut u8;
+    if buf.is_null() {
+        return ptr::null_mut();
+    }
+
+    let bytes_read = uio_fread(buf as *mut c_void, 1, data_len, fp);
+    if bytes_read != data_len {
+        libc::free(buf as *mut c_void);
+        return ptr::null_mut();
+    }
+
+    buf as *mut c_void
 }
 
 /// Free resource data that was allocated by GetResourceData.
@@ -1324,14 +1350,14 @@ mod tests {
             None,
         );
 
-        // GFXRES has no registered handler, so dispatch falls back to UNKNOWNRES
-        // for the handler_key, but preserves the original type name for serialization.
-        // UNKNOWNRES is a value type (freeFun=None), so use_descriptor_as_res
-        // is called immediately, setting str_ptr to the descriptor string.
+        // GFXRES has no registered handler in test mode (C subsystem types not
+        // available), so dispatch falls back to UNKNOWNRES for the handler_key,
+        // but preserves the original type name for serialization.
+        // Data ptr is null (not loaded yet — no loadFun for UNKNOWNRES).
         let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
         assert_eq!(desc.res_type, "GFXRES", "Original type name preserved");
         assert_eq!(desc.type_handler_key, "UNKNOWNRES", "Falls back to UNKNOWNRES handler");
-        assert!(!unsafe { desc.data.str_ptr.is_null() }, "UNKNOWNRES stores descriptor as str_ptr");
+        assert!(unsafe { desc.data.ptr.is_null() }, "Heap-type data not loaded yet");
     }
 
     #[test]
