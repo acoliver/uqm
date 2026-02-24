@@ -15,6 +15,10 @@
  */
 
 #include "port.h"
+
+#ifndef USE_RUST_GFX
+/* Replaced by Rust: rust/src/graphics/scaling.rs */
+
 #include "libs/platform.h"
 
 #if defined(MMX_ASM)
@@ -97,4 +101,6 @@ Scale_SSE_PrepPlatform (const SDL_PixelFormat* fmt)
 #endif
 
 #endif /* MMX_ASM */
+
+#endif /* !USE_RUST_GFX */
 
