@@ -1264,20 +1264,34 @@ pub trait PixelCanvas {
     fn pitch(&self) -> usize;
     fn pixels(&self) -> &[u8];
     fn pixels_mut(&mut self) -> &mut [u8];
-    fn format(&self) -> PixmapFormat;
+    fn format(&self) -> PixelFormat;
 }
 ```
 
+The `format()` method returns `PixelFormat` — a unified enum convertible
+from both `CanvasFormat` and `PixmapFormat` via `From` impls. See
+technical.md §8.4.0 for the `PixelFormat` definition.
+
 Drawing functions SHALL use generic parameters: `fn draw_line<C: PixelCanvas>(canvas: &mut C, ...) -> Result<(), CanvasError>`.
 
-Both `Canvas` (owned pixel buffers) and `SurfaceCanvas` (borrowed from
-`SDL_Surface`) SHALL implement `PixelCanvas`. DCQ dispatch SHALL operate
-through `PixelCanvas` trait objects or generics.
+Three types SHALL implement `PixelCanvas`:
+- **`SurfaceCanvas`** (borrowed from `SDL_Surface`) — implements
+  `PixelCanvas` directly. Used for screen surfaces during DCQ flush.
+- **`LockedCanvas<'a>`** (holds `MutexGuard<'a, CanvasInner>`) — adapter
+  for the owned `Canvas` type. Created via `Canvas::lock_pixels()`. Lock
+  once per draw command, not per pixel. Only one `LockedCanvas` can exist
+  per `Canvas` at a time (Mutex semantics).
+- **`Canvas`** remains unchanged — `LockedCanvas` is the bridge that makes
+  it compatible with `PixelCanvas` without breaking existing tests.
 
-**Rationale**: `&mut C` enforces exclusive access at compile time (no
-runtime locks). No enum arms to maintain. New canvas types (video
-sequences, offscreen buffers) just implement the trait. The existing
-drawing logic already operates on raw pixel slices internally.
+DCQ dispatch SHALL operate through `PixelCanvas` trait objects or generics.
+
+**Rationale**: `&mut C` enforces compile-time exclusive access for
+`SurfaceCanvas` and `LockedCanvas`; runtime exclusive access (via
+`MutexGuard`) when `Canvas` is the underlying store. No enum arms to
+maintain. New canvas types (video sequences, offscreen buffers) just
+implement the trait. The existing drawing logic already operates on raw
+pixel slices internally.
 
 ---
 

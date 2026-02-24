@@ -1104,13 +1104,31 @@ images/offscreen buffers use the owned `Canvas` type. A trait abstraction
 lets both types share the same drawing code:
 
 ```rust
+/// Unified pixel format for the PixelCanvas trait.
+/// Convertible from both CanvasFormat and PixmapFormat.
+pub enum PixelFormat {
+    Rgba32,    // 4 bytes per pixel, RGBA order
+    Rgbx32,    // 4 bytes per pixel, RGBX order (alpha ignored)
+    Indexed8,  // 1 byte per pixel, palette-indexed
+}
+
+impl From<CanvasFormat> for PixelFormat { ... }
+impl From<PixmapFormat> for PixelFormat { ... }
+```
+
+`PixelFormat` is the unified format enum returned by the `PixelCanvas` trait.
+It resolves the `CanvasFormat` vs `PixmapFormat` type mismatch — both
+existing format types convert into `PixelFormat` via `From` impls, so
+drawing functions only need to handle one format enum.
+
+```rust
 pub trait PixelCanvas {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn pitch(&self) -> usize;
     fn pixels(&self) -> &[u8];
     fn pixels_mut(&mut self) -> &mut [u8];
-    fn format(&self) -> PixmapFormat;
+    fn format(&self) -> PixelFormat;
 }
 ```
 
@@ -1121,16 +1139,64 @@ pub fn draw_line<C: PixelCanvas>(canvas: &mut C, x1: i32, y1: i32,
 ```
 
 **Why generics over `&mut Canvas`:**
-- `&mut C` enforces exclusive access at compile time (no runtime locks)
+- `&mut C` enforces compile-time exclusive access for `SurfaceCanvas` and
+  `LockedCanvas`; runtime exclusive access (via `MutexGuard`) when `Canvas`
+  is the underlying store
 - No enum arms to maintain
 - New canvas types (video sequences, offscreen buffers) just implement the trait
 - The existing drawing logic already operates on raw pixel slices internally
+
+#### 8.4.0a LockedCanvas Adapter
+
+The existing `Canvas` type uses `Arc<Mutex<CanvasInner>>` for interior
+mutability. This is incompatible with the `PixelCanvas` trait's
+`pixels_mut(&mut self) -> &mut [u8]` method — calling `pixels_mut` on
+`Canvas` would require returning a reference into locked data, but the
+`MutexGuard` would be dropped before the reference could be used.
+
+**Solution**: `LockedCanvas<'a>` holds a `MutexGuard` and implements
+`PixelCanvas`. The lock is held for the duration of the drawing operation,
+not per-pixel:
+
+```rust
+/// Adapter that holds a MutexGuard and implements PixelCanvas.
+/// Created by calling `canvas.lock_pixels()`.
+pub struct LockedCanvas<'a> {
+    guard: MutexGuard<'a, CanvasInner>,
+}
+
+impl<'a> PixelCanvas for LockedCanvas<'a> {
+    fn width(&self) -> u32 { self.guard.width }
+    fn height(&self) -> u32 { self.guard.height }
+    fn pitch(&self) -> usize { self.guard.pitch }
+    fn pixels(&self) -> &[u8] { &self.guard.data }
+    fn pixels_mut(&mut self) -> &mut [u8] { &mut self.guard.data }
+    fn format(&self) -> PixelFormat { self.guard.format.into() }
+}
+```
+
+**Key design points:**
+
+- **`Canvas` stays as-is** — no breaking change to the 40+ existing tests
+  that use `Canvas` directly. `Canvas::lock_pixels() -> LockedCanvas<'_>`
+  is the creation method.
+- **`SurfaceCanvas` implements `PixelCanvas` directly** — it wraps borrowed
+  `SDL_Surface` pixels and has no `Arc<Mutex>` layer.
+- **`LockedCanvas<'a>` holds the `MutexGuard`** and implements `PixelCanvas`.
+  Lock once per draw command, not per pixel. `&mut LockedCanvas` genuinely
+  enforces exclusive access because the guard is held.
+- **Clone safety**: Cloning `Canvas` clones the `Arc`, but `LockedCanvas`
+  holds the actual guard — only one `LockedCanvas` can exist per `Canvas`
+  at a time (Mutex semantics).
 
 **DCQ dispatch**: The DCQ's `RenderContext` screen storage will change from
 `Arc<RwLock<Canvas>>` to a trait-object-based or generic approach during
 P18–P20 implementation. During DCQ flush, `SurfaceCanvas` is created from
 the current screen's `SDL_Surface`, and draw commands are dispatched through
-the `PixelCanvas` trait.
+the `PixelCanvas` trait. For owned `Canvas` targets (e.g., offscreen
+buffers), DCQ dispatch calls `canvas.lock_pixels()` to obtain a
+`LockedCanvas`, then passes `&mut LockedCanvas` to the generic drawing
+functions.
 
 See REQ-CANVAS-150 in `requirements.md` for the normative requirement.
 

@@ -89,6 +89,19 @@ Implementation:
 | `TFB_BatchGraphics` | `rust_dcq_batch` → depth++ | Nestable |
 | `TFB_UnbatchGraphics` | `rust_dcq_unbatch` → depth--, auto-flush at 0 | Nestable |
 
+### DCQ `handle_command` Dispatch Rework
+
+Refactor `DrawCommandQueue::handle_command()` — all 9 dispatch arms (Line,
+Rect, Image, FilledImage, FontChar, Copy, CopyToImage, ScissorEnable,
+ScissorDisable) must call generic drawing functions via `PixelCanvas` trait.
+The `get_screen_surface()` method returns the `*mut SDL_Surface` pointer;
+the flush function creates a `SurfaceCanvas` from it, then passes
+`&mut SurfaceCanvas` to the generic drawing functions. For owned `Canvas`
+targets (offscreen buffers), flush calls `canvas.lock_pixels()` to obtain
+a `LockedCanvas<'_>`, then passes `&mut LockedCanvas` instead.
+
+Estimated: ~150 LoC changes in `dcqueue.rs`.
+
 ### Files to modify
 - `rust/src/graphics/dcq_ffi.rs`
   - Replace all `todo!()` stubs with full implementations
@@ -96,6 +109,11 @@ Implementation:
   - Wire flush dispatch to `tfb_draw.rs` functions via `SurfaceCanvas`
   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P20`
   - marker: `@requirement REQ-DCQ-010..050, REQ-FFI-030`
+
+- `rust/src/graphics/dcqueue.rs`
+  - Refactor `handle_command()` to dispatch through `PixelCanvas` trait
+  - Replace `Arc<RwLock<Canvas>>` screen access with `SurfaceCanvas` /
+    `LockedCanvas` pattern per technical.md §8.4.0 and §8.4.0a
 
 - `rust/src/graphics/ffi.rs`
   - Add `rust_dcq_init()` call inside `rust_gfx_init()`

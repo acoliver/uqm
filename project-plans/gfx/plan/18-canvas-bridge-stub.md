@@ -86,10 +86,20 @@ These C functions from `dcqueue.c` will have Rust FFI equivalents:
 | `TFB_GetScreenIndex` | `rust_dcq_get_screen` | Get current draw screen |
 | `TFB_SetScreenIndex` | `rust_dcq_set_screen` | Set current draw screen |
 
+### Surface Accessor Pattern (required for P20)
+
+The stub phase must define the new `get_screen_surface() -> *mut SDL_Surface`
+accessor pattern that replaces `get_screen_canvas() -> Arc<RwLock<Canvas>>`.
+This accessor is used by DCQ flush (P20) to obtain the raw surface pointer
+from which `SurfaceCanvas` is created. The stub can return `std::ptr::null_mut()`
+initially, but the function signature and accessor pattern must be established
+here so that P20 can wire it to actual surface pointers.
+
 ### Files to create
 - `rust/src/graphics/dcq_ffi.rs` — New file for DCQ FFI exports
   - Global `DrawCommandQueue` singleton using `UnsafeCell` pattern (like ffi.rs)
   - All ~15 `#[no_mangle] pub extern "C" fn rust_dcq_*` stubs
+  - `get_screen_surface(index) -> *mut SDL_Surface` accessor (stub returns null)
   - Each stub: `catch_unwind` wrapper, parameter validation, returns safe default
   - Body: `todo!("DCQ FFI: <function_name>")` (allowed in stub phase)
   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P18`
