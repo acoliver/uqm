@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use super::ffi_types::{ResourceHandlers, ResourceLoadFun, ResourceFreeFun, ResourceStringFun};
+use super::ffi_types::{ResourceFreeFun, ResourceHandlers, ResourceLoadFun, ResourceStringFun};
 
 /// Registry of resource type handlers.
 ///
@@ -75,7 +75,7 @@ impl Default for TypeRegistry {
 // Built-in value type loaders
 // =============================================================================
 
-use std::ffi::{CStr, c_char, c_uint};
+use std::ffi::{c_char, c_uint, CStr};
 
 use super::ffi_types::ResourceData;
 use super::resource_type::{parse_c_color, serialize_color};
@@ -152,7 +152,8 @@ pub unsafe fn descriptor_to_color(descriptor: *const c_char, resdata: *mut Resou
     let s = c_str.to_str().unwrap_or("");
     match parse_c_color(s) {
         Ok((r, g, b, a)) => {
-            (*resdata).num = ((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | (a as u32);
+            (*resdata).num =
+                ((r as u32) << 24) | ((g as u32) << 16) | ((b as u32) << 8) | (a as u32);
         }
         Err(_) => {
             (*resdata).num = 0;
@@ -262,8 +263,15 @@ mod tests {
 
     // Dummy C-compatible functions for testing
     unsafe extern "C" fn dummy_load(_path: *const c_char, _data: *mut ResourceData) {}
-    unsafe extern "C" fn dummy_free(_handle: *mut std::ffi::c_void) -> std::ffi::c_int { 1 }
-    unsafe extern "C" fn dummy_tostring(_data: *mut ResourceData, _buf: *mut c_char, _size: c_uint) {}
+    unsafe extern "C" fn dummy_free(_handle: *mut std::ffi::c_void) -> std::ffi::c_int {
+        1
+    }
+    unsafe extern "C" fn dummy_tostring(
+        _data: *mut ResourceData,
+        _buf: *mut c_char,
+        _size: c_uint,
+    ) {
+    }
 
     // =========================================================================
     // TypeRegistry tests
@@ -291,7 +299,12 @@ mod tests {
     #[test]
     fn test_install_duplicate_overwrites() {
         let mut registry = TypeRegistry::new();
-        registry.install("TESTTYPE", Some(dummy_load), Some(dummy_free), Some(dummy_tostring));
+        registry.install(
+            "TESTTYPE",
+            Some(dummy_load),
+            Some(dummy_free),
+            Some(dummy_tostring),
+        );
         registry.install("TESTTYPE", Some(dummy_load), None, Some(dummy_tostring));
 
         assert_eq!(registry.count(), 1);
@@ -302,7 +315,12 @@ mod tests {
     #[test]
     fn test_lookup_existing() {
         let mut registry = TypeRegistry::new();
-        registry.install("GFXRES", Some(dummy_load), Some(dummy_free), Some(dummy_tostring));
+        registry.install(
+            "GFXRES",
+            Some(dummy_load),
+            Some(dummy_free),
+            Some(dummy_tostring),
+        );
 
         let handlers = registry.lookup("GFXRES");
         assert!(handlers.is_some());
@@ -560,7 +578,12 @@ mod tests {
     #[test]
     fn test_install_type_stores_under_sys_prefix() {
         let mut registry = TypeRegistry::new();
-        registry.install("TESTTYPE", Some(dummy_load), Some(dummy_free), Some(dummy_tostring));
+        registry.install(
+            "TESTTYPE",
+            Some(dummy_load),
+            Some(dummy_free),
+            Some(dummy_tostring),
+        );
 
         // lookup uses "sys." prefix internally
         let handlers = registry.lookup("TESTTYPE");
@@ -587,7 +610,12 @@ mod tests {
     #[test]
     fn test_type_handler_stores_function_pointers() {
         let mut registry = TypeRegistry::new();
-        registry.install("FNTEST", Some(dummy_load), Some(dummy_free), Some(dummy_tostring));
+        registry.install(
+            "FNTEST",
+            Some(dummy_load),
+            Some(dummy_free),
+            Some(dummy_tostring),
+        );
 
         let handlers = registry.lookup("FNTEST").unwrap();
         assert!(handlers.load_fun.is_some());

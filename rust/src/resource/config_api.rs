@@ -263,14 +263,20 @@ mod tests {
     fn test_put_get_color() {
         let mut map = ResourceMap::new();
         put_color(&mut map, "test.color", 0x1a, 0x00, 0x1a, 0xff);
-        assert_eq!(get_color(&map, "test.color"), Some((0x1a, 0x00, 0x1a, 0xff)));
+        assert_eq!(
+            get_color(&map, "test.color"),
+            Some((0x1a, 0x00, 0x1a, 0xff))
+        );
     }
 
     #[test]
     fn test_put_get_color_with_alpha() {
         let mut map = ResourceMap::new();
         put_color(&mut map, "test.color", 0xff, 0x00, 0x00, 0x80);
-        assert_eq!(get_color(&map, "test.color"), Some((0xff, 0x00, 0x00, 0x80)));
+        assert_eq!(
+            get_color(&map, "test.color"),
+            Some((0xff, 0x00, 0x00, 0x80))
+        );
     }
 
     #[test]

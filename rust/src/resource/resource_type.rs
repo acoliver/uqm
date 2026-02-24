@@ -127,7 +127,8 @@ fn parse_c_int(s: &str) -> Result<i32, String> {
     } else if s.starts_with('0') && s.len() > 1 && s[1..].chars().all(|c| c.is_ascii_digit()) {
         i64::from_str_radix(s, 8).map_err(|e| format!("invalid octal: {e}"))?
     } else {
-        s.parse::<i64>().map_err(|e| format!("invalid integer: {e}"))?
+        s.parse::<i64>()
+            .map_err(|e| format!("invalid integer: {e}"))?
     };
 
     let value = if negative { -value } else { value };
@@ -140,7 +141,12 @@ fn clamp_component(value: i32, max: i32, label: &str) -> u8 {
         log::warn!("color component {} clamped from {} to 0", label, value);
         0
     } else if value > max {
-        log::warn!("color component {} clamped from {} to {}", label, value, max);
+        log::warn!(
+            "color component {} clamped from {} to {}",
+            label,
+            value,
+            max
+        );
         max as u8
     } else {
         value as u8
@@ -197,10 +203,7 @@ pub fn parse_c_color(descriptor: &str) -> Result<(u8, u8, u8, u8), String> {
         }
         "rgba" => {
             if parts.len() != 4 {
-                return Err(format!(
-                    "rgba() requires 4 components, got {}",
-                    parts.len()
-                ));
+                return Err(format!("rgba() requires 4 components, got {}", parts.len()));
             }
             let r = clamp_component(parse_c_int(parts[0])?, 255, "r");
             let g = clamp_component(parse_c_int(parts[1])?, 255, "g");
@@ -580,10 +583,7 @@ mod tests {
 
     #[test]
     fn test_serialize_color_zero_alpha() {
-        assert_eq!(
-            serialize_color(0, 0, 0, 0),
-            "rgba(0x00, 0x00, 0x00, 0x00)"
-        );
+        assert_eq!(serialize_color(0, 0, 0, 0), "rgba(0x00, 0x00, 0x00, 0x00)");
     }
 
     #[test]
