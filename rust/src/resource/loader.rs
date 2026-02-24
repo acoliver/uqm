@@ -354,9 +354,9 @@ mod tests {
         assert!(loader.exists("nested.resource"));
         assert!(!loader.exists("nonexistent.resource"));
 
-        // Case insensitive (default)
-        assert!(loader.exists("TEST.RESOURCE"));
-        assert!(loader.exists("Test.Resource"));
+        // Default is now case-sensitive (matching C behavior)
+        assert!(!loader.exists("TEST.RESOURCE"));
+        assert!(!loader.exists("Test.Resource"));
     }
 
     #[test]

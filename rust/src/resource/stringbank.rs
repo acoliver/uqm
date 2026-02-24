@@ -46,6 +46,7 @@ impl StringBank {
     }
 
     /// Load a string table from a string
+    #[allow(deprecated)]
     pub fn load_table_from_string(
         &mut self,
         language: &str,

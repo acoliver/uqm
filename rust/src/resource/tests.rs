@@ -3,6 +3,7 @@
 // resource index parsing, caching, and reference counting.
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod propfile_tests {
     use crate::resource::propfile::{PropertyError, PropertyFile};
     use std::env;

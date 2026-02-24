@@ -5,12 +5,15 @@
 //! # RMP File Format
 //! The C implementation (index.c, getres.c) uses a key-value format:
 //! ```text
-//! resource.name = path/to/file.ext
-//! another.resource = another/path.ext
+//! resource.name = TYPE:path/to/file.ext
+//! another.resource = GFXRES:another/path.ext
 //! ```
 //!
 //! # Reference
 //! See `sc2/src/libs/resource/index.c` and `getres.c` for the C implementation.
+//!
+//! @plan PLAN-20260224-RES-SWAP.P03
+//! @requirement REQ-RES-018
 
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read};
@@ -48,6 +51,9 @@ impl From<io::Error> for IndexError {
 pub type Result<T> = std::result::Result<T, IndexError>;
 
 /// An entry in the resource index
+///
+/// @plan PLAN-20260224-RES-SWAP.P03
+/// @requirement REQ-RES-018
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceEntry {
     /// Resource name (the key used for lookup)
@@ -58,6 +64,8 @@ pub struct ResourceEntry {
     pub file_offset: u32,
     /// Size of the resource data (0 if unknown/whole file)
     pub file_size: u32,
+    /// Resource type extracted from TYPE:path values (e.g. "GFXRES")
+    pub resource_type: Option<String>,
 }
 
 impl ResourceEntry {
@@ -68,6 +76,7 @@ impl ResourceEntry {
             file_path: file_path.into(),
             file_offset: 0,
             file_size: 0,
+            resource_type: None,
         }
     }
 
@@ -83,8 +92,22 @@ impl ResourceEntry {
             file_path: file_path.into(),
             file_offset: offset,
             file_size: size,
+            resource_type: None,
         }
     }
+}
+
+/// Split a value string on the first `:` to extract the resource type and path.
+///
+/// For example, `"GFXRES:base/comm/arilou/arilou.ani"` returns
+/// `(Some("GFXRES"), "base/comm/arilou/arilou.ani")`.
+///
+/// If there is no `:`, the entire value is the path and the type is `None`.
+///
+/// @plan PLAN-20260224-RES-SWAP.P03
+/// @requirement REQ-RES-018
+pub fn parse_type_path(_value: &str) -> (Option<&str>, &str) {
+    todo!("Split value on first ':' — see component-001.md")
 }
 
 /// Resource index - maps resource names to file locations
@@ -101,10 +124,13 @@ pub struct ResourceIndex {
 
 impl ResourceIndex {
     /// Create an empty resource index
+    ///
+    /// Uses case-sensitive keys to match C behavior (keys are stored and
+    /// looked up with their original case preserved).
     pub fn new() -> Self {
         Self {
             entries: HashMap::new(),
-            case_sensitive: false, // UQM uses case-insensitive lookups
+            case_sensitive: true,
         }
     }
 
@@ -353,22 +379,22 @@ res.c = c.txt
 
     #[test]
     fn test_resource_index_case_sensitivity() {
-        // Default is case-insensitive (matching UQM behavior)
+        // Default is case-sensitive (matching C behavior)
         let mut index = ResourceIndex::new();
         index.insert(ResourceEntry::new("MyResource", "file.txt"));
 
-        // Should find with different cases
-        assert!(index.lookup("myresource").is_some());
-        assert!(index.lookup("MYRESOURCE").is_some());
+        // Case-sensitive: only exact match works
         assert!(index.lookup("MyResource").is_some());
+        assert!(index.lookup("myresource").is_none());
+        assert!(index.lookup("MYRESOURCE").is_none());
 
-        // Case-sensitive index
-        let mut sensitive = ResourceIndex::with_case_sensitivity(true);
-        sensitive.insert(ResourceEntry::new("MyResource", "file.txt"));
+        // Case-insensitive index (old behavior, available via with_case_sensitivity)
+        let mut insensitive = ResourceIndex::with_case_sensitivity(false);
+        insensitive.insert(ResourceEntry::new("MyResource", "file.txt"));
 
-        assert!(sensitive.lookup("MyResource").is_some());
-        assert!(sensitive.lookup("myresource").is_none());
-        assert!(sensitive.lookup("MYRESOURCE").is_none());
+        assert!(insensitive.lookup("myresource").is_some());
+        assert!(insensitive.lookup("MYRESOURCE").is_some());
+        assert!(insensitive.lookup("MyResource").is_some());
     }
 
     #[test]

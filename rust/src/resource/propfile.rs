@@ -1,5 +1,8 @@
 // Property File Parser
 // Parses simple key=value property files
+//
+// @plan PLAN-20260224-RES-SWAP.P03
+// @requirement REQ-RES-018, REQ-RES-R007, REQ-RES-006-012
 
 use std::collections::HashMap;
 use std::fs;
@@ -8,6 +11,23 @@ use std::path::Path;
 
 #[cfg(test)]
 use std::env;
+
+/// Parse a property file string, invoking `handler` for each key-value pair.
+///
+/// This is the replacement for `PropertyFile::from_string`, matching the C
+/// `PropFile_from_string` behavior: preserves key case, handles inline `#`
+/// comments, and supports an optional key prefix.
+///
+/// # Arguments
+/// * `data` - The property file content to parse
+/// * `handler` - Callback invoked with `(key, value)` for each entry
+/// * `prefix` - Optional prefix to prepend to all keys (total key length capped at 255)
+///
+/// @plan PLAN-20260224-RES-SWAP.P03
+/// @requirement REQ-RES-018, REQ-RES-R007, REQ-RES-006-012
+pub fn parse_propfile(_data: &str, _handler: &mut dyn FnMut(&str, &str), _prefix: Option<&str>) {
+    todo!("Parse propfile — see component-001.md")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PropertyError {
@@ -75,6 +95,7 @@ impl PropertyFile {
     }
 
     /// Load a property file from a string
+    #[deprecated(note = "Use parse_propfile() instead")]
     pub fn from_string(content: &str) -> Result<Self, PropertyError> {
         let mut properties = HashMap::new();
 
@@ -203,6 +224,7 @@ impl PropertyFile {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
