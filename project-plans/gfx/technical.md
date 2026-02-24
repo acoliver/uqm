@@ -1014,13 +1014,14 @@ functions to C, then incrementally port C callers to Rust.
 ### 8.2 FFI Bridge for DCQ (Strategy A)
 
 The DCQ bridge replaces `TFB_DrawScreen_*` functions from `tfb_draw.c`
-(493 lines). Each C enqueue function has a Rust equivalent:
+(493 lines). Each C enqueue function has a Rust equivalent with `rust_`
+prefix (see §8.2.1 for naming convention):
 
 ```rust
-// In a new ffi_draw.rs or extension of ffi.rs
+// In dcq_ffi.rs
 
 #[no_mangle]
-pub extern "C" fn TFB_DrawScreen_Line(
+pub extern "C" fn rust_dcq_push_drawline(
     x1: c_int, y1: c_int, x2: c_int, y2: c_int,
     color: FfiColor, draw_mode: FfiDrawMode, dest: c_int
 ) {
@@ -1034,13 +1035,13 @@ pub extern "C" fn TFB_DrawScreen_Line(
 }
 
 #[no_mangle]
-pub extern "C" fn TFB_DrawScreen_Rect(
+pub extern "C" fn rust_dcq_push_drawrect(
     rect: *const FfiRect, color: FfiColor,
     draw_mode: FfiDrawMode, dest: c_int
 ) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn TFB_DrawScreen_Image(
+pub extern "C" fn rust_dcq_push_drawimage(
     img: *mut FfiTfbImage, x: c_int, y: c_int,
     scale: c_int, scalemode: c_int, colormap: *mut c_void,
     draw_mode: FfiDrawMode, dest: c_int
@@ -1057,11 +1058,26 @@ void TFB_DrawScreen_Line(...) { /* original C implementation */ }
 #endif
 ```
 
+#### 8.2.1 Symbol Naming Convention
+
+All Rust FFI exports use the `rust_` prefix to avoid collision with C
+symbols. C callers are guarded by `#ifdef USE_RUST_GFX` and call the
+`rust_*` names directly:
+
+- DCQ exports: `rust_dcq_push_drawline`, `rust_dcq_flush`, `rust_dcq_batch`, etc.
+- Canvas exports: `rust_canvas_draw_line`, `rust_canvas_fill_rect`, etc.
+- Context exports: `rust_context_set`, `rust_context_set_fg_color`, etc.
+- Colormap exports: `rust_cmap_init`, `rust_cmap_set`, `rust_cmap_fade_screen`, etc.
+
+This convention means there is no collision risk with C symbols even when
+both paths are linked (the `USE_RUST_GFX` guard prevents duplicate
+definitions, and the `rust_` prefix prevents name clashes).
+
 ### 8.3 FFI Bridge for DCQ Flush
 
 ```rust
 #[no_mangle]
-pub extern "C" fn rust_dcq_flush_graphics() {
+pub extern "C" fn rust_dcq_flush() {
     // Process all Rust DCQ commands
     global_dcq().process_commands().ok();
 }
@@ -1070,23 +1086,65 @@ pub extern "C" fn rust_dcq_flush_graphics() {
 Called from within `TFB_FlushGraphics` (dcqueue.c):
 ```c
 #ifdef USE_RUST_GFX
-    rust_dcq_flush_graphics();
+    rust_dcq_flush();
 #else
     // Original C command processing loop
     while ((cmd = Pop()) != NULL) { ... }
 #endif
 ```
 
-### 8.4 Canvas↔SDL_Surface Adapter
+### 8.4 PixelCanvas Trait and Canvas↔SDL_Surface Adapter
 
-The most critical bridge element. Rust `Canvas` must interoperate with
+#### 8.4.0 PixelCanvas Trait
+
+Drawing functions in `tfb_draw.rs` are generic over a `PixelCanvas` trait
+rather than taking `&mut Canvas` directly. This is necessary because screen
+surfaces use `SurfaceCanvas` (borrowed `SDL_Surface` pixel data), while
+images/offscreen buffers use the owned `Canvas` type. A trait abstraction
+lets both types share the same drawing code:
+
+```rust
+pub trait PixelCanvas {
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
+    fn pitch(&self) -> usize;
+    fn pixels(&self) -> &[u8];
+    fn pixels_mut(&mut self) -> &mut [u8];
+    fn format(&self) -> PixmapFormat;
+}
+```
+
+Drawing functions become generic:
+```rust
+pub fn draw_line<C: PixelCanvas>(canvas: &mut C, x1: i32, y1: i32,
+    x2: i32, y2: i32, color: Color) -> Result<(), CanvasError> { ... }
+```
+
+**Why generics over `&mut Canvas`:**
+- `&mut C` enforces exclusive access at compile time (no runtime locks)
+- No enum arms to maintain
+- New canvas types (video sequences, offscreen buffers) just implement the trait
+- The existing drawing logic already operates on raw pixel slices internally
+
+**DCQ dispatch**: The DCQ's `RenderContext` screen storage will change from
+`Arc<RwLock<Canvas>>` to a trait-object-based or generic approach during
+P18–P20 implementation. During DCQ flush, `SurfaceCanvas` is created from
+the current screen's `SDL_Surface`, and draw commands are dispatched through
+the `PixelCanvas` trait.
+
+See REQ-CANVAS-150 in `requirements.md` for the normative requirement.
+
+#### 8.4.1 Adapter Design: Canvas Wrapping SDL_Surface
+
+The most critical bridge element. Rust drawing code must interoperate with
 `SDL_Surface` so that:
 1. Rust drawing operations produce pixels visible to the presentation
    layer (which reads `SDL_Surface->pixels`)
 2. C code that still writes to `SDL_Surface` has its pixels visible to
    Rust code
 
-#### 8.4.1 Adapter Design: Canvas Wrapping SDL_Surface
+Both `Canvas` (owned pixels) and `SurfaceCanvas` (borrowed from SDL_Surface)
+implement the `PixelCanvas` trait defined above.
 
 ```rust
 /// Canvas variant that wraps an SDL_Surface's pixel buffer
@@ -1129,10 +1187,11 @@ impl SurfaceCanvas {
 }
 ```
 
-The `SurfaceCanvas` implements the same drawing trait as `Canvas`, so
-all `tfb_draw.rs` functions work with either type. Screen canvases use
-`SurfaceCanvas` (wrapping the 3 SDL_Screens); image canvases use the
-existing owned `Canvas`.
+Both `SurfaceCanvas` and the owned `Canvas` implement the `PixelCanvas`
+trait (§8.4.0), so all `tfb_draw.rs` functions work with either type via
+generics: `fn draw_line<C: PixelCanvas>(canvas: &mut C, ...)`. Screen
+canvases use `SurfaceCanvas` (wrapping the 3 SDL_Screens); image canvases
+use the existing owned `Canvas`.
 
 #### 8.4.2 Alternative: Pixel Sync
 
@@ -1156,55 +1215,58 @@ before `TFB_SwapBuffers`.
 
 ### 8.5 FFI Bridge for Context
 
-The context bridge replaces `context.c` (404 lines):
+The context bridge replaces `context.c` (404 lines). All exports use the
+`rust_` prefix per §8.2.1:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn SetContext(context: *mut FfiContext) { /* ... */ }
+pub extern "C" fn rust_context_set(context: *mut FfiContext) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn SetContextForeGroundColor(color: FfiColor) { /* ... */ }
+pub extern "C" fn rust_context_set_fg_color(color: FfiColor) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn SetContextBackGroundColor(color: FfiColor) { /* ... */ }
+pub extern "C" fn rust_context_set_bg_color(color: FfiColor) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn SetContextClipRect(rect: *const FfiRect) { /* ... */ }
+pub extern "C" fn rust_context_set_clip_rect(rect: *const FfiRect) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn SetContextDrawMode(mode: FfiDrawMode) { /* ... */ }
+pub extern "C" fn rust_context_set_draw_mode(mode: FfiDrawMode) { /* ... */ }
 ```
 
 ### 8.6 FFI Bridge for Colormap
 
-The colormap bridge replaces `cmap.c` (663 lines):
+The colormap bridge replaces `cmap.c` (663 lines). All exports use the
+`rust_` prefix per §8.2.1:
 
 ```rust
 #[no_mangle]
-pub extern "C" fn InitColorMaps() { /* init Rust ColorMapManager */ }
+pub extern "C" fn rust_cmap_init() { /* init Rust ColorMapManager */ }
 
 #[no_mangle]
-pub extern "C" fn SetColorMap(cmap_ptr: *const c_void) { /* ... */ }
+pub extern "C" fn rust_cmap_set(cmap_ptr: *const c_void) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn FadeScreen(fade_type: c_int, seconds: c_int) { /* ... */ }
+pub extern "C" fn rust_cmap_fade_screen(fade_type: c_int, seconds: c_int) { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn FlushFadeXForms() { /* ... */ }
+pub extern "C" fn rust_cmap_flush_xforms() { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn XFormColorMap_step() -> c_int { /* ... */ }
+pub extern "C" fn rust_cmap_xform_step() -> c_int { /* ... */ }
 
 #[no_mangle]
-pub extern "C" fn GetColorMapAddress(index: c_int) -> *const c_void { /* ... */ }
+pub extern "C" fn rust_cmap_get(index: c_int) -> *const c_void { /* ... */ }
 ```
 
 ### 8.7 SurfaceCanvas Adapter Contract
 
 The `SurfaceCanvas` is the critical bridge between C's `SDL_Surface` pixel
-buffers and Rust's `Canvas` drawing abstraction. This section defines the
-precise contract for its ownership, lifetime, locking, aliasing, format,
-pitch, and thread affinity.
+buffers and Rust's drawing abstraction. `SurfaceCanvas` implements the
+`PixelCanvas` trait (§8.4.0), so all `tfb_draw.rs` drawing functions work
+with it through generics. This section defines the precise contract for its
+ownership, lifetime, locking, aliasing, format, pitch, and thread affinity.
 
 #### 8.7.1 Ownership
 

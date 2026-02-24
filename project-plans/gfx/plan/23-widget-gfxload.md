@@ -1,11 +1,15 @@
-# Phase 23: Widget + GfxLoad Bridge
+> **NOTE**: This file's name (`23-widget-gfxload.md`) is a historical
+> artifact from a phase reorder. Canonical phase: **P24** (Widget + GfxLoad Bridge).
+> Phase P23 is now in `23-guards-level1.md`.
+
+# Phase 24: Widget + GfxLoad Bridge
 
 ## Phase ID
-`PLAN-20260223-GFX-FULL-PORT.P23`
+`PLAN-20260223-GFX-FULL-PORT.P24`
 
 ## Prerequisites
-- Required: Phase P22 (Colormap + Guards Verification) completed
-- Expected: 34/41 C files guarded, both build paths working
+- Required: Phase P23a (Level 1-2 Guards Verification) completed
+- Expected: ~31/41 C files guarded, both build paths working
 - Expected: DCQ, Canvas, and Colormap FFI bridges fully implemented
 
 ## Requirements Implemented (Expanded)
@@ -52,7 +56,7 @@ for the APIs that `widgets.c` depends on, the following files shall be
 wrapped in `USE_RUST_GFX` guards: `frame.c`, `font.c`, `context.c`,
 `drawable.c`, and `widgets.c` itself.
 
-These files were explicitly deferred from P21 because `widgets.c` calls
+These files were explicitly deferred from P22/P23 because `widgets.c` calls
 into them (`DrawBatch`, `DrawStamp`, `font_DrawText`, `font_DrawTracedText`,
 `SetContext`, `SetContextForeGroundColor`, `GetFrameCount`). Guarding
 them before the widget bridge exists would break the widget system.
@@ -143,8 +147,8 @@ Future Phase" section.
 - `rust/src/graphics/frame_ffi.rs` (new) — Frame/drawable FFI exports
   - `rust_frame_create`, `rust_frame_destroy`
   - `catch_unwind` on all exports
-  - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P23`
-  - marker: `@requirement REQ-WIDGET-010..020, REQ-GUARD-060, REQ-FFI-030`
+   - marker: `@plan PLAN-20260223-GFX-FULL-PORT.P24`
+   - marker: `@requirement REQ-WIDGET-010..020, REQ-GUARD-060, REQ-FFI-030`
   - Note: loader functions (`LoadGraphic`, `LoadFont`, `TFB_LoadPNG`)
     are NOT included — they remain in C
 
@@ -152,10 +156,10 @@ Future Phase" section.
 - `rust/src/graphics/mod.rs` — Add `pub mod frame_ffi;` (new module)
 - `sc2/src/libs/graphics/sdl/rust_gfx.h` — Add `rust_frame_*` declarations
 - `sc2/src/libs/graphics/widgets.c` — Add `USE_RUST_GFX` bridge or guard
-- `sc2/src/libs/graphics/frame.c` — Add `USE_RUST_GFX` guard (deferred from P21)
-- `sc2/src/libs/graphics/font.c` — Add `USE_RUST_GFX` guard (deferred from P21)
-- `sc2/src/libs/graphics/context.c` — Add `USE_RUST_GFX` guard (deferred from P21)
-- `sc2/src/libs/graphics/drawable.c` — Add `USE_RUST_GFX` guard (deferred from P21)
+- `sc2/src/libs/graphics/frame.c` — Add `USE_RUST_GFX` guard (deferred from P22/P23)
+- `sc2/src/libs/graphics/font.c` — Add `USE_RUST_GFX` guard (deferred from P22/P23)
+- `sc2/src/libs/graphics/context.c` — Add `USE_RUST_GFX` guard (deferred from P22/P23)
+- `sc2/src/libs/graphics/drawable.c` — Add `USE_RUST_GFX` guard (deferred from P22/P23)
 
 **NOT guarded (loader files remain compiled in both modes):**
 - `sc2/src/libs/graphics/gfxload.c` — stays unguarded
@@ -240,10 +244,10 @@ cd sc2 && rm -rf obj/release/src/libs/graphics && ./build.sh uqm 2>&1 | grep -c 
 - blocking issues: widget system too deeply coupled to C drawing internals
 
 ## Phase Completion Marker
-Create: `project-plans/gfx/.completed/P23.md`
+Create: `project-plans/gfx/.completed/P24.md`
 
 Contents:
-- phase ID: P23
+- phase ID: P24
 - timestamp
 - files created: `rust/src/graphics/frame_ffi.rs`
 - files modified: 5 C files (widget-dependent guards), `mod.rs`, `rust_gfx.h`

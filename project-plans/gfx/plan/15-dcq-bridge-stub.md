@@ -17,13 +17,13 @@
 
 ### REQ-CANVAS-010: SurfaceCanvas Adapter
 **Requirement text**: The Rust GFX backend shall provide a `SurfaceCanvas`
-adapter that wraps an `SDL_Surface` pointer and exposes it as a Rust
-`Canvas` for drawing operations.
+adapter that wraps an `SDL_Surface` pointer and implements the `PixelCanvas`
+trait (REQ-CANVAS-150) for drawing operations.
 
 Behavior contract:
 - GIVEN: A valid `*mut SDL_Surface` from C
 - WHEN: `rust_canvas_from_surface(surface)` is called
-- THEN: A `SurfaceCanvas` handle is returned that can be used for draw calls
+- THEN: A `SurfaceCanvas` handle is returned that implements `PixelCanvas` and can be used for draw calls
 
 ### REQ-CANVAS-020: Draw Line Export
 **Requirement text**: When `rust_canvas_draw_line` is called, the backend
@@ -120,25 +120,31 @@ These C functions from `tfb_draw.c` and `sdl/canvas.c` will have Rust FFI equiva
 ### Surface↔Canvas Adapter Design
 
 The `SurfaceCanvas` adapter bridges C's `SDL_Surface` pixel buffers with
-Rust's `Canvas` abstraction from `tfb_draw.rs`:
+Rust's drawing functions. Both `Canvas` (owned pixels) and `SurfaceCanvas`
+(borrowed SDL_Surface pixels) implement the `PixelCanvas` trait
+(REQ-CANVAS-150). Drawing functions are generic over `PixelCanvas`:
 
 ```
-C SDL_Surface (pixel buffer) ──→ SurfaceCanvas adapter ──→ Rust Canvas
-     ↑                                                        ↓
-     └──────────────── pixels written back ◄──────────────────┘
+C SDL_Surface (pixel buffer) ──→ SurfaceCanvas (impl PixelCanvas) ──→ draw_line<C: PixelCanvas>()
+     ↑                                                                       ↓
+     └──────────────── pixels written directly ◄─────────────────────────────┘
 ```
 
 Key design decisions:
+- `SurfaceCanvas` implements `PixelCanvas` trait, providing `pixels_mut()` access
+- Drawing functions become generic: `fn draw_line<C: PixelCanvas>(canvas: &mut C, ...)`
+- `&mut C` enforces exclusive access at compile time (no runtime locks)
 - Canvas wraps raw pixel pointer from `SDL_Surface.pixels`
 - Canvas dimensions from `SDL_Surface.w` / `SDL_Surface.h`
 - Canvas pitch from `SDL_Surface.pitch`
 - Canvas format derived from `SDL_Surface.format` masks
-- **No copy**: Canvas operates directly on surface pixel memory
+- **No copy**: Drawing operates directly on surface pixel memory
 - **Lock/unlock**: May need `SDL_LockSurface` / `SDL_UnlockSurface` for
   hardware surfaces (software surfaces don't need locking)
 
-See `technical.md` §8.7 for the full SurfaceCanvas adapter contract
-(lifetime, locking, aliasing, pitch, format, thread affinity).
+See `technical.md` §8.4.0 for the `PixelCanvas` trait definition and
+§8.7 for the full SurfaceCanvas adapter contract (lifetime, locking,
+aliasing, pitch, format, thread affinity).
 
 ## Verification Commands
 

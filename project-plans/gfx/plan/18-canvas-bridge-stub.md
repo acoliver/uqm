@@ -11,7 +11,7 @@
 - Required: Phase P17a (Canvas Implementation Verification) completed
 - Expected: Canvas FFI bridge fully implemented (P17), all tests passing
 - Expected: Rust dcqueue.rs (1,362 lines) implemented with 15 command types
-- Expected: `SurfaceCanvas` adapter available for DCQ flush dispatch
+- Expected: `SurfaceCanvas` (implementing `PixelCanvas` trait) adapter available for DCQ flush dispatch
 
 ## Requirements Implemented (Expanded)
 
@@ -105,7 +105,7 @@ These C functions from `dcqueue.c` will have Rust FFI equivalents:
 
 #### Who calls this new behavior?
 - C game code currently calls `TFB_DrawScreen_*` in `dcqueue.c`
-- These will be redirected to `rust_dcq_*` via `USE_RUST_GFX` guards (in P21)
+- These will be redirected to `rust_dcq_*` via `USE_RUST_GFX` guards (in P22/P23)
 - For now, stubs are exported but not yet called from C
 
 #### What old behavior gets replaced?
@@ -120,8 +120,8 @@ These C functions from `dcqueue.c` will have Rust FFI equivalents:
 
 #### Dependency on Canvas bridge (P15–P17)
 - DCQ flush dispatches draw commands to `tfb_draw.rs` functions
-- Those functions operate on `Canvas` / `SurfaceCanvas` objects
-- The `SurfaceCanvas` adapter (P17) wraps `SDL_Surface` pixel buffers
+- Those functions accept any type implementing the `PixelCanvas` trait (REQ-CANVAS-150)
+- The `SurfaceCanvas` adapter (P17) wraps `SDL_Surface` pixel buffers and implements `PixelCanvas`
 - Without P17, DCQ flush would have no surface to draw onto
 
 ## Verification Commands

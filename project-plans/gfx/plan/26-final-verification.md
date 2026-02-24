@@ -1,10 +1,13 @@
-# Phase 26: Final Verification — Rust GFX Path Complete
+> **NOTE**: This file's name (`26-final-verification.md`) is a historical
+> artifact from a phase reorder. Canonical phase: **P27** (Final Verification).
+
+# Phase 27: Final Verification — Rust GFX Path Complete
 
 ## Phase ID
-`PLAN-20260223-GFX-FULL-PORT.P26`
+`PLAN-20260223-GFX-FULL-PORT.P27`
 
 ## Prerequisites
-- Required: Phase P25a (C Code Guarding Verification) completed
+- Required: Phase P26a (C Code Guarding Verification) completed
 - Expected: All ~37 C drawing-pipeline files guarded with USE_RUST_GFX
   (4 loader files intentionally unguarded — see 00-overview.md)
 - Expected: Both Rust and C paths build and run
@@ -200,10 +203,10 @@ stable in production.
   for individual subsystems
 
 ## Phase Completion Marker
-Create: `project-plans/gfx/.completed/P26.md`
+Create: `project-plans/gfx/.completed/P27.md`
 
 Contents:
-- phase ID: P26
+- phase ID: P27
 - timestamp: completion date
 - guard count: ~37 drawing-pipeline C files guarded, 4 loader files unguarded
 - test count: total across all modules

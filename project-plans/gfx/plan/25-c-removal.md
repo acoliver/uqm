@@ -1,10 +1,13 @@
-# Phase 25: C Code Guarding — Complete USE_RUST_GFX Coverage
+> **NOTE**: This file's name (`25-c-removal.md`) is a historical
+> artifact from a phase reorder. Canonical phase: **P26** (Guard Finalization).
+
+# Phase 26: C Code Guarding — Complete USE_RUST_GFX Coverage
 
 ## Phase ID
-`PLAN-20260223-GFX-FULL-PORT.P25`
+`PLAN-20260223-GFX-FULL-PORT.P26`
 
 ## Prerequisites
-- Required: Phase P24a (Integration Verification) completed
+- Required: Phase P25a (Integration Verification) completed
 - Expected: Game runs correctly on Rust GFX path
 - Expected: Visual equivalence confirmed
 - Expected: Performance acceptable
@@ -42,7 +45,7 @@ Why it matters:
 
 ## Implementation Tasks
 
-### Step 1: Verify all guards from P21/P23
+### Step 1: Verify all guards from P22/P23/P24
 
 Confirm every C graphics file has the `#ifndef USE_RUST_GFX` guard
 added in earlier phases. The 41 files to check:
@@ -134,7 +137,7 @@ cd rust && cargo test --workspace --all-features
 ```
 
 ## Structural Verification Checklist
-- [ ] 36 drawing-pipeline C files have USE_RUST_GFX guards (2 pre-existing + 29 from P21 + 5 from P23)
+- [ ] 36 drawing-pipeline C files have USE_RUST_GFX guards (2 pre-existing + 15 from P22 + 14 from P23 + 5 from P24)
 - [ ] sdl_common.c remains unguarded (vtable shim)
 - [ ] 5 loader files remain unguarded (gfxload.c, resgfx.c, filegfx.c, loaddisp.c, sdl/png2sdl.c)
 - [ ] Build succeeds with USE_RUST_GFX=1 (Rust path)
@@ -174,10 +177,10 @@ grep -rn "TODO\|FIXME\|HACK\|placeholder" rust/src/graphics/*_ffi.rs 2>/dev/null
 - blocking issues: missing Rust symbol exports
 
 ## Phase Completion Marker
-Create: `project-plans/gfx/.completed/P25.md`
+Create: `project-plans/gfx/.completed/P26.md`
 
 Contents:
-- phase ID: P25
+- phase ID: P26
 - timestamp
 - files guarded: 36 drawing-pipeline C files (list each)
 - files intentionally unguarded: sdl_common.c (vtable shim), 5 loaders (gfxload.c, resgfx.c, filegfx.c, loaddisp.c, sdl/png2sdl.c)

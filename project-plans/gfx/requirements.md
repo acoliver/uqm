@@ -1252,6 +1252,33 @@ for canvas lifecycle management during the coexistence period.
 
 **Replaces**: C `New_TrueColorCanvas` (`canvas.c`), `TFB_DrawCanvas_Delete` (`canvas.c`)
 
+### REQ-CANVAS-150
+All drawing operations in `tfb_draw.rs` SHALL accept any type implementing
+the `PixelCanvas` trait. The `PixelCanvas` trait provides uniform access to
+pixel buffer metadata and data:
+
+```rust
+pub trait PixelCanvas {
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
+    fn pitch(&self) -> usize;
+    fn pixels(&self) -> &[u8];
+    fn pixels_mut(&mut self) -> &mut [u8];
+    fn format(&self) -> PixmapFormat;
+}
+```
+
+Drawing functions SHALL use generic parameters: `fn draw_line<C: PixelCanvas>(canvas: &mut C, ...) -> Result<(), CanvasError>`.
+
+Both `Canvas` (owned pixel buffers) and `SurfaceCanvas` (borrowed from
+`SDL_Surface`) SHALL implement `PixelCanvas`. DCQ dispatch SHALL operate
+through `PixelCanvas` trait objects or generics.
+
+**Rationale**: `&mut C` enforces exclusive access at compile time (no
+runtime locks). No enum arms to maintain. New canvas types (video
+sequences, offscreen buffers) just implement the trait. The existing
+drawing logic already operates on raw pixel slices internally.
+
 ---
 
 ## 22. Colormap FFI Requirements

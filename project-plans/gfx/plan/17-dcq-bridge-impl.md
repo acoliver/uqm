@@ -20,8 +20,8 @@ Implementation:
 - `rust_canvas_from_surface(surface: *mut SDL_Surface) -> *mut SurfaceCanvas`
   - Null check on surface pointer
   - Read `w`, `h`, `pitch`, `pixels`, `format` from SDL_Surface
-  - Derive `CanvasFormat` from surface pixel format masks
-  - Create `Canvas` wrapping the raw pixel pointer
+  - Derive `PixmapFormat` from surface pixel format masks
+  - Create `SurfaceCanvas` implementing `PixelCanvas` trait (REQ-CANVAS-150)
   - Box and return raw pointer as opaque handle
 - `rust_canvas_destroy(canvas: *mut SurfaceCanvas)`
   - Null check, `Box::from_raw`, drop
@@ -30,18 +30,24 @@ Implementation:
 Each draw function:
 1. Null-check the canvas handle
 2. Dereference to get `&mut SurfaceCanvas`
-3. Call the corresponding `tfb_draw.rs` function on the inner `Canvas`
-4. Canvas writes directly to `SDL_Surface.pixels` memory
+3. Call the corresponding generic `tfb_draw.rs` function: `draw_line::<SurfaceCanvas>(...)`
+4. Drawing writes directly to `SDL_Surface.pixels` memory via `PixelCanvas::pixels_mut()`
 5. Return 0 on success, -1 on error
+
+### REQ-CANVAS-150: PixelCanvas Trait Integration
+Both `Canvas` (owned) and `SurfaceCanvas` (borrowed SDL_Surface) implement
+`PixelCanvas`. All drawing functions in `tfb_draw.rs` accept `<C: PixelCanvas>`
+generic parameters, enabling compile-time dispatch without runtime overhead.
 
 ### Pixel Memory Safety
 
-The `SurfaceCanvas` adapter accesses `SDL_Surface.pixels` directly:
+The `SurfaceCanvas` adapter accesses `SDL_Surface.pixels` directly
+via `PixelCanvas::pixels_mut()`:
 
 ```
 rust_canvas_draw_line(handle, x1, y1, x2, y2, color)
-  → handle.canvas.draw_line(x1, y1, x2, y2, color)
-    → writes to surface.pixels[y * pitch + x * bpp]
+  → draw_line::<SurfaceCanvas>(&mut handle, x1, y1, x2, y2, color)
+    → handle.pixels_mut()[y * pitch + x * bpp] = color
 ```
 
 Safety invariants:

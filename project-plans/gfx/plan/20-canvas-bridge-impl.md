@@ -11,7 +11,7 @@
 - Required: Phase P19a (DCQ TDD Verification) completed
 - Expected: All DCQ tests written, stubs compile
 - Expected: `dcqueue.rs` provides `DrawCommandQueue` with push/flush/batch API
-- Expected: Canvas FFI bridge fully implemented (P17), providing `SurfaceCanvas`
+- Expected: Canvas FFI bridge fully implemented (P17), providing `SurfaceCanvas` (implements `PixelCanvas` trait)
 
 ## Requirements Implemented (Expanded)
 
@@ -37,8 +37,10 @@ Implementation for each command type:
 ### REQ-DCQ-030: DCQ Flush
 Implementation:
 - Dequeue all commands in FIFO order
-- For each command, dispatch to the corresponding `tfb_draw.rs` function
-- Commands operate on the current screen's `SurfaceCanvas` (wrapping `SDL_Surface`)
+- For each command, dispatch to the corresponding `tfb_draw.rs` generic function
+- Commands operate on the current screen's `SurfaceCanvas` (wrapping `SDL_Surface`,
+  implementing `PixelCanvas` trait per REQ-CANVAS-150)
+- Drawing functions are called with `<SurfaceCanvas>` as the `PixelCanvas` impl
 - `SurfaceCanvas` is created at flush start, dropped at flush end (see §8.7 contract)
 - Return number of commands processed (or 0 if empty)
 
@@ -47,6 +49,13 @@ Implementation:
 - Store current screen index in `DcqState`
 - Validate screen index range [0, TFB_GFX_NUMSCREENS)
 - Draw commands use `SurfaceCanvas::from_surface(surfaces[current_screen])` as target
+
+> **Note**: DCQ's `RenderContext` screen storage will change from
+> `Arc<RwLock<Canvas>>` to a `PixelCanvas` trait-object-based or generic
+> approach during implementation. The `SurfaceCanvas` wrapping borrowed
+> `SDL_Surface` pixels cannot be stored behind `Arc<RwLock<>>` — it is
+> created transiently during flush and dropped after. See technical.md
+> §8.4.0 and §8.7.
 
 ### REQ-DCQ-050: DCQ Batch Mode
 Implementation:
@@ -95,11 +104,11 @@ Implementation:
 ### Integration Contract
 
 #### Who calls this new behavior?
-- C game code → `TFB_DrawScreen_*` → (via `USE_RUST_GFX` guard, added in P21) → `rust_dcq_*`
+- C game code → `TFB_DrawScreen_*` → (via `USE_RUST_GFX` guard, added in P23) → `rust_dcq_*`
 - `rust_gfx_init` / `rust_gfx_uninit` → `rust_dcq_init` / `rust_dcq_uninit`
 
 #### How can a user trigger this end-to-end?
-1. Build with `USE_RUST_GFX` (after P21 adds guards to dcqueue.c)
+1. Build with `USE_RUST_GFX` (after P23 adds guards to dcqueue.c)
 2. Game enqueues draw commands → Rust DCQ stores them
 3. `TFB_FlushGraphics` → `rust_dcq_flush` → creates `SurfaceCanvas` from current screen
 4. Rust executes all draws on `SurfaceCanvas` → pixels land in `SDL_Surface.pixels`
@@ -107,7 +116,8 @@ Implementation:
 
 #### Dependency on Canvas bridge (P15–P17)
 - DCQ flush creates `SurfaceCanvas::from_surface(surfaces[screen_index])`
-- Each draw command dispatches to `tfb_draw.rs` via the `SurfaceCanvas`
+- Each draw command dispatches to generic `tfb_draw.rs` functions via `PixelCanvas` trait
+- `SurfaceCanvas` implements `PixelCanvas`, so `draw_line::<SurfaceCanvas>(...)` etc. work
 - Without the Canvas adapter, DCQ flush cannot execute draw commands
 
 ## Verification Commands

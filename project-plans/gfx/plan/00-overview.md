@@ -2,7 +2,7 @@
 
 Plan ID: `PLAN-20260223-GFX-FULL-PORT`
 Generated: 2026-02-23
-Total Phases: 30 (P00.5 through P26)
+Total Phases: 34 (P00.5 through P27, including verification sub-phases)
 Requirements: REQ-INIT-*, REQ-UNINIT-*, REQ-SURF-*, REQ-PRE-*, REQ-SCR-*,
   REQ-SCALE-*, REQ-CLR-*, REQ-UTS-*, REQ-POST-*, REQ-SEQ-*, REQ-THR-*,
   REQ-ERR-*, REQ-INV-*, REQ-FMT-*, REQ-WIN-*, REQ-AUX-*, REQ-NP-*,
@@ -76,7 +76,7 @@ The implementation is divided into these logical slices:
 
 Slice A is covered by existing phases P03–P14.
 Slice B (Canvas) is P15–P17, Slice C (DCQ) is P18–P20.
-Slices D–H are covered by phases P21–P26.
+Slices D–H are covered by phases P21–P27.
 
 > **Note on file naming**: Phase files `15-dcq-bridge-stub.md` through
 > `17-dcq-bridge-impl.md` contain **Canvas** content (Slice B), and
@@ -136,16 +136,19 @@ the screen surfaces.
 | P19a | Verification | C | DCQ TDD verification |
 | P20 | Impl | C | DCQ FFI bridge — full implementation |
 | P20a | Verification | C | DCQ implementation verification |
-| P21 | Stub+TDD+Impl | D+E | Colormap FFI + C file USE_RUST_GFX guards |
-| P21a | Verification | D+E | Colormap + guards verification |
-| P22 | Verification | D+E | All guards work, Rust builds without C graphics |
-| P23 | Stub+TDD+Impl | F+G | Widget + GfxLoad bridge |
-| P23a | Verification | F+G | Widget + GfxLoad verification |
-| P24 | Integration | H | End-to-end testing, visual equivalence |
-| P24a | Verification | H | Integration verification |
-| P25 | Impl | H | Guard finalization — all drawing-pipeline C files guarded |
-| P25a | Verification | H | C removal verification |
-| P26 | Integration | H | Final verification — zero C drawing-pipeline implementations active |
+| P21 | Stub+TDD+Impl | D | Colormap FFI bridge only (~8 exports, cmap_ffi.rs) |
+| P21a | Verification | D | Colormap FFI verification |
+| P22 | Impl | E | C file guards — Level 0 (scalers + primitives + geometry, ~15 files) |
+| P22a | Verification | E | Level 0 guards verification |
+| P23 | Impl | E | C file guards — Level 1-2 (canvas, dcqueue, tfb_draw, cmap, palette, gfx_common, pixmap, SDL backend, ~14 files) |
+| P23a | Verification | E | Level 1-2 guards verification |
+| P24 | Stub+TDD+Impl | F+G | Widget + GfxLoad bridge |
+| P24a | Verification | F+G | Widget + GfxLoad verification |
+| P25 | Integration | H | End-to-end testing, visual equivalence |
+| P25a | Verification | H | Integration verification |
+| P26 | Impl | H | Guard finalization — all drawing-pipeline C files guarded |
+| P26a | Verification | H | C removal verification |
+| P27 | Integration | H | Final verification — zero C drawing-pipeline implementations active |
 
 ## C File Inventory (41 files)
 
@@ -209,21 +212,23 @@ the screen surfaces.
 | Category | Count | Files | Phase |
 |----------|-------|-------|-------|
 | Already guarded | 2 | sdl_common.c, scalers.c | Pre-plan |
-| Drawing layer | 8 | dcqueue.c, tfb_draw.c, tfb_prim.c, canvas.c, primitives.c, clipline.c, boxint.c, bbox.c | P21 |
-| Colormap/palette | 2 | cmap.c, palette.c | P21 |
-| Scalers | 10 | 2xscalers.c, 2xscalers_mmx.c, 2xscalers_sse.c, 2xscalers_3dnow.c, bilinear2x.c, biadv2x.c, hq2x.c, nearest2x.c, triscan2x.c, rotozoom.c | P21 |
-| Core (non-widget) | 3 | pixmap.c, intersec.c, gfx_common.c | P21 |
-| SDL backend | 6 | sdl2_pure.c, sdl2_common.c, sdl1_common.c, pure.c, opengl.c*, sdluio.c | P21 |
-| Widget-dependent | 5 | context.c, drawable.c, frame.c, font.c, widgets.c | P23 |
+| Level 0 — Scalers | 10 | 2xscalers.c, 2xscalers_mmx.c, 2xscalers_sse.c, 2xscalers_3dnow.c, bilinear2x.c, biadv2x.c, hq2x.c, nearest2x.c, triscan2x.c, rotozoom.c | P22 |
+| Level 0 — Primitives+Geometry | 5 | primitives.c, clipline.c, boxint.c, bbox.c, intersec.c | P22 |
+| Level 1-2 — Drawing layer | 5 | dcqueue.c, tfb_draw.c, tfb_prim.c, canvas.c, pixmap.c | P23 |
+| Level 1-2 — Colormap/palette | 2 | cmap.c, palette.c | P23 |
+| Level 1-2 — Core | 1 | gfx_common.c | P23 |
+| Level 1-2 — SDL backend | 6 | sdl2_pure.c, sdl2_common.c, sdl1_common.c, pure.c, opengl.c*, sdluio.c | P23 |
+| Widget-dependent | 5 | context.c, drawable.c, frame.c, font.c, widgets.c | P24 |
 | Deferred (loaders) | 5 | gfxload.c, resgfx.c, filegfx.c, loaddisp.c, png2sdl.c | Never |
 | **Total** | **41** | | |
 
 *opengl.c guard is conditional — only if GL backend fully replaced.
 
 **Phase snapshots:**
-- After P21: 31 guarded (2 pre-existing + 29 new), 5 deferred, 5 pending P23
-- After P23: 36 guarded (31 + 5 widget-dependent), 5 deferred
-- After P25: 36 guarded (verification only, no new guards), 5 deferred
+- After P22: 17 guarded (2 pre-existing + 15 Level 0), 5 deferred, 19 pending
+- After P23: 31 guarded (17 + 14 Level 1-2), 5 deferred, 5 pending P24
+- After P24: 36 guarded (31 + 5 widget-dependent), 5 deferred
+- After P26: 36 guarded (verification only, no new guards), 5 deferred
 
 ## End-State Definition
 
@@ -260,7 +265,11 @@ For each phase that adds `USE_RUST_GFX` guards, this ledger tracks which
 C symbols are removed, which Rust symbols replace them, and which remain
 unchanged.
 
-### P21 — Drawing Layer + Colormap + Scalers + Core Abstractions Guards
+### P21 — Colormap FFI Bridge
+
+Colormap FFI exports only (no C file guards in P21).
+
+### P22/P23 — C File Guards (Level 0 + Level 1-2)
 
 **Symbols removed from C** (when `USE_RUST_GFX=1`):
 
@@ -287,8 +296,8 @@ unchanged.
 | `sdl/triscan2x.c` | `Scale_TriScan` | `sdl/triscan2x.c` (self) |
 | `sdl/rotozoom.c` | `rotozoomSurface`, `zoomSurface` | `sdl/rotozoom.c` (self) |
 
-> `context.c` and `drawable.c` are **deferred to P23** (widget-dependent).
-> See REQ-GUARD-040 in P21 for the dependency constraint.
+> `context.c` and `drawable.c` are **deferred to P24** (widget-dependent).
+> See REQ-GUARD-040 for the dependency constraint.
 
 **Symbols added by Rust** (must match signatures):
 
@@ -337,7 +346,7 @@ USE_RUST_GFX=0: symbols from C-path owner column resolve (unchanged)
 - All symbols in `sdl_common.c` (vtable shim, unguarded)
 - All symbols in loader files: `gfxload.c`, `filegfx.c`, `resgfx.c`, `loaddisp.c`
 
-### P23 — Widget-Dependent File Guards
+### P24 — Widget-Dependent File Guards
 
 **Symbols removed from C** (when `USE_RUST_GFX=1`):
 
@@ -398,12 +407,12 @@ USE_RUST_GFX=0: symbols from C column resolve (unchanged)
 > the symbol ledger. `LoadGraphic`, `LoadFont`, and `TFB_LoadPNG` remain
 > in C unconditionally.
 
-### P25 — Guard Finalization and Dual-Path Validation
+### P26 — Guard Finalization and Dual-Path Validation
 
-> Note: SDL backend files are guarded in **P21** (see Canonical File Count Matrix).
-> P25 verifies all guards work end-to-end and both paths build correctly.
+> Note: SDL backend files are guarded in **P23** (Level 1-2 guards).
+> P26 verifies all guards work end-to-end and both paths build correctly.
 
-**SDL backend symbols guarded in P21** (ledger reference):
+**SDL backend symbols guarded in P23** (ledger reference):
 
 | C File | Symbols Guarded | C-path owner (USE_RUST_GFX=0) |
 |---|---|---|
@@ -421,7 +430,7 @@ Verification: After this phase, both builds must succeed:
   `USE_RUST_GFX=1`: symbols from Rust column resolve (via ffi.rs vtable)
   `USE_RUST_GFX=0`: symbols from C column resolve (unchanged)
 
-**Verification step for each guard phase (P21, P23, P25)**:
+**Verification step for each guard phase (P22, P23, P24, P26)**:
 ```bash
 # Build with USE_RUST_GFX=0 and verify no undefined symbols
 # (ensure build.vars has USE_RUST_GFX=0)
@@ -442,8 +451,19 @@ their content. This table is authoritative:
 | P18 | DCQ Bridge — Stub | C | `18-canvas-bridge-stub.md` |
 | P19 | DCQ Bridge — TDD | C | `19-canvas-bridge-tdd.md` |
 | P20 | DCQ Bridge — Impl | C | `20-canvas-bridge-impl.md` |
+| P21 | Colormap FFI Bridge | D | `21-colormap-guards.md` |
+| P21a | Colormap FFI Verification | D | `22-colormap-guards-verification.md` |
+| P22 | C Guards — Level 0 | E | `22-guards-level0.md` |
+| P22a | Level 0 Guards Verification | E | `22a-guards-level0-verification.md` |
+| P23 | C Guards — Level 1-2 | E | `23-guards-level1.md` |
+| P23a | Level 1-2 Guards Verification | E | `23a-guards-level1-verification.md` |
+| P24 | Widget + GfxLoad Bridge | F+G | `23-widget-gfxload.md` |
+| P25 | Integration — End-to-End | H | `24-integration.md` |
+| P26 | Guard Finalization | H | `25-c-removal.md` |
+| P27 | Final Verification | H | `26-final-verification.md` |
 
-All other phase filenames match their content.
+All filenames are historical artifacts from earlier phase orderings.
+The Phase column and Content are authoritative.
 
 ## Phase Completion Markers
 
@@ -505,13 +525,16 @@ expected and correct.
 | P19a  | ⬜     | ⬜       | ⬜                |       |
 | P20   | ⬜     | ⬜       | ⬜                |       |
 | P20a  | ⬜     | ⬜       | ⬜                |       |
-| P21   | ⬜     | ⬜       | ⬜                |       |
-| P21a  | ⬜     | ⬜       | ⬜                |       |
-| P22   | ⬜     | ⬜       | ⬜                |       |
-| P23   | ⬜     | ⬜       | ⬜                |       |
-| P23a  | ⬜     | ⬜       | ⬜                |       |
-| P24   | ⬜     | ⬜       | ⬜                |       |
-| P24a  | ⬜     | ⬜       | ⬜                |       |
-| P25   | ⬜     | ⬜       | ⬜                |       |
-| P25a  | ⬜     | ⬜       | ⬜                |       |
-| P26   | ⬜     | ⬜       | ⬜                |       |
+| P21   | ⬜     | ⬜       | ⬜                | Colormap FFI bridge |
+| P21a  | ⬜     | ⬜       | ⬜                | Colormap verification |
+| P22   | ⬜     | ⬜       | ⬜                | Level 0 guards (~15 files) |
+| P22a  | ⬜     | ⬜       | ⬜                | Level 0 verification |
+| P23   | ⬜     | ⬜       | ⬜                | Level 1-2 guards (~14 files) |
+| P23a  | ⬜     | ⬜       | ⬜                | Level 1-2 verification |
+| P24   | ⬜     | ⬜       | ⬜                | Widget + GfxLoad bridge |
+| P24a  | ⬜     | ⬜       | ⬜                | Widget verification |
+| P25   | ⬜     | ⬜       | ⬜                | Integration end-to-end |
+| P25a  | ⬜     | ⬜       | ⬜                | Integration verification |
+| P26   | ⬜     | ⬜       | ⬜                | Guard finalization |
+| P26a  | ⬜     | ⬜       | ⬜                | C removal verification |
+| P27   | ⬜     | ⬜       | ⬜                | Final verification |

@@ -60,7 +60,7 @@ Test contracts:
 
 ### REQ-DCQ-030+CANVAS: Flush→Canvas Integration (Test Coverage)
 Test contracts:
-- `test_dcq_flush_draws_to_surface` — push DrawLine, flush with SurfaceCanvas, verify pixels
+- `test_dcq_flush_draws_to_surface` — push DrawLine, flush with SurfaceCanvas (implements PixelCanvas), verify pixels
 - `test_dcq_flush_respects_screen_binding` — set screen, flush, verify correct surface modified
 
 ## Implementation Tasks

@@ -1,11 +1,14 @@
-# Phase 24: Integration — End-to-End Testing
+> **NOTE**: This file's name (`24-integration.md`) is a historical
+> artifact from a phase reorder. Canonical phase: **P25** (Integration).
+
+# Phase 25: Integration — End-to-End Testing
 
 ## Phase ID
-`PLAN-20260223-GFX-FULL-PORT.P24`
+`PLAN-20260223-GFX-FULL-PORT.P25`
 
 ## Prerequisites
-- Required: Phase P23a (Widget + GfxLoad Verification) completed
-- Expected: All ~35 drawing-pipeline C files guarded (5 loader files + sdl_common.c unguarded)
+- Required: Phase P24a (Widget + GfxLoad Verification) completed
+- Expected: All ~36 drawing-pipeline C files guarded (5 loader files + sdl_common.c unguarded)
 - Expected: All drawing-pipeline FFI bridges implemented (vtable, DCQ, canvas, colormap, frame/context/drawable)
 - Expected: Build succeeds with `USE_RUST_GFX=1`
 
@@ -178,10 +181,10 @@ cd rust && cargo test --workspace --all-features
   to identify which rendering stage diverges
 
 ## Phase Completion Marker
-Create: `project-plans/gfx/.completed/P24.md`
+Create: `project-plans/gfx/.completed/P25.md`
 
 Contents:
-- phase ID: P24
+- phase ID: P25
 - timestamp
 - build verification: success
 - symbol count: N

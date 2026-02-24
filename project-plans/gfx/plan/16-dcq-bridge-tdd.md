@@ -10,7 +10,7 @@
 ## Prerequisites
 - Required: Phase P15a (Canvas Stub Verification) completed
 - Expected: All `rust_canvas_*` stubs compile and link
-- Expected: `SurfaceCanvas` adapter struct defined
+- Expected: `SurfaceCanvas` adapter struct defined (implements `PixelCanvas` trait)
 
 ## Requirements Implemented (Expanded)
 
