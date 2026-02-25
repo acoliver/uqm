@@ -106,3 +106,6 @@
 /* Defined if using Rust memory allocator */
 #define USE_RUST_MEM
 
+/* Defined if using Rust state file I/O */
+#define USE_RUST_STATE
+

@@ -25,6 +25,7 @@
 #include <unistd.h>
 #endif
 #include <memory.h>
+#include <stdint.h>
 
 // in-memory file i/o
 struct GAME_STATE_FILE
@@ -48,6 +49,70 @@ static GAME_STATE_FILE state_files[NUM_STATE_FILES] =
 	{"DEFGRPINFO",  DEF_BUFSIZE,  STATE_FILE_ITRAILER}
 };
 
+
+#ifdef USE_RUST_STATE
+
+/* Rust FFI declarations for state file operations */
+extern int rust_open_state_file(int file_index, const char *mode);
+extern void rust_close_state_file(int file_index);
+extern void rust_delete_state_file(int file_index);
+extern size_t rust_length_state_file(int file_index);
+extern size_t rust_read_state_file(int file_index, void *buf, size_t size, size_t count);
+extern size_t rust_write_state_file(int file_index, const void *buf, size_t size, size_t count);
+extern int rust_seek_state_file(int file_index, int64_t offset, int whence);
+
+GAME_STATE_FILE *
+OpenStateFile (int stateFile, const char *mode)
+{
+	if (stateFile < 0 || stateFile >= NUM_STATE_FILES)
+		return NULL;
+	if (!rust_open_state_file(stateFile, mode))
+		return NULL;
+	return &state_files[stateFile];
+}
+
+void
+CloseStateFile (GAME_STATE_FILE *fp)
+{
+	int index = (int)(fp - state_files);
+	rust_close_state_file(index);
+}
+
+void
+DeleteStateFile (int stateFile)
+{
+	rust_delete_state_file(stateFile);
+}
+
+DWORD
+LengthStateFile (GAME_STATE_FILE *fp)
+{
+	int index = (int)(fp - state_files);
+	return (DWORD)rust_length_state_file(index);
+}
+
+int
+ReadStateFile (void *lpBuf, COUNT size, COUNT count, GAME_STATE_FILE *fp)
+{
+	int index = (int)(fp - state_files);
+	return (int)rust_read_state_file(index, lpBuf, size, count);
+}
+
+int
+WriteStateFile (const void *lpBuf, COUNT size, COUNT count, GAME_STATE_FILE *fp)
+{
+	int index = (int)(fp - state_files);
+	return (int)rust_write_state_file(index, lpBuf, size, count);
+}
+
+int
+SeekStateFile (GAME_STATE_FILE *fp, long offset, int whence)
+{
+	int index = (int)(fp - state_files);
+	return rust_seek_state_file(index, (int64_t)offset, whence);
+}
+
+#else /* !USE_RUST_STATE */
 
 GAME_STATE_FILE *
 OpenStateFile (int stateFile, const char *mode)
@@ -204,6 +269,8 @@ SeekStateFile (GAME_STATE_FILE *fp, long offset, int whence)
 	fp->ptr = offset;
 	return 1;
 }
+
+#endif /* !USE_RUST_STATE */
 
 
 void
