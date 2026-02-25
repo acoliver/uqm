@@ -1001,7 +1001,6 @@ pub unsafe extern "C" fn rust_play_video_direct_window(
     true
 }
 
-
 // ============================================================================
 // TFB_VideoClip layout (matches C struct tfb_videoclip from video.h)
 // ============================================================================
@@ -1026,15 +1025,15 @@ pub struct TFB_VideoClip {
     pub h: u32,
     pub dst_rect: CRect,
     pub src_rect: CRect,
-    pub h_audio: *mut c_void,   // MUSIC_REF
+    pub h_audio: *mut c_void, // MUSIC_REF
     pub frame_time: u32,
-    pub frame: *mut c_void,     // TFB_Image*
+    pub frame: *mut c_void, // TFB_Image*
     pub cur_frame: u32,
     pub playing: bool,
     pub own_audio: bool,
     pub loop_frame: u32,
     pub loop_to: u32,
-    pub guard: *mut c_void,     // Mutex
+    pub guard: *mut c_void, // Mutex
     pub want_frame: u32,
     pub lag_cnt: i32,
     pub data: *mut c_void,
@@ -1058,11 +1057,7 @@ pub extern "C" fn TFB_UninitVideoPlayer() {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn TFB_PlayVideo(
-    vid: *mut TFB_VideoClip,
-    _x: u32,
-    _y: u32,
-) -> bool {
+pub unsafe extern "C" fn TFB_PlayVideo(vid: *mut TFB_VideoClip, _x: u32, _y: u32) -> bool {
     if vid.is_null() {
         return false;
     }
@@ -1139,16 +1134,17 @@ pub unsafe extern "C" fn TFB_PlayVideo(
                 let looping = clip.loop_frame != VID_NO_LOOP;
                 let handle = rodio_audio::play_raw_pcm(
                     pcm.clone(),
-                    22050,   // DukAud sample rate
-                    2,       // stereo
-                    16,      // 16-bit
+                    22050, // DukAud sample rate
+                    2,     // stereo
+                    16,    // 16-bit
                     SoundCategory::Music,
                     looping,
                 );
                 VIDEO_AUDIO_HANDLE.store(handle, Ordering::Relaxed);
                 rust_bridge_log_msg(&format!(
                     "RUST_VIDEO: playing embedded audio via rodio, {} bytes PCM, handle={}",
-                    pcm.len(), handle
+                    pcm.len(),
+                    handle
                 ));
             } else {
                 rust_bridge_log_msg("RUST_VIDEO: no audio decoded from .duk");
@@ -1173,7 +1169,8 @@ pub unsafe extern "C" fn TFB_StopVideo(_vid: *mut TFB_VideoClip) {
     if audio_handle != 0 {
         rodio_audio::stop_sound(audio_handle);
         rust_bridge_log_msg(&format!(
-            "RUST_VIDEO: stopped audio handle={}", audio_handle
+            "RUST_VIDEO: stopped audio handle={}",
+            audio_handle
         ));
     }
     let speech_handle = VIDEO_SPEECH_HANDLE.swap(0, Ordering::Relaxed);
@@ -1204,9 +1201,6 @@ pub unsafe extern "C" fn TFB_GetVideoPosition(_vid: *mut TFB_VideoClip) -> u32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn TFB_SeekVideo(
-    _vid: *mut TFB_VideoClip,
-    _pos: u32,
-) -> bool {
+pub unsafe extern "C" fn TFB_SeekVideo(_vid: *mut TFB_VideoClip, _pos: u32) -> bool {
     false
 }

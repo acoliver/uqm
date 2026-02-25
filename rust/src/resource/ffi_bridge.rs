@@ -15,7 +15,9 @@ use std::ptr;
 use std::sync::Mutex;
 
 use super::dispatch::ResourceDispatch;
-use super::ffi_types::{ResourceData, ResourceFreeFun, ResourceLoadFileFun, ResourceLoadFun, ResourceStringFun};
+use super::ffi_types::{
+    ResourceData, ResourceFreeFun, ResourceLoadFileFun, ResourceLoadFun, ResourceStringFun,
+};
 use super::propfile::parse_propfile;
 use super::type_registry;
 
@@ -48,23 +50,41 @@ extern "C" {
 // Test stubs for UIO functions — these are never actually called in tests
 // because all UIO-calling FFI functions are gated with #[cfg(not(test))]
 #[cfg(test)]
-unsafe fn uio_fopen(_dir: *mut c_void, _path: *const c_char, _mode: *const c_char) -> *mut c_void { ptr::null_mut() }
+unsafe fn uio_fopen(_dir: *mut c_void, _path: *const c_char, _mode: *const c_char) -> *mut c_void {
+    ptr::null_mut()
+}
 #[cfg(test)]
-unsafe fn uio_fclose(_fp: *mut c_void) -> c_int { 0 }
+unsafe fn uio_fclose(_fp: *mut c_void) -> c_int {
+    0
+}
 #[cfg(test)]
-unsafe fn uio_fread(_buf: *mut c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize { 0 }
+unsafe fn uio_fread(_buf: *mut c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize {
+    0
+}
 #[cfg(test)]
-unsafe fn uio_fwrite(_buf: *const c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize { 0 }
+unsafe fn uio_fwrite(_buf: *const c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize {
+    0
+}
 #[cfg(test)]
-unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int { 0 }
+unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int {
+    0
+}
 #[cfg(test)]
-unsafe fn uio_ftell(_fp: *mut c_void) -> c_long { 0 }
+unsafe fn uio_ftell(_fp: *mut c_void) -> c_long {
+    0
+}
 #[cfg(test)]
-unsafe fn uio_fgetc(_fp: *mut c_void) -> c_int { -1 }
+unsafe fn uio_fgetc(_fp: *mut c_void) -> c_int {
+    -1
+}
 #[cfg(test)]
-unsafe fn uio_fputc(_c: c_int, _fp: *mut c_void) -> c_int { -1 }
+unsafe fn uio_fputc(_c: c_int, _fp: *mut c_void) -> c_int {
+    -1
+}
 #[cfg(test)]
-unsafe fn uio_unlink(_dir: *mut c_void, _path: *const c_char) -> c_int { -1 }
+unsafe fn uio_unlink(_dir: *mut c_void, _path: *const c_char) -> c_int {
+    -1
+}
 #[cfg(test)]
 static mut contentDir: *mut c_void = ptr::null_mut() as *mut c_void;
 
@@ -127,7 +147,9 @@ fn create_initial_state() -> ResourceState {
         None,
         Some(type_registry::color_to_string as ResourceStringFun),
     );
-    dispatch.type_registry.install("UNKNOWNRES", None, None, None);
+    dispatch
+        .type_registry
+        .install("UNKNOWNRES", None, None, None);
 
     ResourceState {
         dispatch,
@@ -138,9 +160,7 @@ fn create_initial_state() -> ResourceState {
 }
 
 /// Ensure state is initialized (auto-init pattern). Returns the lock guard.
-fn ensure_init(
-    guard: &mut std::sync::MutexGuard<'_, Option<ResourceState>>,
-) {
+fn ensure_init(guard: &mut std::sync::MutexGuard<'_, Option<ResourceState>>) {
     if guard.is_none() {
         **guard = Some(create_initial_state());
     }
@@ -331,9 +351,12 @@ pub unsafe extern "C" fn SaveResourceIndex(
 
         // Serialize the entry using toString if available
         let mut buf = [0u8; 256];
-        let mut data_copy = ResourceData { num: unsafe { desc.data.num } };
+        let mut data_copy = ResourceData {
+            num: unsafe { desc.data.num },
+        };
 
-        let serialized = if let Some(handlers) = state.dispatch.type_registry.lookup(&desc.res_type) {
+        let serialized = if let Some(handlers) = state.dispatch.type_registry.lookup(&desc.res_type)
+        {
             if let Some(to_string_fn) = handlers.to_string {
                 to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
                 let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
@@ -400,7 +423,11 @@ pub unsafe extern "C" fn InstallResTypeVectors(
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    if state.dispatch.type_registry.install(type_name, load_fun, free_fun, string_fun) {
+    if state
+        .dispatch
+        .type_registry
+        .install(type_name, load_fun, free_fun, string_fun)
+    {
         1
     } else {
         0
@@ -480,7 +507,11 @@ pub unsafe extern "C" fn res_Remove(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    if state.dispatch.remove_resource(key_str) { 1 } else { 0 }
+    if state.dispatch.remove_resource(key_str) {
+        1
+    } else {
+        0
+    }
 }
 
 // =============================================================================
@@ -520,7 +551,15 @@ pub unsafe extern "C" fn res_GetBooleanResource(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state.dispatch.get_boolean_resource(key_str).unwrap_or(false) { 1 } else { 0 }
+    if state
+        .dispatch
+        .get_boolean_resource(key_str)
+        .unwrap_or(false)
+    {
+        1
+    } else {
+        0
+    }
 }
 
 /// Get the type name for a resource entry.
@@ -544,7 +583,8 @@ pub unsafe extern "C" fn res_GetResourceType(key: *const c_char) -> *const c_cha
         None => return ptr::null(),
     };
 
-    let entry = state.type_cache
+    let entry = state
+        .type_cache
         .entry(key_str.to_string())
         .or_insert_with(|| CString::new(type_name.as_str()).unwrap_or_default());
 
@@ -589,7 +629,11 @@ pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state.dispatch.entries.contains_key(key_str) { 1 } else { 0 }
+    if state.dispatch.entries.contains_key(key_str) {
+        1
+    } else {
+        0
+    }
 }
 
 /// Check if a key is a STRING type.
@@ -696,7 +740,8 @@ pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
         None => return ptr::null(),
     };
 
-    let entry = state.string_cache
+    let entry = state
+        .string_cache
         .entry(key_str.to_string())
         .or_insert_with(|| CString::new(value.as_str()).unwrap_or_default());
 
@@ -724,7 +769,11 @@ pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    state.dispatch.get_int_resource(key_str).map(|v| v as c_int).unwrap_or(0)
+    state
+        .dispatch
+        .get_int_resource(key_str)
+        .map(|v| v as c_int)
+        .unwrap_or(0)
 }
 
 /// Get a boolean config value.
@@ -742,7 +791,15 @@ pub unsafe extern "C" fn res_GetBoolean(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state.dispatch.get_boolean_resource(key_str).unwrap_or(false) { 1 } else { 0 }
+    if state
+        .dispatch
+        .get_boolean_resource(key_str)
+        .unwrap_or(false)
+    {
+        1
+    } else {
+        0
+    }
 }
 
 /// Get a color config value as packed (r<<24)|(g<<16)|(b<<8)|a.
@@ -786,7 +843,9 @@ pub unsafe extern "C" fn res_PutString(key: *const c_char, value: *const c_char)
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    state.dispatch.process_resource_desc(key_str, &format!("STRING:{}", value_str));
+    state
+        .dispatch
+        .process_resource_desc(key_str, &format!("STRING:{}", value_str));
 }
 
 /// Put an integer value into the resource map.
@@ -804,7 +863,9 @@ pub unsafe extern "C" fn res_PutInteger(key: *const c_char, value: c_int) {
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    state.dispatch.process_resource_desc(key_str, &format!("INT32:{}", value));
+    state
+        .dispatch
+        .process_resource_desc(key_str, &format!("INT32:{}", value));
 }
 
 /// Put a boolean value into the resource map.
@@ -823,7 +884,9 @@ pub unsafe extern "C" fn res_PutBoolean(key: *const c_char, value: c_int) {
 
     let state = guard.as_mut().unwrap();
     let bool_str = if value != 0 { "true" } else { "false" };
-    state.dispatch.process_resource_desc(key_str, &format!("BOOLEAN:{}", bool_str));
+    state
+        .dispatch
+        .process_resource_desc(key_str, &format!("BOOLEAN:{}", bool_str));
 }
 
 /// Put a color value into the resource map. Color is packed (r<<24)|(g<<16)|(b<<8)|a.
@@ -847,7 +910,9 @@ pub unsafe extern "C" fn res_PutColor(key: *const c_char, value: u32) {
 
     let state = guard.as_mut().unwrap();
     let color_str = super::resource_type::serialize_color(r, g, b, a);
-    state.dispatch.process_resource_desc(key_str, &format!("COLOR:{}", color_str));
+    state
+        .dispatch
+        .process_resource_desc(key_str, &format!("COLOR:{}", color_str));
 }
 
 // =============================================================================
@@ -874,7 +939,11 @@ pub unsafe extern "C" fn res_CloseResFile(fp: *mut c_void) -> c_int {
     if fp.is_null() || fp == STREAM_SENTINEL {
         return 1;
     }
-    if uio_fclose(fp) == 0 { 1 } else { 0 }
+    if uio_fclose(fp) == 0 {
+        1
+    } else {
+        0
+    }
 }
 
 /// Read from a resource file.
@@ -974,7 +1043,11 @@ pub unsafe extern "C" fn DeleteResFile(dir: *mut c_void, filename: *const c_char
     if filename.is_null() {
         return 0;
     }
-    if uio_unlink(dir, filename) == 0 { 1 } else { 0 }
+    if uio_unlink(dir, filename) == 0 {
+        1
+    } else {
+        0
+    }
 }
 
 // =============================================================================
@@ -1193,7 +1266,10 @@ mod tests {
         let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
         let state = guard.as_ref().unwrap();
         assert_eq!(state.dispatch.type_registry.count(), 5);
-        assert!(state.dispatch.entries.is_empty(), "Fresh init should have no entries");
+        assert!(
+            state.dispatch.entries.is_empty(),
+            "Fresh init should have no entries"
+        );
     }
 
     // =========================================================================
@@ -1356,8 +1432,14 @@ mod tests {
         // Data ptr is null (not loaded yet — no loadFun for UNKNOWNRES).
         let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
         assert_eq!(desc.res_type, "GFXRES", "Original type name preserved");
-        assert_eq!(desc.type_handler_key, "UNKNOWNRES", "Falls back to UNKNOWNRES handler");
-        assert!(unsafe { desc.data.ptr.is_null() }, "Heap-type data not loaded yet");
+        assert_eq!(
+            desc.type_handler_key, "UNKNOWNRES",
+            "Falls back to UNKNOWNRES handler"
+        );
+        assert!(
+            unsafe { desc.data.ptr.is_null() },
+            "Heap-type data not loaded yet"
+        );
     }
 
     #[test]
@@ -1378,7 +1460,10 @@ mod tests {
             Some("config."),
         );
 
-        assert_eq!(state.dispatch.get_boolean_resource("config.fullscreen"), Some(true));
+        assert_eq!(
+            state.dispatch.get_boolean_resource("config.fullscreen"),
+            Some(true)
+        );
     }
 
     #[test]
@@ -1399,7 +1484,10 @@ mod tests {
             Some("config."),
         );
 
-        assert_eq!(state.dispatch.get_boolean_resource("config.fullscreen"), Some(false));
+        assert_eq!(
+            state.dispatch.get_boolean_resource("config.fullscreen"),
+            Some(false)
+        );
     }
 
     #[test]
@@ -1447,7 +1535,10 @@ mod tests {
             Some("keys."),
         );
 
-        assert_eq!(state.dispatch.get_string_resource("keys.up.1"), Some("key Up"));
+        assert_eq!(
+            state.dispatch.get_string_resource("keys.up.1"),
+            Some("key Up")
+        );
     }
 
     // =========================================================================
@@ -1508,7 +1599,8 @@ mod tests {
     #[serial]
     fn test_read_res_file_null() {
         let mut buf = [0u8; 16];
-        let result = unsafe { ReadResFile(buf.as_mut_ptr() as *mut c_void, 1, 16, ptr::null_mut()) };
+        let result =
+            unsafe { ReadResFile(buf.as_mut_ptr() as *mut c_void, 1, 16, ptr::null_mut()) };
         assert_eq!(result, 0, "Read from null should return 0");
     }
 
@@ -1774,7 +1866,9 @@ mod tests {
 
         let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
         let state = guard.as_mut().unwrap();
-        state.dispatch.process_resource_desc("config.fullscreen", "BOOLEAN:true");
+        state
+            .dispatch
+            .process_resource_desc("config.fullscreen", "BOOLEAN:true");
         drop(guard);
 
         let key = CString::new("config.fullscreen").unwrap();

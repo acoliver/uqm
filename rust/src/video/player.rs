@@ -229,11 +229,10 @@ impl VideoPlayer {
             if self.xbrz_factor >= 2 {
                 let src_w = frame.width as usize;
                 let src_h = frame.height as usize;
-                let src_bytes: Vec<u8> = frame.data.iter()
-                    .flat_map(|p| p.to_ne_bytes())
-                    .collect();
+                let src_bytes: Vec<u8> = frame.data.iter().flat_map(|p| p.to_ne_bytes()).collect();
                 let scaled_bytes = scale_rgba(&src_bytes, src_w, src_h, self.xbrz_factor);
-                let scaled_data: Vec<u32> = scaled_bytes.chunks_exact(4)
+                let scaled_data: Vec<u32> = scaled_bytes
+                    .chunks_exact(4)
                     .map(|c| u32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
                     .collect();
                 frame = VideoFrame {

@@ -206,10 +206,7 @@ extern "C" fn rust_duka_Open(
         let frm_data = match read_uio_file(dir, frm_cstr.as_ptr()) {
             Some(d) => d,
             None => {
-                rust_bridge_log_msg(&format!(
-                    "RUST_DUKAUD_OPEN: failed to read {}",
-                    frm_name
-                ));
+                rust_bridge_log_msg(&format!("RUST_DUKAUD_OPEN: failed to read {}", frm_name));
                 return 0;
             }
         };

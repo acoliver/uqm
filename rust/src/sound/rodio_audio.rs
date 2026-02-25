@@ -506,7 +506,9 @@ pub fn play_raw_pcm(
     )) {
         rx.recv().unwrap_or(0)
     } else {
-        rust_bridge_log_msg("RUST_AUDIO: play_raw_pcm send_command failed (audio thread not running?)");
+        rust_bridge_log_msg(
+            "RUST_AUDIO: play_raw_pcm send_command failed (audio thread not running?)",
+        );
         0
     }
 }

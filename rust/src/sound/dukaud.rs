@@ -538,7 +538,10 @@ mod tests {
     fn test_decoder_decode_without_open() {
         let mut dec = DukAudDecoder::new();
         let mut buf = [0u8; 256];
-        assert!(matches!(dec.decode(&mut buf), Err(DecodeError::NotInitialized)));
+        assert!(matches!(
+            dec.decode(&mut buf),
+            Err(DecodeError::NotInitialized)
+        ));
     }
 
     #[test]

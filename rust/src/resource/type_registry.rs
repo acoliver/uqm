@@ -88,7 +88,10 @@ use super::resource_type::{parse_c_color, serialize_color};
 ///
 /// `descriptor` must be a valid null-terminated C string.
 /// `resdata` must point to a valid `ResourceData`.
-pub unsafe extern "C" fn use_descriptor_as_res(descriptor: *const c_char, resdata: *mut ResourceData) {
+pub unsafe extern "C" fn use_descriptor_as_res(
+    descriptor: *const c_char,
+    resdata: *mut ResourceData,
+) {
     if descriptor.is_null() || resdata.is_null() {
         return;
     }
@@ -122,7 +125,10 @@ pub unsafe extern "C" fn descriptor_to_int(descriptor: *const c_char, resdata: *
 ///
 /// `descriptor` must be a valid null-terminated C string.
 /// `resdata` must point to a valid `ResourceData`.
-pub unsafe extern "C" fn descriptor_to_boolean(descriptor: *const c_char, resdata: *mut ResourceData) {
+pub unsafe extern "C" fn descriptor_to_boolean(
+    descriptor: *const c_char,
+    resdata: *mut ResourceData,
+) {
     if descriptor.is_null() || resdata.is_null() {
         return;
     }
@@ -144,7 +150,10 @@ pub unsafe extern "C" fn descriptor_to_boolean(descriptor: *const c_char, resdat
 ///
 /// `descriptor` must be a valid null-terminated C string.
 /// `resdata` must point to a valid `ResourceData`.
-pub unsafe extern "C" fn descriptor_to_color(descriptor: *const c_char, resdata: *mut ResourceData) {
+pub unsafe extern "C" fn descriptor_to_color(
+    descriptor: *const c_char,
+    resdata: *mut ResourceData,
+) {
     if descriptor.is_null() || resdata.is_null() {
         return;
     }
@@ -173,7 +182,11 @@ pub unsafe extern "C" fn descriptor_to_color(descriptor: *const c_char, resdata:
 ///
 /// `resdata` must point to a valid `ResourceData` with a valid `str_ptr`.
 /// `buf` must point to a buffer of at least `size` bytes.
-pub unsafe extern "C" fn raw_descriptor(resdata: *mut ResourceData, buf: *mut c_char, size: c_uint) {
+pub unsafe extern "C" fn raw_descriptor(
+    resdata: *mut ResourceData,
+    buf: *mut c_char,
+    size: c_uint,
+) {
     if resdata.is_null() || buf.is_null() || size == 0 {
         return;
     }
@@ -217,7 +230,11 @@ pub unsafe extern "C" fn int_to_string(resdata: *mut ResourceData, buf: *mut c_c
 ///
 /// `resdata` must point to a valid `ResourceData`.
 /// `buf` must point to a buffer of at least `size` bytes.
-pub unsafe extern "C" fn boolean_to_string(resdata: *mut ResourceData, buf: *mut c_char, size: c_uint) {
+pub unsafe extern "C" fn boolean_to_string(
+    resdata: *mut ResourceData,
+    buf: *mut c_char,
+    size: c_uint,
+) {
     if resdata.is_null() || buf.is_null() || size == 0 {
         return;
     }
@@ -236,7 +253,11 @@ pub unsafe extern "C" fn boolean_to_string(resdata: *mut ResourceData, buf: *mut
 ///
 /// `resdata` must point to a valid `ResourceData`.
 /// `buf` must point to a buffer of at least `size` bytes.
-pub unsafe extern "C" fn color_to_string(resdata: *mut ResourceData, buf: *mut c_char, size: c_uint) {
+pub unsafe extern "C" fn color_to_string(
+    resdata: *mut ResourceData,
+    buf: *mut c_char,
+    size: c_uint,
+) {
     if resdata.is_null() || buf.is_null() || size == 0 {
         return;
     }
