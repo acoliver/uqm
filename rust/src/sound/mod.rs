@@ -30,6 +30,7 @@ pub mod rodio_backend;
 // @plan PLAN-20260225-AUDIO-HEART.P06
 pub mod control;
 pub mod fileinst;
+#[cfg(feature = "audio_heart")]
 pub mod heart_ffi;
 pub mod music;
 pub mod sfx;

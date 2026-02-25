@@ -33,6 +33,10 @@ rodio = { version = "0.19", default-features = false, features = ["wav", "vorbis
 mod_player = "0.1"
 fast_image_resize = "5.0"
 
+[features]
+default = []
+audio_heart = []
+
 [dev-dependencies]
 tempfile = "3"
 insta = "1.34"
