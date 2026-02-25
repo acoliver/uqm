@@ -29,18 +29,8 @@ float sfxVolumeScale;
 float speechVolumeScale;
 TFB_SoundSource soundSource[NUM_SOUNDSOURCES];
 
-
-void
-StopSound (void)
-{
-	int i;
-
-	for (i = FIRST_SFX_SOURCE; i <= LAST_SFX_SOURCE; ++i)
-	{
-		StopSource (i);
-	}
-}
-
+/* CleanSource and StopSource are used by resource loaders even when
+   the high-level API is provided by Rust, so they stay outside the guard. */
 void
 CleanSource (int iSource)
 {
@@ -76,6 +66,19 @@ StopSource (int iSource)
 {
 	audio_SourceStop (soundSource[iSource].handle);
 	CleanSource (iSource);
+}
+
+#ifndef USE_RUST_AUDIO_HEART
+
+void
+StopSound (void)
+{
+	int i;
+
+	for (i = FIRST_SFX_SOURCE; i <= LAST_SFX_SOURCE; ++i)
+	{
+		StopSource (i);
+	}
 }
 
 BOOLEAN
@@ -174,5 +177,7 @@ FadeMusic (BYTE end_vol, SIZE TimeInterval)
 		return GetTimeCounter () + TimeInterval + 1;
 	}
 }
+
+#endif /* USE_RUST_AUDIO_HEART */
 
 

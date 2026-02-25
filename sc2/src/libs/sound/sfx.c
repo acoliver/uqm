@@ -27,6 +27,8 @@
 #include <math.h>
 
 
+#ifndef USE_RUST_AUDIO_HEART
+
 static void CheckFinishedChannels (void);
 
 static const SoundPosition notPositional = {FALSE, 0, 0};
@@ -154,6 +156,8 @@ SetChannelVolume (COUNT channel, COUNT volume, BYTE priority)
 		(volume / (float)MAX_VOLUME) * sfxVolumeScale);
 	(void)priority; // ignored
 }
+
+#endif /* USE_RUST_AUDIO_HEART */
 
 void *
 _GetSoundBankData (uio_Stream *fp, DWORD length)
@@ -293,6 +297,8 @@ _ReleaseSoundBankData (void *Snd)
 	return TRUE;
 }
 
+#ifndef USE_RUST_AUDIO_HEART
+
 BOOLEAN
 DestroySound(SOUND_REF target)
 {
@@ -306,3 +312,5 @@ GetSoundAddress (SOUND sound)
 {
 	return GetStringAddress (sound);
 }
+
+#endif /* USE_RUST_AUDIO_HEART */

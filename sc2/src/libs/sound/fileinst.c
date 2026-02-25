@@ -22,6 +22,7 @@
 #include "libs/reslib.h"
 #include <string.h>
 
+#ifndef USE_RUST_AUDIO_HEART
 
 SOUND_REF
 LoadSoundFile (const char *pStr)
@@ -85,3 +86,4 @@ LoadMusicFile (const char *pStr)
 	return (0);
 }
 
+#endif /* USE_RUST_AUDIO_HEART */

@@ -12,10 +12,10 @@ else
 	uqm_CFILES="audiocore.c fileinst.c resinst.c sound.c sfx.c music.c stream.c trackplayer.c"
 fi
 
-# Use Rust audio heart when USE_RUST_AUDIO_HEART is defined
-# This replaces the 6 C files with Rust FFI equivalents
-if [ -n "$USE_RUST_AUDIO_HEART" ]; then
-	uqm_CFILES="audiocore_rust.c resinst.c"
-fi
+# When USE_RUST_AUDIO_HEART is enabled, the C files are still compiled
+# but their conflicting functions are wrapped in #ifndef USE_RUST_AUDIO_HEART
+# guards. The Rust static library provides the high-level sound API.
+# The C files keep globals (soundSource, musicVolume, etc.) and
+# resource loaders (_GetMusicData, _GetSoundBankData, etc.).
 
 uqm_HFILES="audiocore.h sndintrn.h sound.h stream.h trackint.h trackplayer.h audio_heart_rust.h"

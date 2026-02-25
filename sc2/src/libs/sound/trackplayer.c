@@ -26,6 +26,7 @@
 #include <string.h>
 #include <memory.h>
 
+#ifndef USE_RUST_AUDIO_HEART
 
 static int track_count;       // total number of tracks
 static int no_page_break;     // set when combining several tracks into one
@@ -879,3 +880,6 @@ GetTrackSubtitle (void)
 
 	return cur_sub;
 }
+
+#endif /* USE_RUST_AUDIO_HEART */
+

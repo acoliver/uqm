@@ -75,7 +75,7 @@
 
 /* Defined if using Rust audio backend (rodio) */
 #define USE_RUST_AUDIO
-/* #define USE_RUST_AUDIO_HEART */
+#define USE_RUST_AUDIO_HEART
 
 /* Defined if using Rust input/VControl */
 #define USE_RUST_INPUT

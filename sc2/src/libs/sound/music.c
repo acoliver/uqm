@@ -24,6 +24,8 @@
 #include "libs/memlib.h"
 
 
+#ifndef USE_RUST_AUDIO_HEART
+
 static MUSIC_REF curMusicRef;
 static MUSIC_REF curSpeechRef;
 
@@ -150,6 +152,8 @@ SetMusicVolume (COUNT Volume)
 	musicVolume = Volume;
 	audio_Sourcef (soundSource[MUSIC_SOURCE].handle, audio_GAIN, f);
 }
+
+#endif /* USE_RUST_AUDIO_HEART */
 
 char*
 CheckMusicResName (char* fileName)

@@ -27,6 +27,8 @@
 #include "libs/memlib.h"
 
 
+#ifndef USE_RUST_AUDIO_HEART
+
 static Task decoderTask;
 
 static TimeCount musicFadeStartTime;
@@ -812,3 +814,6 @@ UninitStreamDecoder (void)
 		fade_mutex = NULL;
 	}
 }
+
+#endif /* USE_RUST_AUDIO_HEART */
+
