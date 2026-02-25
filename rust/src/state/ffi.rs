@@ -131,18 +131,24 @@ pub extern "C" fn rust_set_game_state_32(start_bit: c_int, value: u32) {
 }
 
 /// Copy game state bits from source to destination
+///
+/// Acquires the mutex once, snapshots source bytes, then copies.
+/// Previous implementation deadlocked by acquiring the same mutex twice.
 #[no_mangle]
 pub extern "C" fn rust_copy_game_state(dest_bit: c_int, src_start_bit: c_int, src_end_bit: c_int) {
-    guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
-        guard_convert_value(&GLOBAL_GAME_STATE, |src_state| {
-            state.copy_state(
-                dest_bit as usize,
-                src_state,
-                src_start_bit as usize,
-                src_end_bit as usize,
-            );
-        });
-    });
+    let mut guard = match GLOBAL_GAME_STATE.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if let Some(state) = guard.as_mut() {
+        let snapshot = GameState::from_bytes(state.as_bytes());
+        state.copy_state(
+            dest_bit as usize,
+            &snapshot,
+            src_start_bit as usize,
+            src_end_bit as usize,
+        );
+    }
 }
 
 /// Reset all game state to zero
