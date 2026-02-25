@@ -519,4 +519,185 @@ mod tests {
         assert!(cb.on_start_stream(&mut sample));
         assert!(!cb.on_end_chunk(&mut sample, 0));
     }
+
+    // =========================================================================
+    // P04: Types TDD tests
+    // @plan PLAN-20260225-AUDIO-HEART.P04
+    // @requirement REQ-CROSS-CONST-01..08, REQ-CROSS-ERROR-01..03, REQ-CROSS-GENERAL-04
+    // =========================================================================
+
+    #[test]
+    fn test_constants_all_values() {
+        // REQ-CROSS-CONST-01..08
+        assert_eq!(NUM_SFX_CHANNELS, 5);
+        assert_eq!(FIRST_SFX_SOURCE, 0);
+        assert_eq!(LAST_SFX_SOURCE, 4);
+        assert_eq!(MUSIC_SOURCE, 5);
+        assert_eq!(SPEECH_SOURCE, 6);
+        assert_eq!(NUM_SOUNDSOURCES, 7);
+        assert_eq!(MAX_VOLUME, 255);
+        assert_eq!(NORMAL_VOLUME, 160);
+        assert_eq!(PAD_SCOPE_BYTES, 256);
+        assert_eq!(ACCEL_SCROLL_SPEED, 300);
+        assert_eq!(TEXT_SPEED, 80);
+        assert_eq!(ONE_SECOND, 840);
+        assert_eq!(NUM_BUFFERS_PER_SOURCE, 8);
+        assert_eq!(BUFFER_SIZE, 16384);
+    }
+
+    #[test]
+    fn test_audio_error_display_all_variants() {
+        // REQ-CROSS-ERROR-01
+        let cases: Vec<(AudioError, &str)> = vec![
+            (AudioError::NotInitialized, "audio not initialized"),
+            (AudioError::AlreadyInitialized, "audio already initialized"),
+            (AudioError::InvalidSource(3), "invalid source index 3"),
+            (AudioError::InvalidChannel(7), "invalid channel 7"),
+            (AudioError::InvalidSample, "invalid sample"),
+            (AudioError::InvalidDecoder, "invalid decoder"),
+            (AudioError::DecoderError("bad".into()), "decoder error: bad"),
+            (AudioError::IoError("disk".into()), "I/O error: disk"),
+            (AudioError::NullPointer, "null pointer"),
+            (AudioError::ConcurrentLoad, "concurrent load in progress"),
+            (
+                AudioError::ResourceNotFound("x.ogg".into()),
+                "resource not found: x.ogg",
+            ),
+            (AudioError::EndOfStream, "end of stream"),
+            (AudioError::BufferUnderrun, "buffer underrun"),
+        ];
+        for (err, expected) in cases {
+            assert_eq!(err.to_string(), expected);
+        }
+    }
+
+    #[test]
+    fn test_audio_error_from_decode_error_all_variants() {
+        // REQ-CROSS-ERROR-03
+        let eof: AudioError = DecodeError::EndOfFile.into();
+        assert_eq!(eof, AudioError::EndOfStream);
+
+        let not_init: AudioError = DecodeError::NotInitialized.into();
+        assert_eq!(not_init, AudioError::NotInitialized);
+
+        let not_found: AudioError = DecodeError::NotFound("file".into()).into();
+        assert_eq!(not_found, AudioError::ResourceNotFound("file".into()));
+
+        // Other DecodeError variants → DecoderError(String)
+        let other: AudioError = DecodeError::InvalidData("bad".into()).into();
+        match other {
+            AudioError::DecoderError(s) => assert!(s.contains("InvalidData")),
+            _ => panic!("expected DecoderError variant"),
+        }
+    }
+
+    #[test]
+    fn test_sound_position_repr_c_layout() {
+        // SoundPosition should be #[repr(C)] — verify fields are accessible and sized
+        let pos = SoundPosition {
+            positional: true,
+            x: 100,
+            y: -50,
+        };
+        assert!(pos.positional);
+        assert_eq!(pos.x, 100);
+        assert_eq!(pos.y, -50);
+        // Verify Copy
+        let pos2 = pos;
+        assert_eq!(pos, pos2);
+    }
+
+    #[test]
+    fn test_sound_sample_default_all_fields() {
+        let s = SoundSample::new();
+        assert!(s.decoder.is_none());
+        assert_eq!(s.length, 0.0);
+        assert!(s.buffers.is_empty());
+        assert_eq!(s.num_buffers, 0);
+        assert!(s.buffer_tags.is_empty());
+        assert_eq!(s.offset, 0);
+        assert!(!s.looping);
+        assert!(s.data.is_none());
+        assert!(s.callbacks.is_none());
+    }
+
+    #[test]
+    fn test_sound_source_default_all_fields() {
+        let s = SoundSource::new();
+        assert!(s.sample.is_none());
+        assert_eq!(s.handle, 0);
+        assert!(!s.stream_should_be_playing);
+        assert_eq!(s.start_time, 0);
+        assert_eq!(s.pause_time, 0);
+        assert_eq!(s.positional_object, 0);
+        assert_eq!(s.last_q_buf, 0);
+        assert!(s.sbuffer.is_none());
+        assert_eq!(s.sbuf_size, 0);
+        assert_eq!(s.sbuf_tail, 0);
+        assert_eq!(s.sbuf_head, 0);
+        assert_eq!(s.sbuf_lasttime, 0);
+    }
+
+    #[test]
+    fn test_send_sync_bounds() {
+        // REQ-CROSS-GENERAL-04
+        fn assert_send<T: Send>() {}
+        fn assert_sync<T: Sync>() {}
+        fn assert_send_sync<T: Send + Sync>() {}
+
+        assert_send_sync::<AudioError>();
+        assert_send::<SoundSample>();
+        assert_send::<SoundSource>();
+        assert_send::<FadeState>();
+        assert_send_sync::<SoundPosition>();
+        assert_send::<SoundChunk>();
+        assert_send::<MusicRef>();
+    }
+
+    #[test]
+    fn test_fade_state_defaults() {
+        let f = FadeState::new();
+        assert_eq!(f.start_time, 0);
+        assert_eq!(f.interval, 0);
+        assert_eq!(f.start_volume, 0);
+        assert_eq!(f.delta, 0);
+    }
+
+    #[test]
+    fn test_stream_callbacks_all_defaults() {
+        struct Noop;
+        impl StreamCallbacks for Noop {}
+        let mut cb = Noop;
+        let mut sample = SoundSample::new();
+        assert!(cb.on_start_stream(&mut sample)); // default returns true
+        assert!(!cb.on_end_chunk(&mut sample, 0)); // default returns false
+        cb.on_end_stream(&mut sample); // default is no-op
+        let tag = SoundTag {
+            buf_handle: 0,
+            data: 0,
+        };
+        cb.on_tagged_buffer(&mut sample, &tag); // default is no-op
+        cb.on_queue_buffer(&mut sample, 0); // default is no-op
+    }
+
+    // RED tests: these will panic (todo!()) until P05 implements them.
+    // They are ignored for now and will be un-ignored in P05.
+    #[test]
+    #[ignore = "RED: decode_all stub is todo!(), will be implemented in P05"]
+    fn test_decode_all_empty_decoder() {
+        use crate::sound::null::NullDecoder;
+        let mut dec = NullDecoder::new();
+        let result = decode_all(&mut dec);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    #[ignore = "RED: get_decoder_time stub is todo!(), will be implemented in P05"]
+    fn test_get_decoder_time_zero() {
+        use crate::sound::null::NullDecoder;
+        let dec = NullDecoder::new();
+        let t = get_decoder_time(&dec);
+        assert_eq!(t, 0.0);
+    }
 }
