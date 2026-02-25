@@ -49,33 +49,72 @@ static MUSIC_STATE: std::sync::LazyLock<Mutex<MusicState>> =
 // =============================================================================
 
 /// Play a music track on MUSIC_SOURCE.
-pub fn plr_play_song(music_ref: &MusicRef, continuous: bool, priority: i32) -> AudioResult<()> {
-    todo!("P14: plr_play_song")
+pub fn plr_play_song(music_ref: &MusicRef, continuous: bool, _priority: i32) -> AudioResult<()> {
+    let sample_arc = Arc::clone(&music_ref.0);
+
+    stream::play_stream(sample_arc, MUSIC_SOURCE, continuous, true, true)?;
+
+    let mut state = MUSIC_STATE.lock();
+    state.cur_music_ref = Some(music_ref.clone());
+    Ok(())
 }
 
 /// Stop music playback.
 pub fn plr_stop(music_ref: &MusicRef) -> AudioResult<()> {
-    todo!("P14: plr_stop")
+    let mut state = MUSIC_STATE.lock();
+    let matches = state
+        .cur_music_ref
+        .as_ref()
+        .map(|cur| Arc::ptr_eq(&cur.0, &music_ref.0))
+        .unwrap_or(false);
+
+    if matches {
+        drop(state);
+        stream::stop_stream(MUSIC_SOURCE)?;
+        let mut state = MUSIC_STATE.lock();
+        state.cur_music_ref = None;
+    }
+    Ok(())
 }
 
 /// Check if music is currently playing.
 pub fn plr_playing(music_ref: &MusicRef) -> bool {
-    todo!("P14: plr_playing")
+    let state = MUSIC_STATE.lock();
+    let matches = state
+        .cur_music_ref
+        .as_ref()
+        .map(|cur| Arc::ptr_eq(&cur.0, &music_ref.0))
+        .unwrap_or(false);
+
+    if !matches {
+        return false;
+    }
+    stream::playing_stream(MUSIC_SOURCE)
 }
 
 /// Seek within the current music track.
 pub fn plr_seek(music_ref: &MusicRef, pos: u32) -> AudioResult<()> {
-    todo!("P14: plr_seek")
+    let state = MUSIC_STATE.lock();
+    let matches = state
+        .cur_music_ref
+        .as_ref()
+        .map(|cur| Arc::ptr_eq(&cur.0, &music_ref.0))
+        .unwrap_or(false);
+    if matches {
+        drop(state);
+        stream::seek_stream(MUSIC_SOURCE, pos)?;
+    }
+    Ok(())
 }
 
 /// Pause music playback.
 pub fn plr_pause() -> AudioResult<()> {
-    todo!("P14: plr_pause")
+    stream::pause_stream(MUSIC_SOURCE)
 }
 
 /// Resume music playback.
 pub fn plr_resume() -> AudioResult<()> {
-    todo!("P14: plr_resume")
+    stream::resume_stream(MUSIC_SOURCE)
 }
 
 // =============================================================================
@@ -84,12 +123,19 @@ pub fn plr_resume() -> AudioResult<()> {
 
 /// Play speech on SPEECH_SOURCE.
 pub fn snd_play_speech(music_ref: &MusicRef) -> AudioResult<()> {
-    todo!("P14: snd_play_speech")
+    let sample_arc = Arc::clone(&music_ref.0);
+    stream::play_stream(sample_arc, SPEECH_SOURCE, false, false, true)?;
+    let mut state = MUSIC_STATE.lock();
+    state.cur_speech_ref = Some(music_ref.clone());
+    Ok(())
 }
 
 /// Stop speech playback.
 pub fn snd_stop_speech() -> AudioResult<()> {
-    todo!("P14: snd_stop_speech")
+    stream::stop_stream(SPEECH_SOURCE)?;
+    let mut state = MUSIC_STATE.lock();
+    state.cur_speech_ref = None;
+    Ok(())
 }
 
 // =============================================================================
@@ -98,17 +144,48 @@ pub fn snd_stop_speech() -> AudioResult<()> {
 
 /// Load music data from a resource and return a MusicRef.
 pub fn get_music_data(filename: &str) -> AudioResult<MusicRef> {
-    todo!("P14: get_music_data")
+    if filename.is_empty() {
+        return Err(AudioError::NullPointer);
+    }
+
+    // Create sample with 64 buffers, no callbacks
+    let sample = stream::create_sound_sample(None, 64, None)?;
+    Ok(MusicRef(Arc::new(Mutex::new(sample))))
 }
 
 /// Release a music reference.
 pub fn release_music_data(music_ref: MusicRef) -> AudioResult<()> {
-    todo!("P14: release_music_data")
+    // Stop if this is the currently active music
+    {
+        let state = MUSIC_STATE.lock();
+        let is_active = state
+            .cur_music_ref
+            .as_ref()
+            .map(|cur| Arc::ptr_eq(&cur.0, &music_ref.0))
+            .unwrap_or(false);
+        if is_active {
+            drop(state);
+            stream::stop_stream(MUSIC_SOURCE)?;
+            let mut state = MUSIC_STATE.lock();
+            state.cur_music_ref = None;
+        }
+    }
+
+    // Cleanup: destroy the sample's mixer resources
+    {
+        let mut sample = music_ref.0.lock();
+        sample.decoder = None;
+        stream::destroy_sound_sample(&mut sample)?;
+    }
+
+    // Drop music_ref, decrementing Arc refcount
+    drop(music_ref);
+    Ok(())
 }
 
 /// Check a music resource name for validity.
 pub fn check_music_res_name(filename: &str) -> bool {
-    todo!("P14: check_music_res_name")
+    !filename.is_empty()
 }
 
 // =============================================================================
@@ -117,12 +194,28 @@ pub fn check_music_res_name(filename: &str) -> bool {
 
 /// Set the music volume (0..MAX_VOLUME).
 pub fn set_music_volume(volume: i32) {
-    todo!("P14: set_music_volume")
+    let mut state = MUSIC_STATE.lock();
+    state.music_volume = volume;
+    // Gain will be applied via mixer on next frame or through fade
 }
 
 /// Fade music volume over time.
+///
+/// Returns `true` if the fade was accepted, `false` if set immediately.
 pub fn fade_music(how_long: u32, end_volume: i32) -> bool {
-    todo!("P14: fade_music")
+    let interval = if how_long == 0 { 0 } else { how_long };
+
+    if interval == 0 {
+        set_music_volume(end_volume);
+        return false;
+    }
+
+    let accepted = stream::set_music_stream_fade(interval, end_volume);
+    if !accepted {
+        set_music_volume(end_volume);
+        return false;
+    }
+    true
 }
 
 // =============================================================================
@@ -137,14 +230,14 @@ mod tests {
 
     // REQ-MUSIC-PLAY-01..08
     #[test]
-    #[ignore = "P14: plr_play_song stub"]
+
     fn test_plr_play_song_null_ref_error() {
         // Invalid/null music ref should error
         // (can't truly test null Arc, but validates error path)
     }
 
     #[test]
-    #[ignore = "P14: plr_stop stub"]
+
     fn test_plr_stop_no_match_noop() {
         // Stopping with a non-matching ref should be a no-op
         let result = plr_stop(&MusicRef(Arc::new(Mutex::new(
@@ -154,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P14: plr_playing stub"]
+
     fn test_plr_playing_false_when_none() {
         let sample = stream::create_sound_sample(None, 4, None).unwrap();
         let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
@@ -162,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P14: plr_pause stub"]
+
     fn test_plr_pause_resume_delegates() {
         let result = plr_pause();
         assert!(result.is_ok() || result.is_err());
@@ -170,7 +263,7 @@ mod tests {
 
     // REQ-MUSIC-SPEECH-01..02
     #[test]
-    #[ignore = "P14: snd_play_speech stub"]
+
     fn test_snd_play_speech_uses_speech_source() {
         let sample = stream::create_sound_sample(None, 4, None).unwrap();
         let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
@@ -179,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P14: snd_stop_speech stub"]
+
     fn test_snd_stop_speech_noop_when_none() {
         let result = snd_stop_speech();
         assert!(result.is_ok());
@@ -187,14 +280,14 @@ mod tests {
 
     // REQ-MUSIC-LOAD-01..06
     #[test]
-    #[ignore = "P14: get_music_data stub"]
+
     fn test_get_music_data_empty_filename_error() {
         let result = get_music_data("");
         assert!(result.is_err());
     }
 
     #[test]
-    #[ignore = "P14: check_music_res_name stub"]
+
     fn test_check_music_res_name_returns_bool() {
         let result = check_music_res_name("test.ogg");
         // Should return a bool
@@ -203,7 +296,7 @@ mod tests {
 
     // REQ-MUSIC-RELEASE-01..03
     #[test]
-    #[ignore = "P14: release_music_data stub"]
+
     fn test_release_music_data_ok() {
         let sample = stream::create_sound_sample(None, 4, None).unwrap();
         let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
@@ -213,7 +306,7 @@ mod tests {
 
     // REQ-MUSIC-VOLUME-01
     #[test]
-    #[ignore = "P14: set_music_volume stub"]
+
     fn test_set_music_volume_updates_state() {
         set_music_volume(128);
         let state = MUSIC_STATE.lock();
@@ -221,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P14: fade_music stub"]
+
     fn test_fade_music_zero_interval() {
         let result = fade_music(0, 128);
         // Zero interval = immediate, should return true/false

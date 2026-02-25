@@ -530,6 +530,37 @@ pub fn set_music_stream_fade(how_long: u32, end_volume: i32) -> bool {
 /// Initialize the streaming decoder subsystem.
 ///
 /// Spawns the background decoder thread. **Must be called after
+// =============================================================================
+// Source accessors (for SFX / Music modules)
+// =============================================================================
+
+/// Access a sound source by index. Locks the source mutex and calls `f`.
+/// Returns `None` if the source index is out of range.
+pub fn with_source<F, R>(source_index: usize, f: F) -> Option<R>
+where
+    F: FnOnce(&mut SoundSource) -> R,
+{
+    SOURCES.get(source_index).map(|s| f(&mut s.lock()))
+}
+
+/// Stop a sound source (non-streaming SFX stop).
+///
+/// Stops the mixer source and clears the associated sample.
+pub fn stop_source(source_index: usize) -> AudioResult<()> {
+    let handle = {
+        let source = SOURCES
+            .get(source_index)
+            .ok_or(AudioError::InvalidChannel(source_index))?;
+        let mut source = source.lock();
+        let handle = source.handle;
+        source.sample = None;
+        source.stream_should_be_playing = false;
+        handle
+    };
+    let _ = super::mixer::source::mixer_source_stop(handle);
+    Ok(())
+}
+
 /// `mixer_init()`** — the engine allocates mixer sources/buffers during
 /// initialization.
 pub fn init_stream_decoder() -> AudioResult<()> {
