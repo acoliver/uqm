@@ -41,6 +41,14 @@ pub struct MixerSource {
     pub count: u32,
     /// Cached sample for mono->stereo duplication
     pub sample_cache: f32,
+    // @plan PLAN-20260225-AUDIO-HEART.P02b
+    // @requirement REQ-SFX-POSITION-01
+    /// Positional audio X (stored, not used for panning — matches C behavior)
+    pub pos_x: f32,
+    /// Positional audio Y
+    pub pos_y: f32,
+    /// Positional audio Z (default -1.0 for non-positional)
+    pub pos_z: f32,
 }
 
 impl MixerSource {
@@ -61,6 +69,9 @@ impl MixerSource {
             pos: 0,
             count: 0,
             sample_cache: 0.0,
+            pos_x: 0.0,
+            pos_y: 0.0,
+            pos_z: -1.0,
         }
     }
 
@@ -229,8 +240,32 @@ pub fn mixer_source_f(handle: usize, prop: SourceProp, value: f32) -> Result<(),
             src.gain = value * MIX_GAIN_ADJ;
             Ok(())
         }
+        SourceProp::PositionX => {
+            src.pos_x = value;
+            Ok(())
+        }
+        SourceProp::PositionY => {
+            src.pos_y = value;
+            Ok(())
+        }
+        SourceProp::PositionZ => {
+            src.pos_z = value;
+            Ok(())
+        }
         _ => Err(MixerError::InvalidEnum),
     }
+}
+
+/// Set 3-component float vector property (e.g., position).
+pub fn mixer_source_fv(
+    handle: usize,
+    _prop: SourceProp,
+    values: &[f32; 3],
+) -> Result<(), MixerError> {
+    mixer_source_f(handle, SourceProp::PositionX, values[0])?;
+    mixer_source_f(handle, SourceProp::PositionY, values[1])?;
+    mixer_source_f(handle, SourceProp::PositionZ, values[2])?;
+    Ok(())
 }
 
 /// Get an integer property from a source
@@ -258,6 +293,9 @@ pub fn mixer_get_source_f(handle: usize, prop: SourceProp) -> Result<f32, MixerE
 
     match prop {
         SourceProp::Gain => Ok(src.gain / MIX_GAIN_ADJ),
+        SourceProp::PositionX => Ok(src.pos_x),
+        SourceProp::PositionY => Ok(src.pos_y),
+        SourceProp::PositionZ => Ok(src.pos_z),
         _ => Err(MixerError::InvalidEnum),
     }
 }
@@ -613,5 +651,55 @@ mod tests {
     fn test_delete_invalid_source() {
         let result = mixer_delete_sources(&[999]);
         assert_eq!(result, Err(MixerError::InvalidName));
+    }
+
+    #[test]
+    fn test_source_position_defaults() {
+        let handles = mixer_gen_sources(1).unwrap();
+        let h = handles[0];
+        assert!((mixer_get_source_f(h, SourceProp::PositionX).unwrap() - 0.0).abs() < f32::EPSILON);
+        assert!((mixer_get_source_f(h, SourceProp::PositionY).unwrap() - 0.0).abs() < f32::EPSILON);
+        assert!(
+            (mixer_get_source_f(h, SourceProp::PositionZ).unwrap() - (-1.0)).abs() < f32::EPSILON
+        );
+        mixer_delete_sources(&handles).unwrap();
+    }
+
+    #[test]
+    fn test_source_position_set_get() {
+        let handles = mixer_gen_sources(1).unwrap();
+        let h = handles[0];
+        mixer_source_f(h, SourceProp::PositionX, 1.5).unwrap();
+        mixer_source_f(h, SourceProp::PositionY, 2.5).unwrap();
+        mixer_source_f(h, SourceProp::PositionZ, 3.5).unwrap();
+        assert!((mixer_get_source_f(h, SourceProp::PositionX).unwrap() - 1.5).abs() < f32::EPSILON);
+        assert!((mixer_get_source_f(h, SourceProp::PositionY).unwrap() - 2.5).abs() < f32::EPSILON);
+        assert!((mixer_get_source_f(h, SourceProp::PositionZ).unwrap() - 3.5).abs() < f32::EPSILON);
+        mixer_delete_sources(&handles).unwrap();
+    }
+
+    #[test]
+    fn test_source_fv() {
+        let handles = mixer_gen_sources(1).unwrap();
+        let h = handles[0];
+        mixer_source_fv(h, SourceProp::Position, &[10.0, 20.0, 30.0]).unwrap();
+        assert!(
+            (mixer_get_source_f(h, SourceProp::PositionX).unwrap() - 10.0).abs() < f32::EPSILON
+        );
+        assert!(
+            (mixer_get_source_f(h, SourceProp::PositionY).unwrap() - 20.0).abs() < f32::EPSILON
+        );
+        assert!(
+            (mixer_get_source_f(h, SourceProp::PositionZ).unwrap() - 30.0).abs() < f32::EPSILON
+        );
+        mixer_delete_sources(&handles).unwrap();
+    }
+
+    #[test]
+    fn test_position_invalid_handle() {
+        assert_eq!(
+            mixer_source_f(999, SourceProp::PositionX, 1.0),
+            Err(MixerError::InvalidName)
+        );
     }
 }

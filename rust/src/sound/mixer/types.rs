@@ -161,6 +161,11 @@ pub enum SourceProp {
     SourceState = 0x1010,
     BuffersQueued = 0x1015,
     BuffersProcessed = 0x1016,
+    // @plan PLAN-20260225-AUDIO-HEART.P02b
+    // @requirement REQ-SFX-POSITION-01
+    PositionX = 0x3001,
+    PositionY = 0x3002,
+    PositionZ = 0x3003,
 }
 
 /// Buffer properties (compatible with OpenAL)
