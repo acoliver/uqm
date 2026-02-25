@@ -28,6 +28,8 @@ pub mod ogg;
 pub mod rodio_audio;
 pub mod rodio_backend;
 // @plan PLAN-20260225-AUDIO-HEART.P06
+pub mod control;
+pub mod fileinst;
 pub mod music;
 pub mod sfx;
 pub mod stream;
