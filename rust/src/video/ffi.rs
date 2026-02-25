@@ -2,10 +2,13 @@
 
 use std::ffi::{c_char, c_int, c_void, CStr};
 use std::ptr;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::bridge_log::rust_bridge_log_msg;
 use crate::io::ffi::{uio_DirHandle, uio_Handle, uio_close, uio_open, uio_read};
+use crate::sound::dukaud::DukAudDecoder;
+use crate::sound::rodio_audio::{self, SoundCategory};
 
 use super::decoder::DukVideoDecoder;
 use super::player::VideoPlayer;
@@ -13,6 +16,13 @@ use super::scaler::{LanczosVideoScaler, VideoScaler};
 use super::{VideoError, VideoFrame, DUCK_FPS};
 
 pub use crate::graphics::ffi::SDL_Surface;
+
+/// Rodio handle for the currently-playing video audio track.
+/// 0 means no audio is playing.
+static VIDEO_AUDIO_HANDLE: AtomicU32 = AtomicU32::new(0);
+
+/// Rodio handle for video speech track. 0 = none.
+static VIDEO_SPEECH_HANDLE: AtomicU32 = AtomicU32::new(0);
 
 fn log_msg(msg: &str) {
     rust_bridge_log_msg(msg);
@@ -39,13 +49,6 @@ extern "C" {
     // Actual window dimensions for direct presentation
     static ScreenWidthActual: c_int;
     static ScreenHeightActual: c_int;
-
-    // Audio functions from sndlib.h
-    fn LoadMusicFile(filename: *const c_char) -> *mut c_void;
-    fn PLRPlaySong(music_ref: *mut c_void, continuous: c_int, priority: u8);
-    fn PLRStop(music_ref: *mut c_void);
-    fn snd_PlaySpeech(speech_ref: *mut c_void);
-    fn snd_StopSpeech();
 }
 
 // Minimal SDL types needed for direct pixel writes.
@@ -1107,46 +1110,75 @@ pub unsafe extern "C" fn TFB_PlayVideo(
         return false;
     }
 
-    // Load audio from .duk if no separate audio was specified
-    if clip.h_audio.is_null() {
-        clip.h_audio = LoadMusicFile(dec.filename);
-        if !clip.h_audio.is_null() {
-            rust_bridge_log_msg(&format!(
-                "RUST_VIDEO: loaded embedded audio from {}",
-                filename_str
-            ));
+    // Ensure the rodio_audio simple playback system is initialized
+    // (it's separate from the rodio_backend OpenAL-compat layer)
+    rodio_audio::rust_audio_init();
+
+    // Decode audio from the .duk file directly via Rust DukAudDecoder + rodio
+    let basename = filename_str.trim_end_matches(".duk");
+    let duk_file = format!("{}.duk", basename);
+    let frm_file = format!("{}.frm", basename);
+
+    let duk_data = read_uio_file(dec.dir, &duk_file);
+    let frm_data = read_uio_file(dec.dir, &frm_file);
+
+    if let (Some(duk_bytes), Some(frm_bytes)) = (duk_data, frm_data) {
+        let mut audio_dec = DukAudDecoder::new();
+        if audio_dec.open_from_data(&duk_bytes, &frm_bytes).is_ok() {
+            // Decode all audio frames into one PCM buffer
+            let mut pcm = Vec::new();
+            let mut chunk = vec![0u8; 8192];
+            loop {
+                match audio_dec.decode(&mut chunk) {
+                    Ok(n) if n > 0 => pcm.extend_from_slice(&chunk[..n]),
+                    _ => break,
+                }
+            }
+
+            if !pcm.is_empty() {
+                let looping = clip.loop_frame != VID_NO_LOOP;
+                let handle = rodio_audio::play_raw_pcm(
+                    pcm.clone(),
+                    22050,   // DukAud sample rate
+                    2,       // stereo
+                    16,      // 16-bit
+                    SoundCategory::Music,
+                    looping,
+                );
+                VIDEO_AUDIO_HANDLE.store(handle, Ordering::Relaxed);
+                rust_bridge_log_msg(&format!(
+                    "RUST_VIDEO: playing embedded audio via rodio, {} bytes PCM, handle={}",
+                    pcm.len(), handle
+                ));
+            } else {
+                rust_bridge_log_msg("RUST_VIDEO: no audio decoded from .duk");
+            }
         } else {
-            rust_bridge_log_msg(&format!(
-                "RUST_VIDEO: no audio found for {}",
-                filename_str
-            ));
+            rust_bridge_log_msg("RUST_VIDEO: DukAudDecoder failed to open");
         }
-    }
-
-    // Start audio playback
-    if !clip.h_audio.is_null() {
-        let continuous = if clip.loop_frame != VID_NO_LOOP { 1 } else { 0 };
-        PLRPlaySong(clip.h_audio, continuous, 1);
-    }
-
-    // Start speech track if present
-    if !clip.data.is_null() {
-        snd_PlaySpeech(clip.data);
+    } else {
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: could not read .duk/.frm for audio from {}",
+            filename_str
+        ));
     }
 
     true
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn TFB_StopVideo(vid: *mut TFB_VideoClip) {
-    if !vid.is_null() {
-        let clip = &*vid;
-        if !clip.h_audio.is_null() {
-            PLRStop(clip.h_audio);
-        }
-        if !clip.data.is_null() {
-            snd_StopSpeech();
-        }
+pub unsafe extern "C" fn TFB_StopVideo(_vid: *mut TFB_VideoClip) {
+    // Stop video audio played via rodio
+    let audio_handle = VIDEO_AUDIO_HANDLE.swap(0, Ordering::Relaxed);
+    if audio_handle != 0 {
+        rodio_audio::stop_sound(audio_handle);
+        rust_bridge_log_msg(&format!(
+            "RUST_VIDEO: stopped audio handle={}", audio_handle
+        ));
+    }
+    let speech_handle = VIDEO_SPEECH_HANDLE.swap(0, Ordering::Relaxed);
+    if speech_handle != 0 {
+        rodio_audio::stop_sound(speech_handle);
     }
     rust_stop_video();
 }

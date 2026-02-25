@@ -483,6 +483,39 @@ pub extern "C" fn rust_audio_play_raw(
     }
 }
 
+/// Play raw PCM audio directly from Rust (no FFI pointer dance).
+///
+/// Returns a handle > 0 on success, 0 on failure.
+pub fn play_raw_pcm(
+    pcm_data: Vec<u8>,
+    sample_rate: u32,
+    channels: u16,
+    bits_per_sample: u16,
+    category: SoundCategory,
+    looping: bool,
+) -> u32 {
+    let (tx, rx) = mpsc::channel();
+    if send_command(AudioCommand::PlayRaw(
+        pcm_data,
+        sample_rate,
+        channels,
+        bits_per_sample,
+        category,
+        looping,
+        tx,
+    )) {
+        rx.recv().unwrap_or(0)
+    } else {
+        rust_bridge_log_msg("RUST_AUDIO: play_raw_pcm send_command failed (audio thread not running?)");
+        0
+    }
+}
+
+/// Stop a playing sound by handle (Rust-callable).
+pub fn stop_sound(handle: u32) {
+    send_command(AudioCommand::Stop(handle));
+}
+
 /// Stop a playing sound
 #[no_mangle]
 pub extern "C" fn rust_audio_stop(handle: u32) {
