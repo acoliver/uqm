@@ -29,6 +29,7 @@ pub mod rodio_audio;
 pub mod rodio_backend;
 // @plan PLAN-20260225-AUDIO-HEART.P06
 pub mod stream;
+pub mod trackplayer;
 // @plan PLAN-20260225-AUDIO-HEART.P03
 // @requirement REQ-CROSS-GENERAL-07
 pub mod types;
