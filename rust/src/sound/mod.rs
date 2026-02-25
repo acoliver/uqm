@@ -15,8 +15,6 @@
 
 pub mod aiff;
 pub mod aiff_ffi;
-// @plan PLAN-20260225-AUDIO-HEART.P03
-// @requirement REQ-CROSS-GENERAL-07
 pub mod decoder;
 pub mod dukaud;
 pub mod dukaud_ffi;
@@ -29,6 +27,10 @@ pub mod null;
 pub mod ogg;
 pub mod rodio_audio;
 pub mod rodio_backend;
+// @plan PLAN-20260225-AUDIO-HEART.P06
+pub mod stream;
+// @plan PLAN-20260225-AUDIO-HEART.P03
+// @requirement REQ-CROSS-GENERAL-07
 pub mod types;
 pub mod wav;
 pub mod wav_ffi;
