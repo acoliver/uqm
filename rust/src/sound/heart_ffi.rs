@@ -546,6 +546,113 @@ impl StreamCallbacks for CCallbackWrapper {
 mod tests {
     use super::*;
 
+    // --- P19 TDD ---
+
+    // REQ-CROSS-FFI-02: Null safety
+    #[test]
+    #[ignore = "P20: TFB_CreateSoundSample stub"]
+    fn test_create_sound_sample_null_decoder() {
+        let ptr = unsafe { TFB_CreateSoundSample(null_mut(), 4, null_mut()) };
+        assert!(!ptr.is_null());
+        unsafe { TFB_DestroySoundSample(ptr) };
+    }
+
+    #[test]
+    #[ignore = "P20: TFB_DestroySoundSample stub"]
+    fn test_destroy_sound_sample_null_ptr() {
+        unsafe { TFB_DestroySoundSample(null_mut()) }; // should not panic
+    }
+
+    #[test]
+    #[ignore = "P20: TFB_SetSoundSampleData stub"]
+    fn test_set_sound_sample_data_null_ptr() {
+        unsafe { TFB_SetSoundSampleData(null_mut(), null_mut()) }; // no-op
+    }
+
+    #[test]
+    #[ignore = "P20: TFB_GetSoundSampleData stub"]
+    fn test_get_sound_sample_data_null_ptr() {
+        let result = unsafe { TFB_GetSoundSampleData(null_mut()) };
+        assert!(result.is_null());
+    }
+
+    // REQ-CROSS-FFI-03: Error translation
+    #[test]
+    #[ignore = "P20: InitStreamDecoder stub"]
+    fn test_init_stream_decoder_return_code() {
+        let code = InitStreamDecoder();
+        assert!(code == 0 || code == -1);
+    }
+
+    #[test]
+    #[ignore = "P20: PlayingStream stub"]
+    fn test_playing_stream_returns_int() {
+        let result = PlayingStream(0);
+        assert!(result == 0 || result == 1);
+    }
+
+    #[test]
+    #[ignore = "P20: PlayingTrack stub"]
+    fn test_playing_track_returns_int() {
+        let result = PlayingTrack();
+        assert!(result >= 0);
+    }
+
+    #[test]
+    #[ignore = "P20: SoundPlaying stub"]
+    fn test_sound_playing_returns_int() {
+        let result = SoundPlaying();
+        assert!(result == 0 || result == 1);
+    }
+
+    #[test]
+    #[ignore = "P20: LoadSoundFile stub"]
+    fn test_load_sound_file_null_returns_null() {
+        let result = unsafe { LoadSoundFile(ptr::null()) };
+        assert!(result.is_null());
+    }
+
+    // REQ-CROSS-FFI-04: String conversion (already working)
+    #[test]
+    fn test_c_str_to_option_empty() {
+        let s = CString::new("").unwrap();
+        let result = unsafe { c_str_to_option(s.as_ptr()) };
+        assert_eq!(result, Some(""));
+    }
+
+    // REQ-CROSS-GENERAL-08: Callbacks
+    #[test]
+    fn test_callback_wrapper_default_on_start() {
+        let mut wrapper = CCallbackWrapper {
+            callbacks: CTfbSoundCallbacks {
+                on_start_stream: None,
+                on_end_chunk: None,
+                on_end_stream: None,
+                on_tagged_buffer: None,
+                on_queue_buffer: None,
+            },
+            sample_ptr: null_mut(),
+        };
+        let mut sample = stream::create_sound_sample(None, 4, None).unwrap();
+        assert!(wrapper.on_start_stream(&mut sample));
+    }
+
+    #[test]
+    fn test_callback_wrapper_default_on_end_chunk() {
+        let mut wrapper = CCallbackWrapper {
+            callbacks: CTfbSoundCallbacks {
+                on_start_stream: None,
+                on_end_chunk: None,
+                on_end_stream: None,
+                on_tagged_buffer: None,
+                on_queue_buffer: None,
+            },
+            sample_ptr: null_mut(),
+        };
+        let mut sample = stream::create_sound_sample(None, 4, None).unwrap();
+        assert!(wrapper.on_end_chunk(&mut sample, 0));
+    }
+
     #[test]
     fn test_c_callback_wrapper_is_send() {
         fn assert_send<T: Send>() {}
