@@ -89,6 +89,13 @@ Side effects: Frees mixer buffer handles
 
 ## 5. play_stream
 
+**LOCK NOTE**: The buffer fill loop (lines 113-138) calls on_queue_buffer/on_end_chunk while
+holding Source+Sample locks. TrackCallbacks' on_end_chunk acquires TRACK_STATE, making the
+order Source→Sample→TRACK_STATE (inverting the hierarchy). This matches the C implementation
+where PlayStream calls callbacks under the source lock. It is safe because play_stream and
+stop_track are single-threaded (main thread only in UQM). If multi-threaded callers are ever
+added, the buffer fill callbacks would need the deferred callback pattern too.
+
 ```
 70: FUNCTION play_stream(sample_arc, source_index, looping, scope, rewind) -> AudioResult<()>
 71:   VALIDATE source_index < NUM_SOUNDSOURCES ELSE RETURN Err(AudioError::InvalidSource(source_index))
