@@ -14,6 +14,7 @@
 //! - `rodio_backend` module provides OpenAL-compatible API using rodio
 
 pub mod aiff;
+pub mod aiff_ffi;
 pub mod decoder;
 pub mod dukaud;
 pub mod dukaud_ffi;
