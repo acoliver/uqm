@@ -946,22 +946,32 @@ pub unsafe extern "C" fn rust_play_video_direct_window(
     let src_w = decoder.width();
     let src_h = decoder.height();
 
-    rust_bridge_log_msg(&format!(
-        "RUST_VIDEO: Source video {}x{}, Lanczos scaling to window {}x{}",
-        src_w, src_h, window_width, window_height
-    ));
+    // Pick the best xBRZ factor: largest that doesn't exceed window dimensions.
+    // xBRZ supports 2-6. For 280×200 → 1280×960: 4× gives 1120×800, SDL
+    // bilinear stretches the remaining ~14% — same pipeline as 2D graphics.
+    let xbrz_factor = (2..=6usize)
+        .rev()
+        .find(|&f| {
+            (src_w as usize * f) <= window_width as usize
+                && (src_h as usize * f) <= window_height as usize
+        })
+        .unwrap_or(2);
 
-    let lanczos_scaler = Some(LanczosVideoScaler::new(
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: Source video {}x{}, xBRZ {}x → {}x{}, window {}x{}",
         src_w,
         src_h,
+        xbrz_factor,
+        src_w as usize * xbrz_factor,
+        src_h as usize * xbrz_factor,
         window_width,
-        window_height,
+        window_height
     ));
 
     let mut player = VideoPlayer::new(decoder);
-    player.set_position(0, 0); // Centered by renderer
+    player.set_position(0, 0);
     player.set_loop(looping);
-    player.set_lanczos_scaler(lanczos_scaler);
+    player.set_xbrz_factor(xbrz_factor);
     player.set_direct_window_mode(true);
 
     player.play();
@@ -970,8 +980,9 @@ pub unsafe extern "C" fn rust_play_video_direct_window(
         *guard = Some(player);
     }
 
-    rust_bridge_log_msg(
-        "RUST_VIDEO: Direct window player initialized - video will bypass all gfx scaling",
-    );
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: Direct window player initialized with xBRZ {}x scaling",
+        xbrz_factor
+    ));
     true
 }

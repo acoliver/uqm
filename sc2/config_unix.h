@@ -109,3 +109,6 @@
 /* Defined if using Rust state file I/O */
 #define USE_RUST_STATE
 
+/* Defined if using Rust DukAud decoder */
+#define USE_RUST_DUKAUD
+

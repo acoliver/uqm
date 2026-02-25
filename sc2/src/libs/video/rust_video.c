@@ -66,6 +66,19 @@ TFB_PlayVideo (VIDEO_REF vid, uint32 x, uint32 y)
 	if (!ok)
 		return false;
 	
+	// Load audio from the .duk file itself if no separate audio was specified.
+	// Duck video format embeds audio; the C dukaud decoder extracts it.
+	if (!vid->hAudio)
+	{
+		vid->hAudio = LoadMusicFile (vid->decoder->filename);
+		if (vid->hAudio)
+			log_add (log_Info, "RUST_VIDEO: loaded embedded audio from %s",
+					 vid->decoder->filename);
+		else
+			log_add (log_Warning, "RUST_VIDEO: no audio found for %s",
+					 vid->decoder->filename);
+	}
+
 	// Start associated audio (if any) in the main audio path.
 	if (vid->hAudio)
 		PLRPlaySong (vid->hAudio, vid->loop_frame != VID_NO_LOOP, 1);

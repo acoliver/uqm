@@ -42,6 +42,9 @@
 #ifdef USE_RUST_MOD
 #	include "rust_mod.h"
 #endif  /* USE_RUST_MOD */
+#ifdef USE_RUST_DUKAUD
+#	include "rust_dukaud.h"
+#endif  /* USE_RUST_DUKAUD */
 #include "aiffaud.h"
 
 
@@ -161,7 +164,12 @@ static TFB_RegSoundDecoder sd_decoders[MAX_REG_DECODERS + 1] =
 #elif !defined(OVCODEC_NONE)
 	{true,  true,  "ogg", &ova_DecoderVtbl},
 #endif  /* USE_RUST_OGG / OVCODEC_NONE */
+#ifdef USE_RUST_DUKAUD
+	/* Use Rust DukAud decoder (pure Rust port of dukaud.c) */
+	{true,  true,  "duk", &rust_duka_DecoderVtbl},
+#else
 	{true,  true,  "duk", &duka_DecoderVtbl},
+#endif  /* USE_RUST_DUKAUD */
 	{true,  true,  "aif", &aifa_DecoderVtbl},
 	{false, false,  NULL, NULL}, // null term
 };

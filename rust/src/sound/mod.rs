@@ -14,6 +14,8 @@
 //! - `rodio_backend` module provides OpenAL-compatible API using rodio
 
 pub mod decoder;
+pub mod dukaud;
+pub mod dukaud_ffi;
 pub mod ffi;
 pub mod formats;
 pub mod mixer;
@@ -27,6 +29,8 @@ pub mod wav;
 pub mod wav_ffi;
 
 pub use decoder::{DecodeError, DecodeResult, SoundDecoder};
+pub use dukaud::DukAudDecoder;
+pub use dukaud_ffi::rust_duka_DecoderVtbl;
 pub use ffi::rust_ova_DecoderVtbl;
 pub use formats::{AudioFormat, DecoderFormats};
 pub use mod_decoder::ModDecoder;
