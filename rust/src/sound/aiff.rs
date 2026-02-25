@@ -139,42 +139,132 @@ impl AiffDecoder {
     }
 }
 
-// --- Private helper functions (stubs for P05) ---
+// --- Private helper functions ---
+// @plan PLAN-20260225-AIFF-DECODER.P05
+// @requirement REQ-FP-1..15, REQ-SV-1..13, REQ-CH-1..7
 
-fn read_be_u16(_cursor: &mut Cursor<&[u8]>) -> DecodeResult<u16> {
-    todo!("P05: parser impl")
+fn read_be_u16(cursor: &mut Cursor<&[u8]>) -> DecodeResult<u16> {
+    let mut buf = [0u8; 2];
+    cursor
+        .read_exact(&mut buf)
+        .map_err(|_| DecodeError::InvalidData("read u16".into()))?;
+    Ok(u16::from_be_bytes(buf))
 }
 
-fn read_be_u32(_cursor: &mut Cursor<&[u8]>) -> DecodeResult<u32> {
-    todo!("P05: parser impl")
+fn read_be_u32(cursor: &mut Cursor<&[u8]>) -> DecodeResult<u32> {
+    let mut buf = [0u8; 4];
+    cursor
+        .read_exact(&mut buf)
+        .map_err(|_| DecodeError::InvalidData("read u32".into()))?;
+    Ok(u32::from_be_bytes(buf))
 }
 
-fn read_be_i16(_cursor: &mut Cursor<&[u8]>) -> DecodeResult<i16> {
-    todo!("P05: parser impl")
+fn read_be_i16(cursor: &mut Cursor<&[u8]>) -> DecodeResult<i16> {
+    let mut buf = [0u8; 2];
+    cursor
+        .read_exact(&mut buf)
+        .map_err(|_| DecodeError::InvalidData("read i16".into()))?;
+    Ok(i16::from_be_bytes(buf))
 }
 
-fn read_be_f80(_cursor: &mut Cursor<&[u8]>) -> DecodeResult<i32> {
-    todo!("P05: parser impl — IEEE 754 80-bit extended precision")
+/// Parse IEEE 754 80-bit extended precision float to i32.
+///
+/// Layout: sign (1 bit) | biased exponent (15 bits) | significand (64 bits, explicit integer bit)
+/// For normalized numbers: value = (-1)^sign × significand × 2^(biased_exp − 16383 − 63)
+fn read_be_f80(cursor: &mut Cursor<&[u8]>) -> DecodeResult<i32> {
+    let se = read_be_u16(cursor)?;
+    let sig_hi = read_be_u32(cursor)?;
+    let sig_lo = read_be_u32(cursor)?;
+
+    let sign = (se >> 15) & 1;
+    let biased_exp = se & 0x7FFF;
+    let significand: u64 = ((sig_hi as u64) << 32) | (sig_lo as u64);
+
+    // Class 1: Zero
+    if biased_exp == 0 && significand == 0 {
+        return Ok(0);
+    }
+
+    // Class 2: Denormalized — near-zero, will be caught by rate validation
+    if biased_exp == 0 {
+        return Ok(0);
+    }
+
+    // Class 3: Infinity / NaN
+    if biased_exp == 0x7FFF {
+        return Err(DecodeError::InvalidData(
+            "invalid sample rate: infinity or NaN in f80".into(),
+        ));
+    }
+
+    // Class 4: Normal
+    let shift: i32 = (biased_exp as i32) - 16383 - 63;
+
+    let abs_val: u64 = if shift >= 0 {
+        let shifted = significand.checked_shl(shift as u32).unwrap_or(u64::MAX);
+        if shifted > 0x7FFF_FFFF {
+            0x7FFF_FFFF // clamp to i32::MAX
+        } else {
+            shifted
+        }
+    } else {
+        let right_shift = (-shift) as u32;
+        if right_shift >= 64 {
+            0
+        } else {
+            significand >> right_shift
+        }
+    };
+
+    let mut result = abs_val as i32;
+    if sign == 1 {
+        result = -result;
+    }
+    Ok(result)
 }
 
-fn read_chunk_header(_cursor: &mut Cursor<&[u8]>) -> DecodeResult<ChunkHeader> {
-    todo!("P05: parser impl")
+fn read_chunk_header(cursor: &mut Cursor<&[u8]>) -> DecodeResult<ChunkHeader> {
+    let id = read_be_u32(cursor)?;
+    let size = read_be_u32(cursor)?;
+    Ok(ChunkHeader { id, size })
 }
 
 impl AiffDecoder {
     fn read_common_chunk(
         &mut self,
-        _cursor: &mut Cursor<&[u8]>,
-        _chunk_size: u32,
+        cursor: &mut Cursor<&[u8]>,
+        chunk_size: u32,
     ) -> DecodeResult<CommonChunk> {
-        todo!("P05: parser impl")
+        if chunk_size < AIFF_COMM_SIZE as u32 {
+            self.last_error = -2;
+            return Err(DecodeError::InvalidData("COMM chunk too small".into()));
+        }
+        let start_pos = cursor.position();
+        let mut common = CommonChunk::default();
+        common.channels = read_be_u16(cursor)?;
+        common.sample_frames = read_be_u32(cursor)?;
+        common.sample_size = read_be_u16(cursor)?;
+        common.sample_rate = read_be_f80(cursor)?;
+        if chunk_size >= AIFF_EXT_COMM_SIZE as u32 {
+            common.ext_type_id = read_be_u32(cursor)?;
+        }
+        let consumed = cursor.position() - start_pos;
+        let remaining = chunk_size as u64 - consumed;
+        if remaining > 0 {
+            cursor
+                .seek(SeekFrom::Current(remaining as i64))
+                .map_err(|_| DecodeError::InvalidData("seek past COMM remainder".into()))?;
+        }
+        Ok(common)
     }
 
     fn read_sound_data_header(
         &mut self,
-        _cursor: &mut Cursor<&[u8]>,
+        cursor: &mut Cursor<&[u8]>,
     ) -> DecodeResult<SoundDataHeader> {
-        todo!("P05: parser impl")
+        let offset = read_be_u32(cursor)?;
+        let block_size = read_be_u32(cursor)?;
+        Ok(SoundDataHeader { offset, block_size })
     }
 }
 
@@ -218,8 +308,237 @@ impl SoundDecoder for AiffDecoder {
         self.open_from_bytes(&data, &name)
     }
 
-    fn open_from_bytes(&mut self, _data: &[u8], _name: &str) -> DecodeResult<()> {
-        todo!("P05: parser impl — AIFF header parsing and validation")
+    fn open_from_bytes(&mut self, data: &[u8], _name: &str) -> DecodeResult<()> {
+        // Reset state (REQ-LF-7)
+        self.close();
+        self.common = CommonChunk::default();
+
+        // Minimum header size
+        if data.len() < 12 {
+            self.last_error = -2;
+            return Err(DecodeError::InvalidData(
+                "file too small for AIFF header".into(),
+            ));
+        }
+
+        // Memory guard (64MB)
+        if data.len() > MAX_FILE_SIZE {
+            self.last_error = -2;
+            return Err(DecodeError::InvalidData(
+                "AIFF file exceeds 64MB safety limit".into(),
+            ));
+        }
+
+        let mut cursor = Cursor::new(data);
+
+        // Parse FORM header (REQ-FP-1)
+        let chunk_id = read_be_u32(&mut cursor)?;
+        let chunk_size = read_be_u32(&mut cursor)?;
+        let form_type = read_be_u32(&mut cursor)?;
+
+        // Validate FORM (REQ-FP-2)
+        if chunk_id != FORM_ID {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::InvalidData("not a FORM file".into()));
+        }
+
+        // Validate form type (REQ-FP-3)
+        let is_aifc = match form_type {
+            FORM_TYPE_AIFF => false,
+            FORM_TYPE_AIFC => true,
+            _ => {
+                self.last_error = -2;
+                self.close();
+                return Err(DecodeError::InvalidData("unsupported form type".into()));
+            }
+        };
+
+        // Chunk iteration (REQ-FP-4, REQ-FP-6)
+        let mut remaining = chunk_size as i64 - 4;
+        let mut data_ofs: u64 = 0;
+        let mut ssnd_found = false;
+
+        while remaining > 0 {
+            let chunk_hdr = match read_chunk_header(&mut cursor) {
+                Ok(h) => h,
+                Err(_) => break, // ran out of data in chunk headers
+            };
+            let mut consume = 8 + chunk_hdr.size as i64;
+            if chunk_hdr.size & 1 != 0 {
+                consume += 1; // alignment padding (REQ-FP-5)
+            }
+
+            // Overflow guard
+            if consume > remaining + 8 {
+                self.last_error = -2;
+                self.close();
+                return Err(DecodeError::InvalidData(
+                    "chunk size exceeds remaining file data".into(),
+                ));
+            }
+
+            match chunk_hdr.id {
+                COMMON_ID => {
+                    self.common = self.read_common_chunk(&mut cursor, chunk_hdr.size)?;
+                }
+                SOUND_DATA_ID => {
+                    let ssnd_hdr = self.read_sound_data_header(&mut cursor)?;
+                    data_ofs = cursor.position() + ssnd_hdr.offset as u64;
+                    ssnd_found = true;
+                    let skip = chunk_hdr.size.saturating_sub(AIFF_SSND_SIZE as u32);
+                    if skip > 0 {
+                        cursor
+                            .seek(SeekFrom::Current(skip as i64))
+                            .map_err(|_| DecodeError::InvalidData("seek past SSND data".into()))?;
+                    }
+                }
+                _ => {
+                    // Skip unknown chunks (REQ-FP-7)
+                    if chunk_hdr.size > 0 {
+                        cursor
+                            .seek(SeekFrom::Current(chunk_hdr.size as i64))
+                            .map_err(|_| {
+                                DecodeError::InvalidData("seek past unknown chunk".into())
+                            })?;
+                    }
+                }
+            }
+
+            // Alignment padding (REQ-FP-5)
+            if chunk_hdr.size & 1 != 0 {
+                let _ = cursor.seek(SeekFrom::Current(1));
+            }
+
+            remaining -= consume;
+        }
+
+        // Validation phase
+
+        // REQ-SV-5: sample frames > 0
+        if self.common.sample_frames == 0 {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::InvalidData("no sound data".into()));
+        }
+
+        // REQ-SV-1: round bits to byte boundary
+        self.bits_per_sample = (self.common.sample_size + 7) & !7;
+
+        // REQ-SV-2: bits per sample range
+        if self.bits_per_sample == 0 || self.bits_per_sample > 16 {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::UnsupportedFormat(
+                "bits_per_sample must be 1-16".into(),
+            ));
+        }
+
+        // REQ-SV-3: channel count
+        if self.common.channels != 1 && self.common.channels != 2 {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::UnsupportedFormat(
+                "only mono and stereo supported".into(),
+            ));
+        }
+
+        // REQ-SV-4: sample rate range
+        if self.common.sample_rate < MIN_SAMPLE_RATE as i32
+            || self.common.sample_rate > MAX_SAMPLE_RATE as i32
+        {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::UnsupportedFormat("sample_rate".into()));
+        }
+
+        // REQ-SV-6: SSND required
+        if !ssnd_found {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::InvalidData("no SSND chunk".into()));
+        }
+
+        // Compression handling (REQ-CH-1 through REQ-CH-4)
+        if !is_aifc {
+            if self.common.ext_type_id != 0 {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat("AIFF with extension".into()));
+            }
+            self.comp_type = CompressionType::None;
+        } else {
+            if self.common.ext_type_id == SDX2_COMPRESSION {
+                self.comp_type = CompressionType::Sdx2;
+            } else {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat(
+                    "unknown AIFC compression".into(),
+                ));
+            }
+        }
+
+        // SDX2-specific validation (REQ-CH-5, REQ-CH-6)
+        if self.comp_type == CompressionType::Sdx2 {
+            if self.bits_per_sample != 16 {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat(
+                    "SDX2 requires 16-bit".into(),
+                ));
+            }
+            if self.common.channels as usize > MAX_CHANNELS {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat(
+                    "SDX2 too many channels".into(),
+                ));
+            }
+        }
+
+        // Block sizes (REQ-SV-7..9)
+        self.block_align = (self.bits_per_sample / 8) * self.common.channels;
+        if self.comp_type == CompressionType::None {
+            self.file_block = self.block_align;
+        } else {
+            self.file_block = self.block_align / 2; // 2:1 SDX2 compression
+        }
+
+        // Extract audio data (REQ-SV-10)
+        let data_start = data_ofs as usize;
+        let data_size = self.common.sample_frames as usize * self.file_block as usize;
+        if data_start + data_size > data.len() {
+            self.close();
+            return Err(DecodeError::InvalidData(
+                "audio data extends past file".into(),
+            ));
+        }
+        self.data = data[data_start..data_start + data_size].to_vec();
+
+        // Set metadata (REQ-SV-11..13)
+        self.format = match (self.common.channels, self.bits_per_sample) {
+            (1, 8) => AudioFormat::Mono8,
+            (2, 8) => AudioFormat::Stereo8,
+            (1, 16) => AudioFormat::Mono16,
+            _ => AudioFormat::Stereo16,
+        };
+        self.frequency = self.common.sample_rate as u32;
+        self.max_pcm = self.common.sample_frames;
+        self.cur_pcm = 0;
+        self.data_pos = 0;
+        self.length = self.max_pcm as f32 / self.frequency as f32;
+        self.last_error = 0;
+
+        // Set need_swap (REQ-LF-5, REQ-CH-7)
+        if let Some(ref fmts) = self.formats {
+            if self.comp_type == CompressionType::Sdx2 {
+                self.need_swap = fmts.big_endian != fmts.want_big_endian;
+            } else {
+                self.need_swap = !fmts.want_big_endian;
+            }
+        }
+
+        // Predictor initialization (REQ-DS-7)
+        self.prev_val = [0; MAX_CHANNELS];
+
+        Ok(())
     }
 
     fn close(&mut self) {
