@@ -70,9 +70,20 @@
 - `SpliceTrack`: UNICODE* (`*const u16`) text requires UTF-16→UTF-8 conversion
 - `GetTrackSubtitle`: Must return `*const c_char` — use thread-local `RefCell<CString>` cache
 - `GetFirstTrackSubtitle`/`GetNextTrackSubtitle`: Return raw `NonNull<SoundChunk>` pointers cast to `*mut c_void` (zero allocation, matches C behavior — borrowed pointers valid while track state unchanged)
-- `LoadSoundFile`/`LoadMusicFile`: Box::into_raw for return values
+- `LoadSoundFile`: `Box::into_raw(Box::new(SoundBank))` for return values (SoundBank is NOT Arc-wrapped — it's single-owner)
+- `LoadMusicFile`: `Arc::into_raw(Arc::new(Mutex::new(sample)))` per all-Arc strategy
 - `CCallbackWrapper`: stores raw C function pointers, calls them via `unsafe`
 - All `unsafe` blocks must be documented with safety invariant comments
+
+**All-Arc SoundSample Pointer Strategy**
+
+Every `SoundSample` pointer at the FFI boundary uses `Arc<Mutex<SoundSample>>`:
+- `TFB_CreateSoundSample` → `Arc::new(Mutex::new(sample))` → `Arc::into_raw()` as `*mut c_void`
+- `PlayStream`, `StopStream`, accessors → `Arc::increment_strong_count` + `Arc::from_raw` (borrow without ownership change)
+- `TFB_DestroySoundSample` → `Arc::from_raw` (consuming — decrements refcount, frees if last ref)
+- `LoadMusicFile` → same pattern: `Arc::into_raw()`, `DestroyMusic` → `Arc::from_raw`
+
+Note: `SoundBank` (from `LoadSoundFile`) uses `Box`, not `Arc`, because banks are single-owner (no sharing).
 
 **PlayChannel FFI Handle Resolution (Technical Review Issue #6)**
 

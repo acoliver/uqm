@@ -139,13 +139,8 @@ Validation: REQ-SFX-PLAY-08
 Validation: REQ-SFX-POSITION-01..03
 Integration: Uses three separate mixer_source_f calls for X, Y, Z (no mixer_source_fv needed)
 
-**PREREQUISITE — MIXER EXTENSION NEEDED**: The current mixer does NOT support PositionX/Y/Z:
-- `SourceProp` enum has only `Position = 0x1004`, not PositionX/Y/Z variants
-- `mixer_source_f` only handles `SourceProp::Gain`, returns `InvalidEnum` for others
-- `MixerSource` struct has no x/y/z position fields and no panning logic
-Until the mixer is extended, positional audio calls will silently fail (per CROSS-ERROR-01).
-This must be addressed in a mixer extension phase BEFORE P14 music-sfx-impl, or positional
-audio must be documented as NO-OP. See plan/00-overview.md prerequisites.
+**Note**: Positional audio storage (PositionX/Y/Z) is added to the mixer in phase P02b.
+Positions are stored but not used for panning (matching the C mixer's no-op behavior).
 
 ## 7. get_positional_object / set_positional_object
 

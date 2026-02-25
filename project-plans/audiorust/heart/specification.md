@@ -152,6 +152,17 @@ pub const ONE_SECOND: u32 = 840;
 - **`VolumeState`** — `music_volume`, `music_volume_scale`, `sfx_volume_scale`, `speech_volume_scale`.
 - **`FileInstState`** — `cur_resfile_name` concurrency guard.
 
+### All-Arc Pointer Strategy
+
+**All SoundSample pointers at the FFI boundary use `Arc<Mutex<SoundSample>>`.**
+
+- `TFB_CreateSoundSample` wraps the new sample in `Arc::new(Mutex::new(sample))` and returns `Arc::into_raw()` as `*mut c_void`.
+- `PlayStream`, `StopStream`, and other functions that borrow the sample use `Arc::increment_strong_count` + `Arc::from_raw` (temporary clone, drops at end of function).
+- `TFB_DestroySoundSample` uses `Arc::from_raw` (consuming — decrements refcount, frees if last reference).
+- `MusicRef` (returned by `LoadMusicFile`) is also `Arc::into_raw`. `DestroyMusic` uses `Arc::from_raw`.
+
+This unified strategy eliminates Box/Arc confusion at the FFI boundary. All sample ownership flows through Arc refcounting.
+
 ---
 
 ## 4. Integration Points with Existing Modules

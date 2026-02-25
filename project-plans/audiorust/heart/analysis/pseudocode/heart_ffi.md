@@ -50,39 +50,48 @@ FUNCTION cache_and_return_c_str_text(text) -> *const c_char
 07: FUNCTION UninitStreamDecoder()
 08:   LET _ = uninit_stream_decoder()   // ignore errors on shutdown
 09:
-10: FUNCTION TFB_CreateSoundSample(decoder_ptr, num_buffers, callbacks_ptr) -> *mut SoundSample
-11:   // Convert decoder pointer
-12:   // SAFETY (FIX: ISSUE-FFI-02): decoder_ptr MUST have been created by
-13:   // Box::into_raw() on a Box<dyn SoundDecoder> (produced by Rust's
-14:   // load_decoder or a decoder constructor). The fat pointer layout (data +
-15:   // vtable) must match exactly. Passing a pointer not created by
-16:   // Box::into_raw (e.g., a C-allocated pointer) is undefined behavior.
-17:   LET decoder = IF decoder_ptr.is_null() THEN None
-18:     ELSE Some(unsafe { Box::from_raw(decoder_ptr as *mut dyn SoundDecoder) })
-14:   // Convert callbacks
-15:   LET callbacks = convert_c_callbacks(callbacks_ptr)
-16:   MATCH create_sound_sample(decoder, num_buffers, callbacks) {
-17:     Ok(sample) => Box::into_raw(Box::new(sample)),
-18:     Err(e) => { LOG error; null_mut() }
-19:   }
-20:
-21: FUNCTION TFB_DestroySoundSample(sample_ptr)
-22:   IF sample_ptr.is_null() THEN RETURN END IF
-23:   LET sample = unsafe { &mut *sample_ptr }
-24:   LET _ = destroy_sound_sample(sample)
-25:
-26: FUNCTION TFB_SetSoundSampleData(sample_ptr, data_ptr)
-27:   IF sample_ptr.is_null() THEN RETURN END IF
-28:   LET sample = unsafe { &mut *sample_ptr }
-29:   LET data = Box::new(data_ptr as usize)   // store raw pointer as opaque
-30:   set_sound_sample_data(sample, data)
-31:
-32: FUNCTION TFB_GetSoundSampleData(sample_ptr) -> *mut c_void
-33:   // LIFETIME: returned pointer is BORROWED — valid only while the
-34:   // SoundSample exists. Caller must NOT free it.
-35:   IF sample_ptr.is_null() THEN RETURN null END IF
-36:   LET sample = unsafe { &*sample_ptr }
-37:   MATCH get_sound_sample_data(sample) {
+10: FUNCTION TFB_CreateSoundSample(decoder_ptr, num_buffers, callbacks_ptr) -> *mut c_void
+11:   // ALL-ARC STRATEGY: Every SoundSample pointer at the FFI boundary is
+12:   // Arc<Mutex<SoundSample>>::into_raw. This eliminates Box/Arc confusion.
+13:   // PlayStream, StopStream, etc. all use Arc::increment_strong_count +
+14:   // Arc::from_raw to reconstruct. DestroyMusic/DestroySoundSample use
+15:   // Arc::from_raw (consuming, decrements refcount).
+16:   LET decoder = IF decoder_ptr.is_null() THEN None
+17:     ELSE Some(unsafe { Box::from_raw(decoder_ptr as *mut dyn SoundDecoder) })
+18:   LET callbacks = convert_c_callbacks(callbacks_ptr)
+19:   MATCH create_sound_sample(decoder, num_buffers, callbacks) {
+20:     Ok(sample) => {
+21:       LET arc = Arc::new(parking_lot::Mutex::new(sample))
+22:       Arc::into_raw(arc) as *mut c_void   // caller must pass to DestroySoundSample
+23:     }
+24:     Err(e) => { LOG error; null_mut() }
+25:   }
+26:
+27: FUNCTION TFB_DestroySoundSample(sample_ptr)
+28:   IF sample_ptr.is_null() THEN RETURN END IF
+29:   // Reconstruct Arc and let it drop (decrements refcount, frees if last ref)
+30:   LET arc = unsafe { Arc::from_raw(sample_ptr as *const Mutex<SoundSample>) }
+31:   LET _ = destroy_sound_sample(&mut *arc.lock())
+32:   // arc drops here — if refcount hits 0, SoundSample is freed
+33:
+34: FUNCTION TFB_SetSoundSampleData(sample_ptr, data_ptr)
+35:   IF sample_ptr.is_null() THEN RETURN END IF
+36:   // Borrow Arc without changing refcount: increment then from_raw
+37:   unsafe { Arc::increment_strong_count(sample_ptr as *const Mutex<SoundSample>) }
+38:   LET arc = unsafe { Arc::from_raw(sample_ptr as *const Mutex<SoundSample>) }
+39:   LET mut sample = arc.lock()
+40:   LET data = Box::new(data_ptr as usize)
+41:   set_sound_sample_data(&mut sample, data)
+42:   // arc drops here — decrements back to original refcount
+43:
+44: FUNCTION TFB_GetSoundSampleData(sample_ptr) -> *mut c_void
+45:   // LIFETIME: returned pointer is BORROWED — valid only while the
+46:   // SoundSample exists. Caller must NOT free it.
+47:   IF sample_ptr.is_null() THEN RETURN null END IF
+48:   unsafe { Arc::increment_strong_count(sample_ptr as *const Mutex<SoundSample>) }
+49:   LET arc = unsafe { Arc::from_raw(sample_ptr as *const Mutex<SoundSample>) }
+50:   LET sample = arc.lock()
+51:   MATCH get_sound_sample_data(&sample) {
 38:     Some(data) => /* extract pointer */ data as *mut c_void,
 39:     None => null_mut()
 40:   }
@@ -105,20 +114,14 @@ FUNCTION cache_and_return_c_str_text(text) -> *const c_char
 53:
 54: FUNCTION PlayStream(sample_ptr, source, looping, scope, rewind)
 55:   IF sample_ptr.is_null() THEN RETURN END IF
-56:   // FIX ISSUE-FFI-03: Define Arc lifecycle at FFI boundary.
-57:   // sample_ptr was created by Arc::into_raw() (e.g., in get_music_data or
-58:   // the track player's sound_sample). We increment the strong count and
-59:   // create a new Arc handle WITHOUT taking ownership (the original owner
-60:   // still holds its reference). This is the standard Arc FFI pattern:
-61:   //   Arc::into_raw → pass to C → Arc::increment_strong_count + Arc::from_raw
-62:   //
-63:   // SAFETY: sample_ptr must have been created by Arc::into_raw on an
-64:   // Arc<parking_lot::Mutex<SoundSample>>. The pointer is a fat pointer for
-65:   // Mutex<SoundSample> (not a trait object), so it's a thin pointer — safe.
-66:   LET sample_arc = unsafe {
-67:     Arc::increment_strong_count(sample_ptr as *const parking_lot::Mutex<SoundSample>)
-68:     Arc::from_raw(sample_ptr as *const parking_lot::Mutex<SoundSample>)
-69:   }
+56:   // ALL-ARC STRATEGY: sample_ptr was created by TFB_CreateSoundSample using
+57:   // Arc::into_raw. We increment the strong count and create a new Arc handle
+58:   // WITHOUT taking ownership (the original owner still holds its reference).
+59:   // This is consistent because ALL SoundSample pointers are Arc-originated.
+60:   LET sample_arc = unsafe {
+61:     Arc::increment_strong_count(sample_ptr as *const parking_lot::Mutex<SoundSample>)
+62:     Arc::from_raw(sample_ptr as *const parking_lot::Mutex<SoundSample>)
+63:   }
 70:   LET _ = play_stream(sample_arc, source as usize, looping != 0, scope != 0, rewind != 0)
 58:
 59: FUNCTION StopStream(source)

@@ -1252,17 +1252,23 @@ pub extern "C" fn UninitStreamDecoder();
 /// Create a sound sample with num_buffers audio buffers.
 /// decoder: nullable (can be NULL for SFX samples).
 /// callbacks: nullable.
-/// Returns: pointer to SoundSample, or null on failure.
+/// Returns: opaque pointer (Arc<Mutex<SoundSample>>::into_raw), or null on failure.
+///
+/// ALL-ARC STRATEGY: Every SoundSample pointer at the FFI boundary is
+/// Arc<Mutex<SoundSample>>::into_raw. Functions that borrow use
+/// Arc::increment_strong_count + Arc::from_raw. Destroy uses Arc::from_raw
+/// (consuming). This eliminates Box/Arc confusion at the boundary.
 #[no_mangle]
 pub extern "C" fn TFB_CreateSoundSample(
     decoder: *mut c_void,       // *mut dyn SoundDecoder (opaque)
     num_buffers: u32,
     callbacks: *const TFB_SoundCallbacks_C,  // nullable
-) -> *mut SoundSample;
+) -> *mut c_void;  // Arc<Mutex<SoundSample>>::into_raw
 
-/// Destroy a sound sample. Does NOT free the decoder.
+/// Destroy a sound sample. Decrements Arc refcount; frees if last reference.
+/// Does NOT free the decoder.
 #[no_mangle]
-pub extern "C" fn TFB_DestroySoundSample(sample: *mut SoundSample);
+pub extern "C" fn TFB_DestroySoundSample(sample: *mut c_void);  // Arc ptr
 
 /// Set user data on a sample.
 #[no_mangle]

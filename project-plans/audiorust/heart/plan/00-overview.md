@@ -61,6 +61,7 @@ Before implementing any phase:
 ```
 P00a (preflight) → P01 (analysis) → P01a (verify) →
 P02 (pseudocode) → P02a (verify) →
+P02b (mixer extension) → P02c (mixer verify) →
 P03 (types stub) → P03a (verify) → P04 (types TDD) → P04a (verify) → P05 (types impl) → P05a (verify) →
 P06 (stream stub) → P06a (verify) → P07 (stream TDD) → P07a (verify) → P08 (stream impl) → P08a (verify) →
 P09 (trackplayer stub) → P09a (verify) → P10 (trackplayer TDD) → P10a (verify) → P11 (trackplayer impl) → P11a (verify) →
@@ -78,6 +79,9 @@ stub→TDD→impl slice, the steps are strictly sequential.
 
 ```
 P00a ─→ P01 ─→ P01a ─→ P02 ─→ P02a ──┐
+                                        │
+                                        ▼
+                            P02b (mixer ext) → P02c (verify)
                                         │
                                         ▼
                             ┌─── P03 (types stub) ───┐
