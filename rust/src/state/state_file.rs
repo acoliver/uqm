@@ -40,8 +40,9 @@ impl std::error::Error for StateFileError {}
 pub struct StateFile {
     name: &'static str,
     size_hint: usize,
-    open_count: u32,
+    open_count: i32,
     data: Vec<u8>,
+    used: usize,
     ptr: usize,
 }
 
@@ -53,13 +54,14 @@ impl StateFile {
             size_hint,
             open_count: 0,
             data: Vec::with_capacity(size_hint),
+            used: 0,
             ptr: 0,
         }
     }
 
-    /// Get the current file length (number of bytes used)
+    /// Get the current file length (logical high-water mark of bytes written)
     pub fn length(&self) -> usize {
-        self.data.len()
+        self.used
     }
 
     /// Get current read/write position
@@ -86,67 +88,49 @@ impl StateFile {
 
     /// Write data to the file
     pub fn write(&mut self, buf: &[u8]) -> Result<(), StateFileError> {
-        let required_size = self.ptr + buf.len();
+        let required_end = self.ptr + buf.len();
 
-        // Expand if necessary
-        if required_size > self.data.capacity() {
-            let new_size = (required_size * 3 / 2).max(self.size_hint);
-            self.data.reserve(new_size - self.data.len());
-        }
-
-        // Ensure vec is large enough
-        if required_size > self.data.len() {
-            self.data.resize(required_size, 0);
+        // Grow physical buffer if needed
+        if required_end > self.data.len() {
+            let new_size = required_end.max(self.data.len() * 3 / 2);
+            self.data.resize(new_size, 0);
+            if new_size > self.size_hint {
+                self.size_hint = new_size;
+            }
         }
 
         self.data[self.ptr..self.ptr + buf.len()].copy_from_slice(buf);
         self.ptr += buf.len();
 
+        // Update logical high-water mark
+        if self.ptr > self.used {
+            self.used = self.ptr;
+        }
+
         Ok(())
     }
 
-    /// Seek to a position in the file
+    /// Seek to a position in the file.
+    /// Allows seeking past end — no upper-bound clamping.
+    /// Negative results are clamped to 0.
     pub fn seek(&mut self, offset: i64, whence: SeekWhence) -> Result<(), StateFileError> {
         let new_pos = match whence {
-            SeekWhence::Set => {
-                let result = offset;
-                if result < 0 {
-                    0i64
-                } else if result > self.data.len() as i64 {
-                    self.data.len() as i64
-                } else {
-                    result
-                }
-            }
-            SeekWhence::Current => {
-                let current = self.ptr as i64;
-                let result = current + offset;
-                if result < 0 {
-                    0i64
-                } else if result > self.data.len() as i64 {
-                    self.data.len() as i64
-                } else {
-                    result
-                }
-            }
-            SeekWhence::End => {
-                let end = self.data.len() as i64;
-                let result = end + offset;
-                if result < 0 {
-                    0i64
-                } else if result > self.data.len() as i64 {
-                    self.data.len() as i64
-                } else {
-                    result
-                }
-            }
+            SeekWhence::Set => offset,
+            SeekWhence::Current => self.ptr as i64 + offset,
+            SeekWhence::End => self.used as i64 + offset,
         };
 
-        self.ptr = new_pos as usize;
+        if new_pos < 0 {
+            self.ptr = 0;
+        } else {
+            self.ptr = new_pos as usize;
+        }
         Ok(())
     }
 
-    /// Open the file for reading or writing
+    /// Open the file for reading or writing.
+    /// Pre-allocates physical buffer on first open.
+    /// Write mode resets the logical size but keeps the physical allocation.
     fn open(&mut self, mode: FileMode) -> Result<(), StateFileError> {
         self.open_count += 1;
 
@@ -154,17 +138,19 @@ impl StateFile {
             // Warning in debug builds would go here
         }
 
+        // Pre-allocate on first open (when no physical buffer exists)
+        if self.data.is_empty() {
+            self.data.resize(self.size_hint, 0);
+            self.used = 0;
+        }
+
         match mode {
-            FileMode::Read => {
-                // Nothing to do for read mode
+            FileMode::Read | FileMode::ReadWrite => {
+                // Preserve used (logical size)
             }
             FileMode::Write => {
-                // Clear the file
-                self.data.clear();
-                self.ptr = 0;
-            }
-            FileMode::ReadWrite => {
-                // Keep existing data
+                // Reset logical size but keep physical allocation
+                self.used = 0;
             }
         }
 
@@ -172,12 +158,11 @@ impl StateFile {
         Ok(())
     }
 
-    /// Close the file
+    /// Close the file.
+    /// Decrements open_count unconditionally to match C semantics (can go negative).
     fn close(&mut self) {
         self.ptr = 0;
-        if self.open_count > 0 {
-            self.open_count -= 1;
-        }
+        self.open_count -= 1;
     }
 
     /// Delete/reset the file data
@@ -187,6 +172,7 @@ impl StateFile {
         }
         self.data.clear();
         self.data.shrink_to_fit();
+        self.used = 0;
         self.ptr = 0;
     }
 }
@@ -374,13 +360,17 @@ mod tests {
     fn test_state_file_seek_current() {
         let mut file = StateFile::new("TEST", 1024);
         file.write(b"HelloWorld").unwrap();
+        // ptr is at 10 after write, seek +3 => 13 (no upper clamp)
         file.seek(3, SeekWhence::Current).unwrap();
-        assert_eq!(file.position(), 10);
+        assert_eq!(file.position(), 13);
+        // 13 - 5 = 8
         file.seek(-5, SeekWhence::Current).unwrap();
-        assert_eq!(file.position(), 5);
+        assert_eq!(file.position(), 8);
+        // Read from position 8: "ld" (2 bytes available out of 10)
         let mut buf = vec![0u8; 3];
-        file.read(&mut buf).unwrap();
-        assert_eq!(&buf, b"Wor");
+        let bytes_read = file.read(&mut buf).unwrap();
+        assert_eq!(bytes_read, 2);
+        assert_eq!(&buf[..2], b"ld");
     }
 
     #[test]
