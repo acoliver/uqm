@@ -378,15 +378,41 @@ pub struct SubtitleRef {
 // Free Functions (Decoder Trait Gap Resolution)
 // =============================================================================
 
+// @plan PLAN-20260225-AUDIO-HEART.P05
+// @requirement REQ-CROSS-GENERAL-08
+
 /// Decode all remaining data from a decoder into a Vec<u8>.
-/// Loops `decoder.decode()` until EOF, collecting bytes.
+///
+/// Uses pre-allocation when decoder length is known, then loops
+/// `decoder.decode()` with a 4KB scratch buffer until EOF.
 pub fn decode_all(decoder: &mut dyn SoundDecoder) -> DecodeResult<Vec<u8>> {
-    todo!("P05: decode_all implementation")
+    let initial_capacity = if decoder.length() > 0.0 {
+        // Pre-allocate with 10% headroom
+        let estimated = (decoder.length() * decoder.frequency() as f32 * 2.0) as usize;
+        estimated + estimated / 10
+    } else {
+        65536
+    };
+
+    let mut result = Vec::with_capacity(initial_capacity);
+    let mut scratch = [0u8; 4096];
+
+    loop {
+        match decoder.decode(&mut scratch) {
+            Ok(0) => break,
+            Ok(n) => result.extend_from_slice(&scratch[..n]),
+            Err(DecodeError::EndOfFile) => break,
+            Err(e) => return Err(e),
+        }
+    }
+
+    result.shrink_to_fit();
+    Ok(result)
 }
 
 /// Compute the current playback time of a decoder in seconds.
 pub fn get_decoder_time(decoder: &dyn SoundDecoder) -> f32 {
-    todo!("P05: get_decoder_time implementation")
+    decoder.get_frame() as f32 / decoder.frequency().max(1) as f32
 }
 
 // =============================================================================
@@ -680,23 +706,28 @@ mod tests {
         cb.on_queue_buffer(&mut sample, 0); // default is no-op
     }
 
-    // RED tests: these will panic (todo!()) until P05 implements them.
-    // They are ignored for now and will be un-ignored in P05.
+    // These tests were RED (ignored) during P04 and un-ignored in P05.
     #[test]
-    #[ignore = "RED: decode_all stub is todo!(), will be implemented in P05"]
     fn test_decode_all_empty_decoder() {
         use crate::sound::null::NullDecoder;
+        use crate::sound::formats::DecoderFormats;
         let mut dec = NullDecoder::new();
+        dec.init_module(0, &DecoderFormats::default());
+        dec.init();
+        // NullDecoder generates silence — decode returns 0 for 0 total_frames
+        // A NullDecoder with 0 total_frames should hit EOF immediately
         let result = decode_all(&mut dec);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
     }
 
     #[test]
-    #[ignore = "RED: get_decoder_time stub is todo!(), will be implemented in P05"]
     fn test_get_decoder_time_zero() {
         use crate::sound::null::NullDecoder;
-        let dec = NullDecoder::new();
+        use crate::sound::formats::DecoderFormats;
+        let mut dec = NullDecoder::new();
+        dec.init_module(0, &DecoderFormats::default());
+        dec.init();
         let t = get_decoder_time(&dec);
         assert_eq!(t, 0.0);
     }
