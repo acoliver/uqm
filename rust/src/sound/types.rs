@@ -311,7 +311,7 @@ impl FadeState {
 
 /// 3D position for sound effects.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct SoundPosition {
     /// Whether positional audio is enabled.
     pub positional: bool,
