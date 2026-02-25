@@ -301,8 +301,7 @@ pub extern "C" fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c
         _ => return 0,
     };
 
-    let mut files = GLOBAL_STATE_FILES.lock().unwrap();
-    if let Some(state_files) = files.as_mut() {
+    guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |state_files| {
         match state_files.get_file_mut(file_index as usize) {
             Some(file) => match file.seek(offset, seek_whence) {
                 Ok(()) => 1,
@@ -310,9 +309,7 @@ pub extern "C" fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c
             },
             None => 0,
         }
-    } else {
-        0
-    }
+    })
 }
 
 /// Get game state bytes pointer (for serialization)
@@ -385,16 +382,26 @@ where
     }
 }
 
+/// Ensure the state file manager is initialized (auto-init on first use).
+fn ensure_state_files_init(guard: &mut Option<StateFileManager>) {
+    if guard.is_none() {
+        *guard = Some(StateFileManager::new());
+    }
+}
+
 fn guard_convert_state_value<R, F>(mutex: &Mutex<Option<StateFileManager>>, f: F) -> R
 where
     F: FnOnce(&StateFileManager) -> R,
     R: Default,
 {
     match mutex.lock() {
-        Ok(guard) => match guard.as_ref() {
-            Some(state) => f(state),
-            None => R::default(),
-        },
+        Ok(mut guard) => {
+            ensure_state_files_init(&mut guard);
+            match guard.as_ref() {
+                Some(state) => f(state),
+                None => R::default(),
+            }
+        }
         Err(_) => R::default(),
     }
 }
@@ -405,10 +412,13 @@ where
     R: Default,
 {
     match mutex.lock() {
-        Ok(mut guard) => match guard.as_mut() {
-            Some(state) => f(state),
-            None => R::default(),
-        },
+        Ok(mut guard) => {
+            ensure_state_files_init(&mut guard);
+            match guard.as_mut() {
+                Some(state) => f(state),
+                None => R::default(),
+            }
+        }
         Err(_) => R::default(),
     }
 }
@@ -421,10 +431,13 @@ where
     F: FnOnce(&mut StateFileManager) -> Result<R, E>,
 {
     match mutex.lock() {
-        Ok(mut guard) => match guard.as_mut() {
-            Some(state) => f(state).ok(),
-            None => None,
-        },
+        Ok(mut guard) => {
+            ensure_state_files_init(&mut guard);
+            match guard.as_mut() {
+                Some(state) => f(state).ok(),
+                None => None,
+            }
+        }
         Err(_) => None,
     }
 }
