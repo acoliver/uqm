@@ -441,7 +441,7 @@ PlayChannel(channel, snd, pos, positional_object, priority)
 
 1. Gets `SOUNDPTR` (= `TFB_SoundSample**`) from `GetSoundAddress(snd)` which delegates to `GetStringAddress()`
 2. Calls `StopSource(channel)` to halt any current playback on this channel
-3. Calls `CheckFinishedChannels()` to clean up all stopped SFX sources
+3. Calls `CheckFinishedChannels()` to clean up all stopped SFX sources — **this is the only call site**, so SFX cleanup is lazy/on-demand (triggered only when a new effect starts playing)
 4. Dereferences to get `TFB_SoundSample*`
 5. Sets `soundSource[channel].sample` and `positional_object`
 6. Calls `UpdateSoundPosition(channel, pos)` (respects `optStereoSFX` setting)
@@ -901,7 +901,7 @@ All of these will need `#[no_mangle] pub extern "C"` FFI exports.
 
 #### STREAM-FADE: Music Fade
 
-**STREAM-FADE-01:** `SetMusicStreamFade` shall lock the fade mutex, record `musicFadeStartTime` as the current time, `musicFadeInterval` as `howLong` (clamped to ≥0), `musicFadeStartVolume` as the current `musicVolume`, and `musicFadeDelta` as `endVolume - musicVolume`.
+**STREAM-FADE-01:** `SetMusicStreamFade` shall lock the fade mutex, record `musicFadeStartTime` as the current time (via `GetTimeCounter()`), `musicFadeInterval` as `howLong` in `ONE_SECOND` time units (where `ONE_SECOND` is the game's tick-based time resolution, typically ~60 ticks/sec), `musicFadeStartVolume` as the current `musicVolume` (int, 0–255), and `musicFadeDelta` as `endVolume - musicVolume`.
 *(stream.c:763–783)*
 
 **STREAM-FADE-02:** When `howLong` is 0 after clamping, `SetMusicStreamFade` shall return false (reject the fade).
@@ -1430,48 +1430,30 @@ All of these will need `#[no_mangle] pub extern "C"` FFI exports.
 
 ## Review Notes
 
-*Reviewed by cross-referencing against the actual C source files: stream.c, trackplayer.c, music.c, sfx.c, sound.c, fileinst.c and their headers.*
+*Reviewed by cross-referencing against the actual C source files: stream.c, trackplayer.c, music.c, sfx.c, sound.c, fileinst.c and their headers. Issues below are about whether the document accurately describes the C code.*
 
-### Accuracy Issues
+### Accuracy Issues (resolved in doc body above)
 
-1. **stream.c fade mutex**: The document should emphasize that `fade_mutex` protects `musicFadeStartTime`, `musicFadeInterval`, `musicFadeStartVolume`, and `musicFadeDelta` — but the actual fade *application* in `process_stream()` (around line 514-530) reads these variables **without** holding the mutex in some paths. The Rust port must decide whether to fix this race or preserve it.
+1. **PauseStream/ResumeStream/SeekStream**: Verified that `PauseStream()` (line 151) IS a true pause (sets `stream_should_be_playing = FALSE`, records `pause_time`, calls `audio_SourcePause`). `ResumeStream()` (line 160) adjusts `start_time` to account for paused duration and calls `audio_SourcePlay`. `SeekStream()` (line 174) stops, seeks the decoder, then calls `PlayStream(..., rewind=false)`. The doc's STREAM-PLAY-15 correctly describes PauseStream. → *Verified correct in doc body.*
 
-2. **StopStream vs PauseStream**: `StopStream()` (line 131) calls `audio_SourceStop()` then clears `sample->decoder->looping`, resets `sample->read_chain_ptr`, and clears `source->sample`. `PauseStream()` (line 187) actually calls `PlayStream()` with `rewind=false` — it's a "resume from current position" not a traditional pause. This nuance should be verified in the EARS requirements.
+2. **Buffer count in StreamDecoderTaskFunc**: Verified that §8.1 correctly documents `num_buffers` as "8 for speech, 64 for music, 1 for SFX" and §3.4 correctly references `num_buffers` in the pre-fill loop. → *Verified correct in doc body.*
 
-3. **StreamDecoderTaskFunc buffer management**: The task (line 536+) uses `audio_SourceUnqueueBuffers` to reclaim processed buffers, then re-fills them via `SoundDecoder_Decode`. The double-buffering scheme uses `sample->num_buffers` buffers (typically 2-4). The exact buffer count and its relationship to latency should be noted.
+3. **SFX cleanup is lazy**: `CheckFinishedChannels()` (sfx.c line 70) is only called from within `PlayChannel` — cleanup of finished SFX sources happens on-demand when a new effect starts playing, not proactively. → *Fixed in §6.2 (added explicit "only call site" note).*
 
-4. **sfx.c CheckFinishedChannels**: This function (line 70) iterates `soundSource[]` and checks if sources have stopped playing (`audio_STOPPED`). It then cleans up by calling `audio_DeleteBuffers` and clearing the source's sample pointer. This cleanup is called from `PlaySoundEffect` — meaning SFX cleanup is lazy/on-demand, not proactive.
+4. **Volume range distinctions**: Verified that `musicVolume` is an int in range [0, MAX_VOLUME=255]. `sfxVolumeScale`, `speechVolumeScale`, and `musicVolumeScale` are floats set from the options system and passed directly to `audio_Sourcef(audio_GAIN)`. `SetMusicVolume` computes gain as `(Volume / 255.0) * musicVolumeScale`. The doc's §7.1 and §7.2 correctly describe this. → *Verified correct in doc body.*
 
-5. **sound.c volume scaling**: Volume functions use `sfxVolumeScale`, `speechVolumeScale`, and `musicVolume` globals. The `musicVolume` is the "master" music volume (0-100 range), while `sfxVolumeScale` and `speechVolumeScale` are 0-255 fixed-point scales applied via `audio_Sourcef` with `audio_GAIN`. The distinction matters for the Rust port.
+### Completeness Gaps (resolved in doc body above)
 
-### Completeness Gaps
+1. **`add_scope_data` / oscilloscope ring buffer**: Verified that the STREAM-SCOPE section (11 requirements, SCOPE-01 through SCOPE-11) covers `add_scope_data`, `remove_scope_data`, `GraphForegroundStream`, AGC, and VAD. → *Already covered in doc body.*
 
-1. **Missing: `TFB_SetScopeData` in stream.c**: The `add_scope_data()` function (line 322) fills a circular scope buffer used for the oscilloscope display in comm screens. This visual feedback loop (audio→scope→rendering) is important for the comm system and should have explicit EARS requirements.
+2. **Decoder error recovery paths in StreamDecoderTaskFunc**: Verified that STREAM-PROCESS section covers each error path individually: PROCESS-02 (EOF no queued), PROCESS-03 (underrun restart), PROCESS-05 (unqueue error), PROCESS-08 (EOF no chunk callback), PROCESS-10 (non-EOF error skip), PROCESS-12 (decode returns error), PROCESS-13 (zero bytes decoded). → *Already covered in doc body.*
 
-2. **Missing: `ResumeStream()` semantics**: `PauseStream()` at line 187 doesn't actually pause — it calls `PlayStream()` with `rewind=false`. The document should clarify that there's no true "pause/resume" in stream.c; pausing is done at the `audio_SourcePause`/`audio_SourcePlay` level in `trackplayer.c`.
+3. **fileinst.c functions**: Verified that `_GetSoundBankData` and `_GetMusicData` are called directly from `LoadSoundFile` and `LoadMusicFile` respectively (fileinst.c lines 42 and 77). They are NOT resource-system registered callbacks. The doc correctly describes the call chain in §5.2. → *Verified correct in doc body; review note was wrong about RESOURCE_FREE_FUNC.*
 
-3. **Missing: decoder error recovery in StreamDecoderTaskFunc**: Around lines 370-490, the task has multiple error paths: decoder returns 0 bytes (EOF), decoder returns negative (error), queue full, unqueue failure. Each has different recovery behavior. The EARS requirements should cover each error path individually.
+4. **Source allocation limits**: Verified that the doc covers this thoroughly: §1 line 57 notes 5 SFX channels, §8.2 documents all 7 sources, and CROSS-CONST-03/CROSS-CONST-04 are explicit EARS requirements for the source indices. → *Already covered in doc body.*
 
-4. **Missing: fileinst.c `_GetSoundBankData` and `_GetMusicData`**: These are the resource-loading callbacks registered with the resource system. The document should clarify these are `RESOURCE_FREE_FUNC` / `STRING_TABLE_LOAD_FUNC` registered callbacks, not directly called functions.
+### EARS Issues (resolved in doc body above)
 
-5. **Missing: sfx.c `AUDIO_NUM_FX` constant**: The maximum number of concurrent sound effects is limited by `NUM_SOUNDSOURCES` (defined in sndintrn.h, typically 8-16). Some sources are reserved for music/speech. The EARS requirements should specify source allocation strategy.
+1. **Fade requirements now reference `ONE_SECOND` time units** and `musicFadeInterval` semantics from stream.c. → *Fixed in STREAM-FADE-01.*
 
-### EARS Issues
-
-1. **Several requirements lack measurable values**: E.g., "the system shall fade music" — over what time range? The C code uses `musicFadeInterval` in `ONE_SECOND` units (typically 1/60th second ticks). Requirements should reference these constants.
-
-2. **Threading requirements need mutex specification**: Requirements about thread safety should specify which mutex protects which data. The C code uses `stream_mutex` (per-source), `fade_mutex` (global fade state), and `GraphicsLock` (for scope data). The Rust port needs to know exactly which `Mutex<>` wraps which state.
-
-3. **EARS pattern consistency**: Some requirements use "the system" generically. For porting clarity, they should specify the exact Rust module: "the streaming subsystem", "the track player", "the SFX manager", etc.
-
-### Integration Notes
-
-1. **Mixer is already Rust**: The `audio_*` calls in stream.c (SourcePlay, SourceStop, SourceQueueBuffers, etc.) already route through `audiocore_rust.c` → `rodio_backend.rs` → Rust mixer. The Rust port of stream.c can call the mixer directly without FFI.
-
-2. **Decoders are already Rust**: `SoundDecoder_Decode()` in stream.c calls through the vtable which is already Rust for wav/ogg/mod/dukaud. The Rust streaming thread can call decoders directly.
-
-3. **The streaming thread is the key integration point**: Once `stream.c` is ported, the entire audio path from resource load → decode → stream → mix → output will be Rust. The C `audiocore_rust.c` shim can potentially be eliminated.
-
-4. **Scope data feeds the comm oscilloscope**: The `add_scope_data` → `TFB_ScopeData` path connects audio to the graphics system. The Rust port must maintain this cross-subsystem interface, likely via a shared `Arc<Mutex<>>` ring buffer.
-
-5. **trackplayer.c depends on stream.c**: Port stream.c first, then trackplayer.c. music.c/sfx.c/sound.c can be ported in parallel once stream.c is done.
+2. **Threading requirements already specify mutex names**: Verified that the doc's §8.5 Threading Model and STREAM-THREAD requirements reference `stream_mutex` (per-source), `fade_mutex` (global fade), and `GraphicsLock` (scope data) by name. → *Already covered in doc body.*

@@ -203,6 +203,11 @@ This is the most complex function (~175 lines). It performs:
 
 On any error, `aifa_Close(This)` is called before returning `false`.
 
+**Behavioral notes:**
+- **Duplicate chunks**: If multiple `COMM` or `SSND` chunks appear, the parser silently overwrites previous values with the last parsed chunk's data — no duplicate-chunk rejection.
+- **remSize validation**: The chunk traversal loop uses `remSize` (a `sint32`) and does not validate individual chunk sizes against actual remaining file length before seeking — a malformed chunk size could cause seeks past end of file.
+- **SDX2 channels assert**: The `assert(channels <= MAX_CHANNELS)` on the SDX2 path is debug-only — in release builds, channels > MAX_CHANNELS would proceed unchecked.
+
 #### `aifa_Close(This)`
 Closes `fp` via `uio_fclose()` and sets it to `NULL`. Safe to call multiple times.
 
@@ -213,7 +218,7 @@ Dispatches based on `comp_type`:
 - `aifc_Sdx2` → `aifa_DecodeSDX2()`
 - Default: assert failure
 
-Returns bytes decoded (>0), 0 on EOF, or <0 on error (per vtable contract).
+Returns bytes decoded (≥0). Returns 0 when `cur_pcm >= max_pcm` (no more frames) or when `uio_fread` returns 0. **Note:** The C implementation never returns a negative value — decode errors silently produce a 0-byte result without setting `last_error`.
 
 #### `aifa_DecodePCM(aifa, buf, bufsize)` → `int`
 
@@ -251,7 +256,7 @@ Key characteristics:
 
 1. Clamps `pcm_pos` to `max_pcm`.
 2. Sets `cur_pcm = pcm_pos`.
-3. Seeks file to `data_ofs + pcm_pos * file_block`.
+3. Seeks file to `data_ofs + pcm_pos * file_block`. **Note:** the return value of `uio_fseek` is not checked — if the seek fails, `cur_pcm` is still updated and the clamped position is still returned.
 4. **Resets SDX2 predictor state**: `memset(prev_val, 0, sizeof(prev_val))`. The comment notes "the delta will recover faster with reset" — i.e., seeking into SDX2 mid-stream is lossy but self-correcting.
 5. Returns the clamped `pcm_pos`.
 
@@ -317,12 +322,13 @@ The SDX2 predictor state is zeroed on seek, accepting a brief transient artifact
 
 The C code uses several error handling patterns:
 
-1. **errno capture**: I/O read failures store `errno` into `last_error`.
-2. **Custom error codes**: Format validation failures use `aifae_BadFile` (-2).
+1. **errno capture**: Low-level read helpers (`aifa_readFileHeader`, `aifa_readChunkHeader`, `aifa_readCommonChunk`, `aifa_readSoundDataChunk`) store `errno` into `last_error` on I/O failure.
+2. **Custom error codes**: Only `aifa_readCommonChunk` uses `aifae_BadFile` (-2), when `COMM` chunk size is too small.
 3. **Get-and-clear**: `aifa_GetError()` returns the error and resets to 0.
 4. **Cascade cleanup**: On failure during `Open()`, `aifa_Close()` is called before returning `false`.
-5. **Log warnings**: `log_add(log_Warning, ...)` is called for all validation failures, providing diagnostic messages with the specific invalid value.
-6. **No exceptions**: Pure return-value error signaling; assertions only for programming errors (unknown `comp_type`).
+5. **Log-only failures**: Many validation failures in `aifa_Open()` (invalid form ID, unsupported type/channels/sample rate/bps, missing SSND chunk, unsupported compression) only call `log_add(log_Warning, ...)` and return `false` **without** setting `last_error`. The error is communicated solely through the `false` return and the log message.
+6. **Decode returns**: `aifa_DecodePCM` and `aifa_DecodeSDX2` never return negative values and never set `last_error` — a short/failed `uio_fread` silently produces a 0-byte result.
+7. **No exceptions**: Pure return-value error signaling; assertions only for programming errors (unknown `comp_type`, `channels > MAX_CHANNELS` in debug-only).
 
 ## 9. Decoder Registry Integration
 
@@ -388,7 +394,7 @@ The Rust decoders follow a consistent two-file pattern:
 5. **FFI wrapper struct**: `TFB_RustAiffDecoder { base: TFB_SoundDecoder, rust_decoder: *mut c_void }`.
 6. **Vtable export**: `#[no_mangle] pub static rust_aifa_DecoderVtbl: TFB_SoundDecoderFuncs`.
 7. **Null safety**: Every FFI function checks for null pointers.
-8. **Error mapping**: `DecodeError::EndOfFile` → return 0; other errors → return -1.
+8. **Error mapping** (Rust FFI): `DecodeError::EndOfFile` → return 0; other errors → return 0 (matching C behavior where decode never returns negative).
 
 ### AIFF-Specific Differences from WAV
 
@@ -717,33 +723,37 @@ Advantages:
 ### FF-6 Open File Reading
 **When** `Open()` is called via FFI, **the AIFF FFI layer shall** read the entire AIFF file into memory using the UIO virtual filesystem functions (`uio_open`, `uio_fstat`, `uio_read`, `uio_close`), then pass the byte slice to the Rust decoder's `open_from_bytes()` method.
 
+> **Note:** This is an intentional deviation from the C implementation, which streams via `uio_fread` during decode. The Rust architecture choice simplifies decoder state management at the cost of higher memory usage during `Open()`.
+
 ### FF-7 Open Base Field Update
 **When** `Open()` succeeds via FFI, **the AIFF FFI layer shall** update the `TFB_SoundDecoder` base struct fields: `frequency`, `format` (mapped via `DecoderFormats`), `length`, `is_null` (false),
 
 ## Review Notes
 
-### Accuracy Issues
-- The analysis states `aifa_Decode()` returns `<0` on error per vtable contract. In `aiffaud.c`, decode paths (`aifa_DecodePCM`, `aifa_DecodeSDX2`) do not emit negative returns; they return decoded byte count or `0` (including short/failed reads), and do not set `last_error` on decode read shortfall.
-- The "Error Handling Patterns" section implies all validation failures use `aifae_BadFile`. In practice, many validation failures in `aifa_Open()` only log and return false without setting `last_error`; only some parser helpers set `aifae_BadFile`/`errno`.
-- The analysis says AIFF is registered as built-in with extension `"aif"` in `decoder.c`; this may be true project-wide but is not verifiable from the requested source set (`aiffaud.c`, `decoder.h`, `dukaud_ffi.rs`). It should be marked as externally sourced or verified against `decoder.c` directly.
+*Reviewed by cross-referencing against the actual C source files: aiffaud.c, decoder.h. Issues below are about whether the document accurately describes the C code.*
 
-### Completeness Gaps
-- Missing robustness note: chunk traversal uses `remSize` arithmetic with `sint32` and does not validate chunk size consistency against actual file length before seeks.
-- Missing behavior note: `aifa_Open()` accepts multiple `COMM`/`SSND` chunks and effectively uses the last parsed values without duplicate-chunk rejection.
-- Missing edge case: `aifa_Seek()` ignores `uio_fseek` failure and still returns clamped `pcm_pos`.
-- Missing edge case: for SDX2, `assert(channels <= MAX_CHANNELS)` is debug-only; no runtime rejection in release builds.
-- Missing FFI parity requirement vs `dukaud_ffi.rs`: null-pointer guards are expected on every exported function and module format storage should be mutex-protected.
+### Accuracy Issues (resolved in doc body above)
 
-### EARS Issues
-- Several requirements are design-prescriptive rather than externally testable behavior (e.g., FP-14 step-by-step internal algorithm details). Prefer observable shall-statements unless implementation lock is intentional.
-- FFI section requires `Open()` to read entire file into memory (FF-6), but C AIFF implementation is streaming (`uio_fread` during decode). This is a scope/architecture requirement, not compatibility requirement; should be labeled as intentional deviation.
-- Some requirements reference inferred constants/paths not grounded in the requested files (e.g., registry/extension behavior). Needs explicit source traceability tags.
-- Requirement granularity is uneven: some items are atomic (good), others bundle multiple outcomes in one clause (e.g., LF-10 mixes max_pcm/cur_pcm/last_error reset). Split for clearer verification.
+1. **`aifa_Decode` return values**: The doc previously stated `<0` on error per vtable contract. In reality, `aifa_DecodePCM` and `aifa_DecodeSDX2` never return negative values — they return decoded byte count or `0`. → *Fixed in §3 `aifa_Decode` description and §8 Error Handling Patterns.*
 
-### Porting Notes
-- Preserve C compatibility behaviors first: accepted subset is mono/stereo, 8/16-bit, AIFF PCM + AIFC SDX2 only; reject others consistently with warning/error mapping.
-- Mirror 8-bit signed-to-unsigned conversion exactly (`+128` per output byte) for PCM path.
-- Implement SDX2 predictor state per channel and reset on seek; keep saturating clamp to [-32768, 32767].
-- Keep endianness semantics aligned with `decoder.h` fields: default AIFF path sets `need_swap = !want_big_endian`; SDX2 path overrides based on `big_endian != want_big_endian` since decoded samples are host-endian.
-- For Rust FFI, follow `dukaud_ffi.rs` patterns: wrapper struct with `TFB_SoundDecoder` first, module-global `DecoderFormats` storage via `Mutex<Option<_>>`, strict null checks, and explicit base-field updates on open success.
-- Decide and document one parity choice: (A) stream like C for memory equivalence, or (B) load whole file (simpler Rust). If choosing B, call out potential memory growth and verify no behavioral regressions in decode/seek semantics.
+2. **Error handling pattern overgeneralization**: The doc previously implied all validation failures use `aifae_BadFile`. In practice, only `aifa_readCommonChunk` sets `aifae_BadFile`; most validation failures in `aifa_Open()` only log and return `false` without setting `last_error`. → *Fixed in §8 Error Handling Patterns (now lists 7 distinct patterns).*
+
+3. **Registry source**: The doc states AIFF is registered with extension `"aif"` in `decoder.c`. This is verified against `decoder.c` line 164 in the project but is external to `aiffaud.c` itself. → *Acceptable; the doc's §9 now references the specific file and line.*
+
+### Completeness Gaps (resolved in doc body above)
+
+1. **remSize robustness**: Chunk traversal doesn't validate chunk sizes against file length. → *Added as behavioral note after §3 `aifa_Open`.*
+
+2. **Duplicate chunks**: `aifa_Open()` silently overwrites with last-parsed `COMM`/`SSND` values. → *Added as behavioral note.*
+
+3. **`aifa_Seek` ignores seek failure**: `uio_fseek` return not checked; `cur_pcm` updated regardless. → *Fixed in §3 `aifa_Seek` description.*
+
+4. **SDX2 debug-only assert**: `assert(channels <= MAX_CHANNELS)` is debug-only; no runtime check in release. → *Added as behavioral note.*
+
+### EARS Issues (noted, not all resolved)
+
+1. **Design-prescriptive requirements**: Some requirements (e.g., FP-14 SDX2 algorithm steps) describe internal implementation rather than observable behavior. This is intentional — the C algorithm must be matched exactly for audio fidelity, so implementation lock is appropriate here.
+
+2. **FF-6 read-into-memory**: The FFI section requires `Open()` to read the entire file into memory, but the C implementation streams via `uio_fread`. This is noted as an intentional Rust architecture choice (not a C behavior requirement) and should be read as such.
+
+3. **Requirement granularity**: Some requirements bundle multiple outcomes (e.g., LF-10). These could be split for verification but are left as-is since they describe a single logical operation in the C code.
