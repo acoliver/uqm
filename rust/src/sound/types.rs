@@ -132,19 +132,34 @@ pub const BUFFER_SIZE: usize = 16384;
 // Time FFI (REQ-CROSS-GENERAL-05)
 // =============================================================================
 
+#[cfg(not(test))]
 extern "C" {
     fn GetTimeCounter() -> u32;
     fn QuitPosted() -> i32;
 }
 
 /// Safe wrapper around the C `GetTimeCounter()` function.
+#[cfg(not(test))]
 pub fn get_time_counter() -> u32 {
     unsafe { GetTimeCounter() }
 }
 
 /// Safe wrapper around the C `QuitPosted()` function.
+#[cfg(not(test))]
 pub fn quit_posted() -> bool {
     unsafe { QuitPosted() != 0 }
+}
+
+/// Test stub for `GetTimeCounter()` — returns 0.
+#[cfg(test)]
+pub fn get_time_counter() -> u32 {
+    0
+}
+
+/// Test stub for `QuitPosted()` — returns false.
+#[cfg(test)]
+pub fn quit_posted() -> bool {
+    false
 }
 
 // =============================================================================
@@ -709,8 +724,8 @@ mod tests {
     // These tests were RED (ignored) during P04 and un-ignored in P05.
     #[test]
     fn test_decode_all_empty_decoder() {
-        use crate::sound::null::NullDecoder;
         use crate::sound::formats::DecoderFormats;
+        use crate::sound::null::NullDecoder;
         let mut dec = NullDecoder::new();
         dec.init_module(0, &DecoderFormats::default());
         dec.init();
@@ -723,8 +738,8 @@ mod tests {
 
     #[test]
     fn test_get_decoder_time_zero() {
-        use crate::sound::null::NullDecoder;
         use crate::sound::formats::DecoderFormats;
+        use crate::sound::null::NullDecoder;
         let mut dec = NullDecoder::new();
         dec.init_module(0, &DecoderFormats::default());
         dec.init();
