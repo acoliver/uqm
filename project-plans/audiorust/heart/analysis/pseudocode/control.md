@@ -131,12 +131,16 @@ Validation: REQ-VOLUME-SOURCE-04
 ## 7. set_sfx_volume
 
 ```
-110: FUNCTION set_sfx_volume(volume: f32)
+110: FUNCTION set_sfx_volume(volume: i32)
 111:   // REQ-VOLUME-CONTROL-01: apply gain to all SFX sources
-112:   FOR i IN FIRST_SFX_SOURCE..=LAST_SFX_SOURCE DO
-113:     LET source = SOURCES.sources[i].lock()
-114:     CALL mixer_source_f(source.handle, SourceProp::Gain, volume)
-115:   END FOR
+112:   // volume is 0..255 integer (consistent with set_music_volume).
+113:   // Compute gain: volume / MAX_VOLUME (float 0.0..1.0)
+114:   LET vol_state = VOLUME.lock()
+115:   SET vol_state.sfx_volume_scale = volume as f32 / MAX_VOLUME as f32
+116:   FOR i IN FIRST_SFX_SOURCE..=LAST_SFX_SOURCE DO
+117:     LET source = SOURCES.sources[i].lock()
+118:     CALL mixer_source_f(source.handle, SourceProp::Gain, vol_state.sfx_volume_scale)
+119:   END FOR
 ```
 
 Validation: REQ-VOLUME-CONTROL-01
@@ -144,15 +148,25 @@ Validation: REQ-VOLUME-CONTROL-01
 ## 8. set_speech_volume
 
 ```
-120: FUNCTION set_speech_volume(volume: f32)
+120: FUNCTION set_speech_volume(volume: i32)
 121:   // REQ-VOLUME-CONTROL-02: apply gain to SPEECH_SOURCE
-122:   LET source = SOURCES.sources[SPEECH_SOURCE].lock()
-123:   CALL mixer_source_f(source.handle, SourceProp::Gain, volume)
+122:   // volume is 0..255 integer (consistent with set_music_volume/set_sfx_volume).
+123:   LET vol_state = VOLUME.lock()
+124:   SET vol_state.speech_volume_scale = volume as f32 / MAX_VOLUME as f32
+125:   LET source = SOURCES.sources[SPEECH_SOURCE].lock()
+126:   CALL mixer_source_f(source.handle, SourceProp::Gain, vol_state.speech_volume_scale)
 ```
 
 Validation: REQ-VOLUME-CONTROL-02
 
 ## 9. sound_playing
+
+**LOCK SAFETY**: `playing_stream` also acquires the Source mutex internally, so
+calling it while holding the source lock would self-deadlock (parking_lot::Mutex
+is not reentrant). For sources with decoders (streaming sources), we check the
+`stream_should_be_playing` flag directly using the already-held source guard
+instead of calling `playing_stream`. For non-streaming sources (SFX), we query
+the mixer state directly.
 
 ```
 130: FUNCTION sound_playing() -> bool
@@ -160,20 +174,24 @@ Validation: REQ-VOLUME-CONTROL-02
 132:   FOR i IN 0..NUM_SOUNDSOURCES DO
 133:     LET source = SOURCES.sources[i].lock()
 134:     IF source.sample.is_some() THEN
-135:       LET sample = source.sample.as_ref().unwrap().lock()
+135:       IF let Some(sample_arc) = &source.sample THEN
+136:         LET sample = sample_arc.lock()
 136:       IF sample.decoder.is_some() THEN
-137:         IF playing_stream(i) THEN
-138:           RETURN true
-139:         END IF
-140:       ELSE
-141:         LET state = mixer_get_source_i(source.handle, SourceProp::SourceState)
-142:         IF state == Ok(SourceState::Playing as i32) THEN
-143:           RETURN true
-144:         END IF
-145:       END IF
-146:     END IF
-147:   END FOR
-148:   RETURN false
+137:         // Streaming source: check the flag directly instead of calling
+138:         // playing_stream(i), which would re-lock the source (deadlock).
+139:         IF source.stream_should_be_playing THEN
+140:           RETURN true
+141:         END IF
+142:       ELSE
+143:         // Non-streaming source (pre-decoded SFX): query mixer directly
+144:         LET state = mixer_get_source_i(source.handle, SourceProp::SourceState)
+145:         IF state == Ok(SourceState::Playing as i32) THEN
+146:           RETURN true
+147:         END IF
+148:       END IF
+149:     END IF
+150:   END FOR
+151:   RETURN false
 ```
 
 Validation: REQ-VOLUME-QUERY-01
@@ -182,21 +200,42 @@ Validation: REQ-VOLUME-QUERY-01
 
 ```
 150: FUNCTION wait_for_sound_end(channel: Option<usize>)
-151:   // REQ-VOLUME-QUERY-02: poll loop
-152:   LOOP
-153:     // REQ-VOLUME-QUERY-03: quit break
-154:     IF quit_posted() THEN BREAK END IF
-155:
-156:     LET still_playing = MATCH channel {
-157:       None => sound_playing(),
-158:       Some(ch) => channel_playing(ch),
-159:     }
-160:
-161:     IF NOT still_playing THEN BREAK END IF
-162:
-163:     SLEEP Duration::from_millis(50)
-164:   END LOOP
+151:   // REQ-VOLUME-QUERY-02: poll loop with sleep
+152:   // This function blocks the calling thread until the specified source
+153:   // stops playing. It uses a polling approach (not condvar) matching
+154:   // the C implementation in sound.c:WaitForSoundEnd.
+155:   //
+156:   // The C code uses TaskSwitch() which yields for ~10ms. We use an
+157:   // explicit 10ms sleep to match this behavior. This gives the decoder
+158:   // thread time to process buffers and detect end-of-stream.
+159:   LOOP
+160:     // REQ-VOLUME-QUERY-03: quit break — exit immediately if game
+161:     // is shutting down, even if audio is still technically playing.
+162:     // This prevents the polling loop from blocking program exit.
+163:     IF quit_posted() THEN BREAK END IF
+164:
+165:     // Check whether the target source(s) are still playing.
+166:     // channel=None checks ALL sources (any sound playing at all).
+167:     // channel=Some(ch) checks a specific SFX channel.
+168:     LET still_playing = MATCH channel {
+169:       None => sound_playing(),       // calls sound_playing() which checks all sources
+170:       Some(ch) => channel_playing(ch), // checks specific SFX channel via mixer state
+171:     }
+172:
+173:     IF NOT still_playing THEN BREAK END IF
+174:
+175:     // Sleep 10ms between polls, matching C TaskSwitch() granularity.
+176:     // This is a deliberate busy-wait with sleep, not a condvar-based
+177:     // approach, because:
+178:     // 1. The C code uses TaskSwitch() (cooperative yield ~10ms)
+179:     // 2. Multiple unrelated sources may finish at different times
+180:     // 3. The streaming thread has no direct way to signal "done"
+181:     //    to a waiting caller without adding complexity
+182:     // 10ms gives responsive detection while keeping CPU usage low.
+183:     SLEEP Duration::from_millis(10)
+184:   END LOOP
 ```
 
 Validation: REQ-VOLUME-QUERY-02..03
-Side effects: Blocks calling thread
+Side effects: Blocks calling thread with 10ms polling interval (matches C TaskSwitch granularity)
+Threading: Runs on the calling thread (typically the main/game thread); does NOT hold any locks during sleep

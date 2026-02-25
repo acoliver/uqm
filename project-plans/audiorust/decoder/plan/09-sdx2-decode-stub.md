@@ -39,7 +39,7 @@ Why it matters:
   - No implementation changes needed if stub is already correct from Phase 06
 
 ### Pseudocode traceability
-- Confirms stub for pseudocode lines: 250–295
+- Confirms stub for pseudocode lines: 270–315
 
 ## Verification Commands
 

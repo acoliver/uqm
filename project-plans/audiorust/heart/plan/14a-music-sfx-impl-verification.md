@@ -38,8 +38,8 @@ grep -RIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/music.rs rust/src/sound/sf
 ### Subjective checks
 - [ ] `plr_play_song` locks MUSIC_SOURCE, calls `play_stream`, and stores MusicRef — is the lock held for the minimum duration necessary?
 - [ ] `fade_music` schedules a volume fade that produces smooth volume transitions — does it call `set_music_stream_fade` with correct parameters and return the completion time?
-- [ ] `get_music_data` loads decoder, creates sample, and leaks Box to raw pointer — is the MusicRef lifecycle correct (Box::into_raw)?
-- [ ] `release_music_data` stops active playback, reclaims Box, and drops cleanly — does it check if the music is currently active before stopping?
+- [ ] `get_music_data` loads decoder, creates sample, and wraps in `Arc<Mutex<SoundSample>>` — is the MusicRef lifecycle correct (shared ownership via Arc refcounting, no double-free)?
+- [ ] `release_music_data` stops active playback, drops the MusicRef's Arc, and lets the sample be freed when last reference drops — does it check if the music is currently active before stopping?
 - [ ] `play_channel` implements stop-before-play (REQ-SFX-PLAY-01) — does it call stop_source first?
 - [ ] `update_sound_position` uses 3 separate `mixer_source_f` calls for X, Y, Z — NOT mixer_source_fv (which doesn't exist)
 - [ ] SFX bank loading pre-decodes all samples — does `get_sound_bank_data` call `decode_all` for each sample (REQ-SFX-LOAD-03)?

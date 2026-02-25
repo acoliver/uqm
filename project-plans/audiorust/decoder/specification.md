@@ -110,14 +110,14 @@ The Rust port loads the entire audio data segment into memory during `open_from_
 | REQ-CH-4 | AIFC + ext_type_id!=SDX2 → UnsupportedFormat error |
 | REQ-CH-5 | SDX2 requires bits_per_sample == 16 |
 | REQ-CH-6 | SDX2 requires channels ≤ MAX_CHANNELS (4), runtime check |
-| REQ-CH-7 | SDX2: override need_swap = cfg!(target_endian="big") != want_big_endian |
+| REQ-CH-7 | SDX2: override need_swap = formats.big_endian != formats.want_big_endian (runtime, not compile-time) |
 
 ### PCM Decoding (DP)
 
 | ID | Requirement |
 |----|-------------|
 | REQ-DP-1 | Frame count: min(bufsize / block_align, max_pcm - cur_pcm) |
-| REQ-DP-2 | Copy dec_pcm * file_block bytes from self.data to output |
+| REQ-DP-2 | Copy dec_pcm * file_block bytes from self.data to output. Do NOT perform inline byte swapping for 16-bit PCM — the C framework's `SoundDecoder_Decode()` in `decoder.c` already handles byte swapping when `need_swap=true`. The Rust decoder just copies raw big-endian bytes. |
 | REQ-DP-3 | Update cur_pcm and data_pos after decode |
 | REQ-DP-4 | Return Ok(dec_pcm * block_align) bytes |
 | REQ-DP-5 | 8-bit: wrapping_add(128) signed→unsigned conversion |
@@ -178,7 +178,7 @@ The Rust port loads the entire audio data segment into memory during `open_from_
 | REQ-FF-1 | Define TFB_RustAiffDecoder with base TFB_SoundDecoder as first field |
 | REQ-FF-2 | Export rust_aifa_DecoderVtbl with all 12 function pointers |
 | REQ-FF-3 | Store DecoderFormats in static Mutex<Option<DecoderFormats>> |
-| REQ-FF-4 | Init: allocate Box<AiffDecoder>, store as raw pointer, set need_swap=false |
+| REQ-FF-4 | Init: allocate Box<AiffDecoder>, call `dec.init_module(0, &formats)` with formats from the global `RUST_AIFA_FORMATS` Mutex, call `dec.init()`, store as raw pointer, set `(*decoder).need_swap = false`. This matches the established `wav_ffi.rs` Init pattern — the C framework expects Init to prepare the decoder instance with formats so that `open_from_bytes()` can access `self.formats`. |
 | REQ-FF-5 | Term: reconstruct Box from raw pointer, drop, null out |
 | REQ-FF-6 | Open: read file via UIO into Vec<u8>, call open_from_bytes() |
 | REQ-FF-7 | Open success: update base struct (frequency, format, length, is_null, need_swap) |
@@ -213,6 +213,18 @@ The Rust port loads the entire audio data segment into memory during `open_from_
 3. **Performance**: In-memory decode is O(n) in sample count. No allocation during decode/seek.
 4. **Compatibility**: Produces identical audio output to C `aiffaud.c` for all valid inputs.
 5. **Safety**: No `unsafe` in `aiff.rs`. All `unsafe` isolated to `aiff_ffi.rs` FFI boundary.
+
+## Intentional Deviations from C
+
+The following behavioral differences from the C `aiffaud.c` implementation are **intentional**:
+
+1. **Validation order**: The Rust decoder checks SSND presence *before* block_align and compression type validation, while C validates *after* block_align. Both reject the same invalid inputs; only the error message for multi-error files may differ. This is an acceptable difference — the Rust ordering is more logical (validate data exists before processing it).
+
+2. **TermModule clears formats**: The C `aifa_TermModule()` is effectively a no-op. The Rust version sets `formats = None` (matching the `wav.rs` pattern). This is a strict improvement — it prevents use of stale format data after module teardown and matches the established Rust decoder convention.
+
+3. **SDX2 inline byte swap**: The C decoder writes native-endian i16 values via `*dst = v` and relies on the C framework's base `need_swap` field at the mixer level. The Rust decoder performs the byte swap *inline during SDX2 decode* (via `swap_bytes().to_ne_bytes()`). This is functionally equivalent — the output byte order is identical — but architecturally the swap happens at the decoder level rather than the mixer level. **Note:** For PCM mode, the Rust decoder does NOT perform inline byte swapping — it copies raw big-endian bytes and lets the C framework's `SoundDecoder_Decode()` handle the swap via the base struct's `need_swap` field, exactly matching the C AIFF decoder.
+
+4. **f80 full 64-bit significand**: The C code discards the low 32 bits of the IEEE 754 80-bit float significand (31-bit effective precision). The Rust pseudocode uses the full 64-bit significand. Both produce identical results for all integer sample rates used in UQM (8000, 11025, 22050, 44100, 48000, 96000), but the Rust version is more mathematically correct for edge cases.
 
 ## Testability Requirements
 

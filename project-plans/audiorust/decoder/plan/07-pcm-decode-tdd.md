@@ -17,13 +17,13 @@ Behavior contract:
 - WHEN: `decode()` is called
 - THEN: It decodes 25 frames (50/2), returns Ok(50)
 
-### REQ-DP-2: PCM Data Read
-**Requirement text**: Copy `dec_pcm * file_block` bytes from self.data to output.
+### REQ-DP-2: PCM Data Read (No Inline Byte Swap)
+**Requirement text**: Copy `dec_pcm * file_block` bytes from self.data to output. Do NOT perform inline byte swapping — the C framework handles it.
 
 Behavior contract:
 - GIVEN: A decoder with known PCM data [0x00, 0x01, 0x02, 0x03]
 - WHEN: `decode()` is called with sufficient buffer
-- THEN: Output buffer contains the exact same bytes
+- THEN: Output buffer contains the exact same bytes (raw big-endian, no swap)
 
 ### REQ-DP-3: PCM Position Update
 **Requirement text**: Advance cur_pcm and data_pos after decode.
@@ -80,9 +80,33 @@ Why it matters:
 8. `test_decode_pcm_exact_fit` — Buffer exactly fits remaining data
 9. `test_decode_pcm_returns_byte_count` — Verify return value = dec_pcm * block_align
 10. `test_decode_pcm_position_update` — After decode, cur_pcm and data_pos advanced
+11. `test_decode_pcm_16bit_no_inline_swap` — 16-bit PCM does NOT swap bytes inline:
+    - GIVEN: AIFF with 16-bit big-endian sample data [0x03, 0xE8] (1000 as big-endian i16)
+    - AND: need_swap is true (mixer wants little-endian)
+    - WHEN: decode() is called
+    - THEN: output buffer contains [0x03, 0xE8] (bytes unchanged — raw big-endian)
+    - NOTE: The C framework's SoundDecoder_Decode() handles byte swapping via need_swap field
+12. `test_decode_pcm_16bit_raw_bytes_preserved` — 16-bit PCM with need_swap=false:
+    - GIVEN: AIFF with 16-bit big-endian sample data [0x03, 0xE8] (1000 as big-endian i16)
+    - AND: need_swap is false (mixer wants big-endian)
+    - WHEN: decode() is called
+    - THEN: output buffer contains [0x03, 0xE8] (bytes unchanged from file)
+13. `test_decode_pcm_16bit_stereo_raw_bytes` — Stereo 16-bit raw bytes preserved:
+    - GIVEN: Stereo AIFF with big-endian data [0x00, 0x01, 0x00, 0x02] (L=1, R=2)
+    - AND: need_swap is true (C framework will swap, not the decoder)
+    - WHEN: decode() is called
+    - THEN: output contains [0x00, 0x01, 0x00, 0x02] (raw big-endian, no inline swap)
+14. `test_decode_pcm_8bit_no_endian_swap` — 8-bit PCM ignores need_swap:
+    - GIVEN: 8-bit AIFF with need_swap=true
+    - WHEN: decode() is called
+    - THEN: only signed→unsigned conversion applied, no byte swapping
+15. `test_decode_pcm_zero_length_buffer` — Zero-length output buffer:
+    - GIVEN: A valid opened decoder with data
+    - WHEN: decode() is called with an empty (zero-length) buffer
+    - THEN: Returns Ok(0) without advancing position
 
 ### Pseudocode traceability
-- Tests cover pseudocode lines: 226–249 (decode_pcm)
+- Tests cover pseudocode lines: 239–267 (decode_pcm, no inline byte swap)
 
 ## Verification Commands
 
@@ -98,13 +122,18 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 ## Structural Verification Checklist
-- [ ] At least 10 PCM decode test functions defined
+- [ ] At least 15 PCM decode test functions defined
 - [ ] Tests compile (`--no-run`)
 - [ ] Tests use the `build_aiff_file()` helper to create test data
 - [ ] Tests verify output buffer contents, not just return values
 
 ## Semantic Verification Checklist (Mandatory)
 - [ ] 8-bit conversion tests verify actual byte values after wrapping_add(128)
+- [ ] 16-bit output tests verify raw big-endian bytes pass through unchanged (NO inline swap)
+- [ ] 16-bit with need_swap=true test verifies bytes are still raw big-endian (C framework handles swap)
+- [ ] Stereo 16-bit test verifies raw bytes preserved (no swap regardless of need_swap)
+- [ ] 8-bit endian test verifies need_swap has no effect on 8-bit output
+- [ ] Zero-length buffer test verifies Ok(0) without advancing position
 - [ ] Position tracking tests check both cur_pcm and data_pos
 - [ ] EOF test verifies the exact `DecodeError::EndOfFile` variant
 - [ ] Partial decode test verifies correct frame count calculation
@@ -133,6 +162,6 @@ Contents:
 - phase ID: PLAN-20260225-AIFF-DECODER.P07
 - timestamp
 - files changed: `rust/src/sound/aiff.rs` (tests added)
-- tests added: ~10 PCM decode tests
+- tests added: ~15 PCM decode tests
 - verification outputs
 - semantic verification summary

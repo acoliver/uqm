@@ -152,6 +152,7 @@ pub struct SoundSample {
     num_buffers: u32,
     buffer_tags: Vec<Option<SoundTag>>,
     offset: i32,                    // initial time offset
+    looping: bool,                  // stored on sample (not decoder)
     data: Option<Box<dyn Any + Send>>,
     callbacks: Option<Box<dyn StreamCallbacks + Send>>,
 }
@@ -214,11 +215,12 @@ struct FadeState {
 ```rust
 /// Global streaming engine state.
 struct StreamEngine {
-    sources: [Mutex<SoundSource>; NUM_SOUNDSOURCES],
-    fade: Mutex<FadeState>,
+    // Note: sources live in SoundSourceArray (control.rs), NOT here.
+    // StreamEngine only manages the decoder thread and fade state.
+    fade: parking_lot::Mutex<FadeState>,
     decoder_thread: Option<JoinHandle<()>>,
     shutdown: AtomicBool,
-    wake: Condvar,  // to wake the decoder thread when a stream starts
+    wake: parking_lot::Condvar,  // to wake the decoder thread when a stream starts
 }
 
 lazy_static! {
@@ -304,7 +306,7 @@ The scope buffer is a cyclic ring buffer (`Vec<u8>`) inside `SoundSource`. Write
 /// Replaces TFB_SoundChunk. Owns its decoder.
 pub struct SoundChunk {
     decoder: Box<dyn SoundDecoder>,
-    start_time: f32,                 // seconds from track start
+    start_time: f64,                 // seconds from track start (f64 for precision in long tracks)
     tag_me: bool,
     track_num: u32,
     text: Option<String>,            // subtitle text (UTF-8, not UNICODE*)
@@ -333,7 +335,7 @@ struct TrackPlayerState {
     cur_chunk: Option<NonNull<SoundChunk>>,     // guarded by stream_mutex
     cur_sub_chunk: Option<NonNull<SoundChunk>>, // guarded by stream_mutex
     last_track_name: String,
-    dec_offset: f32,                 // accumulated decoder offset in ms
+    dec_offset: f64,                 // accumulated decoder offset in ms (f64 for precision)
 }
 
 // Safety: TrackPlayerState is accessed from the main thread only for
@@ -417,7 +419,7 @@ fn get_time_stamps(timestamp_str: &str) -> Vec<u32>;
 
 - All list mutation (`splice_track`, `splice_multi_track`, `stop_track`) happens on the main thread under `TRACK_STATE` mutex.
 - `cur_chunk` and `cur_sub_chunk` are additionally guarded by the speech source's stream mutex (accessed from the decoder thread in callbacks).
-- `tracks_length` is `AtomicU32` with `Ordering::Relaxed` — read without lock by `get_track_position()`, written under mutex by `play_track()`.
+- `tracks_length` is `AtomicU32` with `Ordering::Release` (writes in `play_track()`/`stop_track()`) and `Ordering::Acquire` (reads in `get_track_position()`). The Release/Acquire pair ensures visibility of track state written before the store. (FIX: spec previously said `Relaxed`, but pseudocode correctly uses `Release`/`Acquire`.)
 
 #### 3.2.7 Seeking
 
@@ -430,12 +432,21 @@ fn get_time_stamps(timestamp_str: &str) -> Vec<u32>;
 #### 3.3.1 Public Types
 
 ```rust
-/// Opaque music reference. Wraps Box<SoundSample>.
+/// Opaque music reference. Wraps Arc<Mutex<SoundSample>> for shared ownership.
 /// Replaces MUSIC_REF (TFB_SoundSample**).
-#[repr(transparent)]
-pub struct MusicRef(*mut SoundSample);
+///
+/// FIX ISSUE-FFI-05: Uses Arc<Mutex<SoundSample>> instead of raw pointer.
+/// This prevents double-free and use-after-free bugs inherent in the C raw
+/// pointer approach. The FFI layer converts raw pointers to/from Arc at the
+/// boundary using Arc::into_raw / Arc::from_raw.
+pub struct MusicRef(Arc<parking_lot::Mutex<SoundSample>>);
 
-// For FFI: MusicRef is a raw pointer that C code stores as an opaque handle.
+// For FFI: C code stores an opaque *mut c_void handle.
+// get_music_data: creates Arc, calls Arc::into_raw → *mut c_void to C.
+// plr_play_song: receives *mut c_void, calls Arc::increment_strong_count +
+//   Arc::from_raw to reconstruct without taking ownership.
+// release_music_data: receives *mut c_void, calls Arc::from_raw to reclaim
+//   ownership (drops the Arc, decrementing refcount).
 ```
 
 #### 3.3.2 Internal State
@@ -1746,7 +1757,7 @@ Verified against actual code in `rust/src/sound/`.
 
 3. **`SoundSample` shared via `Arc<Mutex<SoundSample>>`**: The spec shows `play_stream()` taking `Arc<Mutex<SoundSample>>`. This means the decoder thread locks the sample mutex on every buffer processing iteration. Since the source mutex is already held, this creates a two-lock-deep nesting pattern (source mutex → sample mutex). Lock ordering must be consistent: always source-then-sample to avoid deadlocks. The spec doesn't explicitly state this lock ordering rule — it should.
 
-4. **Recursive `Drop` on linked list**: TRACK-PLAY-04 / TRACK-ASSEMBLE-19 rely on Rust's recursive `Drop` when setting `chunks_head = None`. For very long chunk lists (hundreds of chunks from many `SpliceTrack` calls), this could cause stack overflow from deep recursion. Consider an iterative `Drop` impl. In practice, UQM dialogue tracks rarely exceed ~50 chunks, so this is low-risk.
+4. **Iterative `Drop` on linked list (FIX: ISSUE-MISC-02)**: TRACK-PLAY-04 / TRACK-ASSEMBLE-19 use an iterative `Drop` implementation for `SoundChunk` to avoid stack overflow from deep recursion on long linked lists. The `Drop` impl loops through `next` pointers, taking each Box and dropping it in a loop rather than relying on recursive Drop. This is safe for any list length.
 
 5. **`MusicRef` as raw pointer wrapper** (§3.3.1): `MusicRef(*mut SoundSample)` wrapping a leaked `Box` is the standard pattern for FFI opaque handles. The `Box::from_raw()` in `release_music_data()` correctly reclaims ownership. This is sound.
 

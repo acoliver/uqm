@@ -50,14 +50,14 @@ grep -n "todo!()" src/sound/aiff_ffi.rs
 - [ ] GetName returns `b"Rust AIFF\0"` pointer
 - [ ] InitModule stores formats in Mutex (REQ-FF-3)
 - [ ] TermModule clears Mutex to None
-- [ ] Init does ONLY `Box::new(AiffDecoder::new())` + `Box::into_raw` + store pointer — does NOT call init_module()/init() (REQ-FF-4, matching dukaud_ffi.rs pattern)
+- [ ] Init does `Box::new(AiffDecoder::new())` + `dec.init_module(0, &formats)` from global Mutex + `dec.init()` + `Box::into_raw` + store pointer (REQ-FF-4, matching wav_ffi.rs Init pattern)
 - [ ] Term does Box::from_raw + drop + null out pointer (REQ-FF-5)
 - [ ] All functions with decoder arg have null check (REQ-FF-10)
 - [ ] read_uio_file matches dukaud_ffi.rs pattern (open/fstat/read loop/close)
 - [ ] Open and Decode are `todo!()` stubs (complex logic deferred)
 
 ### Subjective Checks
-- [ ] Does the Init function match the dukaud_ffi.rs Init pattern exactly (allocate, store, set need_swap=false)?
+- [ ] Does the Init function match the wav_ffi.rs Init pattern (allocate, propagate formats via init_module/init, store, set need_swap=false)?
 - [ ] Does read_uio_file handle partial reads correctly (loop until all bytes read or error)?
 - [ ] Is TFB_RustAiffDecoder's first field the TFB_SoundDecoder base (required for C struct inheritance)?
 - [ ] Does the vtable static have the correct `#[no_mangle]` attribute for C symbol visibility?
@@ -76,7 +76,7 @@ cd /Users/acoliver/projects/uqm/rust && grep -n "todo!()" src/sound/aiff_ffi.rs
 - [ ] Vtable static defined with all 12 function pointers
 - [ ] Simple FFI functions implemented (GetName, InitModule, TermModule, GetStructSize, GetError, Init, Term, Close, Seek, GetFrame)
 - [ ] Complex FFI functions stubbed (Open, Decode)
-- [ ] Init matches dukaud_ffi.rs pattern (no double-init)
+- [ ] Init matches wav_ffi.rs pattern (propagates formats via init_module/init)
 
 ## Failure Recovery
 - Return to Phase 15 and fix compilation errors

@@ -23,7 +23,7 @@ grep -q "abs" project-plans/audiorust/decoder/analysis/pseudocode/aiff.md && ech
 grep -q "16383" project-plans/audiorust/decoder/analysis/pseudocode/aiff.md && echo "PASS: f80 unbias" || echo "FAIL"
 grep -q "0x7FFF" project-plans/audiorust/decoder/analysis/pseudocode/aiff.md && echo "PASS: f80 edge cases" || echo "FAIL"
 grep -q "Box::from_raw" project-plans/audiorust/decoder/analysis/pseudocode/aiff_ffi.md && echo "PASS: Box cleanup" || echo "FAIL"
-grep -q "Do NOT call init_module" project-plans/audiorust/decoder/analysis/pseudocode/aiff_ffi.md && echo "PASS: No double-init in Open" || echo "FAIL"
+grep -q "init_module" project-plans/audiorust/decoder/analysis/pseudocode/aiff_ffi.md && echo "PASS: init_module in Init" || echo "FAIL"
 ```
 
 ## Structural Verification Checklist
@@ -43,8 +43,8 @@ grep -q "Do NOT call init_module" project-plans/audiorust/decoder/analysis/pseud
 - [ ] REQ-EH-3 (open failure cleanup): `self.close()` called before every Err return in open_from_bytes
 - [ ] REQ-CH-7 (SDX2 endianness): `cfg!(target_endian)` logic present in pseudocode
 - [ ] REQ-DP-5 (8-bit conversion): `wrapping_add(128)` present in decode_pcm
-- [ ] REQ-FF-4 (Init pattern): Init() only does Box::new + Box::into_raw, does NOT call init_module()/init()
-- [ ] Open() does NOT call init_module()/init() — matching dukaud_ffi.rs pattern
+- [ ] REQ-FF-4 (Init pattern): Init() does Box::new + init_module(0, &formats) + init() + Box::into_raw (matching wav_ffi.rs pattern)
+- [ ] Open() does NOT call init_module()/init() — they are already called in Init()
 
 ### Subjective Checks
 - [ ] Does the f80 parsing algorithm correctly handle the full range of real AIFF sample rates (8000, 11025, 22050, 44100, 48000, 96000)?
@@ -64,14 +64,14 @@ echo "Pseudocode verification phase: no deferred implementation detection needed
 - [ ] Both pseudocode files exist with numbered algorithmic steps
 - [ ] All 9 requirement categories have traceable pseudocode
 - [ ] f80 edge cases (denormalized, infinity/NaN) are explicitly handled
-- [ ] FFI Init matches dukaud_ffi.rs pattern (no double-init)
+- [ ] FFI Init matches wav_ffi.rs pattern (propagates formats via init_module/init)
 - [ ] SDX2 algorithm is mathematically correct
 - [ ] Validation points, error handling, side effects are explicit
 
 ## Failure Recovery
 - Return to Phase 02 and address specific gaps
 - If f80 edge cases missing, add them to pseudocode
-- If FFI Init conflates allocation with initialization, fix to match dukaud_ffi.rs
+- If FFI Init doesn't propagate formats, fix to match wav_ffi.rs pattern
 
 ## Phase Completion Marker
 Create: `project-plans/audiorust/decoder/.completed/P02a.md`

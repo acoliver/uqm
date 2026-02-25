@@ -32,7 +32,7 @@ grep -q "infinity\|nan\|NaN\|0x7FFF" src/sound/aiff.rs && echo "PASS: f80 inf/na
 ## Structural Verification Checklist
 - [ ] `#[cfg(test)] mod tests` block exists in `aiff.rs`
 - [ ] Tests compile: `cargo test --lib --all-features -- aiff --no-run` succeeds
-- [ ] At least 22 test functions defined
+- [ ] At least 23 test functions defined (including truncated file test)
 - [ ] `build_aiff_file()` helper exists
 - [ ] `cargo fmt --all --check` passes
 - [ ] `cargo clippy` passes
@@ -52,7 +52,7 @@ grep -q "infinity\|nan\|NaN\|0x7FFF" src/sound/aiff.rs && echo "PASS: f80 inf/na
 ### Subjective Checks
 - [ ] Does the `build_aiff_file()` helper correctly construct byte-accurate AIFF headers that match the AIFF specification (big-endian, proper chunk sizes)?
 - [ ] Do the validation tests actually trigger the specific error path they intend to test, or could they pass due to an earlier validation check?
-- [ ] Are the f80 test vectors using the correct IEEE 754 80-bit encoding for each sample rate (e.g., 44100 = 0x400D AC44 0000 0000 0000)?
+- [ ] Are the f80 test vectors using the correct IEEE 754 80-bit encoding for each sample rate (e.g., 44100 = 0x400E AC44 0000 0000 0000)?
 - [ ] Would any of these tests pass with a trivial fake implementation (e.g., always returning Ok(()))?
 - [ ] Does the test for duplicate COMM chunks verify that the later chunk's values actually take effect?
 

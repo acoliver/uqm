@@ -45,6 +45,11 @@ grep -RIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/trackplayer.rs
 - [ ] Iterative Drop on SoundChunk avoids stack overflow — does the Drop impl use a `while let` loop instead of recursive drop?
 - [ ] No `unwrap()` or `expect()` in production code paths
 
+### Concurrency verification
+- [ ] Call `stop_track` from main thread while decoder thread callback (`on_end_chunk`) is executing — verify no deadlock (stop_track no longer holds source lock before calling stop_stream)
+- [ ] Call `play_track`/`stop_track` rapidly from multiple threads — verify no panics or leaked chunks
+- [ ] Verify `TrackCallbacks` acquire TRACK_STATE correctly in the deferred callback context (callbacks execute after source+sample locks are released)
+
 ## Deferred Implementation Detection
 
 ```bash

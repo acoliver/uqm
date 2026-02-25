@@ -83,7 +83,7 @@ Why it matters:
 13. `test_decode_sdx2_zero_byte` — Compressed byte 0x00: v = 0, prev_val stays at delta or 0
 
 ### Pseudocode traceability
-- Tests cover pseudocode lines: 250–295 (decode_sdx2)
+- Tests cover pseudocode lines: 270–315 (decode_sdx2)
 
 ## Verification Commands
 
@@ -104,12 +104,40 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] `build_aifc_sdx2_file()` helper creates valid AIFC/SDX2 data
 - [ ] Tests verify exact output values (not just success/failure)
 
+## Golden Test Vectors (C Reference Parity)
+
+> **Note:** The golden vectors described below are **procedural** — they will be extracted
+> from the C decoder during implementation (Phase 11), not provided inline in the plan.
+> The hand-calculated test vectors in the test cases above (e.g., 0x10 → 512) provide
+> baseline correctness assurance, but the golden vectors from actual C decoder output are
+> the definitive parity test. If extraction from C proves impractical, use a known AIFC
+> file and compare output byte-for-byte between C and Rust at runtime.
+
+Implementation tests **must** include golden test vectors extracted from the C decoder
+(`aiffaud.c`) output to prove exact parity. Steps to produce golden vectors:
+
+1. Build UQM with the C AIFF decoder and add a debug hook in `aiffaud.c` to dump
+   the compressed input bytes and the decoded i16 output samples for a known AIFC/SDX2
+   file (e.g., a short UQM sound effect).
+2. Capture at least 3 sequences:
+   - A pure non-delta sequence (several even bytes in a row)
+   - A pure delta sequence (several odd bytes in a row)
+   - A mixed sequence with channel interleaving (stereo)
+3. Encode these as `const` byte arrays in the test module, alongside the expected i16
+   output arrays from the C decoder.
+4. Assert that the Rust `decode_sdx2()` output matches the C output **exactly** (byte-for-byte).
+
+This is the single strongest test for correctness — it catches sign errors, off-by-one
+in the shift, incorrect delta accumulation, and endianness bugs that unit tests with
+hand-calculated values might miss.
+
 ## Semantic Verification Checklist (Mandatory)
 - [ ] Even/odd byte distinction tested (delta vs non-delta mode)
 - [ ] Negative sample handling tested (sign-preserving square)
 - [ ] Per-channel predictor independence tested (stereo)
 - [ ] Clamping tested for both overflow and underflow
 - [ ] Predictor accumulation tested across multiple frames
+- [ ] Golden test vectors from C decoder output included (proving exact parity)
 - [ ] Tests would not pass with a trivial implementation
 
 ## Deferred Implementation Detection (Mandatory)

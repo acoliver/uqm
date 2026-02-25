@@ -9,7 +9,35 @@
 
 ## Requirements Implemented (Expanded)
 
-All REQ-CROSS-FFI-* (4) and REQ-CROSS-GENERAL-03,08 requirements fully implemented.
+### REQ-CROSS-FFI-01: C-Compatible Function Signatures
+- GIVEN: 60+ audio API functions
+- WHEN: C code calls any audio function
+- THEN: The `#[no_mangle] pub extern "C" fn` shim converts C types to Rust types, calls the internal Rust API, and converts results back to C types
+
+### REQ-CROSS-FFI-02: Null Pointer Safety
+- GIVEN: Any FFI function receiving pointer parameters
+- WHEN: A null pointer is passed
+- THEN: The function returns a safe error value (0, null, or no-op) without panicking
+
+### REQ-CROSS-FFI-03: No C FFI Round-Trip to Mixer
+- GIVEN: Rust audio heart calling mixer functions
+- WHEN: Mixer API is used
+- THEN: Calls go directly to Rust mixer module, never through C FFI shims
+
+### REQ-CROSS-FFI-04: Symbol Export
+- GIVEN: A built Rust static library
+- WHEN: Linked into the C binary
+- THEN: All 60+ audio symbols are visible to the linker via `#[no_mangle]`
+
+### REQ-CROSS-GENERAL-03: Unsafe Confinement
+- GIVEN: Unsafe operations (pointer derefs, FFI calls)
+- WHEN: Code requires unsafe
+- THEN: All unsafe is confined to heart_ffi.rs with `// SAFETY:` comments
+
+### REQ-CROSS-GENERAL-08: Error Convention
+- GIVEN: Internal Rust Result<T, AudioError> returns
+- WHEN: Crossing FFI boundary
+- THEN: bool→c_int (1/0), counts→0, pointers→null; errors logged before conversion
 
 ### Pseudocode traceability
 - Stream FFI: pseudocode `heart_ffi.md` lines 1-97
@@ -41,7 +69,7 @@ All REQ-CROSS-FFI-* (4) and REQ-CROSS-GENERAL-03,08 requirements fully implement
 **Specific considerations**
 - `SpliceTrack`: UNICODE* (`*const u16`) text requires UTF-16→UTF-8 conversion
 - `GetTrackSubtitle`: Must return `*const c_char` — use thread-local `RefCell<CString>` cache
-- `GetFirstTrackSubtitle`/`GetNextTrackSubtitle`: Box::into_raw for SubtitleRef
+- `GetFirstTrackSubtitle`/`GetNextTrackSubtitle`: Return raw `NonNull<SoundChunk>` pointers cast to `*mut c_void` (zero allocation, matches C behavior — borrowed pointers valid while track state unchanged)
 - `LoadSoundFile`/`LoadMusicFile`: Box::into_raw for return values
 - `CCallbackWrapper`: stores raw C function pointers, calls them via `unsafe`
 - All `unsafe` blocks must be documented with safety invariant comments
@@ -62,6 +90,43 @@ The SOUND handle lifecycle:
 - Destroyed: `DestroySound` → `Box::from_raw(snd as *mut SoundBank)` → drops
 
 Document this pattern with `// SAFETY:` comments in the FFI shim.
+
+### GraphForegroundStream scope buffer FFI rendering path
+
+The C graphics code needs to read the scope (oscilloscope) data to render the waveform on screen. The data flow is:
+
+1. **Rust produces scope data**: The `graph_foreground_stream()` function (pseudocode `stream.md` §14, lines 400-460) reads the ring buffer, applies AGC/VAD, and writes scaled waveform amplitudes into an output array `data[0..width]` where each element is a Y-coordinate.
+
+2. **FFI function signature**: The FFI shim exposes this as:
+   ```c
+   // C declaration in audio_heart_rust.h:
+   uint32_t GraphForegroundStream(int32_t* data, uint32_t width, uint32_t height, bool want_speech);
+   ```
+   - `data`: Caller-allocated `int32_t` array of at least `width` elements. Rust writes the computed Y-coordinates into this buffer.
+   - `width`: Number of horizontal pixels (= number of samples to compute).
+   - `height`: Vertical pixel range for the waveform.
+   - `want_speech`: If true and speech is active, use speech source; otherwise use music source.
+   - Returns: Number of samples written (0 if no active stream, otherwise `width`).
+
+3. **FFI shim implementation**:
+   ```rust
+   #[no_mangle]
+   pub extern "C" fn GraphForegroundStream(
+       data: *mut i32, width: u32, height: u32, want_speech: c_int,
+   ) -> u32 {
+       if data.is_null() || width == 0 || height == 0 { return 0; }
+       // SAFETY: Caller guarantees data points to at least width i32 elements
+       let slice = unsafe { std::slice::from_raw_parts_mut(data, width as usize) };
+       stream::graph_foreground_stream(slice, width as usize, height as usize, want_speech != 0)
+   }
+   ```
+
+4. **C graphics rendering**: The C code in the comm screen renderer:
+   - Allocates a local `int32_t data[MAX_WIDTH]` array on the stack
+   - Calls `GraphForegroundStream(data, width, height, want_speech)`
+   - Iterates `data[0..returned_count]`, drawing line segments between consecutive Y-coordinates to produce the oscilloscope waveform
+
+5. **No shared ring buffer pointer**: The C code does **not** get a raw pointer to the Rust ring buffer. The scope ring buffer is internal to Rust. The `GraphForegroundStream` function performs all ring buffer reading, AGC, and scaling internally and writes pre-computed Y-coordinates into the caller's buffer. This avoids unsafe shared memory and synchronization issues — the only cross-language data transfer is the output array.
 
 ### Safety documentation requirements
 Every `unsafe` block in heart_ffi.rs must have a `// SAFETY:` comment explaining:

@@ -22,7 +22,7 @@ grep -r "USE_RUST_AUDIO_HEART" sc2/src/libs/sound/
 
 ## Structural Verification Checklist
 - [ ] `USE_RUST_AUDIO_HEART` flag added to `config_unix.h` (or equivalent)
-- [ ] C header `rust_audio_heart.h` created with all FFI declarations
+- [ ] C header `audio_heart_rust.h` created with all FFI declarations
 - [ ] 6 C files conditionally excluded: stream.c, trackplayer.c, music.c, sfx.c, sound.c, fileinst.c
 - [ ] `build.sh uqm` succeeds with Rust audio heart enabled
 - [ ] All workspace Rust tests pass
@@ -34,10 +34,29 @@ grep -r "USE_RUST_AUDIO_HEART" sc2/src/libs/sound/
 
 ### Deterministic checks
 - [ ] All Rust tests pass: `cargo test --lib --all-features` shows 0 failures across ALL modules (types, stream, trackplayer, music, sfx, control, fileinst, heart_ffi)
-- [ ] C build succeeds: `./build.sh uqm` returns exit code 0
+- [ ] C build succeeds WITH Rust heart: `USE_RUST_AUDIO_HEART=1 ./build.sh uqm` returns exit code 0
+- [ ] C build succeeds WITHOUT Rust heart: `./build.sh uqm` returns exit code 0 (backwards compatibility)
 - [ ] Symbols linked correctly: `nm` on built binary shows Rust-provided symbols (PLRPlaySong, PlayChannel, etc.)
 - [ ] No duplicate symbols: no linker warnings about symbol conflicts between Rust and C
 - [ ] Zero deferred markers across ALL modules: `grep -rIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/types.rs rust/src/sound/stream.rs rust/src/sound/trackplayer.rs rust/src/sound/music.rs rust/src/sound/sfx.rs rust/src/sound/control.rs rust/src/sound/fileinst.rs rust/src/sound/heart_ffi.rs` returns 0
+
+### Backwards compatibility verification (USE_RUST_HEART disabled)
+
+The game must work correctly with `USE_RUST_AUDIO_HEART` **disabled** (the default). This verifies that the header guard changes and build system modifications don't break the existing C audio path.
+
+- [ ] **Build without flag**: `./build.sh uqm` (no `USE_RUST_AUDIO_HEART`) succeeds with zero errors and zero new warnings
+- [ ] **C files included**: Verify that `stream.c`, `trackplayer.c`, `music.c`, `sfx.c`, `sound.c`, `fileinst.c` are compiled into the binary (check build log or `nm` output for C-implemented symbols)
+- [ ] **No Rust audio symbols**: When built without the flag, `nm` should NOT show Rust-specific audio heart symbols (the Rust library may still be linked for mixer/decoder, but heart_ffi symbols should not appear in the audio call path)
+- [ ] **Header guards correct**: Each modified header (`music.h`, `sfx.h`, `sound.h`, `stream.h`, `trackplayer.h`, `fileinst.h`) must compile cleanly in both `#ifdef` branches:
+  - Without flag: C prototypes visible, `audio_heart_rust.h` NOT included
+  - With flag: Rust prototypes visible via `audio_heart_rust.h`
+- [ ] **Runtime regression test**: Launch game built without the flag. Verify:
+  - Title screen music plays
+  - Menu navigation SFX plays
+  - Entering communication screen: speech plays, subtitles appear, oscilloscope renders
+  - Volume controls in options work
+  - Game exits cleanly without audio-related crashes or hangs
+- [ ] **No behavioral difference**: The C-built game and Rust-built game should produce identical observable audio behavior for the same inputs
 
 ### Subjective checks — End-to-end scenarios
 - [ ] **Music playback**: Can PLRPlaySong → plr_play_song → play_stream → decoder thread → mixer chain play audio end-to-end? Does the streaming thread correctly wake, decode buffers, queue to mixer, and track FPS?
@@ -49,6 +68,10 @@ grep -r "USE_RUST_AUDIO_HEART" sc2/src/libs/sound/
 - [ ] **Shutdown**: Does UninitAudio → uninit_stream_decoder correctly join the decoder thread, clean up all resources, and leave the system in a safe state?
 - [ ] **Error resilience**: Do null pointers, invalid handles, and concurrent access produce error codes (not panics)?
 - [ ] **No regressions**: Does enabling USE_RUST_AUDIO_HEART produce the same observable behavior as the C implementation for known test scenarios?
+
+### Performance sanity check
+- [ ] **Decode throughput**: A simple benchmark test that calls `decode_all` on a representative audio file completes within a reasonable bound (no accidental O(n²) algorithms). Suggest: decode a 10-second 44.1kHz stereo WAV file in < 100ms on modern hardware.
+- [ ] **No excessive allocations**: Check that streaming playback (music + speech simultaneously) does not grow memory over a 60-second run — scope buffers and mixer buffers should be fixed-size after initialization.
 
 ## Deferred Implementation Detection
 

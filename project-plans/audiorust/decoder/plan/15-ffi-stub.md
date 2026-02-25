@@ -63,7 +63,7 @@ Why it matters:
     - `rust_aifa_TermModule` — implemented (clears formats)
     - `rust_aifa_GetStructSize` — implemented (returns size_of)
     - `rust_aifa_GetError` — implemented (null check + delegate)
-     - `rust_aifa_Init` — implemented (ONLY Box::new + store pointer; do NOT call init_module/init — those are separate vtable calls from C framework, per dukaud_ffi.rs pattern)
+     - `rust_aifa_Init` — implemented (Box::new + call dec.init_module(0, &formats) from global Mutex + call dec.init() + store pointer; matches wav_ffi.rs Init pattern lines 138-147)
     - `rust_aifa_Term` — implemented (Box::from_raw + drop)
     - `rust_aifa_Open` — `todo!()` stub (complex UIO + open_from_bytes)
     - `rust_aifa_Close` — implemented (null check + delegate close)
@@ -79,7 +79,7 @@ Why it matters:
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P15`
 
 ### Pseudocode traceability
-- Uses pseudocode lines: 1–5 (struct), 6–30 (read_uio_file), 31–75 (simple functions), 173–187 (vtable)
+- Uses pseudocode lines: 1–5 (struct), 6–30 (read_uio_file), 31–78 (simple functions), 179–193 (vtable)
 
 ## Verification Commands
 

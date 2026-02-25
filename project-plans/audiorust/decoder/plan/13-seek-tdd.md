@@ -66,7 +66,7 @@ Why it matters:
 10. `test_seek_zero_is_noop` — Seek to 0 when already at 0
 
 ### Pseudocode traceability
-- Tests cover pseudocode lines: 300–312 (seek)
+- Tests cover pseudocode lines: 320–332 (seek)
 
 ## Verification Commands
 

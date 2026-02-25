@@ -41,7 +41,7 @@ grep -RIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/control.rs rust/src/sound/
 - [ ] `clean_source` resets all source fields to initial state — rewind, clear sample, clear scope, reset flags
 - [ ] `stop_sound` stops ALL SFX sources (0..NUM_SFX_CHANNELS) — not speech or music
 - [ ] Volume calculations produce correct gain — verify the formula matches the C implementation
-- [ ] `wait_for_sound_end` polls with 50ms sleep and breaks on `quit_posted()` — does it handle the quit case correctly?
+- [ ] `wait_for_sound_end` polls with 10ms sleep (matching C TaskSwitch granularity) and breaks on `quit_posted()` — does it handle the quit case correctly?
 - [ ] `FileLoadGuard` RAII pattern ensures cleanup even on error paths — is `Drop` implemented to clear `cur_resfile_name`?
 - [ ] `load_sound_file` sets name, calls `get_sound_bank_data`, and clears name — is the guard used?
 - [ ] `load_music_file` validates filename, sets name, calls `get_music_data`, and clears name — does it check for empty filename (REQ-MUSIC-LOAD-01)?

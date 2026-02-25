@@ -60,7 +60,7 @@ echo "aiff_ffi.rs tests:" && grep -c "#\[test\]" src/sound/aiff_ffi.rs
 - [ ] `decoder.c` `sd_decoders[]` "aif" entry correctly conditionally compiled with `#ifdef USE_RUST_AIFF` / `#else` / `#endif`
 - [ ] All 84 requirements (REQ-FP-1..15, REQ-SV-1..13, REQ-CH-1..7, REQ-DP-1..6, REQ-DS-1..8, REQ-SK-1..4, REQ-EH-1..6, REQ-LF-1..10, REQ-FF-1..15) implemented
 - [ ] No `todo!()`, `FIXME`, `HACK`, or `placeholder` in any Rust code
-- [ ] FFI Init function does NOT call init_module()/init() (matching dukaud_ffi.rs pattern)
+- [ ] FFI Init function DOES call init_module()/init() to propagate formats (matching wav_ffi.rs pattern, NOT dukaud_ffi.rs)
 
 ### Subjective Checks
 - [ ] If a user builds with `USE_RUST_AIFF=1` and plays a game level with `.aif` audio, will they hear correct audio playback?

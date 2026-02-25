@@ -86,13 +86,37 @@ Under `USE_RUST_AUDIO_HEART`:
 #### C header
 - `sc2/src/libs/sound/audio_heart_rust.h`
   - Declare all 60+ Rust FFI function prototypes
-  - Use `#ifdef __cplusplus extern "C" { #endif` guards
+  - **Must include standard include guards:**
+    ```c
+    #ifndef AUDIO_HEART_RUST_H_
+    #define AUDIO_HEART_RUST_H_
+    #ifdef __cplusplus
+    extern "C" {
+    #endif
+    // ... all declarations ...
+    #ifdef __cplusplus
+    }
+    #endif
+    #endif /* AUDIO_HEART_RUST_H_ */
+    ```
   - Include type definitions for `TFB_SoundSample`, `TFB_SoundTag`, `TFB_SoundCallbacks`, etc.
 
 #### Build file modifications
 - `sc2/Makefile` or `sc2/build/unix/build_functions` (or equivalent)
-  - Add conditional: when `USE_RUST_AUDIO_HEART` is defined, exclude the 6 C files from SOUND_SRCS
-  - Example:
+  - **IMPORTANT:** Verify the actual build system structure during implementation. The UQM build system uses `build.sh` → `build_functions` → Makefiles; the exact Makefile path and variable names (`SOUND_SRCS`) are speculative and must be confirmed by reading the actual build files before modifying them.
+  - **MANDATORY FIRST STEP:** Before modifying any build file, run:
+    ```bash
+    # 1. Find the actual build system files that reference sound .c files
+    grep -rn "stream\.c\|trackplayer\.c\|music\.c\|sfx\.c\|sound\.c\|fileinst\.c" sc2/build/ sc2/Makefile* sc2/CMakeLists* 2>/dev/null
+    # 2. Identify the exact variable names and build file structure
+    grep -rn "SOUND\|AUDIO\|SRC.*sound" sc2/build/ sc2/Makefile* 2>/dev/null
+    # 3. Verify the Rust static library link flags are already present
+    grep -rn "rust\|cargo\|libuqm_rust" sc2/build/ sc2/Makefile* 2>/dev/null
+    ```
+    Record the results and adapt the conditional compilation to the actual build system. Do NOT assume `SOUND_SRCS` or `filter-out` will work — the build system may use file lists, CMake, or another mechanism.
+  - **DUPLICATE SYMBOL PREVENTION:** When `USE_RUST_AUDIO_HEART` is defined, the 6 C files MUST be excluded from compilation AND the Rust static library MUST be linked. If both the C files and the Rust library are linked, duplicate symbol errors will occur for all 60+ audio function names. Verify with: `nm -g librust_uqm.a | grep -E "PLRPlaySong|PlayChannel|InitSound"` to confirm symbol export.
+  - Add conditional: when `USE_RUST_AUDIO_HEART` is defined, exclude the 6 C files from the sound source list
+  - Example (adapt variable names to actual build system):
     ```makefile
     ifdef USE_RUST_AUDIO_HEART
       SOUND_SRCS := $(filter-out stream.c trackplayer.c music.c sfx.c sound.c fileinst.c, $(SOUND_SRCS))
@@ -109,18 +133,38 @@ Under `USE_RUST_AUDIO_HEART`:
 
 ### Conditional compilation pattern
 
+Each of the 6 sound headers needs `#ifdef USE_RUST_AUDIO_HEART` guards around the C function declarations. This ensures that when the Rust implementation is enabled, C code sees the Rust FFI prototypes (from `audio_heart_rust.h`) instead of the C prototypes. When the flag is not set, the existing C declarations remain untouched.
+
+**All 6 headers requiring guards:**
+
+1. **`music.h`** — Guards around: `PLRPlaySong`, `PLRStop`, `PLRPlaying`, `PLRSeek`, `PLRPause`, `PLRResume`, `snd_PlaySpeech`, `snd_StopSpeech`, `SetMusicVolume`, `FadeMusic`, `CheckMusicResName`, `DestroyMusic`, `GetMusicData`, `ReleaseMusicData`
+2. **`sfx.h`** — Guards around: `PlayChannel`, `StopChannel`, `ChannelPlaying`, `SetChannelVolume`, `CheckFinishedChannels`, `UpdateSoundPosition`, `GetPositionalObject`, `SetPositionalObject`, `DestroySound`, `GetSoundBankData`, `ReleaseSoundBankData`
+3. **`sound.h`** — Guards around: `InitSound`, `UninitSound`, `StopSource`, `CleanSource`, `StopSound`, `SoundPlaying`, `WaitForSoundEnd`, `SetSFXVolume`, `SetSpeechVolume`
+4. **`stream.h`** — Guards around: `InitStreamDecoder`, `UninitStreamDecoder`, `PlayStream`, `StopStream`, `PauseStream`, `ResumeStream`, `SeekStream`, `PlayingStream`, `SetMusicStreamFade`, `GraphForegroundStream`, `TFB_CreateSoundSample`, `TFB_DestroySoundSample`, etc.
+5. **`trackplayer.h`** — Guards around: `SpliceTrack`, `SpliceMultiTrack`, `PlayTrack`, `StopTrack`, `JumpTrack`, `PauseTrack`, `ResumeTrack`, `PlayingTrack`, `GetTrackPosition`, `GetTrackSubtitle`, etc.
+6. **`fileinst.h`** — Guards around: `LoadSoundFile`, `LoadMusicFile`
+
+**Pattern for each header:**
+
 ```c
-/* In each sound header, e.g., stream.h */
+/* In each sound header, e.g., music.h */
 #ifndef USE_RUST_AUDIO_HEART
+
 /* Existing C function declarations */
-void InitStreamDecoder(void);
-void UninitStreamDecoder(void);
-/* ... */
-#else
-/* Rust FFI declarations */
+void PLRPlaySong(MUSIC_REF MusicRef, BOOLEAN Continuous, BYTE Priority);
+void PLRStop(MUSIC_REF MusicRef);
+BOOLEAN PLRPlaying(MUSIC_REF MusicRef);
+/* ... all other C prototypes for this header ... */
+
+#else /* USE_RUST_AUDIO_HEART */
+
+/* Rust FFI declarations — identical signatures, implemented in Rust */
 #include "audio_heart_rust.h"
-#endif
+
+#endif /* USE_RUST_AUDIO_HEART */
 ```
+
+**Important**: The `#ifdef` guard must wrap ALL function declarations that are replaced by Rust, not just some. Partial guards would cause duplicate symbol errors at link time. The `audio_heart_rust.h` header provides all prototypes in one place, so the `#else` branch is simply an include.
 
 ### Rust module registration verification
 - `rust/src/sound/mod.rs` must declare all 7 new modules:

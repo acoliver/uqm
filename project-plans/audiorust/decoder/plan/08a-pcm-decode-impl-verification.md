@@ -38,9 +38,10 @@ grep -RIn "FIXME\|HACK\|placeholder" src/sound/aiff.rs || echo "CLEAN"
 ## Semantic Verification Checklist (Mandatory)
 
 ### Deterministic Checks
-- [ ] Mono 16-bit decode: output bytes match input data exactly (no conversion for 16-bit)
-- [ ] Stereo 16-bit decode: interleaved channels preserved correctly
+- [ ] Mono 16-bit decode: output bytes match input data exactly (raw big-endian, no inline swap)
+- [ ] Stereo 16-bit decode: interleaved channels preserved correctly (raw big-endian bytes)
 - [ ] Mono 8-bit decode: signed→unsigned conversion (0x80→0x00, 0x00→0x80, 0x7F→0xFF)
+- [ ] No inline byte swap for 16-bit PCM — C framework handles it via need_swap field
 - [ ] Partial buffer: correct number of frames decoded (floor division of buf.len() by block_align)
 - [ ] EOF: returns `Err(DecodeError::EndOfFile)` after all frames consumed, not `Ok(0)`
 - [ ] Position tracking: `cur_pcm` and `data_pos` consistent after each decode call

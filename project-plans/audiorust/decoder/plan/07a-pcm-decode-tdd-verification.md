@@ -29,7 +29,7 @@ done
 ```
 
 ## Structural Verification Checklist
-- [ ] At least 10 test functions with `test_decode_pcm` in name
+- [ ] At least 11 test functions with `test_decode_pcm` in name
 - [ ] Tests compile: `cargo test --lib --all-features -- test_decode_pcm --no-run`
 - [ ] Tests use synthetic AIFF data (not external files)
 - [ ] Tests verify output buffer contents, not just return values

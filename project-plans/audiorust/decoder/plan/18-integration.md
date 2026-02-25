@@ -136,6 +136,7 @@ grep "rust_aifa_DecoderVtbl" sc2/src/libs/sound/decoders/rust_aiff.h
 - [ ] With `USE_RUST_AIFF` undefined: C build uses original `aifa_DecoderVtbl` — no regression
 - [ ] With `USE_RUST_AIFF` defined: C build links against `rust_aifa_DecoderVtbl`
 - [ ] The `"aif"` extension in `sd_decoders[]` is correctly conditionally compiled
+- [ ] The boolean values in the Rust entry `{true, true, "aif", ...}` match the original C entry exactly (verified: line 173 of `decoder.c` uses `{true, true, "aif", &aifa_DecoderVtbl}`)
 - [ ] `rust_aiff.h` follows exact pattern of `rust_dukaud.h`
 - [ ] `decoder.c` include placement matches other USE_RUST_* includes
 - [ ] `decoder.c` sd_decoders placement is in the correct position (where `"aif"` currently is)

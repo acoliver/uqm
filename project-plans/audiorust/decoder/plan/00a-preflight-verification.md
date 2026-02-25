@@ -42,6 +42,7 @@ grep -n "USE_RUST_DUKAUD" sc2/src/libs/sound/decoders/decoder.c
 - [ ] `rustc --version` — compiler version compatible
 - [ ] `cargo clippy --version` — linter available
 - [ ] `cd /Users/acoliver/projects/uqm/rust && cargo check --all-features` — existing code compiles
+- [ ] Coverage tool: N/A — this plan does not require coverage gates (`cargo llvm-cov` is not used). If coverage requirements are added later, verify `cargo llvm-cov --version` is available.
 
 ### Dependencies
 - [ ] `rust/Cargo.toml` contains `libc` dependency (needed for FFI `stat` struct)

@@ -10,11 +10,34 @@
 ## Requirements Implemented (Expanded)
 
 ### REQ-TRACK-ASSEMBLE-01 through REQ-TRACK-ASSEMBLE-19: Assembly Tests
+- GIVEN: A track name and subtitle text
+- WHEN: `splice_track` is called
+- THEN: A SoundChunk is created with correct decoder, start_time, text, tag_me fields, and appended to the linked list
+
 ### REQ-TRACK-PLAY-01 through REQ-TRACK-PLAY-10: Playback Tests
+- GIVEN: A spliced track with chunks
+- WHEN: `play_track`/`stop_track`/`pause_track`/`resume_track`/`jump_track` are called
+- THEN: The stream engine is started/stopped/paused/resumed correctly, and track state (cur_chunk, track_count, dec_offset) is updated
+
 ### REQ-TRACK-SEEK-01 through REQ-TRACK-SEEK-13: Seeking Tests
+- GIVEN: A playing track with multiple chunks
+- WHEN: `seek_track`/`fast_reverse_smooth`/`fast_forward_smooth`/`fast_reverse_page`/`fast_forward_page` are called
+- THEN: The position is adjusted correctly, clamped to `0..=tracks_length+1`, and the current chunk/sub-chunk pointers advance to match
+
 ### REQ-TRACK-CALLBACK-01 through REQ-TRACK-CALLBACK-09: Callback Tests
+- GIVEN: A playing track with TrackCallbacks installed
+- WHEN: The streaming engine fires `on_start_stream`/`on_end_chunk`/`on_end_stream`/`on_tagged_buffer`
+- THEN: The callbacks correctly set the decoder, advance chunks, tag buffers, and handle end-of-stream cleanup
+
 ### REQ-TRACK-SUBTITLE-01 through REQ-TRACK-SUBTITLE-04: Subtitle Tests
+- GIVEN: A track with subtitle text in chunks
+- WHEN: `get_track_subtitle`/`get_first_track_subtitle`/`get_next_track_subtitle` are called
+- THEN: The correct subtitle text is returned, and iteration follows the linked list order
+
 ### REQ-TRACK-POSITION-01, REQ-TRACK-POSITION-02: Position Tests
+- GIVEN: A playing track
+- WHEN: `get_track_position` is called with different unit values
+- THEN: The position is returned in the requested units (game ticks or milliseconds)
 
 ## Implementation Tasks
 

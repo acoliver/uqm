@@ -38,7 +38,7 @@ Why it matters:
   - No changes needed if stub is already correct
 
 ### Pseudocode traceability
-- Confirms stub for pseudocode lines: 300–312
+- Confirms stub for pseudocode lines: 320–332
 
 ## Verification Commands
 

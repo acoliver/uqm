@@ -22,7 +22,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 | VolumeState | `struct VolumeState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
 | FileInstState | `struct FileInstState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
 | SoundSourceArray | `struct SoundSourceArray` | Global static (lazy_static) | Program lifetime |
-| MusicRef | `#[repr(transparent)] struct MusicRef(*mut SoundSample)` | Raw pointer wrapper (C owns handle, Rust owns data) | Created on load, destroyed on release |
+| MusicRef | `struct MusicRef(Arc<parking_lot::Mutex<SoundSample>>)` | Arc wrapper for shared ownership (C retains handle, Rust manages refcount) | Created on load, destroyed on release |
 | SoundBank | `struct SoundBank` | Owned by caller (C game code via opaque pointer) | Created on load_sound_file, destroyed on release |
 | SoundPosition | `#[repr(C)] struct SoundPosition` | Value type (Copy) | Stack lifetime |
 | SubtitleRef | `struct SubtitleRef` | Wrapper around pointer into chunk list | Valid while track state is held |
@@ -207,7 +207,7 @@ When `USE_RUST_AUDIO_HEART` is enabled:
 | C headers (sndintrn.h, audiocore.h parts) | Keep but conditionally exclude implementations |
 
 New files added:
-- `sc2/src/libs/sound/rust_audio_heart.h` — FFI declarations
+- `sc2/src/libs/sound/audio_heart_rust.h` — FFI declarations
 - `rust/src/sound/stream.rs`
 - `rust/src/sound/trackplayer.rs`
 - `rust/src/sound/music.rs`
@@ -227,11 +227,17 @@ New files added:
 
 Lock ordering (must be respected to avoid deadlock):
 1. `TRACK_STATE` mutex (outermost)
-2. Source mutex (per-source, from `SOURCES.sources[i]`)
-3. Sample mutex (per-sample, from `Arc<parking_lot::Mutex<SoundSample>>`)
-4. `FadeState` mutex (innermost)
+2. `MUSIC_STATE` mutex
+3. Source mutex (per-source, from `SOURCES.sources[i]`)
+4. Sample mutex (per-sample, from `Arc<parking_lot::Mutex<SoundSample>>`)
+5. `FadeState` mutex (innermost)
 
 Never hold a higher-numbered lock while acquiring a lower-numbered one.
+
+The decoder thread uses a **deferred callback pattern**: `process_source_stream`
+collects callback actions while holding Source+Sample locks (levels 3-4), then
+releases those locks and executes callbacks afterward. This ensures callbacks
+(which acquire TRACK_STATE at level 1) never violate the ordering.
 
 ---
 
@@ -242,4 +248,4 @@ These must be resolved in early implementation phases:
 1. **`set_looping()`** — Store looping flag on `SoundSample` (not decoder). Simpler and doesn't modify existing trait.
 2. **`decode_all()`** — Add as free function: `fn decode_all(decoder: &mut dyn SoundDecoder) -> DecodeResult<Vec<u8>>`. Loops `decode()` until EOF.
 3. **`get_time()`** — Add as free function: `fn get_decoder_time(decoder: &dyn SoundDecoder) -> f32 { decoder.get_frame() as f32 / decoder.frequency() as f32 }`.
-4. **`mixer_source_fv()`** — Either add vector setter to mixer or use three separate `mixer_source_f` calls for 3D position components. Decision: add `mixer_source_fv()` to mixer module.
+4. **`mixer_source_fv()`** — **Resolved: use three separate `mixer_source_f` calls** for X, Y, Z position components. No mixer modifications needed. This approach is simpler and avoids changing the existing mixer API.

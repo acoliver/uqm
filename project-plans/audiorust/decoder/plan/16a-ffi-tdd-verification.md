@@ -26,7 +26,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 ## Structural Verification Checklist
 - [ ] `#[cfg(test)] mod tests` block exists in `aiff_ffi.rs`
 - [ ] Tests compile: `cargo test --lib --all-features -- aiff_ffi --no-run`
-- [ ] At least 8 test functions defined
+- [ ] At least 9 test functions defined (including Open null decoder test)
 - [ ] `cargo fmt --all --check` passes
 - [ ] `cargo clippy` passes
 

@@ -1,465 +1,793 @@
-# AIFF Decoder Plan — Structural Correctness Review
+# Structural Review: AIFF Decoder Plan
 
-**Plan ID**: `PLAN-20260225-AIFF-DECODER`
-**Review Date**: 2026-02-25
-**Reviewer**: LLxprt Code (automated structural review)
-**Templates Used**: `dev-docs/PLAN.md`, `dev-docs/PLAN-TEMPLATE.md`, `dev-docs/RULES.md`
-
----
-
-## Executive Summary
-
-The AIFF Decoder implementation plan is **structurally sound** with high compliance to the plan template. All 37 plan files (18 phases + 18 verifications + overview) follow the required phase template with only minor deviations. The plan demonstrates strong traceability, proper TDD sequencing, and comprehensive requirement coverage across 84 requirements.
-
-**Overall Compliance**: [OK] PASS with minor findings
+**Plan ID:** PLAN-20260225-AIFF-DECODER  
+**Review Date:** 2026-02-25  
+**Review Type:** Pedantic structural compliance against PLAN.md, PLAN-TEMPLATE.md, RULES.md  
+**Fix Rounds Completed:** 3  
 
 ---
 
-## 1. Directory Structure Compliance
+## Template Reference Summary
 
-### Template Requirement (from PLAN.md)
+### PLAN.md Requirements
+- Plan ID format: `PLAN-YYYYMMDD-<FEATURE-SLUG>`
+- Sequential phase execution (no skipping)
+- Traceability markers (`@plan`, `@requirement`, `@pseudocode`)
+- Required directory structure: `specification.md`, `analysis/domain-model.md`, `analysis/pseudocode/*.md`, `plan/*.md`, `.completed/`
+- Phase 0: Specification (no timeline)
+- Phase 0.5: Preflight verification
+- Phase 1: Analysis
+- Phase 2: Pseudocode (numbered, algorithmic)
+- Implementation cycle: Stub → TDD → Impl per slice
+- Integration phase answering 5 questions
+- Verification: structural + semantic
+- Fraud/failure pattern detection
+- Phase completion markers in `.completed/`
+- Plan evaluation checklist (gate before execution)
 
-```
-project-plans/<feature-slug>/
-  specification.md
-  analysis/
-    domain-model.md
-    pseudocode/
-      component-001.md
-      component-002.md
-  plan/
-    00-overview.md
-    00a-preflight-verification.md
-    ...
-  .completed/
-```
+### PLAN-TEMPLATE.md Requirements
+- Plan header with ID, date, total phases, requirements, critical reminders
+- Per-phase: Phase ID, Prerequisites, Requirements Implemented (GIVEN/WHEN/THEN), Implementation Tasks (files to create/modify with markers), Pseudocode traceability, Verification Commands, Structural Verification Checklist, Semantic Verification Checklist, Deferred Implementation Detection, Success Criteria, Failure Recovery, Phase Completion Marker
+- Preflight phase template (toolchain, dependencies, types, test infra, blockers, gate decision)
+- Integration contract template (callers, replaced code, user access path, data migration, E2E verification)
+- Execution tracker template
 
-### Actual Structure
-
-```
-project-plans/audiorust/decoder/
-  specification.md                          [OK]
-  REVIEW-technical.md                       (extra — acceptable)
-  analysis/
-    domain-model.md                         [OK]
-    pseudocode/
-      aiff.md                               [OK] (448 lines, numbered)
-      aiff_ffi.md                           [OK] (266 lines, numbered)
-  plan/
-    00-overview.md                          [OK]
-    00a-preflight-verification.md           [OK]
-    01-analysis.md ... 18a-integration-verification.md  [OK] (36 files)
-  .completed/                               [OK] (empty — plan not yet executed)
-```
-
-**Verdict**: [OK] **PASS** — Directory structure matches template exactly. Both pseudocode files present and numbered. `.completed/` directory exists (empty, as expected for unexecuted plan).
+### RULES.md Requirements
+- TDD mandatory (RED → GREEN → REFACTOR)
+- Quality baseline: `cargo fmt`, `cargo clippy`, `cargo test`
+- Rust rules: explicit types, Result/Option, no unwrap/expect, no unsafe (except approved)
+- Architecture: preserve module boundaries, no `*_v2`/`new_*`
+- Testing: behavior-based, not implementation-detail assertions
+- Anti-placeholder rule in impl phases
+- Persistence rules (not applicable here)
+- LLM rules: follow patterns, no speculative abstractions
 
 ---
 
-## 2. Plan ID Consistency
+## Directory Structure Compliance
 
-**Expected format**: `PLAN-YYYYMMDD-<FEATURE-SLUG>.PNN`
+| Required Element | Present | Notes |
+|---|---|---|
+| `specification.md` | [OK] | Comprehensive, all required sections present |
+| `analysis/domain-model.md` | [OK] | Entities, states, errors, integration, data flow |
+| `analysis/pseudocode/` | [OK] | Two files: `aiff.md`, `aiff_ffi.md` |
+| `plan/00-overview.md` | [OK] | Contains plan header, structure table, execution tracker, integration contract |
+| `plan/00a-preflight-verification.md` | [OK] | Full preflight template |
+| `plan/01..18 + verification` | [OK] | 36 phase files total (18 phases × 2) |
+| `.completed/` | [OK] | Directory exists, empty (execution not started) |
 
-| File | Phase ID | Correct Format? |
-|------|----------|:-:|
-| `00-overview.md` | `PLAN-20260225-AIFF-DECODER` | [OK] |
-| `00a-preflight-verification.md` | `PLAN-20260225-AIFF-DECODER.P00a` | [OK] |
-| `01-analysis.md` | `PLAN-20260225-AIFF-DECODER.P01` | [OK] |
-| `02-pseudocode.md` | `PLAN-20260225-AIFF-DECODER.P02` | [OK] |
-| `03-parser-stub.md` | `PLAN-20260225-AIFF-DECODER.P03` | [OK] |
-| `03a-parser-stub-verification.md` | `PLAN-20260225-AIFF-DECODER.P03a` | [OK] |
-| `04-parser-tdd.md` | `PLAN-20260225-AIFF-DECODER.P04` | [OK] |
-| `05-parser-impl.md` | `PLAN-20260225-AIFF-DECODER.P05` | [OK] |
-| `05a-parser-impl-verification.md` | `PLAN-20260225-AIFF-DECODER.P05a` | [OK] |
-| `06-pcm-decode-stub.md` | `PLAN-20260225-AIFF-DECODER.P06` | [OK] |
-| `08-pcm-decode-impl.md` | `PLAN-20260225-AIFF-DECODER.P08` | [OK] |
-| `09-sdx2-decode-stub.md` | `PLAN-20260225-AIFF-DECODER.P09` | [OK] |
-| `11-sdx2-decode-impl.md` | `PLAN-20260225-AIFF-DECODER.P11` | [OK] |
-| `11a-sdx2-decode-impl-verification.md` | `PLAN-20260225-AIFF-DECODER.P11a` | [OK] |
-| `12-seek-stub.md` | `PLAN-20260225-AIFF-DECODER.P12` | [OK] |
-| `14-seek-impl.md` | `PLAN-20260225-AIFF-DECODER.P14` | [OK] |
-| `15-ffi-stub.md` | `PLAN-20260225-AIFF-DECODER.P15` | [OK] |
-| `16-ffi-tdd.md` | `PLAN-20260225-AIFF-DECODER.P16` | [OK] |
-| `17-ffi-impl.md` | `PLAN-20260225-AIFF-DECODER.P17` | [OK] |
-| `17a-ffi-impl-verification.md` | `PLAN-20260225-AIFF-DECODER.P17a` | [OK] |
-| `18-integration.md` | `PLAN-20260225-AIFF-DECODER.P18` | [OK] |
-| `18a-integration-verification.md` | `PLAN-20260225-AIFF-DECODER.P18a` | [OK] |
-
-**Verdict**: [OK] **PASS** — All phase IDs use consistent format with correct plan slug and date. No ID conflicts or mismatches found.
+**Verdict:** [OK] PASS — directory structure fully compliant.
 
 ---
 
-## 3. Sequential Phase Ordering
+## Per-File Structural Review
 
-**Template Requirement (PLAN.md)**: "If plan phases are 03..12, execution must be: P03 → verify → P04 → verify → ... → P12 → verify"
+### specification.md
 
-| Phase Sequence | Phases | Gap-Free? |
-|---|---|:-:|
-| Analysis | P01 → P01a | [OK] |
-| Pseudocode | P02 → P02a | [OK] |
-| Parser slice | P03 (Stub) → P03a → P04 (TDD) → P04a → P05 (Impl) → P05a | [OK] |
-| PCM decode slice | P06 (Stub) → P06a → P07 (TDD) → P07a → P08 (Impl) → P08a | [OK] |
-| SDX2 decode slice | P09 (Stub) → P09a → P10 (TDD) → P10a → P11 (Impl) → P11a | [OK] |
-| Seek slice | P12 (Stub) → P12a → P13 (TDD) → P13a → P14 (Impl) → P14a | [OK] |
-| FFI slice | P15 (Stub) → P15a → P16 (TDD) → P16a → P17 (Impl) → P17a | [OK] |
-| Integration | P18 → P18a | [OK] |
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Purpose/problem statement | [OK] | [OK] | — |
+| Architectural boundaries | [OK] | [OK] | Module scope table, boundary rules |
+| Data contracts and invariants | [OK] | [OK] | Input/output contracts, 5 invariants |
+| Integration points (existing modules) | [OK] | [OK] | 5 Rust-side, 5 C-side |
+| Functional requirements (`REQ-*` IDs) | [OK] | [OK] | 84 requirements across 9 categories |
+| Error/edge case expectations | [OK] | [OK] | 12 edge cases enumerated |
+| Non-functional requirements | [OK] | [OK] | Memory, thread safety, performance, compatibility, safety |
+| Testability requirements | [OK] | [OK] | Unit tests (7 categories), FFI tests (4 categories) |
+| No implementation timeline | [OK] | [OK] | — |
+| Intentional deviations documented | [OK] | [OK] | 4 deviations with justification (bonus, not required) |
 
-Each slice follows the mandated **Stub → TDD → Impl** cycle with verification after every phase. No phases are skipped.
-
-**Verdict**: [OK] **PASS** — Strict sequential ordering maintained. Every Stub→TDD→Impl cycle complete. Verification phases present for every phase.
-
----
-
-## 4. Per-File Compliance Table (11 Required Sections)
-
-### Legend
-
-| Symbol | Meaning |
-|:---:|---|
-| [OK] | Present and compliant |
-| WARNING: | Present but with minor deviation |
-| [ERROR] | Missing or non-compliant |
-| N/A | Not applicable for this phase type |
-
-### Phase Files (Implementation + Stub Phases)
-
-| Section | P03 Stub | P05 Impl | P06 Stub | P08 Impl | P09 Stub | P11 Impl | P12 Stub | P14 Impl | P15 Stub | P17 Impl | P18 Integ |
-|---------|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|:--------:|:---------:|
-| 1. Phase ID | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 2. Prerequisites | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 3. Requirements (GIVEN/WHEN/THEN) | [OK] | [OK] | [OK] | WARNING:¹ | [OK] | WARNING:¹ | [OK] | WARNING:¹ | [OK] | [OK] | [OK] |
-| 4. Impl Tasks (@plan/@requirement) | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 5. Verification Commands | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 6. Structural Verification | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 7. Semantic Verification | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 8. Deferred Impl Detection | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 9. Success Criteria | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 10. Failure Recovery | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 11. Phase Completion Marker | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-
-### Verification Phase Files
-
-| Section | P00a | P01 | P02 | P03a | P05a | P11a | P17a | P18a |
-|---------|:----:|:---:|:---:|:----:|:----:|:----:|:----:|:----:|
-| 1. Phase ID | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 2. Prerequisites | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 3. Requirements (GIVEN/WHEN/THEN) | N/A | [OK] | [OK] | N/A | N/A | N/A | N/A | N/A |
-| 4. Impl Tasks (@plan/@requirement) | N/A | [OK] | [OK] | N/A | N/A | N/A | N/A | N/A |
-| 5. Verification Commands | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 6. Structural Verification | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 7. Semantic Verification | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 8. Deferred Impl Detection | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 9. Success Criteria | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 10. Failure Recovery | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-| 11. Phase Completion Marker | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] | [OK] |
-
-**Note WARNING:¹**: Phases P08, P11, and P14 (all GREEN/impl phases) list requirements with short `**Requirement text**` one-liners rather than full GIVEN/WHEN/THEN contracts. The template requires GIVEN/WHEN/THEN for *all* phases. However, the corresponding TDD phases (P07, P10, P13) already contain the full behavioral contracts, and the impl phases reference them. This is a minor deviation — the information exists in the plan, just not in the specific impl file. The stub phases (P03, P06, P09, P12, P15) and TDD phases (P04, P07, P10, P13, P16) do all have proper GIVEN/WHEN/THEN contracts.
-
-**Verdict**: [OK] **PASS** with minor findings — All 11 required sections present in every phase file. Minor: some impl (GREEN) phases abbreviate GIVEN/WHEN/THEN since the TDD (RED) phases already defined them fully.
+**Verdict:** [OK] PASS — fully compliant.
 
 ---
 
-## 5. Specification Completeness
+### analysis/domain-model.md
 
-### Template Requirement (PLAN.md, Phase 0):
-- [x] Purpose/problem statement
-- [x] Explicit architectural boundaries
-- [x] Data contracts and invariants (input, output, 5 invariants)
-- [x] Integration points with existing modules (5 integration points listed)
-- [x] Functional requirements with `REQ-*` identifiers (84 total across 9 categories)
-- [x] Error/edge case expectations (12 edge cases)
-- [x] Non-functional requirements (5: memory, thread safety, performance, compatibility, safety)
-- [x] Testability requirements (unit tests + FFI tests)
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Entity definitions | [OK] | [OK] | AiffDecoder, CompressionType, CommonChunk, SoundDataHeader, ChunkHeader, AudioFormat, DecoderFormats |
+| State transition diagram | [OK] | [OK] | ASCII diagram + state table covering full lifecycle |
+| Error handling map | [OK] | [OK] | All operations × error conditions × DecodeError variants × last_error codes |
+| Integration touchpoints | [OK] | [OK] | 5 Rust-side, 4 C-side, old code replaced section |
+| Data flow diagram | [OK] | [OK] | 6-step C→FFI→Rust→FFI→C flow |
+| All 9 REQ categories referenced | [OK] | [OK] | FP, SV, CH, DP, DS, SK, EH, LF, FF all present in error map |
 
-**Requirement Categories**: REQ-FP (15), REQ-SV (13), REQ-CH (7), REQ-DP (6), REQ-DS (8), REQ-SK (4), REQ-EH (6), REQ-LF (10), REQ-FF (15) = **84 total**
-
-**Verdict**: [OK] **PASS** — Specification is comprehensive with all required sections. Strong requirement enumeration with 84 individually identifiable requirements.
+**Verdict:** [OK] PASS — fully compliant.
 
 ---
 
-## 6. Pseudocode Compliance
+### analysis/pseudocode/aiff.md
 
-### Template Requirement (PLAN.md):
-- Pseudocode must be algorithmic and **numbered**
-- Must include: validation points, error handling, ordering constraints, integration boundaries, side effects
-- Implementation phases must reference line ranges
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Numbered algorithmic lines | [OK] | [OK] | Lines 1–378+ |
+| Validation points | [OK] | [OK] | All REQ-SV, REQ-CH validations shown with explicit conditions |
+| Error handling | [OK] | [OK] | Specific Err variants, last_error assignments, close() on failure |
+| Ordering constraints | [OK] | [OK] | parse → validate → extract → metadata → need_swap → predictor init |
+| Integration boundaries | [OK] | [OK] | SoundDecoder trait methods, formats dependency |
+| Side effects | [OK] | [OK] | State mutations documented (cur_pcm, data_pos, prev_val, etc.) |
+| REQ-FP coverage | [OK] | [OK] | All 15 FP requirements have pseudocode lines |
+| REQ-SV coverage | [OK] | [OK] | All 13 SV requirements have pseudocode lines |
+| REQ-CH coverage | [OK] | [OK] | All 7 CH requirements have pseudocode lines |
+| REQ-DP coverage | [OK] | [OK] | All 6 DP requirements with no-inline-swap contract documented |
+| REQ-DS coverage | [OK] | [OK] | All 8 DS requirements with SDX2 algorithm |
+| REQ-SK coverage | [OK] | [OK] | All 4 SK requirements |
+| REQ-EH coverage | [OK] | [OK] | All 6 EH requirements |
+| REQ-LF coverage | [OK] | [OK] | All 10 LF requirements |
+| Line numbering sequential | [OK] | WARNING: | Minor gap: line 83 missing between 82 and 84 (f80 right-shift branch). Cosmetic only; does not affect traceability. |
 
-### `analysis/pseudocode/aiff.md` (448 lines)
-
-| Check | Status |
-|-------|:------:|
-| Numbered lines | [OK] Lines 1–353 |
-| Algorithmic format (not prose) | [OK] |
-| Validation points | [OK] (e.g., lines 79–81, 91–94, 149–164) |
-| Error handling explicit | [OK] (specific `Err` variants, `last_error` values) |
-| Ordering constraints | [OK] (close-before-return, parse-before-validate) |
-| Integration boundaries | [OK] (trait method implementations, pseudocode lines 319–353) |
-| Side effects | [OK] (predictor state, position tracking, data allocation) |
-| REQ-* traceability comments | [OK] (REQ-FP-*, REQ-SV-*, REQ-DP-*, REQ-DS-*, REQ-SK-*, REQ-CH-*, REQ-EH-*, REQ-LF-*) |
-
-### `analysis/pseudocode/aiff_ffi.md` (266 lines)
-
-| Check | Status |
-|-------|:------:|
-| Numbered lines | [OK] Lines 1–187 |
-| Algorithmic format | [OK] |
-| Null safety checks | [OK] (all FFI functions) |
-| Box lifecycle documented | [OK] (Init/Term) |
-| Format mapping | [OK] (Open function) |
-| Error-to-return mapping | [OK] (Decode function) |
-
-### Pseudocode Line References in Implementation Phases
-
-| Phase | Pseudocode Reference | Status |
-|-------|---------------------|:------:|
-| P03 (Parser Stub) | lines 1–19, 313–353 | [OK] |
-| P05 (Parser Impl) | lines 20–224 | [OK] |
-| P08 (PCM Impl) | lines 226–249 | [OK] |
-| P11 (SDX2 Impl) | lines 250–295 | [OK] |
-| P14 (Seek Impl) | lines 300–312 | [OK] |
-| P15 (FFI Stub) | lines 1–5, 6–30, 31–75, 173–187 | [OK] |
-| P17 (FFI Impl) | lines 76–128, 137–150 | [OK] |
-
-**Verdict**: [OK] **PASS** — Both pseudocode files are numbered, algorithmic, and include all required elements. All implementation phases reference specific line ranges.
+**Verdict:** [OK] PASS — fully compliant. Minor cosmetic line numbering gap (non-blocking).
 
 ---
 
-## 7. Semantic Verification Checklist Deep Dive
+### analysis/pseudocode/aiff_ffi.md
 
-### Template Requirement (PLAN-TEMPLATE.md):
-Must have BOTH **deterministic** AND **subjective behavioral** checks. The semantic verification must not be just structural re-checks; it must verify that the behavior *actually works* for AIFF-specific scenarios.
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Numbered algorithmic lines | [OK] | [OK] | Lines 1–193 |
+| All 12 vtable functions covered | [OK] | [OK] | GetName, InitModule, TermModule, GetStructSize, GetError, Init, Term, Open, Close, Decode, Seek, GetFrame |
+| Null safety checks | [OK] | [OK] | Every function checks null decoder and null rust_decoder |
+| Box lifecycle | [OK] | [OK] | Init: Box::new + into_raw; Term: from_raw + drop |
+| Format mapping | [OK] | [OK] | Open maps AudioFormat → C format codes via RUST_AIFA_FORMATS Mutex |
+| Error-to-return-value conversion | [OK] | [OK] | Ok(n)→n, EndOfFile→0, Err→0 |
+| read_uio_file helper | [OK] | [OK] | Lines 6–30 |
+| Vtable static definition | [OK] | [OK] | Lines 179–193 |
+| Line numbering sequential | [OK] | WARNING: | Lines 69–78 (Term) overlap/restart numbering from lines 69 (Init ends at 73). Cosmetic inconsistency. |
 
-### Per-Phase Semantic Verification Quality
-
-#### P00a (Preflight) — Verification-only phase
-- **Deterministic**: [OK] `cargo check` exits 0, `cargo test` exits 0, `sd_decoders[]` has `USE_RUST_*` entry
-- **Subjective**: [OK] 5 behavioral questions about pattern compatibility (mod.rs structure, FFI vtable exports, config placeholders, decoder test patterns)
-- **AIFF-specific**: N/A (preflight)
-- **Quality**: [OK] Good
-
-#### P03 (Parser Stub) — Semantic checks
-- **Deterministic**: [OK] 7 items (new() instance, name(), get_error() get-and-clear, close() state clearing, init() need_swap, etc.)
-- **Subjective**: [ERROR] Missing explicit "subjective checks" subsection — items are behavioral but all deterministic
-- **Quality**: WARNING: All checks are deterministic; no subjective "does this look right?" behavioral questions
-
-#### P03a (Parser Stub Verification)
-- **Deterministic**: [OK] 7 items
-- **Subjective**: [OK] 5 behavioral questions (name() case, close() completeness, init() correctness, constant values)
-- **AIFF-specific**: [OK] Checks FORM_ID=0x464F524D, AIFF=0x41494646, AIFC=0x41494643 — correct AIFF magic values
-- **Quality**: [OK] Good
-
-#### P05 (Parser Impl)
-- **Deterministic**: [OK] 11 items (parsing correctness, validation errors, f80 conversion, odd padding, unknown chunks, duplicate COMM, close-on-error, last_error)
-- **Subjective**: Not explicitly separated, but many items are behavioral
-- **AIFF-specific**: [OK] f80 conversion, odd chunk padding, AIFF vs AIFC boundary — all AIFF-domain checks
-- **Quality**: [OK] Good — rich behavioral checks even without explicit subjective subsection
-
-#### P05a (Parser Impl Verification)
-- **Deterministic**: [OK] 10 items (mono16, stereo8, AIFC SDX2, f80 values, error paths, data extraction)
-- **Subjective**: [OK] 6 behavioral questions (truncated COMM rejection, unknown chunk skipping, odd-size alignment, AIFF/AIFC boundary, data slice extraction, f80 for real files)
-- **AIFF-specific**: [OK] Excellent — questions about AIFF chunk alignment, COMM chunk parsing, AIFF/AIFC form type distinction, 80-bit float sample rates
-- **Quality**: [OK] Excellent
-
-#### P08 (PCM Decode Impl)
-- **Deterministic**: [OK] 6 items (data copying, 8-bit conversion, position tracking, EOF, partial buffer, no allocation)
-- **Subjective**: Not explicitly separated
-- **AIFF-specific**: [OK] 8-bit signed→unsigned conversion is AIFF-specific (AIFF uses signed 8-bit, standard PCM uses unsigned)
-- **Quality**: WARNING: Adequate but no explicit subjective subsection
-
-#### P11 (SDX2 Decode Impl)
-- **Deterministic**: [OK] 8 items (even/odd byte, sign preservation, predictor accumulation, clamping, stereo independence, EOF, endianness)
-- **Subjective**: Not explicitly separated
-- **AIFF-specific**: [OK] SDX2 algorithm specifics (square-with-sign, delta mode, predictor state) — all AIFF/AIFC codec-specific
-- **Quality**: WARNING: Rich behavioral content but no explicit subjective subsection
-
-#### P11a (SDX2 Decode Impl Verification)
-- **Deterministic**: [OK] 8 items with exact test vector expectations (byte=16→512, byte=-16→-512)
-- **Subjective**: [OK] 5 behavioral questions (C implementation comparison, byte swap, interleaving, predictor accumulation, endianness XOR)
-- **AIFF-specific**: [OK] Excellent — SDX2 ADPCM algorithm verification, predictor state tracking, channel interleaving
-- **Quality**: [OK] Excellent
-
-#### P14 (Seek Impl)
-- **Deterministic**: [OK] 6 items (clamp, position update, predictor reset, decode-after-seek for PCM and SDX2, return value)
-- **Subjective**: Not explicitly separated
-- **AIFF-specific**: [OK] SDX2 predictor reset on seek is AIFF/SDX2-specific behavior
-- **Quality**: WARNING: Adequate — behavioral checks present but not split into deterministic/subjective
-
-#### P17 (FFI Impl)
-- **Deterministic**: [OK] 8 items (no double-init, format mapping, base struct update, failure return, EndOfFile→0, null paths, UIO pattern)
-- **Subjective**: Not explicitly separated
-- **Quality**: WARNING: Adequate — good behavioral content
-
-#### P17a (FFI Impl Verification)
-- **Deterministic**: [OK] 8 items
-- **Subjective**: [OK] 6 behavioral questions (Init pattern match, read_uio_file None handling, no negative return, Box leak analysis, use-after-free analysis, format mapping completeness)
-- **Quality**: [OK] Excellent — includes memory safety behavioral questions
-
-#### P18 (Integration)
-- **Deterministic**: [OK] 8 items (conditional compilation both ways, header pattern, include placement, sd_decoders position, build.vars pattern, integration path)
-- **Subjective**: Not explicitly separated
-- **Quality**: WARNING: Adequate — behavioral checks present
-
-#### P18a (Integration Verification)
-- **Deterministic**: [OK] 7 items
-- **Subjective**: [OK] 6 behavioral questions (end-to-end audio playback, complete integration path, binary equivalence without flag, minimal C changes, header conventions, audio output equivalence)
-- **AIFF-specific**: [OK] ".aif audio playback", "identical audio output to C aiffaud.c"
-- **Quality**: [OK] Excellent
-
-### Semantic Verification Summary
-
-| Phase | Has Deterministic? | Has Subjective? | AIFF-Specific Behavioral? | Quality |
-|-------|:--:|:--:|:--:|:--:|
-| P00a (Preflight) | [OK] | [OK] | N/A | [OK] Good |
-| P01 (Analysis) | [OK] | WARNING: implicit | N/A | WARNING: |
-| P02 (Pseudocode) | [OK] | WARNING: implicit | N/A | WARNING: |
-| P03 (Parser Stub) | [OK] | [ERROR] | [OK] | WARNING: |
-| P03a (Parser Stub Verify) | [OK] | [OK] | [OK] | [OK] Good |
-| P05 (Parser Impl) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P05a (Parser Impl Verify) | [OK] | [OK] | [OK] | [OK] Excellent |
-| P08 (PCM Impl) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P11 (SDX2 Impl) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P11a (SDX2 Verify) | [OK] | [OK] | [OK] | [OK] Excellent |
-| P14 (Seek Impl) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P15 (FFI Stub) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P17 (FFI Impl) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P17a (FFI Verify) | [OK] | [OK] | [OK] | [OK] Excellent |
-| P18 (Integration) | [OK] | WARNING: implicit | [OK] | WARNING: |
-| P18a (Integration Verify) | [OK] | [OK] | [OK] | [OK] Excellent |
-
-**Pattern**: Implementation phases (P03, P05, P08, P11, P14, P17, P18) tend to have flat semantic checklists without explicit "Deterministic" vs "Subjective" subsections. The corresponding **verification** phases (P03a, P05a, P11a, P17a, P18a) consistently have both subsections clearly labeled. This is a structural pattern across the plan — not ideal per template, but the behavioral content is present.
-
-**Verdict**: WARNING: **PASS with finding** — All verification (xxa) phases have proper deterministic + subjective split. Implementation phases have rich behavioral checks but don't explicitly separate them into labeled subsections. The template mandates both in every phase. This is a minor structural deviation since the content quality is high and verification phases compensate.
+**Verdict:** [OK] PASS — fully compliant. Minor line numbering overlap between Init and Term sections (cosmetic, non-blocking).
 
 ---
 
-## 8. Deferred Implementation Detection
+### plan/00-overview.md
 
-### Template Requirement:
-```bash
-grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented" src/
-```
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Plan ID: `PLAN-YYYYMMDD-FEATURE` | [OK] | [OK] | `PLAN-20260225-AIFF-DECODER` |
+| Generated date | [OK] | [OK] | 2026-02-25 |
+| Total phases | [OK] | [OK] | 18 (P01–P18, plus P00a preflight) |
+| Requirements list | [OK] | [OK] | All 84 REQ IDs listed |
+| Critical reminders (4 items) | [OK] | [OK] | Preflight, integration, TDD, gates |
+| Plan structure table | [OK] | [OK] | All phases with type, requirements |
+| Execution tracker | [OK] | [OK] | All phases with Status/Verified/Semantic columns |
+| Integration contract | [OK] | [OK] | Callers, replaced code, user path, module registration, data migration, E2E verification |
 
-| Phase | Detection Command Present? | Appropriate for Phase Type? |
-|-------|:-:|:-:|
-| P00a (Preflight) | [OK] (echo "N/A") | [OK] Correct — no code |
-| P01 (Analysis) | [OK] (echo "N/A") | [OK] Correct — no code |
-| P02 (Pseudocode) | [OK] (echo "N/A") | [OK] Correct — no code |
-| P03 (Stub) | [OK] grep for FIXME/HACK/placeholder (todo!() allowed) | [OK] Correct |
-| P03a (Verify) | [OK] Same grep | [OK] |
-| P05 (Impl) | [OK] grep for todo!() + FIXME — notes remaining stubs expected | [OK] Correct — checks only parsing functions |
-| P05a (Verify) | [OK] Same | [OK] |
-| P08 (PCM Impl) | [OK] grep — notes decode_sdx2/seek still stubbed | [OK] |
-| P11 (SDX2 Impl) | [OK] grep — notes seek still stubbed | [OK] |
-| P11a (Verify) | [OK] | [OK] |
-| P14 (Seek Impl) | [OK] grep — expects NO results (all methods done) | [OK] Milestone |
-| P15 (FFI Stub) | [OK] grep — Open/Decode still stubbed | [OK] |
-| P17 (FFI Impl) | [OK] grep — expects NO results | [OK] Milestone |
-| P17a (Verify) | [OK] | [OK] |
-| P18 (Integration) | [OK] checks both aiff.rs and aiff_ffi.rs | [OK] |
-| P18a (Final Verify) | [OK] comprehensive final check | [OK] |
-
-**Verdict**: [OK] **PASS** — Every phase has appropriate deferred implementation detection. Stub phases correctly allow `todo!()` while prohibiting other placeholder patterns. Implementation phases progressively narrow the allowed stubs until P14 and P17 require zero. The final P18a check is comprehensive.
+**Verdict:** [OK] PASS — fully compliant.
 
 ---
 
-## 9. Integration Requirements
+### plan/00a-preflight-verification.md
 
-### Template Requirement (PLAN.md):
-1. Who calls this new behavior? (exact file/functions)
-2. What old behavior gets replaced?
-3. How can a user trigger this end-to-end?
-4. What state/config must migrate?
-5. How is backward compatibility handled?
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | `PLAN-20260225-AIFF-DECODER.P00a` |
+| Toolchain verification | [OK] | [OK] | cargo, rustc, clippy; coverage gate noted as N/A |
+| Dependency verification | [OK] | [OK] | libc crate, std::io types, no new external crates |
+| Type/interface verification | [OK] | [OK] | 10 type/trait existence checks |
+| Test infrastructure verification | [OK] | [OK] | Existing tests, pattern verification |
+| Call-path feasibility | [OK] | [OK] | 5 feasibility checks |
+| Blocking issues section | [OK] | [OK] | — |
+| Gate decision | [OK] | [OK] | PASS/FAIL decision |
+| Phase completion marker | [OK] | [OK] | `.completed/P00a.md` reference |
+| Verification commands | [OK] | [OK] | Concrete bash commands |
+| Structural verification checklist | [OK] | [OK] | — |
+| Semantic verification checklist | [OK] | [OK] | Deterministic + subjective checks |
+| Deferred implementation detection | [OK] | [OK] | N/A noted |
+| Success criteria | [OK] | [OK] | — |
+| Failure recovery | [OK] | [OK] | — |
 
-### Overview (`00-overview.md`) Integration Contract
-
-| Question | Answer in Plan | Status |
-|----------|---------------|:------:|
-| 1. Who calls? | `decoder.c` → `sd_decoders[]` → vtable → `Open/Decode/Seek/Close` | [OK] |
-| 2. What replaced? | `aifa_DecoderVtbl` from `aiffaud.c` → `rust_aifa_DecoderVtbl` under `USE_RUST_AIFF` | [OK] |
-| 3. User path? | Any `.aif` file loaded by game's sound system | [OK] |
-| 4. State migration? | None — vtable API identical | [OK] |
-| 5. Backward compat? | `#ifdef USE_RUST_AIFF` conditional — original C decoder used when flag not defined | [OK] |
-
-### Integration Phase (P18) Specifics
-
-- C header file (`rust_aiff.h`): content shown with exact `#ifndef`/`#ifdef`/`extern` pattern [OK]
-- `decoder.c` modifications: exact `#ifdef` block with `sd_decoders[]` entry shown [OK]
-- `config_unix.h.in` modifications: `@SYMBOL_USE_RUST_AIFF_DEF@` placeholder [OK]
-- `build.vars.in` modifications: exact variable names and patterns [OK]
-- End-to-end verification: build test + runtime playback [OK]
-
-**Verdict**: [OK] **PASS** — All 5 integration questions answered explicitly. P18 contains exact file content and modification instructions. The conditional compilation approach ensures backward compatibility.
+**Verdict:** [OK] PASS — fully compliant.
 
 ---
 
-## 10. Plan Evaluation Checklist
+### plan/01-analysis.md
 
-From PLAN.md (gate before execution):
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | `PLAN-20260225-AIFF-DECODER.P01` |
+| Prerequisites | [OK] | [OK] | P00a PASS required |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | — |
+| Implementation Tasks (files to create/modify) | [OK] | [OK] | `domain-model.md` to create, markers specified |
+| Pseudocode traceability | N/A | [OK] | Analysis phase — no pseudocode yet |
+| Verification Commands | [OK] | [OK] | File existence, requirement category count |
+| Structural Verification Checklist | [OK] | [OK] | 5 items |
+| Semantic Verification Checklist | [OK] | [OK] | 5 items |
+| Deferred Implementation Detection | [OK] | [OK] | N/A noted |
+| Success Criteria | [OK] | [OK] | 4 items |
+| Failure Recovery | [OK] | [OK] | Rollback + blockers |
+| Phase Completion Marker | [OK] | [OK] | `.completed/P01.md` reference |
 
-| Criterion | Status | Evidence |
-|-----------|:------:|---------|
-| Uses plan ID + sequential phases | [OK] | `PLAN-20260225-AIFF-DECODER`, P01–P18 sequential |
-| Preflight verification defined | [OK] | P00a with toolchain, dependencies, type/interface, test infra checks |
-| Requirements expanded and testable | [OK] | 84 requirements with GIVEN/WHEN/THEN contracts |
-| Integration points explicit | [OK] | 5 files, exact change descriptions |
-| Legacy code replacement explicit | [OK] | `aifa_DecoderVtbl` → `rust_aifa_DecoderVtbl` under flag |
-| Pseudocode line references present | [OK] | All impl phases reference specific line ranges |
-| Verification phases include semantic checks | [OK] | Both deterministic and subjective (in verification phases) |
-| Lint/test/coverage gates defined | [OK] | `cargo fmt`, `cargo clippy`, `cargo test` in every phase |
-| No reliance on placeholder completion | [OK] | Progressive `todo!()` elimination tracked across phases |
-
-**Verdict**: [OK] **PASS** — All 9 evaluation criteria met.
-
----
-
-## 11. Findings Summary
-
-### Finding 1 (Minor): Semantic Verification Subsection Labels in Implementation Phases
-
-**Severity**: Minor structural deviation
-**Affected phases**: P03, P05, P08, P11, P14, P15, P17, P18
-**Issue**: Implementation phases have semantic verification checklists with rich behavioral content but do not explicitly split into labeled "Deterministic Checks" and "Subjective Checks" subsections. The template shows these as distinct sections.
-**Mitigation**: The corresponding verification phases (P03a, P05a, P11a, P17a, P18a) consistently have both subsections properly labeled. The overall behavioral coverage is excellent.
-**Recommendation**: Add `### Deterministic Checks` and `### Subjective Checks` subsection headers to implementation phase semantic verification checklists for full template compliance.
-
-### Finding 2 (Minor): GIVEN/WHEN/THEN Brevity in GREEN Phases
-
-**Severity**: Minor
-**Affected phases**: P08, P11, P14
-**Issue**: GREEN (implementation) phases use terse `**Requirement text**` one-liners for some requirements rather than full GIVEN/WHEN/THEN contracts.
-**Mitigation**: The corresponding TDD (RED) phases already contain the full behavioral contracts that the GREEN phase will make pass. The traceability chain is intact.
-**Recommendation**: Either add full GIVEN/WHEN/THEN or add an explicit note like "See P07 for full behavioral contracts" to each requirement.
-
-### Finding 3 (Observation): No Coverage Gate
-
-**Severity**: Observation (not a deficiency)
-**Issue**: The plan does not define a `cargo llvm-cov` coverage gate (the template marks it optional with "if applicable").
-**Note**: This is acceptable — the template explicitly makes coverage optional. The plan compensates with comprehensive per-requirement test enumeration in the specification's Testability Requirements section.
-
-### Finding 4 (Observation): P09 and P12 Are Verification-Only Stubs
-
-**Severity**: Observation
-**Issue**: Phases P09 (SDX2 Stub) and P12 (Seek Stub) perform no code changes — they only verify that stubs created in earlier phases (P06, P03) are correctly wired. This is explicitly acknowledged in both files ("No implementation changes needed if stub is already correct").
-**Note**: This is acceptable and arguably good practice — confirming dispatch wiring before starting TDD. Some plans might collapse these into the TDD phase verification.
+**Verdict:** [OK] PASS — fully compliant.
 
 ---
 
-## 12. Final Verdict
+### plan/01a-analysis-verification.md
 
-| Category | Status |
-|----------|:------:|
-| Directory Structure | [OK] PASS |
-| Plan ID Consistency | [OK] PASS |
-| Sequential Phase Ordering | [OK] PASS |
-| 11 Required Sections (all phases) | [OK] PASS (minor: subsection labels) |
-| Specification Completeness | [OK] PASS |
-| Pseudocode Compliance | [OK] PASS |
-| Semantic Verification Quality | [OK] PASS (minor: impl phases lack explicit split) |
-| Deferred Implementation Detection | [OK] PASS |
-| Integration Requirements | [OK] PASS |
-| Plan Evaluation Checklist | [OK] PASS |
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | `PLAN-20260225-AIFF-DECODER.P01a` |
+| Prerequisites | [OK] | [OK] | P01 completed |
+| Verification Commands | [OK] | [OK] | File check, section grep, requirement count |
+| Structural Verification Checklist | [OK] | [OK] | 5 items |
+| Semantic Verification Checklist | [OK] | [OK] | 4 deterministic + 5 subjective checks |
+| Deferred Implementation Detection | [OK] | [OK] | N/A noted |
+| Success Criteria | [OK] | [OK] | 5 items |
+| Failure Recovery | [OK] | [OK] | Return to P01 |
+| Phase Completion Marker | [OK] | [OK] | `.completed/P01a.md` reference |
 
-### **OVERALL: [OK] STRUCTURALLY CORRECT — Ready for Execution**
+**Verdict:** [OK] PASS — fully compliant.
 
-The AIFF Decoder plan is well-structured, comprehensive, and compliant with the plan template. The two minor findings are cosmetic formatting issues that do not affect the plan's ability to be executed correctly. All 84 requirements are traceable through specification → pseudocode → TDD → implementation → verification → integration.
+---
+
+### plan/02-pseudocode.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | `PLAN-20260225-AIFF-DECODER.P02` |
+| Prerequisites | [OK] | [OK] | P01 completed, domain-model.md expected |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | — |
+| Files to create (with markers) | [OK] | [OK] | Two pseudocode files, markers specified |
+| Verification Commands | [OK] | [OK] | File existence, numbered line count |
+| Structural Verification Checklist | [OK] | [OK] | 4 items covering both files |
+| Semantic Verification Checklist | [OK] | [OK] | 11 items — every REQ category checked |
+| Deferred Implementation Detection | [OK] | [OK] | N/A noted |
+| Success Criteria | [OK] | [OK] | — |
+| Failure Recovery | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — fully compliant.
+
+---
+
+### plan/02a-pseudocode-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Verification Commands | [OK] | [OK] | Numbered line count, algorithm presence grep |
+| Structural Verification Checklist | [OK] | [OK] | 5 items |
+| Semantic Verification Checklist | [OK] | [OK] | 9 deterministic + 5 subjective checks |
+| Deferred Implementation Detection | [OK] | [OK] | N/A noted |
+| Success Criteria | [OK] | [OK] | 6 items |
+| Failure Recovery | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — fully compliant.
+
+---
+
+### plan/03-parser-stub.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | `PLAN-20260225-AIFF-DECODER.P03` |
+| Prerequisites | [OK] | [OK] | P02 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | 5 requirement groups expanded |
+| Files to create (with markers) | [OK] | [OK] | `aiff.rs` with detailed content spec |
+| Files to modify (with markers) | [OK] | [OK] | `mod.rs` |
+| Pseudocode traceability | [OK] | [OK] | Lines 1–19, 339–378, 333–338 |
+| Verification Commands | [OK] | [OK] | fmt, clippy, test |
+| Structural Verification Checklist | [OK] | [OK] | 7 items |
+| Semantic Verification Checklist | [OK] | [OK] | 7 items |
+| Deferred Implementation Detection | [OK] | [OK] | grep for FIXME/HACK (todo!() allowed in stub) |
+| Success Criteria | [OK] | [OK] | 5 items |
+| Failure Recovery | [OK] | [OK] | git checkout rollback |
+| Phase Completion Marker | [OK] | [OK] | — |
+| `todo!()` usage clarified | [OK] | [OK] | Explicit which methods are implemented vs stubbed |
+
+**Verdict:** [OK] PASS — fully compliant. Excellent level of detail on what is implemented vs stubbed.
+
+---
+
+### plan/03a-parser-stub-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 7 checks including specific constant values |
+| Subjective checks | [OK] | [OK] | 5 checks |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/04-parser-tdd.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P03 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | 8 requirement groups with explicit contracts |
+| Test cases enumerated | [OK] | [OK] | 30 test cases with detailed descriptions |
+| Test helper defined | [OK] | [OK] | `build_aiff_file()` |
+| f80 test vectors | [OK] | [OK] | 6 known rates + zero + denorm + infinity + NaN + negative — with raw byte encodings and derivation |
+| Pseudocode traceability | [OK] | [OK] | Lines 73–238, 32–93, 48–68 |
+| Verification Commands | [OK] | [OK] | `--no-run` for RED phase |
+| Structural Verification Checklist | [OK] | [OK] | — |
+| Semantic Verification Checklist | [OK] | [OK] | 12 items including f80 edge cases |
+| Deferred Implementation Detection | [OK] | [OK] | `todo!()` count check |
+| Success Criteria | [OK] | [OK] | Tests compile, would fail (RED) |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — exemplary test case specification with concrete test vectors.
+
+---
+
+### plan/04a-parser-tdd-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 8 checks including f80 edge cases |
+| Subjective checks | [OK] | [OK] | 5 checks including "would tests pass with fake impl" |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/05-parser-impl.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P04 completed (failing tests) |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | 4 requirement groups |
+| Files to modify (with markers) | [OK] | [OK] | Detailed implementation steps |
+| Pseudocode traceability | [OK] | [OK] | 6 line-range references |
+| Verification Commands | [OK] | [OK] | All tests pass (GREEN) |
+| Semantic Verification Checklist | [OK] | [OK] | 14 items including f80 algorithm details |
+| Deferred Implementation Detection | [OK] | [OK] | Verify `todo!()` only in decode/seek |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/05a-parser-impl-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 10 checks |
+| Subjective checks | [OK] | [OK] | 6 checks including real-file validation suggestion |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/06-pcm-decode-stub.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P05 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | Dispatch + EH-6 + stubs |
+| Implementation Tasks | [OK] | [OK] | Replace decode() todo, add decode_pcm/decode_sdx2 stubs |
+| Pseudocode traceability | [OK] | [OK] | Lines 316–319, 226–249, 250–295 |
+| Verification Commands | [OK] | [OK] | Compile + existing tests pass |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/06a-pcm-decode-stub-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/07-pcm-decode-tdd.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P06 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | All 6 REQ-DP with explicit contracts |
+| Test cases enumerated | [OK] | [OK] | 15 test cases with detailed descriptions |
+| No-inline-swap tests | [OK] | [OK] | Tests 11–14 explicitly verify no byte swap (critical correctness requirement) |
+| Zero-length buffer test | [OK] | [OK] | Test 15 |
+| Pseudocode traceability | [OK] | [OK] | Lines 239–267 |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — excellent coverage of the no-inline-swap contract.
+
+---
+
+### plan/07a-pcm-decode-tdd-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/08-pcm-decode-impl.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P07 completed |
+| Requirements Implemented | [OK] | [OK] | All REQ-DP with endianness contract documented |
+| Implementation steps | [OK] | [OK] | 7-step implementation guide |
+| Pseudocode traceability | [OK] | [OK] | Lines 239–269 |
+| Verification Commands | [OK] | [OK] | GREEN phase — all tests pass |
+| Deferred Implementation Detection | [OK] | [OK] | Verify decode_sdx2 + seek still todo |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/08a-pcm-decode-impl-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 7 checks including no-inline-swap verification |
+| Subjective checks | [OK] | [OK] | 4 checks |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/09-sdx2-decode-stub.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P08 completed |
+| Requirements Implemented | [OK] | [OK] | Dispatch confirmation |
+| Implementation Tasks | [OK] | [OK] | Verify existing stub (no new code) |
+| Pseudocode traceability | [OK] | [OK] | Lines 270–315 |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — appropriately minimal for a confirmation-only phase.
+
+---
+
+### plan/09a-sdx2-decode-stub-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/10-sdx2-decode-tdd.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P09 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | REQ-DS-1, DS-4, DS-5, DS-7, DS-8 with exact math |
+| Test cases enumerated | [OK] | [OK] | 13 test cases |
+| Test helper defined | [OK] | [OK] | `build_aifc_sdx2_file()` |
+| Golden test vectors section | [OK] | [OK] | Procedural extraction from C decoder documented |
+| Pseudocode traceability | [OK] | [OK] | Lines 270–315 |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — golden test vector strategy is excellent for parity validation.
+
+---
+
+### plan/10a-sdx2-decode-tdd-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 8 checks with exact math values |
+| Subjective checks | [OK] | [OK] | 6 checks |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/11-sdx2-decode-impl.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P10 completed |
+| Requirements Implemented | [OK] | [OK] | REQ-DS-1..8 (except DS-7 noted elsewhere) |
+| Implementation steps | [OK] | [OK] | 6-step algorithm |
+| Pseudocode traceability | [OK] | [OK] | Lines 270–315 |
+| Semantic Verification Checklist | [OK] | [OK] | 8 items including endianness runtime check |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/11a-sdx2-decode-impl-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 8 checks |
+| Subjective checks | [OK] | [OK] | 5 checks including runtime endianness emphasis |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/12-seek-stub.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All required sections | [OK] | [OK] | — |
+| Appropriately minimal | [OK] | [OK] | Confirmation-only phase |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/12a-seek-stub-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/13-seek-tdd.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P12 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | All 4 REQ-SK with explicit contracts |
+| Test cases enumerated | [OK] | [OK] | 10 test cases |
+| Decode-after-seek tests | [OK] | [OK] | Both PCM and SDX2 |
+| Pseudocode traceability | [OK] | [OK] | Lines 320–332 |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/13a-seek-tdd-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Deterministic checks | [OK] | [OK] | 6 checks |
+| Subjective checks | [OK] | [OK] | 5 checks |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/14-seek-impl.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P13 completed |
+| Requirements Implemented | [OK] | [OK] | All REQ-SK with errno clarification |
+| Implementation steps | [OK] | [OK] | 5-step implementation |
+| Pseudocode traceability | [OK] | [OK] | Lines 320–332 |
+| Milestone noted | [OK] | [OK] | Zero todo!() in aiff.rs |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/14a-seek-impl-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Zero todo check | [OK] | [OK] | Explicit `grep -c "todo!()"` with expected 0 |
+| Milestone marker | [OK] | [OK] | `aiff.rs` feature-complete |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/15-ffi-stub.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P14 completed |
+| Requirements Implemented | [OK] | [OK] | REQ-FF-1, FF-2, FF-3, FF-10, FF-11, FF-12 |
+| Files to create (with markers) | [OK] | [OK] | `aiff_ffi.rs` with exhaustive content spec |
+| Files to modify (with markers) | [OK] | [OK] | `mod.rs` |
+| Pseudocode traceability | [OK] | [OK] | Lines 1–5, 6–30, 31–78, 179–193 |
+| Implemented vs stubbed distinction | [OK] | [OK] | 10 implemented, 2 stubbed (Open, Decode) |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/15a-ffi-stub-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Init pattern verification | [OK] | [OK] | Checks wav_ffi.rs pattern match |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/16-ffi-tdd.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P15 completed |
+| Requirements Implemented (GIVEN/WHEN/THEN) | [OK] | [OK] | REQ-FF-2, FF-10, FF-11, FF-12 |
+| Test cases enumerated | [OK] | [OK] | 13 test cases |
+| Null pointer tests for all functions | [OK] | [OK] | 8 null pointer test cases |
+| Pseudocode traceability | [OK] | [OK] | Lines 31–178 |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/16a-ffi-tdd-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/17-ffi-impl.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P16 completed |
+| Requirements Implemented | [OK] | [OK] | REQ-FF-4..9, FF-13..15 |
+| Implementation Tasks | [OK] | [OK] | Open (9-step) and Decode (5-step) |
+| Pseudocode traceability | [OK] | [OK] | Lines 79–134, 143–156 |
+| Milestone noted | [OK] | [OK] | Both files feature-complete |
+| All checklist sections | [OK] | [OK] | — |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/17a-ffi-impl-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Zero todo check | [OK] | [OK] | — |
+| Box lifecycle safety checks | [OK] | [OK] | Leak + use-after-free in subjective checks |
+| Milestone marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+### plan/18-integration.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| Phase ID | [OK] | [OK] | — |
+| Prerequisites | [OK] | [OK] | P17 completed |
+| Integration questions answered (PLAN.md §5) | | | |
+| — Who calls this? | [OK] | [OK] | `sd_decoders[]` table |
+| — What old behavior replaced? | [OK] | [OK] | `aifa_DecoderVtbl` under `USE_RUST_AIFF` |
+| — How user triggers E2E? | [OK] | [OK] | `.aif` file loaded by game |
+| — State/config migration? | [OK] | [OK] | None needed (vtable API identical) |
+| — Backward compatibility? | [OK] | [OK] | `#ifdef` conditional, C fallback preserved |
+| Files to create | [OK] | [OK] | `rust_aiff.h` with exact content |
+| Files to modify (with markers) | [OK] | [OK] | `decoder.c`, `config_unix.h.in`, `build.vars.in` with exact changes |
+| Verification Commands | [OK] | [OK] | Rust + C build commands |
+| Semantic Verification Checklist | [OK] | [OK] | 9 items including pattern matching |
+| Deferred Implementation Detection | [OK] | [OK] | Final check across both Rust files |
+| Failure Recovery | [OK] | [OK] | Detailed C-side and Rust-side rollback commands |
+| Phase Completion Marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS — all 5 integration questions answered explicitly.
+
+---
+
+### plan/18a-integration-verification.md
+
+| Template Requirement | Present | Compliant | Issue |
+|---|---|---|---|
+| All verification template sections | [OK] | [OK] | — |
+| Final plan evaluation checklist | [OK] | [OK] | 9 items matching PLAN.md gate checklist |
+| Completeness checks | [OK] | [OK] | All 84 requirements, patterns, milestones |
+| Full rollback commands | [OK] | [OK] | C-side + Rust-side |
+| PLAN COMPLETE marker | [OK] | [OK] | — |
+
+**Verdict:** [OK] PASS.
+
+---
+
+## Cross-Cutting Compliance Checks
+
+| PLAN.md Requirement | Compliant | Evidence |
+|---|---|---|
+| Plan ID format `PLAN-YYYYMMDD-FEATURE` | [OK] | `PLAN-20260225-AIFF-DECODER` |
+| Sequential phase execution enforced | [OK] | Every phase has prerequisite referencing previous phase |
+| Traceability markers (`@plan`, `@requirement`) | [OK] | Every file-creation/modification task specifies markers |
+| Pseudocode line references in impl phases | [OK] | P03, P05, P06, P08, P11, P14, P15, P17 all have line refs |
+| Stub → TDD → Impl cycle per slice | [OK] | Parser (P03→P04→P05), PCM (P06→P07→P08), SDX2 (P09→P10→P11), Seek (P12→P13→P14), FFI (P15→P16→P17) |
+| Verification phases (structural+semantic) | [OK] | Every phase has both `a` verification and inline checklists |
+| Deferred implementation detection | [OK] | Every phase has grep-based detection section |
+| Phase completion marker path specified | [OK] | Every phase specifies `.completed/PNN.md` |
+| Integration questions answered | [OK] | P18 + overview integration contract |
+| Fraud/failure pattern detection | [OK] | grep for TODO/FIXME/HACK in every impl verification |
+
+| RULES.md Requirement | Compliant | Evidence |
+|---|---|---|
+| TDD mandatory (RED→GREEN→REFACTOR) | [OK] | TDD phases (P04, P07, P10, P13, P16) are RED; impl phases (P05, P08, P11, P14, P17) are GREEN |
+| Quality baseline (fmt, clippy, test) | [OK] | Every phase includes all three commands |
+| No `unwrap`/`expect` in production | [OK] | Specification mandates Result/Option; FFI phase notes no unwrap pattern |
+| No unsafe except in FFI | [OK] | Specification: "No unsafe in aiff.rs. All unsafe isolated to aiff_ffi.rs" |
+| Behavior-based tests | [OK] | TDD phases specify GIVEN/WHEN/THEN contracts, check output values not internals |
+| Anti-placeholder rule in impl phases | [OK] | Every impl verification phase has grep for forbidden markers |
+| No `*_v2`/`new_*` patterns | [OK] | Plan modifies existing modules, creates new files only where needed |
+
+| PLAN-TEMPLATE.md Requirement | Compliant | Evidence |
+|---|---|---|
+| Plan header with all fields | [OK] | 00-overview.md |
+| Per-phase template compliance | [OK] | All 36 phase files checked above |
+| Preflight template | [OK] | 00a-preflight-verification.md |
+| Integration contract template | [OK] | 00-overview.md integration contract section |
+| Execution tracker template | [OK] | 00-overview.md execution tracker |
+
+---
+
+## Issues Found
+
+### Cosmetic (Non-Blocking)
+
+1. **Pseudocode line numbering gap (aiff.md):** Line 83 is missing between lines 82 and 84 in the f80 parsing section. This is cosmetic — all line references in implementation phases use the actual existing line numbers, so traceability is not broken.
+
+2. **Pseudocode line numbering overlap (aiff_ffi.md):** The Init section ends around line 73, but the Term section restarts at line 69. Line numbers 69–73 are used by both Init and Term. Implementation phases reference the correct functions regardless, so traceability is not broken, but could confuse a reader.
+
+### Substantive
+
+**None found.** After 3 fix rounds, the plan is structurally clean.
+
+---
+
+## Summary
+
+| Category | Files | Pass | Warn | Fail |
+|---|---|---|---|---|
+| Specification | 1 | 1 | 0 | 0 |
+| Analysis | 3 | 3 | 0 | 0 |
+| Plan phases | 36 | 36 | 0 | 0 |
+| Directory structure | 1 | 1 | 0 | 0 |
+| Cross-cutting (PLAN.md) | 10 checks | 10 | 0 | 0 |
+| Cross-cutting (RULES.md) | 7 checks | 7 | 0 | 0 |
+| Cross-cutting (PLAN-TEMPLATE.md) | 5 checks | 5 | 0 | 0 |
+| **Total** | **40 files + 22 checks** | **62/62** | **0** | **0** |
+
+**Cosmetic issues:** 2 (pseudocode line numbering — non-blocking)  
+**Substantive issues:** 0  
+
+**Overall Verdict:** [OK] **PASS** — Plan is structurally compliant with all three templates. Ready for execution.

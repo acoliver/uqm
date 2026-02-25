@@ -109,6 +109,10 @@ Before implementing any phase:
 ### User Access Path
 - Any `.aif` file loaded by the game's sound system (music, effects)
 
+### Module Registration
+- `rust/src/sound/mod.rs`: `pub mod aiff;` added in Phase P03 (parser stub)
+- `rust/src/sound/mod.rs`: `pub mod aiff_ffi;` + `pub use aiff_ffi::rust_aifa_DecoderVtbl;` added in Phase P15 (FFI stub)
+
 ### Data/State Migration
 - None — the vtable API is identical; only the implementation changes
 

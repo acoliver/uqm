@@ -35,7 +35,7 @@ Why it matters:
 - `rust/src/sound/aiff.rs`
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P14`
   - marker: `@requirement REQ-SK-1, REQ-SK-2, REQ-SK-3, REQ-SK-4`
-  - Implement: `seek()` — remove `todo!()`, implement per pseudocode lines 300–312
+  - Implement: `seek()` — remove `todo!()`, implement per pseudocode lines 320–332
   - Steps:
     1. Clamp: `let pcm_pos = pcm_pos.min(self.max_pcm);`
     2. Update: `self.cur_pcm = pcm_pos;`
@@ -44,7 +44,7 @@ Why it matters:
     5. Return: `Ok(pcm_pos)`
 
 ### Pseudocode traceability
-- `seek`: pseudocode lines 300–312
+- `seek`: pseudocode lines 320–332
 
 ## Verification Commands
 

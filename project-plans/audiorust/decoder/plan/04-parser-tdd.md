@@ -109,18 +109,57 @@ Why it matters:
 14. `test_reject_sample_rate_too_high` — rate=200000 → UnsupportedFormat
 15. `test_reject_aiff_with_extension` — AIFF + ext_type_id!=0 → UnsupportedFormat
 16. `test_reject_aifc_unknown_compression` — AIFC + non-SDX2 → UnsupportedFormat
-17. `test_f80_known_rates` — 44100, 22050, 8000, 48000, 96000, 11025 round-trips
-18. `test_f80_denormalized_returns_zero` — Exponent==0 (denormalized) → read_be_f80 returns Ok(0)
-19. `test_f80_infinity_returns_error` — Exponent==0x7FFF with mantissa!=0 or ==0 (infinity/NaN) → Err(InvalidData)
-20. `test_chunk_alignment_padding` — Odd-sized chunk followed by another chunk
-21. `test_unknown_chunk_skipped` — Unknown chunk ID is skipped, parsing continues
-22. `test_duplicate_comm_chunk` — Later COMM overwrites earlier (no error)
-23. `test_open_sets_metadata` — After successful open: frequency, format, length, max_pcm are correct
-24. `test_sdx2_requires_16bit` — SDX2 with 8-bit → UnsupportedFormat
-25. `test_sdx2_channel_limit` — SDX2 with >4 channels → UnsupportedFormat
+17. `test_f80_known_rates` — Compare read_be_f80() against known raw byte encodings.
+    Use these verified 10-byte IEEE 754 80-bit extended precision test vectors
+    (big-endian, sign + 15-bit exponent + 64-bit significand with explicit integer bit):
+
+    | Sample Rate | Raw Bytes (10 bytes, hex)                                       | Expected |
+    |-------------|------------------------------------------------------------------|----------|
+    | 22050 Hz    | `[0x40, 0x0D, 0xAC, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` | 22050    |
+    | 44100 Hz    | `[0x40, 0x0E, 0xAC, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` | 44100    |
+    | 48000 Hz    | `[0x40, 0x0E, 0xBB, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` | 48000    |
+    | 8000 Hz     | `[0x40, 0x0B, 0xFA, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` | 8000     |
+    | 11025 Hz    | `[0x40, 0x0C, 0xAC, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` | 11025    |
+    | 96000 Hz    | `[0x40, 0x0F, 0xBB, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` | 96000    |
+
+    Derivation: For integer N, biased_exp = floor(log2(N)) + 16383, significand = N << (63 - floor(log2(N))).
+    For 44100: biased_exp = 15 + 16383 = 0x400E, significand = 0xAC44_0000_0000_0000.
+    Algorithm: result = significand >> (63 - (biased_exp - 16383)) = significand >> 48 = 44100.
+
+18. `test_f80_zero` — All 10 bytes zero → read_be_f80 returns Ok(0):
+    - Raw bytes: `[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]`
+    - Expected: Ok(0)
+19. `test_f80_denormalized_returns_zero` — Exponent==0, significand!=0 (denormalized) → Ok(0):
+    - Raw bytes: `[0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]`
+    - Expected: Ok(0) — design choice documented in pseudocode (value near-zero, caught by rate validation)
+20. `test_f80_infinity_returns_error` — Exponent==0x7FFF (infinity) → Err(InvalidData):
+    - Raw bytes: `[0x7F, 0xFF, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` (+infinity)
+    - Expected: Err(InvalidData)
+21. `test_f80_nan_returns_error` — Exponent==0x7FFF with non-zero fraction (NaN) → Err(InvalidData):
+    - Raw bytes: `[0x7F, 0xFF, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` (quiet NaN)
+    - Expected: Err(InvalidData)
+22. `test_f80_negative_rate` — Negative sample rate (sign bit set):
+    - Raw bytes: `[0xC0, 0x0E, 0xAC, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]` (-44100)
+    - Expected: Ok(-44100) — the f80 parser returns the signed value; the sample rate
+      validation (min 300 Hz) that follows will reject negative rates
+23. `test_chunk_alignment_padding` — Odd-sized chunk followed by another chunk
+24. `test_unknown_chunk_skipped` — Unknown chunk ID is skipped, parsing continues
+25. `test_duplicate_comm_chunk` — Later COMM overwrites earlier (no error)
+26. `test_open_sets_metadata` — After successful open: frequency, format, length, max_pcm are correct
+27. `test_sdx2_requires_16bit` — SDX2 with 8-bit → UnsupportedFormat
+28. `test_sdx2_channel_limit` — SDX2 with >4 channels → UnsupportedFormat
+29. `test_chunk_size_exceeds_remaining` — Malformed file where a chunk's size field claims more bytes than remain in the FORM container:
+    - GIVEN: A FORM/AIFF file with total FORM size = 30 bytes after header, containing a chunk whose size field = 9999
+    - WHEN: `open_from_bytes()` is called
+    - THEN: Returns `Err(DecodeError::InvalidData("chunk size exceeds remaining file data"))` and sets last_error to -2
+30. `test_truncated_file_mid_comm_chunk` — File truncated in the middle of a COMM chunk:
+    - GIVEN: A valid FORM/AIFF header followed by a COMM chunk header claiming 18 bytes, but only 10 bytes of COMM data present (file ends mid-chunk)
+    - WHEN: `open_from_bytes()` is called
+    - THEN: Returns `Err(DecodeError::InvalidData(...))` (cursor read_exact fails)
 
 ### Pseudocode traceability
-- Tests cover pseudocode lines: 73–224 (open_from_bytes), 32–47 (read_be_f80), 48–68 (chunk parsing)
+- Tests cover pseudocode lines: 73–238 (open_from_bytes), 32–93 (read_be_f80), 48–68 (chunk parsing)
+- Test 30 covers truncated file edge case (cursor read_exact failure)
 
 ## Verification Commands
 
@@ -138,7 +177,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## Structural Verification Checklist
 - [ ] Test module exists in `rust/src/sound/aiff.rs`
-- [ ] At least 22 test functions defined
+- [ ] At least 30 test functions defined
 - [ ] Test helper `build_aiff_file()` creates synthetic AIFF byte arrays
 - [ ] Tests compile (`--no-run`)
 - [ ] Plan/requirement traceability in test comments
@@ -147,10 +186,14 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] Tests verify behavior, not implementation internals
 - [ ] Each error path test checks the specific `DecodeError` variant
 - [ ] Valid-file tests check output state (frequency, format, length, max_pcm)
-- [ ] f80 tests check known sample rate values (44100, 22050, 8000, 48000, 96000, 11025)
-- [ ] f80 denormalized (exponent==0) test verifies result is Ok(0)
-- [ ] f80 infinity/NaN (exponent==0x7FFF) test verifies Err(InvalidData)
+- [ ] f80 tests check known sample rate values using real 10-byte vectors (22050, 44100, 48000, 8000, 11025, 96000)
+- [ ] f80 zero (all bytes 0x00) test verifies result is Ok(0)
+- [ ] f80 denormalized (exp=0, sig!=0) test verifies result is Ok(0)
+- [ ] f80 infinity (exp=0x7FFF) test verifies Err(InvalidData)
+- [ ] f80 NaN (exp=0x7FFF, non-zero fraction) test verifies Err(InvalidData)
+- [ ] f80 negative rate (sign bit set) test verifies correct negative value returned
 - [ ] Edge case tests (odd alignment, unknown chunks, duplicate COMM) present
+- [ ] Chunk size overflow guard test present (chunk_size > remaining bytes → InvalidData)
 - [ ] No tests that would pass with a trivial/fake implementation
 
 ## Deferred Implementation Detection (Mandatory)
@@ -178,6 +221,6 @@ Contents:
 - phase ID: PLAN-20260225-AIFF-DECODER.P04
 - timestamp
 - files changed: `rust/src/sound/aiff.rs` (tests added)
-- tests added: ~25 parser tests
+- tests added: ~29 parser tests
 - verification outputs
 - semantic verification summary

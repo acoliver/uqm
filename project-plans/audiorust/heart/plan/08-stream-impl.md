@@ -9,7 +9,30 @@
 
 ## Requirements Implemented (Expanded)
 
-All STREAM-* requirements (75 total): STREAM-INIT-01..07, STREAM-PLAY-01..20, STREAM-THREAD-01..08, STREAM-PROCESS-01..16, STREAM-SAMPLE-01..05, STREAM-TAG-01..03, STREAM-SCOPE-01..11, STREAM-FADE-01..05.
+All STREAM-* requirements (75 total), grouped by category:
+
+### Init/Lifecycle (STREAM-INIT-01..07)
+- GIVEN: Audio subsystem starting up
+- WHEN: `init_stream_decoder` is called
+- THEN: Sources/buffers are generated via mixer API, decoder thread is spawned with a name, StreamEngine global is initialized
+
+### Playback Control (STREAM-PLAY-01..20)
+- GIVEN: A SoundSample with a decoder
+- WHEN: `play_stream`/`stop_stream`/`pause_stream`/`resume_stream`/`seek_stream` are called
+- THEN: Mixer source state changes correctly, buffers are pre-filled on play, scope buffer is allocated if requested, stream_should_be_playing flag is set/cleared
+
+### Decoder Thread (STREAM-THREAD-01..08)
+- GIVEN: The decoder thread is running
+- WHEN: Sources have `stream_should_be_playing == true`
+- THEN: The thread decodes audio, queues buffers to mixer, processes fades, and sleeps via condvar when idle
+
+### Buffer Processing (STREAM-PROCESS-01..16)
+- GIVEN: A playing source with queued buffers
+- WHEN: Mixer reports processed buffers
+- THEN: Buffers are unqueued, callbacks fire via deferred execution (after releasing locks), EOF/underrun are detected correctly
+
+### Sample Management (STREAM-SAMPLE-01..05), Tags (STREAM-TAG-01..03), Scope (STREAM-SCOPE-01..11), Fade (STREAM-FADE-01..05)
+- Per-requirement behavior contracts defined in specification.md §5.1
 
 ### Pseudocode traceability
 - `init_stream_decoder`: pseudocode `stream.md` lines 1-11
@@ -48,11 +71,27 @@ All STREAM-* requirements (75 total): STREAM-INIT-01..07, STREAM-PLAY-01..20, ST
 
 ### Key implementation notes
 - Use `parking_lot::Mutex` and `parking_lot::Condvar` (never bare `Mutex` or `std::sync::Mutex`)
-- **CRITICAL: Lock ordering rule** — Source mutex MUST always be acquired before sample mutex, which MUST be acquired before fade mutex. The full lock ordering hierarchy is: `TRACK_STATE → Source mutex → Sample mutex → FadeState mutex`. Violating this order risks deadlock between the decoder thread and the main thread. Every function that acquires multiple locks must document which locks are held and in what order.
+- **CRITICAL: Lock ordering rule** — The full lock ordering hierarchy is: `TRACK_STATE → MUSIC_STATE → Source mutex → Sample mutex → FadeState mutex`. A thread holding a lock must NEVER acquire a lock higher in this hierarchy. The decoder thread's `process_source_stream` uses a **deferred callback pattern**: it collects callback actions while holding Source+Sample locks, then drops those locks and executes callbacks afterward — this ensures callbacks (which may acquire TRACK_STATE) never violate the ordering. Every function that acquires multiple locks must document which locks are held and in what order.
 - **Initialization ordering** — `init_stream_decoder()` must be called after `mixer_init()`. Document this in the function's doc comment.
 - All mixer calls must handle `Err` (log + continue, per REQ-CROSS-ERROR-01)
 - No `unwrap()` in production code
 - Decoder thread uses `std::thread::Builder` for named thread
+
+### parking_lot::Condvar vs std::sync::Condvar
+
+`parking_lot::Condvar` does **NOT** have spurious wakeups (unlike `std::sync::Condvar`). From the parking_lot documentation: "Unlike the standard library Condvar type, this does not check for spurious wakeups." This means:
+
+- The `wait_for` timeout in `stream_decoder_task` (pseudocode line 240) does **not** need a loop condition to guard against spurious wakeups. A single `condvar.wait_for(&mut guard, Duration::from_millis(100))` call will either:
+  1. Return `WaitTimeoutResult` after the timeout expires, OR
+  2. Return after a genuine `notify_one`/`notify_all` signal
+
+- This simplifies the idle sleep logic compared to a `std::sync::Condvar` approach, which would require wrapping the wait in a `while !predicate` loop. With `parking_lot`, the code can be a simple:
+  ```rust
+  let _timeout = condvar.wait_for(&mut guard, Duration::from_millis(100));
+  // No spurious wakeup check needed — either timed out or genuinely notified
+  ```
+
+- If the implementation ever switches to `std::sync::Condvar` (not recommended), a `while !shutdown && !any_active` guard loop would be required around the wait call.
 
 ## Verification Commands
 

@@ -36,7 +36,7 @@ Verify assumptions before implementation.
 - [ ] `SoundDecoder` trait lacks `set_looping()` → Plan: store looping flag on `SoundSample` instead
 - [ ] `SoundDecoder` trait lacks `decode_all()` → Plan: add free function `decode_all()`
 - [ ] `SoundDecoder` trait lacks `get_time()` → Plan: add free function `get_decoder_time()`
-- [ ] Mixer lacks `mixer_source_fv()` for 3D position → Plan: add to `mixer/source.rs` in P03 (types stub)
+- [ ] Mixer lacks `mixer_source_fv()` for 3D position → **Resolved: use three separate `mixer_source_f` calls** for X, Y, Z components instead of adding `mixer_source_fv()`. No mixer modifications needed.
 
 ## Call-Path Feasibility
 - [ ] `stream.rs` can import from `sound::mixer::{mixer_source_play, mixer_buffer_data, ...}`

@@ -74,7 +74,7 @@ Why it matters:
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P03`
 
 ### Pseudocode traceability
-- Uses pseudocode lines: 1–19 (constructor), 319–353 (trait accessors), 313–318 (close)
+- Uses pseudocode lines: 1–19 (constructor), 339–378 (trait accessors), 333–338 (close)
 
 ## Verification Commands
 

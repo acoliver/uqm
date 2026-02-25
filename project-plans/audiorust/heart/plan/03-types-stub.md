@@ -117,6 +117,7 @@ The mixer lacks `mixer_source_fv()` for 3D positioning (SFX-POSITION-01). Resolu
 ```bash
 cd /Users/acoliver/projects/uqm/rust && cargo check --lib --all-features
 cd /Users/acoliver/projects/uqm/rust && cargo fmt --all --check
+cd /Users/acoliver/projects/uqm/rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
 ## Structural Verification Checklist
@@ -125,6 +126,7 @@ cd /Users/acoliver/projects/uqm/rust && cargo fmt --all --check
 - [ ] `@plan` and `@requirement` markers present in types.rs
 - [ ] `cargo check` passes (compiles without errors)
 - [ ] `cargo fmt --all --check` passes
+- [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings` passes
 
 ## Semantic Verification Checklist (Mandatory)
 - [ ] AudioError has exactly 14 variants matching spec §2.1

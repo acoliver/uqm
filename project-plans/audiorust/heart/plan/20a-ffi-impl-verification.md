@@ -55,7 +55,7 @@ grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented\|todo!()
 ```
 
 ## Success Criteria
-- [ ] All 15+ tests pass
+- [ ] All 17+ tests pass
 - [ ] Zero deferred implementations
 - [ ] All 60+ FFI functions implemented
 - [ ] PlayChannel handle resolution documented and implemented

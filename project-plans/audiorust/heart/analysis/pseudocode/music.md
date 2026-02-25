@@ -6,6 +6,14 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 
 ## 1. plr_play_song
 
+**OWNERSHIP MODEL**: `MusicRef` wraps an `Arc<Mutex<SoundSample>>` — NOT a raw
+pointer. This prevents double-free: both the `MusicRef` holder and the active
+`SoundSource` share ownership via Arc refcounting. The sample is dropped only when
+the last Arc reference is released. `get_music_data` creates the Arc;
+`release_music_data` drops the MusicRef's Arc (sample freed only if source also
+released its clone). `play_stream` receives an `Arc::clone()`, incrementing the
+refcount.
+
 ```
 01: FUNCTION plr_play_song(music_ref, continuous, priority) -> AudioResult<()>
 02:   // REQ-MUSIC-PLAY-02: validate ref
@@ -13,9 +21,9 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 04:     RETURN Err(AudioError::InvalidSample)
 05:   END IF
 06:
-07:   LET sample_ptr = music_ref.0
-08:   LET sample = unsafe { &mut *sample_ptr }
-09:   LET sample_arc = Arc::new(parking_lot::Mutex::new(/* wrap sample */))
+07:   // Clone the Arc — both MusicRef and the active source share ownership.
+08:   // No raw pointer wrapping, no double-free risk.
+09:   LET sample_arc = Arc::clone(&music_ref.0)
 10:
 11:   // REQ-MUSIC-PLAY-01: play on MUSIC_SOURCE
 12:   CALL play_stream(
@@ -28,7 +36,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 19:
 20:   // Store as current music ref
 21:   LET state = MUSIC_STATE.lock()
-22:   SET state.cur_music_ref = Some(music_ref)
+22:   SET state.cur_music_ref = Some(music_ref.clone())
 23:
 24:   // REQ-MUSIC-PLAY-03: priority ignored
 25:   RETURN Ok(())
@@ -37,6 +45,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 Validation: REQ-MUSIC-PLAY-01..03
 Integration: Calls play_stream, modifies MUSIC_STATE
 Side effects: Starts music playback on MUSIC_SOURCE
+Ownership: Arc::clone() increments refcount — no raw pointer, no double-free
 
 ## 2. plr_stop
 
@@ -109,29 +118,19 @@ Validation: REQ-MUSIC-PLAY-06..08
 ```
 90: FUNCTION snd_play_speech(speech_ref) -> AudioResult<()>
 91:   LET state = MUSIC_STATE.lock()
-92:   LET sample_ptr = speech_ref.0
-93:   LET sample = unsafe { &mut *sample_ptr }
-94:   LET sample_arc = Arc::new(parking_lot::Mutex::new(/* wrap sample */))
-95:
-96:   // REQ-MUSIC-SPEECH-01: no looping, no scope, rewind
-97:   CALL play_stream(
-98:     sample_arc,
-99:     SPEECH_SOURCE,
-100:    false,   // no looping
-101:    false,   // no scope
-102:    true,    // rewind
-103:  )?
-104:  SET state.cur_speech_ref = Some(speech_ref)
-105:  RETURN Ok(())
-106:
-107: FUNCTION snd_stop_speech() -> AudioResult<()>
-108:   LET state = MUSIC_STATE.lock()
-109:   IF state.cur_speech_ref.is_none() THEN
-110:     RETURN Ok(())   // REQ-MUSIC-SPEECH-02
-111:   END IF
-112:   CALL stop_stream(SPEECH_SOURCE)?
-113:   SET state.cur_speech_ref = None
-114:   RETURN Ok(())
+92:   // Clone the Arc — shared ownership between MusicRef and SoundSource
+93:   LET sample_arc = Arc::clone(&speech_ref.0)
+94:
+95:   // REQ-MUSIC-SPEECH-01: no looping, no scope, rewind
+96:   CALL play_stream(
+97:     sample_arc,
+98:     SPEECH_SOURCE,
+99:     false,   // no looping
+100:    false,   // no scope
+101:    true,    // rewind
+102:  )?
+103:  SET state.cur_speech_ref = Some(speech_ref.clone())
+104:  RETURN Ok(())
 ```
 
 Validation: REQ-MUSIC-SPEECH-01..02
@@ -146,26 +145,22 @@ Validation: REQ-MUSIC-SPEECH-01..02
 124:   END IF
 125:
 126:   // REQ-MUSIC-LOAD-02: load decoder
-127:   LET decoder = load_decoder(content_dir, filename, 4096, 0, 0)
-128:   IF decoder.is_err() THEN
-129:     RETURN Err(AudioError::ResourceNotFound(filename.to_string()))   // REQ-MUSIC-LOAD-04
-130:   END IF
-131:   LET decoder = decoder.unwrap()
-132:
-133:   // Create sample with 64 buffers, no callbacks
-134:   LET sample = create_sound_sample(Some(decoder), 64, None)
-135:   IF sample.is_err() THEN
-136:     // REQ-MUSIC-LOAD-05: drop decoder (automatic), return error
-137:     RETURN Err(sample.unwrap_err())
-138:   END IF
-139:
-140:   // REQ-MUSIC-LOAD-03: leak Box to raw pointer
-141:   LET boxed = Box::new(sample.unwrap())
-142:   LET ptr = Box::into_raw(boxed)
-143:   RETURN Ok(MusicRef(ptr))
+127:   LET decoder = load_decoder(content_dir, filename, 4096, 0, 0)?
+128:     .map_err(|_| AudioError::ResourceNotFound(filename.to_string()))?   // REQ-MUSIC-LOAD-04
+129:
+130:   // Create sample with 64 buffers, no callbacks
+131:   // REQ-MUSIC-LOAD-05: on error, decoder is dropped automatically
+132:   LET sample = create_sound_sample(Some(decoder), 64, None)?
+133:
+134:   // REQ-MUSIC-LOAD-03: wrap in Arc for shared ownership
+135:   // MusicRef holds Arc<Mutex<SoundSample>>. play_stream clones the Arc
+136:   // (incrementing refcount). release_music_data drops the MusicRef's Arc.
+137:   // Sample is freed only when last Arc drops — no double-free possible.
+138:   RETURN Ok(MusicRef(Arc::new(parking_lot::Mutex::new(sample))))
 ```
 
 Validation: REQ-MUSIC-LOAD-01..05
+Ownership: MusicRef wraps Arc<Mutex<SoundSample>> — shared ownership via refcounting
 
 ## 7. release_music_data
 
@@ -176,24 +171,37 @@ Validation: REQ-MUSIC-LOAD-01..05
 153:     RETURN Err(AudioError::NullPointer)
 154:   END IF
 155:
-156:   LET sample = unsafe { &mut *music_ref.0 }
-157:
-158:   // REQ-MUSIC-RELEASE-02: stop if currently active
-159:   IF sample.decoder.is_some() THEN
-160:     LET source = SOURCES.sources[MUSIC_SOURCE].lock()
-161:     IF source.sample.as_ref().map(|s| arc_points_to(s, music_ref.0)).unwrap_or(false) THEN
-162:       CALL stop_stream(MUSIC_SOURCE)?
-163:     END IF
-164:   END IF
-165:
-166:   // REQ-MUSIC-RELEASE-03: cleanup
-167:   SET sample.decoder = None   // drop decoder
-168:   CALL destroy_sound_sample(sample)?
-169:   LET _ = unsafe { Box::from_raw(music_ref.0) }   // reclaim and drop
-170:   RETURN Ok(())
+156:   // REQ-MUSIC-RELEASE-02: stop if currently active
+157:   {
+158:     LET sample = music_ref.0.lock()
+159:     IF sample.decoder.is_some() THEN
+160:       LET source = SOURCES.sources[MUSIC_SOURCE].lock()
+161:       IF source.sample.as_ref().map(|s| Arc::ptr_eq(s, &music_ref.0)).unwrap_or(false) THEN
+162:         DROP source   // release source lock before stop_stream
+163:         CALL stop_stream(MUSIC_SOURCE)?
+164:       END IF
+165:     END IF
+166:   }
+167:
+168:   // REQ-MUSIC-RELEASE-03: cleanup — destroy mixer resources
+169:   {
+170:     LET mut sample = music_ref.0.lock()
+171:     SET sample.decoder = None   // drop decoder
+172:     CALL destroy_sound_sample(&mut sample)?
+173:   }
+174:
+175:   // Drop the MusicRef, which drops its Arc. If the source also held a
+176:   // clone, the sample lives until stop_stream clears source.sample.
+177:   // If this is the last Arc, the sample is freed. No Box::from_raw
+178:   // needed — Arc handles deallocation automatically.
+179:   DROP music_ref
+180:   RETURN Ok(())
 ```
 
 Validation: REQ-MUSIC-RELEASE-01..03
+Ownership: Dropping MusicRef decrements the Arc refcount. The SoundSample is freed
+only when the last Arc (from MusicRef or from SoundSource.sample) is dropped.
+No Box::from_raw, no double-free.
 
 ## 8. check_music_res_name
 
@@ -230,14 +238,26 @@ Validation: REQ-MUSIC-VOLUME-01
 202:   LET interval = IF quit_posted() OR time_interval < 0 THEN 0 ELSE time_interval
 203:
 204:   // REQ-VOLUME-CONTROL-04: attempt fade
-205:   LET accepted = set_music_stream_fade(interval as u32, end_vol)
-206:   IF NOT accepted THEN
-207:     CALL set_music_volume(end_vol)
-208:     RETURN get_time_counter()
-209:   END IF
-210:
-211:   // REQ-VOLUME-CONTROL-05: return completion time
-212:   RETURN get_time_counter() + interval as u32 + 1
+205:   // NOTE: If a fade is already in progress, set_music_stream_fade
+206:   // REPLACES it immediately. See §13 (set_music_stream_fade) in
+207:   // stream.md — the function unconditionally overwrites all fade
+208:   // state fields (start_time, interval, start_volume, delta).
+209:   // This means:
+210:   //   - The old fade is abandoned (no completion callback)
+211:   //   - The new fade starts from the CURRENT volume (at the moment
+212:   //     of the call), not from the old fade's start or end volume
+213:   //   - The new fade timer resets to now
+214:   // This matches the C behavior in audiolib.c: calling
+215:   // FadeMusic while a fade is active replaces it.
+216:   LET accepted = set_music_stream_fade(interval as u32, end_vol)
+217:   IF NOT accepted THEN
+218:     CALL set_music_volume(end_vol)
+219:     RETURN get_time_counter()
+220:   END IF
+221:
+222:   // REQ-VOLUME-CONTROL-05: return completion time
+223:   RETURN get_time_counter() + interval as u32 + 1
 ```
 
 Validation: REQ-VOLUME-CONTROL-03..05
+Fade replacement: When called during an active fade, the new fade replaces the current one immediately. The fade timer resets, the start volume is read from the current (mid-fade) volume, and the delta is recomputed toward the new end_vol. The old fade is abandoned without completing.

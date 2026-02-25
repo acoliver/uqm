@@ -9,7 +9,32 @@
 
 ## Requirements Implemented (Expanded)
 
-All VOLUME-* (17) and FILEINST-* (7) requirements fully implemented.
+All VOLUME-* (17) and FILEINST-* (7) requirements, grouped by category:
+
+### Volume Initialization (VOLUME-INIT-01..05)
+- GIVEN: The audio subsystem is starting up
+- WHEN: `init_sound` is called
+- THEN: SoundSourceArray is created with NUM_SOUNDSOURCES mixer handles via `mixer_gen_sources`, VolumeState is initialized with default scales, and `uninit_sound` cleans up via Drop
+
+### Volume Control (VOLUME-CONTROL-01..05)
+- GIVEN: Active audio sources and a volume value (0..MAX_VOLUME)
+- WHEN: `set_sfx_volume`/`set_speech_volume`/`fade_music` are called
+- THEN: Gain is computed as `volume * volume_scale / MAX_VOLUME²`, applied to the correct source(s) via `mixer_source_f`, and fade delegates to `set_music_stream_fade` with clamped interval on quit
+
+### Source Management (VOLUME-SOURCE-01..04)
+- GIVEN: An active sound source with queued buffers
+- WHEN: `stop_source`/`clean_source`/`stop_sound` are called
+- THEN: `mixer_source_stop` is called, all buffers are unqueued, the source is rewound, the sample reference is cleared, and `stop_sound` iterates all SFX sources (0..NUM_SFX_CHANNELS)
+
+### Volume Queries (VOLUME-QUERY-01..03)
+- GIVEN: One or more sources that may be playing
+- WHEN: `sound_playing`/`wait_for_sound_end` are called
+- THEN: `sound_playing` checks all source mixer states and returns true if any is Playing, `wait_for_sound_end` polls with 10ms sleep (matching C TaskSwitch granularity) and breaks on `quit_posted()`
+
+### File Loading (FILEINST-LOAD-01..07)
+- GIVEN: A filename for a sound or music resource
+- WHEN: `load_sound_file`/`load_music_file` are called
+- THEN: A FileLoadGuard RAII guard checks `cur_resfile_name` for concurrency (returning ConcurrentLoad if busy), sets the name, delegates to `get_sound_bank_data`/`get_music_data`, and the guard's Drop clears the name even on error paths
 
 ### Pseudocode traceability
 - `SoundSourceArray::new`: pseudocode `control.md` lines 1-27
@@ -21,7 +46,7 @@ All VOLUME-* (17) and FILEINST-* (7) requirements fully implemented.
 - `set_sfx_volume`: pseudocode `control.md` lines 110-115
 - `set_speech_volume`: pseudocode `control.md` lines 120-123
 - `sound_playing`: pseudocode `control.md` lines 130-148
-- `wait_for_sound_end`: pseudocode `control.md` lines 150-164
+- `wait_for_sound_end`: pseudocode `control.md` lines 150-184 (expanded with 10ms polling detail)
 - `load_sound_file`: pseudocode `fileinst.md` lines 20-36
 - `load_music_file`: pseudocode `fileinst.md` lines 40-56
 - `destroy_sound/destroy_music`: pseudocode `fileinst.md` lines 60-66
@@ -57,6 +82,20 @@ All VOLUME-* (17) and FILEINST-* (7) requirements fully implemented.
 - `SoundSourceArray::new` is called in `lazy_static!` initialization — must not panic
 - `wait_for_sound_end` must check `quit_posted()` via FFI
 - `FileLoadGuard::drop` must be infallible
+
+### WaitForSoundEnd polling behavior
+
+`wait_for_sound_end` uses a **10ms polling loop** matching the C implementation's `TaskSwitch()` granularity (pseudocode `control.md` lines 150-184). Key details:
+
+1. **Polling, not condvar**: This intentionally uses `std::thread::sleep(Duration::from_millis(10))` rather than a condvar. The C code uses `TaskSwitch()` which is a cooperative yield with ~10ms granularity. A condvar approach would require the streaming thread to signal completion to arbitrary waiting callers, adding complexity without benefit.
+
+2. **Quit check**: Every iteration checks `quit_posted()` via FFI before checking playback state. This ensures the polling loop doesn't block program exit.
+
+3. **Channel selection**: `None` → calls `sound_playing()` (checks all sources); `Some(ch)` → calls `channel_playing(ch)` (checks specific SFX channel via mixer `SourceState`).
+
+4. **No locks held during sleep**: The function does NOT hold any mutex while sleeping. Each `sound_playing()` / `channel_playing()` call acquires and releases source locks transiently.
+
+5. **Thread safety**: Safe to call from any thread (typically the main/game thread). The 10ms sleep prevents busy-waiting while giving responsive detection.
 
 ## Verification Commands
 

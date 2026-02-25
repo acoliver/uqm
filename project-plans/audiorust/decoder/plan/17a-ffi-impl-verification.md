@@ -46,7 +46,7 @@ grep "rust_aifa_DecoderVtbl" src/sound/aiff_ffi.rs
 ## Semantic Verification Checklist (Mandatory)
 
 ### Deterministic Checks
-- [ ] Init does ONLY allocate + store + set need_swap=false — does NOT call init_module()/init() (matching dukaud_ffi.rs)
+- [ ] Init allocates + propagates formats via init_module()/init() + stores + sets need_swap=false (matching wav_ffi.rs)
 - [ ] Open reads file via UIO, calls open_from_bytes(), updates base struct fields (frequency, format, length, is_null, need_swap) (REQ-FF-6, REQ-FF-7)
 - [ ] Open failure returns 0, logs error (REQ-FF-8)
 - [ ] Decode maps: Ok(n)→n, EndOfFile→0, Err→0 (REQ-FF-9, never returns negative)
@@ -56,7 +56,7 @@ grep "rust_aifa_DecoderVtbl" src/sound/aiff_ffi.rs
 - [ ] Term drops the Box and nulls out the pointer (REQ-FF-5)
 
 ### Subjective Checks
-- [ ] Does the FFI vtable Init function match the dukaud_ffi.rs Init pattern exactly (no double-initialization)?
+- [ ] Does the FFI vtable Init function match the wav_ffi.rs Init pattern (allocate, propagate formats, store)?
 - [ ] Does Open correctly handle the case where read_uio_file returns None (returns 0, not panic)?
 - [ ] Does the Decode function correctly prevent negative return values (C caller expects non-negative)?
 - [ ] Is there any path where the Box could be leaked (created but never freed)?

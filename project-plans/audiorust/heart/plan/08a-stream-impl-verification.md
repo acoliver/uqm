@@ -48,6 +48,13 @@ grep -RIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/stream.rs
 - [ ] All error paths return correct AudioError variants — no silent failures or swallowed errors
 - [ ] No `unwrap()` or `expect()` in production code paths
 
+### Concurrency verification
+- [ ] Spawn N (≥10) threads calling play_stream/stop_stream/seek_stream simultaneously on the same source — verify no deadlocks (completes within 5s timeout) and no panics (1000 iterations)
+- [ ] Verify the deferred callback pattern in `process_source_stream`: callbacks execute AFTER source+sample locks are released, not while holding them (preventing TRACK_STATE lock ordering violation)
+- [ ] Enable `parking_lot`'s deadlock detection (if available) during test runs to catch lock ordering violations
+- [ ] Rapid play/stop cycling: call play_stream then stop_stream 100 times in quick succession — verify no leaked resources or panics
+- [ ] **FIX ISSUE-VER-01: TOCTOU stress test for deferred callbacks**: Spawn a test that (1) starts a stream with a TrackCallbacks-like callback, (2) triggers buffer processing (decoder thread processes a source), (3) calls `stop_stream` from another thread during callback execution (between lock release and deferred callback invocation), (4) verifies no panic/crash and that the validity check in `execute_deferred_callbacks` correctly skips stale callbacks. Test should repeat 100+ times with random timing jitter to exercise the race window.
+
 ## Deferred Implementation Detection
 
 ```bash

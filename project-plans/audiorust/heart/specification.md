@@ -85,7 +85,7 @@ This specification defines equivalent Rust modules that replace all six C files 
 4. **`Result<T, AudioError>` replaces C return codes** — Unified error enum; FFI shims convert to C-compatible integers.
 5. **Callbacks become trait objects** — `StreamCallbacks` trait with default no-op implementations.
 6. **`std::thread` + `parking_lot::Condvar`** — Replaces `AssignTask`/`ConcludeTask`/`HibernateThread`.
-7. **Lock ordering** — Source mutex must always be acquired before sample mutex (avoids deadlocks).
+7. **Lock ordering** — Full hierarchy: `TRACK_STATE → MUSIC_STATE → Source mutex → Sample mutex → FadeState mutex`. A thread holding a lock must NEVER acquire a lock higher in this list. The deferred callback pattern in `process_source_stream` ensures callbacks (which acquire TRACK_STATE) execute only after Source and Sample locks are released.
 8. **Initialization order** — `init_stream_decoder()` must be called after `mixer_init()`.
 
 ---
@@ -137,15 +137,15 @@ pub const ONE_SECOND: u32 = 840;
 
 ### 3.3 Core Data Structures
 
-- **`SoundSample`** — Owns buffers, borrows decoder. Fields: `decoder`, `length`, `buffers`, `num_buffers`, `buffer_tags`, `offset`, `data`, `callbacks`.
+- **`SoundSample`** — Owns buffers, borrows decoder. Fields: `decoder`, `length`, `buffers`, `num_buffers`, `buffer_tags`, `offset` (game ticks, computed as `start_time_ms * ONE_SECOND / 1000`), `looping` (bool, stored on sample not decoder), `data`, `callbacks`.
 - **`SoundTag`** — Buffer-to-subtitle link. Fields: `buf_handle`, `data`.
 - **`StreamCallbacks`** — Trait with `on_start_stream`, `on_end_chunk`, `on_end_stream`, `on_tagged_buffer`, `on_queue_buffer`.
 - **`SoundSource`** — Per-source state: `sample`, `handle`, `stream_should_be_playing`, `start_time`, `pause_time`, `positional_object`, `last_q_buf`, scope buffer ring.
 - **`FadeState`** — `start_time`, `interval`, `start_volume`, `delta`.
 - **`StreamEngine`** — Global: `sources`, `fade`, `decoder_thread`, `shutdown`, `wake`.
-- **`SoundChunk`** — Track chunk: `decoder`, `start_time`, `tag_me`, `track_num`, `text`, `callback`, `next`.
+- **`SoundChunk`** — Track chunk: `decoder`, `start_time`, `run_time`, `tag_me`, `track_num`, `text`, `callback`, `next`.
 - **`TrackPlayerState`** — Track list head/tail, cur_chunk pointers, track_count, dec_offset.
-- **`MusicRef`** — `#[repr(transparent)]` wrapper around `*mut SoundSample`.
+- **`MusicRef`** — Wrapper around `Arc<Mutex<SoundSample>>` for shared ownership (prevents double-free). Created by `get_music_data`, destroyed by `release_music_data`.
 - **`SoundPosition`** — `#[repr(C)]` struct: `positional`, `x`, `y`.
 - **`SoundBank`** — Collection of pre-decoded SFX samples.
 - **`SoundSourceArray`** — `[parking_lot::Mutex<SoundSource>; NUM_SOUNDSOURCES]`.
@@ -183,7 +183,7 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 
 ### 4.4 C Build System
 
-- New header: `rust_audio_heart.h` with all FFI declarations
+- New header: `audio_heart_rust.h` with all FFI declarations
 - `USE_RUST_AUDIO_HEART` flag in `config_unix.h`
 - Conditional compilation excludes C files when flag is set
 
@@ -293,7 +293,7 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 | REQ-TRACK-ASSEMBLE-16 | Multi-track text | Append text, set no_page_break=true |
 | REQ-TRACK-ASSEMBLE-17 | Multi-track precondition | Error when track_count=0 |
 | REQ-TRACK-ASSEMBLE-18 | Chunk constructor | Zeroed chunk with decoder and start_time |
-| REQ-TRACK-ASSEMBLE-19 | Chunk drop | Recursive Drop for linked list |
+| REQ-TRACK-ASSEMBLE-19 | Chunk drop | Iterative Drop for linked list (avoids stack overflow on long chains) |
 | REQ-TRACK-PLAY-01 | Play | Compute tracks_length, set cur_chunk, play_stream |
 | REQ-TRACK-PLAY-02 | Play no sample | Return Ok when no sample |
 | REQ-TRACK-PLAY-03 | Stop | Stop stream, reset state, drop chunks |
@@ -409,7 +409,7 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 | REQ-VOLUME-SOURCE-03 | Buffer Vec | Rust Vec handles allocation |
 | REQ-VOLUME-SOURCE-04 | Stop sound | Stop all SFX sources |
 | REQ-VOLUME-QUERY-01 | Sound playing | Any source playing |
-| REQ-VOLUME-QUERY-02 | Wait for end | Poll loop with 50ms sleep |
+| REQ-VOLUME-QUERY-02 | Wait for end | Poll loop with 10ms sleep (matches C TaskSwitch granularity) |
 | REQ-VOLUME-QUERY-03 | Quit break | Break on quit_posted |
 
 ### FILEINST — File-Based Loading
@@ -457,6 +457,7 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 | REQ-CROSS-GENERAL-04 | Send+Sync | SoundDecoder is Send; sample is Send+Sync in Arc |
 | REQ-CROSS-GENERAL-05 | Time FFI | GetTimeCounter via FFI, ONE_SECOND=840 |
 | REQ-CROSS-GENERAL-06 | Content I/O | uio_* FFI for file access |
+| REQ-CROSS-GENERAL-06a | Build flag integration | USE_RUST_AUDIO_HEART conditionally includes Rust or C implementation (see P21) |
 | REQ-CROSS-GENERAL-07 | Module registration | Add to sound::mod.rs |
 | REQ-CROSS-GENERAL-08 | FFI error convention | bool→1/0, count→0, pointer→null |
 
@@ -471,8 +472,8 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 5. **Null/invalid MusicRef** — `NullPointer` or `InvalidSample` error at FFI boundary.
 6. **Decoder EOF during pre-fill** — Callback-driven chunk advancement or graceful end.
 7. **Buffer underrun** — Log warning, restart mixer source.
-8. **Recursive Drop on long chunk list** — Risk of stack overflow for very long lists (>50 chunks unlikely in practice).
-9. **Lock ordering violation** — Source mutex must always precede sample mutex.
+8. **SoundChunk linked list drop** — Uses iterative `Drop` implementation (loop, not recursion) to avoid stack overflow for any list length (FIX: ISSUE-MISC-02).
+9. **Lock ordering violation** — Full hierarchy: `TRACK_STATE → MUSIC_STATE → Source → Sample → FadeState`. Decoder thread callbacks use deferred execution pattern to avoid acquiring TRACK_STATE while holding Source/Sample locks.
 10. **Mixer not initialized** — Lazy static ENGINE initialization depends on mixer readiness.
 
 ---
@@ -488,16 +489,90 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 
 ---
 
+## 7a. Memory Budget
+
+Expected memory usage for the audio heart subsystem at runtime. These are per-instance allocations; the total depends on what the game is currently doing.
+
+### Scope Buffer (Oscilloscope Ring Buffer)
+- **Per source**: `num_buffers * buffer_size + PAD_SCOPE_BYTES`
+- **Typical**: Music source with 64 buffers × 4096 bytes/buffer: `64 * 4096 + 256 = ~262KB`
+  - Note: scope buffer is only allocated when `scope=true` (music and tracked speech).
+- **Speech source**: 8 buffers × 4096 bytes: `8 * 4096 + 256 = ~33KB`
+- **Combined maximum**: ~295KB (both music and speech scoped simultaneously)
+- **Minimum (no scope)**: 0 bytes — scope buffer is not allocated for SFX or when scope is disabled
+
+### Sound Sample Buffers (Mixer Buffers)
+- **Per SoundSample**: `num_buffers` mixer buffer handles (lightweight handles, ~8 bytes each)
+- **Music samples**: 64 buffers × 8 bytes = ~512 bytes of handles (actual audio data is in the mixer's buffer store)
+- **SFX samples**: 1 buffer per SFX effect × 8 bytes = ~8 bytes per effect
+- **Track player**: 8 buffers per tracked speech = ~64 bytes of handles
+- **Buffer tag array**: `num_buffers * size_of::<Option<SoundTag>>()` ≈ `num_buffers * 24 bytes`
+  - Music: 64 × 24 = ~1.5KB
+  - Track: 8 × 24 = ~192 bytes
+
+### Decoded Audio (decode_all for SFX)
+- **Per SFX effect**: Full WAV decoded into memory. Typical UQM SFX are 0.1-2.0 seconds at 22050Hz mono 16-bit:
+  - 0.1s: `22050 * 2 * 0.1 = ~4.4KB`
+  - 2.0s: `22050 * 2 * 2.0 = ~88KB`
+- **Per SFX bank**: Up to 256 effects. A typical bank (e.g., combat sounds) has 10-30 effects:
+  - Small bank (10 × 0.5s): ~220KB
+  - Large bank (30 × 1.0s): ~1.3MB
+- **Total SFX**: Multiple banks can be loaded. Typical gameplay loads 2-3 banks: ~1-4MB total
+- **Note**: SFX decoded data lives in the mixer's internal buffer store after `mixer_buffer_data()`. The Vec<u8> from `decode_all()` is dropped after upload.
+
+### Streaming Audio (Not Pre-Decoded)
+- **Music**: NOT pre-decoded. The decoder reads and decodes in 4096-byte chunks on demand. Memory usage is bounded by the number of mixer buffers × buffer size:
+  - 64 buffers × 4096 bytes = ~256KB of PCM data in-flight at any time
+- **Speech/track**: 8 buffers × 4096 bytes = ~32KB in-flight
+
+### Per-Source State
+- **SoundSource struct**: ~120 bytes per source (handle, flags, timing, pointers)
+- **7 sources total**: ~840 bytes
+- **Mutex overhead**: ~40 bytes per `parking_lot::Mutex` wrapper × 7 = ~280 bytes
+
+### Track Player State
+- **SoundChunk**: ~120 bytes per chunk (decoder box, strings, pointers)
+- **Typical comm screen**: 5-20 chunks = ~0.6-2.4KB
+- **Maximum (long dialogue)**: ~50 chunks = ~6KB
+- **Subtitle text**: Variable, typically 100-500 bytes per chunk
+
+### Global State
+- **StreamEngine**: ~200 bytes (atomic flags, condvar, join handle)
+- **FadeState**: ~32 bytes
+- **MusicState**: ~64 bytes
+- **VolumeState**: ~32 bytes
+- **FileInstState**: ~64 bytes
+
+### Summary Budget
+
+| Component | Typical | Maximum | Notes |
+|-----------|---------|---------|-------|
+| Scope buffers | ~33KB | ~295KB | Only music + speech when scoped |
+| SFX decoded audio | ~1MB | ~4MB | In mixer buffer store |
+| Streaming PCM in-flight | ~288KB | ~288KB | Bounded by buffer count |
+| Buffer handles + tags | ~2KB | ~4KB | Lightweight |
+| Track chunks + text | ~2KB | ~6KB | Per conversation |
+| Source state | ~1KB | ~1KB | Fixed 7 sources |
+| Global state | ~0.4KB | ~0.4KB | Fixed overhead |
+| **Total** | **~1.3MB** | **~4.6MB** | SFX dominates |
+
+The memory footprint is dominated by pre-decoded SFX. Music and speech streaming keep memory bounded regardless of file size. This matches the C implementation's memory profile.
+
+---
+
 ## 8. Testability Requirements
 
-1. **Unit tests** per module — test state transitions, error paths, edge cases.
-2. **Mock mixer** — Tests use mock mixer functions or inject test doubles.
-3. **Mock decoder** — `NullDecoder` or custom test decoders for streaming tests.
-4. **Integration tests** — Verify module interactions (stream ↔ control, trackplayer ↔ stream).
-5. **FFI boundary tests** — Verify C-compatible types, null pointer handling, error code translation.
-6. **Thread safety tests** — Concurrent access patterns, shutdown ordering.
-7. **Verification baseline:**
-   - `cargo fmt --all --check`
-   - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-   - `cd /Users/acoliver/projects/uqm/rust && cargo test --lib --all-features`
-   - `cd /Users/acoliver/projects/uqm/sc2 && ./build.sh uqm`
+1. **Unit tests** per module — test state transitions, error paths, edge cases. Each module must have a `#[cfg(test)] mod tests` section.
+2. **Mock mixer** — Tests use mock mixer functions or inject test doubles. No actual audio hardware required for unit tests.
+3. **Mock decoder** — `NullDecoder` or custom test decoders for streaming tests. Must support configurable length, frequency, and format.
+4. **Integration tests** — Verify module interactions (stream ↔ control, trackplayer ↔ stream). Focus on the callback chain: play_stream → decoder thread → callbacks → track state updates.
+5. **FFI boundary tests** — Verify C-compatible types, null pointer handling, error code translation. Every FFI function must have at least one test for the null-pointer case.
+6. **Thread safety tests** — Concurrent access patterns: spawn N threads calling play/stop/seek simultaneously, verify no deadlocks (test completes within timeout), verify no panics. Use `parking_lot`'s deadlock detection if available.
+7. **Test strategy**: TDD cycle — RED (tests written, stubs fail), GREEN (implementations pass), REFACTOR. Every implementation phase (P05, P08, P11, P14, P17, P20) must achieve zero test failures before proceeding.
+8. **Coverage targets**: No strict coverage percentage required, but every public function must have at least one behavioral test. Coverage tooling (`cargo llvm-cov`) may be used if available but is not a gate.
+9. **Performance sanity**: At least one benchmark test verifying `decode_all` throughput (no accidental O(n²) algorithms).
+10. **Verification baseline:**
+    - `cargo fmt --all --check`
+    - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+    - `cd /Users/acoliver/projects/uqm/rust && cargo test --lib --all-features`
+    - `cd /Users/acoliver/projects/uqm/sc2 && ./build.sh uqm`

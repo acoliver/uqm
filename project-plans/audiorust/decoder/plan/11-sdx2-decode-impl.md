@@ -46,7 +46,7 @@ Why it matters:
 - `rust/src/sound/aiff.rs`
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P11`
   - marker: `@requirement REQ-DS-1, REQ-DS-2, REQ-DS-3, REQ-DS-4, REQ-DS-5, REQ-DS-6, REQ-DS-8`
-  - Implement: `decode_sdx2()` — remove `todo!()`, implement per pseudocode lines 250–295
+  - Implement: `decode_sdx2()` — remove `todo!()`, implement per pseudocode lines 270–315
   - Steps:
     1. Check EOF (cur_pcm >= max_pcm → EndOfFile)
     2. Calculate dec_pcm
@@ -62,7 +62,7 @@ Why it matters:
     6. Return byte count
 
 ### Pseudocode traceability
-- `decode_sdx2`: pseudocode lines 250–295
+- `decode_sdx2`: pseudocode lines 270–315
 
 ## Verification Commands
 
@@ -90,7 +90,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] Clamping works at both bounds
 - [ ] Stereo channel predictors are independent
 - [ ] EOF correctly returned
-- [ ] Endianness handled (need_swap for SDX2 uses cfg! target_endian)
+- [ ] Endianness handled (need_swap for SDX2 uses runtime `formats.big_endian != formats.want_big_endian`, NOT compile-time `cfg!`)
 
 ## Deferred Implementation Detection (Mandatory)
 

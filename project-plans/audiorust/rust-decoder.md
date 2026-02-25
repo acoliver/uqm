@@ -401,22 +401,29 @@ If multiple `COMM` or `SSND` chunks appear, later values silently overwrite earl
 
 ## 3.2 IEEE 754 80-bit Float Parsing
 
-The `read_be_f80()` method converts the 10-byte AIFF sample rate field to `i32`:
+The `read_be_f80()` method converts the 10-byte AIFF sample rate field to `i32`.
 
-1. Read `se: u16` (BE) — sign+exponent
-2. Read `mantissa_hi: u32` (BE) — high 32 bits of mantissa
-3. Read `_mantissa_lo: u32` (BE) — low 32 bits (discarded)
+The 80-bit IEEE 754 extended precision format has an **explicit** integer bit (bit 63), unlike 64-bit double which has an implied leading 1. The significand is a 64-bit value including this explicit integer bit.
+
+**Algorithm (full 64-bit significand):**
+
+1. Read `se: u16` (BE) — sign (1 bit) + biased exponent (15 bits)
+2. Read `sig_hi: u32` (BE) — significand bits 63..32
+3. Read `sig_lo: u32` (BE) — significand bits 31..0
 4. `sign = (se >> 15) & 1`
-5. `exponent = se & 0x7FFF`
-6. `mantissa = (mantissa_hi >> 1) as i32` — shift right by 1 to fit in signed 31 bits
-7. `exponent -= 16383` — unbias (2^14 - 1)
-8. `shift = exponent - 31 + 1`
-9. If `shift > 0`: `mantissa = 0x7FFF_FFFF` (overflow clamp)
-10. If `shift < 0`: `mantissa >>= -shift` (arithmetic right shift)
-11. If `sign == 1`: `mantissa = -mantissa`
-12. Return `mantissa`
+5. `biased_exp = se & 0x7FFF`
+6. `significand: u64 = ((sig_hi as u64) << 32) | (sig_lo as u64)`
+7. If `biased_exp == 0 && significand == 0`: return `Ok(0)` — **zero**
+8. If `biased_exp == 0 && significand != 0`: return `Ok(0)` — **denormalized** (near-zero, caught by sample rate validation)
+9. If `biased_exp == 0x7FFF`: return `Err(InvalidData)` — **infinity/NaN**
+10. `shift = biased_exp as i32 - 16383 - 63`
+11. If `shift >= 0`: `abs_val = 0x7FFF_FFFF` (clamp — value exceeds i32 range for any nonzero significand with non-negative shift)
+12. If `shift < 0`: `abs_val = significand >> (-shift)` (truncation toward zero)
+13. `result = abs_val as i32`
+14. If `sign == 1`: `result = -result`
+15. Return `Ok(result)`
 
-The 80-bit IEEE 754 format has an explicit integer bit (bit 63 of the mantissa), unlike 64-bit double. The code handles this by not adding an implied `1` bit. Precision is truncated to 31 bits, which is sufficient for all valid sample rates (integer values 300–128000).
+> **Note:** The C reference (`aiffaud.c`) discards the low 32 bits of the significand and uses 31-bit precision. The Rust implementation uses the full 64-bit significand for mathematical correctness. Both produce identical results for all integer sample rates used in UQM (8000, 11025, 22050, 44100, 48000, 96000), since the low 32 bits are always zero for these values. The Rust version additionally handles zero, denormalized, infinity, and NaN inputs gracefully, whereas the C version produces undefined results for these edge cases.
 
 ## 3.3 PCM Decoding
 
@@ -577,14 +584,15 @@ When any validation fails during `open_from_bytes()`, the method calls `self.clo
 
 ### PCM Mode
 
-AIFF stores samples in big-endian format. `need_swap` is set to `!formats.want_big_endian` during `init()`. If `need_swap` is `true` and `bits_per_sample` is 16, the decoder swaps each pair of bytes in the output.
+AIFF stores samples in big-endian format. `need_swap` is set to `!formats.want_big_endian` during `init()`. The PCM decoder does **NOT** perform inline byte swapping — it copies raw big-endian bytes directly to the output buffer. The C framework's `SoundDecoder_Decode()` in `decoder.c` reads the base struct's `need_swap` field and performs byte swapping for 16-bit formats when needed. This matches the C AIFF decoder (`aifa_DecodePCM`) which also does not perform inline swapping.
 
 ### SDX2 Mode
 
 SDX2 decoding produces samples in machine byte order (the arithmetic operations naturally produce native-endian values). `need_swap` is recalculated during `open_from_bytes()` as:
 
 ```rust
-self.need_swap = cfg!(target_endian = "big") != self.formats.unwrap().want_big_endian;
+let fmts = self.formats.as_ref().ok_or(AiffError::NotInitialized)?;
+self.need_swap = fmts.big_endian != fmts.want_big_endian;  // runtime check, NOT cfg!()
 ```
 
 This matches the C logic: `big_endian != want_big_endian`.
@@ -654,19 +662,23 @@ All requirement IDs match the C specification from `c-decoder.md` 1:1. Requireme
 **When** the `SSND` chunk header has been read, **the AIFF decoder shall** advance the `Cursor` past the remaining chunk data by `chunk_size - 8` (`AIFF_SSND_SIZE`) bytes.
 
 ### FP-14 IEEE 754 80-bit Float Conversion
-**The AIFF decoder shall** implement `read_be_f80()` to convert the 10-byte big-endian IEEE 754 80-bit extended precision sample rate to an `i32` using the following algorithm:
+**The AIFF decoder shall** implement `read_be_f80()` to convert the 10-byte big-endian IEEE 754 80-bit extended precision sample rate to an `i32` using the full 64-bit significand algorithm:
 1. Read 2 bytes as big-endian `u16` for sign+exponent (`se`)
-2. Read 4 bytes as big-endian `u32` for mantissa high
-3. Read 4 bytes as big-endian `u32` for mantissa low (discarded)
+2. Read 4 bytes as big-endian `u32` for significand high (`sig_hi`)
+3. Read 4 bytes as big-endian `u32` for significand low (`sig_lo`)
 4. Extract sign: `(se >> 15) & 1`
-5. Extract exponent: `se & 0x7FFF`
-6. Shift mantissa right by 1: `mantissa = (mantissa_hi >> 1) as i32`
-7. Unbias exponent: `exponent -= 16383`
-8. Calculate shift: `shift = exponent - 31 + 1`
-9. If `shift > 0`: clamp `mantissa` to `0x7FFF_FFFF_i32`
-10. If `shift < 0`: arithmetic right-shift `mantissa` by `-shift`
-11. If `sign == 1`: negate `mantissa`
-12. Return the `i32` result
+5. Extract biased exponent: `biased_exp = se & 0x7FFF`
+6. Combine significand: `significand = ((sig_hi as u64) << 32) | (sig_lo as u64)`
+7. If `biased_exp == 0 && significand == 0`: return `Ok(0)` (zero)
+8. If `biased_exp == 0 && significand != 0`: return `Ok(0)` (denormalized — near-zero, caught by sample rate validation)
+9. If `biased_exp == 0x7FFF`: return `Err(InvalidData)` (infinity or NaN)
+10. Calculate shift: `shift = biased_exp as i32 - 16383 - 63`
+11. If `shift >= 0`: left-shift significand (clamp to `0x7FFF_FFFF` on overflow)
+12. If `shift < 0`: right-shift significand by `-shift` (truncation toward zero)
+13. Convert to `i32`; if `sign == 1`: negate
+14. Return `Ok(result)`
+
+> **Note:** The C reference discards `sig_lo` and uses 31-bit precision. The Rust version uses the full 64-bit significand for mathematical correctness and handles zero/denormalized/infinity/NaN edge cases. Results are identical for all integer sample rates used in UQM.
 
 ### FP-15 Zero-Initialize COMM Data
 **When** parsing a `COMM` chunk, **the AIFF decoder shall** start with a default-initialized `CommonChunk` struct (all fields zero) before populating parsed fields, ensuring `ext_type_id` defaults to `0` for plain AIFF files.
@@ -737,7 +749,9 @@ All requirement IDs match the C specification from `c-decoder.md` 1:1. Requireme
 **When** the compression type is `CompressionType::Sdx2`, **the AIFF decoder shall** verify that `channels as usize <= MAX_CHANNELS` (4) and return `Err(DecodeError::UnsupportedFormat(...))` if exceeded. Unlike the C implementation's debug-only `assert`, this is a runtime check in all build profiles.
 
 ### CH-7 SDX2 Endianness Override
-**When** the compression type is `CompressionType::Sdx2`, **the AIFF decoder shall** override `self.need_swap` to `cfg!(target_endian = "big") != self.formats.unwrap().want_big_endian`, because SDX2 decoding produces samples in machine byte order rather than big-endian.
+**When** the compression type is `CompressionType::Sdx2`, **the AIFF decoder shall** override `self.need_swap` to `self.formats.as_ref().unwrap().big_endian != self.formats.as_ref().unwrap().want_big_endian`, because SDX2 decoding produces samples in the output byte order indicated by `formats.big_endian` rather than the AIFF file's big-endian storage order.
+
+> **Note:** This uses the runtime `formats.big_endian` field (from `TFB_DecoderFormats`), NOT the compile-time `cfg!(target_endian = "big")`. The `big_endian` field reflects the audio backend's output byte order, which may differ from the CPU's native endianness (e.g., `big_endian` is hardcoded to `false` in the current SDL audio backend). Using the runtime field matches the C reference exactly: `This->need_swap = (aifa_formats->big_endian != aifa_formats->want_big_endian)`.
 
 ## Decoding — PCM
 
@@ -772,9 +786,9 @@ All requirement IDs match the C specification from `c-decoder.md` 1:1. Requireme
 
 ### DS-4 SDX2 Decode Algorithm
 **For each** compressed byte, **for each** channel `ch` in `0..channels`, **the AIFF decoder shall** apply:
-1. Cast the byte to `i8`, then to `i32` as `sample`
+1. Read the byte as `sample_byte: i8`, then widen to `sample: i32`
 2. Compute `v = (sample * sample.abs()) << 1`
-3. If `(sample as u8) & 1 != 0`: `v += self.prev_val[ch]` (delta mode)
+3. If `(sample_byte as u8) & 1 != 0`: `v += self.prev_val[ch]` (delta mode — check the original byte, not the widened i32)
 4. Clamp: `v = v.clamp(-32768, 32767)`
 5. Store: `self.prev_val[ch] = v`
 6. Write `v as i16` to the output buffer in the appropriate byte order (native, with byte swap if `need_swap`)
@@ -816,6 +830,8 @@ All requirement IDs match the C specification from `c-decoder.md` 1:1. Requireme
 - `-1`: unknown error
 - `-2`: malformed AIFF file (bad file)
 - `-3`: bad argument
+
+> **Note:** The C EH-2 spec also defines positive values for system `errno` on I/O failures. These are NOT applicable in the pure Rust decoder, which operates on in-memory byte slices (`&[u8]`) with no system file I/O. Positive errno mapping is only relevant in the FFI layer's `read_uio_file()` (which uses C I/O) and is not propagated through `last_error`.
 
 ### EH-3 Open Failure Cleanup
 **When** any validation or parsing fails during `open_from_bytes()`, **the AIFF decoder shall** call `self.close()` to release any partially-set state before returning `Err(...)`.
@@ -890,7 +906,9 @@ static RUST_AIFA_FORMATS: Mutex<Option<DecoderFormats>> = Mutex::new(None);
 Set during `rust_aifa_InitModule()`, cleared during `rust_aifa_TermModule()`.
 
 ### FF-4 Init Allocation
-**When** `rust_aifa_Init()` is called, **the AIFF FFI layer shall** allocate a `Box::new(AiffDecoder::new())`, call `init_module()` with the stored formats and `init()`, convert to a raw `*mut c_void` via `Box::into_raw()`, and store it in `(*rd).rust_decoder`. The function shall set `(*decoder).need_swap = false` and return `1`.
+**When** `rust_aifa_Init()` is called, **the AIFF FFI layer shall** allocate a `Box::new(AiffDecoder::new())`, then propagate formats from the global `RUST_AIFA_FORMATS` Mutex to the instance via `dec.init_module(0, &formats)` and call `dec.init()`, then convert to a raw `*mut c_void` via `Box::into_raw()` and store it in `(*rd).rust_decoder`. The function shall set `(*decoder).need_swap = false` and return `1`.
+
+> **Note:** Init MUST call `dec.init_module()` and `dec.init()` to propagate formats to the Rust decoder instance. This matches the established `wav_ffi.rs` Init pattern (lines 138-147). Without this, `open_from_bytes()` would panic on `self.formats.unwrap()` because `self.formats` would be `None`. The C framework calls `InitModule()` once globally (storing formats in the static Mutex), and `Init()` per instance — the per-instance Init must copy formats from the global Mutex to the decoder instance.
 
 ### FF-5 Term Deallocation
 **When** `rust_aifa_Term()` is called, **the AIFF FFI layer shall** reconstruct the `Box<AiffDecoder>` from `(*rd).rust_decoder` via `Box::from_raw()`, drop it, and set `(*rd).rust_decoder` to `ptr::null_mut()`.
@@ -1057,7 +1075,7 @@ pub mod aiff_ffi;
 | CH-4 | CH-4 | Log + return false | `Err(UnsupportedFormat)` |
 | CH-5 | CH-5 | Log + return false | `Err(UnsupportedFormat)` |
 | CH-6 | CH-6 | `assert(channels <= MAX_CHANNELS)` (debug) | Runtime `Err(UnsupportedFormat)` (all builds) |
-| CH-7 | CH-7 | `need_swap = big_endian != want_big_endian` | `cfg!(target_endian = "big") != want_big_endian` |
+| CH-7 | CH-7 | `need_swap = big_endian != want_big_endian` | `formats.big_endian != formats.want_big_endian` (runtime, matching C exactly) |
 | DP-1 | DP-1 | `bufsize / block_align` clamped | Same |
 | DP-2 | DP-2 | `uio_fread(buf, file_block, dec_pcm)` | `buf.copy_from_slice(data[pos..])` |
 | DP-3 | DP-3 | `cur_pcm += dec_pcm` | Same + `data_pos` advance |
@@ -1065,13 +1083,15 @@ pub mod aiff_ffi;
 | DP-5 | DP-5 | `*ptr += 128` per byte | `byte.wrapping_add(128)` per byte |
 | DP-6 | DP-6 | Return 0 | `Err(EndOfFile)` |
 | DS-1 | DS-1 | `bufsize / block_align` clamped | Same |
-| DS-2 | DS-2 | Read into tail of buf | Read from `self.data` (no in-place trick needed) |
-| DS-3 | DS-3 | `cur_pcm += dec_pcm` | Same + `data_pos` advance |
-| DS-4 → DS-5 | DS-4 | SDX2 algorithm | Same algorithm in Rust |
-| DS-6 | DS-5 | Channel interleaving | Same |
-| DS-7 | DS-6 | `return dec_pcm * block_align` | `Ok(dec_pcm * block_align)` |
-| DS-8 | DS-7 | `memset(prev_val, 0, ...)` at open | `prev_val = [0; MAX_CHANNELS]` |
-| — | DS-8 | (implicit in C: return 0) | `Err(EndOfFile)` |
+| DS-2 | DS-2 | Read into tail of buf | Read from `self.data` (no in-place trick needed) [¹] |
+| DS-3 | DS-3 | `cur_pcm += dec_pcm` | Same + `data_pos` advance [¹] |
+| DS-4 → DS-5 | DS-4 | SDX2 algorithm | Same algorithm in Rust [¹] |
+| DS-6 | DS-5 | Channel interleaving | Same [¹] |
+| DS-7 | DS-6 | `return dec_pcm * block_align` | `Ok(dec_pcm * block_align)` [¹] |
+| DS-8 | DS-7 | `memset(prev_val, 0, ...)` at open | `prev_val = [0; MAX_CHANNELS]` [¹] |
+| — | DS-8 | (implicit in C: return 0) | `Err(EndOfFile)` [¹] |
+
+> **[¹] DS Renumbering Note:** The C DS-2 (read compressed data into tail of output buffer) is an in-place streaming optimization dropped in the Rust version (which reads from `self.data` instead). The C DS-3 (file read step) is subsumed into Rust DS-2. As a result, Rust DS-3 through DS-8 are shifted by one relative to the C numbering: C's DS-4 (SDX2 algorithm) becomes Rust DS-4, C's DS-5 maps through DS-4→DS-5 in the table, etc. The Rust DS-8 (EOF) has no direct C counterpart — in C, EOF is implicitly handled by returning 0.
 | SK-1 | SK-1 | `if (pcm_pos > max_pcm) pcm_pos = max_pcm` | `pcm_pos.min(max_pcm)` |
 | SK-2 | SK-2 | `cur_pcm = pcm_pos` | Same + `data_pos` update |
 | SK-3 | SK-3 (removed) | `fseek(data_ofs + pcm_pos * file_block)` | `data_pos = pcm_pos * file_block` (no file seek) |
@@ -1163,17 +1183,17 @@ All 78 C EARS requirement IDs from `c-decoder.md` are accounted for in the Rust 
 - 12 vtable functions with null checks — matches (lines 82-340).
 - `Box::new()` in Init, `Box::from_raw()` in Term — matches (lines 131-156).
 
-**FF-4 concern:** The Rust spec FF-4 says Init should call `init_module()` with stored formats AND `init()` — this is NOT how `dukaud_ffi.rs` works. In `dukaud_ffi.rs`, `rust_duka_Init()` (line 131) just creates the `Box::new(DukAudDecoder::new())` and stores it. It does NOT call `init_module()` or `init()` on the Rust decoder. Similarly, in `wav_ffi.rs`, Init doesn't call `init_module()`. The C framework calls `InitModule()` once globally and `Init()` per-instance — these are separate operations. The spec's FF-4 conflates them, which could cause double-initialization bugs. **Recommendation:** FF-4 should just allocate the `Box<AiffDecoder>` and store it, set `need_swap`, and return 1 — matching the existing FFI pattern. The `init_module()` and `init()` calls should be triggered by the C framework through the vtable, not duplicated in the Rust FFI's `Init()`.
+**FF-4 (RESOLVED):** The Rust spec FF-4 now correctly specifies that Init calls `dec.init_module(0, &formats)` and `dec.init()` to propagate formats from the global Mutex to the decoder instance. This matches the established `wav_ffi.rs` Init pattern (lines 138-147) where `wav.init_module(0, formats)` and `wav.init()` are called. Without this, `open_from_bytes()` would panic on `self.formats.unwrap()` because `self.formats` would be `None`. Note: `dukaud_ffi.rs` does NOT call these — but `wav_ffi.rs` DOES, and the WAV pattern is the correct one for decoders that need formats during open.
 
 **Decode return value mapping:** The spec's FF-9 says `Err(_) → 0`. This matches the C behavior (AIFF decode never returns negative). However, `dukaud_ffi.rs` (line 286) returns `-1` for non-EOF errors. The AIFF spec is correct per the C reference (`aifa_DecodePCM` and `aifa_DecodeSDX2` never return negative), but this is an intentional difference from the DukAud FFI pattern worth noting during implementation.
 
-**`need_swap` initialization location:** The spec says `init()` sets `need_swap = !want_big_endian` (LF-5). In `wav.rs`, `need_swap` is set in `init_module()` (line 213), not `init()`. The C `aifa_Init()` sets it in `Init()`. The spec follows the C pattern here, which is correct for AIFF, but differs from the WAV Rust pattern. This is fine since the C behavior is the source of truth.
+**`need_swap` initialization location:** The spec says `init()` sets `need_swap = !want_big_endian` (LF-5). The FFI Init now calls both `init_module()` and `init()` (matching wav_ffi.rs), so `need_swap` is properly set during instance initialization. Additionally, `open_from_bytes()` unconditionally recalculates `need_swap` for both PCM and SDX2 modes, providing a safety net.
 
 #### Algorithm Correctness
 
 **SDX2 algorithm (DS-4):** The spec's formula `v = (sample * sample.abs()) << 1` correctly reproduces the C code's `v = (sample_byte * abs(sample_byte)) << 1`. The sign preservation via multiplication with absolute value, odd-bit delta mode, clamping, and per-channel predictor state all match.
 
-**IEEE 754 80-bit float (FP-14):** The 12-step algorithm matches the C `read_be_f80()` implementation exactly, including the explicit integer bit handling (no implicit leading 1) and the 31-bit precision truncation.
+**IEEE 754 80-bit float (FP-14):** The algorithm uses the full 64-bit significand (unlike the C version which truncates to 31 bits). This is mathematically more precise and handles zero/denormalized/infinity/NaN edge cases. Results are identical to C for all integer sample rates (the low 32 bits are zero for integer values).
 
 **8-bit signed→unsigned (DP-5):** `wrapping_add(128)` correctly reproduces the C `*ptr += 128` for converting AIFF's signed 8-bit to unsigned 8-bit.
 
@@ -1205,13 +1225,13 @@ All 78 C EARS requirement IDs from `c-decoder.md` are accounted for in the Rust 
 
 ### 4. Actionable Findings
 
-1. **Fix FF-4** (Medium): Remove the `init_module()` and `init()` calls from the `rust_aifa_Init()` description. The FFI Init should only allocate the `Box<AiffDecoder>`, store it, and set base fields — matching `dukaud_ffi.rs` and `wav_ffi.rs`. The C framework calls InitModule and Init via the vtable separately.
+1. **~~Fix FF-4~~ (RESOLVED)**: FF-4 updated — Init now calls `dec.init_module(0, &formats)` and `dec.init()` to propagate formats from the global Mutex to the decoder instance, matching the `wav_ffi.rs` pattern. This ensures `self.formats` is `Some(...)` when `open_from_bytes()` accesses it.
 
-2. **Clarify EH-2** (Low): Add a note that positive errno values from C EH-2 are not applicable since the pure Rust decoder has no system-level file I/O. The `last_error` field only uses values 0, -1, -2, -3.
+2. **~~Clarify EH-2~~ (RESOLVED)**: EH-2 updated with note about positive errno values not applicable in pure Rust.
 
-3. **Fix C spec FF-7** (Low, C spec issue): The C spec's FF-7 is truncated mid-sentence. The Rust spec's FF-7 has the complete version and is correct.
+3. **Fix C spec FF-7** (Low, C spec issue): The C spec's FF-7 is truncated mid-sentence. The Rust spec's FF-7 has the complete version and is correct. (No action needed in Rust spec.)
 
-4. **Traceability matrix DS row numbering** (Low): The DS-2/DS-3/DS-4/DS-5 renumbering in the traceability matrix is confusing. Consider adding a note explaining that the C's DS-2 (in-place buffer trick) is intentionally dropped and the subsequent IDs shift.
+4. **~~Traceability matrix DS row numbering~~ (RESOLVED)**: Footnote added to Appendix A explaining the DS renumbering.
 
-**Overall verdict:** The Rust spec is thorough, technically sound, and sufficient to fully replace `aiffaud.c`. The one medium-priority issue (FF-4 double-initialization) should be fixed before implementation to avoid bugs. All other findings are low-severity clarifications.
+**Overall verdict:** The Rust spec is thorough, technically sound, and sufficient to fully replace `aiffaud.c`. All findings have been addressed.
 

@@ -62,7 +62,7 @@ Why it matters:
      2. Convert filename to Rust string via CStr
      3. Log open attempt
      4. Get rust decoder from wrapper struct
-     5. Do NOT call init_module()/init() — those are separate vtable calls made by the C framework (matching dukaud_ffi.rs pattern)
+     5. Note: init_module()/init() are called in rust_aifa_Init(), not in Open (matching wav_ffi.rs pattern)
      6. Call read_uio_file(dir, filename) for AIFF data
      7. Call dec.open_from_bytes(&data, filename_str)
      8. On success: update base struct fields (frequency, format via format mapping, length, is_null, need_swap)
@@ -76,8 +76,8 @@ Why it matters:
   - Verify all other functions already implemented from Phase 15
 
 ### Pseudocode traceability
-- `rust_aifa_Open`: pseudocode lines 76–128
-- `rust_aifa_Decode`: pseudocode lines 137–150
+- `rust_aifa_Open`: pseudocode lines 79–134
+- `rust_aifa_Decode`: pseudocode lines 143–156
 
 ## Verification Commands
 
@@ -100,7 +100,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] All FFI tests pass
 
 ## Semantic Verification Checklist (Mandatory)
-- [ ] Open: does NOT call init_module()/init() — those are separate vtable calls from C framework (REQ-FF-4 pattern match with dukaud_ffi.rs)
+- [ ] Open: does NOT call init_module()/init() — those are called in rust_aifa_Init() (REQ-FF-4, matching wav_ffi.rs pattern). Formats are already propagated to the decoder instance before Open is called.
 - [ ] Open: format mapping uses locked RUST_AIFA_FORMATS to convert AudioFormat → C format code
 - [ ] Open: base struct fields updated (frequency, format, length, is_null=false, need_swap)
 - [ ] Open: failure returns 0 and logs error

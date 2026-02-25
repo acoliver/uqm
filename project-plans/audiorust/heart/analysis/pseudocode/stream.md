@@ -77,10 +77,11 @@ Error handling: Propagates mixer_gen_buffers failure
 60: FUNCTION destroy_sound_sample(sample) -> AudioResult<()>
 61:   CALL mixer_delete_buffers(&sample.buffers)
 62:   CLEAR sample.buffers
-63:   CLEAR sample.buffer_tags
-64:   SET sample.callbacks = None
-65:   // Note: decoder NOT dropped here (owned by caller or chunk)
-66:   RETURN Ok(())
+63:   SET sample.num_buffers = 0
+64:   CLEAR sample.buffer_tags
+65:   SET sample.callbacks = None
+66:   // Note: decoder NOT dropped here (owned by caller or chunk)
+67:   RETURN Ok(())
 ```
 
 Validation: REQ-STREAM-SAMPLE-02
@@ -90,18 +91,21 @@ Side effects: Frees mixer buffer handles
 
 ```
 70: FUNCTION play_stream(sample_arc, source_index, looping, scope, rewind) -> AudioResult<()>
-71:   VALIDATE source_index < NUM_SOUNDSOURCES
+71:   VALIDATE source_index < NUM_SOUNDSOURCES ELSE RETURN Err(AudioError::InvalidSource(source_index))
 72:   CALL stop_stream(source_index)?    // REQ-STREAM-PLAY-01
 73:
-74:   LET source = SOURCES.sources[source_index].lock()
-75:   LET mut sample = sample_arc.lock()
-76:
-77:   // REQ-STREAM-PLAY-03: callback abort check
-78:   IF let Some(callbacks) = &mut sample.callbacks THEN
-79:     IF NOT callbacks.on_start_stream(&mut sample) THEN
-80:       RETURN Err(AudioError::EndOfStream)
-81:     END IF
-82:   END IF
+74:   // REQ-STREAM-PLAY-03: callback abort check (BEFORE acquiring locks to avoid ordering violation)
+75:   // Callbacks may acquire TRACK_STATE which is higher in lock hierarchy than Source/Sample.
+76:   LET mut sample_pre = sample_arc.lock()
+77:   IF let Some(callbacks) = &mut sample_pre.callbacks THEN
+78:     IF NOT callbacks.on_start_stream(&mut sample_pre) THEN
+79:       RETURN Err(AudioError::EndOfStream)
+80:     END IF
+81:   END IF
+82:   DROP sample_pre   // release before acquiring Source lock
+83:
+84:   LET source = SOURCES.sources[source_index].lock()
+85:   LET mut sample = sample_arc.lock()
 83:
 84:   // REQ-STREAM-PLAY-04: clear tags
 85:   FOR tag IN sample.buffer_tags.iter_mut() DO
@@ -179,10 +183,11 @@ Side effects: Modifies source state, starts mixer playback
 
 ```
 160: FUNCTION stop_stream(source_index) -> AudioResult<()>
-161:   VALIDATE source_index < NUM_SOUNDSOURCES
+161:   VALIDATE source_index < NUM_SOUNDSOURCES ELSE RETURN Err(AudioError::InvalidSource(source_index))
 162:   LET source = SOURCES.sources[source_index].lock()
-163:   CALL stop_source(source_index)?
-164:   SET source.stream_should_be_playing = false
+163:   // Inline stop_source logic to avoid self-deadlock (source lock already held)
+164:   CALL mixer_source_stop(source.handle)
+165:   SET source.stream_should_be_playing = false
 165:   SET source.sample = None
 166:   SET source.sbuffer = None
 167:   SET source.sbuf_size = 0
@@ -228,20 +233,35 @@ Validation: REQ-STREAM-PLAY-16..17
 
 ## 9. seek_stream
 
+**LOCK SAFETY (FIX: ISSUE-ALG-02)**: `play_stream` acquires the Source lock internally.
+We must NOT hold the Source lock when calling it (parking_lot::Mutex is not reentrant).
+Extract necessary state while holding the lock, drop both locks, then call `play_stream`.
+
 ```
 200: FUNCTION seek_stream(source_index, pos_ms) -> AudioResult<()>
-201:   LET source = SOURCES.sources[source_index].lock()
-202:   IF source.sample.is_none() THEN
-203:     RETURN Err(AudioError::InvalidSample)   // REQ-STREAM-PLAY-19
-204:   END IF
-205:   CALL mixer_source_stop(source.handle)
-206:   LET sample = source.sample.as_ref().unwrap().lock()
-207:   LET decoder = sample.decoder.as_mut().ok_or(AudioError::InvalidDecoder)?
-208:   LET pcm_pos = pos_ms * decoder.frequency() / 1000
-209:   CALL decoder.seek(pcm_pos)?
-210:   DROP source lock
-211:   CALL play_stream(sample_arc, source_index, sample.looping, scope_was_active, false)
-212:   RETURN Ok(())
+201:   // Phase 1: Extract state under locks
+202:   LET source = SOURCES.sources[source_index].lock()
+203:   IF source.sample.is_none() THEN
+204:     RETURN Err(AudioError::InvalidSample)   // REQ-STREAM-PLAY-19
+205:   END IF
+206:   LET sample_arc = Arc::clone(source.sample.as_ref().unwrap())
+207:   LET mixer_handle = source.handle
+208:   LET scope_was_active = source.sbuffer.is_some()
+209:   CALL mixer_source_stop(mixer_handle)
+210:
+211:   LET sample = sample_arc.lock()
+212:   LET decoder = sample.decoder.as_mut().ok_or(AudioError::InvalidDecoder)?
+213:   LET pcm_pos = pos_ms * decoder.frequency() / 1000
+214:   CALL decoder.seek(pcm_pos)?
+215:   LET looping = sample.looping
+216:
+217:   // Phase 2: Drop both locks before calling play_stream
+218:   DROP sample lock
+219:   DROP source lock
+220:
+221:   // Phase 3: Restart — play_stream acquires Source+Sample locks internally
+222:   CALL play_stream(sample_arc, source_index, looping, scope_was_active, false)
+223:   RETURN Ok(())
 ```
 
 Validation: REQ-STREAM-PLAY-18..19
@@ -282,107 +302,196 @@ Threading: Runs on decoder thread only
 
 ## 11. process_source_stream (per-source processing)
 
+**LOCK SAFETY**: This function is called with Source mutex and Sample mutex held.
+Callbacks (`on_end_stream`, `on_end_chunk`, `on_tagged_buffer`, `on_queue_buffer`)
+may need to acquire `TRACK_STATE` (e.g., `TrackCallbacks`). To respect the lock
+ordering (`TRACK_STATE → Source → Sample → FadeState`), callbacks MUST NOT be
+invoked while Source or Sample locks are held.
+
+**Solution**: Collect deferred callback actions into a `Vec<DeferredCallback>` enum
+during processing, then release both locks, then execute deferred callbacks outside
+the locks.
+
 ```
-260: FUNCTION process_source_stream(source, sample)
-261:   LET processed = mixer_get_source_i(source.handle, SourceProp::BuffersProcessed)
-262:   LET queued = mixer_get_source_i(source.handle, SourceProp::BuffersQueued)
-263:
-264:   // REQ-STREAM-PROCESS-02..03: end detection / underrun
-265:   IF processed == 0 THEN
-266:     LET state = mixer_get_source_i(source.handle, SourceProp::SourceState)
-267:     IF state != SourceState::Playing THEN
-268:       IF queued == 0 AND decoder_at_eof(sample) THEN
-269:         SET source.stream_should_be_playing = false
-270:         IF let Some(cb) = &mut sample.callbacks THEN
-271:           cb.on_end_stream(&mut sample)   // REQ-STREAM-PROCESS-02
-272:         END IF
-273:         RETURN
-274:       ELSE IF queued > 0 THEN
-275:         LOG warn "buffer underrun"   // REQ-STREAM-PROCESS-03
-276:         CALL mixer_source_play(source.handle)
-277:       END IF
-278:     END IF
-279:     RETURN
-280:   END IF
-281:
-282:   // REQ-STREAM-PROCESS-04..16: process each completed buffer
-283:   LET end_chunk_failed = false
-284:   FOR _ IN 0..processed DO
-285:     LET unqueued = mixer_source_unqueue_buffers(source.handle, 1)
-286:     IF unqueued.is_err() THEN    // REQ-STREAM-PROCESS-05
-287:       LOG error "unqueue failed"
-288:       BREAK
-289:     END IF
-290:     LET buf_handle = unqueued[0]
-291:
-292:     // REQ-STREAM-PROCESS-06: tagged buffer callback
-293:     IF let Some(cb) = &mut sample.callbacks THEN
-294:       IF let Some(tag) = find_tagged_buffer(sample, buf_handle) THEN
-295:         cb.on_tagged_buffer(&mut sample, tag)
-296:       END IF
-297:     END IF
-298:
-299:     // REQ-STREAM-PROCESS-07: scope remove
-300:     IF source.sbuffer.is_some() THEN
-301:       CALL remove_scope_data(source, buf_handle)
-302:     END IF
-303:
-304:     // Decode new audio for this buffer
-305:     LET decoder = sample.decoder.as_mut()
-306:     IF decoder.is_none() OR end_chunk_failed THEN CONTINUE END IF
-307:
-308:     LET mut buf = vec![0u8; buffer_size]
-309:     LET result = decoder.decode(&mut buf)
-310:     MATCH result:
-311:       Ok(0) => CONTINUE    // REQ-STREAM-PROCESS-13
-312:       Ok(n) => {
-313:         CALL mixer_buffer_data(buf_handle, ...)   // REQ-STREAM-PROCESS-14
-314:         CALL mixer_source_queue_buffers(source.handle, &[buf_handle])
-315:         SET source.last_q_buf = buf_handle   // REQ-STREAM-PROCESS-15
-316:         IF let Some(cb) = &mut sample.callbacks THEN
-317:           cb.on_queue_buffer(&mut sample, buf_handle)
-318:         END IF
-319:         IF source.sbuffer.is_some() THEN
-320:           CALL add_scope_data(source, &buf[..n])   // REQ-STREAM-PROCESS-16
-321:         END IF
-322:       }
-323:       Err(DecodeError::EndOfFile) => {   // REQ-STREAM-PROCESS-08..09
-324:         IF let Some(cb) = &mut sample.callbacks THEN
-325:           IF cb.on_end_chunk(&mut sample, buf_handle) THEN
-326:             // decoder replaced, continue with new decoder
-327:           ELSE
-328:             SET end_chunk_failed = true
-329:           END IF
-330:         ELSE
-331:           SET end_chunk_failed = true
-332:         END IF
-333:       }
-334:       Err(DecodeError::DecoderError(_)) => {   // REQ-STREAM-PROCESS-12
-335:         LOG error "decode error"
-336:         SET source.stream_should_be_playing = false
-337:         BREAK
-338:       }
-339:       Err(_) => CONTINUE    // REQ-STREAM-PROCESS-10
-340:     END MATCH
-341:   END FOR
+259: ENUM DeferredCallback {
+260:   EndStream,
+261:   EndChunk { buf_handle: u32, decoder_replaced: bool },
+262:   TaggedBuffer { tag: SoundTag },
+263:   QueueBuffer { buf_handle: u32 },
+264: }
+
+266: FUNCTION process_source_stream(source, sample)
+267:   // --- Phase 1: Process under locks, collect deferred callbacks ---
+268:   LET mut deferred: Vec<DeferredCallback> = Vec::new()
+269:   LET processed = mixer_get_source_i(source.handle, SourceProp::BuffersProcessed)
+270:   LET queued = mixer_get_source_i(source.handle, SourceProp::BuffersQueued)
+
+272:   // REQ-STREAM-PROCESS-02..03: end detection / underrun
+273:   // Note: when processed == 0 and state == Playing, this is a no-op
+274:   // (mixer is still consuming queued buffers; decoder will check again next iteration)
+275:   IF processed == 0 THEN
+276:     LET state = mixer_get_source_i(source.handle, SourceProp::SourceState)
+277:     IF state != SourceState::Playing THEN
+278:       IF queued == 0 AND decoder_at_eof(sample) THEN
+279:         SET source.stream_should_be_playing = false
+280:         deferred.push(DeferredCallback::EndStream)   // REQ-STREAM-PROCESS-02
+281:         // --- Drop locks, then execute deferred callbacks ---
+282:         DROP sample lock
+283:         DROP source lock
+284:         CALL execute_deferred_callbacks(deferred, sample_arc_clone, source_idx)
+285:         RETURN
+286:       ELSE IF queued > 0 THEN
+287:         LOG warn "buffer underrun"   // REQ-STREAM-PROCESS-03
+288:         CALL mixer_source_play(source.handle)
+289:       END IF
+290:     END IF
+291:     RETURN
+292:   END IF
+
+294:   // REQ-STREAM-PROCESS-04..16: process each completed buffer
+295:   LET end_chunk_failed = false
+296:   FOR _ IN 0..processed DO
+297:     LET unqueued = mixer_source_unqueue_buffers(source.handle, 1)
+298:     IF unqueued.is_err() THEN    // REQ-STREAM-PROCESS-05
+299:       LOG error "unqueue failed"
+300:       BREAK
+301:     END IF
+302:     LET buf_handle = unqueued[0]
+
+304:     // REQ-STREAM-PROCESS-06: tagged buffer callback (deferred)
+305:     IF let Some(tag) = find_tagged_buffer(sample, buf_handle) THEN
+306:       deferred.push(DeferredCallback::TaggedBuffer { tag: tag.clone() })
+307:     END IF
+
+309:     // REQ-STREAM-PROCESS-07: scope remove
+310:     IF source.sbuffer.is_some() THEN
+311:       CALL remove_scope_data(source, buf_handle)
+312:     END IF
+
+314:     // Decode new audio for this buffer
+315:     LET decoder = sample.decoder.as_mut()
+316:     IF decoder.is_none() OR end_chunk_failed THEN CONTINUE END IF
+
+318:     LET mut buf = vec![0u8; buffer_size]
+319:     LET result = decoder.decode(&mut buf)
+320:     MATCH result:
+321:       Ok(0) => CONTINUE    // REQ-STREAM-PROCESS-13
+322:       Ok(n) => {
+323:         CALL mixer_buffer_data(buf_handle, ...)   // REQ-STREAM-PROCESS-14
+324:         CALL mixer_source_queue_buffers(source.handle, &[buf_handle])
+325:         SET source.last_q_buf = buf_handle   // REQ-STREAM-PROCESS-15
+326:         deferred.push(DeferredCallback::QueueBuffer { buf_handle })
+327:         IF source.sbuffer.is_some() THEN
+328:           CALL add_scope_data(source, &buf[..n])   // REQ-STREAM-PROCESS-16
+329:         END IF
+330:       }
+331:       Err(DecodeError::EndOfFile) => {   // REQ-STREAM-PROCESS-08..09
+332:         deferred.push(DeferredCallback::EndChunk { buf_handle, decoder_replaced: false })
+333:         SET end_chunk_failed = true   // tentatively; callback may replace decoder
+334:       }
+335:       Err(DecodeError::DecoderError(_)) => {   // REQ-STREAM-PROCESS-12
+336:         LOG error "decode error"
+337:         SET source.stream_should_be_playing = false
+338:         BREAK
+339:       }
+340:       Err(_) => CONTINUE    // REQ-STREAM-PROCESS-10
+341:     END MATCH
+342:   END FOR
+
+344:   // --- Phase 2: Drop locks, then execute deferred callbacks ---
+345:   LET sample_arc_clone = source.sample.as_ref().map(Arc::clone)
+346:   DROP sample lock
+347:   DROP source lock
+348:   CALL execute_deferred_callbacks(deferred, sample_arc_clone, source_idx)
+
+350: FUNCTION execute_deferred_callbacks(deferred, sample_arc_opt, source_index)
+351:   // Called with NO locks held — safe to acquire TRACK_STATE
+352:   //
+353:   // FIX ISSUE-ALG-01 (TOCTOU): Between dropping locks and arriving here,
+354:   // another thread may have called stop_stream(), setting source.sample = None.
+355:   // The sample_arc clone keeps the SoundSample alive (Arc refcount > 0), but
+356:   // the source no longer references it. Before executing callbacks, verify
+357:   // the source still points to this sample. If not, skip callbacks — the
+358:   // stream was stopped and callbacks are stale.
+359:   IF sample_arc_opt.is_none() THEN RETURN END IF
+360:   LET sample_arc = sample_arc_opt.unwrap()
+361:
+362:   // Validity check: re-lock source briefly to verify sample pointer match
+363:   {
+364:     LET source = SOURCES.sources[source_index].lock()
+365:     IF source.sample.is_none()
+366:        OR NOT Arc::ptr_eq(source.sample.as_ref().unwrap(), &sample_arc) THEN
+367:       LOG debug "deferred callbacks skipped: source sample changed (stop_stream race)"
+368:       RETURN   // stream was stopped — skip all deferred callbacks
+369:     END IF
+370:     // source lock dropped here
+371:   }
+372:
+373:   FOR action IN deferred DO
+355:     MATCH action:
+356:       DeferredCallback::EndStream => {
+357:         LET mut sample = sample_arc.lock()
+358:         IF let Some(cb) = &mut sample.callbacks THEN
+359:           cb.on_end_stream(&mut sample)
+360:         END IF
+361:       }
+362:       DeferredCallback::EndChunk { buf_handle, .. } => {
+363:         LET mut sample = sample_arc.lock()
+364:         IF let Some(cb) = &mut sample.callbacks THEN
+365:           IF cb.on_end_chunk(&mut sample, buf_handle) THEN
+366:             // decoder replaced by callback — subsequent decode calls
+367:             // will pick up the new decoder on next iteration
+368:           END IF
+369:         END IF
+370:       }
+371:       DeferredCallback::TaggedBuffer { tag } => {
+372:         LET mut sample = sample_arc.lock()
+373:         IF let Some(cb) = &mut sample.callbacks THEN
+374:           cb.on_tagged_buffer(&mut sample, &tag)
+375:         END IF
+376:       }
+377:       DeferredCallback::QueueBuffer { buf_handle } => {
+378:         LET mut sample = sample_arc.lock()
+379:         IF let Some(cb) = &mut sample.callbacks THEN
+380:           cb.on_queue_buffer(&mut sample, buf_handle)
+381:         END IF
+382:       }
+383:     END MATCH
+384:   END FOR
 ```
 
 Validation: REQ-STREAM-PROCESS-01..16
+Lock safety: Callbacks are invoked in `execute_deferred_callbacks` with NO locks
+held, allowing them to safely acquire TRACK_STATE (respecting lock ordering:
+TRACK_STATE → Source → Sample → FadeState).
 
 ## 12. process_music_fade
 
 ```
 360: FUNCTION process_music_fade()
-361:   LET fade = ENGINE.fade.lock()
-362:   IF fade.interval == 0 THEN    // REQ-STREAM-FADE-05
-363:     RETURN
-364:   END IF
-365:   LET elapsed = (get_time_counter() - fade.start_time).min(fade.interval)
-366:   LET volume = fade.start_volume + fade.delta * elapsed as i32 / fade.interval as i32
-367:   CALL set_music_volume(volume)    // REQ-STREAM-FADE-03
-368:   IF elapsed >= fade.interval THEN
-369:     SET fade.interval = 0   // REQ-STREAM-FADE-04
-370:   END IF
+361:   // LOCK SAFETY: Read fade state, drop lock, then call set_music_volume
+362:   // (set_music_volume acquires MUSIC_STATE + Source, which are higher in hierarchy than FadeState)
+363:   LET (volume, done) = {
+364:     LET fade = ENGINE.fade.lock()
+365:     IF fade.interval == 0 THEN    // REQ-STREAM-FADE-05
+366:       RETURN
+367:     END IF
+368:     LET elapsed = (get_time_counter() - fade.start_time).min(fade.interval)
+369:     // NOTE: Integer division produces non-linear stepping — the volume
+370:     // won't change until elapsed >= interval/delta (first ~6ms of a
+371:     // typical fade). This matches the C implementation's behavior and
+372:     // is intentional for compatibility. No overflow risk for realistic
+373:     // parameters (delta * elapsed stays well within i32 range).
+374:     LET vol = fade.start_volume + fade.delta * elapsed as i32 / fade.interval as i32
+375:     LET is_done = elapsed >= fade.interval
+376:     (vol, is_done)
+377:     // fade lock dropped here
+378:   }
+379:   CALL set_music_volume(volume)    // REQ-STREAM-FADE-03
+380:   IF done THEN
+381:     LET fade = ENGINE.fade.lock()
+382:     SET fade.interval = 0   // REQ-STREAM-FADE-04
+383:   END IF
 ```
 
 Validation: REQ-STREAM-FADE-03..05
@@ -475,15 +584,16 @@ Validation: REQ-STREAM-SCOPE-01..11
 ## 15. read_sound_sample (helper)
 
 ```
-470: FUNCTION read_sound_sample(buffer, pos, format) -> i16
-471:   IF format is 8-bit THEN
-472:     LET val = buffer[pos as usize] as i16
-473:     RETURN (val - 128) << 8    // REQ-STREAM-SCOPE-08
-474:   ELSE
-475:     LET lo = buffer[pos as usize] as i16
-476:     LET hi = buffer[(pos + 1) as usize] as i16
-477:     RETURN lo | (hi << 8)
-478:   END IF
+470: FUNCTION read_sound_sample(buffer, pos, size, format) -> i16
+471:   // size = ring buffer length; wrap reads at boundary to avoid panic
+472:   IF format is 8-bit THEN
+473:     LET val = buffer[pos as usize] as i16
+474:     RETURN (val - 128) << 8    // REQ-STREAM-SCOPE-08
+475:   ELSE
+476:     LET lo = buffer[pos as usize] as i16
+477:     LET hi = buffer[((pos + 1) % size) as usize] as i16   // wrap at ring boundary
+478:     RETURN lo | (hi << 8)
+479:   END IF
 ```
 
 Validation: REQ-STREAM-SCOPE-08
@@ -510,10 +620,17 @@ Validation: REQ-STREAM-SCOPE-08
 506:   END FOR
 507:   RETURN false
 508:
-509: FUNCTION clear_buffer_tag(tag) {
-510:   // The Option<SoundTag> containing this tag is set to None
-511:   // REQ-STREAM-TAG-03
-512: }
+509: FUNCTION clear_buffer_tag(sample, tag_ptr)
+510:   // Find the buffer_tags slot whose SoundTag matches tag_ptr by pointer
+511:   // comparison, then set that slot to None.  REQ-STREAM-TAG-03
+512:   FOR tag_slot IN sample.buffer_tags.iter_mut() DO
+513:     IF let Some(tag) = tag_slot THEN
+514:       IF std::ptr::eq(tag, tag_ptr) THEN
+515:         SET *tag_slot = None
+516:         RETURN
+517:       END IF
+518:     END IF
+519:   END FOR
 ```
 
 Validation: REQ-STREAM-TAG-01..03
@@ -538,3 +655,69 @@ Validation: REQ-STREAM-TAG-01..03
 ```
 
 Validation: REQ-STREAM-SCOPE-01..02
+
+## 18. decode_all (SoundDecoder default method)
+
+```
+540: FUNCTION decode_all(decoder) -> AudioResult<Vec<u8>>
+541:   // Buffer growth strategy: pre-allocate if length is known,
+542:   // otherwise use doubling strategy starting at 64KB.
+543:   // This avoids O(n^2) reallocation for large files.
+544:
+545:   LET known_length = decoder.length()   // seconds (0.0 if unknown)
+546:   LET freq = decoder.frequency()
+547:   LET bps = decoder.format().bytes_per_sample()
+548:   LET channels = decoder.format().channels()
+549:
+550:   // Step 1: Estimate total size and pre-allocate
+551:   LET initial_capacity = IF known_length > 0.0 THEN
+552:     // Known length: pre-allocate exact expected size + 10% headroom
+553:     LET estimated_bytes = (known_length * freq as f64 * bps as f64 * channels as f64) as usize
+554:     estimated_bytes + estimated_bytes / 10
+555:   ELSE
+556:     // Unknown length: start at 64KB
+557:     65536
+558:   END IF
+559:
+560:   LET mut result = Vec::with_capacity(initial_capacity)
+561:   LET mut decode_buf = vec![0u8; 4096]   // fixed-size decode scratch buffer
+562:
+563:   // Step 2: Decode loop with doubling growth
+564:   LOOP
+565:     LET n = decoder.decode(&mut decode_buf)
+566:     MATCH n:
+567:       Ok(0) => BREAK                        // EOF: zero bytes decoded
+568:       Ok(bytes_read) => {
+569:         // Append decoded bytes to result
+570:         // Vec::extend_from_slice handles growth internally;
+571:         // because we pre-allocated, this rarely reallocates.
+572:         result.extend_from_slice(&decode_buf[..bytes_read])
+573:       }
+574:       Err(DecodeError::EndOfFile) => BREAK   // explicit EOF signal
+575:       Err(DecodeError::DecoderError(e)) => {
+576:         LOG error "decode_all: decoder error: {}", e
+577:         RETURN Err(AudioError::DecoderError(e.to_string()))
+578:       }
+579:       Err(DecodeError::NotInitialized) => RETURN Err(AudioError::NotInitialized)   // permanent
+580:       Err(DecodeError::InvalidData(_)) => RETURN Err(AudioError::InvalidData)     // permanent
+581:       Err(DecodeError::UnsupportedFormat) => RETURN Err(AudioError::Unsupported)  // permanent
+582:       Err(DecodeError::NotFound) => RETURN Err(AudioError::NotFound)              // permanent
+583:       Err(e) => {                              // IoError, SeekFailed: retry up to 3 times
+584:         SET retry_count += 1
+585:         IF retry_count > 3 THEN RETURN Err(AudioError::DecoderError(e.to_string())) END IF
+586:         CONTINUE
+587:       }
+580:     END MATCH
+581:   END LOOP
+582:
+583:   // Step 3: Shrink to fit (release unused capacity)
+584:   result.shrink_to_fit()
+585:   RETURN Ok(result)
+```
+
+Validation: REQ-SFX-LOAD-03 (called from get_sound_bank_data)
+Buffer strategy:
+- **Known length**: Pre-allocate `length * freq * bytes_per_sample * channels + 10%` — single allocation for most files.
+- **Unknown length**: Start at 64KB. `Vec::extend_from_slice` uses the standard Rust doubling strategy internally (amortized O(1) per byte), so total reallocation cost is O(n log n) worst case, not O(n^2).
+- **Scratch buffer**: Fixed 4KB decode buffer avoids per-iteration allocation.
+- **Shrink**: `shrink_to_fit()` releases over-allocation after decoding completes.

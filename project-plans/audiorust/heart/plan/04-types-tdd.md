@@ -98,7 +98,7 @@ grep -n "TODO\|FIXME\|HACK\|placeholder" rust/src/sound/types.rs | grep -v "todo
 
 ## Success Criteria
 - [ ] All 13+ tests written and compile
-- [ ] Tests should PASS once implementations are correct (GREEN phase is P05)
+- [ ] This is the RED phase: tests compile and run, but most will FAIL because the stub implementations use `todo!()`. Tests will turn GREEN in phase P05 (types implementation) when real behavior replaces the stubs.
 
 ## Failure Recovery
 - rollback: `git checkout -- rust/src/sound/types.rs`

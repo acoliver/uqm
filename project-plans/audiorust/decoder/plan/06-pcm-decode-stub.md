@@ -52,7 +52,7 @@ Why it matters:
   - Add `fn decode_sdx2(&mut self, buf: &mut [u8]) -> DecodeResult<usize>` — `todo!()` stub
 
 ### Pseudocode traceability
-- Dispatch: pseudocode lines 296–299
+- Dispatch: pseudocode lines 316–319
 - Stubs for: lines 226–249 (decode_pcm), lines 250–295 (decode_sdx2)
 
 ## Verification Commands

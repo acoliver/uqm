@@ -49,24 +49,31 @@ Why it matters:
 - `rust/src/sound/aiff.rs`
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P05`
   - Implement: `read_be_u16()`, `read_be_u32()`, `read_be_i16()` — pseudocode lines 20–31
-   - Implement: `read_be_f80()` — pseudocode lines 32–61, REQ-FP-14
-     - Must handle denormalized (exponent==0) → return 0
-     - Must handle infinity/NaN (exponent==0x7FFF) → return Err(InvalidData)
-     - Normal case: unbias exponent, shift mantissa, clamp overflow
+   - Implement: `read_be_f80()` — pseudocode lines 32–93, REQ-FP-14
+     - Read all 10 bytes: sign (1 bit), biased exponent (15 bits), significand (64 bits including explicit integer bit)
+     - Reconstruct full 64-bit significand: `((sig_hi as u64) << 32) | (sig_lo as u64)`
+     - Class 1 (exp=0, sig=0): return 0
+     - Class 2 (exp=0, sig!=0): denormalized → return 0 (documented: near-zero, rejected by rate validation)
+     - Class 3 (exp=0x7FFF): return Err(InvalidData) for infinity/NaN
+     - Class 4 (normal): `value = significand * 2^(biased_exp - 16383 - 63)`, truncate to i32
+       - Right shift for typical sample rates (shift < 0): `significand >> (-shift)`
+       - Left shift with overflow clamp to i32::MAX (shift >= 0)
+       - Apply sign
+     - **Must use full 64-bit significand** — do NOT discard low 32 bits
   - Implement: `read_chunk_header()` — pseudocode lines 48–51
   - Implement: `read_common_chunk()` — pseudocode lines 52–68, REQ-FP-8 through REQ-FP-11
   - Implement: `read_sound_data_header()` — pseudocode lines 69–72, REQ-FP-12
-  - Implement: `open_from_bytes()` — pseudocode lines 73–224, all FP/SV/CH requirements
+  - Implement: `open_from_bytes()` — pseudocode lines 73–238, all FP/SV/CH requirements
   - Implement: `open()` — calls `std::fs::read()` then `open_from_bytes()`
   - Remove `todo!()` from all parsing methods
 
 ### Pseudocode traceability
 - `read_be_u16/u32/i16`: pseudocode lines 20–31
-- `read_be_f80`: pseudocode lines 32–47
+- `read_be_f80`: pseudocode lines 32–93
 - `read_chunk_header`: pseudocode lines 48–51
 - `read_common_chunk`: pseudocode lines 52–68
 - `read_sound_data_header`: pseudocode lines 69–72
-- `open_from_bytes`: pseudocode lines 73–224
+- `open_from_bytes`: pseudocode lines 73–238
 
 ## Verification Commands
 
@@ -92,14 +99,17 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] All parser tests pass (`cargo test -- aiff`)
 - [ ] Valid AIFF files parse correctly (frequency, format, length, data length match)
 - [ ] All validation errors trigger with correct `DecodeError` variant
-- [ ] f80 conversion produces correct integer sample rates for normal values
-- [ ] f80 denormalized (exponent==0) returns 0
-- [ ] f80 infinity/NaN (exponent==0x7FFF) returns Err(InvalidData)
+- [ ] f80 conversion uses full 64-bit significand (NOT truncated to 32 bits)
+- [ ] f80 conversion produces correct integer sample rates for normal values (22050, 44100, 48000, 8000, 11025)
+- [ ] f80 denormalized (exp=0, sig!=0) returns 0 (documented design choice)
+- [ ] f80 zero (exp=0, sig=0) returns 0
+- [ ] f80 infinity/NaN (exp=0x7FFF) returns Err(InvalidData)
 - [ ] Odd chunk padding handled correctly
 - [ ] Unknown chunks skipped without error
 - [ ] Duplicate COMM chunks don't error (later overwrites earlier)
 - [ ] `close()` called on every error path in `open_from_bytes()`
 - [ ] `last_error` set to `-2` on parsing failures
+- [ ] `need_swap` set unconditionally in `open_from_bytes()` for both PCM (`!want_big_endian`) and SDX2 (`big_endian != want_big_endian`) — does NOT rely on `init()` being called first
 
 ## Deferred Implementation Detection (Mandatory)
 

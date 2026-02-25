@@ -66,9 +66,10 @@ Why it matters:
 10. `test_get_frame_null_decoder` — GetFrame with null decoder returns 0
 11. `test_decode_null_decoder` — Decode with null decoder returns 0
 12. `test_init_term_lifecycle` — Init allocates, Term deallocates without leak
+13. `test_open_null_decoder` — Open with null decoder returns 0 without crashing
 
 ### Pseudocode traceability
-- Tests cover pseudocode lines: 31–172 (all FFI functions)
+- Tests cover pseudocode lines: 31–178 (all FFI functions)
 
 ## Verification Commands
 
@@ -85,7 +86,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## Structural Verification Checklist
 - [ ] Test module exists in `aiff_ffi.rs`
-- [ ] At least 12 test functions defined
+- [ ] At least 13 test functions defined
 - [ ] Tests compile (`--no-run`)
 - [ ] Null pointer tests for all functions taking `*mut TFB_SoundDecoder`
 
@@ -120,6 +121,6 @@ Contents:
 - phase ID: PLAN-20260225-AIFF-DECODER.P16
 - timestamp
 - files changed: `rust/src/sound/aiff_ffi.rs` (tests added)
-- tests added: ~12 FFI tests
+- tests added: ~13 FFI tests
 - verification outputs
 - semantic verification summary

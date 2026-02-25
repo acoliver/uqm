@@ -124,15 +124,28 @@ Validation: REQ-SFX-PLAY-08
 98:       END IF
 99:     END IF
 100:
-101:    CALL mixer_source_fv(source.handle, SourceProp::Position, &[x, y, z])
-102:  ELSE
-103:    // REQ-SFX-POSITION-03: non-positional
-104:    CALL mixer_source_fv(source.handle, SourceProp::Position, &[0.0, 0.0, -1.0])
-105:  END IF
+101:    // Use three separate mixer_source_f calls (mixer_source_fv does not exist)
+102:    CALL mixer_source_f(source.handle, SourceProp::PositionX, x)
+103:    CALL mixer_source_f(source.handle, SourceProp::PositionY, y)
+104:    CALL mixer_source_f(source.handle, SourceProp::PositionZ, z)
+105:  ELSE
+106:    // REQ-SFX-POSITION-03: non-positional
+107:    CALL mixer_source_f(source.handle, SourceProp::PositionX, 0.0)
+108:    CALL mixer_source_f(source.handle, SourceProp::PositionY, 0.0)
+109:    CALL mixer_source_f(source.handle, SourceProp::PositionZ, -1.0)
+110:  END IF
 ```
 
 Validation: REQ-SFX-POSITION-01..03
-Integration: Requires mixer_source_fv (to be added to mixer)
+Integration: Uses three separate mixer_source_f calls for X, Y, Z (no mixer_source_fv needed)
+
+**PREREQUISITE — MIXER EXTENSION NEEDED**: The current mixer does NOT support PositionX/Y/Z:
+- `SourceProp` enum has only `Position = 0x1004`, not PositionX/Y/Z variants
+- `mixer_source_f` only handles `SourceProp::Gain`, returns `InvalidEnum` for others
+- `MixerSource` struct has no x/y/z position fields and no panning logic
+Until the mixer is extended, positional audio calls will silently fail (per CROSS-ERROR-01).
+This must be addressed in a mixer extension phase BEFORE P14 music-sfx-impl, or positional
+audio must be documented as NO-OP. See plan/00-overview.md prerequisites.
 
 ## 7. get_positional_object / set_positional_object
 
@@ -210,28 +223,45 @@ Validation: REQ-SFX-LOAD-01..07
 
 ## 9. release_sound_bank_data
 
+**LOCK SAFETY (FIX: ISSUE-CONC-03)**: `stop_source` acquires the Source lock internally.
+We must NOT hold the Source lock when calling it — parking_lot::Mutex is not reentrant.
+Collect indices needing a stop, drop the source lock, then stop them.
+
 ```
 180: FUNCTION release_sound_bank_data(bank) -> AudioResult<()>
 181:   // REQ-SFX-RELEASE-01: bank moved by value, empty is no-op
-182:
+
 183:   FOR sample_opt IN bank.samples.iter() DO
 184:     IF let Some(sample) = sample_opt THEN
-185:       // REQ-SFX-RELEASE-02: check all sources
-186:       FOR i IN 0..NUM_SOUNDSOURCES DO
-187:         LET source = SOURCES.sources[i].lock()
-188:         IF source.sample.as_ref().map(|s| arc_matches(s, sample)).unwrap_or(false) THEN
-189:           CALL stop_source(i)?
-190:           SET source.sample = None
-191:         END IF
-192:       END FOR
-193:
-194:       // REQ-SFX-RELEASE-03: destroy sample
-195:       CALL destroy_sound_sample(sample)?
-196:     END IF
-197:   END FOR
-198:
-199:   // Bank dropped (Rust drop semantics)
-200:   RETURN Ok(())
+185:       // REQ-SFX-RELEASE-02: check all sources — collect indices to stop
+186:       // FIX ISSUE-CONC-03: Do NOT call stop_source while holding source lock.
+187:       LET mut to_stop: Vec<usize> = Vec::new()
+188:       FOR i IN 0..NUM_SOUNDSOURCES DO
+189:         LET source = SOURCES.sources[i].lock()
+190:         IF source.sample.as_ref().map(|s| arc_matches(s, sample)).unwrap_or(false) THEN
+191:           to_stop.push(i)
+192:         END IF
+193:         // source lock dropped here (end of loop iteration)
+194:       END FOR
+195:
+196:       // Now stop and clear the matched sources (no locks held)
+      // FIX MED-EDGE-03: Re-check match in Phase 2 to prevent TOCTOU
+197:       FOR i IN to_stop DO
+198:         CALL stop_source(i)?   // acquires Source lock internally
+199:         LET source = SOURCES.sources[i].lock()
+200:         // Re-verify the sample still matches (another thread may have swapped it)
+201:         IF source.sample.as_ref().map(|s| arc_matches(s, sample)).unwrap_or(false) THEN
+202:           SET source.sample = None
+203:         END IF
+204:       END FOR
+202:
+203:       // REQ-SFX-RELEASE-03: destroy sample
+204:       CALL destroy_sound_sample(sample)?
+205:     END IF
+206:   END FOR
+
+208:   // Bank dropped (Rust drop semantics)
+209:   RETURN Ok(())
 ```
 
 Validation: REQ-SFX-RELEASE-01..03

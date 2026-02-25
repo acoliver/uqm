@@ -2,7 +2,7 @@
 
 Plan ID: `PLAN-20260225-AUDIO-HEART`
 Generated: 2026-02-25
-Total Phases: 22 (P00a through P21)
+Total Phases: 22 implementation phases (P00a through P21), each with a corresponding verification phase (P03a through P21a), totaling 44 phase documents
 
 ## Requirements
 
@@ -54,7 +54,7 @@ Before implementing any phase:
 5. No `unwrap()`/`expect()` in production code
 6. Use `parking_lot::Mutex` (not `std::sync::Mutex`)
 7. All `unsafe` confined to FFI boundary (`heart_ffi.rs`)
-8. Lock ordering: TRACK_STATE → Source mutex → Sample mutex → FadeState mutex
+8. Lock ordering: TRACK_STATE → MUSIC_STATE → Source mutex → Sample mutex → FadeState mutex (decoder thread callbacks use deferred execution to avoid inverse acquisition)
 
 ## Phase Execution Order
 
@@ -69,6 +69,81 @@ P15 (control+fileinst stub) → P15a (verify) → P16 (control+fileinst TDD) →
 P18 (FFI stub) → P18a (verify) → P19 (FFI TDD) → P19a (verify) → P20 (FFI impl) → P20a (verify) →
 P21 (integration) → P21a (verify)
 ```
+
+## Phase Dependency Graph
+
+The following diagram shows which phases depend on which. Each phase requires its
+verification step (Pxx → Pxxa) to pass before dependents can begin. Within each
+stub→TDD→impl slice, the steps are strictly sequential.
+
+```
+P00a ─→ P01 ─→ P01a ─→ P02 ─→ P02a ──┐
+                                        │
+                                        ▼
+                            ┌─── P03 (types stub) ───┐
+                            │                         │
+                            ▼                         │
+                   P03a → P04 (types TDD)             │
+                            │                         │
+                            ▼                         │
+                   P04a → P05 (types impl) ── P05a    │
+                            │                         │
+              ┌─────────────┼─────────────────────────┘
+              │             │
+              │   ┌─────────┘
+              │   │
+              ▼   ▼
+    P06 (stream stub) ── P06a → P07 (stream TDD) → P07a → P08 (stream impl) → P08a
+              │                                                    │
+              │  depends on: types (P05a)                          │
+              │                                                    │
+              ▼                                                    ▼
+    P09 (trackplayer stub)─P09a→P10 (trackplayer TDD)→P10a→P11 (trackplayer impl)→P11a
+              │                                                    │
+              │  depends on: types (P05a), stream (P08a)           │
+              │                                                    │
+              ▼                                                    ▼
+    P12 (music+sfx stub)──P12a→P13 (music+sfx TDD)──→P13a→P14 (music+sfx impl)──→P14a
+              │                                                    │
+              │  depends on: types (P05a), stream (P08a)           │
+              │                                                    │
+              ▼                                                    ▼
+    P15 (ctrl+fileinst stub)─P15a→P16 (ctrl+fileinst TDD)→P16a→P17 (ctrl+fileinst impl)→P17a
+              │                                                    │
+              │  depends on: types (P05a), stream (P08a),          │
+              │              music+sfx (P14a)                      │
+              │                                                    │
+              ▼                                                    ▼
+    P18 (FFI stub)────P18a→P19 (FFI TDD)────→P19a→P20 (FFI impl)────→P20a
+              │                                                    │
+              │  depends on: ALL implementation phases             │
+              │  (P05a, P08a, P11a, P14a, P17a)                   │
+              │                                                    │
+              ▼                                                    ▼
+    P21 (integration)──────────────────────────────→ P21a (final verify)
+              │
+              │  depends on: ALL phases (P20a)
+              │  + C build system + sound headers
+```
+
+### Dependency summary table
+
+| Phase Group | Module | Depends On (impl phases) |
+|------------|--------|--------------------------|
+| P03-P05 | `types.rs` | P02a (pseudocode complete) |
+| P06-P08 | `stream.rs` | P05a (types) |
+| P09-P11 | `trackplayer.rs` | P05a (types), P08a (stream) |
+| P12-P14 | `music.rs`, `sfx.rs` | P05a (types), P08a (stream) |
+| P15-P17 | `control.rs`, `fileinst.rs` | P05a (types), P08a (stream), P14a (music+sfx) |
+| P18-P20 | `heart_ffi.rs` | P05a, P08a, P11a, P14a, P17a (all impl phases) |
+| P21 | C integration | P20a (all Rust modules complete) |
+
+Key constraints:
+- Types (P05) must be complete before any other module
+- Stream (P08) must be complete before trackplayer, music/sfx, or control
+- Music/SFX (P14) must be complete before control (which delegates to it)
+- All implementation phases must be complete before FFI (P18-P20)
+- FFI must be complete before integration (P21)
 
 ## Execution Tracker
 

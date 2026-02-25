@@ -55,7 +55,7 @@ grep -RIn "FIXME\|HACK\|placeholder\|for now\|will be implemented" src/sound/aif
 - [ ] Does odd-size chunk alignment padding work correctly — if a chunk has size 17, does it skip 18 bytes total (17 + 1 padding)?
 - [ ] Does the parser handle the boundary between AIFF (form_type=AIFF, no compression) and AIFC (form_type=AIFC, must have compression) correctly?
 - [ ] After a successful parse, is the extracted audio data slice exactly the right region of the input (data_start to data_start + sample_frames * file_block)?
-- [ ] Does the 80-bit float parser produce correct sample rates for real AIFF files (not just synthetic test data)?
+- [ ] Does the 80-bit float parser produce correct sample rates for real AIFF files (not just synthetic test data)? **Recommended**: extract the 10-byte f80 sample rate field from an actual game `.aif` file (e.g., via `xxd -s OFFSET -l 10 path/to/file.aif`) and add it as an additional test vector to validate against real-world data, not just mathematically derived test values.
 
 ## Deferred Implementation Detection
 
@@ -75,7 +75,7 @@ cd /Users/acoliver/projects/uqm/rust && grep -n "todo!()\|unimplemented!()" src/
 
 ## Failure Recovery
 - Return to Phase 05 and fix failing tests
-- If f80 algorithm produces wrong values, debug against known sample rate encodings (44100 = 0x400DAC44...)
+- If f80 algorithm produces wrong values, debug against known sample rate encodings (44100 Hz = `[0x40, 0x0E, 0xAC, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]`)
 - rollback: `git checkout -- rust/src/sound/aiff.rs`
 
 ## Phase Completion Marker

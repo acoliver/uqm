@@ -52,7 +52,7 @@ grep -RIn "FIXME\|HACK\|placeholder" src/sound/aiff.rs || echo "CLEAN"
 - [ ] Does the byte swap (need_swap) work correctly for SDX2 output — writing i16 values in the expected byte order?
 - [ ] Is the compressed data reading correct — one byte per channel per frame, with frame-major interleaving?
 - [ ] After decoding multiple frames, does the predictor state correctly accumulate, producing different output than if predictor was reset each frame?
-- [ ] Does the endianness handling (`cfg!(target_endian = "big")` XOR `want_big_endian`) produce the correct need_swap value?
+- [ ] Does the endianness handling (`formats.big_endian != formats.want_big_endian`) produce the correct need_swap value? (Uses runtime `formats.big_endian`, NOT compile-time `cfg!(target_endian = "big")`)
 
 ## Deferred Implementation Detection
 

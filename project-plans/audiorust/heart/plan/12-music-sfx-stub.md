@@ -31,7 +31,7 @@ Behavior contract:
 
 ### REQ-MUSIC-RELEASE-01 through REQ-MUSIC-RELEASE-04: Music Release Stubs
 Behavior contract:
-- GIVEN: MusicRef wraps a raw pointer to SoundSample
+- GIVEN: MusicRef wraps an `Arc<Mutex<SoundSample>>` for shared ownership
 - WHEN: `release_music_data` stub is defined
 - THEN: It accepts `MusicRef` and returns `AudioResult<()>`
 
@@ -86,7 +86,7 @@ Behavior contract:
   - marker: `@plan PLAN-20260225-AUDIO-HEART.P12`
 
 ### music.rs stub contents
-1. `MusicRef` (re-exported from types or defined here with repr(transparent))
+1. `MusicRef` (wrapper around `Arc<Mutex<SoundSample>>` for shared ownership)
 2. `MusicState` struct (cur_music_ref, cur_speech_ref, music_volume, music_volume_scale)
 3. `lazy_static! { static ref MUSIC_STATE }` (or `OnceLock`)
 4. All public functions with `todo!()`:
@@ -133,7 +133,7 @@ cd /Users/acoliver/projects/uqm/rust && cargo clippy --workspace --all-targets -
 ## Semantic Verification Checklist (Mandatory)
 - [ ] music.rs imports from stream.rs (play_stream, stop_stream, etc.)
 - [ ] sfx.rs imports from control (stop_source, clean_source)
-- [ ] MusicRef wraps a raw pointer
+- [ ] MusicRef wraps an `Arc<Mutex<SoundSample>>` for shared ownership
 - [ ] SoundPosition is repr(C)
 - [ ] SoundBank holds Vec<Option<SoundSample>>
 
