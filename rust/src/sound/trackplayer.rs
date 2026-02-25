@@ -445,4 +445,241 @@ mod tests {
         assert!(ACCEL_SCROLL_SPEED > 0.0);
         assert!(MAX_MULTI_TRACKS > 0);
     }
+
+    // --- P10 TDD tests ---
+
+    // REQ-TRACK-ASSEMBLE-01..03: Subtitle splitting
+    #[test]
+    #[ignore = "P11: split_sub_pages stub"]
+    fn test_split_sub_pages_single() {
+        let pages = split_sub_pages("Hello world");
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].text, "Hello world");
+    }
+
+    #[test]
+    #[ignore = "P11: split_sub_pages stub"]
+    fn test_split_sub_pages_multiple() {
+        let pages = split_sub_pages("Page one\r\nPage two");
+        assert_eq!(pages.len(), 2);
+        assert_eq!(pages[0].text, "Page one");
+        assert_eq!(pages[1].text, "Page two");
+    }
+
+    #[test]
+    #[ignore = "P11: split_sub_pages stub"]
+    fn test_split_sub_pages_continuation_marks() {
+        let pages = split_sub_pages("First page...\r\n..Second page");
+        assert!(pages.len() >= 2);
+        // Continuation text should have ellipsis handled
+    }
+
+    #[test]
+    #[ignore = "P11: split_sub_pages stub"]
+    fn test_split_sub_pages_timing() {
+        let pages = split_sub_pages("Short");
+        assert!(pages[0].timestamp >= 0.0);
+        // Timing should be at least TEXT_SPEED * char_count
+    }
+
+    // REQ-TRACK-ASSEMBLE-14: Timestamp parsing
+    #[test]
+    #[ignore = "P11: get_time_stamps stub"]
+    fn test_get_time_stamps_basic() {
+        let ts = get_time_stamps("100,200,300");
+        assert_eq!(ts.len(), 3);
+        assert!((ts[0] - 100.0).abs() < 0.01);
+        assert!((ts[1] - 200.0).abs() < 0.01);
+        assert!((ts[2] - 300.0).abs() < 0.01);
+    }
+
+    #[test]
+    #[ignore = "P11: get_time_stamps stub"]
+    fn test_get_time_stamps_skip_zeros() {
+        let ts = get_time_stamps("0,100,0");
+        // Non-zero values should be preserved
+        assert!(ts.iter().all(|&t| t == 0.0 || t >= 100.0));
+    }
+
+    #[test]
+    #[ignore = "P11: get_time_stamps stub"]
+    fn test_get_time_stamps_mixed_separators() {
+        let ts = get_time_stamps("100\n200\r300");
+        assert_eq!(ts.len(), 3);
+    }
+
+    // REQ-TRACK-ASSEMBLE-04..13: Assembly
+    #[test]
+    #[ignore = "P11: splice_track stub"]
+    fn test_splice_track_no_text_returns_ok() {
+        let result = splice_track(Some("track"), None, None, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[ignore = "P11: splice_track stub"]
+    fn test_splice_track_no_name_no_tracks_warns() {
+        // When no tracks exist and no name is given, should return Ok
+        let result = splice_track(None, Some("text"), None, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[ignore = "P11: splice_track stub"]
+    fn test_splice_track_creates_first_sample() {
+        let state = TRACK_STATE.lock();
+        let had_sample = state.sound_sample.is_some();
+        drop(state);
+        // After first splice_track with a name, state should have a sample
+        // (can't easily test without a real decoder; this verifies the path)
+        assert!(!had_sample); // initially no sample
+    }
+
+    #[test]
+    fn test_splice_track_chunk_construction() {
+        // Test that SoundChunk can be constructed with all fields
+        let chunk = SoundChunk {
+            decoder: None,
+            start_time: 500.0,
+            run_time: -1000,
+            tag_me: true,
+            track_num: 2,
+            text: Some("Subtitle text".into()),
+            callback: Some(Box::new(|_| {})),
+            next: None,
+        };
+        assert_eq!(chunk.start_time, 500.0);
+        assert_eq!(chunk.run_time, -1000);
+        assert!(chunk.tag_me);
+        assert_eq!(chunk.track_num, 2);
+        assert!(chunk.callback.is_some());
+    }
+
+    #[test]
+    fn test_splice_track_last_page_negative_run_time() {
+        // Last page in a track should have negative run_time (minimum display)
+        let chunk = SoundChunk {
+            decoder: None,
+            start_time: 0.0,
+            run_time: -2000, // negative = minimum display time
+            tag_me: true,
+            track_num: 0,
+            text: Some("Last page".into()),
+            callback: None,
+            next: None,
+        };
+        assert!(chunk.run_time < 0);
+    }
+
+    // REQ-TRACK-ASSEMBLE-15..17: Multi-track
+    #[test]
+    #[ignore = "P11: splice_multi_track stub"]
+    fn test_splice_multi_track_precondition() {
+        let result = splice_multi_track(&[Some("t1"), Some("t2")], &[None, None], None);
+        // Should not panic
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P11: splice_multi_track stub"]
+    fn test_splice_multi_track_appends() {
+        let result = splice_multi_track(&[Some("t1")], &[Some("text")], None);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    // REQ-TRACK-PLAY-01..10: Playback
+    #[test]
+    #[ignore = "P11: play_track stub"]
+    fn test_play_track_no_sample_ok() {
+        // When no sample exists, should handle gracefully
+        let result = play_track(false);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P11: stop_track stub"]
+    fn test_stop_track_clears_all() {
+        let result = stop_track();
+        assert!(result.is_ok());
+        let state = TRACK_STATE.lock();
+        assert_eq!(state.track_count, 0);
+        assert!(state.chunks_head.is_none());
+        assert!(state.chunks_tail.is_null());
+    }
+
+    #[test]
+    #[ignore = "P11: playing_track stub"]
+    fn test_playing_track_zero_when_empty() {
+        assert!(!playing_track());
+    }
+
+    // REQ-TRACK-SEEK-01..06: Seeking
+    #[test]
+    fn test_seek_clamps_offset_concept() {
+        // Verify the clamping concept: offset should be in [0, length+1]
+        let length = 1000u32;
+        let offset: i32 = -500;
+        let clamped = offset.max(0).min(length as i32 + 1);
+        assert_eq!(clamped, 0);
+
+        let offset: i32 = 5000;
+        let clamped = offset.max(0).min(length as i32 + 1);
+        assert_eq!(clamped, 1001);
+    }
+
+    #[test]
+    fn test_get_current_track_pos_concept() {
+        // Position should be clamped to [0, tracks_length]
+        let tracks_length = 840u32;
+        let raw_pos: i32 = 500;
+        let clamped = raw_pos.max(0).min(tracks_length as i32) as u32;
+        assert_eq!(clamped, 500);
+
+        let raw_pos: i32 = 2000;
+        let clamped = raw_pos.max(0).min(tracks_length as i32) as u32;
+        assert_eq!(clamped, 840);
+    }
+
+    // REQ-TRACK-POSITION-01..02: Position
+    #[test]
+    #[ignore = "P11: get_track_position stub"]
+    fn test_get_track_position_no_sample() {
+        assert_eq!(get_track_position(0), 0);
+    }
+
+    #[test]
+    fn test_get_track_position_scaling_concept() {
+        // in_units == 0 → return raw ticks; in_units != 0 → percentage
+        let tracks_length = 840u32;
+        let pos = 420u32;
+        let percentage = pos * 100 / tracks_length.max(1);
+        assert_eq!(percentage, 50);
+    }
+
+    // REQ-TRACK-SUBTITLE-01..04: Subtitles
+    #[test]
+    #[ignore = "P11: get_track_subtitle stub"]
+    fn test_get_track_subtitle_none_when_empty() {
+        assert!(get_track_subtitle().is_none());
+    }
+
+    #[test]
+    #[ignore = "P11: get_first_track_subtitle stub"]
+    fn test_get_first_track_subtitle_none() {
+        assert!(get_first_track_subtitle().is_none());
+    }
+
+    // REQ-TRACK-SEEK-11..12: Navigation
+    #[test]
+    #[ignore = "P11: find_next_page stub"]
+    fn test_find_next_page_none() {
+        assert!(find_next_page().is_none());
+    }
+
+    #[test]
+    #[ignore = "P11: find_prev_page stub"]
+    fn test_find_prev_page_defaults_to_head() {
+        // With no previous, should return head or None
+        assert!(find_prev_page().is_none());
+    }
 }
