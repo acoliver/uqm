@@ -388,17 +388,29 @@ where
 fn guard_convert_state_value<R, F>(mutex: &Mutex<Option<StateFileManager>>, f: F) -> R
 where
     F: FnOnce(&StateFileManager) -> R,
+    R: Default,
 {
-    let guard = mutex.lock().unwrap();
-    f(guard.as_ref().unwrap())
+    match mutex.lock() {
+        Ok(guard) => match guard.as_ref() {
+            Some(state) => f(state),
+            None => R::default(),
+        },
+        Err(_) => R::default(),
+    }
 }
 
 fn guard_convert_state_value_mut<R, F>(mutex: &Mutex<Option<StateFileManager>>, f: F) -> R
 where
     F: FnOnce(&mut StateFileManager) -> R,
+    R: Default,
 {
-    let mut guard = mutex.lock().unwrap();
-    f(guard.as_mut().unwrap())
+    match mutex.lock() {
+        Ok(mut guard) => match guard.as_mut() {
+            Some(state) => f(state),
+            None => R::default(),
+        },
+        Err(_) => R::default(),
+    }
 }
 
 fn guard_convert_state_result_mut<R, E, F>(
