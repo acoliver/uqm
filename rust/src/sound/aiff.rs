@@ -111,7 +111,7 @@ pub struct AiffDecoder {
     /// Current PCM frame position
     cur_pcm: u32,
     /// SDX2 predictor values per channel
-    prev_val: [i16; MAX_CHANNELS],
+    prev_val: [i32; MAX_CHANNELS],
 }
 
 impl AiffDecoder {
@@ -265,6 +265,119 @@ impl AiffDecoder {
         let offset = read_be_u32(cursor)?;
         let block_size = read_be_u32(cursor)?;
         Ok(SoundDataHeader { offset, block_size })
+    }
+
+    // @plan PLAN-20260225-AIFF-DECODER.P08
+    // @requirement REQ-DP-1..6
+    fn decode_pcm(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {
+        // REQ-DP-6: EOF check
+        if self.cur_pcm >= self.max_pcm {
+            return Err(DecodeError::EndOfFile);
+        }
+
+        // REQ-DP-1: frame count
+        let block_align = self.block_align as usize;
+        if block_align == 0 {
+            return Ok(0);
+        }
+        let dec_pcm = std::cmp::min(
+            buf.len() / block_align,
+            (self.max_pcm - self.cur_pcm) as usize,
+        );
+        if dec_pcm == 0 {
+            return Ok(0);
+        }
+
+        let file_block = self.file_block as usize;
+        let read_bytes = dec_pcm * file_block;
+        let write_bytes = dec_pcm * block_align;
+
+        // REQ-DP-2: copy raw big-endian PCM data (no inline byte swap)
+        buf[..write_bytes].copy_from_slice(&self.data[self.data_pos..self.data_pos + read_bytes]);
+
+        // REQ-DP-5: 8-bit signed→unsigned conversion
+        if self.bits_per_sample == 8 {
+            for byte in buf[..write_bytes].iter_mut() {
+                *byte = byte.wrapping_add(128);
+            }
+        }
+
+        // REQ-DP-3: position update
+        self.cur_pcm += dec_pcm as u32;
+        self.data_pos += read_bytes;
+
+        // REQ-DP-4: return bytes written
+        Ok(write_bytes)
+    }
+
+    // @plan PLAN-20260225-AIFF-DECODER.P11
+    // @requirement REQ-DS-1..8
+    fn decode_sdx2(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {
+        // REQ-DS-8: EOF check
+        if self.cur_pcm >= self.max_pcm {
+            return Err(DecodeError::EndOfFile);
+        }
+
+        // REQ-DS-1: frame count
+        let block_align = self.block_align as usize;
+        if block_align == 0 {
+            return Ok(0);
+        }
+        let dec_pcm = std::cmp::min(
+            buf.len() / block_align,
+            (self.max_pcm - self.cur_pcm) as usize,
+        );
+        if dec_pcm == 0 {
+            return Ok(0);
+        }
+
+        let channels = self.common.channels as usize;
+        let file_block = self.file_block as usize;
+        let compressed_bytes = dec_pcm * file_block;
+
+        // REQ-DS-2: read compressed data
+        let compressed = &self.data[self.data_pos..self.data_pos + compressed_bytes];
+
+        let mut out_pos = 0;
+
+        // REQ-DS-4, REQ-DS-5: SDX2 decode loop
+        for frame_idx in 0..dec_pcm {
+            for ch in 0..channels {
+                let byte_idx = frame_idx * channels + ch;
+                let sample_byte = compressed[byte_idx] as i8;
+                let sample = sample_byte as i32;
+                let abs_val = sample.abs();
+                let mut v = (sample * abs_val) << 1;
+
+                // Delta mode: odd sample bytes add to predictor
+                if (sample_byte as u8) & 1 != 0 {
+                    v += self.prev_val[ch];
+                }
+
+                // Saturate to i16 range
+                v = v.clamp(-32768, 32767);
+                self.prev_val[ch] = v;
+
+                // Write i16 to output
+                let sample_i16 = v as i16;
+                let bytes = if self.need_swap {
+                    sample_i16.swap_bytes().to_ne_bytes()
+                } else {
+                    sample_i16.to_ne_bytes()
+                };
+                buf[out_pos] = bytes[0];
+                buf[out_pos + 1] = bytes[1];
+                out_pos += 2;
+            }
+        }
+
+        // REQ-DS-3: position update
+        self.cur_pcm += dec_pcm as u32;
+        self.data_pos += compressed_bytes;
+
+        // REQ-DS-6: return bytes written
+        let write_bytes = dec_pcm * block_align;
+        Ok(write_bytes)
     }
 }
 
@@ -557,12 +670,28 @@ impl SoundDecoder for AiffDecoder {
         self.length = 0.0;
     }
 
-    fn decode(&mut self, _buf: &mut [u8]) -> DecodeResult<usize> {
-        todo!("P08/P11: PCM and SDX2 decode impl")
+    fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {
+        match self.comp_type {
+            CompressionType::None => self.decode_pcm(buf),
+            CompressionType::Sdx2 => self.decode_sdx2(buf),
+        }
     }
 
-    fn seek(&mut self, _pcm_pos: u32) -> DecodeResult<u32> {
-        todo!("P14: seek impl")
+    // @plan PLAN-20260225-AIFF-DECODER.P14
+    // @requirement REQ-SK-1..4
+    fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32> {
+        // REQ-SK-1: clamp to max
+        let pcm_pos = pcm_pos.min(self.max_pcm);
+
+        // REQ-SK-2: update position
+        self.cur_pcm = pcm_pos;
+        self.data_pos = pcm_pos as usize * self.file_block as usize;
+
+        // REQ-SK-3: reset predictor
+        self.prev_val = [0i32; MAX_CHANNELS];
+
+        // REQ-SK-4
+        Ok(pcm_pos)
     }
 
     fn get_frame(&self) -> u32 {
@@ -1303,5 +1432,366 @@ mod tests {
         let mut dec = make_decoder();
         let result = dec.open_from_bytes(&big, "huge.aiff");
         assert!(matches!(result, Err(DecodeError::InvalidData(_))));
+    }
+
+    // --- P07/P08 PCM decode tests ---
+
+    /// Helper: create a decoder opened with known PCM data
+    fn make_pcm_decoder(channels: u16, sample_size: u16, audio_data: Vec<u8>) -> AiffDecoder {
+        let sample_frames =
+            audio_data.len() as u32 / (((sample_size + 7) & !7) as u32 / 8 * channels as u32);
+        let data = AiffBuilder::new()
+            .channels(channels)
+            .sample_size(sample_size)
+            .sample_frames(sample_frames)
+            .ssnd_data(audio_data)
+            .build();
+        let mut dec = make_decoder();
+        dec.open_from_bytes(&data, "test.aiff").unwrap();
+        dec
+    }
+
+    #[test]
+    fn test_decode_pcm_mono16() {
+        let audio = vec![0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04]; // 4 frames
+        let mut dec = make_pcm_decoder(1, 16, audio.clone());
+        let mut buf = vec![0u8; 8];
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 8);
+        assert_eq!(&buf[..8], &audio[..]);
+    }
+
+    #[test]
+    fn test_decode_pcm_stereo16() {
+        // L=0x0001 R=0x0002, L=0x0003 R=0x0004
+        let audio = vec![0x00, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04];
+        let mut dec = make_pcm_decoder(2, 16, audio.clone());
+        let mut buf = vec![0u8; 8];
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 8);
+        assert_eq!(&buf[..8], &audio[..]);
+    }
+
+    #[test]
+    fn test_decode_pcm_mono8_signed_to_unsigned() {
+        // Signed: -128(0x80), -1(0xFF), 0(0x00), 127(0x7F)
+        let audio = vec![0x80, 0xFF, 0x00, 0x7F];
+        let mut dec = make_pcm_decoder(1, 8, audio);
+        let mut buf = vec![0u8; 4];
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 4);
+        // After wrapping_add(128): 0, 127, 128, 255
+        assert_eq!(buf, vec![0x00, 0x7F, 0x80, 0xFF]);
+    }
+
+    #[test]
+    fn test_decode_pcm_stereo8_signed_to_unsigned() {
+        let audio = vec![0x80, 0x7F, 0x00, 0xFF]; // 2 frames, 2 channels
+        let mut dec = make_pcm_decoder(2, 8, audio);
+        let mut buf = vec![0u8; 4];
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 4);
+        assert_eq!(buf, vec![0x00, 0xFF, 0x80, 0x7F]);
+    }
+
+    #[test]
+    fn test_decode_pcm_partial_buffer() {
+        let audio = vec![0u8; 200]; // 100 mono16 frames
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        let mut buf = vec![0u8; 50]; // only room for 25 frames
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 50);
+        assert_eq!(dec.cur_pcm, 25);
+    }
+
+    #[test]
+    fn test_decode_pcm_multiple_calls() {
+        let audio: Vec<u8> = (0..20).collect(); // 10 mono16 frames
+        let mut dec = make_pcm_decoder(1, 16, audio.clone());
+        let mut buf = vec![0u8; 10]; // 5 frames
+        let n1 = dec.decode(&mut buf).unwrap();
+        assert_eq!(n1, 10);
+        assert_eq!(&buf[..10], &audio[..10]);
+        assert_eq!(dec.cur_pcm, 5);
+        let n2 = dec.decode(&mut buf).unwrap();
+        assert_eq!(n2, 10);
+        assert_eq!(&buf[..10], &audio[10..20]);
+        assert_eq!(dec.cur_pcm, 10);
+    }
+
+    #[test]
+    fn test_decode_pcm_eof() {
+        let audio = vec![0u8; 4]; // 2 mono16 frames
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        let mut buf = vec![0u8; 4];
+        dec.decode(&mut buf).unwrap(); // consume all
+        let result = dec.decode(&mut buf);
+        assert!(matches!(result, Err(DecodeError::EndOfFile)));
+    }
+
+    #[test]
+    fn test_decode_pcm_exact_fit() {
+        let audio = vec![0u8; 6]; // 3 mono16 frames
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        let mut buf = vec![0u8; 6]; // exact fit
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 6);
+        assert_eq!(dec.cur_pcm, 3);
+    }
+
+    #[test]
+    fn test_decode_pcm_returns_byte_count() {
+        let audio = vec![0u8; 40]; // 10 stereo16 frames
+        let mut dec = make_pcm_decoder(2, 16, audio);
+        let mut buf = vec![0u8; 40];
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 40); // 10 frames * 4 bytes
+    }
+
+    #[test]
+    fn test_decode_pcm_position_update() {
+        let audio = vec![0u8; 20]; // 10 mono16 frames
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        let mut buf = vec![0u8; 6]; // 3 frames
+        dec.decode(&mut buf).unwrap();
+        assert_eq!(dec.cur_pcm, 3);
+        assert_eq!(dec.data_pos, 6);
+    }
+
+    #[test]
+    fn test_decode_pcm_16bit_no_inline_swap() {
+        let audio = vec![0x03, 0xE8]; // 1000 as big-endian i16
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        dec.need_swap = true; // pretend mixer wants little-endian
+        let mut buf = vec![0u8; 2];
+        dec.decode(&mut buf).unwrap();
+        // Raw bytes must be preserved — no inline swap
+        assert_eq!(buf, vec![0x03, 0xE8]);
+    }
+
+    #[test]
+    fn test_decode_pcm_16bit_raw_bytes_preserved() {
+        let audio = vec![0x03, 0xE8];
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        dec.need_swap = false;
+        let mut buf = vec![0u8; 2];
+        dec.decode(&mut buf).unwrap();
+        assert_eq!(buf, vec![0x03, 0xE8]);
+    }
+
+    #[test]
+    fn test_decode_pcm_16bit_stereo_raw_bytes() {
+        let audio = vec![0x00, 0x01, 0x00, 0x02]; // L=1 R=2
+        let mut dec = make_pcm_decoder(2, 16, audio);
+        dec.need_swap = true;
+        let mut buf = vec![0u8; 4];
+        dec.decode(&mut buf).unwrap();
+        assert_eq!(buf, vec![0x00, 0x01, 0x00, 0x02]);
+    }
+
+    #[test]
+    fn test_decode_pcm_8bit_no_endian_swap() {
+        let audio = vec![0x80, 0x00]; // 2 mono8 frames
+        let mut dec = make_pcm_decoder(1, 8, audio);
+        dec.need_swap = true; // should have no effect on 8-bit
+        let mut buf = vec![0u8; 2];
+        dec.decode(&mut buf).unwrap();
+        // Only signed→unsigned: 0x80+128=0, 0x00+128=128
+        assert_eq!(buf, vec![0x00, 0x80]);
+    }
+
+    #[test]
+    fn test_decode_pcm_zero_length_buffer() {
+        let audio = vec![0u8; 4];
+        let mut dec = make_pcm_decoder(1, 16, audio);
+        let mut buf = vec![];
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(dec.cur_pcm, 0); // position unchanged
+    }
+
+    #[test]
+    fn test_need_swap_set_correctly_for_16bit() {
+        let data = AiffBuilder::new()
+            .channels(1)
+            .sample_size(16)
+            .sample_frames(10)
+            .ssnd_data(vec![0u8; 20])
+            .build();
+        let mut dec = make_decoder();
+        dec.open_from_bytes(&data, "swap_test.aiff").unwrap();
+        // Default DecoderFormats has want_big_endian = false
+        // AIFF is big-endian → need_swap should be true
+        assert!(dec.need_swap);
+    }
+
+    // --- P10/P11 SDX2 decode tests ---
+
+    /// Helper: create a decoder opened with known SDX2 data
+    fn make_sdx2_decoder(channels: u16, audio_data: Vec<u8>) -> AiffDecoder {
+        // SDX2: file_block = block_align / 2 = (2 * channels) / 2 = channels
+        let sample_frames = audio_data.len() as u32 / channels as u32;
+        let data = AiffBuilder::new()
+            .form_type(FORM_TYPE_AIFC)
+            .channels(channels)
+            .sample_size(16)
+            .sample_frames(sample_frames)
+            .ext_type_id(SDX2_COMPRESSION)
+            .ssnd_data(audio_data)
+            .build();
+        let mut dec = make_decoder();
+        dec.open_from_bytes(&data, "test.aifc").unwrap();
+        dec
+    }
+
+    #[test]
+    fn test_decode_sdx2_zero_input() {
+        // All zero bytes → all zero samples
+        let mut dec = make_sdx2_decoder(1, vec![0u8; 10]);
+        let mut buf = vec![0u8; 20]; // 10 frames * 2 bytes
+        let n = dec.decode(&mut buf).unwrap();
+        assert_eq!(n, 20);
+        // v = (0 * 0) << 1 = 0, even byte so no delta → all zeros
+        for chunk in buf[..20].chunks_exact(2) {
+            let sample = i16::from_ne_bytes([chunk[0], chunk[1]]);
+            assert_eq!(sample, 0);
+        }
+    }
+
+    #[test]
+    fn test_decode_sdx2_positive_sample() {
+        // Sample byte = 10 → v = (10 * 10) << 1 = 200
+        // Even byte (10 & 1 == 0) → no delta
+        let mut dec = make_sdx2_decoder(1, vec![10]);
+        let mut buf = vec![0u8; 2];
+        dec.decode(&mut buf).unwrap();
+        let sample = i16::from_ne_bytes([buf[0], buf[1]]);
+        assert_eq!(sample, 200);
+    }
+
+    #[test]
+    fn test_decode_sdx2_negative_sample() {
+        // Sample byte = -10 (0xF6) → v = (-10 * 10) << 1 = -200
+        // Even byte (0xF6 & 1 == 0) → no delta
+        let mut dec = make_sdx2_decoder(1, vec![0xF6]);
+        let mut buf = vec![0u8; 2];
+        dec.decode(&mut buf).unwrap();
+        let sample = i16::from_ne_bytes([buf[0], buf[1]]);
+        assert_eq!(sample, -200);
+    }
+
+    #[test]
+    fn test_decode_sdx2_delta_mode() {
+        // Frame 0: byte=10 (even) → v = 200, prev=200
+        // Frame 1: byte=11 (odd)  → v = (11 * 11) << 1 = 242, + prev(200) = 442
+        let mut dec = make_sdx2_decoder(1, vec![10, 11]);
+        let mut buf = vec![0u8; 4];
+        dec.decode(&mut buf).unwrap();
+        let s0 = i16::from_ne_bytes([buf[0], buf[1]]);
+        let s1 = i16::from_ne_bytes([buf[2], buf[3]]);
+        assert_eq!(s0, 200);
+        assert_eq!(s1, 442);
+    }
+
+    #[test]
+    fn test_decode_sdx2_saturation() {
+        // byte=127 → v = (127 * 127) << 1 = 32258
+        // Then byte=127 (odd) → v = 32258 + 32258 = 64516 → clamped to 32767
+        let mut dec = make_sdx2_decoder(1, vec![127, 127]);
+        let mut buf = vec![0u8; 4];
+        dec.decode(&mut buf).unwrap();
+        let s0 = i16::from_ne_bytes([buf[0], buf[1]]);
+        let s1 = i16::from_ne_bytes([buf[2], buf[3]]);
+        assert_eq!(s0, 32258);
+        assert_eq!(s1, 32767); // saturated
+    }
+
+    #[test]
+    fn test_decode_sdx2_stereo() {
+        // 2 channels: [L0=10, R0=20, L1=11, R1=21]
+        let mut dec = make_sdx2_decoder(2, vec![10, 20, 11, 21]);
+        let mut buf = vec![0u8; 8]; // 2 frames * 2 ch * 2 bytes
+        dec.decode(&mut buf).unwrap();
+        let l0 = i16::from_ne_bytes([buf[0], buf[1]]);
+        let r0 = i16::from_ne_bytes([buf[2], buf[3]]);
+        let l1 = i16::from_ne_bytes([buf[4], buf[5]]);
+        let r1 = i16::from_ne_bytes([buf[6], buf[7]]);
+        // L0: (10*10)<<1 = 200 (even, no delta)
+        assert_eq!(l0, 200);
+        // R0: (20*20)<<1 = 800 (even, no delta)
+        assert_eq!(r0, 800);
+        // L1: (11*11)<<1 = 242, odd → +200 = 442
+        assert_eq!(l1, 442);
+        // R1: (21*21)<<1 = 882, odd → +800 = 1682
+        assert_eq!(r1, 1682);
+    }
+
+    #[test]
+    fn test_decode_sdx2_eof() {
+        let mut dec = make_sdx2_decoder(1, vec![10]);
+        let mut buf = vec![0u8; 2];
+        dec.decode(&mut buf).unwrap(); // consume the one frame
+        let result = dec.decode(&mut buf);
+        assert!(matches!(result, Err(DecodeError::EndOfFile)));
+    }
+
+    #[test]
+    fn test_decode_sdx2_position_update() {
+        let mut dec = make_sdx2_decoder(1, vec![0u8; 10]);
+        let mut buf = vec![0u8; 6]; // 3 frames
+        dec.decode(&mut buf).unwrap();
+        assert_eq!(dec.cur_pcm, 3);
+        assert_eq!(dec.data_pos, 3); // SDX2 file_block = 1 byte per frame (mono)
+    }
+
+    // --- P13/P14 Seek tests ---
+
+    #[test]
+    fn test_seek_to_beginning() {
+        let mut dec = make_pcm_decoder(1, 16, vec![0u8; 20]);
+        let mut buf = vec![0u8; 10];
+        dec.decode(&mut buf).unwrap(); // advance to frame 5
+        let pos = dec.seek(0).unwrap();
+        assert_eq!(pos, 0);
+        assert_eq!(dec.cur_pcm, 0);
+        assert_eq!(dec.data_pos, 0);
+    }
+
+    #[test]
+    fn test_seek_to_middle() {
+        let mut dec = make_pcm_decoder(1, 16, vec![0u8; 20]);
+        let pos = dec.seek(5).unwrap();
+        assert_eq!(pos, 5);
+        assert_eq!(dec.cur_pcm, 5);
+        assert_eq!(dec.data_pos, 10); // 5 frames * 2 bytes
+    }
+
+    #[test]
+    fn test_seek_past_end_clamps() {
+        let mut dec = make_pcm_decoder(1, 16, vec![0u8; 20]); // 10 frames
+        let pos = dec.seek(999).unwrap();
+        assert_eq!(pos, 10); // clamped to max_pcm
+        assert_eq!(dec.cur_pcm, 10);
+    }
+
+    #[test]
+    fn test_seek_resets_predictor() {
+        let mut dec = make_sdx2_decoder(1, vec![10, 11]); // predictor gets set
+        let mut buf = vec![0u8; 4];
+        dec.decode(&mut buf).unwrap();
+        assert_ne!(dec.prev_val[0], 0); // predictor should be non-zero
+        dec.seek(0).unwrap();
+        assert_eq!(dec.prev_val, [0; MAX_CHANNELS]); // reset
+    }
+
+    #[test]
+    fn test_seek_then_decode() {
+        let audio: Vec<u8> = (0..20).collect(); // 10 mono16 frames
+        let mut dec = make_pcm_decoder(1, 16, audio.clone());
+        dec.seek(5).unwrap();
+        let mut buf = vec![0u8; 4]; // 2 frames
+        dec.decode(&mut buf).unwrap();
+        // Should read frames 5-6 → bytes 10..14
+        assert_eq!(&buf[..4], &audio[10..14]);
     }
 }
