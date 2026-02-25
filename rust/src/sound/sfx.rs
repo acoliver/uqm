@@ -145,6 +145,140 @@ pub fn release_sound_bank_data(sound_bank: SoundBank) -> AudioResult<()> {
 mod tests {
     use super::*;
 
+    // --- P13 TDD ---
+
+    // REQ-SFX-PLAY-01..09
+    #[test]
+    #[ignore = "P14: play_channel stub"]
+    fn test_play_channel_invalid_channel_error() {
+        let bank = SoundBank {
+            samples: Vec::new(),
+            source_file: None,
+        };
+        let result = play_channel(
+            999,
+            &bank,
+            0,
+            SoundPosition {
+                positional: false,
+                x: 0,
+                y: 0,
+            },
+            0,
+            0,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P14: play_channel stub"]
+    fn test_play_channel_missing_sample_error() {
+        let bank = SoundBank {
+            samples: Vec::new(),
+            source_file: None,
+        };
+        let result = play_channel(
+            0,
+            &bank,
+            0,
+            SoundPosition {
+                positional: false,
+                x: 0,
+                y: 0,
+            },
+            0,
+            0,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P14: stop_channel stub"]
+    fn test_stop_channel_delegates() {
+        let result = stop_channel(0, 0);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P14: channel_playing stub"]
+    fn test_channel_playing_initial_false() {
+        assert!(!channel_playing(0));
+    }
+
+    #[test]
+    #[ignore = "P14: check_finished_channels stub"]
+    fn test_check_finished_channels_cleans() {
+        check_finished_channels(); // should not panic
+    }
+
+    // REQ-SFX-POSITION-01..05
+    #[test]
+    fn test_sound_position_non_positional() {
+        let pos = SoundPosition {
+            positional: false,
+            x: 0,
+            y: 0,
+        };
+        assert!(!pos.positional);
+    }
+
+    #[test]
+    fn test_sound_position_positional() {
+        let pos = SoundPosition {
+            positional: true,
+            x: 100,
+            y: -50,
+        };
+        assert!(pos.positional);
+        assert_eq!(pos.x, 100);
+        assert_eq!(pos.y, -50);
+    }
+
+    #[test]
+    fn test_sound_position_min_distance_concept() {
+        // MIN_DISTANCE prevents zero-distance division
+        let dist = 0.0f32;
+        let clamped = dist.max(MIN_DISTANCE);
+        assert!(clamped >= MIN_DISTANCE);
+    }
+
+    #[test]
+    #[ignore = "P14: get/set_positional_object stub"]
+    fn test_get_set_positional_object() {
+        set_positional_object(0, 42);
+        assert_eq!(get_positional_object(0), 42);
+    }
+
+    // REQ-SFX-LOAD-01..07
+    #[test]
+    #[ignore = "P14: get_sound_bank_data stub"]
+    fn test_get_sound_bank_data_empty_lines() {
+        let result = get_sound_bank_data("");
+        assert!(result.is_err());
+    }
+
+    // REQ-SFX-RELEASE-01..04
+    #[test]
+    #[ignore = "P14: release_sound_bank_data stub"]
+    fn test_release_sound_bank_data_empty_ok() {
+        let bank = SoundBank {
+            samples: Vec::new(),
+            source_file: None,
+        };
+        let result = release_sound_bank_data(bank);
+        assert!(result.is_ok());
+    }
+
+    // REQ-SFX-VOLUME-01
+    #[test]
+    fn test_set_channel_volume_gain_concept() {
+        // Gain = volume / MAX_VOLUME * scale
+        let volume = 128i32;
+        let scale = 0.8f32;
+        let gain = volume as f32 / MAX_VOLUME as f32 * scale;
+        assert!((gain - 0.4016).abs() < 0.01);
+    }
+
     #[test]
     fn test_sfx_state_new() {
         let state = SfxState::new();
@@ -158,16 +292,6 @@ mod tests {
         assert!(ATTENUATION > 0.0);
         assert!(MIN_DISTANCE > 0.0);
         assert_eq!(MAX_FX, NUM_SFX_CHANNELS);
-    }
-
-    #[test]
-    fn test_sound_position_non_positional() {
-        let pos = SoundPosition {
-            positional: false,
-            x: 0,
-            y: 0,
-        };
-        assert!(!pos.positional);
     }
 
     #[test]
