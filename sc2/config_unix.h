@@ -112,3 +112,6 @@
 /* Defined if using Rust DukAud decoder */
 #define USE_RUST_DUKAUD
 
+/* Defined if using Rust video player orchestration (replaces rust_video.c) */
+#define USE_RUST_VIDPLAYER
+

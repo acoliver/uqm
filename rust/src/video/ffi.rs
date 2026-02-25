@@ -35,6 +35,17 @@ extern "C" {
     // Logical screen dimensions from gfx_common.h (internal 320x240)
     static ScreenWidth: c_int;
     static ScreenHeight: c_int;
+
+    // Actual window dimensions for direct presentation
+    static ScreenWidthActual: c_int;
+    static ScreenHeightActual: c_int;
+
+    // Audio functions from sndlib.h
+    fn LoadMusicFile(filename: *const c_char) -> *mut c_void;
+    fn PLRPlaySong(music_ref: *mut c_void, continuous: c_int, priority: u8);
+    fn PLRStop(music_ref: *mut c_void);
+    fn snd_PlaySpeech(speech_ref: *mut c_void);
+    fn snd_StopSpeech();
 }
 
 // Minimal SDL types needed for direct pixel writes.
@@ -985,4 +996,185 @@ pub unsafe extern "C" fn rust_play_video_direct_window(
         xbrz_factor
     ));
     true
+}
+
+
+// ============================================================================
+// TFB_VideoClip layout (matches C struct tfb_videoclip from video.h)
+// ============================================================================
+
+/// C `RECT` type (from gfx types)
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CRect {
+    pub corner_x: i16,
+    pub corner_y: i16,
+    pub extent_w: i16,
+    pub extent_h: i16,
+}
+
+/// Matches `struct tfb_videoclip` from video.h.
+/// `VIDEO_REF` is a pointer to this struct.
+#[repr(C)]
+pub struct TFB_VideoClip {
+    pub decoder: *mut TFB_VideoDecoder,
+    pub length: f32,
+    pub w: u32,
+    pub h: u32,
+    pub dst_rect: CRect,
+    pub src_rect: CRect,
+    pub h_audio: *mut c_void,   // MUSIC_REF
+    pub frame_time: u32,
+    pub frame: *mut c_void,     // TFB_Image*
+    pub cur_frame: u32,
+    pub playing: bool,
+    pub own_audio: bool,
+    pub loop_frame: u32,
+    pub loop_to: u32,
+    pub guard: *mut c_void,     // Mutex
+    pub want_frame: u32,
+    pub lag_cnt: i32,
+    pub data: *mut c_void,
+}
+
+/// `VID_NO_LOOP` from vidlib.h: `(0U - 1)` = `0xFFFFFFFF`
+const VID_NO_LOOP: u32 = 0xFFFF_FFFF;
+
+// ============================================================================
+// TFB_* video player API — replaces rust_video.c
+// ============================================================================
+
+#[no_mangle]
+pub extern "C" fn TFB_InitVideoPlayer() -> bool {
+    true
+}
+
+#[no_mangle]
+pub extern "C" fn TFB_UninitVideoPlayer() {
+    rust_stop_video();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn TFB_PlayVideo(
+    vid: *mut TFB_VideoClip,
+    _x: u32,
+    _y: u32,
+) -> bool {
+    if vid.is_null() {
+        return false;
+    }
+    let clip = &mut *vid;
+
+    if clip.decoder.is_null() {
+        return false;
+    }
+    let dec = &*clip.decoder;
+
+    if dec.filename.is_null() {
+        return false;
+    }
+
+    let filename_cstr = CStr::from_ptr(dec.filename);
+    let filename_str = match filename_cstr.to_str() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    rust_bridge_log_msg(&format!("RUST_VIDEO: TFB_PlayVideo {}", filename_str));
+
+    let actual_width = ScreenWidthActual as u32;
+    let actual_height = ScreenHeightActual as u32;
+
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: Using direct window presentation (actual {}x{})",
+        actual_width, actual_height
+    ));
+
+    let ok = rust_play_video_direct_window(
+        dec.dir,
+        dec.filename,
+        actual_width,
+        actual_height,
+        clip.loop_frame != VID_NO_LOOP,
+    );
+
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: rust_play_video_direct_window returned {}",
+        ok as i32
+    ));
+
+    if !ok {
+        return false;
+    }
+
+    // Load audio from .duk if no separate audio was specified
+    if clip.h_audio.is_null() {
+        clip.h_audio = LoadMusicFile(dec.filename);
+        if !clip.h_audio.is_null() {
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: loaded embedded audio from {}",
+                filename_str
+            ));
+        } else {
+            rust_bridge_log_msg(&format!(
+                "RUST_VIDEO: no audio found for {}",
+                filename_str
+            ));
+        }
+    }
+
+    // Start audio playback
+    if !clip.h_audio.is_null() {
+        let continuous = if clip.loop_frame != VID_NO_LOOP { 1 } else { 0 };
+        PLRPlaySong(clip.h_audio, continuous, 1);
+    }
+
+    // Start speech track if present
+    if !clip.data.is_null() {
+        snd_PlaySpeech(clip.data);
+    }
+
+    true
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn TFB_StopVideo(vid: *mut TFB_VideoClip) {
+    if !vid.is_null() {
+        let clip = &*vid;
+        if !clip.h_audio.is_null() {
+            PLRStop(clip.h_audio);
+        }
+        if !clip.data.is_null() {
+            snd_StopSpeech();
+        }
+    }
+    rust_stop_video();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn TFB_VideoPlaying(_vid: *mut TFB_VideoClip) -> bool {
+    rust_video_playing()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn TFB_ProcessVideoFrame(_vid: *mut TFB_VideoClip) -> bool {
+    let ok = rust_process_video_frame();
+    rust_bridge_log_msg(&format!(
+        "RUST_VIDEO: rust_process_video_frame -> {}",
+        ok as i32
+    ));
+    ok
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn TFB_GetVideoPosition(_vid: *mut TFB_VideoClip) -> u32 {
+    rust_get_video_position()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn TFB_SeekVideo(
+    _vid: *mut TFB_VideoClip,
+    _pos: u32,
+) -> bool {
+    false
 }

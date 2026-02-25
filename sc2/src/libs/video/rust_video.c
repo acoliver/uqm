@@ -1,11 +1,15 @@
 /*
  *  Rust Video Player wrapper
  *
- *  When USE_RUST_VIDEO is defined, this file routes the legacy C video-player
- *  API (vidplayer.c) into the pure Rust video player.
+ *  When USE_RUST_VIDEO is defined (but USE_RUST_VIDPLAYER is not), this file
+ *  routes the legacy C video-player API (vidplayer.c) into the pure Rust
+ *  video player. When USE_RUST_VIDPLAYER is also defined, the Rust staticlib
+ *  exports TFB_* symbols directly and this file is empty.
  */
 
-#ifdef USE_RUST_VIDEO
+#include "port.h"
+
+#if defined(USE_RUST_VIDEO) && !defined(USE_RUST_VIDPLAYER)
 
 #include "video.h"
 #include "vidplayer.h"
@@ -131,4 +135,4 @@ TFB_SeekVideo (VIDEO_REF vid, uint32 pos)
 	return false;
 }
 
-#endif /* USE_RUST_VIDEO */
+#endif /* USE_RUST_VIDEO && !USE_RUST_VIDPLAYER */
