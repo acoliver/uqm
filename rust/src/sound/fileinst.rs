@@ -64,22 +64,29 @@ fn acquire_load_guard(filename: &str) -> AudioResult<FileLoadGuard> {
 
 /// Load a sound bank from a resource file.
 pub fn load_sound_file(filename: &str) -> AudioResult<SoundBank> {
-    todo!("P17: load_sound_file")
+    let _guard = acquire_load_guard(filename)?;
+    sfx::get_sound_bank_data(filename)
 }
 
 /// Load music from a resource file.
 pub fn load_music_file(filename: &str) -> AudioResult<MusicRef> {
-    todo!("P17: load_music_file")
+    let _guard = acquire_load_guard(filename)?;
+
+    if !music::check_music_res_name(filename) {
+        return Err(AudioError::ResourceNotFound(filename.to_string()));
+    }
+
+    music::get_music_data(filename)
 }
 
 /// Destroy/release a sound bank.
 pub fn destroy_sound(bank: SoundBank) -> AudioResult<()> {
-    todo!("P17: destroy_sound")
+    sfx::release_sound_bank_data(bank)
 }
 
 /// Destroy/release a music reference.
 pub fn destroy_music(music_ref: MusicRef) -> AudioResult<()> {
-    todo!("P17: destroy_music")
+    music::release_music_data(music_ref)
 }
 
 // =============================================================================
@@ -93,14 +100,14 @@ mod tests {
     // --- P16 TDD ---
 
     #[test]
-    #[ignore = "P17: load_sound_file stub"]
+
     fn test_load_sound_file_empty_error() {
         let result = load_sound_file("");
         assert!(result.is_err());
     }
 
     #[test]
-    #[ignore = "P17: load_music_file stub"]
+
     fn test_load_music_file_delegates() {
         let _serial = TEST_LOCK.lock().unwrap();
         FILE_STATE.lock().cur_resfile_name = None;
@@ -109,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P17: destroy_sound stub"]
+
     fn test_destroy_sound_delegates() {
         let bank = SoundBank {
             samples: Vec::new(),
@@ -120,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P17: destroy_music stub"]
+
     fn test_destroy_music_delegates() {
         let sample = crate::sound::stream::create_sound_sample(None, 4, None).unwrap();
         let music_ref = MusicRef(std::sync::Arc::new(Mutex::new(sample)));

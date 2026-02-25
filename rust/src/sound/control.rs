@@ -64,12 +64,12 @@ static VOLUME: std::sync::LazyLock<Mutex<VolumeState>> =
 
 /// Initialize the sound system.
 pub fn init_sound() -> AudioResult<()> {
-    todo!("P17: init_sound")
+    Ok(())
 }
 
 /// Uninitialize the sound system.
 pub fn uninit_sound() {
-    todo!("P17: uninit_sound")
+    // Cleanup handled by Rust Drop semantics on program exit
 }
 
 // =============================================================================
@@ -78,17 +78,40 @@ pub fn uninit_sound() {
 
 /// Stop a sound source by index.
 pub fn stop_source(source_index: usize) -> AudioResult<()> {
-    todo!("P17: stop_source")
+    if source_index >= NUM_SOUNDSOURCES {
+        return Err(AudioError::InvalidChannel(source_index));
+    }
+    stream::stop_source(source_index)?;
+    clean_source(source_index)?;
+    Ok(())
 }
 
 /// Clean up a stopped source (unqueue buffers, rewind).
 pub fn clean_source(source_index: usize) -> AudioResult<()> {
-    todo!("P17: clean_source")
+    if source_index >= NUM_SOUNDSOURCES {
+        return Err(AudioError::InvalidChannel(source_index));
+    }
+    stream::with_source(source_index, |source| {
+        source.positional_object = 0;
+        let handle = source.handle;
+
+        // Unqueue processed buffers
+        let processed = mixer_source::mixer_get_source_i(handle, SourceProp::BuffersProcessed)
+            .unwrap_or(0) as u32;
+        if processed > 0 {
+            let _ = mixer_source::mixer_source_unqueue_buffers(handle, processed);
+        }
+
+        let _ = mixer_source::mixer_source_rewind(handle);
+    });
+    Ok(())
 }
 
 /// Stop all SFX sources.
 pub fn stop_sound() {
-    todo!("P17: stop_sound")
+    for i in FIRST_SFX_SOURCE..=LAST_SFX_SOURCE {
+        let _ = stop_source(i);
+    }
 }
 
 // =============================================================================
@@ -97,12 +120,28 @@ pub fn stop_sound() {
 
 /// Set the SFX volume and apply gain to all SFX sources.
 pub fn set_sfx_volume(volume: i32) {
-    todo!("P17: set_sfx_volume")
+    let mut vol = VOLUME.lock();
+    vol.sfx_volume_scale = volume as f32 / MAX_VOLUME as f32;
+    let scale = vol.sfx_volume_scale;
+    drop(vol);
+
+    for i in FIRST_SFX_SOURCE..=LAST_SFX_SOURCE {
+        stream::with_source(i, |source| {
+            let _ = mixer_source::mixer_source_f(source.handle, SourceProp::Gain, scale);
+        });
+    }
 }
 
 /// Set the speech volume and apply gain to the speech source.
 pub fn set_speech_volume(volume: i32) {
-    todo!("P17: set_speech_volume")
+    let mut vol = VOLUME.lock();
+    vol.speech_volume_scale = volume as f32 / MAX_VOLUME as f32;
+    let scale = vol.speech_volume_scale;
+    drop(vol);
+
+    stream::with_source(SPEECH_SOURCE, |source| {
+        let _ = mixer_source::mixer_source_f(source.handle, SourceProp::Gain, scale);
+    });
 }
 
 // =============================================================================
@@ -111,14 +150,53 @@ pub fn set_speech_volume(volume: i32) {
 
 /// Check if any sound is currently playing.
 pub fn sound_playing() -> bool {
-    todo!("P17: sound_playing")
+    for i in 0..NUM_SOUNDSOURCES {
+        let playing = stream::with_source(i, |source| {
+            if source.sample.is_some() {
+                if let Some(ref sample_arc) = source.sample {
+                    let sample = sample_arc.lock();
+                    if sample.decoder.is_some() {
+                        // Streaming source: check flag to avoid deadlock
+                        return source.stream_should_be_playing;
+                    }
+                }
+                // Non-streaming: query mixer
+                mixer_source::mixer_get_source_i(source.handle, SourceProp::SourceState)
+                    .map(|s| s == 0x1012) // Playing
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .unwrap_or(false);
+
+        if playing {
+            return true;
+        }
+    }
+    false
 }
 
 /// Block until sound playback finishes.
 ///
 /// `channel`: `None` = wait for all sources, `Some(ch)` = specific channel.
 pub fn wait_for_sound_end(channel: Option<usize>) {
-    todo!("P17: wait_for_sound_end")
+    loop {
+        if crate::sound::types::quit_posted() {
+            break;
+        }
+
+        let still_playing = match channel {
+            None => sound_playing(),
+            Some(ch) => sfx::channel_playing(ch),
+        };
+
+        if !still_playing {
+            break;
+        }
+
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 // =============================================================================
@@ -132,34 +210,34 @@ mod tests {
     // --- P16 TDD ---
 
     #[test]
-    #[ignore = "P17: init_sound stub"]
+
     fn test_init_sound_ok() {
         let result = init_sound();
         assert!(result.is_ok());
     }
 
     #[test]
-    #[ignore = "P17: stop_source stub"]
+
     fn test_stop_source_invalid_index_error() {
         let result = stop_source(999);
         assert!(result.is_err());
     }
 
     #[test]
-    #[ignore = "P17: clean_source stub"]
+
     fn test_clean_source_invalid_index_error() {
         let result = clean_source(999);
         assert!(result.is_err());
     }
 
     #[test]
-    #[ignore = "P17: stop_sound stub"]
+
     fn test_stop_sound_all_sfx_channels() {
         stop_sound(); // should not panic
     }
 
     #[test]
-    #[ignore = "P17: set_sfx_volume stub"]
+
     fn test_set_sfx_volume_all_channels() {
         set_sfx_volume(128); // should not panic
         let state = VOLUME.lock();
@@ -167,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P17: set_speech_volume stub"]
+
     fn test_set_speech_volume_speech_source() {
         set_speech_volume(200); // should not panic
         let state = VOLUME.lock();
@@ -175,13 +253,13 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "P17: sound_playing stub"]
+
     fn test_sound_playing_false_when_idle() {
         assert!(!sound_playing());
     }
 
     #[test]
-    #[ignore = "P17: wait_for_sound_end stub"]
+
     fn test_wait_for_sound_end_returns_when_not_playing() {
         wait_for_sound_end(None); // should return immediately
     }
