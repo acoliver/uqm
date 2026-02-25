@@ -13,6 +13,7 @@
 //! - `rodio_audio` module provides a simple rodio-based audio system
 //! - `rodio_backend` module provides OpenAL-compatible API using rodio
 
+pub mod aiff;
 pub mod decoder;
 pub mod dukaud;
 pub mod dukaud_ffi;
