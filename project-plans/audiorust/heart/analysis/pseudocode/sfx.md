@@ -26,7 +26,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 17:
 18:   // REQ-SFX-PLAY-04: set source state
 19:   LET source = SOURCES.sources[channel].lock()
-20:   SET source.sample = Some(Arc::new(Mutex::new(sample.clone())))
+20:   SET source.sample = Some(Arc::new(parking_lot::Mutex::new(sample.clone())))
 21:   SET source.positional_object = positional_object
 22:
 23:   // REQ-SFX-PLAY-05: positional audio

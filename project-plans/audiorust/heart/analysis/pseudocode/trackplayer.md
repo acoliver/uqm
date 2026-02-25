@@ -43,7 +43,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 34:   IF state.track_count == 0 THEN
 35:     LET callbacks = Box::new(TrackCallbacks) as Box<dyn StreamCallbacks + Send>
 36:     LET sample = create_sound_sample(None, 8, Some(callbacks))?
-37:     SET state.sound_sample = Some(Arc::new(Mutex::new(sample)))
+37:     SET state.sound_sample = Some(Arc::new(parking_lot::Mutex::new(sample)))
 38:   END IF
 39:
 40:   // REQ-TRACK-ASSEMBLE-01: split pages

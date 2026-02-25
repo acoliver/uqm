@@ -49,7 +49,10 @@ Why it matters:
 - `rust/src/sound/aiff.rs`
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P05`
   - Implement: `read_be_u16()`, `read_be_u32()`, `read_be_i16()` — pseudocode lines 20–31
-  - Implement: `read_be_f80()` — pseudocode lines 32–47, REQ-FP-14
+   - Implement: `read_be_f80()` — pseudocode lines 32–61, REQ-FP-14
+     - Must handle denormalized (exponent==0) → return 0
+     - Must handle infinity/NaN (exponent==0x7FFF) → return Err(InvalidData)
+     - Normal case: unbias exponent, shift mantissa, clamp overflow
   - Implement: `read_chunk_header()` — pseudocode lines 48–51
   - Implement: `read_common_chunk()` — pseudocode lines 52–68, REQ-FP-8 through REQ-FP-11
   - Implement: `read_sound_data_header()` — pseudocode lines 69–72, REQ-FP-12
@@ -89,7 +92,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] All parser tests pass (`cargo test -- aiff`)
 - [ ] Valid AIFF files parse correctly (frequency, format, length, data length match)
 - [ ] All validation errors trigger with correct `DecodeError` variant
-- [ ] f80 conversion produces correct integer sample rates
+- [ ] f80 conversion produces correct integer sample rates for normal values
+- [ ] f80 denormalized (exponent==0) returns 0
+- [ ] f80 infinity/NaN (exponent==0x7FFF) returns Err(InvalidData)
 - [ ] Odd chunk padding handled correctly
 - [ ] Unknown chunks skipped without error
 - [ ] Duplicate COMM chunks don't error (later overwrites earlier)

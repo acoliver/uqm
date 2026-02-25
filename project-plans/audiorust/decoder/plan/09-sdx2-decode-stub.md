@@ -9,13 +9,20 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-DS-1 through REQ-DS-8: SDX2 ADPCM Decoding (Stubs)
-**Requirement text**: Prepare SDX2 decode method signature and confirm dispatch path is wired.
+### REQ-DS-1 (dispatch confirmation): SDX2 Decode Dispatch
+**Requirement text**: Confirm `decode_sdx2()` stub exists and is reachable from `decode()` dispatch.
 
 Behavior contract:
 - GIVEN: `decode_sdx2()` has a `todo!()` stub from Phase 06
-- WHEN: This phase completes
-- THEN: `decode_sdx2()` signature remains correct, dispatch confirmed working for SDX2 comp_type
+- WHEN: `decode()` is called on a decoder opened with `CompressionType::Sdx2`
+- THEN: The dispatch match reaches `decode_sdx2()` (which panics with `todo!()` in this phase)
+
+### Stub Verification
+Behavior contract:
+- GIVEN: The `decode_sdx2()` stub was created in Phase 06
+- WHEN: `cargo check` is run
+- THEN: The code compiles with the correct signature `fn decode_sdx2(&mut self, buf: &mut [u8]) -> DecodeResult<usize>`
+- AND: The `todo!()` body is preserved (will be replaced in Phase 11)
 
 Why it matters:
 - Confirms the SDX2 decode path is reachable via the dispatch in decode()

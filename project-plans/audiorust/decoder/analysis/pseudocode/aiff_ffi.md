@@ -144,43 +144,40 @@
 89:
 90:     LET dec = &mut *((*rd).rust_decoder as *mut AiffDecoder)
 91:
-92:     // Initialize with stored formats
-93:     LOCK RUST_AIFA_FORMATS:
-94:       IF formats exists:
-95:         CALL dec.init_module(0, &formats)
-96:     CALL dec.init()
-97:
-98:     // Read file via UIO (REQ-FF-6)
-99:     LET file_data = read_uio_file(dir, filename)
-100:    IF file_data is None:
-101:      LOG "RUST_AIFF_OPEN: failed to read {filename_str}"
-102:      RETURN 0
-103:
-104:    // Open from bytes
-105:    MATCH dec.open_from_bytes(&file_data, filename_str):
-106:      Ok(()) =>
-107:        // Update base struct (REQ-FF-7)
-108:        SET (*decoder).frequency = dec.frequency()
-109:
-110:        LOCK RUST_AIFA_FORMATS:
-111:          LET format_code = MATCH dec.format():
-112:            AudioFormat::Mono8   => formats.mono8
-113:            AudioFormat::Stereo8 => formats.stereo8
-114:            AudioFormat::Mono16  => formats.mono16
-115:            AudioFormat::Stereo16 => formats.stereo16
-116:          SET (*decoder).format = format_code
-117:
-118:        SET (*decoder).length = dec.length()
-119:        SET (*decoder).is_null = false
-120:        SET (*decoder).need_swap = dec.needs_swap()
+92:     // NOTE: Do NOT call init_module()/init() here — those are separate
+93:     // vtable calls made by the C framework (matching dukaud_ffi.rs pattern).
+94:
+95:     // Read file via UIO (REQ-FF-6)
+96:     LET file_data = read_uio_file(dir, filename)
+97:     IF file_data is None:
+98:       LOG "RUST_AIFF_OPEN: failed to read {filename_str}"
+99:       RETURN 0
+100:
+101:    // Open from bytes
+102:    MATCH dec.open_from_bytes(&file_data, filename_str):
+103:      Ok(()) =>
+104:        // Update base struct (REQ-FF-7)
+105:        SET (*decoder).frequency = dec.frequency()
+106:
+107:        LOCK RUST_AIFA_FORMATS:
+108:          LET format_code = MATCH dec.format():
+109:            AudioFormat::Mono8   => formats.mono8
+110:            AudioFormat::Stereo8 => formats.stereo8
+111:            AudioFormat::Mono16  => formats.mono16
+112:            AudioFormat::Stereo16 => formats.stereo16
+113:          SET (*decoder).format = format_code
+114:
+115:        SET (*decoder).length = dec.length()
+116:        SET (*decoder).is_null = false
+117:        SET (*decoder).need_swap = dec.needs_swap()
+118:
+119:        LOG "RUST_AIFF_OPEN: OK freq={} format={} length={}s"
+120:        RETURN 1
 121:
-122:        LOG "RUST_AIFF_OPEN: OK freq={} format={} length={}s"
-123:        RETURN 1
-124:
-125:      Err(e) =>
-126:        // (REQ-FF-8)
-127:        LOG "RUST_AIFF_OPEN: error: {e}"
-128:        RETURN 0
+122:      Err(e) =>
+123:        // (REQ-FF-8)
+124:        LOG "RUST_AIFF_OPEN: error: {e}"
+125:        RETURN 0
 ```
 
 ## 12. Close

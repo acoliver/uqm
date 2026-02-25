@@ -9,7 +9,7 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-VOLUME-INIT-01..05: Initialization Stubs
+### REQ-VOLUME-INIT-01 through REQ-VOLUME-INIT-05: Initialization Stubs
 **Requirement text**: SoundSourceArray with mixer source handles; VolumeState with defaults.
 
 Behavior contract:
@@ -17,10 +17,29 @@ Behavior contract:
 - WHEN: control.rs is created
 - THEN: Source array and volume state compile
 
-### REQ-VOLUME-CONTROL-01..05: Volume Control Stubs
-### REQ-VOLUME-SOURCE-01..04: Source Management Stubs
-### REQ-VOLUME-QUERY-01..03: Query Stubs
-### REQ-FILEINST-LOAD-01..07: File Loading Stubs
+### REQ-VOLUME-CONTROL-01 through REQ-VOLUME-CONTROL-05: Volume Control Stubs
+Behavior contract:
+- GIVEN: Mixer provides `mixer_source_f(handle, SourceProp::Gain, gain)`
+- WHEN: `set_sfx_volume`, `set_speech_volume` stubs are defined
+- THEN: They accept volume as i32 and return `AudioResult<()>`
+
+### REQ-VOLUME-SOURCE-01 through REQ-VOLUME-SOURCE-04: Source Management Stubs
+Behavior contract:
+- GIVEN: Mixer provides `mixer_source_stop`, `mixer_source_rewind`
+- WHEN: `stop_source`, `clean_source`, `stop_sound` stubs are defined
+- THEN: They accept source_index as usize and return `AudioResult<()>`
+
+### REQ-VOLUME-QUERY-01 through REQ-VOLUME-QUERY-03: Query Stubs
+Behavior contract:
+- GIVEN: SoundSourceArray exists with per-source mutex
+- WHEN: `sound_playing`, `wait_for_sound_end` stubs are defined
+- THEN: `sound_playing` returns `bool`, `wait_for_sound_end` returns `AudioResult<()>`
+
+### REQ-FILEINST-LOAD-01 through REQ-FILEINST-LOAD-07: File Loading Stubs
+Behavior contract:
+- GIVEN: uio_* FFI functions for file I/O
+- WHEN: `load_sound_file`, `load_music_file`, `destroy_sound`, `destroy_music` stubs are defined
+- THEN: Load functions accept filename and return `AudioResult<*mut c_void>`, destroy functions accept handle and return `AudioResult<()>`
 
 ## Implementation Tasks
 
@@ -37,7 +56,7 @@ Behavior contract:
   - marker: `@plan PLAN-20260225-AUDIO-HEART.P15`
 
 ### control.rs stub contents
-1. `SoundSourceArray` struct with `[Mutex<SoundSource>; NUM_SOUNDSOURCES]`
+1. `SoundSourceArray` struct with `[parking_lot::Mutex<SoundSource>; NUM_SOUNDSOURCES]`
 2. `VolumeState` struct
 3. `lazy_static!` for `SOURCES` (pub(crate)) and `VOLUME`
 4. All public functions with `todo!()`:
@@ -70,7 +89,7 @@ cd /Users/acoliver/projects/uqm/rust && cargo clippy --workspace --all-targets -
 ## Structural Verification Checklist
 - [ ] `control.rs` and `fileinst.rs` created
 - [ ] `mod.rs` updated
-- [ ] SoundSourceArray compiles with array of Mutex<SoundSource>
+- [ ] SoundSourceArray compiles with array of `parking_lot::Mutex<SoundSource>`
 - [ ] FileLoadGuard implements Drop
 - [ ] `cargo check` passes
 

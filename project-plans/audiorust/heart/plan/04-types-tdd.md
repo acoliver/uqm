@@ -9,7 +9,7 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-CROSS-CONST-01..08: Constants Correctness
+### REQ-CROSS-CONST-01, REQ-CROSS-CONST-02, REQ-CROSS-CONST-03, REQ-CROSS-CONST-04, REQ-CROSS-CONST-05, REQ-CROSS-CONST-06, REQ-CROSS-CONST-07, REQ-CROSS-CONST-08: Constants Correctness
 **Requirement text**: All constants match specified values.
 
 Behavior contract:
@@ -17,7 +17,7 @@ Behavior contract:
 - WHEN: Tests assert their values
 - THEN: All match spec exactly
 
-### REQ-CROSS-ERROR-01..03: Error Handling
+### REQ-CROSS-ERROR-01, REQ-CROSS-ERROR-02, REQ-CROSS-ERROR-03: Error Handling
 **Requirement text**: AudioError conversions and Display work correctly.
 
 Behavior contract:
@@ -33,12 +33,26 @@ Behavior contract:
 - WHEN: Compile-time assertions check Send/Sync
 - THEN: SoundSample is Send, AudioError is Send+Sync
 
+### SoundDecoder Trait Gap Tests (rust-heart.md Action Items #1-3)
+**Requirement text**: `decode_all` and `get_decoder_time` free functions work correctly; `SoundSample.looping` field exists.
+
+Behavior contract:
+- GIVEN: `decode_all` loops decoder.decode() until EOF
+- WHEN: Called with a NullDecoder
+- THEN: Returns `Ok(Vec::new())` (empty, since NullDecoder returns EOF immediately)
+- GIVEN: `get_decoder_time` computes `get_frame() / frequency()`
+- WHEN: Called with a fresh decoder
+- THEN: Returns 0.0 (frame 0, frequency > 0)
+- GIVEN: `SoundSample` has `looping: bool` field
+- WHEN: Constructed with defaults
+- THEN: `looping` is `false`
+
 ## Implementation Tasks
 
 ### Files to modify
 - `rust/src/sound/types.rs` — Add `#[cfg(test)] mod tests` with TDD tests
   - marker: `@plan PLAN-20260225-AUDIO-HEART.P04`
-  - marker: `@requirement REQ-CROSS-CONST-01..08, REQ-CROSS-ERROR-01..03`
+  - marker: `@requirement REQ-CROSS-CONST-01, REQ-CROSS-CONST-02, REQ-CROSS-CONST-03, REQ-CROSS-CONST-04, REQ-CROSS-CONST-05, REQ-CROSS-CONST-06, REQ-CROSS-CONST-07, REQ-CROSS-CONST-08, REQ-CROSS-ERROR-01, REQ-CROSS-ERROR-02, REQ-CROSS-ERROR-03, REQ-CROSS-GENERAL-04`
 
 ### Tests to write (RED phase — these should FAIL if types are wrong)
 1. `test_constants_values` — Assert all 8 constant groups match spec values

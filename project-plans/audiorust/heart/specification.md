@@ -10,7 +10,7 @@ Date: 2026-02-25
 
 The UQM audio pipeline currently uses six C source files (`stream.c`, `trackplayer.c`, `music.c`, `sfx.c`, `sound.c`, `fileinst.c`) that implement the "heart" of the audio subsystem — streaming playback, track/subtitle management, music/SFX APIs, volume control, and file-based loading. These C modules use global mutable state, function-pointer callbacks, manual memory management, and ad-hoc thread synchronization.
 
-This specification defines equivalent Rust modules that replace all six C files entirely. The Rust implementation uses `Arc<Mutex<>>`, trait objects, typed errors, and explicit ownership to provide the same behavior with stronger safety guarantees. The existing Rust mixer (`sound::mixer`) and decoder (`sound::decoder`) modules are reused without modification; the new modules sit above them in the architecture.
+This specification defines equivalent Rust modules that replace all six C files entirely. The Rust implementation uses `Arc<parking_lot::Mutex<>>`, trait objects, typed errors, and explicit ownership to provide the same behavior with stronger safety guarantees. The existing Rust mixer (`sound::mixer`) and decoder (`sound::decoder`) modules are reused without modification; the new modules sit above them in the architecture.
 
 ---
 
@@ -66,7 +66,7 @@ This specification defines equivalent Rust modules that replace all six C files 
 │  SoundSample / SoundTag / scope buffer                            │
 ├──────────────────────────────────────────────────────────────────┤
 │                    control.rs                                     │
-│  SoundSourceArray (Arc<Mutex<>> wrapped sources)                  │
+│  SoundSourceArray (parking_lot::Mutex<> wrapped sources)           │
 │  stop_source / clean_source / volume control                      │
 ├──────────────────────────────────────────────────────────────────┤
 │                 sound::mixer (existing)                            │
@@ -148,7 +148,7 @@ pub const ONE_SECOND: u32 = 840;
 - **`MusicRef`** — `#[repr(transparent)]` wrapper around `*mut SoundSample`.
 - **`SoundPosition`** — `#[repr(C)]` struct: `positional`, `x`, `y`.
 - **`SoundBank`** — Collection of pre-decoded SFX samples.
-- **`SoundSourceArray`** — `[Mutex<SoundSource>; NUM_SOUNDSOURCES]`.
+- **`SoundSourceArray`** — `[parking_lot::Mutex<SoundSource>; NUM_SOUNDSOURCES]`.
 - **`VolumeState`** — `music_volume`, `music_volume_scale`, `sfx_volume_scale`, `speech_volume_scale`.
 - **`FileInstState`** — `cur_resfile_name` concurrency guard.
 
@@ -195,7 +195,7 @@ All `mixer_*` functions from `sound::mixer` are called directly:
 
 | ID | Title | Summary |
 |----|-------|---------|
-| REQ-STREAM-INIT-01 | Fade mutex init | Create `Mutex<FadeState>` on init |
+| REQ-STREAM-INIT-01 | Fade mutex init | Create `parking_lot::Mutex<FadeState>` on init |
 | REQ-STREAM-INIT-02 | Decoder thread spawn | Spawn background decoder thread |
 | REQ-STREAM-INIT-03 | Thread spawn failure | Return `Err(AudioError::NotInitialized)` on spawn failure |
 | REQ-STREAM-INIT-04 | Shutdown sequence | Set `shutdown` atomic, notify condvar, join thread |

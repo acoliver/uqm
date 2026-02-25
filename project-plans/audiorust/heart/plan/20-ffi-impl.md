@@ -25,7 +25,7 @@ All REQ-CROSS-FFI-* (4) and REQ-CROSS-GENERAL-03,08 requirements fully implement
 ### Files to modify
 - `rust/src/sound/heart_ffi.rs` — Replace all `todo!()` with FFI shim implementations
   - marker: `@plan PLAN-20260225-AUDIO-HEART.P20`
-  - marker: `@requirement REQ-CROSS-FFI-01..04, REQ-CROSS-GENERAL-03,08`
+  - marker: `@requirement REQ-CROSS-FFI-01, REQ-CROSS-FFI-02, REQ-CROSS-FFI-03, REQ-CROSS-FFI-04, REQ-CROSS-GENERAL-03, REQ-CROSS-GENERAL-08`
 
 ### Implementation details for each function category
 
@@ -45,6 +45,23 @@ All REQ-CROSS-FFI-* (4) and REQ-CROSS-GENERAL-03,08 requirements fully implement
 - `LoadSoundFile`/`LoadMusicFile`: Box::into_raw for return values
 - `CCallbackWrapper`: stores raw C function pointers, calls them via `unsafe`
 - All `unsafe` blocks must be documented with safety invariant comments
+
+**PlayChannel FFI Handle Resolution (Technical Review Issue #6)**
+
+The C API `PlayChannel(snd, index, notsfx, priority, positional)` receives `snd` as `*mut c_void` (opaque SOUND handle). Resolution:
+
+1. The SOUND handle is a `*mut SoundBank` — it was created by `LoadSoundFile` → `get_sound_bank_data` → `Box::into_raw`.
+2. In `PlayChannel` FFI shim: cast `snd` back to `&SoundBank` via `Box::from_raw` (or just `&*snd.cast::<SoundBank>()` with null check).
+3. Use `index` to look up the specific sample: `bank.samples[index as usize]`.
+4. If `index` is out of bounds or `samples[index]` is `None`, return error (no-op in C convention).
+5. Pass the resolved sample to `sfx::play_channel()`.
+
+The SOUND handle lifecycle:
+- Created: `LoadSoundFile` → `Box::into_raw(Box::new(SoundBank))` → returns `*mut c_void`
+- Used: `PlayChannel` → `&*(snd as *mut SoundBank)` → `bank.samples[index]`
+- Destroyed: `DestroySound` → `Box::from_raw(snd as *mut SoundBank)` → drops
+
+Document this pattern with `// SAFETY:` comments in the FFI shim.
 
 ### Safety documentation requirements
 Every `unsafe` block in heart_ffi.rs must have a `// SAFETY:` comment explaining:

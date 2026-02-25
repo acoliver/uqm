@@ -16,11 +16,11 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 | SoundChunk | `struct SoundChunk` | Owned by TrackPlayerState (linked list via Box) | Created on splice_track, dropped on stop_track |
 | FadeState | `struct FadeState` | Owned by StreamEngine | Program lifetime |
 | StreamEngine | `struct StreamEngine` | Global static (lazy_static) | Program lifetime |
-| TrackPlayerState | `struct TrackPlayerState` | Global static (lazy_static + Mutex) | Program lifetime |
-| MusicState | `struct MusicState` | Global static (lazy_static + Mutex) | Program lifetime |
-| SfxState | `struct SfxState` | Global static (lazy_static + Mutex) | Program lifetime |
-| VolumeState | `struct VolumeState` | Global static (lazy_static + Mutex) | Program lifetime |
-| FileInstState | `struct FileInstState` | Global static (lazy_static + Mutex) | Program lifetime |
+| TrackPlayerState | `struct TrackPlayerState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
+| MusicState | `struct MusicState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
+| SfxState | `struct SfxState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
+| VolumeState | `struct VolumeState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
+| FileInstState | `struct FileInstState` | Global static (lazy_static + parking_lot::Mutex) | Program lifetime |
 | SoundSourceArray | `struct SoundSourceArray` | Global static (lazy_static) | Program lifetime |
 | MusicRef | `#[repr(transparent)] struct MusicRef(*mut SoundSample)` | Raw pointer wrapper (C owns handle, Rust owns data) | Created on load, destroyed on release |
 | SoundBank | `struct SoundBank` | Owned by caller (C game code via opaque pointer) | Created on load_sound_file, destroyed on release |
@@ -228,7 +228,7 @@ New files added:
 Lock ordering (must be respected to avoid deadlock):
 1. `TRACK_STATE` mutex (outermost)
 2. Source mutex (per-source, from `SOURCES.sources[i]`)
-3. Sample mutex (per-sample, from `Arc<Mutex<SoundSample>>`)
+3. Sample mutex (per-sample, from `Arc<parking_lot::Mutex<SoundSample>>`)
 4. `FadeState` mutex (innermost)
 
 Never hold a higher-numbered lock while acquiring a lower-numbered one.

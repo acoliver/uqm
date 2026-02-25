@@ -8,7 +8,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 
 ```
 01: STRUCT FileLoadGuard<'a> {
-02:   state: &'a Mutex<FileInstState>,
+02:   state: &'a parking_lot::Mutex<FileInstState>,
 03: }
 04:
 05: IMPL Drop FOR FileLoadGuard {

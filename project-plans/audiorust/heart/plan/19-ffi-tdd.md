@@ -9,7 +9,7 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-CROSS-FFI-01..04: FFI Correctness
+### REQ-CROSS-FFI-01, REQ-CROSS-FFI-02, REQ-CROSS-FFI-03, REQ-CROSS-FFI-04: FFI Correctness
 ### REQ-CROSS-GENERAL-03: Unsafe Containment
 ### REQ-CROSS-GENERAL-08: Error Translation
 

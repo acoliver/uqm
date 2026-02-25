@@ -110,12 +110,14 @@ Why it matters:
 15. `test_reject_aiff_with_extension` — AIFF + ext_type_id!=0 → UnsupportedFormat
 16. `test_reject_aifc_unknown_compression` — AIFC + non-SDX2 → UnsupportedFormat
 17. `test_f80_known_rates` — 44100, 22050, 8000, 48000, 96000, 11025 round-trips
-18. `test_chunk_alignment_padding` — Odd-sized chunk followed by another chunk
-19. `test_unknown_chunk_skipped` — Unknown chunk ID is skipped, parsing continues
-20. `test_duplicate_comm_chunk` — Later COMM overwrites earlier (no error)
-21. `test_open_sets_metadata` — After successful open: frequency, format, length, max_pcm are correct
-22. `test_sdx2_requires_16bit` — SDX2 with 8-bit → UnsupportedFormat
-23. `test_sdx2_channel_limit` — SDX2 with >4 channels → UnsupportedFormat
+18. `test_f80_denormalized_returns_zero` — Exponent==0 (denormalized) → read_be_f80 returns Ok(0)
+19. `test_f80_infinity_returns_error` — Exponent==0x7FFF with mantissa!=0 or ==0 (infinity/NaN) → Err(InvalidData)
+20. `test_chunk_alignment_padding` — Odd-sized chunk followed by another chunk
+21. `test_unknown_chunk_skipped` — Unknown chunk ID is skipped, parsing continues
+22. `test_duplicate_comm_chunk` — Later COMM overwrites earlier (no error)
+23. `test_open_sets_metadata` — After successful open: frequency, format, length, max_pcm are correct
+24. `test_sdx2_requires_16bit` — SDX2 with 8-bit → UnsupportedFormat
+25. `test_sdx2_channel_limit` — SDX2 with >4 channels → UnsupportedFormat
 
 ### Pseudocode traceability
 - Tests cover pseudocode lines: 73–224 (open_from_bytes), 32–47 (read_be_f80), 48–68 (chunk parsing)
@@ -136,7 +138,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## Structural Verification Checklist
 - [ ] Test module exists in `rust/src/sound/aiff.rs`
-- [ ] At least 20 test functions defined
+- [ ] At least 22 test functions defined
 - [ ] Test helper `build_aiff_file()` creates synthetic AIFF byte arrays
 - [ ] Tests compile (`--no-run`)
 - [ ] Plan/requirement traceability in test comments
@@ -145,7 +147,9 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] Tests verify behavior, not implementation internals
 - [ ] Each error path test checks the specific `DecodeError` variant
 - [ ] Valid-file tests check output state (frequency, format, length, max_pcm)
-- [ ] f80 tests check known sample rate values
+- [ ] f80 tests check known sample rate values (44100, 22050, 8000, 48000, 96000, 11025)
+- [ ] f80 denormalized (exponent==0) test verifies result is Ok(0)
+- [ ] f80 infinity/NaN (exponent==0x7FFF) test verifies Err(InvalidData)
 - [ ] Edge case tests (odd alignment, unknown chunks, duplicate COMM) present
 - [ ] No tests that would pass with a trivial/fake implementation
 
@@ -174,6 +178,6 @@ Contents:
 - phase ID: PLAN-20260225-AIFF-DECODER.P04
 - timestamp
 - files changed: `rust/src/sound/aiff.rs` (tests added)
-- tests added: ~23 parser tests
+- tests added: ~25 parser tests
 - verification outputs
 - semantic verification summary

@@ -57,16 +57,16 @@ Why it matters:
 - `rust/src/sound/aiff_ffi.rs`
   - marker: `@plan PLAN-20260225-AIFF-DECODER.P17`
   - marker: `@requirement REQ-FF-4, REQ-FF-5, REQ-FF-6, REQ-FF-7, REQ-FF-8, REQ-FF-9, REQ-FF-13, REQ-FF-14, REQ-FF-15`
-  - Implement: `rust_aifa_Open()` — remove `todo!()`:
-    1. Null checks for decoder and filename
-    2. Convert filename to Rust string via CStr
-    3. Log open attempt
-    4. Get rust decoder from wrapper struct
-    5. Lock RUST_AIFA_FORMATS, call dec.init_module(0, &formats) and dec.init()
-    6. Call read_uio_file(dir, filename) for AIFF data
-    7. Call dec.open_from_bytes(&data, filename_str)
-    8. On success: update base struct fields (frequency, format via format mapping, length, is_null, need_swap)
-    9. On failure: log error, return 0
+   - Implement: `rust_aifa_Open()` — remove `todo!()`:
+     1. Null checks for decoder and filename
+     2. Convert filename to Rust string via CStr
+     3. Log open attempt
+     4. Get rust decoder from wrapper struct
+     5. Do NOT call init_module()/init() — those are separate vtable calls made by the C framework (matching dukaud_ffi.rs pattern)
+     6. Call read_uio_file(dir, filename) for AIFF data
+     7. Call dec.open_from_bytes(&data, filename_str)
+     8. On success: update base struct fields (frequency, format via format mapping, length, is_null, need_swap)
+     9. On failure: log error, return 0
   - Implement: `rust_aifa_Decode()` — remove `todo!()`:
     1. Null checks for decoder, buf, bufsize
     2. Get rust decoder
@@ -100,7 +100,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 - [ ] All FFI tests pass
 
 ## Semantic Verification Checklist (Mandatory)
-- [ ] Open: init_module + init called on decoder before open_from_bytes
+- [ ] Open: does NOT call init_module()/init() — those are separate vtable calls from C framework (REQ-FF-4 pattern match with dukaud_ffi.rs)
 - [ ] Open: format mapping uses locked RUST_AIFA_FORMATS to convert AudioFormat → C format code
 - [ ] Open: base struct fields updated (frequency, format, length, is_null=false, need_swap)
 - [ ] Open: failure returns 0 and logs error

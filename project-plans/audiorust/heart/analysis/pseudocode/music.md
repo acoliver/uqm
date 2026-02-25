@@ -15,7 +15,7 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 06:
 07:   LET sample_ptr = music_ref.0
 08:   LET sample = unsafe { &mut *sample_ptr }
-09:   LET sample_arc = Arc::new(Mutex::new(/* wrap sample */))
+09:   LET sample_arc = Arc::new(parking_lot::Mutex::new(/* wrap sample */))
 10:
 11:   // REQ-MUSIC-PLAY-01: play on MUSIC_SOURCE
 12:   CALL play_stream(
@@ -111,7 +111,7 @@ Validation: REQ-MUSIC-PLAY-06..08
 91:   LET state = MUSIC_STATE.lock()
 92:   LET sample_ptr = speech_ref.0
 93:   LET sample = unsafe { &mut *sample_ptr }
-94:   LET sample_arc = Arc::new(Mutex::new(/* wrap sample */))
+94:   LET sample_arc = Arc::new(parking_lot::Mutex::new(/* wrap sample */))
 95:
 96:   // REQ-MUSIC-SPEECH-01: no looping, no scope, rewind
 97:   CALL play_stream(

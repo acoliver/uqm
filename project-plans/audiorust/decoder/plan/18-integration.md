@@ -158,14 +158,22 @@ cd /Users/acoliver/projects/uqm/rust && grep -RIn "todo!()\|FIXME\|HACK\|placeho
 - [ ] End-to-end integration path is complete
 
 ## Failure Recovery
-- rollback steps:
+- **C-side rollback** (restores all C integration changes):
   ```bash
   git checkout -- sc2/src/libs/sound/decoders/decoder.c
   git checkout -- sc2/src/config_unix.h.in
   git checkout -- sc2/build.vars.in
-  rm sc2/src/libs/sound/decoders/rust_aiff.h
+  rm -f sc2/src/libs/sound/decoders/rust_aiff.h
   ```
-- blocking issues: If C build fails, check symbol visibility (`#[no_mangle]` on vtable)
+- **Verify rollback succeeded**: `cd sc2 && ./build.sh uqm` — C build must succeed identically to before this phase
+- **Rust-side rollback** (if Rust files were also modified — normally not in this phase):
+  ```bash
+  git checkout -- rust/src/sound/mod.rs
+  ```
+- blocking issues:
+  - If C build fails with undefined symbol `rust_aifa_DecoderVtbl`: check `#[no_mangle]` on vtable in `aiff_ffi.rs` and that the Rust staticlib is linked
+  - If `build.vars.in` syntax errors: compare closely with existing `USE_RUST_DUKAUD` / `USE_RUST_WAV` entries for exact whitespace and quoting
+  - If `config_unix.h.in` breaks: verify the `@SYMBOL_USE_RUST_AIFF_DEF@` placeholder is on its own line, same as other `@SYMBOL_*_DEF@` entries
 
 ## Phase Completion Marker
 Create: `project-plans/audiorust/decoder/.completed/P18.md`

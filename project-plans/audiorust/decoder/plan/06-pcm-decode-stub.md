@@ -9,13 +9,27 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-DP-1 through REQ-DP-6: PCM Decoding (Stubs)
-**Requirement text**: Create compile-safe stubs for `decode_pcm()` and the PCM path through `decode()`.
+### REQ-DP-1 (dispatch): PCM Decode Dispatch
+**Requirement text**: Replace `decode()` `todo!()` with a match dispatch to `decode_pcm()` and `decode_sdx2()`.
 
 Behavior contract:
 - GIVEN: The `decode()` method currently uses `todo!()`
 - WHEN: This phase completes
-- THEN: `decode()` dispatches to `decode_pcm()` for CompressionType::None, and `decode_pcm()` has a `todo!()` stub. SDX2 path also stubs to `todo!()`.
+- THEN: `decode()` dispatches to `decode_pcm()` for `CompressionType::None`, and to `decode_sdx2()` for `CompressionType::Sdx2`
+
+### REQ-EH-6: Unknown Compression Dispatch
+**Requirement text**: `decode()` with unknown comp_type returns `Err(DecoderError)`.
+
+Behavior contract:
+- GIVEN: The dispatch match covers all `CompressionType` variants
+- WHEN: A PCM file is opened and `decode()` is called
+- THEN: The match dispatches to `decode_pcm()`; the match is exhaustive so unknown types are handled at compile time
+
+### Stub Functions
+Behavior contract:
+- GIVEN: `decode_pcm()` and `decode_sdx2()` are created as `todo!()` stubs
+- WHEN: `cargo check` is run
+- THEN: The code compiles; the stubs will panic at runtime if called (expected in RED phase)
 
 Why it matters:
 - Separates the decode dispatch mechanism from the actual decoding logic

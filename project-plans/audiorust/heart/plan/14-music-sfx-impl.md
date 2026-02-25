@@ -58,8 +58,9 @@ All MUSIC-* (21) and SFX-* (26) requirements fully implemented.
 ### Key implementation notes
 - `MusicRef` is a raw pointer — all access requires `unsafe`
 - Positional audio: `ATTENUATION = 160.0`, `MIN_DISTANCE = 0.5`
-- `mixer_source_fv` needed for 3D position (verify it exists from P03)
+- **3D Positioning** (REQ-SFX-POSITION-01): Use three separate `mixer_source_f` calls for X, Y, Z position components (see P12 design note). The mixer does NOT have `mixer_source_fv()`.
 - SFX bank loading: parse lines, each line is a WAV filename
+- All `parking_lot::Mutex` references (never bare `Mutex` or `std::sync::Mutex`)
 
 ## Verification Commands
 

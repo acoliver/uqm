@@ -9,7 +9,7 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-MUSIC-PLAY-01..08: Music Playback Stubs
+### REQ-MUSIC-PLAY-01 through REQ-MUSIC-PLAY-08: Music Playback Stubs
 **Requirement text**: Music play/stop/pause/resume/seek through MUSIC_SOURCE.
 
 Behavior contract:
@@ -17,15 +17,59 @@ Behavior contract:
 - WHEN: music.rs function signatures are created
 - THEN: All music API functions compile with `todo!()` bodies
 
-### REQ-MUSIC-SPEECH-01..02: Speech Stubs
-### REQ-MUSIC-LOAD-01..06: Music Loading Stubs
-### REQ-MUSIC-RELEASE-01..04: Music Release Stubs
+### REQ-MUSIC-SPEECH-01, REQ-MUSIC-SPEECH-02: Speech Stubs
+Behavior contract:
+- GIVEN: stream.rs provides `play_stream`/`stop_stream` on SPEECH_SOURCE
+- WHEN: `snd_play_speech`, `snd_stop_speech` stubs are defined
+- THEN: They accept a MusicRef parameter and compile with `todo!()` bodies
+
+### REQ-MUSIC-LOAD-01 through REQ-MUSIC-LOAD-06: Music Loading Stubs
+Behavior contract:
+- GIVEN: Decoder types exist in `sound::decoder`
+- WHEN: `get_music_data`, `check_music_res_name` stubs are defined
+- THEN: They accept filename/decoder parameters and return `AudioResult<MusicRef>`
+
+### REQ-MUSIC-RELEASE-01 through REQ-MUSIC-RELEASE-04: Music Release Stubs
+Behavior contract:
+- GIVEN: MusicRef wraps a raw pointer to SoundSample
+- WHEN: `release_music_data` stub is defined
+- THEN: It accepts `MusicRef` and returns `AudioResult<()>`
+
 ### REQ-MUSIC-VOLUME-01: Music Volume Stub
-### REQ-SFX-PLAY-01..09: SFX Playback Stubs
-### REQ-SFX-POSITION-01..05: Positional Audio Stubs
+Behavior contract:
+- GIVEN: Volume is an i32 (0..MAX_VOLUME)
+- WHEN: `set_music_volume` and `fade_music` stubs are defined
+- THEN: They accept volume/time parameters and compile
+
+### REQ-SFX-PLAY-01 through REQ-SFX-PLAY-09: SFX Playback Stubs
+Behavior contract:
+- GIVEN: SoundBank and SoundSource exist
+- WHEN: `play_channel`, `stop_channel`, `channel_playing`, `set_channel_volume`, `check_finished_channels` stubs are defined
+- THEN: They accept channel index / volume parameters and compile
+
+### REQ-SFX-POSITION-01 through REQ-SFX-POSITION-05: Positional Audio Stubs
+Behavior contract:
+- GIVEN: SoundPosition is `#[repr(C)]` with positional, x, y
+- WHEN: `update_sound_position`, `get_positional_object`, `set_positional_object` stubs are defined
+- THEN: They accept source_index and SoundPosition parameters and compile
+
 ### REQ-SFX-VOLUME-01: SFX Volume Stub
-### REQ-SFX-LOAD-01..07: SFX Loading Stubs
-### REQ-SFX-RELEASE-01..04: SFX Release Stubs
+Behavior contract:
+- GIVEN: Volume is an i32 (0..MAX_VOLUME)
+- WHEN: `set_sfx_volume` stub is defined
+- THEN: It compiles with volume parameter
+
+### REQ-SFX-LOAD-01 through REQ-SFX-LOAD-07: SFX Loading Stubs
+Behavior contract:
+- GIVEN: File I/O via uio_* FFI functions
+- WHEN: `get_sound_bank_data` stub is defined
+- THEN: It accepts a filename and returns `AudioResult<SoundBank>`
+
+### REQ-SFX-RELEASE-01 through REQ-SFX-RELEASE-04: SFX Release Stubs
+Behavior contract:
+- GIVEN: SoundBank owns Vec<Option<SoundSample>>
+- WHEN: `release_sound_bank_data` stub is defined
+- THEN: It accepts SoundBank and returns `AudioResult<()>`
 
 ## Implementation Tasks
 
@@ -61,6 +105,16 @@ Behavior contract:
    - `play_channel`, `stop_channel`, `channel_playing`, `set_channel_volume`, `check_finished_channels`
    - `update_sound_position`, `get_positional_object`, `set_positional_object`
    - `get_sound_bank_data`, `release_sound_bank_data`
+
+### 3D Positioning Approach (rust-heart.md Action Item #4 — REQ-SFX-POSITION-01)
+
+The mixer module does NOT have `mixer_source_fv()` (vector setter). Instead of modifying the mixer, `update_sound_position` shall use three separate `mixer_source_f` calls to set X, Y, Z position components individually:
+```rust
+mixer_source_f(handle, SourceProp::Position, x)?;  // X component
+mixer_source_f(handle, SourceProp::Position, y)?;  // Y component
+mixer_source_f(handle, SourceProp::Position, z)?;  // Z component
+```
+Document this design decision in `sfx.rs` with a comment referencing this plan note.
 
 ## Verification Commands
 

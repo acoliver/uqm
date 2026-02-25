@@ -9,31 +9,31 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-STREAM-SAMPLE-01..05: Sample CRUD
+### REQ-STREAM-SAMPLE-01 through REQ-STREAM-SAMPLE-05: Sample CRUD
 Behavior contract:
 - GIVEN: A valid decoder and buffer count
 - WHEN: create_sound_sample is called
 - THEN: Sample has correct number of buffers, tags are all None, callbacks stored
 
-### REQ-STREAM-TAG-01..03: Buffer Tagging
+### REQ-STREAM-TAG-01, REQ-STREAM-TAG-02, REQ-STREAM-TAG-03: Buffer Tagging
 Behavior contract:
 - GIVEN: A sample with buffer_tags
 - WHEN: tag_buffer is called
 - THEN: Tag is stored in first available slot; find_tagged_buffer finds it
 
-### REQ-STREAM-PLAY-01..20: Playback State Transitions
+### REQ-STREAM-PLAY-01 through REQ-STREAM-PLAY-20: Playback State Transitions
 Behavior contract:
 - GIVEN: A source in inactive state
 - WHEN: play_stream is called
 - THEN: Source becomes playing, mixer source starts, buffers pre-filled
 
-### REQ-STREAM-FADE-01..05: Fade Logic
+### REQ-STREAM-FADE-01 through REQ-STREAM-FADE-05: Fade Logic
 Behavior contract:
 - GIVEN: Music is playing at volume V
 - WHEN: set_music_stream_fade is called
 - THEN: Fade interpolates linearly from V to target over interval
 
-### REQ-STREAM-SCOPE-01..11: Scope Buffer
+### REQ-STREAM-SCOPE-01 through REQ-STREAM-SCOPE-11: Scope Buffer
 Behavior contract:
 - GIVEN: A stream with scope enabled
 - WHEN: Audio is decoded and queued

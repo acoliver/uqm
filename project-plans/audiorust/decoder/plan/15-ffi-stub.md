@@ -63,7 +63,7 @@ Why it matters:
     - `rust_aifa_TermModule` — implemented (clears formats)
     - `rust_aifa_GetStructSize` — implemented (returns size_of)
     - `rust_aifa_GetError` — implemented (null check + delegate)
-    - `rust_aifa_Init` — implemented (Box::new + store pointer)
+     - `rust_aifa_Init` — implemented (ONLY Box::new + store pointer; do NOT call init_module/init — those are separate vtable calls from C framework, per dukaud_ffi.rs pattern)
     - `rust_aifa_Term` — implemented (Box::from_raw + drop)
     - `rust_aifa_Open` — `todo!()` stub (complex UIO + open_from_bytes)
     - `rust_aifa_Close` — implemented (null check + delegate close)

@@ -44,9 +44,21 @@ All TRACK-* requirements (57 total): TRACK-ASSEMBLE-01..19, TRACK-PLAY-01..10, T
 
 ### Key implementation notes
 - SoundChunk linked list uses `Box<SoundChunk>` for ownership, `*mut SoundChunk` for non-owning back-pointers
-- `unsafe impl Send` justified by single-thread mutation pattern
+- `unsafe impl Send` justified by single-thread mutation pattern (all access under `TRACK_STATE` `parking_lot::Mutex`)
 - `cur_chunk`/`cur_sub_chunk` as `Option<NonNull<SoundChunk>>` for null-safety with raw access
-- Recursive Drop on linked list (acceptable for UQM track lengths)
+- **Iterative Drop for SoundChunk** (Technical Review Issue #7): Implement `Drop` for `SoundChunk` using an iterative loop instead of recursive drop to avoid stack overflow on very long chains. The default recursive `Drop` would consume one stack frame per list node. While UQM track lengths are typically short (<50 chunks), implement iteratively for safety:
+  ```rust
+  impl Drop for SoundChunk {
+      fn drop(&mut self) {
+          let mut next = self.next.take();
+          while let Some(mut chunk) = next {
+              next = chunk.next.take();
+              // chunk drops here without recursion
+          }
+      }
+  }
+  ```
+- All `parking_lot::Mutex` references (never bare `Mutex` or `std::sync::Mutex`)
 
 ## Verification Commands
 

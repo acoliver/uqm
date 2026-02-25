@@ -5,88 +5,77 @@
 
 ## Prerequisites
 - Required: Phase P21 completed
-- Expected: Complete C+Rust integration with conditional build flag
+- Expected: All modules integrated, USE_RUST_AUDIO_HEART flag working, C build succeeds
 
 ## Verification Commands
 
 ```bash
-# Full Rust test suite
 cd /Users/acoliver/projects/uqm/rust && cargo test --lib --all-features
 cd /Users/acoliver/projects/uqm/rust && cargo fmt --all --check
 cd /Users/acoliver/projects/uqm/rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-# Build without flag (regression)
 cd /Users/acoliver/projects/uqm/sc2 && ./build.sh uqm
+# Verify Rust symbols replace C symbols
+nm build/uqm 2>/dev/null | grep -c "PLRPlaySong\|PlayChannel\|SpliceTrack\|InitMusicPlayer"
+# Verify C files excluded
+grep -r "USE_RUST_AUDIO_HEART" sc2/src/libs/sound/
+```
 
-# Build with flag
-cd /Users/acoliver/projects/uqm/sc2 && USE_RUST_AUDIO_HEART=1 ./build.sh uqm
+## Structural Verification Checklist
+- [ ] `USE_RUST_AUDIO_HEART` flag added to `config_unix.h` (or equivalent)
+- [ ] C header `rust_audio_heart.h` created with all FFI declarations
+- [ ] 6 C files conditionally excluded: stream.c, trackplayer.c, music.c, sfx.c, sound.c, fileinst.c
+- [ ] `build.sh uqm` succeeds with Rust audio heart enabled
+- [ ] All workspace Rust tests pass
+- [ ] `cargo fmt` passes
+- [ ] `cargo clippy` passes
+- [ ] No new linker warnings
 
-# Deferred impl check across all modules
-grep -RIn "TODO\|FIXME\|HACK\|todo!()" \
+## Semantic Verification Checklist
+
+### Deterministic checks
+- [ ] All Rust tests pass: `cargo test --lib --all-features` shows 0 failures across ALL modules (types, stream, trackplayer, music, sfx, control, fileinst, heart_ffi)
+- [ ] C build succeeds: `./build.sh uqm` returns exit code 0
+- [ ] Symbols linked correctly: `nm` on built binary shows Rust-provided symbols (PLRPlaySong, PlayChannel, etc.)
+- [ ] No duplicate symbols: no linker warnings about symbol conflicts between Rust and C
+- [ ] Zero deferred markers across ALL modules: `grep -rIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/types.rs rust/src/sound/stream.rs rust/src/sound/trackplayer.rs rust/src/sound/music.rs rust/src/sound/sfx.rs rust/src/sound/control.rs rust/src/sound/fileinst.rs rust/src/sound/heart_ffi.rs` returns 0
+
+### Subjective checks — End-to-end scenarios
+- [ ] **Music playback**: Can PLRPlaySong → plr_play_song → play_stream → decoder thread → mixer chain play audio end-to-end? Does the streaming thread correctly wake, decode buffers, queue to mixer, and track FPS?
+- [ ] **Music fade**: Does FadeMusic schedule a fade that smoothly transitions volume via the decoder thread's process_music_fade?
+- [ ] **Track/speech playback**: Can SpliceTrack → splice_track → play_track → play_stream chain play speech with subtitles? Does the track player correctly advance chunks, fire subtitle callbacks, and handle seek operations?
+- [ ] **SFX playback**: Can PlayChannel resolve the opaque SOUND handle, look up the pre-decoded sample, and play it through the mixer? Does positional audio set coordinates correctly?
+- [ ] **File loading**: Can LoadSoundFile → load_sound_file → get_sound_bank_data parse a sound list, pre-decode all samples, and return a usable SoundBank? Is concurrent loading properly guarded?
+- [ ] **Volume control**: Do SetSFXVolume, SetSpeechVolume, and SetMusicVolume correctly apply gain to the right sources? Does music volume interact correctly with fade?
+- [ ] **Shutdown**: Does UninitAudio → uninit_stream_decoder correctly join the decoder thread, clean up all resources, and leave the system in a safe state?
+- [ ] **Error resilience**: Do null pointers, invalid handles, and concurrent access produce error codes (not panics)?
+- [ ] **No regressions**: Does enabling USE_RUST_AUDIO_HEART produce the same observable behavior as the C implementation for known test scenarios?
+
+## Deferred Implementation Detection
+
+```bash
+grep -rIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented\|todo!()" \
   rust/src/sound/types.rs rust/src/sound/stream.rs rust/src/sound/trackplayer.rs \
   rust/src/sound/music.rs rust/src/sound/sfx.rs rust/src/sound/control.rs \
   rust/src/sound/fileinst.rs rust/src/sound/heart_ffi.rs
-
-# Symbol count in static library
-cd /Users/acoliver/projects/uqm/rust && cargo build --lib --all-features
-nm target/debug/libuqm_rust.a | grep " T " | wc -l
+# Must return 0 results across ALL files
 ```
 
-## Checks
+## Success Criteria
+- [ ] All tests pass across all 8 modules
+- [ ] C build succeeds with Rust audio heart
+- [ ] No duplicate or missing symbols
+- [ ] Zero deferred implementations
+- [ ] End-to-end audio pipeline functional
 
-### Build Checks
-- [ ] `cargo test --lib --all-features` — all pass (130+ tests)
-- [ ] `cargo fmt` — passes
-- [ ] `cargo clippy` — passes
-- [ ] `./build.sh uqm` without flag — succeeds (C audio)
-- [ ] `./build.sh uqm` with flag — succeeds (Rust audio)
-- [ ] Zero deferred implementation markers
+## Failure Recovery
+- rollback: `git stash` or revert the integration commit
+- If linker issues: check for symbol conflicts, missing `#[no_mangle]`, or wrong `extern "C"` linkage
+- If runtime crashes: enable Rust logging, check for null pointer issues at FFI boundary
+- If audio silence: verify mixer initialization order, check that `init_stream_decoder` is called after `mixer_init`
 
-### Manual Verification Checks
-- [ ] Title screen music plays (Rust path)
-- [ ] Menu navigation SFX works
-- [ ] Combat weapon sounds fire
-- [ ] Communication screen speech plays with subtitles
-- [ ] Oscilloscope waveform renders
-- [ ] Volume controls work (music/SFX/speech)
-- [ ] Music fade transitions work
-- [ ] Speech seeking works
-- [ ] No regression when flag is off
-
-### Cross-Module Integration Checks
-- [ ] stream.rs correctly reads from SOURCES (control.rs)
-- [ ] trackplayer.rs correctly uses play_stream (stream.rs)
-- [ ] music.rs correctly delegates to stream functions
-- [ ] sfx.rs correctly uses stop_source/clean_source (control.rs)
-- [ ] fileinst.rs correctly delegates to music/sfx loading
-- [ ] heart_ffi.rs correctly wraps all module APIs
-
-### Test Coverage Summary
-- [ ] types.rs: 13+ tests (constants, errors, conversions)
-- [ ] stream.rs: 29+ tests (sample, tags, fade, scope, playback, thread)
-- [ ] trackplayer.rs: 25+ tests (splitting, assembly, playback, seeking, subtitles)
-- [ ] music.rs: 12+ tests (playback, speech, loading, volume)
-- [ ] sfx.rs: 13+ tests (playback, positional, loading)
-- [ ] control.rs: 9+ tests (init, sources, volume, queries)
-- [ ] fileinst.rs: 6+ tests (guard, loading, destroy)
-- [ ] heart_ffi.rs: 17+ tests (null safety, errors, strings, callbacks)
-- [ ] **Total: 124+ tests**
-
-## Final Gate Decision
-- [ ] PASS: Audio Heart Rust port complete, production-ready behind feature flag
-- [ ] FAIL: Document issues, create follow-up plan
+## Phase Completion Marker
+Create: `project-plans/audiorust/heart/.completed/P21a.md`
 
 ## Plan Completion
-When all checks pass, the plan `PLAN-20260225-AUDIO-HEART` is complete.
-
-Create final completion marker: `project-plans/audiorust/heart/.completed/PLAN-COMPLETE.md`
-
-Contents:
-- Plan ID: PLAN-20260225-AUDIO-HEART
-- Completion timestamp
-- Total phases executed: 22 (P00a through P21a)
-- Total tests: 124+
-- Total requirements satisfied: 234
-- Files created: 8 Rust modules + 1 C header
-- Files modified: mod.rs, config_unix.h, 6 sound headers, build system
-- Status: COMPLETE
+When this phase passes, the entire PLAN-20260225-AUDIO-HEART plan is complete.
+All 6 C files (stream.c, trackplayer.c, music.c, sfx.c, sound.c, fileinst.c) are replaced by Rust equivalents.

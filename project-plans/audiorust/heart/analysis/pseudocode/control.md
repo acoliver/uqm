@@ -15,9 +15,9 @@ Plan ID: `PLAN-20260225-AUDIO-HEART`
 06:   END IF
 07:   LET handles = handles.unwrap()
 08:
-09:   LET sources = array of NUM_SOUNDSOURCES Mutex<SoundSource>
+09:   LET sources = array of NUM_SOUNDSOURCES parking_lot::Mutex<SoundSource>
 10:   FOR (i, handle) IN handles.iter().enumerate() DO
-11:     SET sources[i] = Mutex::new(SoundSource {
+11:     SET sources[i] = parking_lot::Mutex::new(SoundSource {
 12:       sample: None,
 13:       handle: *handle,
 14:       stream_should_be_playing: false,

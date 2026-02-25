@@ -47,7 +47,7 @@ Behavior contract:
 ### Files to create
 - `rust/src/sound/heart_ffi.rs` — All 60+ `#[no_mangle] pub extern "C" fn` shims
   - marker: `@plan PLAN-20260225-AUDIO-HEART.P18`
-  - marker: `@requirement REQ-CROSS-FFI-01..04, REQ-CROSS-GENERAL-03,08`
+  - marker: `@requirement REQ-CROSS-FFI-01, REQ-CROSS-FFI-02, REQ-CROSS-FFI-03, REQ-CROSS-FFI-04, REQ-CROSS-GENERAL-03, REQ-CROSS-GENERAL-08`
 
 ### Files to modify
 - `rust/src/sound/mod.rs` — Add `pub mod heart_ffi;`

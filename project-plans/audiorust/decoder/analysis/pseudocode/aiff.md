@@ -51,17 +51,31 @@
 34:   READ mantissa_hi = read_be_u32(cursor)?    // high 32 bits
 35:   READ _mantissa_lo = read_be_u32(cursor)?   // low 32 bits (discarded)
 36:   LET sign = (se >> 15) & 1
-37:   LET exponent = (se & 0x7FFF) as i32
-38:   LET mantissa = (mantissa_hi >> 1) as i32   // shift to fit in signed 31 bits
-39:   SET exponent = exponent - 16383             // unbias (2^14 - 1)
-40:   LET shift = exponent - 31 + 1
-41:   IF shift > 0:
-42:     SET mantissa = 0x7FFF_FFFF               // overflow clamp
-43:   ELSE IF shift < 0:
-44:     SET mantissa = mantissa >> (-shift)       // arithmetic right shift
-45:   IF sign == 1:
-46:     SET mantissa = -mantissa
-47:   RETURN Ok(mantissa)
+37:   LET biased_exponent = (se & 0x7FFF)
+38:
+39:   // Edge case: Denormalized numbers (biased exponent == 0)
+40:   // These represent very small values (< 2^-16382); for sample rates this is
+41:   // effectively zero. Real AIFF files never use denormalized sample rates.
+42:   IF biased_exponent == 0:
+43:     RETURN Ok(0)
+44:
+45:   // Edge case: Infinity and NaN (biased exponent == 0x7FFF)
+46:   // Sample rates cannot be infinity or NaN. Return InvalidData.
+47:   IF biased_exponent == 0x7FFF:
+48:     RETURN Err(InvalidData("invalid sample rate: infinity or NaN in f80"))
+49:
+50:   // Normal case
+51:   LET exponent = biased_exponent as i32
+52:   LET mantissa = (mantissa_hi >> 1) as i32   // shift to fit in signed 31 bits
+53:   SET exponent = exponent - 16383             // unbias (2^14 - 1)
+54:   LET shift = exponent - 31 + 1
+55:   IF shift > 0:
+56:     SET mantissa = 0x7FFF_FFFF               // overflow clamp
+57:   ELSE IF shift < 0:
+58:     SET mantissa = mantissa >> (-shift)       // arithmetic right shift
+59:   IF sign == 1:
+60:     SET mantissa = -mantissa
+61:   RETURN Ok(mantissa)
 ```
 
 ## 4. Chunk Header Parsing

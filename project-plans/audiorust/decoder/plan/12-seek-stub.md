@@ -9,13 +9,20 @@
 
 ## Requirements Implemented (Expanded)
 
-### REQ-SK-1 through REQ-SK-4: Seeking (Stubs)
-**Requirement text**: Confirm `seek()` stub exists with correct signature.
+### REQ-SK-1 (stub confirmation): Seek Stub
+**Requirement text**: Confirm `seek()` stub exists with correct signature and is reachable via SoundDecoder trait.
 
 Behavior contract:
-- GIVEN: `seek()` has a `todo!()` stub
-- WHEN: This phase verifies
-- THEN: `seek()` signature is `fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32>` with `todo!()`
+- GIVEN: `seek()` has a `todo!()` stub from Phase 03
+- WHEN: `cargo check` is run
+- THEN: The code compiles with signature `fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32>`
+- AND: The `todo!()` body is preserved (will be replaced in Phase 14)
+
+### Stub Verification
+Behavior contract:
+- GIVEN: The `seek()` method is defined in `impl SoundDecoder for AiffDecoder`
+- WHEN: A caller invokes `decoder.seek(position)` through the trait
+- THEN: The dispatch reaches the `seek()` stub (which panics with `todo!()` in this phase)
 
 Why it matters:
 - Seek already has a stub from Phase 03

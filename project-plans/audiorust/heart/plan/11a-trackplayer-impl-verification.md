@@ -14,18 +14,54 @@ cd /Users/acoliver/projects/uqm/rust && cargo test --lib --all-features -- sound
 cd /Users/acoliver/projects/uqm/rust && cargo test --lib --all-features
 cd /Users/acoliver/projects/uqm/rust && cargo fmt --all --check
 cd /Users/acoliver/projects/uqm/rust && cargo clippy --workspace --all-targets --all-features -- -D warnings
+cd /Users/acoliver/projects/uqm/sc2 && ./build.sh uqm
+# Deferred impl detection
 grep -RIn "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/trackplayer.rs
 ```
 
-## Checks
-- [ ] All trackplayer tests pass (25+)
-- [ ] All workspace tests pass
-- [ ] Zero deferred markers
-- [ ] fmt and clippy pass
-- [ ] Linked list operations verified
-- [ ] Subtitle splitting verified
-- [ ] Seeking math verified
+## Structural Verification Checklist
+- [ ] All `todo!()` removed from trackplayer.rs (non-test code)
+- [ ] All tests pass
+- [ ] `cargo fmt` passes
+- [ ] `cargo clippy` passes
+- [ ] `build.sh uqm` succeeds
 
-## Gate Decision
-- [ ] PASS: proceed to P12
-- [ ] FAIL: fix trackplayer implementation
+## Semantic Verification Checklist
+
+### Deterministic checks
+- [ ] All trackplayer tests pass (25+): `cargo test --lib --all-features -- sound::trackplayer::tests` shows 0 failures
+- [ ] All workspace tests pass: `cargo test --lib --all-features` shows 0 failures
+- [ ] Zero deferred markers: `grep -c "TODO\|FIXME\|HACK\|todo!()" rust/src/sound/trackplayer.rs` returns 0 (excluding test module)
+- [ ] Iterative Drop implemented: `grep -c "impl Drop for SoundChunk" rust/src/sound/trackplayer.rs` returns 1
+
+### Subjective checks
+- [ ] `splice_track` builds linked list correctly — does it append chunks to the tail? Does it create a new SoundSample on the first call (REQ-TRACK-ASSEMBLE-07)?
+- [ ] `split_sub_pages` produces correct continuation marks — are `..` and `...` marks applied per REQ-TRACK-ASSEMBLE-03?
+- [ ] `stop_track` frees all chunks without leaking — does it set `chunks_head = None` (which triggers iterative Drop), null out all raw pointers, and reset track_count to 0?
+- [ ] `TrackCallbacks::on_end_chunk` advances cur_chunk correctly — does it handle the case where there's no next chunk (end of list)?
+- [ ] Track player correctly splices audio chunks — does splice_track create chunks with the right decoder, start_time, text, and tag_me fields?
+- [ ] Seek functions clamp correctly — does `seek_track` clamp offset to `0..=tracks_length+1` per REQ-TRACK-SEEK-01?
+- [ ] Subtitle queries return correct text — does `get_track_subtitle` return the cur_sub_chunk's text?
+- [ ] Iterative Drop on SoundChunk avoids stack overflow — does the Drop impl use a `while let` loop instead of recursive drop?
+- [ ] No `unwrap()` or `expect()` in production code paths
+
+## Deferred Implementation Detection
+
+```bash
+grep -RIn "TODO\|FIXME\|HACK\|placeholder\|for now\|will be implemented\|todo!()" rust/src/sound/trackplayer.rs
+# Must return 0 results
+```
+
+## Success Criteria
+- [ ] All 25+ tests pass
+- [ ] Zero deferred implementations
+- [ ] Track player fully operational (unit-level)
+- [ ] Iterative Drop implemented for SoundChunk
+- [ ] Lifetime safety invariants documented
+
+## Failure Recovery
+- rollback: `git stash` or `git checkout -- rust/src/sound/trackplayer.rs`
+- blocking issues: If stream.rs behavior differs from expected, adapt TrackCallbacks
+
+## Phase Completion Marker
+Create: `project-plans/audiorust/heart/.completed/P11a.md`

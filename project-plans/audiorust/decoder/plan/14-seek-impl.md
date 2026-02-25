@@ -21,6 +21,9 @@
 ### REQ-SK-4: Seek Return Value
 **Requirement text**: `Ok(pcm_pos)`.
 
+### Note: EH-2 errno clarification
+Positive errno values (from C EH-2) are not applicable in the pure Rust decoder — it operates on in-memory `&[u8]` slices with no system-level file I/O. The seek implementation uses only in-memory position updates. Positive errno mapping only applies in `aiff_ffi.rs`'s `read_uio_file()`.
+
 Why it matters:
 - GREEN phase — making all seek tests pass
 - Completes all pure Rust decoder functionality (parser + PCM + SDX2 + seek)

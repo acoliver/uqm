@@ -47,8 +47,9 @@ All STREAM-* requirements (75 total): STREAM-INIT-01..07, STREAM-PLAY-01..20, ST
 8. Oscilloscope (`graph_foreground_stream`) — AGC, rendering
 
 ### Key implementation notes
-- Use `parking_lot::Mutex` and `parking_lot::Condvar`
-- Lock ordering: source → sample → fade (never reverse)
+- Use `parking_lot::Mutex` and `parking_lot::Condvar` (never bare `Mutex` or `std::sync::Mutex`)
+- **CRITICAL: Lock ordering rule** — Source mutex MUST always be acquired before sample mutex, which MUST be acquired before fade mutex. The full lock ordering hierarchy is: `TRACK_STATE → Source mutex → Sample mutex → FadeState mutex`. Violating this order risks deadlock between the decoder thread and the main thread. Every function that acquires multiple locks must document which locks are held and in what order.
+- **Initialization ordering** — `init_stream_decoder()` must be called after `mixer_init()`. Document this in the function's doc comment.
 - All mixer calls must handle `Err` (log + continue, per REQ-CROSS-ERROR-01)
 - No `unwrap()` in production code
 - Decoder thread uses `std::thread::Builder` for named thread

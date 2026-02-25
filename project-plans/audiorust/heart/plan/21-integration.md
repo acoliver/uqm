@@ -33,7 +33,7 @@ Behavior contract:
 ### REQ-CROSS-GENERAL-07: Module Registration
 **Requirement text**: All modules registered in sound::mod.rs.
 
-### REQ-CROSS-THREAD-01..04: Threading Integration
+### REQ-CROSS-THREAD-01, REQ-CROSS-THREAD-02, REQ-CROSS-THREAD-03, REQ-CROSS-THREAD-04: Threading Integration
 **Requirement text**: Decoder thread runs correctly when called from C game loop.
 
 ## Integration Contract

@@ -150,7 +150,7 @@ The Rust port loads the entire audio data segment into memory during `open_from_
 | ID | Requirement |
 |----|-------------|
 | REQ-EH-1 | get_error() returns current last_error and resets to 0 |
-| REQ-EH-2 | Error codes: 0 (none), -1 (unknown), -2 (bad file), -3 (bad argument) |
+| REQ-EH-2 | Error codes: 0 (none), -1 (unknown), -2 (bad file), -3 (bad argument). Note: The C EH-2 spec also defines positive errno values for system-level file I/O errors; these are NOT applicable in the pure Rust decoder since it operates on in-memory byte slices (`&[u8]`) with no system file I/O. Positive errno mapping is only relevant in the FFI layer's `read_uio_file()` which uses C I/O. |
 | REQ-EH-3 | open_from_bytes() calls close() on any failure before returning Err |
 | REQ-EH-4 | close() is idempotent — clears data, positions, predictor |
 | REQ-EH-5 | term() calls close() |
