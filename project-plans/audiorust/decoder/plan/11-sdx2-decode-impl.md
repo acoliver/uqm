@@ -52,12 +52,15 @@ Why it matters:
     2. Calculate dec_pcm
     3. Slice compressed data from self.data
     4. For each frame, for each channel:
-       a. Read compressed byte as i8
+        a. Read compressed byte as i8
        b. Apply square-with-sign: `v = (sample * sample.abs()) << 1`
-       c. If odd byte: add prev_val[ch] (delta mode)
-       d. Clamp to i16 range
-       e. Store predictor
-       f. Write i16 to output buffer (with endian handling)
+       c. If odd byte (`sample_byte & 1 != 0`): add prev_val[ch] (delta mode)
+          NOTE: Cross-verify the `& 1` test against aiffaud.c during implementation.
+          The C code uses `encoded & 1` on the raw byte before sign extension.
+          Ensure the Rust implementation tests the SAME bit on the SAME value.
+       d. Clamp to i16 range [-32768, 32767]
+       e. Store predictor: `prev_val[ch] = clamped_value`
+       f. Write i16 to output buffer (respecting `formats.big_endian` at runtime)
     5. Update cur_pcm and data_pos
     6. Return byte count
 

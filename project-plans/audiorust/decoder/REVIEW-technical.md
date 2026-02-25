@@ -83,15 +83,19 @@ Checked P04a (parser TDD), P11a (SDX2 impl), P17a (FFI impl), P18a (integration)
 
 ## 5. Issues Found
 
-1. **[Minor]** SDX2 delta mode: the `sample_byte & 1` test should be cross-verified against aiffaud.c in implementation to confirm exact bit semantics.
-2. **[Minor]** PCM 16-bit endian contract could benefit from an explicit test that verifies `need_swap` is set correctly for big-endian AIFF data on little-endian hosts.
-3. **[Minor]** No explicit upper bound on AIFF file size for in-memory loading. Large files could cause memory spikes.
-4. **[Minor]** Chunk iteration should guard against malformed chunk sizes that claim beyond EOF.
-5. **[Minor]** SDX2 tests should include golden vectors from C decoder output for exact parity verification.
-6. **[Minor]** `formats.unwrap()` in one pseudocode path could panic if lifecycle violated — prefer explicit error.
+All 6 minor issues have been resolved:
+
+1. ~~SDX2 delta mode cross-verify~~ -- FIXED: Added explicit cross-verification note in P11 impl phase.
+2. ~~PCM 16-bit endian test~~ -- FIXED: Added `test_need_swap_set_correctly_for_16bit` to P07 TDD phase.
+3. ~~AIFF file size upper bound~~ -- FIXED: Added 64MB safety guard in pseudocode and `test_file_exceeds_size_limit` in P04.
+4. ~~Chunk size overflow~~ -- Already present: `test_chunk_size_exceeds_remaining` in P04 (test 29).
+5. ~~SDX2 golden vectors~~ -- Already present: P10 has full "Golden Test Vectors" section.
+6. ~~formats.unwrap()~~ -- Already fixed: no `.unwrap()` calls remain in decoder pseudocode.
+
+No remaining issues.
 
 ---
 
 ## 6. Verdict
 
-**PASS** — The plan is technically sound and ready for execution. All 6 issues are minor and can be addressed during implementation without plan changes.
+**PASS** -- All issues resolved. Plan is technically sound and ready for execution with subagent mapping for COORDINATING.md.

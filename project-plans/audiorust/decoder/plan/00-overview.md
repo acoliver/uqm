@@ -5,10 +5,27 @@ Generated: 2026-02-25
 Total Phases: 18 (P01–P18, plus P00a preflight)
 Requirements: REQ-FP-1..15, REQ-SV-1..13, REQ-CH-1..7, REQ-DP-1..6, REQ-DS-1..8, REQ-SK-1..4, REQ-EH-1..6, REQ-LF-1..10, REQ-FF-1..15
 
+## Subagent Mapping (per COORDINATING.md)
+
+| Phase Type | Subagent | Notes |
+|------------|----------|-------|
+| Implementation (NN) | `rustreviewer` | All stub, TDD, and impl phases |
+| Verification (NNa) | `deepthinker` | All verification and gate phases |
+| Preflight (00a) | `deepthinker` | Environment check |
+| Analysis (01, 02) | `rustreviewer` | Domain model and pseudocode already complete |
+| Integration (18) | `rustreviewer` | C wiring and build |
+
+Coordination rules (from `dev-docs/COORDINATING.md`):
+- One phase at a time. No multi-phase batching.
+- Phase N+1 cannot start until Phase N verification is PASS.
+- Failed phase must be remediated and re-verified before moving on.
+- Todos created for ALL phases before execution starts.
+- `.completed/PNN.md` with pass evidence after each verification.
+
 ## Critical Reminders
 
 Before implementing any phase:
-1. Preflight verification is complete (Phase 0.5)
+1. Preflight verification is complete (Phase 00a)
 2. Integration points are explicitly listed
 3. TDD cycle is defined per slice
 4. Lint/test/coverage gates are declared

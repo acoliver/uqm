@@ -44,6 +44,23 @@ REQ-CROSS-GENERAL-01, REQ-CROSS-GENERAL-02, REQ-CROSS-GENERAL-03, REQ-CROSS-GENE
 
 **Total: 234 requirements**
 
+## Subagent Mapping (per COORDINATING.md)
+
+| Phase Type | Subagent | Notes |
+|------------|----------|-------|
+| Implementation (NN) | `rustreviewer` | All stub, TDD, and impl phases |
+| Verification (NNa) | `deepthinker` | All verification and gate phases |
+| Preflight (00a) | `deepthinker` | Environment check |
+| Analysis (01, 02) | `rustreviewer` | Domain model and pseudocode already complete |
+| Integration (21) | `rustreviewer` | C wiring and build |
+
+Coordination rules (from `dev-docs/COORDINATING.md`):
+- One phase at a time. No multi-phase batching.
+- Phase N+1 cannot start until Phase N verification is PASS.
+- Failed phase must be remediated and re-verified before moving on.
+- Todos created for ALL phases before execution starts.
+- `.completed/PNN.md` with pass evidence after each verification.
+
 ## Critical Reminders
 
 Before implementing any phase:

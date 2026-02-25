@@ -95,14 +95,18 @@ Checked P08a (stream), P11a (trackplayer), P14a (music-sfx), P20a (FFI), P21a (i
 
 ## 5. Issues Found
 
-1. **[Minor]** SpliceMultiTrack chunk boundary calculation is somewhat high-level in pseudocode. More detail on silence detection/timestamp splitting would reduce implementation risk.
-2. **[Minor]** Fade-in-progress replacement behavior (new fade requested during active fade) not explicitly documented. C code replaces current fade.
-3. **[Minor]** WaitForSoundEnd polling interval unspecified.
-4. **[Minor]** GraphForegroundStream scope buffer rendering path underspecified (how Rust scope buffer gets read by C graphics code).
-5. **[Minor]** No explicit memory budget constraints for scope buffer or decoded audio buffers.
+All 5 minor issues from the initial review have been resolved:
+
+1. ~~SpliceMultiTrack chunk boundary detail~~ -- Already detailed: chunk boundary diagram, duration calculation via `decoder.length()` with `decode_all()` fallback, seek-or-recreate pattern, and per-chunk start_time accumulation.
+2. ~~Fade-in-progress replacement~~ -- FIXED: set_music_stream_fade now documents that a new fade REPLACES an in-progress fade, starting from the current volume (not the old fade's target).
+3. ~~WaitForSoundEnd polling interval~~ -- Already specified: 10ms sleep matching C's TaskSwitch() granularity.
+4. ~~GraphForegroundStream scope buffer path~~ -- FIXED: Added FFI rendering path comment explaining that C calls via FFI, passes a C-allocated i32 array, and Rust writes pre-computed Y coordinates. No raw buffer pointer is shared.
+5. ~~Memory budget constraints~~ -- Already documented: specification.md section 7a has detailed memory budgets for scope buffers (~295KB max), sound sample buffers, and decoded audio.
+
+No remaining issues.
 
 ---
 
 ## 6. Verdict
 
-**PASS** -- All critical and high-priority issues from previous rounds have been resolved. The plan is technically sound with good requirement coverage, consistent lock ordering, unified Arc pointer strategy, and comprehensive verification. The 5 remaining issues are all minor and can be resolved during implementation.
+**PASS** -- All issues resolved. The plan is technically sound with comprehensive requirement coverage, consistent lock ordering, unified Arc pointer strategy, subagent mapping for COORDINATING.md, and thorough verification phases. Ready for execution.

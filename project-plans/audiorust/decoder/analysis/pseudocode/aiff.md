@@ -178,7 +178,14 @@ For sample rate decoding, we convert to `u32` via truncation (matching C integer
  80:     SET self.last_error = -2
  81:     RETURN Err(InvalidData("file too small for AIFF header"))
  82:
- 83:   LET cursor = Cursor::new(data)
+ 83:   // Memory guard: reject files larger than 64MB to prevent memory spikes.
+ 84:   // UQM's largest AIFF files are well under 10MB; 64MB is a generous safety limit.
+ 85:   // This is an in-memory decoder — the entire payload is held in self.data.
+ 86:   IF data.len() > 64 * 1024 * 1024:
+ 87:     SET self.last_error = -2
+ 88:     RETURN Err(InvalidData("AIFF file exceeds 64MB safety limit"))
+ 89:
+ 90:   LET cursor = Cursor::new(data)
  84:
  85:   // Parse file header (REQ-FP-1)
  86:   LET chunk_id = read_be_u32(&mut cursor)?

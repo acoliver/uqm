@@ -511,11 +511,15 @@ Validation: REQ-STREAM-FADE-03..05
 382:     RETURN false
 383:   END IF
 384:   LET fade = ENGINE.fade.lock()
-385:   SET fade.start_time = get_time_counter()
-386:   SET fade.interval = how_long
-387:   SET fade.start_volume = current_music_volume()
-388:   SET fade.delta = end_volume - fade.start_volume
-389:   RETURN true    // REQ-STREAM-FADE-01
+385:   // REQ-STREAM-FADE-03: If a fade is already in progress, the new fade
+386:   // REPLACES it (matching C behavior). The start_volume is set to the
+387:   // CURRENT music volume (not the in-progress fade's target), so the
+388:   // new fade begins from wherever the old fade had reached.
+389:   SET fade.start_time = get_time_counter()
+390:   SET fade.interval = how_long
+391:   SET fade.start_volume = current_music_volume()
+392:   SET fade.delta = end_volume - fade.start_volume
+393:   RETURN true    // REQ-STREAM-FADE-01
 ```
 
 Validation: REQ-STREAM-FADE-01..02
@@ -524,7 +528,14 @@ Validation: REQ-STREAM-FADE-01..02
 
 ```
 400: FUNCTION graph_foreground_stream(data, width, height, want_speech) -> usize
-401:   // REQ-STREAM-SCOPE-03: source selection
+401:   // FFI rendering path: This function IS the bridge between Rust scope buffer
+402:   // and C graphics. The C code calls GraphForegroundStream(data, width, height)
+403:   // via FFI, passing a C-allocated i32 array. We read from the Rust ring buffer,
+404:   // perform all AGC/VAD/scaling, and write pre-computed Y coordinates into
+405:   // data[0..width]. The C code then uses these Y values directly for drawing.
+406:   // No raw buffer pointer is shared; the only cross-language data is the output array.
+407:   //
+408:   // REQ-STREAM-SCOPE-03: source selection
 402:   LET source_idx = IF want_speech AND speech_has_decoder() THEN SPEECH_SOURCE ELSE MUSIC_SOURCE
 403:   LET source = SOURCES.sources[source_idx].lock()
 404:

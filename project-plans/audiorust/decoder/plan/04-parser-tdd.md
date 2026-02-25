@@ -156,10 +156,15 @@ Why it matters:
     - GIVEN: A valid FORM/AIFF header followed by a COMM chunk header claiming 18 bytes, but only 10 bytes of COMM data present (file ends mid-chunk)
     - WHEN: `open_from_bytes()` is called
     - THEN: Returns `Err(DecodeError::InvalidData(...))` (cursor read_exact fails)
+31. `test_file_exceeds_size_limit` — File larger than 64MB safety limit:
+    - GIVEN: A byte array of 64*1024*1024 + 1 bytes (just over limit)
+    - WHEN: `open_from_bytes()` is called
+    - THEN: Returns `Err(DecodeError::InvalidData("AIFF file exceeds 64MB safety limit"))`
 
 ### Pseudocode traceability
 - Tests cover pseudocode lines: 73–238 (open_from_bytes), 32–93 (read_be_f80), 48–68 (chunk parsing)
 - Test 30 covers truncated file edge case (cursor read_exact failure)
+- Test 31 covers memory guard (pseudocode lines 83–88)
 
 ## Verification Commands
 

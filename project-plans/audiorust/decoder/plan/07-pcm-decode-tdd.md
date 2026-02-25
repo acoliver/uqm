@@ -104,6 +104,13 @@ Why it matters:
     - GIVEN: A valid opened decoder with data
     - WHEN: decode() is called with an empty (zero-length) buffer
     - THEN: Returns Ok(0) without advancing position
+16. `test_need_swap_set_correctly_for_16bit` — Verify need_swap is set on 16-bit AIFF:
+    - GIVEN: A 16-bit big-endian AIFF file opened on a little-endian host
+    - WHEN: open_from_bytes() completes
+    - THEN: `self.formats.need_swap` is true (the C framework reads this to decide byte-swapping)
+    - AND: `self.formats.big_endian` is true (AIFF is always big-endian)
+    - NOTE: This test verifies the _contract_ between the Rust decoder and the C framework.
+      The decoder sets need_swap; the framework's SoundDecoder_Decode() reads it.
 
 ### Pseudocode traceability
 - Tests cover pseudocode lines: 239–267 (decode_pcm, no inline byte swap)
