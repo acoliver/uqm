@@ -129,6 +129,63 @@ pub fn wait_for_sound_end(channel: Option<usize>) {
 mod tests {
     use super::*;
 
+    // --- P16 TDD ---
+
+    #[test]
+    #[ignore = "P17: init_sound stub"]
+    fn test_init_sound_ok() {
+        let result = init_sound();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[ignore = "P17: stop_source stub"]
+    fn test_stop_source_invalid_index_error() {
+        let result = stop_source(999);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P17: clean_source stub"]
+    fn test_clean_source_invalid_index_error() {
+        let result = clean_source(999);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P17: stop_sound stub"]
+    fn test_stop_sound_all_sfx_channels() {
+        stop_sound(); // should not panic
+    }
+
+    #[test]
+    #[ignore = "P17: set_sfx_volume stub"]
+    fn test_set_sfx_volume_all_channels() {
+        set_sfx_volume(128); // should not panic
+        let state = VOLUME.lock();
+        assert!((state.sfx_volume_scale - (128.0 / 255.0)).abs() < 0.01);
+    }
+
+    #[test]
+    #[ignore = "P17: set_speech_volume stub"]
+    fn test_set_speech_volume_speech_source() {
+        set_speech_volume(200); // should not panic
+        let state = VOLUME.lock();
+        assert!((state.speech_volume_scale - (200.0 / 255.0)).abs() < 0.01);
+    }
+
+    #[test]
+    #[ignore = "P17: sound_playing stub"]
+    fn test_sound_playing_false_when_idle() {
+        assert!(!sound_playing());
+    }
+
+    #[test]
+    #[ignore = "P17: wait_for_sound_end stub"]
+    fn test_wait_for_sound_end_returns_when_not_playing() {
+        wait_for_sound_end(None); // should return immediately
+    }
+
     #[test]
     fn test_volume_state_new() {
         let state = VolumeState::new();

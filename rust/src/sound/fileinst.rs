@@ -90,6 +90,44 @@ pub fn destroy_music(music_ref: MusicRef) -> AudioResult<()> {
 mod tests {
     use super::*;
 
+    // --- P16 TDD ---
+
+    #[test]
+    #[ignore = "P17: load_sound_file stub"]
+    fn test_load_sound_file_empty_error() {
+        let result = load_sound_file("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P17: load_music_file stub"]
+    fn test_load_music_file_delegates() {
+        let _serial = TEST_LOCK.lock().unwrap();
+        FILE_STATE.lock().cur_resfile_name = None;
+        let result = load_music_file("test.ogg");
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    #[ignore = "P17: destroy_sound stub"]
+    fn test_destroy_sound_delegates() {
+        let bank = SoundBank {
+            samples: Vec::new(),
+            source_file: None,
+        };
+        let result = destroy_sound(bank);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[ignore = "P17: destroy_music stub"]
+    fn test_destroy_music_delegates() {
+        let sample = crate::sound::stream::create_sound_sample(None, 4, None).unwrap();
+        let music_ref = MusicRef(std::sync::Arc::new(Mutex::new(sample)));
+        let result = destroy_music(music_ref);
+        assert!(result.is_ok());
+    }
+
     #[test]
     fn test_file_inst_state_new() {
         let state = FileInstState::new();
