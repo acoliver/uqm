@@ -233,46 +233,40 @@ pub unsafe extern "C" fn TFB_GetSoundSampleDecoder(sample_ptr: *mut c_void) -> *
 #[no_mangle]
 pub unsafe extern "C" fn PlayStream(
     sample_ptr: *mut c_void,
-    source: c_int,
-    looping: c_int,
-    scope: c_int,
-    rewind: c_int,
+    source: u32,
+    looping: bool,
+    scope: bool,
+    rewind: bool,
 ) {
     if sample_ptr.is_null() {
         return;
     }
     let sample_arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let _ = stream::play_stream(
-        sample_arc,
-        source as usize,
-        looping != 0,
-        scope != 0,
-        rewind != 0,
-    );
+    let _ = stream::play_stream(sample_arc, source as usize, looping, scope, rewind);
 }
 
 #[no_mangle]
-pub extern "C" fn StopStream(source: c_int) {
+pub extern "C" fn StopStream(source: u32) {
     let _ = stream::stop_stream(source as usize);
 }
 
 #[no_mangle]
-pub extern "C" fn PauseStream(source: c_int) {
+pub extern "C" fn PauseStream(source: u32) {
     let _ = stream::pause_stream(source as usize);
 }
 
 #[no_mangle]
-pub extern "C" fn ResumeStream(source: c_int) {
+pub extern "C" fn ResumeStream(source: u32) {
     let _ = stream::resume_stream(source as usize);
 }
 
 #[no_mangle]
-pub extern "C" fn SeekStream(source: c_int, pos: c_uint) {
+pub extern "C" fn SeekStream(source: u32, pos: u32) {
     let _ = stream::seek_stream(source as usize, pos);
 }
 
 #[no_mangle]
-pub extern "C" fn PlayingStream(source: c_int) -> c_int {
+pub extern "C" fn PlayingStream(source: u32) -> u8 {
     if stream::playing_stream(source as usize) {
         1
     } else {
@@ -324,93 +318,85 @@ pub unsafe extern "C" fn TFB_ClearBufferTag(tag_ptr: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn SetMusicStreamFade(how_long: c_int, end_volume: c_int) -> c_int {
-    if stream::set_music_stream_fade(how_long as u32, end_volume as i32) {
-        1
-    } else {
-        0
-    }
+pub extern "C" fn SetMusicStreamFade(how_long: i32, end_volume: c_int) -> bool {
+    stream::set_music_stream_fade(how_long.max(0) as u32, end_volume)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn GraphForegroundStream(
-    data_ptr: *mut i32,
-    width: c_uint,
-    height: c_uint,
+    data_ptr: *mut u8,
+    width: i32,
+    height: i32,
     want_speech: c_int,
-) -> c_uint {
-    if data_ptr.is_null() || width == 0 || height == 0 {
+) -> c_int {
+    if data_ptr.is_null() || width <= 0 || height <= 0 {
         return 0;
     }
-    let slice = std::slice::from_raw_parts_mut(data_ptr, width as usize);
+    // C passes uint8* but underlying data is i32 array of `width` elements
+    let i32_ptr = data_ptr as *mut i32;
+    let slice = std::slice::from_raw_parts_mut(i32_ptr, width as usize);
     stream::graph_foreground_stream(slice, width as usize, height as usize, want_speech != 0)
-        as c_uint
+        as c_int
 }
 
 // =============================================================================
 // Track Player FFI (17 functions)
 // =============================================================================
 
-pub type TrackCallback = unsafe extern "C" fn(c_int);
+/// C callback type: void (*CallbackFunction)(void* arg)
+pub type CallbackFunction = unsafe extern "C" fn(*mut c_void);
 
 #[no_mangle]
 pub unsafe extern "C" fn SpliceTrack(
-    track_name_ptr: *const c_char,
+    track_name_ptr: *const u16,
     track_text_ptr: *const u16,
-    timestamp_ptr: *const c_char,
-    callback_ptr: Option<TrackCallback>,
+    timestamp_ptr: *const u16,
+    callback_ptr: Option<CallbackFunction>,
 ) {
-    let name = c_str_to_option(track_name_ptr);
+    let name = utf16_ptr_to_option(track_name_ptr);
     let text = utf16_ptr_to_option(track_text_ptr);
-    let timestamp = c_str_to_option(timestamp_ptr);
+    let timestamp = utf16_ptr_to_option(timestamp_ptr);
     let callback: Option<Box<dyn Fn(i32) + Send>> = callback_ptr.map(|f| {
         Box::new(move |val: i32| {
-            f(val as c_int);
+            f(val as *mut c_void);
         }) as Box<dyn Fn(i32) + Send>
     });
-    let _ = trackplayer::splice_track(name, text.as_deref(), timestamp, callback);
+    let _ = trackplayer::splice_track(
+        name.as_deref(),
+        text.as_deref(),
+        timestamp.as_deref(),
+        callback,
+    );
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn SpliceMultiTrack(
-    track_names_ptr: *const *const c_char,
-    track_texts_ptr: *const *const u16,
-    timestamp_ptr: *const c_char,
+    track_names_ptr: *const *const u16,
+    track_text_ptr: *const u16,
 ) {
     if track_names_ptr.is_null() {
         return;
     }
-    // Read null-terminated array of C strings
-    let mut names: Vec<Option<&str>> = Vec::new();
+    // Read null-terminated array of UNICODE* strings
+    let mut names: Vec<Option<String>> = Vec::new();
     let mut i = 0;
     loop {
         let p = *track_names_ptr.add(i);
         if p.is_null() {
             break;
         }
-        names.push(c_str_to_option(p));
+        names.push(utf16_ptr_to_option(p));
         i += 1;
     }
-    // Read corresponding texts (null-terminated array of UTF-16 strings)
-    let mut texts: Vec<Option<String>> = Vec::new();
-    if !track_texts_ptr.is_null() {
-        let mut j = 0;
-        loop {
-            let p = *track_texts_ptr.add(j);
-            if p.is_null() {
-                break;
-            }
-            texts.push(utf16_ptr_to_option(p));
-            j += 1;
-        }
-    }
-    let text_refs: Vec<Option<&str>> = texts.iter().map(|t| t.as_deref()).collect();
-    let _ = trackplayer::splice_multi_track(&names, &text_refs, c_str_to_option(timestamp_ptr));
+    let text = utf16_ptr_to_option(track_text_ptr);
+    let name_refs: Vec<Option<&str>> = names.iter().map(|n| n.as_deref()).collect();
+    let text_refs: Vec<Option<&str>> = vec![text.as_deref(); name_refs.len()];
+    let _ = trackplayer::splice_multi_track(&name_refs, &text_refs, None);
 }
 
 #[no_mangle]
-pub extern "C" fn PlayTrack(scope: c_int) {
-    let _ = trackplayer::play_track(scope != 0);
+pub extern "C" fn PlayTrack() {
+    let _ = trackplayer::play_track(true);
 }
 
 #[no_mangle]
@@ -419,8 +405,8 @@ pub extern "C" fn StopTrack() {
 }
 
 #[no_mangle]
-pub extern "C" fn JumpTrack(track_num: c_uint) {
-    let _ = trackplayer::jump_track(track_num);
+pub extern "C" fn JumpTrack() {
+    let _ = trackplayer::jump_track(0);
 }
 
 #[no_mangle]
@@ -434,7 +420,7 @@ pub extern "C" fn ResumeTrack() {
 }
 
 #[no_mangle]
-pub extern "C" fn PlayingTrack() -> c_int {
+pub extern "C" fn PlayingTrack() -> u16 {
     if trackplayer::playing_track() {
         1
     } else {
@@ -463,8 +449,8 @@ pub extern "C" fn FastForward_Page() {
 }
 
 #[no_mangle]
-pub extern "C" fn GetTrackPosition(in_units: c_uint) -> c_uint {
-    trackplayer::get_track_position(in_units) as c_uint
+pub extern "C" fn GetTrackPosition(in_units: c_int) -> c_int {
+    trackplayer::get_track_position(in_units as u32) as c_int
 }
 
 #[no_mangle]
@@ -600,12 +586,18 @@ pub extern "C" fn SetMusicVolume(volume: c_int) {
 }
 
 #[no_mangle]
-pub extern "C" fn FadeMusic(end_vol: c_int, how_long: c_int) -> c_uint {
-    if music::fade_music(how_long as u32, end_vol) {
-        1
-    } else {
-        0
+pub extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
+    let interval = if how_long < 0 { 0u32 } else { how_long as u32 };
+    if crate::sound::types::quit_posted() {
+        // Don't make users wait for fades on quit
+        music::set_music_volume(end_vol as i32);
+        return crate::sound::types::get_time_counter();
     }
+    if !music::fade_music(interval, end_vol as i32) {
+        music::set_music_volume(end_vol as i32);
+        return crate::sound::types::get_time_counter();
+    }
+    crate::sound::types::get_time_counter() + interval
 }
 
 // =============================================================================
@@ -691,7 +683,7 @@ pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
 // =============================================================================
 
 #[no_mangle]
-pub extern "C" fn InitSound() -> c_int {
+pub extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int {
     match control::init_sound() {
         Ok(()) => 1,
         Err(e) => {
@@ -721,8 +713,9 @@ pub extern "C" fn SoundPlaying() -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn WaitForSoundEnd(channel: c_int) {
-    let ch = if channel < 0 {
+pub extern "C" fn WaitForSoundEnd(channel: u16) {
+    // COUNT is u16; TFBSOUND_WAIT_ALL is (COUNT)~0 = 0xFFFF
+    let ch = if channel == 0xFFFF {
         None
     } else {
         Some(channel as usize)
@@ -731,13 +724,13 @@ pub extern "C" fn WaitForSoundEnd(channel: c_int) {
 }
 
 #[no_mangle]
-pub extern "C" fn SetSFXVolume(volume: c_int) {
-    control::set_sfx_volume(volume);
+pub extern "C" fn SetSFXVolume(volume: f32) {
+    control::set_sfx_volume((volume * MAX_VOLUME as f32) as i32);
 }
 
 #[no_mangle]
-pub extern "C" fn SetSpeechVolume(volume: c_int) {
-    control::set_speech_volume(volume);
+pub extern "C" fn SetSpeechVolume(volume: f32) {
+    control::set_speech_volume((volume * MAX_VOLUME as f32) as i32);
 }
 
 // =============================================================================
