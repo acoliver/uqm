@@ -7,6 +7,14 @@
 - Required: Phase 16 completed
 - Expected: FFI tests in `aiff_ffi.rs`
 
+
+## Requirements Implemented (Expanded)
+
+N/A — Verification-only phase. Requirements are verified, not implemented.
+
+## Implementation Tasks
+
+N/A — Verification-only phase. No code changes.
 ## Verification Commands
 
 ```bash

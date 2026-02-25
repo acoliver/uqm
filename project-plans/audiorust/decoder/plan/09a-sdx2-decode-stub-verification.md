@@ -7,6 +7,14 @@
 - Required: Phase 09 completed
 - Expected: `decode_sdx2()` stub confirmed, dispatch wired
 
+
+## Requirements Implemented (Expanded)
+
+N/A — Verification-only phase. Requirements are verified, not implemented.
+
+## Implementation Tasks
+
+N/A — Verification-only phase. No code changes.
 ## Verification Commands
 
 ```bash

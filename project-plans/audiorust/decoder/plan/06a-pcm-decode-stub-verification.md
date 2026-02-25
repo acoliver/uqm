@@ -7,6 +7,14 @@
 - Required: Phase 06 completed
 - Expected: `decode_pcm()` and `decode_sdx2()` stubs exist, `decode()` dispatches
 
+
+## Requirements Implemented (Expanded)
+
+N/A — Verification-only phase. Requirements are verified, not implemented.
+
+## Implementation Tasks
+
+N/A — Verification-only phase. No code changes.
 ## Verification Commands
 
 ```bash

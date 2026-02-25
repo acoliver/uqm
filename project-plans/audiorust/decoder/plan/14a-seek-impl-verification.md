@@ -7,6 +7,14 @@
 - Required: Phase 14 completed
 - Expected: `seek()` fully implemented, zero `todo!()` in `aiff.rs`
 
+
+## Requirements Implemented (Expanded)
+
+N/A — Verification-only phase. Requirements are verified, not implemented.
+
+## Implementation Tasks
+
+N/A — Verification-only phase. No code changes.
 ## Verification Commands
 
 ```bash

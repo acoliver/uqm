@@ -109,5 +109,5 @@ grep -rn 'TODO\|FIXME\|HACK\|unimplemented!\|todo!' rust/src/sound/mixer/types.r
 git restore rust/src/sound/mixer/types.rs rust/src/sound/mixer/source.rs
 ```
 
-## Phase Completion
+## Phase Completion Marker
 When all checks pass, create `.completed/02b-mixer-extension.md` with timestamp and test results.

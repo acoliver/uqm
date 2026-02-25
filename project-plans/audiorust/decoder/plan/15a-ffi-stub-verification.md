@@ -7,6 +7,14 @@
 - Required: Phase 15 completed
 - Expected files: `rust/src/sound/aiff_ffi.rs`, updated `mod.rs`
 
+
+## Requirements Implemented (Expanded)
+
+N/A — Verification-only phase. Requirements are verified, not implemented.
+
+## Implementation Tasks
+
+N/A — Verification-only phase. No code changes.
 ## Verification Commands
 
 ```bash

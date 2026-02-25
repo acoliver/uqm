@@ -7,6 +7,14 @@
 - Required: Phase 11 completed
 - Expected: `decode_sdx2()` fully implemented
 
+
+## Requirements Implemented (Expanded)
+
+N/A — Verification-only phase. Requirements are verified, not implemented.
+
+## Implementation Tasks
+
+N/A — Verification-only phase. No code changes.
 ## Verification Commands
 
 ```bash
