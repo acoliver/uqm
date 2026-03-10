@@ -31,9 +31,13 @@ extern int rust_is_thread_system_initialized(void);
 
 /* Thread operations */
 extern RustThread* rust_thread_spawn(const char* name, void (*func)(void*), void* data);
+extern void rust_thread_spawn_detached(const char* name, void (*func)(void*), void* data);
 extern int rust_thread_join(RustThread* thread);
 extern void rust_thread_yield(void);
 extern void rust_hibernate_thread(uint32 msecs);
+extern void* rust_thread_local_create(void);
+extern void rust_thread_local_destroy(void* thread_local);
+extern void* rust_get_my_thread_local(void);
 
 /* Mutex operations */
 extern RustMutex* rust_mutex_create(const char* name);
@@ -41,6 +45,7 @@ extern void rust_mutex_destroy(RustMutex* mutex);
 extern void rust_mutex_lock(RustMutex* mutex);
 extern int rust_mutex_try_lock(RustMutex* mutex);
 extern void rust_mutex_unlock(RustMutex* mutex);
+extern int rust_mutex_depth(RustMutex* mutex);
 
 /* Condition Variable operations */
 extern RustCondVar* rust_condvar_create(const char* name);

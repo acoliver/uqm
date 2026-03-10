@@ -23,6 +23,7 @@ extern int rust_init_thread_system(void);
 extern void rust_uninit_thread_system(void);
 extern int rust_is_thread_system_initialized(void);
 extern RustThread* rust_thread_spawn(const char* name, void (*func)(void*), void* data);
+extern void rust_thread_spawn_detached(const char* name, void (*func)(void*), void* data);
 extern int rust_thread_join(RustThread* thread);
 extern void rust_thread_yield(void);
 extern void rust_hibernate_thread(uint32 msecs);
@@ -31,6 +32,7 @@ extern void rust_mutex_destroy(RustMutex* mutex);
 extern void rust_mutex_lock(RustMutex* mutex);
 extern int rust_mutex_try_lock(RustMutex* mutex);
 extern void rust_mutex_unlock(RustMutex* mutex);
+extern int rust_mutex_depth(RustMutex* mutex);
 extern RustCondVar* rust_condvar_create(const char* name);
 extern void rust_condvar_destroy(RustCondVar* cond);
 extern void rust_condvar_wait(RustCondVar* cond, RustMutex* mutex);
@@ -44,6 +46,9 @@ extern int rust_semaphore_try_acquire(RustSemaphore* sem);
 extern void rust_semaphore_release(RustSemaphore* sem);
 extern uint32 rust_semaphore_count(RustSemaphore* sem);
 extern void rust_task_switch(void);
+extern void* rust_thread_local_create(void);
+extern void rust_thread_local_destroy(void* thread_local);
+extern void* rust_get_my_thread_local(void);
 
 void
 InitThreadSystem (void)
@@ -68,9 +73,8 @@ CreateThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char
 void
 StartThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char *name)
 {
-	/* Fire-and-forget thread spawn */
 	(void)stackSize;
-	rust_thread_spawn(name, (void (*)(void*))func, data);
+	rust_thread_spawn_detached(name, (void (*)(void*))func, data);
 }
 
 void
@@ -243,31 +247,25 @@ TryLockRecursiveMutex (RecursiveMutex m)
 int
 GetRecursiveMutexDepth (RecursiveMutex m)
 {
-	/* Rust mutexes don't track recursion depth */
-	(void)m;
-	return 0;
+	return rust_mutex_depth((RustMutex*)m);
 }
 
 ThreadLocal *
 CreateThreadLocal (void)
 {
-	ThreadLocal *tl = HMalloc (sizeof (ThreadLocal));
-	tl->flushSem = CreateSemaphore (0, "FlushGraphics", SYNC_CLASS_VIDEO);
-	return tl;
+	return (ThreadLocal *) rust_thread_local_create();
 }
 
 void
 DestroyThreadLocal (ThreadLocal *tl)
 {
-	DestroySemaphore (tl->flushSem);
-	HFree (tl);
+	rust_thread_local_destroy((void *)tl);
 }
 
 ThreadLocal *
 GetMyThreadLocal (void)
 {
-	/* Fall through to the native SDL implementation for TLS */
-	return NativeGetMyThreadLocal ();
+	return (ThreadLocal *) rust_get_my_thread_local();
 }
 
 void

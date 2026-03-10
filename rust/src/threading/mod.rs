@@ -26,7 +26,7 @@ mod tests;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
-use std::thread::{self, JoinHandle};
+use std::thread::{self, JoinHandle, ThreadId};
 use std::time::Duration;
 
 /// Error type for threading operations
@@ -199,6 +199,92 @@ impl<T> UqmMutex<T> {
 impl<T: Default> Default for UqmMutex<T> {
     fn default() -> Self {
         Self::new(T::default(), None)
+    }
+}
+
+#[derive(Debug, Default)]
+struct FfiMutexState {
+    owner: Option<ThreadId>,
+    depth: u32,
+}
+
+#[derive(Debug)]
+struct RustFfiMutex {
+    state: Mutex<FfiMutexState>,
+    condvar: Condvar,
+    #[allow(dead_code)]
+    name: Option<String>,
+}
+
+impl RustFfiMutex {
+    fn new(name: Option<&str>) -> Self {
+        Self {
+            state: Mutex::new(FfiMutexState::default()),
+            condvar: Condvar::new(),
+            name: name.map(String::from),
+        }
+    }
+
+    fn lock(&self) -> Result<()> {
+        let current = thread::current().id();
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ThreadError::MutexPoisoned)?;
+
+        while matches!(state.owner, Some(owner) if owner != current) {
+            state = self
+                .condvar
+                .wait(state)
+                .map_err(|_| ThreadError::MutexPoisoned)?;
+        }
+
+        state.owner = Some(current);
+        state.depth += 1;
+        Ok(())
+    }
+
+    fn try_lock(&self) -> Result<bool> {
+        let current = thread::current().id();
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ThreadError::MutexPoisoned)?;
+
+        if matches!(state.owner, Some(owner) if owner != current) {
+            return Ok(false);
+        }
+
+        state.owner = Some(current);
+        state.depth += 1;
+        Ok(true)
+    }
+
+    fn unlock(&self) -> Result<()> {
+        let current = thread::current().id();
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ThreadError::MutexPoisoned)?;
+
+        match state.owner {
+            Some(owner) if owner == current && state.depth > 0 => {
+                state.depth -= 1;
+                if state.depth == 0 {
+                    state.owner = None;
+                    drop(state);
+                    self.condvar.notify_one();
+                }
+                Ok(())
+            }
+            _ => Err(ThreadError::InvalidOperation(
+                "Attempted to unlock mutex from non-owner thread".to_string(),
+            )),
+        }
+    }
+
+    fn depth(&self) -> u32 {
+        self.state.lock().map(|state| state.depth).unwrap_or(0)
     }
 }
 
@@ -561,13 +647,14 @@ static THREAD_SYSTEM_INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// # Errors
 /// Returns `ThreadError::InvalidOperation` if already initialized
 pub fn init_thread_system() -> Result<()> {
-    // TODO: Implement thread system initialization
-    // The C implementation calls NativeInitThreadSystem and creates lifecycleMutex
     if THREAD_SYSTEM_INITIALIZED.swap(true, Ordering::SeqCst) {
         return Err(ThreadError::InvalidOperation(
             "Thread system already initialized".to_string(),
         ));
     }
+
+    ensure_rust_thread_local();
+    ensure_ffi_thread_local();
     Ok(())
 }
 
@@ -576,8 +663,8 @@ pub fn init_thread_system() -> Result<()> {
 /// Should be called during shutdown.
 /// The C implementation destroys the lifecycle mutex.
 pub fn uninit_thread_system() {
-    // TODO: Implement thread system cleanup
-    // The C implementation calls NativeUnInitThreadSystem and destroys lifecycleMutex
+    destroy_current_ffi_thread_local();
+    clear_rust_thread_local();
     THREAD_SYSTEM_INITIALIZED.store(false, Ordering::SeqCst);
 }
 
@@ -599,9 +686,7 @@ pub fn process_thread_lifecycles() {
 ///
 /// The C implementation uses TaskSwitch -> NativeTaskSwitch -> SDL_Delay(1).
 pub fn task_switch() {
-    // TODO: Implement task switch
-    // For now, use std::thread::yield_now
-    thread::yield_now();
+    thread::sleep(Duration::from_millis(1));
 }
 
 /// Sleep the current thread
@@ -642,8 +727,17 @@ impl Default for ThreadLocal {
     }
 }
 
+#[repr(C)]
+struct FfiThreadLocal {
+    flush_sem: *mut c_void,
+}
+
 thread_local! {
     static THREAD_LOCAL: std::cell::RefCell<Option<ThreadLocal>> = const { std::cell::RefCell::new(None) };
+}
+
+thread_local! {
+    static FFI_THREAD_LOCAL: std::cell::Cell<*mut FfiThreadLocal> = const { std::cell::Cell::new(std::ptr::null_mut()) };
 }
 
 /// Get the current thread's local data
@@ -652,6 +746,74 @@ thread_local! {
 /// The thread-local data, or `None` if not set
 pub fn get_my_thread_local() -> Option<ThreadLocal> {
     THREAD_LOCAL.with(|tl| tl.borrow().clone())
+}
+
+fn ensure_rust_thread_local() -> bool {
+    THREAD_LOCAL.with(|tl| {
+        if tl.borrow().is_none() {
+            *tl.borrow_mut() = Some(ThreadLocal::new());
+            true
+        } else {
+            false
+        }
+    })
+}
+
+fn clear_rust_thread_local() {
+    THREAD_LOCAL.with(|tl| {
+        *tl.borrow_mut() = None;
+    });
+}
+
+fn current_ffi_thread_local() -> *mut FfiThreadLocal {
+    FFI_THREAD_LOCAL.with(|tl| tl.get())
+}
+
+fn set_ffi_thread_local(thread_local: *mut FfiThreadLocal) {
+    FFI_THREAD_LOCAL.with(|tl| tl.set(thread_local));
+}
+
+fn ensure_ffi_thread_local() -> bool {
+    if current_ffi_thread_local().is_null() {
+        set_ffi_thread_local(create_ffi_thread_local());
+        true
+    } else {
+        false
+    }
+}
+
+fn destroy_current_ffi_thread_local() {
+    let thread_local = current_ffi_thread_local();
+    if !thread_local.is_null() {
+        set_ffi_thread_local(std::ptr::null_mut());
+        unsafe { destroy_ffi_thread_local(thread_local) };
+    }
+}
+
+struct ThreadLocalGuard {
+    created_rust: bool,
+    created_ffi: bool,
+}
+
+impl ThreadLocalGuard {
+    fn attach() -> Self {
+        Self {
+            created_rust: ensure_rust_thread_local(),
+            created_ffi: ensure_ffi_thread_local(),
+        }
+    }
+}
+
+impl Drop for ThreadLocalGuard {
+    fn drop(&mut self) {
+        if self.created_ffi {
+            destroy_current_ffi_thread_local();
+        }
+
+        if self.created_rust {
+            clear_rust_thread_local();
+        }
+    }
 }
 
 impl Clone for ThreadLocal {
@@ -691,6 +853,26 @@ pub struct RustCondVar {
 #[repr(C)]
 pub struct RustSemaphore {
     _private: [u8; 0],
+}
+
+fn create_ffi_thread_local() -> *mut FfiThreadLocal {
+    let flush_name = b"FlushGraphics\0";
+    let flush_sem = unsafe { rust_semaphore_create(0, flush_name.as_ptr() as *const c_char) };
+
+    Box::into_raw(Box::new(FfiThreadLocal {
+        flush_sem: flush_sem as *mut c_void,
+    }))
+}
+
+unsafe fn destroy_ffi_thread_local(thread_local: *mut FfiThreadLocal) {
+    if thread_local.is_null() {
+        return;
+    }
+
+    let thread_local = Box::from_raw(thread_local);
+    if !thread_local.flush_sem.is_null() {
+        rust_semaphore_destroy(thread_local.flush_sem as *mut RustSemaphore);
+    }
 }
 
 // --- Thread System Lifecycle ---
@@ -751,10 +933,27 @@ pub extern "C" fn rust_is_thread_system_initialized() -> c_int {
 /// * `name` must be a valid null-terminated C string or NULL
 /// * `func` must be a valid function pointer
 /// * `data` must remain valid for the lifetime of the thread
+fn spawn_c_thread(
+    name: Option<&str>,
+    func: unsafe extern "C" fn(*mut c_void) -> c_int,
+    data: *mut c_void,
+) -> Result<Thread<()>> {
+    let func_ptr = func as usize;
+    let data_ptr = data as usize;
+
+    Thread::spawn(name, move || {
+        let _thread_local_guard = ThreadLocalGuard::attach();
+        let func: unsafe extern "C" fn(*mut c_void) -> c_int =
+            unsafe { std::mem::transmute(func_ptr) };
+        let data = data_ptr as *mut c_void;
+        let _ = unsafe { func(data) };
+    })
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn rust_thread_spawn(
     name: *const c_char,
-    func: unsafe extern "C" fn(*mut c_void),
+    func: unsafe extern "C" fn(*mut c_void) -> c_int,
     data: *mut c_void,
 ) -> *mut RustThread {
     let name_str = if name.is_null() {
@@ -763,21 +962,25 @@ pub unsafe extern "C" fn rust_thread_spawn(
         CStr::from_ptr(name).to_str().ok()
     };
 
-    // Convert raw pointers to usize to make them Send-safe for the closure.
-    // usize is Send, whereas raw pointers are not.
-    let func_ptr = func as usize;
-    let data_ptr = data as usize;
-
-    match Thread::spawn(name_str, move || {
-        // Safety: We're reconstructing the original function pointer and data pointer
-        // inside the spawned thread. The caller guarantees data remains valid.
-        let func: unsafe extern "C" fn(*mut c_void) = unsafe { std::mem::transmute(func_ptr) };
-        let data = data_ptr as *mut c_void;
-        unsafe { func(data) }
-    }) {
+    match spawn_c_thread(name_str, func, data) {
         Ok(thread) => Box::into_raw(Box::new(thread)) as *mut RustThread,
         Err(_) => ptr::null_mut(),
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_thread_spawn_detached(
+    name: *const c_char,
+    func: unsafe extern "C" fn(*mut c_void) -> c_int,
+    data: *mut c_void,
+) {
+    let name_str = if name.is_null() {
+        None
+    } else {
+        CStr::from_ptr(name).to_str().ok()
+    };
+
+    let _ = spawn_c_thread(name_str, func, data);
 }
 
 /// Join a thread and wait for it to complete
@@ -825,6 +1028,38 @@ pub extern "C" fn rust_hibernate_thread(msecs: u32) {
     hibernate_thread(Duration::from_millis(msecs as u64));
 }
 
+#[no_mangle]
+pub extern "C" fn rust_thread_local_create() -> *mut c_void {
+    let existing = current_ffi_thread_local();
+    if !existing.is_null() {
+        return existing as *mut c_void;
+    }
+
+    ensure_rust_thread_local();
+    ensure_ffi_thread_local();
+    current_ffi_thread_local() as *mut c_void
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_thread_local_destroy(thread_local: *mut c_void) {
+    if thread_local.is_null() {
+        return;
+    }
+
+    let thread_local = thread_local as *mut FfiThreadLocal;
+    if current_ffi_thread_local() == thread_local {
+        set_ffi_thread_local(ptr::null_mut());
+    }
+
+    destroy_ffi_thread_local(thread_local);
+    clear_rust_thread_local();
+}
+
+#[no_mangle]
+pub extern "C" fn rust_get_my_thread_local() -> *mut c_void {
+    current_ffi_thread_local() as *mut c_void
+}
+
 // --- Mutex Operations ---
 
 /// Create a new mutex
@@ -845,7 +1080,7 @@ pub unsafe extern "C" fn rust_mutex_create(name: *const c_char) -> *mut RustMute
         CStr::from_ptr(name).to_str().ok()
     };
 
-    let mutex = UqmMutex::new((), name_str);
+    let mutex = RustFfiMutex::new(name_str);
     Box::into_raw(Box::new(mutex)) as *mut RustMutex
 }
 
@@ -860,7 +1095,7 @@ pub unsafe extern "C" fn rust_mutex_create(name: *const c_char) -> *mut RustMute
 #[no_mangle]
 pub unsafe extern "C" fn rust_mutex_destroy(mutex: *mut RustMutex) {
     if !mutex.is_null() {
-        drop(Box::from_raw(mutex as *mut UqmMutex<()>));
+        drop(Box::from_raw(mutex as *mut RustFfiMutex));
     }
 }
 
@@ -874,12 +1109,8 @@ pub unsafe extern "C" fn rust_mutex_destroy(mutex: *mut RustMutex) {
 #[no_mangle]
 pub unsafe extern "C" fn rust_mutex_lock(mutex: *mut RustMutex) {
     if !mutex.is_null() {
-        let mutex = &*(mutex as *mut UqmMutex<()>);
-        // We intentionally leak the guard here - it will be "unlocked" manually
-        // This is a simplified model; a real implementation would track guards
-        let _guard = mutex.lock();
-        // Intentionally forget the guard so the mutex stays locked until rust_mutex_unlock
-        std::mem::forget(_guard);
+        let mutex = &*(mutex as *mut RustFfiMutex);
+        let _ = mutex.lock();
     }
 }
 
@@ -899,9 +1130,9 @@ pub unsafe extern "C" fn rust_mutex_try_lock(mutex: *mut RustMutex) -> c_int {
         return 0;
     }
 
-    let mutex = &*(mutex as *mut UqmMutex<()>);
+    let mutex = &*(mutex as *mut RustFfiMutex);
     match mutex.try_lock() {
-        Ok(Some(_)) => 1,
+        Ok(true) => 1,
         _ => 0,
     }
 }
@@ -915,11 +1146,21 @@ pub unsafe extern "C" fn rust_mutex_try_lock(mutex: *mut RustMutex) -> c_int {
 /// * `mutex` must be a valid handle
 /// * Must be called from the same thread that locked it
 #[no_mangle]
-pub unsafe extern "C" fn rust_mutex_unlock(_mutex: *mut RustMutex) {
-    // Note: With Rust's guard-based locking, unlock happens when guard is dropped.
-    // This FFI binding is a simplified model. In a real implementation,
-    // we would need to track the guard separately.
-    // For now, this is a no-op - the C code would need adaptation.
+pub unsafe extern "C" fn rust_mutex_unlock(mutex: *mut RustMutex) {
+    if !mutex.is_null() {
+        let mutex = &*(mutex as *mut RustFfiMutex);
+        let _ = mutex.unlock();
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rust_mutex_depth(mutex: *mut RustMutex) -> c_int {
+    if mutex.is_null() {
+        return 0;
+    }
+
+    let mutex = &*(mutex as *mut RustFfiMutex);
+    mutex.depth() as c_int
 }
 
 // --- Condition Variable Operations ---
