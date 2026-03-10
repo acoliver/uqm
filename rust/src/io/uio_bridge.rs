@@ -4,28 +4,52 @@
 use crate::bridge_log::rust_bridge_log_msg;
 use libc::{mode_t, off_t, size_t};
 use std::collections::HashMap;
+
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::raw::{c_char, c_int, c_long};
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
-use std::sync::Mutex;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 // =============================================================================
 // Mount Point Registry
+const UIO_MOUNT_RDONLY: c_int = 1 << 1;
+const UIO_MOUNT_LOCATION_MASK: c_int = 3 << 2;
+const UIO_MOUNT_BELOW: c_int = 2 << 2;
+const UIO_MOUNT_ABOVE: c_int = 3 << 2;
+
+const UIO_FSTYPE_STDIO: c_int = 1;
+const UIO_FSTYPE_ZIP: c_int = 2;
+
+const UIO_STREAM_STATUS_OK: c_int = 0;
+const UIO_STREAM_STATUS_EOF: c_int = 1;
+const UIO_STREAM_STATUS_ERROR: c_int = 2;
+
+const UIO_STREAM_OPERATION_NONE: c_int = 0;
+const UIO_STREAM_OPERATION_READ: c_int = 1;
+const UIO_STREAM_OPERATION_WRITE: c_int = 2;
+
+
 // =============================================================================
 
 struct MountInfo {
-    source_path: PathBuf,
-    base_dir: PathBuf, // Base directory for this mount
+    id: usize,
+    repository: usize,
+    handle_ptr: usize,
+    mount_point: String,
+    mounted_root: PathBuf,
+    fs_type: c_int,
+    active_in_registry: bool,
 }
 
-static MOUNT_REGISTRY: OnceLock<Mutex<HashMap<String, MountInfo>>> = OnceLock::new();
+static MOUNT_REGISTRY: OnceLock<Mutex<Vec<MountInfo>>> = OnceLock::new();
+static NEXT_MOUNT_ID: AtomicUsize = AtomicUsize::new(1);
 
-fn get_mount_registry() -> &'static Mutex<HashMap<String, MountInfo>> {
-    MOUNT_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
+fn get_mount_registry() -> &'static Mutex<Vec<MountInfo>> {
+    MOUNT_REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
 }
 
 // Types matching C structures from io.h and uiostream.h
@@ -35,18 +59,19 @@ pub struct uio_DirHandle {
     path: PathBuf,
     refcount: std::sync::atomic::AtomicI32,
     repository: *mut uio_Repository,
-    root_end: PathBuf, // Emulating rootEnd pointer
-                       // Additional fields would go here for full implementation
+    root_end: PathBuf,
 }
 
 #[repr(C)]
 pub struct uio_Repository {
-    _private: [u8; 0],
+    flags: c_int,
 }
 
 #[repr(C)]
 pub struct uio_MountHandle {
-    _private: [u8; 0],
+    repository: *mut uio_Repository,
+    id: usize,
+    fs_type: c_int,
 }
 
 // =============================================================================
@@ -253,6 +278,209 @@ pub struct uio_Stream {
     open_flags: c_int,
 }
 
+fn repository_key(repository: *mut uio_Repository) -> usize {
+    repository as usize
+}
+
+fn mount_handle_key(handle: *mut uio_MountHandle) -> usize {
+    handle as usize
+}
+
+fn normalize_mount_point(path: &Path) -> String {
+    let raw = path.to_string_lossy();
+    if raw.is_empty() || raw == "/" {
+        return "/".to_string();
+    }
+
+    let trimmed = raw.trim_matches('/');
+    if trimmed.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", trimmed)
+    }
+}
+
+fn normalize_virtual_path(path: &Path) -> PathBuf {
+    if path.as_os_str().is_empty() {
+        return PathBuf::from("/");
+    }
+
+    if path.is_absolute() {
+        let mount = normalize_mount_point(path);
+        return PathBuf::from(mount);
+    }
+
+    PathBuf::from(format!("/{}", path.to_string_lossy().trim_matches('/')))
+}
+
+fn register_mount(
+    repository: *mut uio_Repository,
+    mount_point: &Path,
+    mounted_root: PathBuf,
+    fs_type: c_int,
+    active_in_registry: bool,
+) -> *mut uio_MountHandle {
+    let id = NEXT_MOUNT_ID.fetch_add(1, Ordering::SeqCst);
+    let handle = Box::new(uio_MountHandle {
+        repository,
+        id,
+        fs_type,
+    });
+    let handle_ptr = Box::into_raw(handle);
+
+    let info = MountInfo {
+        id,
+        repository: repository_key(repository),
+        handle_ptr: mount_handle_key(handle_ptr),
+        mount_point: normalize_mount_point(mount_point),
+        mounted_root,
+        fs_type,
+        active_in_registry,
+    };
+
+    let mut registry = get_mount_registry().lock().unwrap();
+    registry.push(info);
+    sort_mount_registry(&mut registry);
+    handle_ptr
+}
+
+fn sort_mount_registry(registry: &mut Vec<MountInfo>) {
+    registry.sort_by(|a, b| {
+        b.active_in_registry
+            .cmp(&a.active_in_registry)
+            .then_with(|| b.mount_point.len().cmp(&a.mount_point.len()))
+            .then_with(|| b.id.cmp(&a.id))
+    });
+}
+
+fn remove_mount_entry(handle: *mut uio_MountHandle) -> Option<MountInfo> {
+    if handle.is_null() {
+        return None;
+    }
+
+    let handle_key = mount_handle_key(handle);
+    let mut registry = get_mount_registry().lock().unwrap();
+    let index = registry.iter().position(|entry| entry.handle_ptr == handle_key)?;
+    Some(registry.remove(index))
+}
+
+fn remove_repository_mounts(repository: *mut uio_Repository) -> Vec<usize> {
+    let repository_key = repository_key(repository);
+    let mut registry = get_mount_registry().lock().unwrap();
+    let mut handles = Vec::new();
+    let mut i = 0;
+    while i < registry.len() {
+        if registry[i].repository == repository_key {
+            handles.push(registry.remove(i).handle_ptr);
+        } else {
+            i += 1;
+        }
+    }
+    handles
+}
+
+fn duplicate_c_string(path: &Path) -> *mut c_char {
+    let lossy = path.to_string_lossy();
+    let bytes = lossy.as_bytes();
+    let alloc = unsafe { libc::malloc(bytes.len() + 1) } as *mut c_char;
+    if alloc.is_null() {
+        return ptr::null_mut();
+    }
+
+    unsafe {
+        ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, alloc, bytes.len());
+        *alloc.add(bytes.len()) = 0;
+    }
+
+    alloc
+}
+
+fn is_real_filesystem_path(path: &Path) -> bool {
+    if !path.is_absolute() {
+        return false;
+    }
+
+    let Some(component) = path.components().nth(1) else {
+        return false;
+    };
+
+    matches!(
+        component.as_os_str().to_string_lossy().as_ref(),
+        "Users"
+            | "home"
+            | "tmp"
+            | "var"
+            | "opt"
+            | "private"
+            | "System"
+            | "Library"
+            | "Applications"
+    )
+}
+
+fn resolve_virtual_mount_path(registry: &[MountInfo], path: &Path) -> Option<(usize, PathBuf)> {
+    let normalized = normalize_virtual_path(path);
+
+    registry
+        .iter()
+        .filter(|entry| entry.active_in_registry)
+        .find_map(|entry| {
+            let mount_path = Path::new(&entry.mount_point);
+            if normalized == mount_path || normalized.starts_with(mount_path) {
+                let suffix = normalized
+                    .strip_prefix(mount_path)
+                    .unwrap_or_else(|_| Path::new(""));
+                let resolved = if suffix.as_os_str().is_empty() {
+                    entry.mounted_root.clone()
+                } else {
+                    entry.mounted_root.join(suffix)
+                };
+                Some((entry.handle_ptr, resolved))
+            } else {
+                None
+            }
+        })
+}
+
+fn resolve_file_location(dir: *mut uio_DirHandle, in_path: *const c_char) -> Option<(usize, PathBuf)> {
+    if dir.is_null() {
+        return None;
+    }
+
+    let dir_path = unsafe { &(*dir).path };
+    let input = unsafe { cstr_to_pathbuf(in_path) }?;
+    let candidate = resolve_path(dir_path, &input);
+    let registry = get_mount_registry().lock().unwrap();
+
+    if is_real_filesystem_path(&candidate) {
+        return registry
+            .iter()
+            .filter(|entry| entry.active_in_registry)
+            .filter(|entry| candidate == entry.mounted_root || candidate.starts_with(&entry.mounted_root))
+            .max_by_key(|entry| entry.mounted_root.components().count())
+            .map(|entry| (entry.handle_ptr, candidate.clone()));
+    }
+
+    resolve_virtual_mount_path(&registry, &candidate)
+}
+
+
+fn set_stream_status(stream: *mut uio_Stream, status: c_int) {
+    if !stream.is_null() {
+        unsafe {
+            (*stream).status = status;
+        }
+    }
+}
+
+fn set_stream_operation(stream: *mut uio_Stream, operation: c_int) {
+    if !stream.is_null() {
+        unsafe {
+            (*stream).operation = operation;
+        }
+    }
+}
+
 // =============================================================================
 // uio_getFileLocation / uio_unmountDir / uio_unmountAllDirs /
 // uio_getMountFileSystemType / uio_transplantDir
@@ -260,53 +488,112 @@ pub struct uio_Stream {
 
 #[no_mangle]
 pub unsafe extern "C" fn uio_getFileLocation(
-    _dir: *mut uio_DirHandle,
-    _inPath: *const c_char,
+    dir: *mut uio_DirHandle,
+    inPath: *const c_char,
     _flags: c_int,
     mountHandle: *mut *mut uio_MountHandle,
     outPath: *mut *mut c_char,
 ) -> c_int {
-    log_marker("uio_getFileLocation called - stub");
-    // Stub: return success with null mount handle and empty path
+    log_marker("uio_getFileLocation called");
+
+    let Some((handle_ptr, resolved_path)) = resolve_file_location(dir, inPath) else {
+        if !mountHandle.is_null() {
+            *mountHandle = ptr::null_mut();
+        }
+        if !outPath.is_null() {
+            *outPath = ptr::null_mut();
+        }
+        return -1;
+    };
+
+    let duplicated = duplicate_c_string(&resolved_path);
+    if duplicated.is_null() {
+        return -1;
+    }
+
     if !mountHandle.is_null() {
-        *mountHandle = ptr::null_mut();
+        *mountHandle = handle_ptr as *mut uio_MountHandle;
     }
     if !outPath.is_null() {
-        *outPath = ptr::null_mut();
+        *outPath = duplicated;
     }
     0
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_unmountDir(_mountHandle: *mut uio_MountHandle) -> c_int {
-    log_marker("uio_unmountDir called - stub");
-    0 // Success
+pub unsafe extern "C" fn uio_unmountDir(mountHandle: *mut uio_MountHandle) -> c_int {
+    log_marker("uio_unmountDir called");
+
+    if mountHandle.is_null() {
+        return -1;
+    }
+
+    if remove_mount_entry(mountHandle).is_none() {
+        return -1;
+    }
+
+    let _ = Box::from_raw(mountHandle);
+    0
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_unmountAllDirs(_repository: *mut uio_Repository) -> c_int {
-    log_marker("uio_unmountAllDirs called - stub");
-    0 // Success
+pub unsafe extern "C" fn uio_unmountAllDirs(repository: *mut uio_Repository) -> c_int {
+    log_marker("uio_unmountAllDirs called");
+
+    for handle_ptr in remove_repository_mounts(repository) {
+        let _ = Box::from_raw(handle_ptr as *mut uio_MountHandle);
+    }
+
+    0
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_getMountFileSystemType(_mountHandle: *mut uio_MountHandle) -> c_int {
-    log_marker("uio_getMountFileSystemType called - stub");
-    0 // Return a dummy filesystem ID
+pub unsafe extern "C" fn uio_getMountFileSystemType(mountHandle: *mut uio_MountHandle) -> c_int {
+    log_marker("uio_getMountFileSystemType called");
+    if mountHandle.is_null() {
+        return 0;
+    }
+
+    (*mountHandle).fs_type
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn uio_transplantDir(
-    _mountPoint: *const c_char,
-    _sourceDir: *mut uio_DirHandle,
-    _flags: c_int,
-    _relative: *mut uio_MountHandle,
+    mountPoint: *const c_char,
+    sourceDir: *mut uio_DirHandle,
+    flags: c_int,
+    relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
-    log_marker("uio_transplantDir called - stub");
-    // Return a dummy non-null handle
-    let handle = Box::new(uio_MountHandle { _private: [] });
-    Box::leak(handle) as *mut uio_MountHandle
+    log_marker("uio_transplantDir called");
+
+    if sourceDir.is_null() {
+        return ptr::null_mut();
+    }
+
+    if (flags & UIO_MOUNT_RDONLY) != UIO_MOUNT_RDONLY {
+        return ptr::null_mut();
+    }
+
+    let mount_point = match cstr_to_pathbuf(mountPoint) {
+        Some(path) => path,
+        None => return ptr::null_mut(),
+    };
+
+    let location = flags & UIO_MOUNT_LOCATION_MASK;
+    let relative_required = location == UIO_MOUNT_ABOVE || location == UIO_MOUNT_BELOW;
+    if relative_required != !relative.is_null() {
+        return ptr::null_mut();
+    }
+
+    register_mount(
+        (*sourceDir).repository,
+        &mount_point,
+        (*sourceDir).path.clone(),
+        UIO_FSTYPE_STDIO,
+        true,
+    )
 }
+
 
 // =============================================================================
 // uio_fgets / uio_fgetc / uio_ungetc / uio_fprintf / uio_fputc / uio_fputs
@@ -1055,10 +1342,9 @@ pub unsafe extern "C" fn uio_unInit() {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn uio_openRepository(_flags: c_int) -> *mut uio_Repository {
+pub unsafe extern "C" fn uio_openRepository(flags: c_int) -> *mut uio_Repository {
     log_marker("uio_openRepository called");
-    // Return a dummy non-null pointer
-    let repo = Box::new(uio_Repository { _private: [] });
+    let repo = Box::new(uio_Repository { flags });
     Box::leak(repo) as *mut uio_Repository
 }
 
@@ -1066,153 +1352,45 @@ pub unsafe extern "C" fn uio_openRepository(_flags: c_int) -> *mut uio_Repositor
 pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
     log_marker("uio_closeRepository called");
     if !repository.is_null() {
+        uio_unmountAllDirs(repository);
         let _ = Box::from_raw(repository);
     }
 }
+
 
 // =============================================================================
 // uio_openDir / uio_closeDir / uio_mountDir / uio_openDirRelative
 // =============================================================================
 
-// Helper: Resolve path through mount registry
 fn resolve_mount_path(path: &Path) -> PathBuf {
-    let path_str = path.to_string_lossy();
-
     rust_bridge_log_msg(&format!("RUST_UIO: resolve_mount_path input: {:?}", path));
 
-    // CRITICAL: If path is an absolute filesystem path (starts with /Users, /home, /tmp, etc.)
-    // it should NOT be resolved through the virtual mount system. Return as-is.
-    // The virtual mount "/" is for UIO virtual paths, not real filesystem paths.
-    if path.is_absolute() && !path_str.starts_with("//") {
-        // Check if this looks like a real filesystem path (not a virtual "/" path)
-        // Real paths: /Users/..., /home/..., /tmp/..., /var/..., /opt/..., etc.
-        // Virtual paths: just "/" or "/packages", "/addons", etc.
-        let first_component = path.components().nth(1);
-        if let Some(comp) = first_component {
-            let comp_str = comp.as_os_str().to_string_lossy();
-            // Common real filesystem prefixes
-            if comp_str == "Users"
-                || comp_str == "home"
-                || comp_str == "tmp"
-                || comp_str == "var"
-                || comp_str == "opt"
-                || comp_str == "private"
-                || comp_str == "System"
-                || comp_str == "Library"
-                || comp_str == "Applications"
-            {
-                rust_bridge_log_msg(&format!(
-                    "RUST_UIO: path {:?} is real filesystem path, returning as-is",
-                    path
-                ));
-                return path.to_path_buf();
-            }
-        }
-    }
-
-    // IMPORTANT: Check if path is already an absolute path under any mount's base_dir or source_path
-    // This prevents duplicating /Users/... segments when paths have already been resolved
     let registry = get_mount_registry().lock().unwrap();
-    for (_mount_point, mount_info) in registry.iter() {
-        let base_dir_str = mount_info.base_dir.to_string_lossy();
-        let source_path_str = mount_info.source_path.to_string_lossy();
-
-        rust_bridge_log_msg(&format!("RUST_UIO: resolve_mount_path checking: path_str={:?} base_dir_str={:?} source_path_str={:?}", 
-            path_str, base_dir_str, source_path_str));
-
-        // Check if path already starts with base_dir (e.g., "/Users/acoliver/...")
-        if path_str.starts_with(base_dir_str.as_ref()) {
-            rust_bridge_log_msg(&format!(
-                "RUST_UIO: path {:?} already under base_dir {:?}, returning as-is",
-                path, mount_info.base_dir
-            ));
-            return path.to_path_buf();
-        }
-
-        // Check if path already starts with source_path
-        if path_str.starts_with(source_path_str.as_ref()) {
-            rust_bridge_log_msg(&format!(
-                "RUST_UIO: path {:?} already under source_path {:?}, returning as-is",
-                path, mount_info.source_path
-            ));
-            return path.to_path_buf();
-        }
-    }
-    // Drop the lock before we potentially re-acquire it below
-    drop(registry);
-
-    // Try to find a matching mount point (longest match wins)
-    let registry = get_mount_registry().lock().unwrap();
-    let mut best_mount: Option<String> = None;
-    let mut best_mount_len = 0;
-
-    for mount_point in registry.keys() {
-        if path_str.starts_with(mount_point) && mount_point.len() > best_mount_len {
-            best_mount = Some(mount_point.clone());
-            best_mount_len = mount_point.len();
-        }
+    if is_real_filesystem_path(path)
+        || registry
+            .iter()
+            .filter(|entry| entry.active_in_registry)
+            .any(|entry| path == entry.mounted_root || path.starts_with(&entry.mounted_root))
+    {
+        rust_bridge_log_msg(&format!(
+            "RUST_UIO: path {:?} already resolved to filesystem path",
+            path
+        ));
+        return path.to_path_buf();
     }
 
-    if let Some(mount_point) = best_mount {
-        if let Some(mount_info) = registry.get(&mount_point) {
-            // Special handling for "/" mount point
-            if mount_point == "/" {
-                // For root mount, the path relative to "/" is appended to base_dir
-                let suffix = &path_str[best_mount_len..]; // Skip the "/"
-                let resolved = if suffix.is_empty() || suffix == "/" {
-                    mount_info.base_dir.clone()
-                } else {
-                    // Remove leading slash from suffix if present
-                    let suffix_clean = if suffix.starts_with('/') {
-                        &suffix[1..]
-                    } else {
-                        suffix
-                    };
-                    if suffix_clean.is_empty() {
-                        mount_info.base_dir.clone()
-                    } else {
-                        mount_info.base_dir.join(suffix_clean)
-                    }
-                };
-                rust_bridge_log_msg(&format!(
-                    "RUST_UIO: resolved {:?} -> {:?} (mount: {})",
-                    path, resolved, mount_point
-                ));
-                return resolved;
-            }
-
-            // For other mount points, use original logic
-            let suffix = &path_str[best_mount_len..];
-            let resolved = if suffix.is_empty() || suffix.starts_with('/') {
-                // Remove leading slash from suffix if present
-                let suffix_clean = if suffix.starts_with('/') {
-                    &suffix[1..]
-                } else {
-                    suffix
-                };
-                if suffix_clean.is_empty() {
-                    mount_info.source_path.clone()
-                } else {
-                    mount_info.source_path.join(suffix_clean)
-                }
-            } else {
-                mount_info.source_path.join(suffix)
-            };
-            rust_bridge_log_msg(&format!(
-                "RUST_UIO: resolved {:?} -> {:?} (mount: {})",
-                path, resolved, mount_point
-            ));
-            return resolved;
-        }
+    if let Some((_handle_ptr, resolved)) = resolve_virtual_mount_path(&registry, path) {
+        rust_bridge_log_msg(&format!("RUST_UIO: resolved {:?} -> {:?}", path, resolved));
+        resolved
+    } else {
+        rust_bridge_log_msg(&format!(
+            "RUST_UIO: no mount match for {:?}, returning original",
+            path
+        ));
+        path.to_path_buf()
     }
-
-    // No mount matched, return original
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: no mount match for {:?}, returning original",
-        path
-    ));
-    path.to_path_buf()
 }
+
 
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDir(
@@ -1276,111 +1454,71 @@ pub unsafe extern "C" fn uio_mountDir(
     _fsType: c_int,
     sourceDir: *mut uio_DirHandle,
     sourcePath: *const c_char,
+
     inPath: *const c_char,
     _autoMount: *mut *mut (),
-    _flags: c_int,
-    _relative: *mut uio_MountHandle,
+    flags: c_int,
+    relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
     let mount_point = match cstr_to_pathbuf(mountPoint) {
-        Some(p) => p.to_string_lossy().to_string(),
+        Some(p) => p,
         None => {
             rust_bridge_log_msg("RUST_UIO: uio_mountDir: null mountPoint");
             return ptr::null_mut();
         }
     };
 
-    // Log raw pointer value for debugging
     rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_mountDir called: mountPoint={}, inPath ptr={:?}, sourceDir={:?}",
-        mount_point, inPath, sourceDir
+        "RUST_UIO: uio_mountDir called: mountPoint={:?}, inPath ptr={:?}, sourceDir={:?}, flags={}, relative={:?}",
+        mount_point, inPath, sourceDir, flags, relative
     ));
 
     if !sourceDir.is_null() {
         let base_path = (*sourceDir).path.clone();
         let rel_path = cstr_to_pathbuf(sourcePath).unwrap_or_default();
-        let source_path = if rel_path.as_os_str().is_empty() {
+        let mounted_root = if rel_path.as_os_str().is_empty() || rel_path == Path::new("/") {
             base_path.clone()
         } else {
             resolve_path(&base_path, &rel_path)
         };
         rust_bridge_log_msg(&format!(
             "RUST_UIO: uio_mountDir: sourceDir set, sourcePath {:?} -> {:?}",
-            rel_path, source_path
+            rel_path, mounted_root
         ));
-        rust_bridge_log_msg(
-            "RUST_UIO: uio_mountDir: skipping registry update for sourceDir mounts",
-        );
 
-        let handle = Box::new(uio_MountHandle { _private: [] });
-        return Box::leak(handle) as *mut uio_MountHandle;
+        let active_in_registry = _fsType != UIO_FSTYPE_ZIP;
+        return register_mount(_destRep, &mount_point, mounted_root, _fsType, active_in_registry);
     }
 
-    // Determine the actual source path:
-    // IMPORTANT: The parameter names from C are confusing:
-    // - sourceDir: directory handle for the source (NULL for STDIO mounts)
-    // - sourcePath: path relative to sourceDir (should be NULL if sourceDir is NULL)
-    // - inPath: the physical filesystem path to mount!
-    //
-    // The C code checks: if sourceDir is NULL, then inPath is used as the physical path
-    // If sourceDir is not NULL, then sourcePath is the path relative to sourceDir
-    //
-    // For STDIO mounts: sourceDir=NULL, sourcePath=NULL, inPath=actual_path
-    //
-    let (source_path, base_dir) = if !inPath.is_null() {
-        // inPath contains the actual filesystem path to mount
+    let mounted_root = if !inPath.is_null() {
         match cstr_to_pathbuf(inPath) {
             Some(path) => {
-                let path_str = path.to_string_lossy().to_string();
                 rust_bridge_log_msg(&format!(
-                    "RUST_UIO: uio_mountDir: using inPath '{}' as source",
-                    path_str
+                    "RUST_UIO: uio_mountDir: using inPath {:?} as source",
+                    path
                 ));
-                (path.clone(), path)
+                path
             }
             None => {
                 rust_bridge_log_msg(
                     "RUST_UIO: uio_mountDir: inPath conversion failed, using empty path",
                 );
-                (PathBuf::new(), PathBuf::new())
+                PathBuf::new()
             }
         }
     } else {
-        // No path provided at all (NULL pointer)
         rust_bridge_log_msg("RUST_UIO: uio_mountDir: inPath is NULL, using empty path");
-        (PathBuf::new(), PathBuf::new())
+        PathBuf::new()
     };
 
     rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_mountDir: mounting source='{:?}' base_dir='{:?}' at '{}'",
-        source_path, base_dir, mount_point
+        "RUST_UIO: uio_mountDir: mounting root={:?} at {:?}",
+        mounted_root, mount_point
     ));
 
-    // Store mount mapping
-    {
-        let mut registry = get_mount_registry().lock().unwrap();
-        registry.insert(
-            mount_point.clone(),
-            MountInfo {
-                source_path: source_path.clone(),
-                base_dir: base_dir.clone(),
-            },
-        );
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: mount registry now has {} entries",
-            registry.len()
-        ));
-        for (k, v) in registry.iter() {
-            rust_bridge_log_msg(&format!(
-                "RUST_UIO:   registry['{}'] = source='{:?}' base='{:?}",
-                k, v.source_path, v.base_dir
-            ));
-        }
-    }
-
-    // Return a non-null dummy handle to indicate "success"
-    let handle = Box::new(uio_MountHandle { _private: [] });
-    Box::leak(handle) as *mut uio_MountHandle
+    register_mount(_destRep, &mount_point, mounted_root, _fsType, true)
 }
+
 
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDirRelative(
@@ -2080,6 +2218,8 @@ fn remove_buffer_size(ptr: *mut c_char) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+
     use std::ffi::CString;
     use std::path::PathBuf;
 
@@ -2090,59 +2230,70 @@ mod tests {
         }
     }
 
+
     // Helper to add a test mount
-    fn add_test_mount(mount_point: &str, source: &str, base: &str) {
+    fn add_test_mount(mount_point: &str, mounted_root: &str) {
+        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+        let handle = Box::into_raw(Box::new(uio_MountHandle {
+            repository,
+            id: NEXT_MOUNT_ID.fetch_add(1, Ordering::SeqCst),
+            fs_type: UIO_FSTYPE_STDIO,
+        }));
+
         let mut registry = get_mount_registry().lock().unwrap();
-        registry.insert(
-            mount_point.to_string(),
-            MountInfo {
-                source_path: PathBuf::from(source),
-                base_dir: PathBuf::from(base),
-            },
-        );
+        registry.push(MountInfo {
+            id: unsafe { (*handle).id },
+            repository: repository_key(repository),
+            handle_ptr: handle as usize,
+            mount_point: normalize_mount_point(Path::new(mount_point)),
+            mounted_root: PathBuf::from(mounted_root),
+            fs_type: UIO_FSTYPE_STDIO,
+            active_in_registry: true,
+        });
+        sort_mount_registry(&mut registry);
     }
 
     #[test]
+    #[serial]
     fn test_mount_registry_basic() {
         clear_mount_registry();
 
-        // Add a mount
-        add_test_mount("/content", "/tmp/content", "/tmp/content");
+        add_test_mount("/content", "/tmp/content");
 
-        // Verify it's stored
         {
             let registry = get_mount_registry().lock().unwrap();
-            assert!(registry.contains_key("/content"));
-            let info = registry.get("/content").unwrap();
-            assert_eq!(info.source_path, PathBuf::from("/tmp/content"));
-            assert_eq!(info.base_dir, PathBuf::from("/tmp/content"));
+            let info = registry
+                .iter()
+                .find(|entry| entry.mount_point == "/content")
+                .unwrap();
+            assert_eq!(info.mounted_root, PathBuf::from("/tmp/content"));
+            assert_eq!(info.fs_type, UIO_FSTYPE_STDIO);
+            assert!(info.active_in_registry);
         }
 
         clear_mount_registry();
     }
 
     #[test]
+    #[serial]
     fn test_resolve_mount_path_with_mount() {
         clear_mount_registry();
 
-        // Add root mount
-        add_test_mount("/", "/Users/test/game", "/Users/test/game");
+        add_test_mount("/", "/Users/test/game");
 
-        // Test resolution
         let path = PathBuf::from("/content/packages");
         let resolved = resolve_mount_path(&path);
 
-        // Should resolve to base_dir + subpath
         assert_eq!(resolved, PathBuf::from("/Users/test/game/content/packages"));
 
         clear_mount_registry();
     }
 
     #[test]
+    #[serial]
     fn test_resolve_mount_path_no_mount() {
         clear_mount_registry();
 
-        // No mounts registered, path should pass through
         let path = PathBuf::from("/some/random/path");
         let resolved = resolve_mount_path(&path);
 
@@ -2152,23 +2303,23 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resolve_mount_path_absolute_fs_path() {
         clear_mount_registry();
 
-        // Add a root mount
-        add_test_mount("/", "/Users/test/game", "/Users/test/game");
+        add_test_mount("/", "/Users/test/game");
 
-        // An absolute filesystem path under /Users should NOT be double-resolved
         let path = PathBuf::from("/Users/acoliver/projects/uqm/content");
         let resolved = resolve_mount_path(&path);
 
-        // Should return as-is because it starts with /Users
         assert_eq!(resolved, path);
 
         clear_mount_registry();
     }
 
+
     #[test]
+    #[serial]
     fn test_cstr_to_pathbuf_valid() {
         let test_path = CString::new("/test/path").unwrap();
         let result = unsafe { cstr_to_pathbuf(test_path.as_ptr()) };
@@ -2178,12 +2329,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_cstr_to_pathbuf_null() {
         let result = unsafe { cstr_to_pathbuf(std::ptr::null()) };
         assert!(result.is_none());
     }
 
     #[test]
+    #[serial]
     fn test_resolve_path_relative() {
         let base = PathBuf::from("/home/user");
         let rel = PathBuf::from("documents/file.txt");
@@ -2193,6 +2346,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_resolve_path_absolute() {
         let base = PathBuf::from("/home/user");
         let abs = PathBuf::from("/etc/config");
@@ -2203,6 +2357,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_literal() {
         assert!(matches_pattern("test.txt", "test.txt", MATCH_LITERAL));
         assert!(!matches_pattern("test.txt", "other.txt", MATCH_LITERAL));
@@ -2210,24 +2365,28 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_prefix() {
         assert!(matches_pattern("test.txt", "test", MATCH_PREFIX));
         assert!(!matches_pattern("test.txt", "txt", MATCH_PREFIX));
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_suffix() {
         assert!(matches_pattern("test.txt", ".txt", MATCH_SUFFIX));
         assert!(!matches_pattern("test.txt", ".doc", MATCH_SUFFIX));
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_substring() {
         assert!(matches_pattern("mytest.txt", "test", MATCH_SUBSTRING));
         assert!(!matches_pattern("mytest.txt", "foo", MATCH_SUBSTRING));
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_regex_rmp() {
         // Test the .rmp regex pattern
         assert!(matches_pattern("file.rmp", r"\.[rR][mM][pP]$", MATCH_REGEX));
@@ -2240,6 +2399,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_regex_zip_uqm() {
         // Test the .zip/.uqm regex pattern
         assert!(matches_pattern(
@@ -2265,6 +2425,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_matches_pattern_empty_pattern() {
         // Empty pattern should match everything
         assert!(matches_pattern("anything.txt", "", MATCH_LITERAL));
@@ -2272,6 +2433,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_buffer_size_registry() {
         let test_ptr = 0x12345678 as *mut c_char;
 
@@ -2291,12 +2453,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_buffer_size_registry_null() {
         let result = get_buffer_size(std::ptr::null_mut());
         assert_eq!(result, None);
     }
 
     #[test]
+    #[serial]
     fn test_seek_constants() {
         // Verify our seek constants match expected values
         assert_eq!(SEEK_SET, 0);
@@ -2305,6 +2469,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_open_flags_constants() {
         // Verify file open flags
         assert_eq!(O_RDONLY, 0);
@@ -2314,3 +2479,4 @@ mod tests {
         assert_eq!(O_TRUNC, 0o1000);
     }
 }
+

@@ -18,12 +18,30 @@
 #include "thrcommon.h"
 #include "rust_threads.h"
 
+#define LIFECYCLE_SIZE 8
+
+typedef struct _rust_thread {
+	RustThread *native;
+#ifdef NAMED_SYNCHRO
+	const char *name;
+#endif
+} *TrueThread;
+
+typedef struct ThreadStartInfo {
+	ThreadFunction func;
+	void *data;
+	TrueThread thread;
+} ThreadStartInfo;
+
+static Mutex lifecycleMutex;
+static Thread pendingDeath[LIFECYCLE_SIZE];
+
 /* Forward declarations of Rust FFI functions */
 extern int rust_init_thread_system(void);
 extern void rust_uninit_thread_system(void);
 extern int rust_is_thread_system_initialized(void);
-extern RustThread* rust_thread_spawn(const char* name, void (*func)(void*), void* data);
-extern void rust_thread_spawn_detached(const char* name, void (*func)(void*), void* data);
+extern RustThread* rust_thread_spawn(const char* name, int (*func)(void*), void* data);
+extern void rust_thread_spawn_detached(const char* name, int (*func)(void*), void* data);
 extern int rust_thread_join(RustThread* thread);
 extern void rust_thread_yield(void);
 extern void rust_hibernate_thread(uint32 msecs);
@@ -50,31 +68,118 @@ extern void* rust_thread_local_create(void);
 extern void rust_thread_local_destroy(void* thread_local);
 extern void* rust_get_my_thread_local(void);
 
+static void
+InitLifecycleState (void)
+{
+	int i;
+	for (i = 0; i < LIFECYCLE_SIZE; ++i)
+		pendingDeath[i] = NULL;
+}
+
+static TrueThread
+AllocThreadHandle (const char *name)
+{
+	TrueThread thread;
+
+	thread = (TrueThread) HMalloc (sizeof *thread);
+	thread->native = NULL;
+#ifdef NAMED_SYNCHRO
+	thread->name = name;
+#else
+	(void) name;
+#endif
+	return thread;
+}
+
+static int
+RustThreadHelper (void *opaque)
+{
+	ThreadStartInfo *startInfo = (ThreadStartInfo *) opaque;
+	ThreadFunction func = startInfo->func;
+	void *data = startInfo->data;
+	TrueThread thread = startInfo->thread;
+	int result;
+
+	HFree (startInfo);
+	result = (*func) (data);
+
+#ifdef DEBUG_THREADS
+	if (thread != NULL)
+	{
+		log_add (log_Debug, "Thread '%s' done (returned %d).",
+				thread->name, result);
+		fflush (stderr);
+	}
+#endif
+
+	FinishThread ((Thread) thread);
+	return result;
+}
+
 void
 InitThreadSystem (void)
 {
 	rust_init_thread_system();
+	InitLifecycleState ();
+	lifecycleMutex = CreateMutex ("Thread Lifecycle Mutex", SYNC_CLASS_RESOURCE);
 	log_add(log_Debug, "Rust thread system initialized");
 }
 
 void
 UnInitThreadSystem (void)
 {
+	ProcessThreadLifecycles ();
+	if (lifecycleMutex)
+	{
+		DestroyMutex (lifecycleMutex);
+		lifecycleMutex = 0;
+	}
 	rust_uninit_thread_system();
 }
 
 Thread
 CreateThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char *name)
 {
+	TrueThread thread;
+	ThreadStartInfo *startInfo;
+
 	(void)stackSize; /* Rust manages its own stack */
-	return (Thread)rust_thread_spawn(name, (void (*)(void*))func, data);
+	thread = AllocThreadHandle (name);
+	startInfo = (ThreadStartInfo *) HMalloc (sizeof (*startInfo));
+	startInfo->func = func;
+	startInfo->data = data;
+	startInfo->thread = thread;
+
+	thread->native = rust_thread_spawn (name, RustThreadHelper, startInfo);
+	if (thread->native == NULL)
+	{
+		HFree (startInfo);
+		HFree (thread);
+		return NULL;
+	}
+
+	return (Thread) thread;
 }
 
 void
 StartThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char *name)
 {
+	TrueThread thread;
+	ThreadStartInfo *startInfo;
+
 	(void)stackSize;
-	rust_thread_spawn_detached(name, (void (*)(void*))func, data);
+	thread = AllocThreadHandle (name);
+	startInfo = (ThreadStartInfo *) HMalloc (sizeof (*startInfo));
+	startInfo->func = func;
+	startInfo->data = data;
+	startInfo->thread = thread;
+
+	thread->native = rust_thread_spawn (name, RustThreadHelper, startInfo);
+	if (thread->native == NULL)
+	{
+		HFree (startInfo);
+		HFree (thread);
+	}
 }
 
 void
@@ -103,31 +208,70 @@ TaskSwitch (void)
 void
 WaitThread (Thread thread, int *status)
 {
-	(void)status; /* Rust doesn't return status this way */
-	if (thread)
+	TrueThread t = (TrueThread) thread;
+
+	if (status)
+		*status = 0;
+
+	if (t && t->native)
 	{
-		rust_thread_join((RustThread*)thread);
+		int result = rust_thread_join (t->native);
+		if (status)
+			*status = result;
+		t->native = NULL;
 	}
 }
 
 void
 FinishThread (Thread thread)
 {
-	/* Mark thread for cleanup; in Rust threads clean up on drop */
-	(void)thread;
+	int i;
+
+	if (!thread || !lifecycleMutex)
+		return;
+
+	LockMutex (lifecycleMutex);
+	for (i = 0; i < LIFECYCLE_SIZE; i++)
+	{
+		if (pendingDeath[i] == NULL)
+		{
+			pendingDeath[i] = thread;
+			UnlockMutex (lifecycleMutex);
+			return;
+		}
+	}
+	UnlockMutex (lifecycleMutex);
+	log_add (log_Fatal, "Thread Lifecycle array filled.  Make LIFECYCLE_SIZE larger than %d.", LIFECYCLE_SIZE);
+	exit (EXIT_FAILURE);
 }
 
 void
 ProcessThreadLifecycles (void)
 {
-	/* Rust threads are self-managing; nothing to do */
+	int i;
+
+	if (!lifecycleMutex)
+		return;
+
+	LockMutex (lifecycleMutex);
+	for (i = 0; i < LIFECYCLE_SIZE; i++)
+	{
+		Thread t = pendingDeath[i];
+		if (t != NULL)
+		{
+			WaitThread (t, NULL);
+			pendingDeath[i] = NULL;
+			DestroyThread (t);
+		}
+	}
+	UnlockMutex (lifecycleMutex);
 }
 
 void
 DestroyThread (Thread t)
 {
-	/* Rust threads clean up on join/drop */
-	(void)t;
+	if (t)
+		HFree (t);
 }
 
 Mutex

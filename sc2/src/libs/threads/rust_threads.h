@@ -30,8 +30,9 @@ extern void rust_uninit_thread_system(void);
 extern int rust_is_thread_system_initialized(void);
 
 /* Thread operations */
-extern RustThread* rust_thread_spawn(const char* name, void (*func)(void*), void* data);
-extern void rust_thread_spawn_detached(const char* name, void (*func)(void*), void* data);
+extern RustThread* rust_thread_spawn(const char* name, int (*func)(void*), void* data);
+extern void rust_thread_spawn_detached(const char* name, int (*func)(void*), void* data);
+
 extern int rust_thread_join(RustThread* thread);
 extern void rust_thread_yield(void);
 extern void rust_hibernate_thread(uint32 msecs);
