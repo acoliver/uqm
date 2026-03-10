@@ -11,6 +11,8 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
+use super::mixer::source as mixer_source;
+use super::mixer::types::SourceProp;
 use super::stream;
 use super::types::*;
 
@@ -107,6 +109,39 @@ pub fn plr_seek(music_ref: &MusicRef, pos: u32) -> AudioResult<()> {
     Ok(())
 }
 
+/// Stop the currently active music (sentinel ~0 path).
+pub fn plr_stop_current() -> AudioResult<()> {
+    let state = MUSIC_STATE.lock();
+    if state.cur_music_ref.is_none() {
+        return Ok(());
+    }
+    drop(state);
+    stream::stop_stream(MUSIC_SOURCE)?;
+    let mut state = MUSIC_STATE.lock();
+    state.cur_music_ref = None;
+    Ok(())
+}
+
+/// Check whether any current music is playing (sentinel ~0 path).
+pub fn plr_playing_current() -> bool {
+    let state = MUSIC_STATE.lock();
+    if state.cur_music_ref.is_none() {
+        return false;
+    }
+    drop(state);
+    stream::playing_stream(MUSIC_SOURCE)
+}
+
+/// Seek within current music track (sentinel ~0 path).
+pub fn plr_seek_current(pos: u32) -> AudioResult<()> {
+    let state = MUSIC_STATE.lock();
+    if state.cur_music_ref.is_none() {
+        return Ok(());
+    }
+    drop(state);
+    stream::seek_stream(MUSIC_SOURCE, pos)
+}
+
 /// Pause music playback.
 pub fn plr_pause() -> AudioResult<()> {
     stream::pause_stream(MUSIC_SOURCE)
@@ -194,9 +229,21 @@ pub fn check_music_res_name(filename: &str) -> bool {
 
 /// Set the music volume (0..MAX_VOLUME).
 pub fn set_music_volume(volume: i32) {
-    let mut state = MUSIC_STATE.lock();
-    state.music_volume = volume;
-    // Gain will be applied via mixer on next frame or through fade
+    let clamped = volume.clamp(0, MAX_VOLUME);
+    let gain = {
+        let mut state = MUSIC_STATE.lock();
+        state.music_volume = clamped;
+        state.music_volume_scale * (clamped as f32 / MAX_VOLUME as f32)
+    };
+
+    stream::with_source(MUSIC_SOURCE, |source| {
+        let _ = mixer_source::mixer_source_f(source.handle, SourceProp::Gain, gain);
+    });
+}
+
+/// Get current music volume (0..MAX_VOLUME).
+pub fn current_music_volume() -> i32 {
+    MUSIC_STATE.lock().music_volume
 }
 
 /// Fade music volume over time.

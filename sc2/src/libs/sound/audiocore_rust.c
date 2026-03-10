@@ -1,8 +1,9 @@
 /*
- * Rust Audio Backend - implements audiocore API using rodio
+ * Rust Audio Backend - implements audiocore API using the Rust mixer
  *
  * When USE_RUST_AUDIO is defined, this file provides the audiocore
- * functions by calling into the Rust rodio backend.
+ * functions by calling into the Rust mixer (rust_mixer_*).
+ * Audio output is handled by the mixer pump in stream.rs (rodio).
  */
 
 #include "config.h"
@@ -27,32 +28,89 @@ int snddriver, soundflags;
 volatile bool audio_inited = false;
 
 /*
- * Rust FFI declarations
+ * Enum translation table: maps audio_* enum indices to MIX_* values.
+ * audio_* enums (from audiocore.h) are sequential integers starting at 0.
+ * MIX_* values (from mixer.h) are the OpenAL-like hex constants.
+ * Index order MUST match the audio_* enum declaration in audiocore.h.
  */
-/* Note: audio_Object is uintptr_t which is 64-bit on ARM64 macOS */
-extern sint32 rust_audio_backend_init(sint32 flags);
-extern void rust_audio_backend_uninit(void);
-extern sint32 rust_audio_get_error(void);
-extern void rust_audio_gen_sources(uint32 n, audio_Object *psrcobj);
-extern void rust_audio_delete_sources(uint32 n, audio_Object *psrcobj);
-extern sint32 rust_audio_is_source(audio_Object srcobj);
-extern void rust_audio_source_i(audio_Object srcobj, sint32 pname, audio_IntVal value);
-extern void rust_audio_source_f(audio_Object srcobj, sint32 pname, float value);
-extern void rust_audio_source_fv(audio_Object srcobj, sint32 pname, float *value);
-extern void rust_audio_get_source_i(audio_Object srcobj, sint32 pname, audio_IntVal *value);
-extern void rust_audio_get_source_f(audio_Object srcobj, sint32 pname, float *value);
-extern void rust_audio_source_rewind(audio_Object srcobj);
-extern void rust_audio_source_play(audio_Object srcobj);
-extern void rust_audio_source_pause(audio_Object srcobj);
-extern void rust_audio_source_stop(audio_Object srcobj);
-extern void rust_audio_source_queue_buffers(audio_Object srcobj, uint32 n, audio_Object* pbufobj);
-extern void rust_audio_source_unqueue_buffers(audio_Object srcobj, uint32 n, audio_Object* pbufobj);
-extern void rust_audio_gen_buffers(uint32 n, audio_Object *pbufobj);
-extern void rust_audio_delete_buffers(uint32 n, audio_Object *pbufobj);
-extern sint32 rust_audio_is_buffer(audio_Object bufobj);
-extern void rust_audio_get_buffer_i(audio_Object bufobj, sint32 pname, audio_IntVal *value);
-extern void rust_audio_buffer_data(audio_Object bufobj, uint32 format, void* data, uint32 size, uint32 freq);
+#define MIX_FORMAT_DUMMYID     0x00170000
+#define MIX_FORMAT_MAKE_LOCAL(b, c) \
+		( MIX_FORMAT_DUMMYID | ((b) & 0xff) | (((c) & 0xff) << 8) )
 
+static const sint32 EnumLookup[audio_ENUM_SIZE] =
+{
+	/* Errors */
+	0,          /* audio_NO_ERROR */
+	0xA001,     /* audio_INVALID_NAME */
+	0xA002,     /* audio_INVALID_ENUM */
+	0xA003,     /* audio_INVALID_VALUE */
+	0xA004,     /* audio_INVALID_OPERATION */
+	0xA005,     /* audio_OUT_OF_MEMORY */
+	0xA101,     /* audio_DRIVER_FAILURE */
+
+	/* Source properties */
+	0x1004,     /* audio_POSITION -> MIX_POSITION */
+	0x1007,     /* audio_LOOPING -> MIX_LOOPING */
+	0x1009,     /* audio_BUFFER -> MIX_BUFFER */
+	0x100A,     /* audio_GAIN -> MIX_GAIN */
+	0x1010,     /* audio_SOURCE_STATE -> MIX_SOURCE_STATE */
+	0x1015,     /* audio_BUFFERS_QUEUED -> MIX_BUFFERS_QUEUED */
+	0x1016,     /* audio_BUFFERS_PROCESSED -> MIX_BUFFERS_PROCESSED */
+
+	/* Source state information */
+	0,          /* audio_INITIAL -> MIX_INITIAL */
+	1,          /* audio_STOPPED -> MIX_STOPPED */
+	2,          /* audio_PLAYING -> MIX_PLAYING */
+	3,          /* audio_PAUSED -> MIX_PAUSED */
+
+	/* Sound buffer properties */
+	0x2001,     /* audio_FREQUENCY -> MIX_FREQUENCY */
+	0x2002,     /* audio_BITS -> MIX_BITS */
+	0x2003,     /* audio_CHANNELS -> MIX_CHANNELS */
+	0x2004,     /* audio_SIZE -> MIX_SIZE */
+
+	/* Format constants */
+	(sint32) MIX_FORMAT_MAKE_LOCAL(2, 1),  /* audio_FORMAT_MONO16 */
+	(sint32) MIX_FORMAT_MAKE_LOCAL(2, 2),  /* audio_FORMAT_STEREO16 */
+	(sint32) MIX_FORMAT_MAKE_LOCAL(1, 1),  /* audio_FORMAT_MONO8 */
+	(sint32) MIX_FORMAT_MAKE_LOCAL(1, 2),  /* audio_FORMAT_STEREO8 */
+};
+
+/*
+ * Rust mixer FFI declarations
+ *
+ * mixer_Object is intptr_t; audio_Object is uintptr_t.
+ * Both are pointer-sized — safe to cast between them.
+ */
+typedef intptr_t mixer_Object;
+
+extern int rust_mixer_Init(unsigned int frequency, unsigned int format,
+		unsigned int quality, unsigned int flags);
+extern void rust_mixer_Uninit(void);
+extern unsigned int rust_mixer_GetError(void);
+extern void rust_mixer_GenSources(unsigned int n, mixer_Object *psrcobj);
+extern void rust_mixer_DeleteSources(unsigned int n, mixer_Object *psrcobj);
+extern int rust_mixer_IsSource(mixer_Object srcobj);
+extern void rust_mixer_Sourcei(mixer_Object srcobj, unsigned int pname, intptr_t value);
+extern void rust_mixer_Sourcef(mixer_Object srcobj, unsigned int pname, float value);
+extern void rust_mixer_Sourcefv(mixer_Object srcobj, unsigned int pname, float *value);
+extern void rust_mixer_GetSourcei(mixer_Object srcobj, unsigned int pname, intptr_t *value);
+extern void rust_mixer_GetSourcef(mixer_Object srcobj, unsigned int pname, float *value);
+extern void rust_mixer_SourceRewind(mixer_Object srcobj);
+extern void rust_mixer_SourcePlay(mixer_Object srcobj);
+extern void rust_mixer_SourcePause(mixer_Object srcobj);
+extern void rust_mixer_SourceStop(mixer_Object srcobj);
+extern void rust_mixer_SourceQueueBuffers(mixer_Object srcobj, unsigned int n,
+		mixer_Object *pbufobj);
+extern void rust_mixer_SourceUnqueueBuffers(mixer_Object srcobj, unsigned int n,
+		mixer_Object *pbufobj);
+extern void rust_mixer_GenBuffers(unsigned int n, mixer_Object *pbufobj);
+extern void rust_mixer_DeleteBuffers(unsigned int n, mixer_Object *pbufobj);
+extern int rust_mixer_IsBuffer(mixer_Object bufobj);
+extern void rust_mixer_GetBufferi(mixer_Object bufobj, unsigned int pname,
+		intptr_t *value);
+extern void rust_mixer_BufferData(mixer_Object bufobj, unsigned int format,
+		void *data, unsigned int size, unsigned int freq);
 
 
 /*
@@ -64,21 +122,33 @@ initAudio (sint32 driver, sint32 flags)
 {
 	sint32 ret;
 	TFB_DecoderFormats formats;
-	
-	log_add (log_Info, "initAudio: Using Rust rodio backend");
-	
-	(void)driver; /* We ignore the driver selection and always use rodio */
-	
-	ret = rust_audio_backend_init(flags);
-	
+	unsigned int mixer_format;
+
+	log_add (log_Info, "initAudio: Using Rust mixer backend");
+
+	(void)driver; /* We always use the Rust mixer */
+
+	/*
+	 * Initialize the Rust mixer: 44100 Hz, stereo 16-bit, medium quality.
+	 * The mixer_format encoding matches MIX_FORMAT_MAKE(2, 2):
+	 *   bytes_per_channel=2, channels=2 → (2 << 8) | 2 = 0x0202
+	 */
+	if (flags & audio_QUALITY_HIGH)
+		mixer_format = 0x0202; /* stereo 16-bit */
+	else if (flags & audio_QUALITY_LOW)
+		mixer_format = 0x0202; /* stereo 16-bit (same for now) */
+	else
+		mixer_format = 0x0202; /* stereo 16-bit default */
+
+	ret = rust_mixer_Init (44100, mixer_format, 1 /* medium */, 0 /* none */);
+
 	if (ret == 0)
 	{
-		log_add (log_Fatal, "Rust audio backend initialization failed.\n");
+		log_add (log_Fatal, "Rust mixer initialization failed.\n");
 		exit (EXIT_FAILURE);
 	}
 
-	/* Initialize sound decoders - CRITICAL! 
-	 * Without this, wava_formats is NULL and wav.c will crash */
+	/* Initialize sound decoders */
 	log_add (log_Info, "Initializing sound decoders.");
 	formats.big_endian = false;
 	formats.want_big_endian = false;
@@ -89,18 +159,19 @@ initAudio (sint32 driver, sint32 flags)
 	if (SoundDecoder_Init (flags, &formats))
 	{
 		log_add (log_Error, "Sound decoders initialization failed.");
-		rust_audio_backend_uninit();
+		rust_mixer_Uninit();
 		return -1;
 	}
 	log_add (log_Info, "Sound decoders initialized.");
 
-	/* Initialize soundSource array - generate handles and create mutexes */
+	/* Initialize soundSource array — generate mixer handles and create mutexes */
 	{
 		int i;
 		for (i = 0; i < NUM_SOUNDSOURCES; ++i)
 		{
 			audio_GenSources (1, &soundSource[i].handle);
-			soundSource[i].stream_mutex = CreateMutex ("Rust audio stream mutex", SYNC_CLASS_AUDIO);
+			soundSource[i].stream_mutex = CreateMutex (
+					"Rust mixer stream mutex", SYNC_CLASS_AUDIO);
 		}
 	}
 
@@ -108,7 +179,7 @@ initAudio (sint32 driver, sint32 flags)
 	if (InitStreamDecoder ())
 	{
 		log_add (log_Error, "Stream decoder initialization failed.");
-		rust_audio_backend_uninit();
+		rust_mixer_Uninit();
 		return -1;
 	}
 
@@ -117,9 +188,9 @@ initAudio (sint32 driver, sint32 flags)
 	SetSFXVolume (sfxVolumeScale);
 	SetSpeechVolume (speechVolumeScale);
 	SetMusicVolume (musicVolume);
-	
+
 	audio_inited = true;
-	
+
 	return 0; /* Success */
 }
 
@@ -154,7 +225,7 @@ unInitAudio (void)
 	}
 
 	SoundDecoder_Uninit ();
-	rust_audio_backend_uninit();
+	rust_mixer_Uninit();
 }
 
 
@@ -165,103 +236,105 @@ unInitAudio (void)
 sint32
 audio_GetError (void)
 {
-	return rust_audio_get_error();
+	return (sint32) rust_mixer_GetError();
 }
 
 
 /*
- * Sources
+ * Sources — cast audio_Object (uintptr_t) ↔ mixer_Object (intptr_t)
  */
 
 void
 audio_GenSources (uint32 n, audio_Object *psrcobj)
 {
-	rust_audio_gen_sources(n, psrcobj);
+	rust_mixer_GenSources(n, (mixer_Object *) psrcobj);
 }
 
 void
 audio_DeleteSources (uint32 n, audio_Object *psrcobj)
 {
-	rust_audio_delete_sources(n, psrcobj);
+	rust_mixer_DeleteSources(n, (mixer_Object *) psrcobj);
 }
 
 bool
 audio_IsSource (audio_Object srcobj)
 {
-	return rust_audio_is_source(srcobj) != 0;
+	return rust_mixer_IsSource((mixer_Object) srcobj) != 0;
 }
 
 void
 audio_Sourcei (audio_Object srcobj, audio_SourceProp pname,
 		audio_IntVal value)
 {
-	rust_audio_source_i(srcobj, pname, value);
+	rust_mixer_Sourcei((mixer_Object) srcobj, EnumLookup[pname], value);
 }
 
 void
 audio_Sourcef (audio_Object srcobj, audio_SourceProp pname,
 		float value)
 {
-	rust_audio_source_f(srcobj, pname, value);
+	rust_mixer_Sourcef((mixer_Object) srcobj, EnumLookup[pname], value);
 }
 
 void
 audio_Sourcefv (audio_Object srcobj, audio_SourceProp pname,
 		float *value)
 {
-	rust_audio_source_fv(srcobj, pname, value);
+	rust_mixer_Sourcefv((mixer_Object) srcobj, EnumLookup[pname], value);
 }
 
 void
 audio_GetSourcei (audio_Object srcobj, audio_SourceProp pname,
 		audio_IntVal *value)
 {
-	rust_audio_get_source_i(srcobj, pname, value);
+	rust_mixer_GetSourcei((mixer_Object) srcobj, EnumLookup[pname], (intptr_t *) value);
 }
 
 void
 audio_GetSourcef (audio_Object srcobj, audio_SourceProp pname,
 		float *value)
 {
-	rust_audio_get_source_f(srcobj, pname, value);
+	rust_mixer_GetSourcef((mixer_Object) srcobj, EnumLookup[pname], value);
 }
 
 void
 audio_SourceRewind (audio_Object srcobj)
 {
-	rust_audio_source_rewind(srcobj);
+	rust_mixer_SourceRewind((mixer_Object) srcobj);
 }
 
 void
 audio_SourcePlay (audio_Object srcobj)
 {
-	rust_audio_source_play(srcobj);
+	rust_mixer_SourcePlay((mixer_Object) srcobj);
 }
 
 void
 audio_SourcePause (audio_Object srcobj)
 {
-	rust_audio_source_pause(srcobj);
+	rust_mixer_SourcePause((mixer_Object) srcobj);
 }
 
 void
 audio_SourceStop (audio_Object srcobj)
 {
-	rust_audio_source_stop(srcobj);
+	rust_mixer_SourceStop((mixer_Object) srcobj);
 }
 
 void
 audio_SourceQueueBuffers (audio_Object srcobj, uint32 n,
 		audio_Object* pbufobj)
 {
-	rust_audio_source_queue_buffers(srcobj, n, pbufobj);
+	rust_mixer_SourceQueueBuffers((mixer_Object) srcobj, n,
+			(mixer_Object *) pbufobj);
 }
 
 void
 audio_SourceUnqueueBuffers (audio_Object srcobj, uint32 n,
 		audio_Object* pbufobj)
 {
-	rust_audio_source_unqueue_buffers(srcobj, n, pbufobj);
+	rust_mixer_SourceUnqueueBuffers((mixer_Object) srcobj, n,
+			(mixer_Object *) pbufobj);
 }
 
 
@@ -272,33 +345,33 @@ audio_SourceUnqueueBuffers (audio_Object srcobj, uint32 n,
 void
 audio_GenBuffers (uint32 n, audio_Object *pbufobj)
 {
-	rust_audio_gen_buffers(n, pbufobj);
+	rust_mixer_GenBuffers(n, (mixer_Object *) pbufobj);
 }
 
 void
 audio_DeleteBuffers (uint32 n, audio_Object *pbufobj)
 {
-	rust_audio_delete_buffers(n, pbufobj);
+	rust_mixer_DeleteBuffers(n, (mixer_Object *) pbufobj);
 }
 
 bool
 audio_IsBuffer (audio_Object bufobj)
 {
-	return rust_audio_is_buffer(bufobj) != 0;
+	return rust_mixer_IsBuffer((mixer_Object) bufobj) != 0;
 }
 
 void
 audio_GetBufferi (audio_Object bufobj, audio_BufferProp pname,
 		audio_IntVal *value)
 {
-	rust_audio_get_buffer_i(bufobj, pname, value);
+	rust_mixer_GetBufferi((mixer_Object) bufobj, EnumLookup[pname], (intptr_t *) value);
 }
 
 void
 audio_BufferData (audio_Object bufobj, uint32 format, void* data,
 		uint32 size, uint32 freq)
 {
-	rust_audio_buffer_data(bufobj, format, data, size, freq);
+	rust_mixer_BufferData((mixer_Object) bufobj, EnumLookup[format], data, size, freq);
 }
 
 bool
@@ -315,7 +388,7 @@ audio_GetFormatInfo (uint32 format, int *channels, int *sample_size)
 		*channels = 2;
 		*sample_size = sizeof (uint8);
 		return true;
-	
+
 	case audio_FORMAT_MONO16:
 		*channels = 1;
 		*sample_size = sizeof (sint16);

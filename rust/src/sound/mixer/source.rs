@@ -209,6 +209,54 @@ pub fn mixer_source_i(handle: usize, prop: SourceProp, value: i32) -> Result<(),
             src.looping = value != 0;
             Ok(())
         }
+        SourceProp::Buffer => {
+            // Unqueue all existing buffers (matches C mixer_Sourcei MIX_BUFFER)
+            if src.queued_count > 0 {
+                // Reset buffer states back to Filled
+                let mut cur = src.first_queued;
+                while let Some(bh) = cur {
+                    if let Some(buffer) = mixer_get_buffer(bh) {
+                        let mut buf = buffer.lock();
+                        cur = buf.next;
+                        buf.next = None;
+                        if buf.state == BufferState::Queued as u32
+                            || buf.state == BufferState::Playing as u32
+                        {
+                            buf.state = BufferState::Filled as u32;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                src.first_queued = None;
+                src.next_queued = None;
+                src.prev_queued = None;
+                src.last_queued = None;
+                src.queued_count = 0;
+                src.processed_count = 0;
+                src.pos = 0;
+                src.count = 0;
+            }
+
+            if value != 0 {
+                let buf_handle = value as usize;
+                let buffer = mixer_get_buffer(buf_handle).ok_or(MixerError::InvalidName)?;
+                let mut buf = buffer.lock();
+                if buf.state != BufferState::Filled as u32 {
+                    return Err(MixerError::InvalidOperation);
+                }
+                buf.state = BufferState::Queued as u32;
+                buf.next = None;
+                drop(buf);
+
+                src.first_queued = Some(buf_handle);
+                src.next_queued = Some(buf_handle);
+                src.prev_queued = None;
+                src.last_queued = Some(buf_handle);
+                src.queued_count = 1;
+            }
+            Ok(())
+        }
         SourceProp::SourceState => {
             if value == SourceState::Initial as i32 {
                 // Rewind to initial state
@@ -302,7 +350,13 @@ pub fn mixer_get_source_f(handle: usize, prop: SourceProp) -> Result<f32, MixerE
 
 /// Start playback on a source
 pub fn mixer_source_play(handle: usize) -> Result<(), MixerError> {
-    let source = mixer_get_source(handle).ok_or(MixerError::InvalidName)?;
+    let source = match mixer_get_source(handle) {
+        Some(s) => s,
+        None => {
+            eprintln!("[mixer] source_play: handle {} NOT FOUND in pool", handle);
+            return Err(MixerError::InvalidName);
+        }
+    };
     let mut src = source.lock();
 
     src.check_state()?;
@@ -320,6 +374,10 @@ pub fn mixer_source_play(handle: usize) -> Result<(), MixerError> {
     }
 
     src.state = SourceState::Playing as u32;
+    eprintln!(
+        "[mixer] source_play: handle={} state=Playing next_queued={:?} first_queued={:?} gain={}",
+        handle, src.next_queued, src.first_queued, src.gain
+    );
 
     Ok(())
 }
@@ -342,7 +400,20 @@ pub fn mixer_source_stop(handle: usize) -> Result<(), MixerError> {
 
     src.check_state()?;
 
-    // Unqueue all buffers
+    // Reset buffer states back to Filled before clearing queue
+    // (matches C mixer_SourceUnqueueAll behaviour)
+    let mut cur = src.first_queued;
+    while let Some(bh) = cur {
+        if let Some(buffer) = mixer_get_buffer(bh) {
+            let mut buf = buffer.lock();
+            cur = buf.next;
+            buf.next = None;
+            buf.state = BufferState::Filled as u32;
+        } else {
+            break;
+        }
+    }
+
     src.first_queued = None;
     src.next_queued = None;
     src.prev_queued = None;
@@ -362,6 +433,20 @@ pub fn mixer_source_rewind(handle: usize) -> Result<(), MixerError> {
     let mut src = source.lock();
 
     src.check_state()?;
+
+    // Reset processed buffers back to Queued (matches C mixer_SourceRewind_internal)
+    let mut cur = src.first_queued;
+    while let Some(bh) = cur {
+        if let Some(buffer) = mixer_get_buffer(bh) {
+            let mut buf = buffer.lock();
+            if buf.state != BufferState::Queued as u32 {
+                buf.state = BufferState::Queued as u32;
+            }
+            cur = buf.next;
+        } else {
+            break;
+        }
+    }
 
     src.pos = 0;
     src.count = 0;

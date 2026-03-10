@@ -11,7 +11,7 @@
 //! of `SoundChunk`s, each with its own decoder, subtitle text, and timing.
 
 use std::ptr::{self, NonNull};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -27,11 +27,13 @@ use log::warn;
 // =============================================================================
 
 /// Characters per second for subtitle pacing.
-pub const TEXT_SPEED: f64 = 50.0;
-/// Accelerated scroll speed multiplier.
-pub const ACCEL_SCROLL_SPEED: f64 = 3.0;
+pub const TEXT_SPEED: f64 = 80.0;
+/// Accelerated smooth-seek step size in game ticks.
+/// Matches C `ACCEL_SCROLL_SPEED` semantics.
+pub const ACCEL_SCROLL_SPEED: f64 = 300.0;
 /// Maximum tracks in a multi-track splice.
-pub const MAX_MULTI_TRACKS: usize = 8;
+/// Matches C `MAX_MULTI_TRACKS` in `trackplayer.c`.
+pub const MAX_MULTI_TRACKS: usize = 20;
 
 // =============================================================================
 // Data Structures (spec §3.2.2)
@@ -54,11 +56,34 @@ pub struct SoundChunk {
     pub track_num: u32,
     /// Subtitle text for this chunk.
     pub text: Option<String>,
+    /// Cached CString for FFI — stable pointer for C pointer-identity comparisons.
+    /// Created lazily from `text`.
+    pub text_cstr: Option<std::ffi::CString>,
     /// Per-chunk callback (first page only).
     /// Must be Fn, not FnOnce — callbacks can fire multiple times on seek.
     pub callback: Option<Box<dyn Fn(i32) + Send>>,
     /// Linked list — next chunk.
     pub next: Option<Box<SoundChunk>>,
+}
+
+impl SoundChunk {
+    /// Create the cached CString from text if not already cached.
+    pub fn ensure_text_cstr(&mut self) {
+        if self.text_cstr.is_none() {
+            if let Some(ref text) = self.text {
+                self.text_cstr = std::ffi::CString::new(text.as_str()).ok();
+            }
+        }
+    }
+
+    /// Get a stable pointer to the CString text (for C pointer-identity comparisons).
+    pub fn text_cstr_ptr(&mut self) -> *const std::os::raw::c_char {
+        self.ensure_text_cstr();
+        match self.text_cstr.as_ref() {
+            Some(cs) => cs.as_ptr(),
+            None => std::ptr::null(),
+        }
+    }
 }
 
 // REQ-TRACK-ASSEMBLE-19: Iterative Drop to prevent stack overflow on long lists
@@ -156,6 +181,26 @@ impl TrackPlayerState {
 static TRACK_STATE: std::sync::LazyLock<Mutex<TrackPlayerState>> =
     std::sync::LazyLock::new(|| Mutex::new(TrackPlayerState::new()));
 
+// Throttle hot-path subtitle logging so comm update loops stay responsive.
+static SUBTITLE_LOG_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// Details for a resolved seek target.
+struct SeekTarget {
+    chunk_ptr: Option<NonNull<SoundChunk>>,
+    clamped_ticks: u32,
+    seek_time_ms: u32,
+}
+
+#[inline]
+fn ms_to_ticks(ms: u32) -> u32 {
+    ((ms as u64 * ONE_SECOND as u64) / 1000) as u32
+}
+
+#[inline]
+fn ticks_to_ms(ticks: u32) -> u32 {
+    ((ticks as u64 * 1000) / ONE_SECOND as u64) as u32
+}
+
 // =============================================================================
 // Track Callbacks (implements StreamCallbacks)
 // =============================================================================
@@ -217,19 +262,17 @@ impl StreamCallbacks for TrackCallbacks {
         let next_nn = NonNull::from(next.as_ref());
         state.cur_chunk = Some(next_nn);
         let next_mut = unsafe { &mut *(next_nn.as_ptr()) };
-        if let Some(mut dec) = next_mut.decoder.take() {
-            let _ = dec.seek(0); // rewind
+        if let Some(dec) = next_mut.decoder.take() {
+            // C parity: OnChunkEnd rewinds the next decoder before attaching it
+            // as the active sample decoder.
+            let mut dec = dec;
+            let _ = dec.seek(0);
             sample.decoder = Some(dec);
         }
 
         if next.tag_me {
             let chunk_ptr = next.as_ref() as *const SoundChunk as usize;
-            if buffer < sample.buffer_tags.len() {
-                sample.buffer_tags[buffer] = Some(SoundTag {
-                    buf_handle: buffer,
-                    data: chunk_ptr,
-                });
-            }
+            let _ = stream::tag_buffer(sample, buffer, chunk_ptr);
         }
         true
     }
@@ -240,7 +283,16 @@ impl StreamCallbacks for TrackCallbacks {
         state.cur_sub_chunk = None;
     }
 
-    fn on_tagged_buffer(&mut self, _sample: &mut SoundSample, tag: &SoundTag) {
+    fn on_tagged_buffer(&mut self, sample: &mut SoundSample, tag: &SoundTag) {
+        if let Some(slot) = sample
+            .buffer_tags
+            .iter_mut()
+            .filter_map(|entry| entry.as_mut())
+            .find(|entry| entry.buf_handle == tag.buf_handle)
+        {
+            stream::clear_buffer_tag(slot);
+        }
+
         let chunk_ptr = tag.data as *const SoundChunk;
         let mut state = TRACK_STATE.lock();
         if state.chunks_head.is_none() {
@@ -263,11 +315,15 @@ impl StreamCallbacks for TrackCallbacks {
 // =============================================================================
 
 /// Splice a new track (audio + subtitle) onto the track sequence.
+///
+/// `decoders`: one decoder per subtitle page, each limited to its time range.
+/// If empty and `track_name` is provided, chunks get `decoder: None`.
 pub fn splice_track(
     track_name: Option<&str>,
     track_text: Option<&str>,
     timestamp: Option<&str>,
     mut callback: Option<Box<dyn Fn(i32) + Send>>,
+    mut decoders: Vec<Box<dyn SoundDecoder>>,
 ) -> AudioResult<()> {
     let mut state = TRACK_STATE.lock();
 
@@ -295,10 +351,11 @@ pub fn splice_track(
                 let chunk = SoundChunk {
                     decoder: None,
                     start_time: state.dec_offset,
-                    run_time: page.timestamp as i32,
+                    run_time: ms_to_ticks(page.timestamp as u32) as i32,
                     tag_me: true,
                     track_num: state.track_count.saturating_sub(1),
                     text: Some(page.text.clone()),
+                    text_cstr: None,
                     callback: None,
                     next: None,
                 };
@@ -308,11 +365,9 @@ pub fn splice_track(
         return Ok(());
     }
 
-    // New track with decoder — for now, create chunk without loading decoder
-    // (decoder loading will be wired in FFI phase)
     let _name = track_name.unwrap();
 
-    // First track: create sound_sample
+    // First track: create sound_sample (no decoder yet — chunks own decoders)
     if state.track_count == 0 {
         let callbacks: Box<dyn StreamCallbacks + Send> = Box::new(TrackCallbacks);
         let sample = stream::create_sound_sample(None, 8, Some(callbacks))?;
@@ -322,51 +377,91 @@ pub fn splice_track(
     let pages = split_sub_pages(text);
     let timestamps = timestamp.map(|ts| get_time_stamps(ts)).unwrap_or_default();
 
-    for (i, page) in pages.iter().enumerate() {
-        let mut run_time = if i < timestamps.len() {
-            timestamps[i] as i32
-        } else {
-            page.timestamp as i32
-        };
+    let appending_without_page_break = state.no_page_break && state.track_count > 0;
 
-        // Negate last page timestamp
-        if i == pages.len() - 1 {
-            run_time = -run_time.abs();
-        }
-
-        // no_page_break handling
-        if state.no_page_break && state.track_count > 0 && i == 0 {
+    // C parity: when no_page_break is set, append page 0 text to the previous
+    // subtitle first, but still build chunk 0 from decoder/timing data.
+    if appending_without_page_break {
+        if let Some(first_page) = pages.first() {
             if !state.last_sub.is_null() {
                 let last_sub = unsafe { &mut *state.last_sub };
                 match &mut last_sub.text {
-                    Some(t) => t.push_str(&page.text),
-                    None => last_sub.text = Some(page.text.clone()),
+                    Some(t) => t.push_str(&first_page.text),
+                    None => last_sub.text = Some(first_page.text.clone()),
                 }
             }
-            state.no_page_break = false;
+        }
+    }
+
+    let decoder_count = decoders.len();
+    let chunk_count = pages.len().max(decoder_count);
+    let mut dec_iter = decoders.drain(..);
+
+    for i in 0..chunk_count {
+        let page = pages.get(i);
+        let page_decoder = dec_iter.next();
+
+        // If this is a subtitle-only no_page_break append with no decoder for the
+        // first page, there is no C-equivalent chunk to synthesize.
+        if appending_without_page_break && i == 0 && page_decoder.is_none() {
             continue;
         }
 
+        let run_time_ms = if i < timestamps.len() {
+            timestamps[i] as i32
+        } else if let Some(page) = page {
+            page.timestamp as i32
+        } else {
+            0
+        };
+
+        // Update sound_sample length from this decoder
+        if let Some(ref dec) = page_decoder {
+            if let Some(ref sample_arc) = state.sound_sample {
+                let mut sample = sample_arc.lock();
+                sample.length += dec.length();
+            }
+        }
+
+        // C parity for no_page_break: first chunk of this splice is audio-only and
+        // untagged; tagging resumes from the next chunk.
+        let suppress_first_page = appending_without_page_break && i == 0;
+        let tag_me = !suppress_first_page;
+        let text = if suppress_first_page {
+            None
+        } else {
+            page.map(|p| p.text.clone())
+        };
+
         let chunk = SoundChunk {
-            decoder: None, // Decoder loaded externally via FFI
+            decoder: page_decoder,
             start_time: state.dec_offset,
-            run_time,
-            tag_me: true,
+            run_time: ms_to_ticks(run_time_ms.unsigned_abs()) as i32,
+            tag_me,
             track_num: state.track_count,
-            text: Some(page.text.clone()),
-            callback: if i == 0 { callback.take() } else { None },
+            text,
+            text_cstr: None,
+            callback: if tag_me { callback.take() } else { None },
             next: None,
         };
+
+        // Advance dec_offset by decoder length (like C does)
+        if let Some(ref dec) = chunk.decoder {
+            state.dec_offset += (dec.length() * 1000.0) as f64;
+        }
 
         let has_text = chunk.text.is_some();
         append_chunk(&mut state, chunk);
         if has_text {
             state.last_sub = state.chunks_tail;
         }
-        state.no_page_break = false;
     }
 
-    state.track_count += 1;
+    state.no_page_break = false;
+
+    if !appending_without_page_break {
+        state.track_count += 1;
+    }
     state.last_track_name = _name.to_string();
     Ok(())
 }
@@ -397,10 +492,11 @@ pub fn splice_multi_track(
         let chunk = SoundChunk {
             decoder: None,
             start_time: state.dec_offset,
-            run_time: -(3.0 * TEXT_SPEED) as i32,
+            run_time: ms_to_ticks((3.0 * TEXT_SPEED) as u32) as i32,
             tag_me: false,
             track_num: state.track_count.saturating_sub(1),
             text: None,
+            text_cstr: None,
             callback: None,
             next: None,
         };
@@ -513,14 +609,20 @@ pub fn resume_track() -> AudioResult<()> {
 
 /// Check if a track is currently playing.
 pub fn playing_track() -> bool {
+    playing_track_num() > 0
+}
+
+/// Returns the track number currently playing (1-based), or 0 if nothing is playing.
+/// Matches C `PlayingTrack()` which returns `cur_chunk->track_num + 1`.
+pub fn playing_track_num() -> u16 {
     let state = TRACK_STATE.lock();
     if state.sound_sample.is_none() {
-        return false;
+        return 0;
     }
     state
         .cur_chunk
-        .map(|c| unsafe { c.as_ref() }.track_num + 1 > 0)
-        .unwrap_or(false)
+        .map(|c| (unsafe { c.as_ref() }.track_num + 1) as u16)
+        .unwrap_or(0)
 }
 
 // =============================================================================
@@ -528,52 +630,116 @@ pub fn playing_track() -> bool {
 // =============================================================================
 
 /// Seek backward smoothly (rewind).
+/// Uses stream start_time-based position like C get_current_track_pos().
 pub fn fast_reverse_smooth() -> AudioResult<()> {
-    let pos = {
+    {
         let state = TRACK_STATE.lock();
-        get_current_track_pos_simple(&state)
-    };
+        if state.sound_sample.is_none() {
+            return Ok(());
+        }
+    }
+
+    let pos = stream::get_stream_position_ticks(SPEECH_SOURCE);
     let new_pos = pos.saturating_sub(ACCEL_SCROLL_SPEED as u32);
+    eprintln!(
+        "[PARITY][FAST_REVERSE_SMOOTH] pos_ticks={} new_pos_ticks={}",
+        pos, new_pos
+    );
     seek_to_position(new_pos)
 }
 
 /// Seek forward smoothly (fast-forward).
+/// Uses stream start_time-based position like C get_current_track_pos().
 pub fn fast_forward_smooth() -> AudioResult<()> {
-    let pos = {
+    {
         let state = TRACK_STATE.lock();
-        get_current_track_pos_simple(&state)
-    };
+        if state.sound_sample.is_none() {
+            return Ok(());
+        }
+    }
+
+    let pos = stream::get_stream_position_ticks(SPEECH_SOURCE);
     let new_pos = pos + ACCEL_SCROLL_SPEED as u32;
+    eprintln!(
+        "[PARITY][FAST_FORWARD_SMOOTH] pos_ticks={} new_pos_ticks={}",
+        pos, new_pos
+    );
     seek_to_position(new_pos)
 }
 
 /// Jump backward by one subtitle page.
 pub fn fast_reverse_page() -> AudioResult<()> {
-    let state = TRACK_STATE.lock();
-    let prev = find_prev_page_inner(&state.chunks_head, state.cur_sub_chunk);
-    if let Some(page) = prev {
+    let (sample_arc, offset_ticks) = {
+        let mut state = TRACK_STATE.lock();
+        if state.sound_sample.is_none() {
+            return Ok(());
+        }
+
+        let prev = find_prev_page_inner(&state.chunks_head, state.cur_sub_chunk);
+        let Some(page) = prev else {
+            return Ok(());
+        };
+
         let chunk = unsafe { page.as_ref() };
-        let pos = chunk.start_time as u32;
-        drop(state);
-        seek_to_position(pos)?;
-    }
-    Ok(())
+        let offset_ticks = ms_to_ticks(chunk.start_time as u32) as i32;
+
+        state.cur_chunk = Some(page);
+        state.cur_sub_chunk = Some(page);
+        (
+            Arc::clone(state.sound_sample.as_ref().unwrap()),
+            offset_ticks,
+        )
+    };
+
+    stream::play_stream_with_offset_override(
+        sample_arc,
+        SPEECH_SOURCE,
+        false,
+        true,
+        true,
+        Some(offset_ticks),
+    )
 }
 
 /// Jump forward by one subtitle page.
 pub fn fast_forward_page() -> AudioResult<()> {
-    let state = TRACK_STATE.lock();
-    let next = find_next_page_inner(state.cur_sub_chunk);
-    if let Some(page) = next {
-        let chunk = unsafe { page.as_ref() };
-        let pos = chunk.start_time as u32;
-        drop(state);
-        seek_to_position(pos)?;
+    // Strict C parity: page FF must be based on current subtitle page marker only.
+    // If cur_sub_chunk is absent, C behavior is to fall through to end-of-track seek.
+    let page_target = {
+        let mut state = TRACK_STATE.lock();
+        if state.sound_sample.is_none() {
+            return Ok(());
+        }
+
+        let next = find_next_page_inner(state.cur_sub_chunk);
+        if let Some(page) = next {
+            let chunk = unsafe { page.as_ref() };
+            let offset_ticks = ms_to_ticks(chunk.start_time as u32) as i32;
+            state.cur_chunk = Some(page);
+            state.cur_sub_chunk = Some(page);
+            Some((Arc::clone(state.sound_sample.as_ref().unwrap()), offset_ticks))
+        } else {
+            None
+        }
+    };
+
+    if let Some((sample_arc, offset_ticks)) = page_target {
+        stream::play_stream_with_offset_override(
+            sample_arc,
+            SPEECH_SOURCE,
+            false,
+            true,
+            true,
+            Some(offset_ticks),
+        )
     } else {
-        drop(state);
-        let _ = stream::stop_stream(SPEECH_SOURCE);
+        // Match C FastForward_Page -> seek_track(tracks_length + 1), not direct stop.
+        let end_plus_one = {
+            let state = TRACK_STATE.lock();
+            state.tracks_length.load(Ordering::Acquire).saturating_add(1)
+        };
+        seek_to_position(end_plus_one)
     }
-    Ok(())
 }
 
 /// Get the current track position.
@@ -590,7 +756,7 @@ pub fn get_track_position(in_units: u32) -> u32 {
     if len == 0 {
         return 0;
     }
-    let pos = get_current_track_pos_simple(&state);
+    let pos = stream::get_stream_position_ticks(SPEECH_SOURCE).min(len);
     if in_units == 0 {
         pos
     } else {
@@ -613,6 +779,38 @@ pub fn get_track_subtitle() -> Option<String> {
         .map(|c| unsafe { c.as_ref() })
         .and_then(|c| c.text.clone())
 }
+
+/// Return a stable C string pointer for the current subtitle.
+/// The pointer remains valid and identical as long as `cur_sub_chunk` doesn't change.
+/// This is critical for C's pointer-identity comparison in `CheckSubtitles`.
+pub fn get_track_subtitle_cstr() -> *const std::os::raw::c_char {
+    let mut state = TRACK_STATE.lock();
+    let Some(cur_ptr) = state.cur_sub_chunk else {
+        if SUBTITLE_LOG_COUNTER.fetch_add(1, Ordering::Relaxed) % 120 == 0 {
+            eprintln!("[PARITY][SUBTITLE] active=<none>");
+        }
+        return std::ptr::null();
+    };
+
+    // SAFETY: `cur_sub_chunk` is maintained as a pointer into the owned linked list
+    // (`chunks_head`) and only reset/updated while holding TRACK_STATE. We hold the
+    // mutex here, so taking a mutable reference for lazy CString caching is safe.
+    let chunk = unsafe { &mut *cur_ptr.as_ptr() };
+    let ptr = chunk.text_cstr_ptr();
+    if SUBTITLE_LOG_COUNTER.fetch_add(1, Ordering::Relaxed) % 120 == 0 {
+        if let Some(text) = chunk.text.as_ref() {
+            eprintln!(
+                "[PARITY][SUBTITLE] len={} ptr=0x{:x}",
+                text.len(),
+                ptr as usize
+            );
+        } else {
+            eprintln!("[PARITY][SUBTITLE] active=<null_text>");
+        }
+    }
+    ptr
+}
+
 
 /// Get the first subtitle in the track.
 pub fn get_first_track_subtitle() -> Option<SubtitleRef> {
@@ -640,23 +838,108 @@ pub fn get_track_subtitle_text(sub_ref: &SubtitleRef) -> Option<&str> {
 }
 
 // =============================================================================
+// Chunk pointer API — raw pointer iteration matching C's SUBTITLE_REF contract
+// =============================================================================
+
+/// Return the raw pointer to chunks_head (matching C's GetFirstTrackSubtitle).
+pub fn get_first_chunk_ptr() -> *const u8 {
+    let state = TRACK_STATE.lock();
+    match state.chunks_head.as_ref() {
+        Some(c) => c.as_ref() as *const SoundChunk as *const u8,
+        None => std::ptr::null(),
+    }
+}
+
+/// Given a chunk pointer `last_ref`, walk to the next tagged page
+/// (matching C's GetNextTrackSubtitle(SUBTITLE_REF LastRef)).
+pub fn get_next_chunk_ptr(last_ref: *const u8) -> *const u8 {
+    if last_ref.is_null() {
+        return std::ptr::null();
+    }
+    let state = TRACK_STATE.lock();
+    // Validate that last_ref points to a chunk in our list
+    if !chunk_is_in_list(&state.chunks_head, last_ref as *const SoundChunk) {
+        return std::ptr::null();
+    }
+    let chunk = unsafe { &*(last_ref as *const SoundChunk) };
+    let mut ptr = chunk.next.as_deref();
+    while let Some(c) = ptr {
+        if c.tag_me {
+            return c as *const SoundChunk as *const u8;
+        }
+        ptr = c.next.as_deref();
+    }
+    std::ptr::null()
+}
+
+/// Given a chunk pointer, return its subtitle text (matching C's GetTrackSubtitleText).
+pub fn get_chunk_text(chunk_ptr: *const u8) -> Option<String> {
+    if chunk_ptr.is_null() {
+        return None;
+    }
+    let state = TRACK_STATE.lock();
+    if !chunk_is_in_list(&state.chunks_head, chunk_ptr as *const SoundChunk) {
+        return None;
+    }
+    let chunk = unsafe { &*(chunk_ptr as *const SoundChunk) };
+    chunk.text.clone()
+}
+
+/// Given a chunk pointer, return a stable CString pointer (matching C's GetTrackSubtitleText).
+pub fn get_chunk_text_cstr(chunk_ptr: *const u8) -> *const std::os::raw::c_char {
+    if chunk_ptr.is_null() {
+        return std::ptr::null();
+    }
+    let state = TRACK_STATE.lock();
+    if !chunk_is_in_list(&state.chunks_head, chunk_ptr as *const SoundChunk) {
+        return std::ptr::null();
+    }
+    let chunk = unsafe { &mut *(chunk_ptr as *mut SoundChunk) };
+    chunk.text_cstr_ptr()
+}
+
+// =============================================================================
 // Internal Functions
 // =============================================================================
 
 /// Split subtitle text into sub-pages based on CRLF breaks and timing.
 fn split_sub_pages(text: &str) -> Vec<SubPage> {
-    let crlf = "\r\n";
-    let parts: Vec<&str> = text.split(crlf).collect();
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    // Match C behavior: split on either '\r' or '\n', consuming runs of line breaks.
+    let bytes = text.as_bytes();
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start = 0usize;
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        if bytes[i] == b'\r' || bytes[i] == b'\n' {
+            parts.push(&text[start..i]);
+            while i < bytes.len() && (bytes[i] == b'\r' || bytes[i] == b'\n') {
+                i += 1;
+            }
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+
+    if start < bytes.len() {
+        parts.push(&text[start..]);
+    }
+
     let mut result = Vec::new();
 
-    for (i, part) in parts.iter().enumerate() {
-        let mut page_text = part.to_string();
+    for (idx, part) in parts.iter().enumerate() {
+        let mut page_text = (*part).to_string();
 
-        // Continuation marks
-        if i > 0 {
+        // Continuation marks (same as C).
+        if idx > 0 {
             page_text = format!("..{}", page_text);
         }
-        if i < parts.len() - 1 {
+        if idx < parts.len() - 1 {
             let last_char = part.chars().last();
             let needs_ellipsis = last_char
                 .map(|c| !c.is_whitespace() && !c.is_ascii_punctuation())
@@ -674,6 +957,7 @@ fn split_sub_pages(text: &str) -> Vec<SubPage> {
             timestamp,
         });
     }
+
     result
 }
 
@@ -726,47 +1010,157 @@ fn chunk_is_in_list(head: &Option<Box<SoundChunk>>, target: *const SoundChunk) -
     false
 }
 
-/// Seek to a specific position (in game ticks). Drops TRACK_STATE,
-/// delegates to stream::seek_stream, then updates track state.
+/// Seek to a specific position (in game ticks).
+///
+/// Matches C seek_track semantics:
+/// - clamp to tracks_length + 1
+/// - update stream start_time timebase
+/// - resolve current chunk and subtitle tag state
+/// - seek the selected chunk decoder to relative offset
+/// - attach selected decoder to sample and restart stream if needed
 fn seek_to_position(pos: u32) -> AudioResult<()> {
-    {
+    eprintln!("[PARITY][SEEK] request_ticks={}", pos);
+    let sample_arc = {
         let mut state = TRACK_STATE.lock();
-        let len = state.tracks_length.load(Ordering::Acquire);
-        let clamped = pos.min(len + 1);
+        let target = resolve_seek_target(&mut state, pos);
+        eprintln!(
+            "[PARITY][SEEK] resolved clamped_ticks={} seek_time_ms={} has_chunk={}",
+            target.clamped_ticks,
+            target.seek_time_ms,
+            target.chunk_ptr.is_some()
+        );
 
-        // Walk chunk list to find and update cur_chunk/cur_sub_chunk
-        let mut cumulative: u32 = 0;
-        let mut last_tagged: Option<NonNull<SoundChunk>> = None;
-        let mut cur = state.chunks_head.as_deref();
-        let mut found = false;
+        // Keep stream position/timebase coherent with C get_current_track_pos().
+        stream::with_source(SPEECH_SOURCE, |source| {
+            source.start_time = get_time_counter() as i32 - target.clamped_ticks as i32;
+        });
 
-        while let Some(chunk) = cur {
-            if chunk.tag_me {
-                last_tagged = Some(NonNull::from(chunk));
-            }
-            let duration = chunk.run_time.unsigned_abs();
-            let chunk_end = cumulative + duration;
-
-            if chunk_end > clamped {
-                state.cur_chunk = Some(NonNull::from(chunk));
-                if let Some(tagged) = last_tagged {
-                    let tagged_ref = unsafe { tagged.as_ref() };
-                    do_track_tag_inner(&mut state, tagged_ref);
-                }
-                found = true;
-                break;
-            }
-            cumulative = chunk_end;
-            cur = chunk.next.as_deref();
-        }
-
-        if !found {
+        if target.chunk_ptr.is_none() {
+            // Beyond end of all tracks.
             state.cur_chunk = None;
             state.cur_sub_chunk = None;
+            drop(state);
+            let _ = stream::stop_stream(SPEECH_SOURCE);
+            return Ok(());
         }
+
+        let sample_arc = match state.sound_sample.as_ref() {
+            Some(s) => Arc::clone(s),
+            None => return Ok(()),
+        };
+
+        let chunk_ptr = target.chunk_ptr.unwrap();
+        let chunk = unsafe { chunk_ptr.as_ref() };
+        let seek_ms = target.seek_time_ms;
+
+        {
+            let mut sample = sample_arc.lock();
+
+            // Return currently attached decoder back to old cur_chunk before switching.
+            if let Some(dec) = sample.decoder.take() {
+                if let Some(cur_ptr) = state.cur_chunk {
+                    let cur_mut = unsafe { &mut *cur_ptr.as_ptr() };
+                    if cur_mut.decoder.is_none() {
+                        cur_mut.decoder = Some(dec);
+                    }
+                }
+            }
+
+            // Attach target chunk decoder and seek within it.
+            // C parity: seek target is milliseconds relative to chunk start,
+            // but decoder seek API takes PCM sample position.
+            let chunk_mut = unsafe { &mut *chunk_ptr.as_ptr() };
+            if let Some(mut dec) = chunk_mut.decoder.take() {
+                let pcm_pos = (seek_ms as u64 * dec.frequency() as u64 / 1000) as u32;
+                let _ = dec.seek(pcm_pos);
+                eprintln!(
+                    "[PARITY][SEEK] decoder_freq={} pcm_pos={} (from seek_ms={})",
+                    dec.frequency(),
+                    pcm_pos,
+                    seek_ms
+                );
+                sample.decoder = Some(dec);
+            }
+
+            sample.offset = chunk.start_time as i32 * ONE_SECOND as i32 / 1000;
+            eprintln!(
+                "[PARITY][SEEK] chunk_start_ms={:.3} sample_offset_ticks={} seek_ms={}",
+                chunk.start_time,
+                sample.offset,
+                seek_ms
+            );
+        }
+
+        state.cur_chunk = Some(chunk_ptr);
+
+        sample_arc
+    };
+
+    if !stream::playing_stream(SPEECH_SOURCE) {
+        stream::play_stream(sample_arc, SPEECH_SOURCE, false, true, false)?;
     }
-    // Delegate actual audio seeking to the stream engine
-    stream::seek_stream(SPEECH_SOURCE, pos)
+
+    Ok(())
+}
+
+/// Resolve a seek target and update cur_chunk/cur_sub_chunk like C seek_track().
+fn resolve_seek_target(state: &mut TrackPlayerState, pos: u32) -> SeekTarget {
+    let len = state.tracks_length.load(Ordering::Acquire);
+    let clamped_ticks = pos.min(len + 1);
+
+    let mut last_tagged: Option<NonNull<SoundChunk>> = None;
+    let mut cur = state.chunks_head.as_deref();
+
+    while let Some(chunk) = cur {
+        let chunk_ptr = NonNull::from(chunk);
+        let chunk_tag_me = chunk.tag_me;
+        let chunk_start_ms = chunk.start_time as u32;
+        let chunk_len_ms = chunk
+            .decoder
+            .as_ref()
+            .map(|d| (d.length() * 1000.0) as u32)
+            .unwrap_or(0);
+
+        if chunk_tag_me {
+            last_tagged = Some(chunk_ptr);
+        }
+
+        let chunk_end_ticks = ms_to_ticks(chunk_start_ms.saturating_add(chunk_len_ms));
+
+        if clamped_ticks < chunk_end_ticks {
+            // C seek_track semantics:
+            // - remember last tagged chunk seen while scanning
+            // - include current chunk if it is tagged
+            let tagged_ptr = if chunk_tag_me {
+                Some(chunk_ptr)
+            } else {
+                last_tagged
+            };
+            if let Some(tagged) = tagged_ptr {
+                do_track_tag_ptr_inner(state, tagged);
+            }
+
+            let chunk_start_ticks = ms_to_ticks(chunk_start_ms);
+            let rel_ticks = clamped_ticks.saturating_sub(chunk_start_ticks);
+            let seek_time_ms = ticks_to_ms(rel_ticks);
+
+            return SeekTarget {
+                chunk_ptr: Some(chunk_ptr),
+                clamped_ticks,
+                seek_time_ms,
+            };
+        }
+
+        cur = chunk.next.as_deref();
+    }
+
+    state.cur_chunk = None;
+    state.cur_sub_chunk = None;
+    SeekTarget {
+        chunk_ptr: None,
+        clamped_ticks,
+        seek_time_ms: 0,
+    }
 }
 
 /// Find the next tagged page after the given position.
@@ -789,13 +1183,17 @@ fn find_prev_page_inner(
     cur: Option<NonNull<SoundChunk>>,
 ) -> Option<NonNull<SoundChunk>> {
     let head_ref = head.as_deref()?;
-    let cur_nn = cur?;
-    let cur_ptr = cur_nn.as_ptr();
+    let cur_ptr = cur.map(|nn| nn.as_ptr());
+
+    // C parity: cur == NULL is treated as end-of-list.
+    // So we still scan from head and return the last tagged page.
     let mut last_tagged = Some(NonNull::from(head_ref));
     let mut node = Some(head_ref);
     while let Some(chunk) = node {
-        if ptr::eq(chunk, cur_ptr as *const _) {
-            break;
+        if let Some(cptr) = cur_ptr {
+            if ptr::eq(chunk, cptr as *const _) {
+                break;
+            }
         }
         if chunk.tag_me {
             last_tagged = Some(NonNull::from(chunk));
@@ -815,39 +1213,30 @@ fn do_track_tag_inner(state: &mut TrackPlayerState, chunk: &SoundChunk) {
     state.cur_sub_chunk = Some(NonNull::from(chunk));
 }
 
-/// Get the current track playback position in game ticks (simplified).
-/// Uses chunk durations and current position within current chunk.
-fn get_current_track_pos_simple(state: &TrackPlayerState) -> u32 {
-    let len = state.tracks_length.load(Ordering::Acquire);
-    if len == 0 {
-        return 0;
+fn do_track_tag_ptr_inner(state: &mut TrackPlayerState, chunk_ptr: NonNull<SoundChunk>) {
+    if let Some(ref cb) = unsafe { chunk_ptr.as_ref() }.callback {
+        cb(0);
     }
-    // Walk to current chunk and sum preceding durations
-    let cur_ptr = match state.cur_chunk {
-        Some(c) => c.as_ptr(),
-        None => return 0,
-    };
-    let mut pos: u32 = 0;
-    let mut node = state.chunks_head.as_deref();
-    while let Some(chunk) = node {
-        if ptr::eq(chunk, cur_ptr as *const _) {
-            break;
-        }
-        pos += chunk.run_time.unsigned_abs();
-        node = chunk.next.as_deref();
-    }
-    pos.min(len)
+    state.cur_sub_chunk = Some(chunk_ptr);
 }
+
 
 /// Get the total track end time in game ticks.
 fn tracks_end_time_inner(state: &TrackPlayerState) -> u32 {
-    let mut total: u32 = 0;
+    let mut total_ms: u32 = 0;
     let mut cur = state.chunks_head.as_deref();
     while let Some(chunk) = cur {
-        total += chunk.run_time.unsigned_abs();
+        let chunk_end_ms = (chunk.start_time as u32).saturating_add(
+            chunk
+                .decoder
+                .as_ref()
+                .map(|d| (d.length() * 1000.0) as u32)
+                .unwrap_or(0),
+        );
+        total_ms = total_ms.max(chunk_end_ms);
         cur = chunk.next.as_deref();
     }
-    total
+    ms_to_ticks(total_ms)
 }
 
 // =============================================================================
@@ -867,6 +1256,7 @@ mod tests {
             tag_me: false,
             track_num: 0,
             text: None,
+            text_cstr: None,
             callback: None,
             next: None,
         };
@@ -883,6 +1273,7 @@ mod tests {
             tag_me: true,
             track_num: 1,
             text: Some("Page 2".into()),
+            text_cstr: None,
             callback: None,
             next: None,
         });
@@ -893,6 +1284,7 @@ mod tests {
             tag_me: true,
             track_num: 0,
             text: Some("Page 1".into()),
+            text_cstr: None,
             callback: None,
             next: Some(chunk2),
         };
@@ -912,6 +1304,7 @@ mod tests {
                 tag_me: false,
                 track_num: 0,
                 text: None,
+                text_cstr: None,
                 callback: None,
                 next: head,
             }));
@@ -1011,14 +1404,14 @@ mod tests {
     // REQ-TRACK-ASSEMBLE-04..13: Assembly
     #[test]
     fn test_splice_track_no_text_returns_ok() {
-        let result = splice_track(Some("track"), None, None, None);
+        let result = splice_track(Some("track"), None, None, None, Vec::new());
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_splice_track_no_name_no_tracks_warns() {
         // When no tracks exist and no name is given, should return Ok
-        let result = splice_track(None, Some("text"), None, None);
+        let result = splice_track(None, Some("text"), None, None, Vec::new());
         assert!(result.is_ok());
     }
 
@@ -1038,34 +1431,19 @@ mod tests {
         let chunk = SoundChunk {
             decoder: None,
             start_time: 500.0,
-            run_time: -1000,
+            run_time: ms_to_ticks(1000) as i32,
             tag_me: true,
             track_num: 2,
             text: Some("Subtitle text".into()),
+            text_cstr: None,
             callback: Some(Box::new(|_| {})),
             next: None,
         };
         assert_eq!(chunk.start_time, 500.0);
-        assert_eq!(chunk.run_time, -1000);
+        assert_eq!(chunk.run_time, ms_to_ticks(1000) as i32);
         assert!(chunk.tag_me);
         assert_eq!(chunk.track_num, 2);
         assert!(chunk.callback.is_some());
-    }
-
-    #[test]
-    fn test_splice_track_last_page_negative_run_time() {
-        // Last page in a track should have negative run_time (minimum display)
-        let chunk = SoundChunk {
-            decoder: None,
-            start_time: 0.0,
-            run_time: -2000, // negative = minimum display time
-            tag_me: true,
-            track_num: 0,
-            text: Some("Last page".into()),
-            callback: None,
-            next: None,
-        };
-        assert!(chunk.run_time < 0);
     }
 
     // REQ-TRACK-ASSEMBLE-15..17: Multi-track
@@ -1083,6 +1461,15 @@ mod tests {
     }
 
     // REQ-TRACK-PLAY-01..10: Playback
+
+    #[test]
+    fn test_ms_ticks_roundtrip_close() {
+        let ms = 1000u32;
+        let ticks = ms_to_ticks(ms);
+        let back_ms = ticks_to_ms(ticks);
+        assert!((back_ms as i32 - ms as i32).abs() <= 2);
+    }
+
     #[test]
     #[ignore = "P11: play_track stub"]
     fn test_play_track_no_sample_ok() {

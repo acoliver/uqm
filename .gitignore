@@ -15,3 +15,5 @@ sc2/uqm
 rust-bridge.log
 sc2/rust-bridge.log
 logs/
+
+tmp/

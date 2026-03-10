@@ -9,6 +9,7 @@
 //! control, fileinst, heart_ffi).
 
 use std::any::Any;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -135,7 +136,7 @@ pub const BUFFER_SIZE: usize = 16384;
 #[cfg(not(test))]
 extern "C" {
     fn GetTimeCounter() -> u32;
-    fn QuitPosted() -> i32;
+    static QuitPosted: i32;
 }
 
 /// Safe wrapper around the C `GetTimeCounter()` function.
@@ -144,10 +145,10 @@ pub fn get_time_counter() -> u32 {
     unsafe { GetTimeCounter() }
 }
 
-/// Safe wrapper around the C `QuitPosted()` function.
+/// Safe wrapper around the C `QuitPosted` global flag.
 #[cfg(not(test))]
 pub fn quit_posted() -> bool {
-    unsafe { QuitPosted() != 0 }
+    unsafe { QuitPosted != 0 }
 }
 
 /// Test stub for `GetTimeCounter()` — returns 0.
@@ -263,6 +264,12 @@ pub struct SoundSource {
     pub sbuf_head: u32,
     /// Last scope sample time.
     pub sbuf_lasttime: u32,
+    /// Queued buffer byte sizes for accurate scope removal (FIFO order).
+    pub queued_buf_sizes: VecDeque<usize>,
+    /// Persistent flag: EndChunk already failed (end of chunk list reached).
+    /// Prevents repeated futile on_end_chunk calls across decoder cycles.
+    /// Reset when a new stream is started.
+    pub end_chunk_failed: bool,
 }
 
 impl SoundSource {
@@ -281,6 +288,8 @@ impl SoundSource {
             sbuf_tail: 0,
             sbuf_head: 0,
             sbuf_lasttime: 0,
+            queued_buf_sizes: VecDeque::new(),
+            end_chunk_failed: false,
         }
     }
 }

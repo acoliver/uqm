@@ -98,12 +98,19 @@ static BUFFER_POOL: Mutex<Vec<Option<Arc<Mutex<MixerBuffer>>>>> = Mutex::new(Vec
 /// Generate new buffer objects
 ///
 /// Returns handles to newly created buffers.
+/// Handles are 1-based (handle 0 = "no buffer" sentinel, matching OpenAL convention).
 pub fn mixer_gen_buffers(n: u32) -> Result<Vec<usize>, MixerError> {
     if n == 0 {
         return Ok(Vec::new());
     }
 
     let mut pool = BUFFER_POOL.lock();
+
+    // Reserve index 0 as "no buffer" sentinel on first allocation
+    if pool.is_empty() {
+        pool.push(None);
+    }
+
     let mut handles = Vec::with_capacity(n as usize);
 
     for _ in 0..n {
@@ -345,6 +352,18 @@ pub fn mixer_buffer_data(
         }
         (converted, dst_size as u32)
     };
+
+    // Diagnostic: check if buffer data is non-zero
+    static BUF_DIAG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let bd = BUF_DIAG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if bd < 5 {
+        let nz = converted_data.iter().position(|&b| b != 0);
+        let first_bytes: Vec<u8> = converted_data.iter().take(16).copied().collect();
+        eprintln!(
+            "[BUF_DATA#{}] handle={} src_fmt=0x{:x} freq={} mixer_freq={} data_len={} nonzero={:?} first16={:?}",
+            bd, handle, format, freq, mixer_freq, converted_data.len(), nz, first_bytes
+        );
+    }
 
     buf.data = Some(converted_data);
     buf.size = final_size;

@@ -32,6 +32,7 @@
 #include "libs/inplib.h"
 #include "libs/timelib.h"
 #include "libs/threadlib.h"
+#include <stdio.h>
 
 
 #define ACCELERATION_INCREMENT (ONE_SECOND / 12)
@@ -380,6 +381,15 @@ DoInput (void *pInputState, BOOLEAN resetInput)
 		}
 
 		soundFlags = MenuKeysToSoundFlags (&PulsedInputState);
+		fprintf (stderr,
+				"[DoInput] menuSounds=%p soundFlags=0x%04x sound0=0x%04x sound1=0x%04x select=%d cancel=%d up=%d down=%d left=%d right=%d\n",
+				(void *)MenuSounds, (unsigned)soundFlags, (unsigned)sound_0, (unsigned)sound_1,
+				(int)PulsedInputState.menu[KEY_MENU_SELECT],
+				(int)PulsedInputState.menu[KEY_MENU_CANCEL],
+				(int)PulsedInputState.menu[KEY_MENU_UP],
+				(int)PulsedInputState.menu[KEY_MENU_DOWN],
+				(int)PulsedInputState.menu[KEY_MENU_LEFT],
+				(int)PulsedInputState.menu[KEY_MENU_RIGHT]);
 			
 		if (MenuSounds && (soundFlags & (sound_0 | sound_1)))
 		{

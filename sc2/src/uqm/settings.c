@@ -20,6 +20,7 @@
 
 #include "globdata.h"
 #include "libs/compiler.h"
+#include <stdio.h>
 
 
 static MUSIC_REF LastMusicRef;
@@ -87,6 +88,10 @@ void
 PlaySoundEffect (SOUND S, COUNT Channel, SoundPosition Pos,
 		void *PositionalObject, BYTE Priority)
 {
+	fprintf (stderr,
+			"[PlaySoundEffect] S=%p ch=%u pri=%u sound_disabled=%d\n",
+			(void *)S, (unsigned)Channel, (unsigned)Priority,
+			(GLOBAL (glob_flags) & SOUND_DISABLED) != 0);
 	if (!(GLOBAL (glob_flags) & SOUND_DISABLED))
 	{
 		SetChannelVolume (Channel, MAX_VOLUME >> 1, Priority);

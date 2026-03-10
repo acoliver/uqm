@@ -14,8 +14,8 @@ pub const MIXER_SRC_MAGIC: u32 = 0x5358494D;
 /// Maximum number of sources that can be active simultaneously
 pub const MAX_SOURCES: usize = 8;
 
-/// Gain adjustment constant for volume scaling
-pub const MIX_GAIN_ADJ: f32 = 255.0;
+/// Channel gain adjustment for clipping reduction (matches C MIX_GAIN_ADJ)
+pub const MIX_GAIN_ADJ: f32 = 0.75;
 
 /// Maximum value for 16-bit signed integer
 pub const SINT16_MAX: f32 = 32767.0;

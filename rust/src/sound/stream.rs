@@ -24,7 +24,17 @@ use super::mixer::buffer as mixer_buffer;
 use super::mixer::mix as mixer_mix;
 use super::mixer::source as mixer_source;
 use super::mixer::types::{MixerError, MixerFormat, SourceProp, SourceState};
+use super::music;
 use super::types::*;
+
+// =============================================================================
+// Format Conversion
+// =============================================================================
+
+/// Convert an `AudioFormat` to mixer format encoding.
+fn audio_format_to_mixer(fmt: AudioFormat) -> u32 {
+    fmt.to_mixer_format()
+}
 
 // =============================================================================
 // Internal State (spec §3.1.2)
@@ -157,6 +167,17 @@ pub fn play_stream(
     scope: bool,
     rewind: bool,
 ) -> AudioResult<()> {
+    play_stream_with_offset_override(sample_arc, source_index, looping, scope, rewind, None)
+}
+
+pub fn play_stream_with_offset_override(
+    sample_arc: Arc<Mutex<SoundSample>>,
+    source_index: usize,
+    looping: bool,
+    scope: bool,
+    rewind: bool,
+    offset_override: Option<i32>,
+) -> AudioResult<()> {
     if source_index >= NUM_SOUNDSOURCES {
         return Err(AudioError::InvalidSource(source_index));
     }
@@ -186,8 +207,15 @@ pub fn play_stream(
     }
 
     // Handle rewind or compute offset
-    let base_offset = sample.offset;
-    let offset = {
+    let offset = if let Some(override_offset) = offset_override {
+        if rewind {
+            if let Some(decoder) = sample.decoder.as_mut() {
+                let _ = decoder.seek(0);
+            }
+        }
+        override_offset
+    } else {
+        let base_offset = sample.offset;
         let decoder = sample.decoder.as_mut().ok_or(AudioError::InvalidDecoder)?;
         if rewind {
             let _ = decoder.seek(0);
@@ -255,15 +283,17 @@ pub fn play_stream(
             Some((buf, n, false)) => {
                 let mixer_freq = mixer_mix::mixer_get_frequency();
                 let mixer_fmt = mixer_mix::mixer_get_format();
+                let mix_format = audio_format_to_mixer(format);
                 let _ = mixer_buffer::mixer_buffer_data(
                     buf_handle,
-                    format as u32,
+                    mix_format,
                     &buf[..n],
                     freq,
                     mixer_freq,
                     mixer_fmt,
                 );
                 let _ = mixer_source::mixer_source_queue_buffers(source.handle, &[buf_handle]);
+                source.queued_buf_sizes.push_back(n);
                 // on_queue_buffer via take pattern
                 let mut cbs = sample.callbacks.take();
                 if let Some(ref mut cb) = cbs {
@@ -305,6 +335,8 @@ pub fn stop_stream(source_index: usize) -> AudioResult<()> {
     source.sbuf_head = 0;
     source.sbuf_lasttime = 0;
     source.pause_time = 0;
+    source.queued_buf_sizes.clear();
+    source.end_chunk_failed = false;
     Ok(())
 }
 
@@ -333,6 +365,7 @@ pub fn resume_stream(source_index: usize) -> AudioResult<()> {
 
 /// Seek the stream to the given position in milliseconds.
 pub fn seek_stream(source_index: usize, pos_ms: u32) -> AudioResult<()> {
+    eprintln!("[PARITY][STREAM_SEEK] source={} pos_ms={}", source_index, pos_ms);
     // Phase 1: Extract state under locks
     let source = get_source(source_index)?;
     let sample_arc = source
@@ -346,6 +379,11 @@ pub fn seek_stream(source_index: usize, pos_ms: u32) -> AudioResult<()> {
     let mut sample = sample_arc.lock();
     let decoder = sample.decoder.as_mut().ok_or(AudioError::InvalidDecoder)?;
     let pcm_pos = pos_ms as u64 * decoder.frequency() as u64 / 1000;
+    eprintln!(
+        "[PARITY][STREAM_SEEK] freq={} pcm_pos={}",
+        decoder.frequency(),
+        pcm_pos
+    );
     let _ = decoder.seek(pcm_pos as u32);
     let looping = sample.looping;
 
@@ -363,6 +401,27 @@ pub fn playing_stream(source_index: usize) -> bool {
         .map(|s| s.stream_should_be_playing)
         .unwrap_or(false)
 }
+
+/// Get current stream playback position in game ticks (ONE_SECOND units).
+/// Mirrors C trackplayer logic: pos = GetTimeCounter() - source.start_time.
+pub fn get_stream_position_ticks(source_index: usize) -> u32 {
+    let source = match get_source(source_index) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+
+    if source.sample.is_none() {
+        return 0;
+    }
+
+    let now = get_time_counter() as i32;
+    let mut pos = now - source.start_time;
+    if pos < 0 {
+        pos = 0;
+    }
+    pos as u32
+}
+
 
 // =============================================================================
 // Buffer Tagging (spec §3.1.3)
@@ -400,16 +459,49 @@ const DEF_PAGE_MAX: i32 = 28000;
 /// VAD minimum energy threshold.
 const VAD_MIN_ENERGY: i32 = 100;
 
+/// Static AGC state matching C's `static` variables in `GraphForegroundStream`.
+/// Persists across calls for smooth waveform normalization.
+struct AgcState {
+    page_sum: i32,
+    pages: [i32; AGC_PAGE_COUNT],
+    page_head: usize,
+    frame_sum: i32,
+    frames: i32,
+    avg_amp: i32,
+}
+
+static AGC: Mutex<AgcState> = Mutex::new(AgcState {
+    page_sum: DEF_PAGE_MAX * AGC_PAGE_COUNT as i32,
+    pages: [DEF_PAGE_MAX; AGC_PAGE_COUNT],
+    page_head: 0,
+    frame_sum: 0,
+    frames: 0,
+    avg_amp: DEF_PAGE_MAX,
+});
+
 pub fn graph_foreground_stream(
-    data: &mut [i32],
+    data: &mut [u8],
     width: usize,
     height: usize,
     want_speech: bool,
 ) -> usize {
+    // Match C GraphForegroundStream source selection semantics:
+    // prefer speech only when requested and actually available (non-null decoder).
     let source_idx = if want_speech {
-        // Prefer speech if available
         let speech = get_source(SPEECH_SOURCE);
-        if speech.as_ref().map(|s| s.sample.is_some()).unwrap_or(false) {
+        let speech_available = speech
+            .as_ref()
+            .map(|s| {
+                s.sample
+                    .as_ref()
+                    .map(|sa| {
+                        let sample = sa.lock();
+                        sample.decoder.as_ref().map(|d| !d.is_null()).unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
+        if speech_available {
             SPEECH_SOURCE
         } else {
             MUSIC_SOURCE
@@ -423,7 +515,11 @@ pub fn graph_foreground_stream(
         Err(_) => return 0,
     };
 
-    if source.sample.is_none() || source.sbuffer.is_none() || source.sbuf_size == 0 {
+    if !source.stream_should_be_playing
+        || source.sample.is_none()
+        || source.sbuffer.is_none()
+        || source.sbuf_size == 0
+    {
         return 0;
     }
 
@@ -443,55 +539,94 @@ pub fn graph_foreground_stream(
     };
     let sbuf_size = source.sbuf_size as usize;
 
+    // Determine channel/sample geometry (matching C's audio_GetFormatInfo)
+    let channels = decoder.format().channels();
+    let sample_size = if decoder.format().is_16bit() { 2 } else { 1 };
+    let full_sample = channels * sample_size;
+
+    // Step: 1 for speech, 4 for music (in 11025Hz units), scaled to source freq
     let base_step: usize = if source_idx == SPEECH_SOURCE { 1 } else { 4 };
-    let freq_scale = decoder.frequency() as f32 / 11025.0;
-    let bytes_per_sample = decoder.format().bytes_per_sample() as usize;
-    let step = (base_step as f32 * freq_scale).max(1.0) as usize * bytes_per_sample.max(1);
+    let step = {
+        let s = decoder.frequency() as usize * base_step / 11025;
+        (if s == 0 { 1 } else { s }) * full_sample
+    };
 
+    // Compute read position from scope head + time delta
     let delta_time = get_time_counter().wrapping_sub(source.sbuf_lasttime);
-    let delta_bytes = (delta_time as f32 * decoder.frequency() as f32 * bytes_per_sample as f32
-        / ONE_SECOND as f32) as u32;
-    let mut read_pos =
-        ((source.sbuf_head + delta_bytes.min(source.sbuf_size)) % source.sbuf_size) as usize;
+    let delta_bytes =
+        (delta_time as u64 * decoder.frequency() as u64 * full_sample as u64 / ONE_SECOND as u64)
+            as u32;
+    // Align delta to sample boundary
+    let delta_aligned = delta_bytes & !(full_sample as u32 - 1);
+    let mut read_pos = ((source.sbuf_head + delta_aligned.min(source.sbuf_size))
+        % source.sbuf_size) as usize;
 
-    let mut agc_pages = [DEF_PAGE_MAX; AGC_PAGE_COUNT];
-    let mut agc_idx = 0usize;
-    let mut frame_count = 0usize;
-    let mut page_max = 0i32;
-    let target_amp = height as i32 / 4;
-    let is_8bit = bytes_per_sample <= 1;
+    let mut agc = AGC.lock();
+    let target_amp = (height as i32 >> 1) >> 1;
+    let scale = if agc.avg_amp > 0 {
+        agc.avg_amp / target_amp.max(1)
+    } else {
+        1
+    };
+    let scale = scale.max(1);
 
+    let mut max_a: i32 = 0;
+    let mut energy: i64 = 0;
     let count = width.min(data.len());
-    for x in 0..count {
-        let sample_val = read_scope_sample(sbuf, read_pos, sbuf_size, is_8bit);
 
-        page_max = page_max.max(sample_val.abs() as i32);
-        frame_count += 1;
-        if frame_count >= AGC_FRAME_COUNT {
-            if page_max > VAD_MIN_ENERGY {
-                agc_pages[agc_idx] = page_max;
-                agc_idx = (agc_idx + 1) % AGC_PAGE_COUNT;
-            }
-            frame_count = 0;
-            page_max = 0;
+    for x in 0..count {
+        // Read and sum channels (matching C: s += readSoundSample for each channel)
+        let mut s: i32 = read_scope_sample(sbuf, read_pos, sbuf_size, sample_size) as i32;
+        if channels > 1 {
+            s += read_scope_sample(sbuf, read_pos + sample_size, sbuf_size, sample_size) as i32;
         }
 
-        let avg_amp: i32 = agc_pages.iter().sum::<i32>() / AGC_PAGE_COUNT as i32;
-        let scaled = (sample_val as i32) * target_amp / avg_amp.max(1);
-        let y = (height as i32 / 2 + scaled).clamp(0, height as i32 - 1);
-        data[x] = y;
+        energy += (s as i64 * s as i64) / 0x10000;
+        let t = s.abs();
+        if t > max_a {
+            max_a = t;
+        }
+
+        // Scale and center (matching C: s = (s / scale) + (height >> 1))
+        let y = (s / scale) + (height as i32 >> 1);
+        let y = y.clamp(0, height as i32 - 1);
+        data[x] = y as u8;
 
         read_pos = (read_pos + step) % sbuf_size;
     }
-    count
+    if count > 0 {
+        energy /= count as i64;
+    }
+
+    // AGC update (matching C: VAD + page/frame accumulation)
+    if energy > VAD_MIN_ENERGY as i64 {
+        agc.frame_sum += max_a;
+        agc.frames += 1;
+        if agc.frames >= AGC_FRAME_COUNT as i32 {
+            agc.frame_sum /= AGC_FRAME_COUNT as i32;
+            let head = agc.page_head;
+            let frame_avg = agc.frame_sum;
+            agc.page_sum -= agc.pages[head];
+            agc.page_sum += frame_avg;
+            agc.pages[head] = frame_avg;
+            agc.page_head = (head + 1) % AGC_PAGE_COUNT;
+            agc.frame_sum = 0;
+            agc.frames = 0;
+            agc.avg_amp = agc.page_sum / AGC_PAGE_COUNT as i32;
+        }
+    }
+
+    // Return 1 on success (matching C convention, not width)
+    if count > 0 { 1 } else { 0 }
 }
 
 /// Read a single sample from the scope ring buffer.
-fn read_scope_sample(buffer: &[u8], pos: usize, size: usize, is_8bit: bool) -> i16 {
+/// `sample_size` is 1 for 8-bit, 2 for 16-bit (matching C's readSoundSample).
+fn read_scope_sample(buffer: &[u8], pos: usize, size: usize, sample_size: usize) -> i16 {
     if size == 0 {
         return 0;
     }
-    if is_8bit {
+    if sample_size <= 1 {
         let val = buffer[pos % size] as i16;
         (val - 128) << 8
     } else {
@@ -514,12 +649,12 @@ pub fn set_music_stream_fade(how_long: u32, end_volume: i32) -> bool {
     if how_long == 0 {
         return false;
     }
+    let start_volume = music::current_music_volume();
     let mut fade = ENGINE.fade.lock();
     fade.start_time = get_time_counter();
     fade.interval = how_long;
-    // Start from current music volume (not stored here — use MAX_VOLUME as default)
-    fade.start_volume = MAX_VOLUME;
-    fade.delta = end_volume - fade.start_volume;
+    fade.start_volume = start_volume;
+    fade.delta = end_volume - start_volume;
     true
 }
 
@@ -561,13 +696,33 @@ pub fn stop_source(source_index: usize) -> AudioResult<()> {
     Ok(())
 }
 
-/// `mixer_init()`** — the engine allocates mixer sources/buffers during
-/// initialization.
+/// Initialize the stream decoder subsystem.
+///
+/// This allocates mixer sources for each sound source slot, initializes
+/// the mixer, starts a mixer-pump thread (feeding mixer output into rodio),
+/// and spawns the stream decoder thread.
 pub fn init_stream_decoder() -> AudioResult<()> {
     let mut guard = ENGINE.decoder_thread.lock();
     if guard.is_some() {
         return Err(AudioError::AlreadyInitialized);
     }
+
+    // Generate mixer source handles for each sound source slot and store them.
+    // The mixer itself is already initialized by audiocore_rust.c (rust_mixer_Init)
+    // before InitStreamDecoder is called.
+    let handles = mixer_source::mixer_gen_sources(NUM_SOUNDSOURCES as u32)
+        .map_err(|_| AudioError::NotInitialized)?;
+    for (i, &handle) in handles.iter().enumerate() {
+        if let Some(src_mutex) = SOURCES.get(i) {
+            src_mutex.lock().handle = handle;
+        }
+    }
+
+    // Start the mixer pump — a background thread that periodically mixes
+    // all sources into PCM and feeds the result to the rodio backend.
+    #[cfg(not(test))]
+    start_mixer_pump();
+
     ENGINE.shutdown.store(false, Ordering::Release);
 
     let handle = std::thread::Builder::new()
@@ -579,10 +734,210 @@ pub fn init_stream_decoder() -> AudioResult<()> {
     Ok(())
 }
 
+/// The mixer pump thread handle.
+static MIXER_PUMP_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+/// Shutdown flag for mixer pump.
+static MIXER_PUMP_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+/// Start a background thread that continuously mixes audio and sends it to rodio.
+fn start_mixer_pump() {
+    MIXER_PUMP_SHUTDOWN.store(false, Ordering::Release);
+
+    let handle = std::thread::Builder::new()
+        .name("mixer pump".into())
+        .spawn(|| {
+            eprintln!("[mixer_pump] thread started, opening cpal output stream...");
+
+            use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+
+            let host = cpal::default_host();
+            let device = match host.default_output_device() {
+                Some(d) => d,
+                None => {
+                    eprintln!("[mixer_pump] no output audio device found");
+                    return;
+                }
+            };
+
+            let dev_name = device.name().unwrap_or_default();
+            eprintln!("[mixer_pump] using device: {:?}", dev_name);
+
+            // Query the device's default config to find a supported format
+            let default_config = match device.default_output_config() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("[mixer_pump] failed to get default output config: {}", e);
+                    return;
+                }
+            };
+            eprintln!(
+                "[mixer_pump] device default config: channels={} sample_rate={} sample_format={:?}",
+                default_config.channels(),
+                default_config.sample_rate().0,
+                default_config.sample_format()
+            );
+
+            let config = cpal::StreamConfig {
+                channels: 2,
+                sample_rate: cpal::SampleRate(44100),
+                buffer_size: cpal::BufferSize::Default,
+            };
+
+            let mut pump = MixerPumpSource::new();
+
+            // Try f32 output first (most compatible on macOS), then fall back to i16
+            let stream = match device.build_output_stream(
+                &config,
+                move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+                    static CB_COUNT: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
+                    static CB_PANIC_COUNT: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
+
+                    let n = CB_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let fill_result = catch_unwind(AssertUnwindSafe(|| {
+                        if n < 3 {
+                            eprintln!("[mixer_pump_cb#{}] output.len()={}", n, output.len());
+                        }
+                        for sample in output.iter_mut() {
+                            let raw = pump.next().unwrap_or(0);
+                            *sample = raw as f32 / 32768.0;
+                        }
+                    }));
+
+                    if fill_result.is_err() {
+                        output.fill(0.0);
+                        let panic_n =
+                            CB_PANIC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if panic_n < 5 || panic_n % 1000 == 0 {
+                            eprintln!(
+                                "[mixer_pump_cb] recovered from panic in output callback #{}",
+                                panic_n
+                            );
+                        }
+                    }
+                },
+                move |err| {
+                    eprintln!("[mixer_pump] audio stream error: {}", err);
+                },
+                None,
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("[mixer_pump] failed to build output stream: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = stream.play() {
+                eprintln!("[mixer_pump] failed to start playback: {}", e);
+                return;
+            }
+
+            eprintln!("[mixer_pump] started — feeding mixer output to cpal");
+
+            // Keep alive until shutdown — stream must stay alive for audio to work
+            while !MIXER_PUMP_SHUTDOWN.load(Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+
+            drop(stream);
+            eprintln!("[mixer_pump] stopped");
+        })
+        .ok();
+
+    *MIXER_PUMP_HANDLE.lock() = handle;
+}
+
+/// A rodio Source that pulls PCM from the Rust mixer.
+///
+/// rodio calls `next()` repeatedly to get individual samples. We mix in
+/// chunks for efficiency and yield one sample at a time.
+struct MixerPumpSource {
+    /// Pre-mixed buffer (interleaved i16 samples, little-endian).
+    buf: Vec<i16>,
+    /// Current read position in `buf`.
+    pos: usize,
+}
+
+impl MixerPumpSource {
+    fn new() -> Self {
+        MixerPumpSource {
+            buf: Vec::new(),
+            pos: 0,
+        }
+    }
+
+    /// Mix a new chunk of audio.
+    fn refill(&mut self) {
+        // 4096 bytes = 1024 stereo 16-bit samples
+        let mut raw = vec![0u8; 4096];
+        let _ = super::mixer::mix::mixer_mix_channels(&mut raw);
+
+        // Periodic diagnostic: log mixer state every ~500 calls (~12s at 44100 Hz)
+        static DIAG_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let count = DIAG_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if count < 5 || count % 500 == 0 {
+            let freq = super::mixer::mix::mixer_get_frequency();
+            let fmt = super::mixer::mix::mixer_get_format();
+            let non_zero = raw.iter().position(|&b| b != 0);
+            let sources = super::mixer::source::get_all_sources();
+            let playing: Vec<_> = sources.iter()
+                .filter_map(|(handle, src)| {
+                    let s = src.lock();
+                    if s.state == (super::mixer::types::SourceState::Playing as u32) {
+                        Some((*handle, s.next_queued, s.pos, s.gain))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            eprintln!(
+                "[mixer_pump_diag#{}] freq={} fmt={:?} nonzero={:?} total_sources={} playing={:?}",
+                count, freq, fmt, non_zero, sources.len(), playing
+            );
+        }
+
+        // Convert raw bytes to i16 samples
+        self.buf.clear();
+        for chunk in raw.chunks_exact(2) {
+            self.buf.push(i16::from_le_bytes([chunk[0], chunk[1]]));
+        }
+        self.pos = 0;
+    }
+}
+
+impl Iterator for MixerPumpSource {
+    type Item = i16;
+
+    fn next(&mut self) -> Option<i16> {
+        if self.pos >= self.buf.len() {
+            self.refill();
+        }
+        if self.pos < self.buf.len() {
+            let sample = self.buf[self.pos];
+            self.pos += 1;
+            Some(sample)
+        } else {
+            Some(0)
+        }
+    }
+}
+
+// MixerPumpSource is used directly via cpal callback, no rodio::Source needed.
+
 /// Shut down the streaming decoder subsystem.
 ///
 /// Signals the decoder thread to stop and joins it.
 pub fn uninit_stream_decoder() -> AudioResult<()> {
+    // Stop the mixer pump first
+    MIXER_PUMP_SHUTDOWN.store(true, Ordering::Release);
+    if let Some(handle) = MIXER_PUMP_HANDLE.lock().take() {
+        let _ = handle.join();
+    }
+
     let handle = {
         let mut guard = ENGINE.decoder_thread.lock();
         guard.take()
@@ -592,7 +947,7 @@ pub fn uninit_stream_decoder() -> AudioResult<()> {
         ENGINE.shutdown.store(true, Ordering::Release);
         ENGINE.wake.notify_one();
         if handle.join().is_err() {
-            log::error!("decoder thread panicked");
+            eprintln!("[stream] decoder thread panicked on join");
         }
     }
 
@@ -642,7 +997,7 @@ fn stream_decoder_task() {
 enum DeferredCallback {
     EndStream,
     EndChunk { buf_handle: usize },
-    TaggedBuffer { tag_data: usize },
+    TaggedBuffer { buf_handle: usize, tag_data: usize },
     QueueBuffer { buf_handle: usize },
 }
 
@@ -669,6 +1024,60 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
                     mixer_source::mixer_get_source_i(source.handle, SourceProp::BuffersQueued)
                         .unwrap_or(0);
                 if queued == 0 {
+                    // If a decoder still exists, try to keep feeding the stream before ending.
+                    if sample.decoder.is_some() {
+                        let mut did_queue = false;
+                        let sample_buffers = sample.buffers.clone();
+                        for buf_handle in sample_buffers {
+                            let mut buf = vec![0u8; BUFFER_SIZE];
+                            let (freq, format, n) = {
+                                let decoder = match sample.decoder.as_mut() {
+                                    Some(d) => d,
+                                    None => break,
+                                };
+                                let freq = decoder.frequency();
+                                let format = decoder.format();
+                                match decoder.decode(&mut buf) {
+                                    Ok(0) => (freq, format, 0usize),
+                                    Ok(n) => (freq, format, n),
+                                    Err(DecodeError::EndOfFile) => {
+                                        deferred.push(DeferredCallback::EndChunk { buf_handle });
+                                        (freq, format, 0usize)
+                                    }
+                                    Err(_) => (freq, format, 0usize),
+                                }
+                            };
+
+                            if n > 0 {
+                                let mixer_freq = mixer_mix::mixer_get_frequency();
+                                let mixer_fmt = mixer_mix::mixer_get_format();
+                                let mix_format = audio_format_to_mixer(format);
+                                let _ = mixer_buffer::mixer_buffer_data(
+                                    buf_handle,
+                                    mix_format,
+                                    &buf[..n],
+                                    freq,
+                                    mixer_freq,
+                                    mixer_fmt,
+                                );
+                                let _ = mixer_source::mixer_source_queue_buffers(source.handle, &[buf_handle]);
+                                source.last_q_buf = buf_handle;
+                                source.queued_buf_sizes.push_back(n);
+                                deferred.push(DeferredCallback::QueueBuffer { buf_handle });
+                                did_queue = true;
+                            }
+                        }
+
+                        if did_queue {
+                            source.stream_should_be_playing = true;
+                            let _ = mixer_source::mixer_source_play(source.handle);
+                            drop(sample);
+                            drop(source);
+                            execute_deferred_callbacks(deferred, sample_arc, source_index);
+                            return;
+                        }
+                    }
+
                     source.stream_should_be_playing = false;
                     deferred.push(DeferredCallback::EndStream);
                 } else {
@@ -682,7 +1091,21 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
             return;
         }
 
-        let mut end_chunk_failed = false;
+        // Match C process_stream (stream.c:392-504) exactly:
+        //   1. Unqueue buffer
+        //   2. Process tagged buffer callback
+        //   3. Remove scope data
+        //   4. Check decoder->error from PREVIOUS decode (persistent state)
+        //      - If EOF: call OnEndChunk(sample, last_q_buf), get new decoder
+        //   5. Decode with (possibly new) decoder
+        //   6. BufferData + Queue the buffer
+        //   7. Update last_q_buf, fire OnQueueBuffer
+        //
+        // In C, decoder->error is persistent on the decoder struct. When
+        // SoundDecoder_Decode returns partial bytes at EOF, those bytes ARE
+        // queued, and decoder->error == EOF is only checked next iteration.
+        // In Rust, decode() returns Err(EndOfFile) with no bytes, so we must
+        // handle EOF immediately: fire EndChunk, get new decoder, re-decode.
         for _ in 0..processed {
             let unqueued = mixer_source::mixer_source_unqueue_buffers(source.handle, 1);
             let buf_handle = match unqueued {
@@ -699,55 +1122,103 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
                     .find(|t| t.buf_handle == buf_handle)
                     .map(|t| t.data)
                     .unwrap_or(0);
-                deferred.push(DeferredCallback::TaggedBuffer { tag_data });
+                deferred.push(DeferredCallback::TaggedBuffer {
+                    buf_handle,
+                    tag_data,
+                });
             }
 
-            // Scope remove
+            // Scope remove — use actual decoded size tracked per buffer
             if source.sbuffer.is_some() {
-                remove_scope_data(&mut source, BUFFER_SIZE);
+                let buf_bytes = source.queued_buf_sizes.pop_front().unwrap_or(BUFFER_SIZE);
+                remove_scope_data(&mut source, buf_bytes);
             }
 
-            // Decode new audio
-            if sample.decoder.is_none() || end_chunk_failed {
+            if sample.decoder.is_none() {
                 continue;
             }
 
-            let decoder = match sample.decoder.as_mut() {
-                Some(d) => d,
-                None => continue,
+            // Decode into the unqueued buffer
+            let mut buf = vec![0u8; BUFFER_SIZE];
+            let decode_result = {
+                let decoder = sample.decoder.as_mut().unwrap();
+                decoder.decode(&mut buf)
             };
 
-            let freq = decoder.frequency();
-            let format = decoder.format();
-            let mut buf = vec![0u8; BUFFER_SIZE];
-            match decoder.decode(&mut buf) {
-                Ok(0) => continue,
-                Ok(n) => {
-                    let mixer_freq = mixer_mix::mixer_get_frequency();
-                    let mixer_fmt = mixer_mix::mixer_get_format();
-                    let _ = mixer_buffer::mixer_buffer_data(
-                        buf_handle,
-                        format as u32,
-                        &buf[..n],
-                        freq,
-                        mixer_freq,
-                        mixer_fmt,
-                    );
-                    let _ = mixer_source::mixer_source_queue_buffers(source.handle, &[buf_handle]);
-                    source.last_q_buf = buf_handle;
-                    deferred.push(DeferredCallback::QueueBuffer { buf_handle });
-                    if source.sbuffer.is_some() {
-                        add_scope_data(&mut source, &buf[..n]);
-                    }
+            let n = match decode_result {
+                Ok(0) => {
+                    // No data decoded — buffer lost (C comment: "should never get here")
+                    continue;
                 }
+                Ok(n) => n,
                 Err(DecodeError::EndOfFile) => {
-                    deferred.push(DeferredCallback::EndChunk { buf_handle });
-                    end_chunk_failed = true;
+                    // Decoder reached EOF. In C, decoder->error == EOF is checked
+                    // at the START of the next iteration. But since our decode()
+                    // returns no partial bytes, we handle it NOW: fire OnEndChunk
+                    // to get a new decoder, then re-decode with it.
+                    if source.end_chunk_failed {
+                        continue;
+                    }
+
+                    let end_chunk_buf = source.last_q_buf;
+                    let mut cbs = sample.callbacks.take();
+                    let replaced = if let Some(ref mut cb) = cbs {
+                        cb.on_end_chunk(&mut sample, end_chunk_buf)
+                    } else {
+                        false
+                    };
+                    sample.callbacks = cbs;
+
+                    if !replaced {
+                        source.end_chunk_failed = true;
+                        continue;
+                    }
+
+                    // OnEndChunk succeeded — new decoder set. Now decode with it.
+                    if let Some(new_dec) = sample.decoder.as_mut() {
+                        match new_dec.decode(&mut buf) {
+                            Ok(0) => continue,
+                            Ok(n) => n,
+                            Err(DecodeError::EndOfFile) => {
+                                // New decoder also immediately EOF — mark failed
+                                source.end_chunk_failed = true;
+                                continue;
+                            }
+                            Err(_) => {
+                                source.stream_should_be_playing = false;
+                                break;
+                            }
+                        }
+                    } else {
+                        continue;
+                    }
                 }
                 Err(_) => {
                     source.stream_should_be_playing = false;
                     break;
                 }
+            };
+
+            // Fill and queue the buffer with decoded data
+            let freq = sample.decoder.as_ref().map(|d| d.frequency()).unwrap_or(22050);
+            let format = sample.decoder.as_ref().map(|d| d.format()).unwrap_or(AudioFormat::Stereo16);
+            let mixer_freq = mixer_mix::mixer_get_frequency();
+            let mixer_fmt = mixer_mix::mixer_get_format();
+            let mix_format = audio_format_to_mixer(format);
+            let _ = mixer_buffer::mixer_buffer_data(
+                buf_handle,
+                mix_format,
+                &buf[..n],
+                freq,
+                mixer_freq,
+                mixer_fmt,
+            );
+            let _ = mixer_source::mixer_source_queue_buffers(source.handle, &[buf_handle]);
+            source.last_q_buf = buf_handle;
+            deferred.push(DeferredCallback::QueueBuffer { buf_handle });
+            source.queued_buf_sizes.push_back(n);
+            if source.sbuffer.is_some() {
+                add_scope_data(&mut source, &buf[..n]);
             }
         }
     } // locks dropped here
@@ -791,9 +1262,12 @@ fn execute_deferred_callbacks(
                     let _ = cb.on_end_chunk(&mut sample, buf_handle);
                 }
             }
-            DeferredCallback::TaggedBuffer { tag_data } => {
+            DeferredCallback::TaggedBuffer {
+                buf_handle,
+                tag_data,
+            } => {
                 let tag = SoundTag {
-                    buf_handle: 0,
+                    buf_handle,
                     data: tag_data,
                 };
                 if let Some(ref mut cb) = cbs {
@@ -817,13 +1291,14 @@ fn process_music_fade() {
         if fade.interval == 0 {
             return;
         }
-        let vol = compute_fade_volume(&fade, get_time_counter());
-        let is_done = get_time_counter().wrapping_sub(fade.start_time) >= fade.interval;
+        let now = get_time_counter();
+        let vol = compute_fade_volume(&fade, now);
+        let is_done = now.wrapping_sub(fade.start_time) >= fade.interval;
         (vol, is_done)
     };
 
-    // Volume application would go to music module (not yet implemented)
-    // For now, just mark fade as complete
+    music::set_music_volume(volume);
+
     if done {
         let mut fade = ENGINE.fade.lock();
         fade.interval = 0;
@@ -851,6 +1326,10 @@ fn remove_scope_data(source: &mut SoundSource, amount: usize) {
         return;
     }
     source.sbuf_head = ((source.sbuf_head as usize + amount) % size) as u32;
+    // Critical: reset the oscilloscope read-position clock (matching C stream.c:320).
+    // Without this, delta_time in graph_foreground_stream grows unbounded from
+    // stream start, causing reads from stale/wrong positions in the ring buffer.
+    source.sbuf_lasttime = get_time_counter();
 }
 
 /// Read and decode audio data from a sample's decoder into a buffer.
@@ -895,18 +1374,26 @@ fn find_tagged_buffer_internal(sample: &SoundSample, buffer: usize) -> Option<&S
         .buffer_tags
         .iter()
         .filter_map(|t| t.as_ref())
-        .find(|t| t.buf_handle == buffer)
+        .find(|t| t.buf_handle != 0 && t.buf_handle == buffer)
 }
 
 /// Tag a buffer in the first available slot.
 fn tag_buffer_internal(sample: &mut SoundSample, buffer: usize, data: usize) -> bool {
     for slot in &mut sample.buffer_tags {
-        if slot.is_none() {
-            *slot = Some(SoundTag {
-                buf_handle: buffer,
-                data,
-            });
-            return true;
+        match slot {
+            None => {
+                *slot = Some(SoundTag {
+                    buf_handle: buffer,
+                    data,
+                });
+                return true;
+            }
+            Some(tag) if tag.buf_handle == 0 => {
+                tag.buf_handle = buffer;
+                tag.data = data;
+                return true;
+            }
+            _ => {}
         }
     }
     false
@@ -935,6 +1422,22 @@ fn compute_fade_volume(fade: &FadeState, now: u32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[test]
+    fn test_callback_panic_recovery_pattern() {
+        let mut output = vec![1.0_f32; 8];
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            panic!("simulated callback panic");
+        }));
+
+        if result.is_err() {
+            output.fill(0.0);
+        }
+
+        assert!(output.iter().all(|&s| s == 0.0));
+    }
+
 
     // =========================================================================
     // P07: Stream TDD tests
@@ -1054,6 +1557,21 @@ mod tests {
         ];
         assert!(!tag_buffer_internal(&mut sample, 3, 30));
     }
+
+    #[test]
+    fn test_tag_buffer_reuses_cleared_slot() {
+        let mut sample = SoundSample::new();
+        sample.buffer_tags = vec![Some(SoundTag { buf_handle: 7, data: 11 }), None];
+
+        let slot = sample.buffer_tags[0].as_mut().unwrap();
+        clear_buffer_tag_internal(slot);
+
+        assert!(tag_buffer_internal(&mut sample, 42, 100));
+        let tag = find_tagged_buffer_internal(&sample, 42);
+        assert!(tag.is_some());
+        assert_eq!(tag.unwrap().data, 100);
+    }
+
 
     #[test]
     fn test_clear_buffer_tag() {

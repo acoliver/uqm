@@ -30,6 +30,7 @@ ogg = "0.9"
 xbrz-rs = "0.1.0"
 memoffset = "0.9.1"
 rodio = { version = "0.19", default-features = false, features = ["wav", "vorbis"] }
+cpal = "0.15"
 mod_player = "0.1"
 fast_image_resize = "5.0"
 

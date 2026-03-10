@@ -276,19 +276,48 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
 
     if state.is_none() {
         // Not initialized - output silence
+        static NONE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NONE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if n < 3 || n % 10000 == 0 {
+            eprintln!(
+                "[MIXER_MIX] state=None (not initialized!), call #{}", n
+            );
+        }
         for byte in stream.iter_mut() {
             *byte = 0;
         }
         return Ok(());
     }
-
     let chansize = state.as_ref().unwrap().chansize;
     let channels = state.as_ref().unwrap().channels;
+
+    {
+        static SOME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = SOME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if n < 3 {
+            eprintln!("[MIXER_MIX] state=Some, freq={}, chansize={}, channels={}", 
+                state.as_ref().unwrap().freq, chansize, channels);
+        }
+    }
 
     drop(state);
 
     // Get all sources ONCE at the start (like C code does with its mutex)
     let sources = crate::sound::mixer::source::get_all_sources();
+
+    // One-time diagnostic: what sources are in the pool and their states?
+    static MIX_DIAG_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let mix_n = MIX_DIAG_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if mix_n < 3 || (mix_n % 10000 == 0) {
+        let states: Vec<_> = sources.iter().map(|(h, s)| {
+            let g = s.lock();
+            (*h, g.state, g.next_queued, g.gain)
+        }).collect();
+        crate::bridge_log::rust_bridge_log_msg(&format!(
+            "MIX_DIAG#{}: {} sources: {:?}",
+            mix_n, sources.len(), states
+        ));
+    }
 
     // mixer_sampsize is the size of one complete sample (all channels)
     let mixer_sampsize = (chansize * channels) as u32;
@@ -430,13 +459,35 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
                 src_guard.sample_cache = sample;
             }
 
+            // Debug: track speech source pos advancement
+            if *_handle == 13 {
+                static SPEECH_DIAG: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let sd = SPEECH_DIAG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if sd < 20 || (sd % 50000 == 0) {
+                    eprintln!("[SPEECH_MIX#{}] left={} pos={} buf_size={} count={} sample={:.1} buf_high={} buf_low={} buf_sampsize={}", sd, left, src_guard.pos, buf_size, src_guard.count, sample, buf_high, buf_low, buf_sampsize);
+                }
+            }
+
             fullsamp += sample;
 
             // Update buffer state / exhaustion logic (matches mixer.c 1047-1060)
             if src_guard.pos < buf_size || (left && buf_sampsize != mixer_sampsize) {
                 buf_guard.state = BufferState::Playing as u32;
+                // Diagnostic: check if pos >= buf_size but left saved it
+                if src_guard.pos >= buf_size && left && buf_sampsize != mixer_sampsize {
+                    static LEFT_SAVE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                    let lsc = LEFT_SAVE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if lsc < 5 {
+                        eprintln!("[MIXER_LEFT_SAVE#{}] handle={} pos={} buf_size={} left={} buf_sampsize={} mixer_sampsize={} buf_org_chans={}", lsc, _handle, src_guard.pos, buf_size, left, buf_sampsize, mixer_sampsize, buf_org_channels);
+                    }
+                }
             } else {
                 // buffer exhausted, go next
+                static EXHAUST_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                let ec = EXHAUST_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if ec < 20 {
+                    eprintln!("[MIXER_EXHAUST#{}] handle={} pos={} buf_size={} left={} buf_sampsize={} mixer_sampsize={} buf_org_chans={} processed_count={}", ec, _handle, src_guard.pos, buf_size, left, buf_sampsize, mixer_sampsize, buf_org_channels, src_guard.processed_count);
+                }
                 buf_guard.state = BufferState::Processed as u32;
                 src_guard.pos = 0;
                 src_guard.prev_queued = src_guard.next_queued;

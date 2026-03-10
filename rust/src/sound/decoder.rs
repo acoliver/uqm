@@ -136,6 +136,165 @@ pub trait SoundDecoder: Send {
     fn needs_swap(&self) -> bool;
 }
 
+/// A wrapper decoder that limits decoding to a specific sample range.
+///
+/// Mirrors C's `SoundDecoder_Load(dir, file, bufsize, startTime, runTime)` behavior:
+/// seeks to `start_sample` on open, returns EOF after `end_sample`.
+pub struct LimitedDecoder {
+    inner: Box<dyn SoundDecoder>,
+    start_sample: u32,
+    end_sample: u32,
+    /// Bytes per sample frame (e.g., 4 for stereo16)
+    bytes_per_frame: u32,
+    /// Current position in samples
+    current_sample: u32,
+    /// Length in seconds (clamped to the limited range)
+    limited_length: f32,
+}
+
+impl LimitedDecoder {
+    /// Create a new LimitedDecoder.
+    ///
+    /// # Arguments
+    /// * `inner` - The underlying decoder (already opened with data)
+    /// * `start_time_ms` - Start time in milliseconds
+    /// * `run_time_ms` - Maximum run time in milliseconds (0 = unlimited)
+    pub fn new(
+        mut inner: Box<dyn SoundDecoder>,
+        start_time_ms: u32,
+        run_time_ms: i32,
+    ) -> Self {
+        let freq = inner.frequency();
+        let format = inner.format();
+        let total_length = inner.length();
+
+        let bytes_per_frame = match format {
+            AudioFormat::Mono8 => 1,
+            AudioFormat::Stereo8 | AudioFormat::Mono16 => 2,
+            AudioFormat::Stereo16 => 4,
+        };
+
+        let start_sample = (start_time_ms as f64 / 1000.0 * freq as f64) as u32;
+
+        // Compute limited length like C does:
+        // length = total_length - startTime/1000
+        // if runTime > 0 && runTime/1000 < length: length = runTime/1000
+        let mut limited_length = total_length - start_time_ms as f32 / 1000.0;
+        if limited_length < 0.0 {
+            limited_length = 0.0;
+        }
+        if run_time_ms > 0 && (run_time_ms as f32 / 1000.0) < limited_length {
+            limited_length = run_time_ms as f32 / 1000.0;
+        }
+
+        let end_sample = start_sample + (limited_length * freq as f32) as u32;
+
+        // Seek to start position
+        if start_sample > 0 {
+            let _ = inner.seek(start_sample);
+        }
+
+        LimitedDecoder {
+            inner,
+            start_sample,
+            end_sample,
+            bytes_per_frame,
+            current_sample: start_sample,
+            limited_length,
+        }
+    }
+}
+
+impl SoundDecoder for LimitedDecoder {
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn init_module(&mut self, flags: i32, formats: &DecoderFormats) -> bool {
+        self.inner.init_module(flags, formats)
+    }
+
+    fn term_module(&mut self) {
+        self.inner.term_module()
+    }
+
+    fn get_error(&mut self) -> i32 {
+        self.inner.get_error()
+    }
+
+    fn init(&mut self) -> bool {
+        self.inner.init()
+    }
+
+    fn term(&mut self) {
+        self.inner.term()
+    }
+
+    fn open(&mut self, path: &Path) -> DecodeResult<()> {
+        self.inner.open(path)
+    }
+
+    fn open_from_bytes(&mut self, data: &[u8], name: &str) -> DecodeResult<()> {
+        self.inner.open_from_bytes(data, name)
+    }
+
+    fn close(&mut self) {
+        self.inner.close()
+    }
+
+    fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {
+        if self.current_sample >= self.end_sample {
+            return Err(DecodeError::EndOfFile);
+        }
+
+        // Limit buffer to remaining samples
+        let remaining_samples = self.end_sample - self.current_sample;
+        let remaining_bytes = remaining_samples as usize * self.bytes_per_frame as usize;
+        let max_bytes = buf.len().min(remaining_bytes);
+
+        if max_bytes == 0 {
+            return Err(DecodeError::EndOfFile);
+        }
+
+        let result = self.inner.decode(&mut buf[..max_bytes]);
+        if let Ok(n) = &result {
+            self.current_sample += (*n as u32) / self.bytes_per_frame;
+        }
+        result
+    }
+
+    fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32> {
+        let target = self.start_sample + pcm_pos;
+        let result = self.inner.seek(target)?;
+        self.current_sample = result;
+        Ok(result - self.start_sample)
+    }
+
+    fn get_frame(&self) -> u32 {
+        self.inner.get_frame()
+    }
+
+    fn frequency(&self) -> u32 {
+        self.inner.frequency()
+    }
+
+    fn format(&self) -> AudioFormat {
+        self.inner.format()
+    }
+
+    fn length(&self) -> f32 {
+        self.limited_length
+    }
+
+    fn is_null(&self) -> bool {
+        self.inner.is_null()
+    }
+
+    fn needs_swap(&self) -> bool {
+        self.inner.needs_swap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

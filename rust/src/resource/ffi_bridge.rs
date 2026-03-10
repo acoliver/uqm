@@ -42,9 +42,47 @@ extern "C" {
     // C subsystem type registration functions — called from InitResourceSystem
     fn InstallGraphicResTypes() -> c_int;
     fn InstallStringTableResType() -> c_int;
+    #[cfg(not(feature = "audio_heart"))]
     fn InstallAudioResTypes() -> c_int;
     fn InstallVideoResType() -> c_int;
     fn InstallCodeResType() -> c_int;
+}
+
+// When audio_heart feature is enabled, register Rust audio resource callbacks
+// instead of C's InstallAudioResTypes.
+#[cfg(all(not(test), feature = "audio_heart"))]
+use crate::sound::heart_ffi::{LoadMusicFile, LoadSoundFile, DestroyMusic, DestroySound};
+
+#[cfg(all(not(test), feature = "audio_heart"))]
+unsafe extern "C" fn rust_load_sound_bank(pathname: *const c_char, resdata: *mut ResourceData) {
+    let name = if pathname.is_null() { "<null>" } else {
+        std::ffi::CStr::from_ptr(pathname).to_str().unwrap_or("<bad utf8>")
+    };
+    eprintln!("[audio_heart] rust_load_sound_bank called: {}", name);
+    (*resdata).ptr = LoadSoundFile(pathname);
+    eprintln!("[audio_heart] rust_load_sound_bank result: {:?}", (*resdata).ptr);
+}
+
+#[cfg(all(not(test), feature = "audio_heart"))]
+unsafe extern "C" fn rust_free_sound_bank(data: *mut c_void) -> c_int {
+    DestroySound(data);
+    1
+}
+
+#[cfg(all(not(test), feature = "audio_heart"))]
+unsafe extern "C" fn rust_load_music(pathname: *const c_char, resdata: *mut ResourceData) {
+    let name = if pathname.is_null() { "<null>" } else {
+        std::ffi::CStr::from_ptr(pathname).to_str().unwrap_or("<bad utf8>")
+    };
+    eprintln!("[audio_heart] rust_load_music called: {}", name);
+    (*resdata).ptr = LoadMusicFile(pathname);
+    eprintln!("[audio_heart] rust_load_music result: {:?}", (*resdata).ptr);
+}
+
+#[cfg(all(not(test), feature = "audio_heart"))]
+unsafe extern "C" fn rust_free_music(data: *mut c_void) -> c_int {
+    DestroyMusic(data);
+    1
 }
 
 // Test stubs for UIO functions — these are never actually called in tests
@@ -209,7 +247,26 @@ pub extern "C" fn InitResourceSystem() -> *mut c_void {
         unsafe {
             InstallGraphicResTypes();
             InstallStringTableResType();
-            InstallAudioResTypes();
+            #[cfg(feature = "audio_heart")]
+            {
+                eprintln!("[audio_heart] Registering Rust SNDRES/MUSICRES callbacks");
+                InstallResTypeVectors(
+                    b"SNDRES\0".as_ptr() as *const c_char,
+                    Some(rust_load_sound_bank),
+                    Some(rust_free_sound_bank),
+                    None,
+                );
+                InstallResTypeVectors(
+                    b"MUSICRES\0".as_ptr() as *const c_char,
+                    Some(rust_load_music),
+                    Some(rust_free_music),
+                    None,
+                );
+            }
+            #[cfg(not(feature = "audio_heart"))]
+            {
+                InstallAudioResTypes();
+            }
             InstallVideoResType();
             InstallCodeResType();
         }
@@ -349,16 +406,21 @@ pub unsafe extern "C" fn SaveResourceIndex(
 
         let desc = &state.dispatch.entries[key];
 
-        // Serialize the entry using toString if available
-        let mut buf = [0u8; 256];
-        let mut data_copy = ResourceData {
-            num: unsafe { desc.data.num },
-        };
-
-        let serialized = if let Some(handlers) = state.dispatch.type_registry.lookup(&desc.res_type)
+        // Serialize the entry using toString if available.
+        // STRING types: use the Rust fname directly — avoids unsafe str_ptr
+        // which can hold a dangling/invalid pointer after type changes.
+        let serialized = if desc.res_type == "STRING" {
+            format!("{}:{}", desc.res_type, desc.fname)
+        } else if let Some(handlers) = state.dispatch.type_registry.lookup(&desc.res_type)
         {
             if let Some(to_string_fn) = handlers.to_string {
-                to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
+                let mut buf = [0u8; 256];
+                let mut data_copy: ResourceData = unsafe {
+                    std::ptr::read(&desc.data)
+                };
+                unsafe {
+                    to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
+                }
                 let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
                 let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
                 format!("{}:{}", desc.res_type, value_str)

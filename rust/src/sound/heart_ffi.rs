@@ -14,21 +14,284 @@
 //! conversion and error translation. All unsafe code is confined here.
 
 use std::cell::RefCell;
-use std::ffi::{c_char, c_int, c_uint, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr, CString};
+use std::path::Path;
 use std::ptr::{self, null_mut};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 
 use super::control;
-use super::decoder::SoundDecoder;
+use super::decoder::{LimitedDecoder, SoundDecoder};
 use super::fileinst;
+use super::formats::AudioFormat;
+use super::mixer::buffer as mixer_buffer;
+use super::mixer::{mixer_get_format, mixer_get_frequency};
 use super::music;
 use super::sfx;
 use super::stream;
 use super::trackplayer;
-use super::trackplayer::SubtitleRef;
+// SubtitleRef no longer needed — subtitle iteration uses raw chunk pointers
 use super::types::*;
+
+// =============================================================================
+// C FFI helpers — UIO + string table access
+// =============================================================================
+
+#[cfg(not(test))]
+extern "C" {
+    fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void;
+    fn uio_fclose(fp: *mut c_void) -> c_int;
+    fn uio_fread(buf: *mut c_void, size: usize, count: usize, fp: *mut c_void) -> usize;
+    fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int;
+    fn uio_ftell(fp: *mut c_void) -> c_long;
+    static contentDir: *mut c_void;
+
+    fn AllocStringTable(num_entries: c_int, flags: c_int) -> *mut c_void;
+    fn FreeStringTable(strtab: *mut c_void);
+}
+
+unsafe fn HMalloc(size: usize) -> *mut c_void {
+    crate::memory::rust_hmalloc(size)
+}
+
+unsafe fn HFree(ptr: *mut c_void) {
+    crate::memory::rust_hfree(ptr)
+}
+
+#[cfg(test)]
+unsafe fn uio_fopen(_dir: *mut c_void, _path: *const c_char, _mode: *const c_char) -> *mut c_void {
+    null_mut()
+}
+#[cfg(test)]
+unsafe fn uio_fclose(_fp: *mut c_void) -> c_int { 0 }
+#[cfg(test)]
+unsafe fn uio_fread(_buf: *mut c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize { 0 }
+#[cfg(test)]
+unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int { 0 }
+#[cfg(test)]
+unsafe fn uio_ftell(_fp: *mut c_void) -> c_long { 0 }
+#[cfg(test)]
+static mut contentDir: *mut c_void = 0 as *mut c_void;
+#[cfg(test)]
+unsafe fn AllocStringTable(_n: c_int, _f: c_int) -> *mut c_void { null_mut() }
+#[cfg(test)]
+unsafe fn FreeStringTable(_p: *mut c_void) {}
+// HMalloc/HFree use crate::memory directly (no test stubs needed)
+
+/// C STRING_TABLE_ENTRY_DESC layout — must match sc2/src/libs/strings/strintrn.h
+#[repr(C)]
+struct CStringTableEntry {
+    data: *mut c_char,
+    length: c_int,
+    index: c_int,
+    parent: *mut c_void,
+}
+
+/// C STRING_TABLE_DESC layout — must match sc2/src/libs/strings/strintrn.h
+#[repr(C)]
+struct CStringTable {
+    flags: u16,
+    size: c_int,
+    strings: *mut CStringTableEntry,
+    name_index: *mut c_void,
+}
+
+/// Read a file via UIO into a byte vector.
+unsafe fn uio_read_file(path: *const c_char) -> Option<Vec<u8>> {
+    let mode = b"rb\0".as_ptr() as *const c_char;
+    let fp = uio_fopen(contentDir, path, mode);
+    if fp.is_null() {
+        return None;
+    }
+    uio_fseek(fp, 0, 2); // SEEK_END
+    let length = uio_ftell(fp) as usize;
+    uio_fseek(fp, 0, 0); // SEEK_SET
+    if length == 0 {
+        uio_fclose(fp);
+        return None;
+    }
+    let mut buf = vec![0u8; length];
+    let read = uio_fread(buf.as_mut_ptr() as *mut c_void, 1, length, fp);
+    uio_fclose(fp);
+    buf.truncate(read);
+    Some(buf)
+}
+
+/// Create a Rust decoder for a file, based on extension.
+fn create_decoder_for_extension(ext: &str) -> Option<Box<dyn SoundDecoder>> {
+    let mut decoder: Box<dyn SoundDecoder> = match ext {
+        "ogg" => Box::new(super::ogg::OggDecoder::new()),
+        "wav" => Box::new(super::wav::WavDecoder::new()),
+        "mod" => Box::new(super::mod_decoder::ModDecoder::new()),
+        "aif" | "aiff" => Box::new(super::aiff::AiffDecoder::new()),
+        _ => {
+            eprintln!("create_decoder_for_extension: unknown ext '{}'", ext);
+            return None;
+        }
+    };
+    decoder.init();
+    Some(decoder)
+}
+
+/// Get the file extension from a filename.
+fn file_extension(name: &str) -> Option<&str> {
+    Path::new(name).extension().and_then(|e| e.to_str())
+}
+
+/// Create per-page decoders with time-limited ranges, matching C's
+/// `SoundDecoder_Load(dir, file, bufsize, dec_offset, time_stamps[page])` pattern.
+///
+/// Each page gets its own decoder that seeks to the correct offset and
+/// limits decoding to its timestamp duration.
+unsafe fn create_per_page_decoders(
+    track_name: Option<&str>,
+    track_text: Option<&str>,
+    timestamp: Option<&str>,
+) -> Vec<Box<dyn SoundDecoder>> {
+    let name = match track_name {
+        Some(n) => n,
+        None => return Vec::new(),
+    };
+    let text = match track_text {
+        Some(t) => t,
+        None => return Vec::new(),
+    };
+
+    // Parse pages with same delimiter behavior as C trackplayer (split on CR or LF runs).
+    let mut pages: Vec<&str> = Vec::new();
+    let bytes = text.as_bytes();
+    let mut start = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'\r' || bytes[i] == b'\n' {
+            pages.push(&text[start..i]);
+            while i < bytes.len() && (bytes[i] == b'\r' || bytes[i] == b'\n') {
+                i += 1;
+            }
+
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    if start < bytes.len() {
+        pages.push(&text[start..]);
+    }
+
+    let num_pages = pages.len();
+
+    let timestamps: Vec<i32> = timestamp
+        .map(|ts| {
+            ts.split(|c: char| c == ',' || c == '\n' || c == '\r')
+                .filter_map(|s| s.trim().parse::<f64>().ok())
+                .filter(|&v| v > 0.0)
+                .map(|v| v as i32)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Build per-page run times with C SpliceTrack semantics:
+    // - num_timestamps = parsed + 1 when timestamp list is provided
+    // - if num_timestamps > num_pages, set the last timestamp to a large negative
+    //   value to represent "play remainder" until more subtitle pages are appended
+    // - if no timestamps are provided, default to one timing entry per subtitle page
+    let mut page_run_times: Vec<i32> = if timestamps.is_empty() {
+        (0..num_pages)
+            .map(|page_idx| {
+                let char_count = pages[page_idx].chars().count();
+                (char_count as f64 * 80.0).max(1000.0) as i32
+            })
+            .collect()
+    } else {
+        let mut runs = timestamps;
+        runs.push(0);
+        if runs.len() > num_pages {
+            if let Some(last) = runs.last_mut() {
+                *last = -100000;
+            }
+        } else if runs.len() < num_pages {
+            // Preserve available explicit timestamps; fallback by text length.
+            while runs.len() < num_pages {
+                let page_idx = runs.len();
+                let char_count = pages[page_idx].chars().count();
+                runs.push((char_count as f64 * 80.0).max(1000.0) as i32);
+            }
+        }
+        runs
+    };
+
+    // Always ensure the final provided page timing is negative (play to end).
+    if let Some(last) = page_run_times.last_mut() {
+        if *last > 0 {
+            *last = -*last;
+        }
+    }
+
+
+    // Read the audio file once
+    let ext = match file_extension(name) {
+        Some(e) => e,
+        None => return Vec::new(),
+    };
+    let c_name = match CString::new(name) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let file_data = match uio_read_file(c_name.as_ptr()) {
+        Some(d) => d,
+        None => return Vec::new(),
+    };
+
+    let mut decoders: Vec<Box<dyn SoundDecoder>> = Vec::with_capacity(page_run_times.len());
+    let mut dec_offset_ms: u32 = 0;
+
+    for page_idx in 0..page_run_times.len() {
+        let run_time_ms = page_run_times[page_idx];
+
+        // Create a fresh decoder for this page
+        let mut dec = match create_decoder_for_extension(ext) {
+            Some(d) => d,
+            None => break,
+        };
+        match dec.open_from_bytes(&file_data, name) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!(
+                    "[SpliceTrack] decoder open failed for {} page {}: {:?}",
+                    name, page_idx, e
+                );
+                break;
+            }
+        }
+
+        // Preserve sign like C SoundDecoder_Load(..., runTime):
+        // negative run_time means "do not clamp" (play to end from offset).
+        let limited = LimitedDecoder::new(dec, dec_offset_ms, run_time_ms);
+
+        eprintln!(
+            "[SpliceTrack] page {}/{}: offset={}ms run={}ms dec_len={:.2}s",
+            page_idx + 1,
+            page_run_times.len(),
+            dec_offset_ms,
+            run_time_ms,
+            limited.length()
+        );
+
+        // Advance offset by actual decoder length (ms)
+        dec_offset_ms += (limited.length() * 1000.0) as u32;
+
+        decoders.push(Box::new(limited));
+    }
+
+    eprintln!(
+        "[SpliceTrack] created {} per-page decoders for {} (total offset={}ms)",
+        decoders.len(),
+        name,
+        dec_offset_ms
+    );
+    decoders
+}
 
 // =============================================================================
 // Thread-local CString caches (FIX: ISSUE-FFI-01)
@@ -51,21 +314,19 @@ unsafe fn c_str_to_option(ptr: *const c_char) -> Option<&'static str> {
     }
 }
 
-unsafe fn utf16_ptr_to_option(ptr: *const u16) -> Option<String> {
+/// Convert a UNICODE* (which is really char* / C string) to Option<String>.
+/// UQM's UNICODE is typedef'd to `char`, not u16.
+unsafe fn unicode_ptr_to_option(ptr: *const c_char) -> Option<String> {
     if ptr.is_null() {
         return None;
     }
-    let mut len = 0usize;
-    let mut p = ptr;
-    while *p != 0 {
-        len += 1;
-        p = p.add(1);
+    let cstr = std::ffi::CStr::from_ptr(ptr);
+    let s = cstr.to_string_lossy().into_owned();
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
     }
-    if len == 0 {
-        return None;
-    }
-    let slice = std::slice::from_raw_parts(ptr, len);
-    Some(String::from_utf16_lossy(slice))
 }
 
 fn cache_and_return_c_str_subtitle(text: &str) -> *const c_char {
@@ -84,22 +345,31 @@ fn cache_and_return_c_str_text(text: &str) -> *const c_char {
     })
 }
 
+/// MUSIC_REF is a double pointer: `Box<Arc<Mutex<SoundSample>>>` stored as
+/// `*mut *mut c_void`. The outer Box is the "MUSIC_REF" handle.
+/// Borrow the Arc from a MUSIC_REF (double-pointer) WITHOUT taking ownership.
+unsafe fn music_ref_borrow(music_ref_ptr: *mut c_void) -> MusicRef {
+    let arc_ptr = *(music_ref_ptr as *const *const Mutex<SoundSample>);
+    Arc::increment_strong_count(arc_ptr);
+    MusicRef(Arc::from_raw(arc_ptr))
+}
+
+/// Take ownership of the Arc from a MUSIC_REF (for destroy).
+unsafe fn music_ref_take(music_ref_ptr: *mut c_void) -> MusicRef {
+    let arc_ptr = *(music_ref_ptr as *const *const Mutex<SoundSample>);
+    MusicRef(Arc::from_raw(arc_ptr))
+}
+
+/// Check if a MUSIC_REF is the `(MUSIC_REF)~0` sentinel meaning "current music".
+fn is_music_ref_sentinel(ptr: *mut c_void) -> bool {
+    ptr as usize == usize::MAX
+}
+
 /// Borrow an Arc from a raw pointer without consuming ownership.
-/// Caller must ensure `ptr` came from `Arc::into_raw`.
+/// Used by TFB_* functions that receive Arc::into_raw pointers directly.
 unsafe fn arc_borrow<T>(ptr: *const T) -> Arc<T> {
     Arc::increment_strong_count(ptr);
     Arc::from_raw(ptr)
-}
-/// Reconstruct a MusicRef from a raw pointer WITHOUT taking ownership.
-unsafe fn reconstruct_music_ref_borrowed(ptr: *mut c_void) -> MusicRef {
-    let typed_ptr = ptr as *const Mutex<SoundSample>;
-    Arc::increment_strong_count(typed_ptr);
-    MusicRef(Arc::from_raw(typed_ptr))
-}
-
-/// Reconstruct a MusicRef from a raw pointer, TAKING ownership (consumes the reference).
-unsafe fn reconstruct_music_ref_owned(ptr: *mut c_void) -> MusicRef {
-    MusicRef(Arc::from_raw(ptr as *const Mutex<SoundSample>))
 }
 
 fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Send>> {
@@ -113,10 +383,8 @@ fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Sen
     }))
 }
 
-// Thread-local subtitle ref cache for GetFirstTrackSubtitle/GetNextTrackSubtitle
-thread_local! {
-    static SUBTITLE_REF_CACHE: RefCell<Option<SubtitleRef>> = const { RefCell::new(None) };
-}
+// (SUBTITLE_REF_CACHE removed — subtitle iteration now uses raw chunk pointers
+// matching C's SUBTITLE_REF = TFB_SoundChunk* semantics)
 
 // =============================================================================
 // Stream FFI (18 functions)
@@ -127,7 +395,7 @@ pub extern "C" fn InitStreamDecoder() -> c_int {
     match stream::init_stream_decoder() {
         Ok(()) => 0,
         Err(e) => {
-            log::error!("InitStreamDecoder: {}", e);
+            eprintln!("InitStreamDecoder: {}", e);
             -1
         }
     }
@@ -161,7 +429,7 @@ pub unsafe extern "C" fn TFB_CreateSoundSample(
             Arc::into_raw(arc) as *mut c_void
         }
         Err(e) => {
-            log::error!("TFB_CreateSoundSample: {}", e);
+            eprintln!("TFB_CreateSoundSample: {}", e);
             null_mut()
         }
     }
@@ -332,9 +600,7 @@ pub unsafe extern "C" fn GraphForegroundStream(
     if data_ptr.is_null() || width <= 0 || height <= 0 {
         return 0;
     }
-    // C passes uint8* but underlying data is i32 array of `width` elements
-    let i32_ptr = data_ptr as *mut i32;
-    let slice = std::slice::from_raw_parts_mut(i32_ptr, width as usize);
+    let slice = std::slice::from_raw_parts_mut(data_ptr, width as usize);
     stream::graph_foreground_stream(slice, width as usize, height as usize, want_speech != 0)
         as c_int
 }
@@ -348,36 +614,46 @@ pub type CallbackFunction = unsafe extern "C" fn(*mut c_void);
 
 #[no_mangle]
 pub unsafe extern "C" fn SpliceTrack(
-    track_name_ptr: *const u16,
-    track_text_ptr: *const u16,
-    timestamp_ptr: *const u16,
+    track_name_ptr: *const c_char,
+    track_text_ptr: *const c_char,
+    timestamp_ptr: *const c_char,
     callback_ptr: Option<CallbackFunction>,
 ) {
-    let name = utf16_ptr_to_option(track_name_ptr);
-    let text = utf16_ptr_to_option(track_text_ptr);
-    let timestamp = utf16_ptr_to_option(timestamp_ptr);
+    let name = unicode_ptr_to_option(track_name_ptr);
+    let text = unicode_ptr_to_option(track_text_ptr);
+    let timestamp = unicode_ptr_to_option(timestamp_ptr);
+    eprintln!("[SpliceTrack] name={:?} text_len={:?} ts_len={:?} cb={}", name, text.as_ref().map(|s| s.len()), timestamp.as_ref().map(|s| s.len()), callback_ptr.is_some());
     let callback: Option<Box<dyn Fn(i32) + Send>> = callback_ptr.map(|f| {
         Box::new(move |val: i32| {
             f(val as *mut c_void);
         }) as Box<dyn Fn(i32) + Send>
     });
+
+    // Create per-page decoders with time-limited ranges (like C's SoundDecoder_Load)
+    let decoders = create_per_page_decoders(
+        name.as_deref(),
+        text.as_deref(),
+        timestamp.as_deref(),
+    );
+
     let _ = trackplayer::splice_track(
         name.as_deref(),
         text.as_deref(),
         timestamp.as_deref(),
         callback,
+        decoders,
     );
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn SpliceMultiTrack(
-    track_names_ptr: *const *const u16,
-    track_text_ptr: *const u16,
+    track_names_ptr: *const *const c_char,
+    track_text_ptr: *const c_char,
 ) {
     if track_names_ptr.is_null() {
         return;
     }
-    // Read null-terminated array of UNICODE* strings
+    // Read null-terminated array of UNICODE* (char*) strings
     let mut names: Vec<Option<String>> = Vec::new();
     let mut i = 0;
     loop {
@@ -385,10 +661,10 @@ pub unsafe extern "C" fn SpliceMultiTrack(
         if p.is_null() {
             break;
         }
-        names.push(utf16_ptr_to_option(p));
+        names.push(unicode_ptr_to_option(p));
         i += 1;
     }
-    let text = utf16_ptr_to_option(track_text_ptr);
+    let text = unicode_ptr_to_option(track_text_ptr);
     let name_refs: Vec<Option<&str>> = names.iter().map(|n| n.as_deref()).collect();
     let text_refs: Vec<Option<&str>> = vec![text.as_deref(); name_refs.len()];
     let _ = trackplayer::splice_multi_track(&name_refs, &text_refs, None);
@@ -396,6 +672,7 @@ pub unsafe extern "C" fn SpliceMultiTrack(
 
 #[no_mangle]
 pub extern "C" fn PlayTrack() {
+    eprintln!("[PlayTrack] called");
     let _ = trackplayer::play_track(true);
 }
 
@@ -421,11 +698,7 @@ pub extern "C" fn ResumeTrack() {
 
 #[no_mangle]
 pub extern "C" fn PlayingTrack() -> u16 {
-    if trackplayer::playing_track() {
-        1
-    } else {
-        0
-    }
+    trackplayer::playing_track_num()
 }
 
 #[no_mangle]
@@ -455,48 +728,25 @@ pub extern "C" fn GetTrackPosition(in_units: c_int) -> c_int {
 
 #[no_mangle]
 pub extern "C" fn GetTrackSubtitle() -> *const c_char {
-    match trackplayer::get_track_subtitle() {
-        Some(text) => cache_and_return_c_str_subtitle(&text),
-        None => ptr::null(),
-    }
+    // Return a stable pointer from the chunk's cached CString.
+    // C's CheckSubtitles uses pointer identity to detect subtitle changes.
+    trackplayer::get_track_subtitle_cstr()
 }
 
 #[no_mangle]
 pub extern "C" fn GetFirstTrackSubtitle() -> *mut c_void {
-    match trackplayer::get_first_track_subtitle() {
-        Some(sub_ref) => {
-            SUBTITLE_REF_CACHE.with(|cache| {
-                *cache.borrow_mut() = Some(sub_ref);
-            });
-            SUBTITLE_REF_CACHE.with(|cache| {
-                let borrow = cache.borrow();
-                match borrow.as_ref() {
-                    Some(r) => r as *const SubtitleRef as *mut c_void,
-                    None => null_mut(),
-                }
-            })
-        }
-        None => null_mut(),
-    }
+    // Return the actual chunks_head pointer (matches C: returns chunks_head as SUBTITLE_REF)
+    trackplayer::get_first_chunk_ptr() as *mut c_void
 }
 
 #[no_mangle]
-pub extern "C" fn GetNextTrackSubtitle() -> *mut c_void {
-    match trackplayer::get_next_track_subtitle() {
-        Some(sub_ref) => {
-            SUBTITLE_REF_CACHE.with(|cache| {
-                *cache.borrow_mut() = Some(sub_ref);
-            });
-            SUBTITLE_REF_CACHE.with(|cache| {
-                let borrow = cache.borrow();
-                match borrow.as_ref() {
-                    Some(r) => r as *const SubtitleRef as *mut c_void,
-                    None => null_mut(),
-                }
-            })
-        }
-        None => null_mut(),
+pub extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void {
+    // Match C ABI: GetNextTrackSubtitle(SUBTITLE_REF LastRef)
+    // LastRef is an opaque pointer to a SoundChunk in the linked list
+    if last_ref.is_null() {
+        return null_mut();
     }
+    trackplayer::get_next_chunk_ptr(last_ref as *const u8) as *mut c_void
 }
 
 #[no_mangle]
@@ -504,8 +754,8 @@ pub unsafe extern "C" fn GetTrackSubtitleText(sub_ref_ptr: *mut c_void) -> *cons
     if sub_ref_ptr.is_null() {
         return ptr::null();
     }
-    let sub_ref = &*(sub_ref_ptr as *const SubtitleRef);
-    cache_and_return_c_str_text(&sub_ref.text)
+    // Return stable CString pointer from the chunk itself
+    trackplayer::get_chunk_text_cstr(sub_ref_ptr as *const u8)
 }
 
 // =============================================================================
@@ -518,11 +768,21 @@ pub unsafe extern "C" fn PLRPlaySong(
     continuous: c_int,
     priority: c_int,
 ) {
+    eprintln!("[audio_heart] PLRPlaySong called: ptr={:?} continuous={} priority={}", music_ref_ptr, continuous, priority);
     if music_ref_ptr.is_null() {
+        eprintln!("[audio_heart] PLRPlaySong: null ptr, returning");
         return;
     }
-    let music_ref = reconstruct_music_ref_borrowed(music_ref_ptr);
-    let _ = music::plr_play_song(&music_ref, continuous != 0, priority);
+    if is_music_ref_sentinel(music_ref_ptr) {
+        eprintln!("[audio_heart] PLRPlaySong: sentinel ~0, returning");
+        return;
+    }
+    let music_ref = music_ref_borrow(music_ref_ptr);
+    eprintln!("[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song");
+    match music::plr_play_song(&music_ref, continuous != 0, priority) {
+        Ok(()) => eprintln!("[audio_heart] PLRPlaySong: success"),
+        Err(e) => eprintln!("[audio_heart] PLRPlaySong: error: {:?}", e),
+    }
 }
 
 #[no_mangle]
@@ -530,7 +790,11 @@ pub unsafe extern "C" fn PLRStop(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
         return;
     }
-    let music_ref = reconstruct_music_ref_borrowed(music_ref_ptr);
+    if is_music_ref_sentinel(music_ref_ptr) {
+        let _ = music::plr_stop_current();
+        return;
+    }
+    let music_ref = music_ref_borrow(music_ref_ptr);
     let _ = music::plr_stop(&music_ref);
 }
 
@@ -539,7 +803,10 @@ pub unsafe extern "C" fn PLRPlaying(music_ref_ptr: *mut c_void) -> c_int {
     if music_ref_ptr.is_null() {
         return 0;
     }
-    let music_ref = reconstruct_music_ref_borrowed(music_ref_ptr);
+    if is_music_ref_sentinel(music_ref_ptr) {
+        return if music::plr_playing_current() { 1 } else { 0 };
+    }
+    let music_ref = music_ref_borrow(music_ref_ptr);
     if music::plr_playing(&music_ref) {
         1
     } else {
@@ -552,17 +819,29 @@ pub unsafe extern "C" fn PLRSeek(music_ref_ptr: *mut c_void, pos: c_uint) {
     if music_ref_ptr.is_null() {
         return;
     }
-    let music_ref = reconstruct_music_ref_borrowed(music_ref_ptr);
+    if is_music_ref_sentinel(music_ref_ptr) {
+        let _ = music::plr_seek_current(pos);
+        return;
+    }
+    let music_ref = music_ref_borrow(music_ref_ptr);
     let _ = music::plr_seek(&music_ref, pos);
 }
 
 #[no_mangle]
-pub extern "C" fn PLRPause() {
+pub unsafe extern "C" fn PLRPause(music_ref_ptr: *mut c_void) {
+    if music_ref_ptr.is_null() {
+        return;
+    }
+    // C checks MusicRef == curMusicRef || MusicRef == ~0 before pausing
+    // Rust just pauses the current stream regardless
     let _ = music::plr_pause();
 }
 
 #[no_mangle]
-pub extern "C" fn PLRResume() {
+pub unsafe extern "C" fn PLRResume(music_ref_ptr: *mut c_void) {
+    if music_ref_ptr.is_null() {
+        return;
+    }
     let _ = music::plr_resume();
 }
 
@@ -571,7 +850,10 @@ pub unsafe extern "C" fn snd_PlaySpeech(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
         return;
     }
-    let music_ref = reconstruct_music_ref_borrowed(music_ref_ptr);
+    if is_music_ref_sentinel(music_ref_ptr) {
+        return;
+    }
+    let music_ref = music_ref_borrow(music_ref_ptr);
     let _ = music::snd_play_speech(&music_ref);
 }
 
@@ -604,31 +886,40 @@ pub extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
 // SFX FFI (8 functions)
 // =============================================================================
 
+/// C signature: `PlayChannel(COUNT channel, SOUND snd, SoundPosition pos, void *obj, BYTE pri)`
+/// SOUND is a `STRING` = `STRING_TABLE_ENTRY_DESC*`. The `.data` field is an
+/// HMalloc'd slot containing a `*mut SoundSample`.
 #[no_mangle]
 pub unsafe extern "C" fn PlayChannel(
     channel: c_uint,
-    sound_bank_ptr: *mut c_void,
-    sound_index: c_uint,
-    pos_ptr: *const SoundPosition,
-    positional_object: c_uint,
-    priority: c_int,
+    snd_ptr: *mut c_void,       // SOUND (STRING_TABLE_ENTRY_DESC*)
+    pos: SoundPosition,          // passed by value in C
+    positional_object: *mut c_void,
+    priority: c_uint,
 ) {
-    if sound_bank_ptr.is_null() {
+    eprintln!("[PlayChannel] channel={} snd_ptr={:?} priority={}", channel, snd_ptr, priority);
+    if snd_ptr.is_null() {
+        eprintln!("[PlayChannel] snd_ptr is null, returning");
         return;
     }
-    let bank = &*(sound_bank_ptr as *const SoundBank);
-    let pos = if pos_ptr.is_null() {
-        SoundPosition::default()
-    } else {
-        *pos_ptr
-    };
-    let _ = sfx::play_channel(
+    // snd_ptr is a STRING_TABLE_ENTRY_DESC*. First field is `data` (a char*).
+    let entry = &*(snd_ptr as *const CStringTableEntry);
+    if entry.data.is_null() {
+        return;
+    }
+    // entry.data points to an HMalloc'd slot containing *mut SoundSample
+    let sample_ptr = *(entry.data as *const *const SoundSample);
+    if sample_ptr.is_null() {
+        return;
+    }
+    let sample = &*sample_ptr;
+
+    let _ = sfx::play_sample(
         channel as usize,
-        bank,
-        sound_index as usize,
+        sample,
         pos,
         positional_object as usize,
-        priority,
+        priority as i32,
     );
 }
 
@@ -669,13 +960,29 @@ pub extern "C" fn SetPositionalObject(source_index: c_uint, object: c_uint) {
     sfx::set_positional_object(source_index as usize, object as usize);
 }
 
+/// Free a SOUND_REF (STRING_TABLE containing SoundSample pointers).
+/// Each entry's .data is an HMalloc'd slot pointing to a Box<SoundSample>.
 #[no_mangle]
 pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
     if bank_ptr.is_null() {
         return;
     }
-    let bank = *Box::from_raw(bank_ptr as *mut SoundBank);
-    let _ = sfx::release_sound_bank_data(bank);
+    let strtab = &*(bank_ptr as *const CStringTable);
+    for i in 0..strtab.size as usize {
+        let entry = &mut *strtab.strings.add(i);
+        if !entry.data.is_null() {
+            let sample_pp = entry.data as *mut *mut SoundSample;
+            let sample_ptr = *sample_pp;
+            if !sample_ptr.is_null() {
+                // Reconstruct and drop the Box<SoundSample>, destroying mixer buffers
+                let mut sample = *Box::from_raw(sample_ptr);
+                let _ = stream::destroy_sound_sample(&mut sample);
+            }
+            // Null out data so FreeStringTable won't double-free
+            entry.data = null_mut();
+        }
+    }
+    FreeStringTable(bank_ptr);
 }
 
 // =============================================================================
@@ -684,10 +991,14 @@ pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
 
 #[no_mangle]
 pub extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int {
+    eprintln!("[audio_heart] InitSound called");
     match control::init_sound() {
-        Ok(()) => 1,
+        Ok(()) => {
+            eprintln!("[audio_heart] InitSound: success");
+            1
+        }
         Err(e) => {
-            log::error!("InitSound: {}", e);
+            eprintln!("[audio_heart] InitSound: error: {}", e);
             0
         }
     }
@@ -737,6 +1048,8 @@ pub extern "C" fn SetSpeechVolume(volume: f32) {
 // File Loading FFI (4 functions)
 // =============================================================================
 
+/// Load a sound bank (.snd file listing). Returns a STRING_TABLE (C struct)
+/// where each entry's `.data` points to a `*mut SoundSample`.
 #[no_mangle]
 pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
     if filename.is_null() {
@@ -746,15 +1059,155 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
         Ok(s) => s,
         Err(_) => return null_mut(),
     };
-    match fileinst::load_sound_file(name) {
-        Ok(bank) => Box::into_raw(Box::new(bank)) as *mut c_void,
-        Err(e) => {
-            log::error!("LoadSoundFile({}): {}", name, e);
-            null_mut()
+
+    eprintln!("LoadSoundFile: loading bank {}", name);
+
+    // Read the bank file (text) via UIO
+    let c_name = CString::new(name).unwrap_or_default();
+    let data = match uio_read_file(c_name.as_ptr()) {
+        Some(d) => d,
+        None => {
+            eprintln!("LoadSoundFile({}): failed to read file", name);
+            return null_mut();
         }
+    };
+
+    // Extract directory prefix from the bank filename
+    let dir_prefix = match name.rfind('/').or_else(|| name.rfind('\\')) {
+        Some(pos) => &name[..=pos],
+        None => "",
+    };
+
+    // Parse lines — each line is a sound filename relative to the bank's directory
+    let text = String::from_utf8_lossy(&data);
+    let mut samples: Vec<Box<SoundSample>> = Vec::new();
+
+    for line in text.lines() {
+        let snd_name = line.trim();
+        if snd_name.is_empty() {
+            continue;
+        }
+
+        // Build full path: dir_prefix + sound filename
+        let full_path = format!("{}{}", dir_prefix, snd_name);
+        eprintln!("LoadSoundFile: loading sound {}", full_path);
+
+        let ext = match file_extension(snd_name) {
+            Some(e) => e,
+            None => {
+                eprintln!("LoadSoundFile: no extension for '{}', skipping", snd_name);
+                continue;
+            }
+        };
+
+        let mut decoder = match create_decoder_for_extension(ext) {
+            Some(d) => d,
+            None => {
+                eprintln!("LoadSoundFile: no decoder for .{}, skipping {}", ext, snd_name);
+                continue;
+            }
+        };
+
+        // Read sound file
+        let c_path = CString::new(full_path.as_str()).unwrap_or_default();
+        let snd_data = match uio_read_file(c_path.as_ptr()) {
+            Some(d) => d,
+            None => {
+                eprintln!("LoadSoundFile: couldn't read {}", full_path);
+                continue;
+            }
+        };
+
+        // Open decoder
+        if let Err(e) = decoder.open_from_bytes(&snd_data, snd_name) {
+            eprintln!("LoadSoundFile: decoder failed for {}: {:?}", full_path, e);
+            continue;
+        }
+
+        let freq = decoder.frequency();
+        let format = decoder.format();
+        let length = decoder.length();
+
+        eprintln!(
+            "LoadSoundFile: decoder {} rate={} format={:?}",
+            snd_name, freq, format
+        );
+
+        // Decode all PCM data
+        let pcm = match super::types::decode_all(decoder.as_mut()) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("LoadSoundFile: decode_all failed for {}: {:?}", full_path, e);
+                continue;
+            }
+        };
+
+        eprintln!("LoadSoundFile: decoded {} bytes for {}", pcm.len(), snd_name);
+
+        // Create sample with 1 buffer (SFX: pre-decoded, no streaming decoder)
+        let mut sample = match stream::create_sound_sample(None, 1, None) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("LoadSoundFile: create_sound_sample failed: {}", e);
+                continue;
+            }
+        };
+        sample.length = length;
+
+        // Store decoded PCM in the mixer buffer
+        if !sample.buffers.is_empty() && !pcm.is_empty() {
+            let mixer_freq = mixer_get_frequency();
+            let mixer_fmt = mixer_get_format();
+            let _ = mixer_buffer::mixer_buffer_data(
+                sample.buffers[0],
+                format.to_mixer_format(),
+                &pcm,
+                freq,
+                mixer_freq,
+                mixer_fmt,
+            );
+        }
+
+        samples.push(Box::new(sample));
     }
+
+    if samples.is_empty() {
+        eprintln!("LoadSoundFile({}): no sounds decoded", name);
+        return null_mut();
+    }
+
+    let snd_ct = samples.len();
+
+    // Allocate a C STRING_TABLE
+    let strtab_ptr = AllocStringTable(snd_ct as c_int, 0);
+    if strtab_ptr.is_null() {
+        eprintln!("LoadSoundFile({}): AllocStringTable failed", name);
+        // Clean up samples
+        for mut s in samples {
+            let _ = stream::destroy_sound_sample(&mut s);
+        }
+        return null_mut();
+    }
+
+    let strtab = &*(strtab_ptr as *const CStringTable);
+
+    // Populate each entry's .data with a pointer to the SoundSample
+    for (i, sample) in samples.into_iter().enumerate() {
+        let entry = &mut *strtab.strings.add(i);
+        let sample_ptr = Box::into_raw(sample);
+        // Allocate a pointer-sized slot (matching C's `HMalloc(sizeof(TFB_SoundSample*))`)
+        let target = HMalloc(std::mem::size_of::<*mut c_void>()) as *mut *mut SoundSample;
+        *target = sample_ptr;
+        entry.data = target as *mut c_char;
+        entry.length = std::mem::size_of::<*mut c_void>() as c_int;
+    }
+
+    eprintln!("LoadSoundFile({}): loaded {} sounds", name, snd_ct);
+    strtab_ptr
 }
 
+/// Load a music file. Returns a MUSIC_REF (double pointer: `*mut *mut Arc<Mutex<SoundSample>>`).
+/// The caller (resource system) stores this as opaque `void*`.
 #[no_mangle]
 pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
     if filename.is_null() {
@@ -764,22 +1217,83 @@ pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
         Ok(s) => s,
         Err(_) => return null_mut(),
     };
-    match fileinst::load_music_file(name) {
-        Ok(music_ref) => Arc::into_raw(music_ref.0) as *mut c_void,
-        Err(e) => {
-            log::error!("LoadMusicFile({}): {}", name, e);
-            null_mut()
+
+    eprintln!("LoadMusicFile: loading {}", name);
+
+    // Determine decoder type from extension
+    let ext = match file_extension(name) {
+        Some(e) => e,
+        None => {
+            eprintln!("LoadMusicFile({}): no file extension", name);
+            return null_mut();
         }
+    };
+    let mut decoder = match create_decoder_for_extension(ext) {
+        Some(d) => d,
+        None => {
+            eprintln!("LoadMusicFile({}): no decoder for .{}", name, ext);
+            return null_mut();
+        }
+    };
+
+    // Read file via UIO
+    let c_name = CString::new(name).unwrap_or_default();
+    let data = match uio_read_file(c_name.as_ptr()) {
+        Some(d) => d,
+        None => {
+            eprintln!("LoadMusicFile({}): failed to read file", name);
+            return null_mut();
+        }
+    };
+
+    // Open decoder from bytes
+    if let Err(e) = decoder.open_from_bytes(&data, name) {
+        eprintln!("LoadMusicFile({}): decoder open failed: {:?}", name, e);
+        return null_mut();
     }
+
+    eprintln!(
+        "LoadMusicFile: decoder rate={} format={:?} length={:.1}s",
+        decoder.frequency(),
+        decoder.format(),
+        decoder.length()
+    );
+
+    // Create SoundSample with 64 buffers (streaming)
+    let sample = match stream::create_sound_sample(Some(decoder), 64, None) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("LoadMusicFile({}): create_sound_sample failed: {}", name, e);
+            return null_mut();
+        }
+    };
+
+    // Wrap in Arc<Mutex> for shared streaming access
+    let arc = Arc::new(Mutex::new(sample));
+
+    // Allocate MUSIC_REF: a pointer-sized slot holding the Arc raw pointer.
+    // This matches C's `h = AllocMusicData(sizeof(void*)); *h = sample;`
+    let slot = HMalloc(std::mem::size_of::<*mut c_void>()) as *mut *const Mutex<SoundSample>;
+    if slot.is_null() {
+        eprintln!("LoadMusicFile({}): HMalloc failed", name);
+        return null_mut();
+    }
+    *slot = Arc::into_raw(arc);
+    slot as *mut c_void
 }
 
+/// Free a MUSIC_REF. The pointer is a double-pointer: `*mut *const Mutex<SoundSample>`.
+/// We take ownership of the Arc (decrement refcount) and free the outer slot.
 #[no_mangle]
 pub unsafe extern "C" fn DestroyMusic(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
         return;
     }
-    let music_ref = reconstruct_music_ref_owned(music_ref_ptr);
+    // Take ownership of the Arc (drops refcount)
+    let music_ref = music_ref_take(music_ref_ptr);
     let _ = music::release_music_data(music_ref);
+    // Free the outer pointer slot
+    HFree(music_ref_ptr);
 }
 
 // =============================================================================

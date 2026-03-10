@@ -44,6 +44,17 @@ impl AudioFormat {
     pub fn is_stereo(&self) -> bool {
         matches!(self, AudioFormat::Stereo8 | AudioFormat::Stereo16)
     }
+
+    /// Convert to mixer format encoding (MIX_FORMAT_MAKE).
+    ///
+    /// The mixer expects `MIX_FORMAT_DUMMYID | bpc | (chans << 8)` (e.g.,
+    /// `0x00170202` for Stereo16), not the decoder's `AudioFormat` values.
+    pub fn to_mixer_format(self) -> u32 {
+        let bpc: u32 = if self.is_16bit() { 2 } else { 1 };
+        let chans = self.channels() as u32;
+        // MIX_FORMAT_DUMMYID = 0x0017_0000
+        0x0017_0000 | (bpc & 0xFF) | ((chans & 0xFF) << 8)
+    }
 }
 
 impl Default for AudioFormat {

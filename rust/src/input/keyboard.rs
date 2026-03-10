@@ -3,6 +3,7 @@
 //! Handles keyboard key bindings to control state variables.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A keyboard key binding that maps a keycode to a control state variable.
 #[derive(Debug, Clone)]
@@ -22,6 +23,9 @@ impl KeyBinding {
 
 /// Number of buckets for keyboard binding hash table
 pub const KEYBOARD_INPUT_BUCKETS: usize = 512;
+
+static KEY_DOWN_COUNT: AtomicUsize = AtomicUsize::new(0);
+static KEY_UP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Keyboard binding manager
 #[derive(Debug)]
@@ -145,10 +149,24 @@ impl KeyboardBindings {
     /// Caller must ensure target addresses are valid writable i32 pointers
     pub unsafe fn handle_key_down(&self, keycode: i32) {
         const VCONTROL_STARTBIT: i32 = 0x100;
+        let n = KEY_DOWN_COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_INPUT_KBD_DOWN: keycode=0x{:X}",
+                keycode
+            ));
+        }
         for binding in self.get_bindings(keycode) {
             let target_ptr = binding.target as *mut i32;
             if !target_ptr.is_null() {
+                let before = *target_ptr;
                 *target_ptr = (*target_ptr + 1) | VCONTROL_STARTBIT;
+                if n < 80 {
+                    crate::bridge_log::rust_bridge_log_msg(&format!(
+                        "RUST_INPUT_KBD_DOWN_BIND: key=0x{:X} target={:p} before={} after={}",
+                        keycode, target_ptr, before, *target_ptr
+                    ));
+                }
             }
         }
     }
@@ -166,12 +184,26 @@ impl KeyboardBindings {
     pub unsafe fn handle_key_up(&self, keycode: i32) {
         const VCONTROL_STARTBIT: i32 = 0x100;
         const VCONTROL_MASK: i32 = 0xFF;
+        let n = KEY_UP_COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "RUST_INPUT_KBD_UP: keycode=0x{:X}",
+                keycode
+            ));
+        }
         for binding in self.get_bindings(keycode) {
             let target_ptr = binding.target as *mut i32;
             if !target_ptr.is_null() {
+                let before = *target_ptr;
                 let v = *target_ptr & VCONTROL_MASK;
                 if v > 0 {
                     *target_ptr = (v - 1) | (*target_ptr & VCONTROL_STARTBIT);
+                }
+                if n < 80 {
+                    crate::bridge_log::rust_bridge_log_msg(&format!(
+                        "RUST_INPUT_KBD_UP_BIND: key=0x{:X} target={:p} before={} after={}",
+                        keycode, target_ptr, before, *target_ptr
+                    ));
                 }
             }
         }

@@ -110,8 +110,8 @@ void PLRPlaySong(MUSIC_REF MusicRef, BOOLEAN Continuous, BYTE Priority);
 void PLRStop(MUSIC_REF MusicRef);
 BOOLEAN PLRPlaying(MUSIC_REF MusicRef);
 void PLRSeek(MUSIC_REF MusicRef, uint32 pos);
-void PLRPause(void);
-void PLRResume(void);
+void PLRPause(MUSIC_REF MusicRef);
+void PLRResume(MUSIC_REF MusicRef);
 
 void snd_PlaySpeech(MUSIC_REF SpeechRef);
 void snd_StopSpeech(void);

@@ -119,6 +119,49 @@ pub fn play_channel(
     Ok(())
 }
 
+/// Play a single pre-decoded SoundSample on a channel (called from FFI).
+pub fn play_sample(
+    channel: usize,
+    sample: &SoundSample,
+    pos: SoundPosition,
+    positional_object: usize,
+    _priority: i32,
+) -> AudioResult<()> {
+    if channel > LAST_SFX_SOURCE {
+        return Err(AudioError::InvalidChannel(channel));
+    }
+
+    stream::stop_source(channel)?;
+    check_finished_channels();
+
+    let state = SFX_STATE.lock();
+    if state.opt_stereo_sfx {
+        update_sound_position(channel, pos);
+    } else {
+        update_sound_position(channel, SoundPosition { positional: false, x: 0, y: 0 });
+    }
+    drop(state);
+
+    stream::with_source(channel, |source| {
+        source.positional_object = positional_object;
+        let handle = source.handle;
+        if !sample.buffers.is_empty() {
+            let buf_id = sample.buffers[0] as i32;
+            let r = mixer_source::mixer_source_i(handle, SourceProp::Buffer, buf_id);
+            // Verify the buffer was actually queued
+            let queued_after = mixer_source::mixer_get_source_i(handle, SourceProp::BuffersQueued).unwrap_or(-1);
+            let state_after = mixer_source::mixer_get_source_i(handle, SourceProp::SourceState).unwrap_or(-1);
+            eprintln!("[play_sample] ch={} handle={} buf_id={} set_result={:?} queued_after={} state=0x{:x}", channel, handle, buf_id, r, queued_after, state_after);
+        } else {
+            eprintln!("[play_sample] ch={} handle={} NO BUFFERS", channel, handle);
+        }
+        let _ = mixer_source::mixer_source_play(handle);
+    })
+    .ok_or(AudioError::InvalidChannel(channel))?;
+
+    Ok(())
+}
+
 /// Stop a sound effect channel.
 pub fn stop_channel(channel: usize, _priority: i32) -> AudioResult<()> {
     stream::stop_source(channel)
