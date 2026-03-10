@@ -60,6 +60,12 @@ extern size_t rust_length_state_file(int file_index);
 extern size_t rust_read_state_file(int file_index, void *buf, size_t size, size_t count);
 extern size_t rust_write_state_file(int file_index, const void *buf, size_t size, size_t count);
 extern int rust_seek_state_file(int file_index, int64_t offset, int whence);
+extern int rust_init_planet_info(int num_stars);
+extern void rust_uninit_planet_info(void);
+extern int rust_get_planet_info(int star_index, int planet_index, int moon_index,
+		const BYTE *planet_num_moons, int num_planets, DWORD *out_mask);
+extern int rust_put_planet_info(int star_index, int planet_index, int moon_index,
+		const BYTE *planet_num_moons, int num_planets, const DWORD *mask);
 
 GAME_STATE_FILE *
 OpenStateFile (int stateFile, const char *mode)
@@ -110,6 +116,58 @@ SeekStateFile (GAME_STATE_FILE *fp, long offset, int whence)
 {
 	int index = (int)(fp - state_files);
 	return rust_seek_state_file(index, (int64_t)offset, whence);
+}
+
+static int
+get_num_stars (void)
+{
+	STAR_DESC *pSD;
+	int num_stars = 0;
+
+	for (pSD = &star_array[0];
+			pSD->star_pt.x <= MAX_X_UNIVERSE && pSD->star_pt.y <= MAX_Y_UNIVERSE;
+			++pSD)
+	{
+		++num_stars;
+	}
+
+	return num_stars;
+}
+
+static COUNT
+get_current_star_index (void)
+{
+	return (COUNT)(CurStarDescPtr - star_array);
+}
+
+static COUNT
+get_current_planet_index (void)
+{
+	return (COUNT)(pSolarSysState->pBaseDesc->pPrevDesc - pSolarSysState->PlanetDesc);
+}
+
+static COUNT
+get_current_moon_index (void)
+{
+	if (pSolarSysState->pOrbitalDesc->pPrevDesc == pSolarSysState->SunDesc)
+		return 0;
+
+	return (COUNT)(pSolarSysState->pOrbitalDesc - pSolarSysState->MoonDesc + 1);
+}
+
+static COUNT
+get_current_num_planets (void)
+{
+	return pSolarSysState->SunDesc[0].NumPlanets;
+}
+
+static void
+fill_planet_num_moons (BYTE *planet_num_moons)
+{
+	COUNT i;
+
+	for (i = 0; i < pSolarSysState->SunDesc[0].NumPlanets; ++i)
+		planet_num_moons[i] = pSolarSysState->PlanetDesc[i].NumPlanets;
 }
 
 #else /* !USE_RUST_STATE */
@@ -276,6 +334,9 @@ SeekStateFile (GAME_STATE_FILE *fp, long offset, int whence)
 void
 InitPlanetInfo (void)
 {
+#ifdef USE_RUST_STATE
+	rust_init_planet_info (get_num_stars ());
+#else
 	GAME_STATE_FILE *fp;
 
 	fp = OpenStateFile (STARINFO_FILE, "wb");
@@ -294,12 +355,17 @@ InitPlanetInfo (void)
 
 		CloseStateFile (fp);
 	}
+#endif
 }
 
 void
 UninitPlanetInfo (void)
 {
+#ifdef USE_RUST_STATE
+	rust_uninit_planet_info ();
+#else
 	DeleteStateFile (STARINFO_FILE);
+#endif
 }
 
 #define OFFSET_SIZE       (sizeof (DWORD))
@@ -308,11 +374,30 @@ UninitPlanetInfo (void)
 void
 GetPlanetInfo (void)
 {
-	GAME_STATE_FILE *fp;
-
 	pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask[BIOLOGICAL_SCAN] = 0;
 	pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask[MINERAL_SCAN] = 0;
 	pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask[ENERGY_SCAN] = 0;
+
+#ifdef USE_RUST_STATE
+	{
+		BYTE planet_num_moons[MAX_PLANETS];
+		DWORD rust_mask[NUM_SCAN_TYPES];
+
+		fill_planet_num_moons (planet_num_moons);
+		if (rust_get_planet_info (
+				get_current_star_index (),
+				get_current_planet_index (),
+				get_current_moon_index (),
+				planet_num_moons,
+				get_current_num_planets (),
+				rust_mask))
+		{
+			memcpy (pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask,
+					rust_mask, sizeof (rust_mask));
+		}
+	}
+#else
+	GAME_STATE_FILE *fp;
 
 	fp = OpenStateFile (STARINFO_FILE, "rb");
 	if (fp)
@@ -351,11 +436,24 @@ GetPlanetInfo (void)
 
 		CloseStateFile (fp);
 	}
+#endif
 }
 
 void
 PutPlanetInfo (void)
 {
+#ifdef USE_RUST_STATE
+	BYTE planet_num_moons[MAX_PLANETS];
+
+	fill_planet_num_moons (planet_num_moons);
+	rust_put_planet_info (
+			get_current_star_index (),
+			get_current_planet_index (),
+			get_current_moon_index (),
+			planet_num_moons,
+			get_current_num_planets (),
+			pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask);
+#else
 	GAME_STATE_FILE *fp;
 
 	fp = OpenStateFile (STARINFO_FILE, "r+b");
@@ -417,5 +515,6 @@ PutPlanetInfo (void)
 
 		CloseStateFile (fp);
 	}
+#endif
 }
 

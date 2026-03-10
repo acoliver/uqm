@@ -76,6 +76,10 @@
 /* Defined if using Rust audio backend (rodio) */
 @SYMBOL_USE_RUST_AUDIO_DEF@
 
+
+/* Defined if using Rust audio heart integration */
+@SYMBOL_USE_RUST_AUDIO_HEART_DEF@
+
 /* Defined if using Rust input/VControl */
 @SYMBOL_USE_RUST_INPUT_DEF@
 
@@ -84,6 +88,9 @@
 
 /* Defined if using Rust video */
 @SYMBOL_USE_RUST_VIDEO_DEF@
+
+/* Defined if using Rust video player integration */
+@SYMBOL_USE_RUST_VIDPLAYER_DEF@
 
 /* Defined if using Rust graphics */
 @SYMBOL_USE_RUST_GFX_DEF@
@@ -97,6 +104,12 @@
 /* Defined if using Rust WAV decoder */
 @SYMBOL_USE_RUST_WAV_DEF@
 
+/* Defined if using Rust DukAud decoder */
+@SYMBOL_USE_RUST_DUKAUD_DEF@
+
+/* Defined if using Rust AIFF decoder */
+@SYMBOL_USE_RUST_AIFF_DEF@
+
 /* Defined if using Rust threads */
 @SYMBOL_USE_RUST_THREADS_DEF@
 
@@ -105,4 +118,7 @@
 
 /* Defined if using Rust memory allocator */
 @SYMBOL_USE_RUST_MEM_DEF@
+
+/* Defined if using Rust game state helpers */
+@SYMBOL_USE_RUST_STATE_DEF@
 

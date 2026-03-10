@@ -221,6 +221,29 @@ impl StateFileManager {
         Ok(&mut self.files[file_index])
     }
 
+    /// Open a state file for the duration of a closure and close it afterwards.
+    pub fn with_open_file<R, F>(
+        &mut self,
+        file_index: usize,
+        mode: FileMode,
+        f: F,
+    ) -> Result<R, StateFileError>
+    where
+        F: FnOnce(&mut StateFile) -> Result<R, StateFileError>,
+    {
+        let result = {
+            let file = self.open(file_index, mode)?;
+            f(file)
+        };
+
+        let close_result = self.close(file_index);
+        match (result, close_result) {
+            (Err(err), _) => Err(err),
+            (Ok(_), Err(err)) => Err(err),
+            (Ok(value), Ok(())) => Ok(value),
+        }
+    }
+
     /// Close a state file
     pub fn close(&mut self, file_index: usize) -> Result<(), StateFileError> {
         if file_index >= NUM_STATE_FILES {

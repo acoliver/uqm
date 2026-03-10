@@ -47,6 +47,59 @@ FRAME PlayFrame;
 GLOBDATA GlobData;
 
 
+#ifdef USE_RUST_STATE
+extern BYTE rust_get_game_state_bits_from_bytes (const BYTE *state, int startBit, int endBit);
+extern void rust_set_game_state_bits_in_bytes (BYTE *state, int startBit, int endBit, BYTE val);
+extern DWORD rust_get_game_state32_from_bytes (const BYTE *state, int startBit);
+extern void rust_set_game_state32_in_bytes (BYTE *state, int startBit, DWORD val);
+extern void rust_copy_game_state_bits_between_bytes (BYTE *dest, int target, const BYTE *src,
+		int begin, int end);
+
+BYTE
+getGameState (BYTE *state, int startBit, int endBit)
+{
+	return rust_get_game_state_bits_from_bytes (state, startBit, endBit);
+}
+
+void
+setGameState (BYTE *state, int startBit, int endBit, BYTE val
+#ifdef STATE_DEBUG
+		, const char *name
+#endif
+)
+{
+	rust_set_game_state_bits_in_bytes (state, startBit, endBit, val);
+#ifdef STATE_DEBUG
+	log_add (log_Debug, "State '%s' set to %d.", name, (int)val);
+#endif
+}
+
+DWORD
+getGameState32 (BYTE *state, int startBit)
+{
+	return rust_get_game_state32_from_bytes (state, startBit);
+}
+
+void
+setGameState32 (BYTE *state, int startBit, DWORD val
+#ifdef STATE_DEBUG
+		, const char *name
+#endif
+)
+{
+	rust_set_game_state32_in_bytes (state, startBit, val);
+#ifdef STATE_DEBUG
+	log_add (log_Debug, "State '%s' set to %u.", name, (unsigned)val);
+#endif
+}
+
+void
+copyGameState (BYTE *dest, DWORD target, BYTE *src, DWORD begin, DWORD end)
+{
+	rust_copy_game_state_bits_between_bytes (dest, (int)target, src, (int)begin, (int)end);
+}
+#else
+
 BYTE
 getGameState (BYTE *state, int startBit, int endBit)
 {
@@ -134,6 +187,9 @@ copyGameState (BYTE *dest, DWORD target, BYTE *src, DWORD begin, DWORD end)
 		target += 8;
 	}
 }
+
+#endif
+
 
 static void
 CreateRadar (void)
