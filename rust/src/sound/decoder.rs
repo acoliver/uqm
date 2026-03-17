@@ -159,11 +159,7 @@ impl LimitedDecoder {
     /// * `inner` - The underlying decoder (already opened with data)
     /// * `start_time_ms` - Start time in milliseconds
     /// * `run_time_ms` - Maximum run time in milliseconds (0 = unlimited)
-    pub fn new(
-        mut inner: Box<dyn SoundDecoder>,
-        start_time_ms: u32,
-        run_time_ms: i32,
-    ) -> Self {
+    pub fn new(mut inner: Box<dyn SoundDecoder>, start_time_ms: u32, run_time_ms: i32) -> Self {
         let freq = inner.frequency();
         let format = inner.format();
         let total_length = inner.length();

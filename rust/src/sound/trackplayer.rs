@@ -717,7 +717,10 @@ pub fn fast_forward_page() -> AudioResult<()> {
             let offset_ticks = ms_to_ticks(chunk.start_time as u32) as i32;
             state.cur_chunk = Some(page);
             state.cur_sub_chunk = Some(page);
-            Some((Arc::clone(state.sound_sample.as_ref().unwrap()), offset_ticks))
+            Some((
+                Arc::clone(state.sound_sample.as_ref().unwrap()),
+                offset_ticks,
+            ))
         } else {
             None
         }
@@ -736,7 +739,10 @@ pub fn fast_forward_page() -> AudioResult<()> {
         // Match C FastForward_Page -> seek_track(tracks_length + 1), not direct stop.
         let end_plus_one = {
             let state = TRACK_STATE.lock();
-            state.tracks_length.load(Ordering::Acquire).saturating_add(1)
+            state
+                .tracks_length
+                .load(Ordering::Acquire)
+                .saturating_add(1)
         };
         seek_to_position(end_plus_one)
     }
@@ -810,7 +816,6 @@ pub fn get_track_subtitle_cstr() -> *const std::os::raw::c_char {
     }
     ptr
 }
-
 
 /// Get the first subtitle in the track.
 pub fn get_first_track_subtitle() -> Option<SubtitleRef> {
@@ -1085,9 +1090,7 @@ fn seek_to_position(pos: u32) -> AudioResult<()> {
             sample.offset = chunk.start_time as i32 * ONE_SECOND as i32 / 1000;
             eprintln!(
                 "[PARITY][SEEK] chunk_start_ms={:.3} sample_offset_ticks={} seek_ms={}",
-                chunk.start_time,
-                sample.offset,
-                seek_ms
+                chunk.start_time, sample.offset, seek_ms
             );
         }
 
@@ -1219,7 +1222,6 @@ fn do_track_tag_ptr_inner(state: &mut TrackPlayerState, chunk_ptr: NonNull<Sound
     }
     state.cur_sub_chunk = Some(chunk_ptr);
 }
-
 
 /// Get the total track end time in game ticks.
 fn tracks_end_time_inner(state: &TrackPlayerState) -> u32 {

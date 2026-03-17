@@ -174,7 +174,13 @@ impl GameState {
         src_start_bit: usize,
         src_end_bit: usize,
     ) {
-        copy_state_bits_raw(&mut self.bytes, dest_bit, &src.bytes, src_start_bit, src_end_bit)
+        copy_state_bits_raw(
+            &mut self.bytes,
+            dest_bit,
+            &src.bytes,
+            src_start_bit,
+            src_end_bit,
+        )
     }
 
     /// Get raw bytes for serialization.

@@ -365,7 +365,10 @@ pub fn resume_stream(source_index: usize) -> AudioResult<()> {
 
 /// Seek the stream to the given position in milliseconds.
 pub fn seek_stream(source_index: usize, pos_ms: u32) -> AudioResult<()> {
-    eprintln!("[PARITY][STREAM_SEEK] source={} pos_ms={}", source_index, pos_ms);
+    eprintln!(
+        "[PARITY][STREAM_SEEK] source={} pos_ms={}",
+        source_index, pos_ms
+    );
     // Phase 1: Extract state under locks
     let source = get_source(source_index)?;
     let sample_arc = source
@@ -421,7 +424,6 @@ pub fn get_stream_position_ticks(source_index: usize) -> u32 {
     }
     pos as u32
 }
-
 
 // =============================================================================
 // Buffer Tagging (spec §3.1.3)
@@ -496,7 +498,11 @@ pub fn graph_foreground_stream(
                     .as_ref()
                     .map(|sa| {
                         let sample = sa.lock();
-                        sample.decoder.as_ref().map(|d| !d.is_null()).unwrap_or(false)
+                        sample
+                            .decoder
+                            .as_ref()
+                            .map(|d| !d.is_null())
+                            .unwrap_or(false)
                     })
                     .unwrap_or(false)
             })
@@ -553,13 +559,12 @@ pub fn graph_foreground_stream(
 
     // Compute read position from scope head + time delta
     let delta_time = get_time_counter().wrapping_sub(source.sbuf_lasttime);
-    let delta_bytes =
-        (delta_time as u64 * decoder.frequency() as u64 * full_sample as u64 / ONE_SECOND as u64)
-            as u32;
+    let delta_bytes = (delta_time as u64 * decoder.frequency() as u64 * full_sample as u64
+        / ONE_SECOND as u64) as u32;
     // Align delta to sample boundary
     let delta_aligned = delta_bytes & !(full_sample as u32 - 1);
-    let mut read_pos = ((source.sbuf_head + delta_aligned.min(source.sbuf_size))
-        % source.sbuf_size) as usize;
+    let mut read_pos =
+        ((source.sbuf_head + delta_aligned.min(source.sbuf_size)) % source.sbuf_size) as usize;
 
     let mut agc = AGC.lock();
     let target_amp = (height as i32 >> 1) >> 1;
@@ -617,7 +622,11 @@ pub fn graph_foreground_stream(
     }
 
     // Return 1 on success (matching C convention, not width)
-    if count > 0 { 1 } else { 0 }
+    if count > 0 {
+        1
+    } else {
+        0
+    }
 }
 
 /// Read a single sample from the scope ring buffer.
@@ -884,7 +893,8 @@ impl MixerPumpSource {
             let fmt = super::mixer::mix::mixer_get_format();
             let non_zero = raw.iter().position(|&b| b != 0);
             let sources = super::mixer::source::get_all_sources();
-            let playing: Vec<_> = sources.iter()
+            let playing: Vec<_> = sources
+                .iter()
                 .filter_map(|(handle, src)| {
                     let s = src.lock();
                     if s.state == (super::mixer::types::SourceState::Playing as u32) {
@@ -896,7 +906,12 @@ impl MixerPumpSource {
                 .collect();
             eprintln!(
                 "[mixer_pump_diag#{}] freq={} fmt={:?} nonzero={:?} total_sources={} playing={:?}",
-                count, freq, fmt, non_zero, sources.len(), playing
+                count,
+                freq,
+                fmt,
+                non_zero,
+                sources.len(),
+                playing
             );
         }
 
@@ -1060,7 +1075,10 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
                                     mixer_freq,
                                     mixer_fmt,
                                 );
-                                let _ = mixer_source::mixer_source_queue_buffers(source.handle, &[buf_handle]);
+                                let _ = mixer_source::mixer_source_queue_buffers(
+                                    source.handle,
+                                    &[buf_handle],
+                                );
                                 source.last_q_buf = buf_handle;
                                 source.queued_buf_sizes.push_back(n);
                                 deferred.push(DeferredCallback::QueueBuffer { buf_handle });
@@ -1200,8 +1218,16 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
             };
 
             // Fill and queue the buffer with decoded data
-            let freq = sample.decoder.as_ref().map(|d| d.frequency()).unwrap_or(22050);
-            let format = sample.decoder.as_ref().map(|d| d.format()).unwrap_or(AudioFormat::Stereo16);
+            let freq = sample
+                .decoder
+                .as_ref()
+                .map(|d| d.frequency())
+                .unwrap_or(22050);
+            let format = sample
+                .decoder
+                .as_ref()
+                .map(|d| d.format())
+                .unwrap_or(AudioFormat::Stereo16);
             let mixer_freq = mixer_mix::mixer_get_frequency();
             let mixer_fmt = mixer_mix::mixer_get_format();
             let mix_format = audio_format_to_mixer(format);
@@ -1438,7 +1464,6 @@ mod tests {
         assert!(output.iter().all(|&s| s == 0.0));
     }
 
-
     // =========================================================================
     // P07: Stream TDD tests
     // @plan PLAN-20260225-AUDIO-HEART.P07
@@ -1561,7 +1586,13 @@ mod tests {
     #[test]
     fn test_tag_buffer_reuses_cleared_slot() {
         let mut sample = SoundSample::new();
-        sample.buffer_tags = vec![Some(SoundTag { buf_handle: 7, data: 11 }), None];
+        sample.buffer_tags = vec![
+            Some(SoundTag {
+                buf_handle: 7,
+                data: 11,
+            }),
+            None,
+        ];
 
         let slot = sample.buffer_tags[0].as_mut().unwrap();
         clear_buffer_tag_internal(slot);
@@ -1571,7 +1602,6 @@ mod tests {
         assert!(tag.is_some());
         assert_eq!(tag.unwrap().data, 100);
     }
-
 
     #[test]
     fn test_clear_buffer_tag() {

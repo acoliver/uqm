@@ -32,7 +32,6 @@ const UIO_STREAM_OPERATION_NONE: c_int = 0;
 const UIO_STREAM_OPERATION_READ: c_int = 1;
 const UIO_STREAM_OPERATION_WRITE: c_int = 2;
 
-
 // =============================================================================
 
 struct MountInfo {
@@ -360,7 +359,9 @@ fn remove_mount_entry(handle: *mut uio_MountHandle) -> Option<MountInfo> {
 
     let handle_key = mount_handle_key(handle);
     let mut registry = get_mount_registry().lock().unwrap();
-    let index = registry.iter().position(|entry| entry.handle_ptr == handle_key)?;
+    let index = registry
+        .iter()
+        .position(|entry| entry.handle_ptr == handle_key)?;
     Some(registry.remove(index))
 }
 
@@ -442,7 +443,10 @@ fn resolve_virtual_mount_path(registry: &[MountInfo], path: &Path) -> Option<(us
         })
 }
 
-fn resolve_file_location(dir: *mut uio_DirHandle, in_path: *const c_char) -> Option<(usize, PathBuf)> {
+fn resolve_file_location(
+    dir: *mut uio_DirHandle,
+    in_path: *const c_char,
+) -> Option<(usize, PathBuf)> {
     if dir.is_null() {
         return None;
     }
@@ -456,14 +460,15 @@ fn resolve_file_location(dir: *mut uio_DirHandle, in_path: *const c_char) -> Opt
         return registry
             .iter()
             .filter(|entry| entry.active_in_registry)
-            .filter(|entry| candidate == entry.mounted_root || candidate.starts_with(&entry.mounted_root))
+            .filter(|entry| {
+                candidate == entry.mounted_root || candidate.starts_with(&entry.mounted_root)
+            })
             .max_by_key(|entry| entry.mounted_root.components().count())
             .map(|entry| (entry.handle_ptr, candidate.clone()));
     }
 
     resolve_virtual_mount_path(&registry, &candidate)
 }
-
 
 fn set_stream_status(stream: *mut uio_Stream, status: c_int) {
     if !stream.is_null() {
@@ -593,7 +598,6 @@ pub unsafe extern "C" fn uio_transplantDir(
         true,
     )
 }
-
 
 // =============================================================================
 // uio_fgets / uio_fgetc / uio_ungetc / uio_fprintf / uio_fputc / uio_fputs
@@ -1357,7 +1361,6 @@ pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
     }
 }
 
-
 // =============================================================================
 // uio_openDir / uio_closeDir / uio_mountDir / uio_openDirRelative
 // =============================================================================
@@ -1390,7 +1393,6 @@ fn resolve_mount_path(path: &Path) -> PathBuf {
         path.to_path_buf()
     }
 }
-
 
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDir(
@@ -1487,7 +1489,13 @@ pub unsafe extern "C" fn uio_mountDir(
         ));
 
         let active_in_registry = _fsType != UIO_FSTYPE_ZIP;
-        return register_mount(_destRep, &mount_point, mounted_root, _fsType, active_in_registry);
+        return register_mount(
+            _destRep,
+            &mount_point,
+            mounted_root,
+            _fsType,
+            active_in_registry,
+        );
     }
 
     let mounted_root = if !inPath.is_null() {
@@ -1518,7 +1526,6 @@ pub unsafe extern "C" fn uio_mountDir(
 
     register_mount(_destRep, &mount_point, mounted_root, _fsType, true)
 }
-
 
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDirRelative(
@@ -2230,7 +2237,6 @@ mod tests {
         }
     }
 
-
     // Helper to add a test mount
     fn add_test_mount(mount_point: &str, mounted_root: &str) {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
@@ -2316,7 +2322,6 @@ mod tests {
 
         clear_mount_registry();
     }
-
 
     #[test]
     #[serial]
@@ -2479,4 +2484,3 @@ mod tests {
         assert_eq!(O_TRUNC, 0o1000);
     }
 }
-

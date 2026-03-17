@@ -138,7 +138,14 @@ pub fn play_sample(
     if state.opt_stereo_sfx {
         update_sound_position(channel, pos);
     } else {
-        update_sound_position(channel, SoundPosition { positional: false, x: 0, y: 0 });
+        update_sound_position(
+            channel,
+            SoundPosition {
+                positional: false,
+                x: 0,
+                y: 0,
+            },
+        );
     }
     drop(state);
 

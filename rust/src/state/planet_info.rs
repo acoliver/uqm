@@ -93,7 +93,8 @@ impl<'a> PlanetInfoManager<'a> {
                     return Ok(ScanRetrieveMask::new());
                 }
 
-                let record_offset = offset + scan_record_offset(planet_index, moon_index, planet_num_moons);
+                let record_offset =
+                    offset + scan_record_offset(planet_index, moon_index, planet_num_moons);
                 file.seek(record_offset as i64, SeekWhence::Set)?;
 
                 let mut values = [0u32; NUM_SCAN_TYPES];
@@ -134,7 +135,8 @@ impl<'a> PlanetInfoManager<'a> {
                     }
                 }
 
-                let record_offset = offset + scan_record_offset(planet_index, moon_index, planet_num_moons);
+                let record_offset =
+                    offset + scan_record_offset(planet_index, moon_index, planet_num_moons);
                 file.seek(record_offset as i64, SeekWhence::Set)?;
                 write_u32_array(file, &mask.to_array())
             })
@@ -284,8 +286,12 @@ mod tests {
             biological: 30,
         };
 
-        planet_mgr.put_planet_info(0, 0, 0, &mask1, &[0, 0, 0]).unwrap();
-        planet_mgr.put_planet_info(0, 1, 0, &mask2, &[0, 0, 0]).unwrap();
+        planet_mgr
+            .put_planet_info(0, 0, 0, &mask1, &[0, 0, 0])
+            .unwrap();
+        planet_mgr
+            .put_planet_info(0, 1, 0, &mask2, &[0, 0, 0])
+            .unwrap();
 
         let retrieved1 = planet_mgr.get_planet_info(0, 0, 0, &[0, 0, 0]).unwrap();
         let retrieved2 = planet_mgr.get_planet_info(0, 1, 0, &[0, 0, 0]).unwrap();
@@ -312,8 +318,12 @@ mod tests {
             biological: 30,
         };
 
-        planet_mgr.put_planet_info(0, 0, 0, &planet_mask, &[2]).unwrap();
-        planet_mgr.put_planet_info(0, 0, 1, &moon_mask, &[2]).unwrap();
+        planet_mgr
+            .put_planet_info(0, 0, 0, &planet_mask, &[2])
+            .unwrap();
+        planet_mgr
+            .put_planet_info(0, 0, 1, &moon_mask, &[2])
+            .unwrap();
 
         let retrieved_planet = planet_mgr.get_planet_info(0, 0, 0, &[2]).unwrap();
         let retrieved_moon = planet_mgr.get_planet_info(0, 0, 1, &[2]).unwrap();
@@ -389,6 +399,9 @@ mod tests {
 
     #[test]
     fn test_validate_target_rejects_out_of_bounds_moon() {
-        assert_eq!(validate_target(0, 2, &[1]), Err(StateFileError::ReadOutOfBounds));
+        assert_eq!(
+            validate_target(0, 2, &[1]),
+            Err(StateFileError::ReadOutOfBounds)
+        );
     }
 }
