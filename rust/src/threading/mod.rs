@@ -227,10 +227,7 @@ impl RustFfiMutex {
 
     fn lock(&self) -> Result<()> {
         let current = thread::current().id();
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| ThreadError::MutexPoisoned)?;
+        let mut state = self.state.lock().map_err(|_| ThreadError::MutexPoisoned)?;
 
         while matches!(state.owner, Some(owner) if owner != current) {
             state = self
@@ -246,10 +243,7 @@ impl RustFfiMutex {
 
     fn try_lock(&self) -> Result<bool> {
         let current = thread::current().id();
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| ThreadError::MutexPoisoned)?;
+        let mut state = self.state.lock().map_err(|_| ThreadError::MutexPoisoned)?;
 
         if matches!(state.owner, Some(owner) if owner != current) {
             return Ok(false);
@@ -262,10 +256,7 @@ impl RustFfiMutex {
 
     fn unlock(&self) -> Result<()> {
         let current = thread::current().id();
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| ThreadError::MutexPoisoned)?;
+        let mut state = self.state.lock().map_err(|_| ThreadError::MutexPoisoned)?;
 
         match state.owner {
             Some(owner) if owner == current && state.depth > 0 => {
@@ -593,7 +584,6 @@ impl Task {
 
     /// Get the current task state
     pub fn state(&self) -> TaskState {
-        // TODO: Implement state retrieval
         match self.state.load(Ordering::SeqCst) {
             0 => TaskState::Ready,
             1 => TaskState::Running,
@@ -608,7 +598,6 @@ impl Task {
     /// # Arguments
     /// * `state` - The new state
     pub fn set_state(&self, state: TaskState) {
-        // TODO: Implement state setting
         self.state.store(state as u32, Ordering::SeqCst);
     }
 
@@ -673,13 +662,14 @@ pub fn is_thread_system_initialized() -> bool {
     THREAD_SYSTEM_INITIALIZED.load(Ordering::SeqCst)
 }
 
-/// Process pending thread lifecycle events
+/// Intentional no-op: lifecycle processing is C-owned.
 ///
-/// The C implementation processes pendingBirth and pendingDeath arrays.
-/// In Rust, we may not need this if we use proper RAII.
+/// The C adapter (`rust_thrcommon.c`) owns the `pendingDeath` array and
+/// `ProcessThreadLifecycles` loop. The Rust subsystem does not replicate
+/// this bookkeeping because thread creation/destruction is managed at the
+/// C adapter layer via `StartThread_Core` / `FinishThread`.
 pub fn process_thread_lifecycles() {
-    // TODO: Implement lifecycle processing
-    // The C implementation creates/destroys threads from the lifecycle arrays
+    // no-op by design — see doc comment
 }
 
 /// Yield execution to other threads
@@ -694,8 +684,6 @@ pub fn task_switch() {
 /// # Arguments
 /// * `duration` - How long to sleep
 pub fn hibernate_thread(duration: Duration) {
-    // TODO: Implement thread hibernation
-    // The C implementation uses NativeSleepThread -> SDL_Delay
     thread::sleep(duration);
 }
 
@@ -937,7 +925,7 @@ fn spawn_c_thread(
     name: Option<&str>,
     func: unsafe extern "C" fn(*mut c_void) -> c_int,
     data: *mut c_void,
-) -> Result<Thread<()>> {
+) -> Result<Thread<c_int>> {
     let func_ptr = func as usize;
     let data_ptr = data as usize;
 
@@ -946,7 +934,7 @@ fn spawn_c_thread(
         let func: unsafe extern "C" fn(*mut c_void) -> c_int =
             unsafe { std::mem::transmute(func_ptr) };
         let data = data_ptr as *mut c_void;
-        let _ = unsafe { func(data) };
+        unsafe { func(data) }
     })
 }
 
@@ -968,6 +956,13 @@ pub unsafe extern "C" fn rust_thread_spawn(
     }
 }
 
+/// Spawn a thread with no caller-visible join handle.
+///
+/// Dropping the `JoinHandle` intentionally detaches the Rust thread.
+/// This helper contains spawn failure within the subsystem boundary,
+/// but the current ABI does not provide synchronous failure reporting
+/// back to the C caller for reclaiming adapter-owned detached-thread
+/// wrapper allocations.
 #[no_mangle]
 pub unsafe extern "C" fn rust_thread_spawn_detached(
     name: *const c_char,
@@ -980,13 +975,21 @@ pub unsafe extern "C" fn rust_thread_spawn_detached(
         CStr::from_ptr(name).to_str().ok()
     };
 
-    let _ = spawn_c_thread(name_str, func, data);
+    match spawn_c_thread(name_str, func, data) {
+        Ok(_thread) => {
+            // intentional detach via drop at scope end
+        }
+        Err(_) => {
+            // contained failure; no panic/exception exposure
+        }
+    }
 }
 
 /// Join a thread and wait for it to complete
 ///
 /// # Arguments
 /// * `thread` - Thread handle (consumed by this call)
+/// * `out_status` - Pointer to receive the thread's return value (can be NULL)
 ///
 /// # Returns
 /// 1 on success, 0 on failure
@@ -994,16 +997,35 @@ pub unsafe extern "C" fn rust_thread_spawn_detached(
 /// # Safety
 /// * `thread` must be a valid handle from rust_thread_spawn
 /// * The handle is invalidated after this call
+/// * `out_status` must be NULL or point to valid memory
+///
+/// @plan PLAN-20260314-THREADING.P05
 #[no_mangle]
-pub unsafe extern "C" fn rust_thread_join(thread: *mut RustThread) -> c_int {
+pub unsafe extern "C" fn rust_thread_join(
+    thread: *mut RustThread,
+    out_status: *mut c_int,
+) -> c_int {
     if thread.is_null() {
+        if !out_status.is_null() {
+            *out_status = 0;
+        }
         return 0;
     }
 
-    let thread: Box<Thread<()>> = Box::from_raw(thread as *mut Thread<()>);
+    let thread: Box<Thread<c_int>> = Box::from_raw(thread as *mut Thread<c_int>);
     match thread.join() {
-        Ok(()) => 1,
-        Err(_) => 0,
+        Ok(status) => {
+            if !out_status.is_null() {
+                *out_status = status;
+            }
+            1
+        }
+        Err(_) => {
+            if !out_status.is_null() {
+                *out_status = 0;
+            }
+            0
+        }
     }
 }
 

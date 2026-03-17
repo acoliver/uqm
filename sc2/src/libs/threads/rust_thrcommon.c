@@ -42,7 +42,7 @@ extern void rust_uninit_thread_system(void);
 extern int rust_is_thread_system_initialized(void);
 extern RustThread* rust_thread_spawn(const char* name, int (*func)(void*), void* data);
 extern void rust_thread_spawn_detached(const char* name, int (*func)(void*), void* data);
-extern int rust_thread_join(RustThread* thread);
+extern int rust_thread_join(RustThread* thread, int* out_status);
 extern void rust_thread_yield(void);
 extern void rust_hibernate_thread(uint32 msecs);
 extern RustMutex* rust_mutex_create(const char* name);
@@ -174,6 +174,11 @@ StartThread_Core (ThreadFunction func, void *data, SDWORD stackSize, const char 
 	startInfo->data = data;
 	startInfo->thread = thread;
 
+	/* rust_thread_spawn (not rust_thread_spawn_detached) is intentional here.
+	 * ProcessThreadLifecycles -> WaitThread -> rust_thread_join needs
+	 * thread->native to hold a valid RustThread* for the current cleanup path.
+	 * The detached-spawn failure contract in the spec would require a different
+	 * ABI/design if adapter-owned wrapper cleanup on failure is to be guaranteed. */
 	thread->native = rust_thread_spawn (name, RustThreadHelper, startInfo);
 	if (thread->native == NULL)
 	{
@@ -192,10 +197,29 @@ SleepThread (TimeCount sleepTime)
 void
 SleepThreadUntil (TimeCount wakeTime)
 {
-	TimeCount now = GetTimeCounter();
-	if (wakeTime > now)
+	for (;;)
 	{
-		SleepThread(wakeTime - now);
+		uint32 nextTimeMs;
+		TimeCount nextTime;
+		TimeCount now;
+
+		Async_process ();
+
+		now = GetTimeCounter ();
+		if (wakeTime <= now)
+			return;
+
+		nextTimeMs = Async_timeBeforeNextMs ();
+		nextTime = (nextTimeMs / 1000) * ONE_SECOND +
+				((nextTimeMs % 1000) * ONE_SECOND / 1000);
+				/* Overflow-safe conversion. */
+		if (wakeTime < nextTime)
+			nextTime = wakeTime;
+
+		if (nextTime <= now)
+			SleepThread (0);
+		else
+			SleepThread (nextTime - now);
 	}
 }
 
@@ -215,9 +239,15 @@ WaitThread (Thread thread, int *status)
 
 	if (t && t->native)
 	{
-		int result = rust_thread_join (t->native);
+		int out_status = 0;
+		int result = rust_thread_join (t->native, &out_status);
 		if (status)
-			*status = result;
+		{
+			if (result)
+				*status = out_status;  /* actual thread return value */
+			else
+				*status = 0;           /* join failed */
+		}
 		t->native = NULL;
 	}
 }
@@ -359,7 +389,9 @@ BroadcastCondVar (CondVar c)
 RecursiveMutex
 CreateRecursiveMutex_Core (const char *name, DWORD syncClass)
 {
-	/* Rust std::sync::Mutex is not recursive; using regular mutex */
+	/* RustFfiMutex supports recursive locking with owner tracking and depth counting.
+	 * This comment describes the recursive-mutex path only; plain Mutex semantics
+	 * remain governed by the separate audit blocker in the specification. */
 	(void)syncClass;
 	return (RecursiveMutex)rust_mutex_create(name);
 }

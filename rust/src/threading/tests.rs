@@ -16,6 +16,7 @@
 //! - `sc2/src/libs/threads/sdl/sdlthreads.c`
 
 use super::*;
+use std::ffi::c_int;
 use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -80,6 +81,48 @@ fn test_thread_spawn_with_return_value() {
     assert_eq!(result, 120); // 5! = 120
 
     uninit_thread_system();
+}
+
+/// @plan PLAN-20260314-THREADING.P04
+#[test]
+fn test_thread_c_int_return_positive() {
+    let thread = Thread::<c_int>::spawn(Some("ret_pos"), || 42).expect("spawn should succeed");
+    let result = thread.join().expect("join should succeed");
+    assert_eq!(result, 42);
+}
+
+/// @plan PLAN-20260314-THREADING.P04
+#[test]
+fn test_thread_c_int_return_zero() {
+    let thread = Thread::<c_int>::spawn(Some("ret_zero"), || 0).expect("spawn should succeed");
+    let result = thread.join().expect("join should succeed");
+    assert_eq!(result, 0); // 0 is a valid return, not an error
+}
+
+/// @plan PLAN-20260314-THREADING.P04
+#[test]
+fn test_thread_c_int_return_negative() {
+    let thread = Thread::<c_int>::spawn(Some("ret_neg"), || -1).expect("spawn should succeed");
+    let result = thread.join().expect("join should succeed");
+    assert_eq!(result, -1);
+}
+
+/// @plan PLAN-20260314-THREADING.P04
+#[test]
+fn test_thread_c_int_return_multiple_values() {
+    let values: Vec<c_int> = vec![0, 1, -1, 42, 255, -128, i32::MAX, i32::MIN];
+    let threads: Vec<_> = values
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            Thread::<c_int>::spawn(Some(&format!("ret_{}", i)), move || v)
+                .expect("spawn should succeed")
+        })
+        .collect();
+    for (thread, &expected) in threads.into_iter().zip(values.iter()) {
+        let result = thread.join().expect("join should succeed");
+        assert_eq!(result, expected);
+    }
 }
 
 /// Test multiple concurrent threads
@@ -723,4 +766,133 @@ fn test_result_type() {
 
     let err: Result<i32> = Err(ThreadError::NotInitialized);
     assert!(err.is_err());
+}
+
+// ============================================================================
+// Adapter-Level FFI Tests (P05)
+// ============================================================================
+
+/// C-compatible thread function that returns 42
+unsafe extern "C" fn c_thread_return_42(_data: *mut std::ffi::c_void) -> c_int {
+    42
+}
+
+/// C-compatible thread function that returns 0
+unsafe extern "C" fn c_thread_return_zero(_data: *mut std::ffi::c_void) -> c_int {
+    0
+}
+
+/// C-compatible thread function that returns -1
+unsafe extern "C" fn c_thread_return_negative(_data: *mut std::ffi::c_void) -> c_int {
+    -1
+}
+
+/// Test rust_thread_join with out_status returning 42
+///
+/// Validates that the two-value convention works: result=1 (success), out_status=42 (actual return)
+///
+/// @plan PLAN-20260314-THREADING.P05
+#[test]
+fn test_ffi_thread_join_returns_42() {
+    use std::ptr;
+
+    unsafe {
+        // Spawn thread via FFI
+        let thread = super::rust_thread_spawn(ptr::null(), c_thread_return_42, ptr::null_mut());
+        assert!(!thread.is_null(), "Thread spawn should succeed");
+
+        // Join with out_status
+        let mut out_status: c_int = 999; // sentinel value
+        let result = super::rust_thread_join(thread, &mut out_status as *mut c_int);
+
+        // Verify two-value convention
+        assert_eq!(result, 1, "Join should succeed (return 1)");
+        assert_eq!(out_status, 42, "out_status should be 42");
+    }
+}
+
+/// Test rust_thread_join with out_status returning 0
+///
+/// Validates that thread returning 0 is distinguished from join failure
+///
+/// @plan PLAN-20260314-THREADING.P05
+#[test]
+fn test_ffi_thread_join_returns_zero() {
+    use std::ptr;
+
+    unsafe {
+        let thread = super::rust_thread_spawn(ptr::null(), c_thread_return_zero, ptr::null_mut());
+        assert!(!thread.is_null());
+
+        let mut out_status: c_int = 999;
+        let result = super::rust_thread_join(thread, &mut out_status as *mut c_int);
+
+        // Two-value convention: result=1 (success), out_status=0 (thread returned 0)
+        assert_eq!(result, 1, "Join should succeed");
+        assert_eq!(
+            out_status, 0,
+            "out_status should be 0 (thread returned 0, not failure)"
+        );
+    }
+}
+
+/// Test rust_thread_join with out_status returning -1
+///
+/// Validates negative return values propagate correctly
+///
+/// @plan PLAN-20260314-THREADING.P05
+#[test]
+fn test_ffi_thread_join_returns_negative() {
+    use std::ptr;
+
+    unsafe {
+        let thread =
+            super::rust_thread_spawn(ptr::null(), c_thread_return_negative, ptr::null_mut());
+        assert!(!thread.is_null());
+
+        let mut out_status: c_int = 999;
+        let result = super::rust_thread_join(thread, &mut out_status as *mut c_int);
+
+        assert_eq!(result, 1, "Join should succeed");
+        assert_eq!(out_status, -1, "out_status should be -1");
+    }
+}
+
+/// Test rust_thread_join with NULL out_status pointer
+///
+/// Validates that NULL out_status doesn't crash (matches WaitThread(t, NULL) use case)
+///
+/// @plan PLAN-20260314-THREADING.P05
+#[test]
+fn test_ffi_thread_join_null_out_status() {
+    use std::ptr;
+
+    unsafe {
+        let thread = super::rust_thread_spawn(ptr::null(), c_thread_return_42, ptr::null_mut());
+        assert!(!thread.is_null());
+
+        // Join with NULL out_status (common in ProcessThreadLifecycles)
+        let result = super::rust_thread_join(thread, ptr::null_mut());
+
+        assert_eq!(result, 1, "Join should succeed even with NULL out_status");
+    }
+}
+
+/// Test rust_thread_join with NULL thread pointer
+///
+/// Validates error handling for NULL thread
+///
+/// @plan PLAN-20260314-THREADING.P05
+#[test]
+fn test_ffi_thread_join_null_thread() {
+    use std::ptr;
+
+    unsafe {
+        let mut out_status: c_int = 999;
+        let result = super::rust_thread_join(ptr::null_mut(), &mut out_status as *mut c_int);
+
+        // Should fail gracefully
+        assert_eq!(result, 0, "Join should fail with NULL thread");
+        assert_eq!(out_status, 0, "out_status should be set to 0 on failure");
+    }
 }
