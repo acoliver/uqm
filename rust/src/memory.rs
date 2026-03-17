@@ -5,17 +5,24 @@ use std::ffi::c_void;
 ///
 /// # Safety
 /// This function calls into libc's malloc and is unsafe
+///
+/// @plan PLAN-20260314-MEMORY.P05
+/// @requirement REQ-MEM-ALLOC-001, REQ-MEM-ALLOC-002, REQ-MEM-ALLOC-003, REQ-MEM-ZERO-001,
+/// REQ-MEM-OOM-001, REQ-MEM-OOM-002, REQ-MEM-OOM-003, REQ-MEM-ALLOC-008
 #[no_mangle]
 pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
     if size == 0 {
         // Return a non-null pointer for zero-size allocation
-        return libc::malloc(1);
+        let ptr = libc::malloc(1);
+        if ptr.is_null() {
+            log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
+            std::process::abort();
+        }
+        return ptr;
     }
 
     let ptr = libc::malloc(size);
     if ptr.is_null() {
-        // Log fatal error if allocation failed
-        // @plan PLAN-20260224-MEM-SWAP.P05 @requirement REQ-MEM-005
         log_add(LogLevel::Fatal, "HMalloc() FATAL: out of memory.");
         std::process::abort();
     }
@@ -26,6 +33,9 @@ pub unsafe extern "C" fn rust_hmalloc(size: usize) -> *mut c_void {
 ///
 /// # Safety
 /// This function calls into libc's free and is unsafe
+///
+/// @plan PLAN-20260314-MEMORY.P05
+/// @requirement REQ-MEM-ALLOC-006, REQ-MEM-ALLOC-007, REQ-MEM-OWN-003
 #[no_mangle]
 pub unsafe extern "C" fn rust_hfree(ptr: *mut c_void) {
     if !ptr.is_null() {
@@ -37,11 +47,19 @@ pub unsafe extern "C" fn rust_hfree(ptr: *mut c_void) {
 ///
 /// # Safety
 /// This function calls into libc's malloc and memset and is unsafe
+///
+/// @plan PLAN-20260314-MEMORY.P05
+/// @requirement REQ-MEM-ALLOC-004, REQ-MEM-ALLOC-009, REQ-MEM-ZERO-001, REQ-MEM-ZERO-002,
+/// REQ-MEM-OOM-001, REQ-MEM-OOM-002, REQ-MEM-OOM-003, REQ-MEM-ALLOC-008
 #[no_mangle]
 pub unsafe extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
     if size == 0 {
         // Return a non-null pointer for zero-size allocation
         let ptr = libc::malloc(1);
+        if ptr.is_null() {
+            log_add(LogLevel::Fatal, "HCalloc() FATAL: out of memory.");
+            std::process::abort();
+        }
         libc::memset(ptr, 0, 1);
         return ptr;
     }
@@ -59,6 +77,11 @@ pub unsafe extern "C" fn rust_hcalloc(size: usize) -> *mut c_void {
 ///
 /// # Safety
 /// This function calls into libc's realloc and is unsafe
+///
+/// @plan PLAN-20260314-MEMORY.P05
+/// @requirement REQ-MEM-ALLOC-005, REQ-MEM-ALLOC-007, REQ-MEM-ALLOC-010, REQ-MEM-ZERO-003,
+/// REQ-MEM-OOM-001, REQ-MEM-OOM-002, REQ-MEM-OOM-003, REQ-MEM-OWN-004, REQ-MEM-OWN-005,
+/// REQ-MEM-ALLOC-008
 #[no_mangle]
 pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_void {
     if size == 0 {
@@ -66,11 +89,16 @@ pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_
         if !ptr.is_null() {
             libc::free(ptr);
         }
-        return libc::malloc(1);
+        let new_ptr = libc::malloc(1);
+        if new_ptr.is_null() {
+            log_add(LogLevel::Fatal, "HRealloc() FATAL: out of memory.");
+            std::process::abort();
+        }
+        return new_ptr;
     }
 
     let new_ptr = libc::realloc(ptr, size);
-    if new_ptr.is_null() && size > 0 {
+    if new_ptr.is_null() {
         log_add(LogLevel::Fatal, "HRealloc() FATAL: out of memory.");
         std::process::abort();
     }
@@ -81,6 +109,9 @@ pub unsafe extern "C" fn rust_hrealloc(ptr: *mut c_void, size: usize) -> *mut c_
 ///
 /// # Safety
 /// This function is meant to be called from C code
+///
+/// @plan PLAN-20260314-MEMORY.P05
+/// @requirement REQ-MEM-LIFE-001, REQ-MEM-LIFE-003, REQ-MEM-LIFE-005, REQ-MEM-LIFE-006
 #[no_mangle]
 pub unsafe extern "C" fn rust_mem_init() -> bool {
     // In later phases, this might initialize custom allocators
@@ -92,6 +123,9 @@ pub unsafe extern "C" fn rust_mem_init() -> bool {
 ///
 /// # Safety
 /// This function is meant to be called from C code
+///
+/// @plan PLAN-20260314-MEMORY.P05
+/// @requirement REQ-MEM-LIFE-002, REQ-MEM-LIFE-004, REQ-MEM-LIFE-005
 #[no_mangle]
 pub unsafe extern "C" fn rust_mem_uninit() -> bool {
     // In later phases, this might deinitialize custom allocators
@@ -99,12 +133,16 @@ pub unsafe extern "C" fn rust_mem_uninit() -> bool {
     true
 }
 
-/// Helper function to allocate memory for a C-compatible array of strings
+/// Helper function to allocate memory for a C-compatible array of strings.
 ///
-/// This is useful for creating arguments arrays to pass to C code
+/// Returns a tuple of (array_ptr, string_ptrs):
+/// - `array_ptr`: The null-terminated array of pointers. Must be freed via `rust_hfree`.
+/// - `string_ptrs`: The individual C string pointers. Each must be reclaimed via
+///   `CString::from_raw()`, NOT via `libc::free()` or `rust_hfree`, because they were
+///   created by `CString::into_raw()` and are owned by the Rust allocator.
 ///
 /// # Safety
-/// This function allocates memory that must be freed with HFree
+/// The caller must ensure proper cleanup using the correct deallocator for each component.
 #[allow(dead_code)]
 pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut i8, Vec<*mut i8>) {
     use std::ffi::CString;
@@ -119,16 +157,6 @@ pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut i8, Vec<*mut i8>) {
 
     // Allocate an array of pointers
     let array_ptr = rust_hmalloc(std::mem::size_of::<*mut i8>() * (argv.len() + 1)) as *mut *mut i8;
-    if array_ptr.is_null() {
-        // Clean up the allocated strings
-        for ptr in &c_strings {
-            if !ptr.is_null() {
-                libc::free(*ptr as *mut c_void);
-            }
-        }
-        panic!("Failed to allocate argv array");
-    }
-
     // Copy the pointers to the array
     for (i, ptr) in c_strings.iter().enumerate() {
         ptr::write(array_ptr.add(i), *ptr);
@@ -234,8 +262,39 @@ mod tests {
     }
 
     #[test]
+    fn test_null_free_is_safe() {
+        unsafe {
+            // HFree(NULL) must be a safe no-op (specification §14.1)
+            rust_hfree(std::ptr::null_mut());
+        }
+    }
+
+    #[test]
+    fn test_realloc_null_ptr_acts_as_malloc() {
+        unsafe {
+            log_init(10);
+
+            // HRealloc(NULL, size) must behave as HMalloc(size) (specification §14.1)
+            let ptr = rust_hrealloc(std::ptr::null_mut(), 64);
+            assert!(!ptr.is_null());
+
+            // Verify writable storage
+            let byte_ptr = ptr as *mut u8;
+            for i in 0..64 {
+                *byte_ptr.add(i) = i as u8;
+            }
+            for i in 0..64 {
+                assert_eq!(*byte_ptr.add(i), i as u8);
+            }
+
+            rust_hfree(ptr);
+        }
+    }
+
+    #[test]
     fn test_copy_argv_to_c() {
         use std::ffi::CStr;
+        use std::ffi::CString;
 
         unsafe {
             let argv = vec![
@@ -273,7 +332,7 @@ mod tests {
                 if ptr.is_null() {
                     break;
                 }
-                libc::free(ptr as *mut c_void);
+                drop(CString::from_raw(ptr));
                 i += 1;
             }
             rust_hfree(array_ptr as *mut c_void);

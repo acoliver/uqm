@@ -1,27 +1,25 @@
-# REQ-MEM-INT-009 Follow-Up: Mixed-Language Seam Test Handoff
+# REQ-MEM-INT-009: Remaining Mixed-Language Seam Test Coverage
 
-## Purpose
-Track the remaining project-level work required to close the true C↔Rust seam-testing portion of `REQ-MEM-INT-009`.
+## Status
+Partially satisfied by PLAN-20260314-MEMORY.P05 (Rust-side ABI integration tests).
 
-## Requirement
-- `REQ-MEM-INT-009`
+## What was delivered
+- 6 Rust-side ABI integration tests in `rust/tests/memory_integration.rs`
+- Tests verify: alloc+free, calloc zero-fill, realloc preservation, zero-size normalization, lifecycle smoke, realloc-to-zero
+
+## What remains
+True compiled C↔Rust seam tests that exercise:
+1. A real C caller through `memlib.h` macros (HMalloc → rust_hmalloc linkage)
+2. C allocation followed by Rust free
+3. Rust allocation followed by C free through an actual compiled C caller
+4. Zero-size normalization at the compiled ABI seam
+5. Lifecycle sequencing (mem_init/mem_uninit) across the compiled boundary
 
 ## Owner
-- Project-level integration/testing owner for the memory subsystem boundary work
+Project-level integration — not owned by the memory subsystem plan.
 
-## Artifact Path
-- `project-plans/20260311/memory/req-mem-int-009-followup.md`
+## Artifact path
+This file: `project-plans/20260311/memory/req-mem-int-009-followup.md`
 
-## Scope
-This follow-up exists because the memory plan's Rust-side ABI integration tests validate the exported Rust ABI surface but do not verify the compiled mixed-language seam through actual C callers and headers.
-
-## Required Acceptance Criteria
-The downstream mixed-language seam work is complete only when the project test suite includes compiled-boundary coverage for all of the following:
-1. A real C caller reaches the Rust memory implementation through `sc2/src/libs/memlib.h`.
-2. Memory allocated from the C side is successfully released through the Rust memory path.
-3. Memory allocated from the Rust side is successfully released from the C side through the historical API boundary.
-4. Zero-size seam behavior is verified across the compiled C↔Rust boundary for allocation and reallocation entry points.
-5. Lifecycle sequencing across the compiled boundary is exercised, including init/uninit interactions relevant to the memory subsystem contract.
-
-## Expected Downstream Deliverable
-Create or update a project-level test plan or tracker entry that schedules the compiled C↔Rust seam harness work and points to the concrete tests that will satisfy the acceptance criteria above.
+## Acceptance criteria
+A compiled C test fixture that links against the Rust library and exercises all 5 items above, with passing test results.
