@@ -18,8 +18,8 @@ use std::sync::{Mutex, OnceLock};
 // Mount Point Registry
 const UIO_MOUNT_RDONLY: c_int = 1 << 1;
 const UIO_MOUNT_LOCATION_MASK: c_int = 3 << 2;
-const UIO_MOUNT_TOP: c_int = 0 << 2;
-const UIO_MOUNT_BOTTOM: c_int = 1 << 2;
+const UIO_MOUNT_BOTTOM: c_int = 0 << 2;
+const UIO_MOUNT_TOP: c_int = 1 << 2;
 
 const UIO_MOUNT_BELOW: c_int = 2 << 2;
 const UIO_MOUNT_ABOVE: c_int = 3 << 2;
@@ -113,6 +113,9 @@ fn get_mount_registry() -> &'static Mutex<Vec<MountInfo>> {
 #[repr(C)]
 pub struct uio_DirHandle {
     path: PathBuf,
+    /// The original virtual path (e.g. "/packages") used for mount resolution.
+    /// `path` holds the resolved host path; this holds the pre-resolution virtual path.
+    virtual_path: PathBuf,
     refcount: std::sync::atomic::AtomicI32,
     repository: *mut uio_Repository,
     root_end: PathBuf,
@@ -551,9 +554,7 @@ pub unsafe extern "C" fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whenc
         return -1;
     }
 
-    // handle is a Mutex<File>
-    let file = &(*handle);
-    let mut guard = match file.lock() {
+    let mut guard = match (*handle).lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
@@ -745,11 +746,7 @@ fn register_mount(
     let zip_index = if fs_type == UIO_FSTYPE_ZIP {
         match crate::io::zip_reader::ZipIndex::new(&mounted_root) {
             Ok(index) => Some(std::sync::Arc::new(index)),
-            Err(e) => {
-                rust_bridge_log_msg(&format!(
-                    "RUST_UIO: Failed to index ZIP archive {:?}: {}",
-                    mounted_root, e
-                ));
+            Err(_e) => {
                 set_errno(libc::EIO);
                 return ptr::null_mut();
             }
@@ -1204,46 +1201,27 @@ pub unsafe extern "C" fn uio_fgets(
 }
 
 unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream) -> *mut c_char {
-    rust_bridge_log_msg("RUST_UIO: uio_fgets entry");
     if stream.is_null() || buf.is_null() || size <= 0 {
-        rust_bridge_log_msg("RUST_UIO: uio_fgets invalid args");
         return ptr::null_mut();
     }
 
     let max_len = size as usize;
-    if max_len == 0 {
-        return ptr::null_mut();
-    }
-
     let s = &mut *stream;
     if s.handle.is_null() {
-        rust_bridge_log_msg("RUST_UIO: uio_fgets null handle");
         return ptr::null_mut();
     }
 
-    let handle_ptr = s.handle as *mut Mutex<std::fs::File>;
-    if handle_ptr.is_null() {
-        rust_bridge_log_msg("RUST_UIO: uio_fgets null handle");
-        return ptr::null_mut();
-    }
-    let mut guard = match (*handle_ptr).lock() {
+    // Use correct type: uio_Handle = Mutex<uio_HandleInner>
+    let mut guard = match (*s.handle).lock() {
         Ok(g) => g,
         Err(_) => {
-            rust_bridge_log_msg("RUST_UIO: uio_fgets lock failed");
             return ptr::null_mut();
         }
     };
 
-    // Safe bounds check before creating slice
-    if max_len == 0 {
-        return ptr::null_mut();
-    }
-
     let buffer = slice::from_raw_parts_mut(buf as *mut u8, max_len);
     let mut count = 0usize;
-
-    // Ensure we leave room for null terminator
-    let max_read = if max_len > 0 { max_len - 1 } else { 0 };
+    let max_read = max_len - 1; // leave room for null terminator
 
     let mut had_error = false;
     while count < max_read {
@@ -1251,14 +1229,12 @@ unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream
         let read = match guard.read(&mut byte) {
             Ok(n) => n,
             Err(_) => {
-                rust_bridge_log_msg("RUST_UIO: uio_fgets read failed");
                 set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
                 had_error = true;
                 break;
             }
         };
         if read == 0 {
-            // EOF reached
             if count == 0 {
                 set_stream_status(stream, UIO_STREAM_STATUS_EOF);
             }
@@ -1275,15 +1251,11 @@ unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream
         return ptr::null_mut();
     }
 
-    // Successfully read some data
     if !had_error {
         set_stream_status(stream, UIO_STREAM_STATUS_OK);
     }
 
-    // Safely null-terminate (count is guaranteed < max_len here)
-    if count < max_len {
-        buffer[count] = 0;
-    }
+    buffer[count] = 0;
     buf
 }
 
@@ -1397,15 +1369,12 @@ pub unsafe extern "C" fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
         return -1;
     }
 
-    let handle_ptr = s.handle as *mut Mutex<std::fs::File>;
-    let file_mutex = &*handle_ptr;
-
     let byte = c as u8;
 
-    if let Ok(mut file) = file_mutex.lock() {
+    if let Ok(mut guard) = (*s.handle).lock() {
         use std::io::Write;
-        match file.write_all(&[byte]) {
-            Ok(()) => c, // Return the character written
+        match guard.write_all(&[byte]) {
+            Ok(()) => c,
             Err(_) => -1,
         }
     } else {
@@ -1424,16 +1393,13 @@ pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) ->
         return -1;
     }
 
-    let handle_ptr = s_stream.handle as *mut Mutex<std::fs::File>;
-    let file_mutex = &*handle_ptr;
-
     let cstr = std::ffi::CStr::from_ptr(s);
     let bytes = cstr.to_bytes();
 
-    if let Ok(mut file) = file_mutex.lock() {
+    if let Ok(mut guard) = (*s_stream.handle).lock() {
         use std::io::Write;
-        match file.write_all(bytes) {
-            Ok(()) => 0, // Success (non-negative means success for fputs)
+        match guard.write_all(bytes) {
+            Ok(()) => 0,
             Err(_) => -1,
         }
     } else {
@@ -1452,12 +1418,9 @@ pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
         return 0;
     }
 
-    let handle_ptr = s.handle as *mut Mutex<std::fs::File>;
-    let file_mutex = &*handle_ptr;
-
-    if let Ok(mut file) = file_mutex.lock() {
+    if let Ok(mut guard) = (*s.handle).lock() {
         use std::io::Write;
-        match file.flush() {
+        match guard.flush() {
             Ok(()) => 0,
             Err(_) => -1,
         }
@@ -2869,6 +2832,7 @@ pub unsafe extern "C" fn uio_openDir(
     // Create directory handle (don't fail if it doesn't exist - may be created later)
     let handle = Box::new(uio_DirHandle {
         path: resolved.clone(),
+        virtual_path: c_path.clone(),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: _repository,
         root_end: resolved.clone(), // For now, root_end = full path
@@ -2911,18 +2875,21 @@ pub unsafe extern "C" fn uio_mountDir(
     flags: c_int,
     relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
+
     let mount_point = match cstr_to_pathbuf(mountPoint) {
         Some(p) => p,
         None => {
-            rust_bridge_log_msg("RUST_UIO: uio_mountDir: null mountPoint");
+            eprintln!("RUST_UIO: uio_mountDir: null mountPoint");
             return ptr::null_mut();
         }
     };
 
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_mountDir called: mountPoint={:?}, inPath ptr={:?}, sourceDir={:?}, flags={}, relative={:?}",
-        mount_point, inPath, sourceDir, flags, relative
-    ));
+    let source_path_str = if sourcePath.is_null() { "(null)".to_string() } else { std::ffi::CStr::from_ptr(sourcePath).to_string_lossy().into_owned() };
+    let in_path_str = if inPath.is_null() { "(null)".to_string() } else { std::ffi::CStr::from_ptr(inPath).to_string_lossy().into_owned() };
+    eprintln!(
+        "RUST_UIO: uio_mountDir: mountPoint={:?}, sourcePath='{}', inPath='{}', sourceDir={:?}, flags={}, relative={:?}",
+        mount_point, source_path_str, in_path_str, sourceDir, flags, relative
+    );
 
     if !sourceDir.is_null() {
         let base_path = (*sourceDir).path.clone();
@@ -3030,8 +2997,18 @@ pub unsafe extern "C" fn uio_openDirRelative(
         resolve_mount_path(&joined)
     };
 
+    // Compute virtual path from base's virtual path
+    let base_virtual = &(*base).virtual_path;
+    let virtual_resolved = if is_abs {
+        PathBuf::from(std::ffi::CStr::from_ptr(path).to_string_lossy().as_ref())
+    } else {
+        let rel = cstr_to_pathbuf(path).unwrap_or_default();
+        normalize_virtual_path_full(base_virtual, &rel)
+    };
+
     let handle = Box::new(uio_DirHandle {
         path: resolved.clone(),
+        virtual_path: virtual_resolved,
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: (*base).repository,
         root_end: (*base).root_end.clone(),
@@ -3218,7 +3195,6 @@ pub unsafe extern "C" fn uio_open(
 pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
     log_marker("uio_close called");
     if !handle.is_null() {
-        // handle is a Mutex<File>
         let _ = Box::from_raw(handle);
     }
     0 // Success
@@ -3230,9 +3206,7 @@ pub unsafe extern "C" fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: 
         return -1;
     }
 
-    // handle is a Mutex<File>
-    let file = &(*handle);
-    let mut guard = match file.lock() {
+    let mut guard = match (*handle).lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
@@ -3254,9 +3228,7 @@ pub unsafe extern "C" fn uio_write(
         return -1;
     }
 
-    // handle is a Mutex<File>
-    let file = &(*handle);
-    let mut guard = match file.lock() {
+    let mut guard = match (*handle).lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
@@ -3274,9 +3246,7 @@ pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat)
         return -1;
     }
 
-    // handle is a Mutex<File>
-    let file = &(*handle);
-    let guard = match file.lock() {
+    let guard = match (*handle).lock() {
         Ok(g) => g,
         Err(_) => return -1,
     };
@@ -3576,10 +3546,6 @@ pub unsafe extern "C" fn uio_fread(
     nmemb: size_t,
     stream: *mut uio_Stream,
 ) -> size_t {
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_fread entry stream={:?} buf={:?} size={} nmemb={} (raw size={:#x} nmemb={:#x})",
-        stream, buf, size, nmemb, size as usize, nmemb as usize
-    ));
     if stream.is_null() {
         rust_bridge_log_msg("RUST_UIO: uio_fread null stream");
         return 0;
@@ -3750,7 +3716,7 @@ pub unsafe extern "C" fn uio_getDirList(
             return ptr::null_mut();
         }
 
-        let dir_path = &(*dir).path;
+        let dir_virtual_path = &(*dir).virtual_path;
         let rel_path = if path.is_null() {
             PathBuf::new() // Empty path means current directory
         } else {
@@ -3765,12 +3731,12 @@ pub unsafe extern "C" fn uio_getDirList(
         };
 
         log_marker(&format!(
-            "uio_getDirList: dir_path={:?} rel_path={:?}",
-            dir_path, rel_path
+            "uio_getDirList: dir_virtual={:?} rel_path={:?}",
+            dir_virtual_path, rel_path
         ));
 
-        // Normalize the virtual path
-        let virtual_path = normalize_virtual_path_full(dir_path, &rel_path);
+        // Use the virtual path for mount resolution
+        let virtual_path = normalize_virtual_path_full(dir_virtual_path, &rel_path);
 
         let pattern_str = if _pattern.is_null() {
             ""
@@ -4548,6 +4514,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4580,6 +4547,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4626,6 +4594,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4668,6 +4637,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4716,6 +4686,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4753,6 +4724,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4890,6 +4862,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4922,6 +4895,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4952,6 +4926,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -4982,6 +4957,7 @@ mod tests {
         let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: temp_dir.path().to_path_buf(),
+            virtual_path: temp_dir.path().to_path_buf(),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository,
             root_end: temp_dir.path().to_path_buf(),
@@ -5242,6 +5218,7 @@ mod tests {
 
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: PathBuf::from("/content"),
+            virtual_path: PathBuf::from("/content"),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository: repo,
             root_end: PathBuf::from("/content"),
@@ -5289,6 +5266,7 @@ mod tests {
 
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: PathBuf::from("/content"),
+            virtual_path: PathBuf::from("/content"),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository: repo,
             root_end: PathBuf::from("/content"),
@@ -5334,6 +5312,7 @@ mod tests {
 
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: PathBuf::from("/content"),
+            virtual_path: PathBuf::from("/content"),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository: repo,
             root_end: PathBuf::from("/content"),
@@ -5400,6 +5379,7 @@ mod tests {
 
         let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
             path: PathBuf::from("/content"),
+            virtual_path: PathBuf::from("/content"),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository: repo,
             root_end: PathBuf::from("/content"),
@@ -5460,6 +5440,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5520,12 +5501,14 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir1 = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/mount1"),
+                virtual_path: PathBuf::from("/mount1"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/mount1"),
             }));
             let dir2 = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/mount2"),
+                virtual_path: PathBuf::from("/mount2"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/mount2"),
@@ -5575,6 +5558,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5617,6 +5601,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5662,6 +5647,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5751,6 +5737,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5797,6 +5784,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5838,6 +5826,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5887,6 +5876,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/content"),
+                virtual_path: PathBuf::from("/content"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/content"),
@@ -5946,6 +5936,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -5988,6 +5979,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6046,6 +6038,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/indices"),
+                virtual_path: PathBuf::from("/indices"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/indices"),
@@ -6479,6 +6472,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6554,6 +6548,7 @@ mod tests {
 
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/archive"),
+                virtual_path: PathBuf::from("/archive"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/archive"),
@@ -6561,6 +6556,7 @@ mod tests {
 
             let temp_dir_handle = Box::into_raw(Box::new(uio_DirHandle {
                 path: temp_extract_dir.path().to_path_buf(),
+                virtual_path: temp_extract_dir.path().to_path_buf(),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: temp_extract_dir.path().to_path_buf(),
@@ -6620,6 +6616,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6655,6 +6652,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6712,6 +6710,7 @@ mod tests {
 
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/archive"),
+                virtual_path: PathBuf::from("/archive"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/archive"),
@@ -6775,6 +6774,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6821,6 +6821,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6862,6 +6863,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
@@ -6907,6 +6909,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir = Box::into_raw(Box::new(uio_DirHandle {
                 path: PathBuf::from("/data"),
+                virtual_path: PathBuf::from("/data"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
                 root_end: PathBuf::from("/data"),
