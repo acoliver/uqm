@@ -1,8 +1,7 @@
 //! Resource dispatch layer — lazy loading, refcounting, and lifecycle management
 //!
-//! Provides `ResourceDispatch` which ties together `ResourceMap` (from config_api)
-//! and `TypeRegistry` to implement the full resource get/free/detach/remove lifecycle
-//! matching the C `getres.c` dispatch functions.
+//! Provides `ResourceDispatch` which uses `TypeRegistry` to implement the full
+//! resource get/free/detach/remove lifecycle matching the C `getres.c` dispatch functions.
 //!
 //! @plan PLAN-20260224-RES-SWAP.P15
 //! @plan PLAN-20260224-RES-SWAP.P17
@@ -17,7 +16,7 @@ use super::type_registry::TypeRegistry;
 
 /// Combined resource descriptor with FFI data and refcount.
 ///
-/// Merges config_api's `ResourceDesc` (fname, res_type) with ffi_types' `ResourceData`
+/// Merges resource descriptor fields (fname, res_type) with `ResourceData`
 /// (the loaded data union) and refcount tracking for the dispatch lifecycle.
 pub struct FullResourceDesc {
     /// File path or value string (from TYPE:path in the index)
@@ -77,6 +76,8 @@ impl ResourceDispatch {
 
         let handlers = self.type_registry.lookup(type_name);
 
+        // @plan PLAN-20260314-RESOURCE.P04
+        // @requirement REQ-RES-UNK-001
         let (handler_key, is_value_type) = if let Some(h) = handlers {
             let is_value = h.free_fun.is_none();
             (type_name.to_string(), is_value)
@@ -86,19 +87,43 @@ impl ResourceDispatch {
                 type_name,
                 key
             );
-            ("UNKNOWNRES".to_string(), false)
+            ("UNKNOWNRES".to_string(), true)
         };
 
         let fname_cstring = CString::new(path).ok();
         let mut data = ResourceData::default();
 
         // For value types, call loadFun immediately
+        // @plan PLAN-20260314-RESOURCE.P04
+        // @requirement REQ-RES-UNK-001
         if is_value_type {
-            if let Some(h) = self.type_registry.lookup(type_name) {
+            if let Some(h) = self.type_registry.lookup(&handler_key) {
                 if let Some(load_fn) = h.load_fun {
                     if let Some(ref cs) = fname_cstring {
                         unsafe {
                             load_fn(cs.as_ptr(), &mut data);
+                        }
+                    }
+                }
+            }
+        }
+
+        // @plan PLAN-20260314-RESOURCE.P06
+        // @requirement REQ-RES-OWN-009
+        // Check if replacing an existing entry with loaded heap data
+        if let Some(old) = self.entries.get(key) {
+            unsafe {
+                if !old.data.ptr.is_null() {
+                    if let Some(handler) = self.type_registry.lookup(&old.type_handler_key) {
+                        if let Some(free_fun) = handler.free_fun {
+                            if old.refcount > 0 {
+                                log::warn!(
+                                    "Replacing resource '{}' with outstanding refcount={}",
+                                    key,
+                                    old.refcount
+                                );
+                            }
+                            free_fun(old.data.ptr);
                         }
                     }
                 }
@@ -134,7 +159,27 @@ impl ResourceDispatch {
             }
         };
 
-        // Lazy load if not yet loaded (ptr is null)
+        // @plan PLAN-20260314-RESOURCE.P04
+        // @requirement REQ-RES-LOAD-011
+        // Check if this is a value type (no free_fun)
+        let is_value_type = self
+            .type_registry
+            .lookup(&desc.type_handler_key)
+            .map(|h| h.free_fun.is_none())
+            .unwrap_or(false);
+
+        if is_value_type {
+            // Value type: return str_ptr if non-null, else num as pointer
+            desc.refcount += 1;
+            let str_ptr = unsafe { desc.data.str_ptr };
+            if !str_ptr.is_null() {
+                return str_ptr as *mut c_void;
+            } else {
+                return unsafe { desc.data.num } as *mut c_void;
+            }
+        }
+
+        // Heap type: lazy load if not yet loaded (ptr is null)
         let ptr_is_null = unsafe { desc.data.ptr.is_null() };
         if ptr_is_null {
             // Look up the type handler to get loadFun
@@ -342,6 +387,29 @@ impl ResourceDispatch {
         let desc = self.entries.get(key)?;
         Some(&desc.res_type)
     }
+
+    /// Clean up all loaded heap resources during shutdown.
+    ///
+    /// Iterates all entries and calls freeFun on loaded heap resources
+    /// (ptr non-null and handler has free_fun). Value types (no free_fun)
+    /// and unloaded entries (ptr null) are skipped.
+    ///
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-LIFE-004, REQ-RES-OWN-010
+    pub fn cleanup_all_entries(&mut self) {
+        for (key, entry) in self.entries.iter_mut() {
+            unsafe {
+                if !entry.data.ptr.is_null() {
+                    if let Some(handler) = self.type_registry.lookup(&entry.type_handler_key) {
+                        if let Some(free_fun) = handler.free_fun {
+                            free_fun(entry.data.ptr);
+                            entry.data.ptr = ptr::null_mut();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Default for ResourceDispatch {
@@ -374,6 +442,18 @@ mod tests {
 
     unsafe extern "C" fn color_load_wrapper(d: *const c_char, r: *mut ResourceData) {
         crate::resource::type_registry::descriptor_to_color(d, r);
+    }
+
+    // @plan PLAN-20260314-RESOURCE.P04
+    // @requirement REQ-RES-UNK-001
+    unsafe extern "C" fn unknownres_load_wrapper(
+        descriptor: *const c_char,
+        data: *mut ResourceData,
+    ) {
+        if descriptor.is_null() || data.is_null() {
+            return;
+        }
+        (*data).str_ptr = descriptor;
     }
 
     /// Helper: register the 4 built-in value types in a dispatch system.
@@ -614,5 +694,527 @@ mod tests {
         let d = dispatch.entries.get("test.heap").unwrap();
         assert_eq!(d.refcount, 3);
         assert!(!unsafe { d.data.ptr.is_null() });
+    }
+
+    // =========================================================================
+    // P03 Value-Type Dispatch TDD tests (RED PHASE)
+    // @plan PLAN-20260314-RESOURCE.P03
+    // =========================================================================
+
+    #[test]
+    fn test_unknownres_registered_as_value_type() {
+        // @plan PLAN-20260314-RESOURCE.P03
+        // @requirement REQ-RES-UNK-001
+        //
+        // UNKNOWNRES should be registered as a value type (free_fun = None)
+        // and have a load function to store the descriptor string.
+
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        // Register UNKNOWNRES (currently done in ffi_bridge init, but verify here)
+        dispatch
+            .type_registry
+            .install("UNKNOWNRES", Some(unknownres_load_wrapper), None, None);
+
+        let handlers = dispatch.type_registry.lookup("UNKNOWNRES").unwrap();
+
+        // UNKNOWNRES should be a value type (no free_fun)
+        assert!(
+            handlers.free_fun.is_none(),
+            "UNKNOWNRES should be a value type with free_fun = None"
+        );
+
+        // UNKNOWNRES should have a load_fun to store descriptor
+        // GAP: Currently fails because load_fun is None
+        assert!(
+            handlers.load_fun.is_some(),
+            "UNKNOWNRES should have load_fun to store descriptor"
+        );
+    }
+
+    #[test]
+    fn test_process_resource_desc_unknown_type_stores_as_value() {
+        // @plan PLAN-20260314-RESOURCE.P03
+        // @requirement REQ-RES-UNK-001
+        //
+        // When an unknown type is encountered, it should be stored as UNKNOWNRES
+        // with the descriptor string preserved in str_ptr (eager load for value types).
+
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+        dispatch
+            .type_registry
+            .install("UNKNOWNRES", Some(unknownres_load_wrapper), None, None);
+
+        // Process an entry with unknown type
+        dispatch.process_resource_desc("mykey", "FAKETYPE:some/path.dat");
+
+        let desc = dispatch.entries.get("mykey").unwrap();
+        assert_eq!(desc.type_handler_key, "UNKNOWNRES");
+        assert_eq!(desc.res_type, "FAKETYPE"); // Preserved original type
+
+        // GAP: Currently fails because UNKNOWNRES has no loadFun and is_value_type is false
+        // The str_ptr should be set via eager load
+        assert!(
+            !unsafe { desc.data.str_ptr.is_null() },
+            "UNKNOWNRES entry should have str_ptr set via eager load"
+        );
+    }
+
+    #[test]
+    fn test_get_resource_value_type_string_returns_str_ptr() {
+        // @plan PLAN-20260314-RESOURCE.P03
+        // @requirement REQ-RES-LOAD-011
+        //
+        // get_resource() on a STRING value type should return str_ptr
+        // and increment refcount.
+
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        dispatch.process_resource_desc("mykey", "STRING:hello");
+
+        let desc_before = dispatch.entries.get("mykey").unwrap();
+        let expected_ptr = unsafe { desc_before.data.str_ptr };
+
+        // GAP: Currently fails because get_resource treats all types as heap types
+        let result = dispatch.get_resource("mykey");
+        assert!(!result.is_null(), "get_resource should return str_ptr");
+        assert_eq!(
+            result as *const c_char, expected_ptr,
+            "get_resource should return the str_ptr value"
+        );
+
+        let desc_after = dispatch.entries.get("mykey").unwrap();
+        assert_eq!(desc_after.refcount, 1, "refcount should be incremented");
+    }
+
+    #[test]
+    fn test_get_resource_value_type_int_returns_num_as_ptr() {
+        // @plan PLAN-20260314-RESOURCE.P03
+        // @requirement REQ-RES-LOAD-011
+        //
+        // get_resource() on an INT32 value type should return num as *mut c_void
+        // and increment refcount.
+
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        dispatch.process_resource_desc("mykey", "INT32:42");
+
+        // GAP: Currently fails because get_resource checks data.ptr which is null for value types
+        let result = dispatch.get_resource("mykey");
+        assert!(
+            !result.is_null(),
+            "get_resource should return num as pointer"
+        );
+        assert_eq!(
+            result as usize, 42,
+            "get_resource should return num cast to pointer"
+        );
+
+        let desc = dispatch.entries.get("mykey").unwrap();
+        assert_eq!(desc.refcount, 1, "refcount should be incremented");
+    }
+
+    #[test]
+    fn test_get_resource_unknownres_returns_str_ptr() {
+        // @plan PLAN-20260314-RESOURCE.P03
+        // @requirement REQ-RES-UNK-003
+        //
+        // get_resource() on an UNKNOWNRES entry should return the str_ptr
+        // (descriptor string) and increment refcount.
+
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+        dispatch
+            .type_registry
+            .install("UNKNOWNRES", Some(unknownres_load_wrapper), None, None);
+
+        dispatch.process_resource_desc("mykey", "BOGUS:myfile.dat");
+
+        let desc_before = dispatch.entries.get("mykey").unwrap();
+        assert_eq!(desc_before.type_handler_key, "UNKNOWNRES");
+
+        // GAP: Currently fails because UNKNOWNRES entry doesn't eager-load str_ptr
+        // and get_resource doesn't handle value types correctly
+        let result = dispatch.get_resource("mykey");
+        assert!(
+            !result.is_null(),
+            "get_resource on UNKNOWNRES should return str_ptr"
+        );
+
+        let desc_after = dispatch.entries.get("mykey").unwrap();
+        assert_eq!(desc_after.refcount, 1, "refcount should be incremented");
+
+        // Verify the pointer points to the descriptor string
+        let expected_ptr = unsafe { desc_after.data.str_ptr };
+        assert_eq!(
+            result as *const c_char, expected_ptr,
+            "returned pointer should match str_ptr"
+        );
+    }
+
+    #[test]
+    fn test_get_resource_heap_type_still_lazy_loads() {
+        // @plan PLAN-20260314-RESOURCE.P03
+        // @requirement REQ-RES-LOAD-001
+        //
+        // Heap types should still use lazy loading behavior.
+        // This test verifies existing behavior is preserved.
+
+        let mut dispatch = ResourceDispatch::new();
+
+        // Mock heap-type loader that sets a sentinel value
+        unsafe extern "C" fn mock_heap_load(_path: *const c_char, data: *mut ResourceData) {
+            // Simulate loading by setting ptr to a non-null value
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        dispatch.type_registry.install(
+            "MOCKHEAP",
+            Some(mock_heap_load as ResourceLoadFun),
+            Some(dummy_free as ResourceFreeFun),
+            None,
+        );
+
+        // Manually insert unloaded heap entry
+        let desc = FullResourceDesc {
+            fname: "test.dat".to_string(),
+            res_type: "MOCKHEAP".to_string(),
+            data: ResourceData {
+                ptr: ptr::null_mut(),
+            },
+            refcount: 0,
+            type_handler_key: "MOCKHEAP".to_string(),
+            fname_cstring: CString::new("test.dat").ok(),
+        };
+        dispatch.entries.insert("heap.key".to_string(), desc);
+
+        // First get_resource should trigger lazy load
+        let result = dispatch.get_resource("heap.key");
+        assert_eq!(
+            result as usize, 0xDEADBEEF,
+            "get_resource should trigger lazy load"
+        );
+
+        let desc = dispatch.entries.get("heap.key").unwrap();
+        assert_eq!(desc.refcount, 1, "refcount should be 1 after first get");
+        assert_eq!(
+            unsafe { desc.data.ptr } as usize,
+            0xDEADBEEF,
+            "loadFun should have been called"
+        );
+    }
+
+    // =========================================================================
+    // P06: Lifecycle & Replacement Cleanup tests
+    // @plan PLAN-20260314-RESOURCE.P06
+    // =========================================================================
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-OWN-009
+    #[test]
+    fn test_process_resource_desc_replacement_calls_free_fun() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static FREE_CALLED: AtomicBool = AtomicBool::new(false);
+
+        unsafe extern "C" fn mock_free_tracking(data: *mut c_void) -> c_int {
+            FREE_CALLED.store(true, Ordering::SeqCst);
+            1
+        }
+
+        unsafe extern "C" fn mock_load(_path: *const c_char, data: *mut ResourceData) {
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        let mut dispatch = ResourceDispatch::new();
+        dispatch.type_registry.install(
+            "MOCKHEAP",
+            Some(mock_load as ResourceLoadFun),
+            Some(mock_free_tracking as ResourceFreeFun),
+            None,
+        );
+
+        // Insert initial entry and simulate it being loaded
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file1.dat");
+        let entry = dispatch.entries.get_mut("test.key").unwrap();
+        unsafe {
+            entry.data.ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        FREE_CALLED.store(false, Ordering::SeqCst);
+
+        // Replace the entry
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file2.dat");
+
+        assert!(
+            FREE_CALLED.load(Ordering::SeqCst),
+            "freeFun should have been called on old entry"
+        );
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-OWN-009
+    #[test]
+    fn test_process_resource_desc_replacement_warns_on_refcount() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static FREE_CALLED: AtomicBool = AtomicBool::new(false);
+
+        unsafe extern "C" fn mock_free_tracking(data: *mut c_void) -> c_int {
+            FREE_CALLED.store(true, Ordering::SeqCst);
+            1
+        }
+
+        unsafe extern "C" fn mock_load(_path: *const c_char, data: *mut ResourceData) {
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        let mut dispatch = ResourceDispatch::new();
+        dispatch.type_registry.install(
+            "MOCKHEAP",
+            Some(mock_load as ResourceLoadFun),
+            Some(mock_free_tracking as ResourceFreeFun),
+            None,
+        );
+
+        // Insert initial entry and simulate it being loaded with refcount > 0
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file1.dat");
+        let entry = dispatch.entries.get_mut("test.key").unwrap();
+        unsafe {
+            entry.data.ptr = 0xDEADBEEF as *mut c_void;
+        }
+        entry.refcount = 2;
+
+        FREE_CALLED.store(false, Ordering::SeqCst);
+
+        // Replace the entry (should warn but still call freeFun)
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file2.dat");
+
+        assert!(
+            FREE_CALLED.load(Ordering::SeqCst),
+            "freeFun should have been called even with refcount > 0"
+        );
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-OWN-005
+    #[test]
+    fn test_process_resource_desc_replacement_value_type_no_free() {
+        register_builtin_value_types(&mut ResourceDispatch::new());
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        // Insert a STRING entry
+        dispatch.process_resource_desc("test.key", "STRING:value1");
+
+        // Replace with new STRING entry (should not crash)
+        dispatch.process_resource_desc("test.key", "STRING:value2");
+
+        let entry = dispatch.entries.get("test.key").unwrap();
+        assert_eq!(entry.fname, "value2");
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-LIFE-004
+    #[test]
+    fn test_uninit_frees_loaded_heap_resources() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static FREE_CALLED: AtomicBool = AtomicBool::new(false);
+
+        unsafe extern "C" fn mock_free_tracking(data: *mut c_void) -> c_int {
+            FREE_CALLED.store(true, Ordering::SeqCst);
+            1
+        }
+
+        unsafe extern "C" fn mock_load(_path: *const c_char, data: *mut ResourceData) {
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        let mut dispatch = ResourceDispatch::new();
+        dispatch.type_registry.install(
+            "MOCKHEAP",
+            Some(mock_load as ResourceLoadFun),
+            Some(mock_free_tracking as ResourceFreeFun),
+            None,
+        );
+
+        // Insert and simulate loaded entry
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file.dat");
+        let entry = dispatch.entries.get_mut("test.key").unwrap();
+        unsafe {
+            entry.data.ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        FREE_CALLED.store(false, Ordering::SeqCst);
+
+        // Call cleanup
+        dispatch.cleanup_all_entries();
+
+        assert!(
+            FREE_CALLED.load(Ordering::SeqCst),
+            "cleanup_all_entries should call freeFun on loaded heap resources"
+        );
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-OWN-005
+    #[test]
+    fn test_uninit_skips_value_types() {
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        dispatch.process_resource_desc("test.str", "STRING:value");
+        dispatch.process_resource_desc("test.int", "INT32:42");
+
+        // Should not crash (value types have no freeFun)
+        dispatch.cleanup_all_entries();
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-OWN-005
+    #[test]
+    fn test_uninit_skips_unloaded_heap_entries() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static FREE_CALLED: AtomicBool = AtomicBool::new(false);
+
+        unsafe extern "C" fn mock_free_tracking(data: *mut c_void) -> c_int {
+            FREE_CALLED.store(true, Ordering::SeqCst);
+            1
+        }
+
+        unsafe extern "C" fn mock_load(_path: *const c_char, _data: *mut ResourceData) {
+            // Don't set ptr - leave it null
+        }
+
+        let mut dispatch = ResourceDispatch::new();
+        dispatch.type_registry.install(
+            "MOCKHEAP",
+            Some(mock_load as ResourceLoadFun),
+            Some(mock_free_tracking as ResourceFreeFun),
+            None,
+        );
+
+        // Insert entry but don't load it (ptr remains null)
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file.dat");
+
+        FREE_CALLED.store(false, Ordering::SeqCst);
+
+        // Call cleanup
+        dispatch.cleanup_all_entries();
+
+        assert!(
+            !FREE_CALLED.load(Ordering::SeqCst),
+            "cleanup_all_entries should NOT call freeFun on unloaded entries"
+        );
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-LOAD-007
+    #[test]
+    fn test_free_resource_on_value_type_never_calls_free_fun() {
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        dispatch.process_resource_desc("test.str", "STRING:value");
+        dispatch.process_resource_desc("test.int", "INT32:42");
+
+        // Should log warning but not crash (value types have no freeFun)
+        dispatch.free_resource("test.str");
+        dispatch.free_resource("test.int");
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-LOAD-007
+    #[test]
+    fn test_detach_resource_on_value_type_returns_null_without_destructor() {
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        dispatch.process_resource_desc("test.str", "STRING:value");
+        dispatch.process_resource_desc("test.bool", "BOOLEAN:true");
+
+        // Should return null and log warning (value types can't be detached)
+        let result_str = dispatch.detach_resource("test.str");
+        let result_bool = dispatch.detach_resource("test.bool");
+
+        assert!(result_str.is_null(), "detach on STRING should return null");
+        assert!(
+            result_bool.is_null(),
+            "detach on BOOLEAN should return null"
+        );
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-LOAD-008
+    #[test]
+    fn test_remove_materialized_heap_entry_frees_and_erases_key() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        static FREE_CALLED: AtomicBool = AtomicBool::new(false);
+
+        unsafe extern "C" fn mock_free_tracking(data: *mut c_void) -> c_int {
+            FREE_CALLED.store(true, Ordering::SeqCst);
+            1
+        }
+
+        unsafe extern "C" fn mock_load(_path: *const c_char, data: *mut ResourceData) {
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        let mut dispatch = ResourceDispatch::new();
+        dispatch.type_registry.install(
+            "MOCKHEAP",
+            Some(mock_load as ResourceLoadFun),
+            Some(mock_free_tracking as ResourceFreeFun),
+            None,
+        );
+
+        // Insert and simulate loaded entry
+        dispatch.process_resource_desc("test.key", "MOCKHEAP:file.dat");
+        let entry = dispatch.entries.get_mut("test.key").unwrap();
+        unsafe {
+            entry.data.ptr = 0xDEADBEEF as *mut c_void;
+        }
+
+        FREE_CALLED.store(false, Ordering::SeqCst);
+
+        // Remove the entry
+        let result = dispatch.remove_resource("test.key");
+
+        assert!(result, "remove_resource should return true");
+        assert!(
+            FREE_CALLED.load(Ordering::SeqCst),
+            "remove_resource should call freeFun"
+        );
+        assert!(
+            !dispatch.entries.contains_key("test.key"),
+            "key should be removed from map"
+        );
+    }
+
+    /// @plan PLAN-20260314-RESOURCE.P06
+    /// @requirement REQ-RES-LOAD-008
+    #[test]
+    fn test_remove_value_type_erases_key_without_heap_destructor() {
+        let mut dispatch = ResourceDispatch::new();
+        register_builtin_value_types(&mut dispatch);
+
+        dispatch.process_resource_desc("test.str", "STRING:value");
+        dispatch.process_resource_desc("test.int", "INT32:42");
+
+        // Should succeed and not crash (no destructor for value types)
+        let result_str = dispatch.remove_resource("test.str");
+        let result_int = dispatch.remove_resource("test.int");
+
+        assert!(result_str, "remove_resource on STRING should succeed");
+        assert!(result_int, "remove_resource on INT32 should succeed");
+        assert!(!dispatch.entries.contains_key("test.str"));
+        assert!(!dispatch.entries.contains_key("test.int"));
     }
 }

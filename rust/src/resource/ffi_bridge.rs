@@ -36,6 +36,10 @@ extern "C" {
     fn uio_fgetc(fp: *mut c_void) -> c_int;
     fn uio_fputc(c: c_int, fp: *mut c_void) -> c_int;
     fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int;
+    // @plan PLAN-20260314-RESOURCE.P08
+    // @requirement REQ-RES-FILE-003
+    fn uio_stat(dir: *mut c_void, path: *const c_char, stat_buf: *mut libc::stat) -> c_int;
+
 
     static contentDir: *mut c_void;
 
@@ -135,6 +139,11 @@ unsafe fn uio_unlink(_dir: *mut c_void, _path: *const c_char) -> c_int {
     -1
 }
 #[cfg(test)]
+unsafe fn uio_stat(_dir: *mut c_void, _path: *const c_char, _stat_buf: *mut libc::stat) -> c_int {
+    -1
+}
+
+#[cfg(test)]
 static mut contentDir: *mut c_void = ptr::null_mut() as *mut c_void;
 
 // =============================================================================
@@ -167,6 +176,19 @@ const STREAM_SENTINEL: *mut c_void = !0usize as *mut c_void;
 // Internal helpers
 // =============================================================================
 
+// @plan PLAN-20260314-RESOURCE.P04
+// @requirement REQ-RES-UNK-001
+/// UNKNOWNRES load function: stores the descriptor as str_ptr.
+///
+/// This allows unknown fallback entries to be treated as value types,
+/// where the descriptor string is preserved as the resource data.
+unsafe extern "C" fn unknownres_load_fun(descriptor: *const c_char, data: *mut ResourceData) {
+    if descriptor.is_null() || data.is_null() {
+        return;
+    }
+    (*data).str_ptr = descriptor;
+}
+
 /// Initialize a fresh ResourceState with the 5 built-in value types.
 fn create_initial_state() -> ResourceState {
     let mut dispatch = ResourceDispatch::new();
@@ -196,9 +218,12 @@ fn create_initial_state() -> ResourceState {
         None,
         Some(type_registry::color_to_string as ResourceStringFun),
     );
+
+    // @plan PLAN-20260314-RESOURCE.P04
+    // @requirement REQ-RES-UNK-001
     dispatch
         .type_registry
-        .install("UNKNOWNRES", None, None, None);
+        .install("UNKNOWNRES", Some(unknownres_load_fun), None, None);
 
     ResourceState {
         dispatch,
@@ -298,6 +323,12 @@ pub extern "C" fn UninitResourceSystem() {
 
     if guard.is_none() {
         log::warn!("UninitResourceSystem called when not initialized");
+    }
+
+    // @plan PLAN-20260314-RESOURCE.P06
+    // @requirement REQ-RES-LIFE-004
+    if let Some(ref mut state) = *guard {
+        state.dispatch.cleanup_all_entries();
     }
 
     *guard = None;
@@ -417,26 +448,33 @@ pub unsafe extern "C" fn SaveResourceIndex(
 
         let desc = &state.dispatch.entries[key];
 
-        // Serialize the entry using toString if available.
+        // @plan PLAN-20260314-RESOURCE.P07
+        // @requirement REQ-RES-IDX-005
+        // Skip entries without toString function — this filters out heap types
+        // and unknown types that can't be serialized back to config format.
+
+        // Look up the handler for this entry's type_handler_key (not res_type,
+        // since unknown types have res_type != type_handler_key)
+        let handler = state.dispatch.type_registry.lookup(&desc.type_handler_key);
+        let to_string_fn = match handler.and_then(|h| h.to_string) {
+            Some(f) => f,
+            None => continue, // Skip entries without toString
+        };
+
+        // Serialize the entry using toString.
         // STRING types: use the Rust fname directly — avoids unsafe str_ptr
         // which can hold a dangling/invalid pointer after type changes.
         let serialized = if desc.res_type == "STRING" {
             format!("{}:{}", desc.res_type, desc.fname)
-        } else if let Some(handlers) = state.dispatch.type_registry.lookup(&desc.res_type) {
-            if let Some(to_string_fn) = handlers.to_string {
-                let mut buf = [0u8; 256];
-                let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
-                unsafe {
-                    to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
-                }
-                let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
-                let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
-                format!("{}:{}", desc.res_type, value_str)
-            } else {
-                format!("{}:{}", desc.res_type, desc.fname)
-            }
         } else {
-            format!("{}:{}", desc.res_type, desc.fname)
+            let mut buf = [0u8; 256];
+            let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
+            unsafe {
+                to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
+            }
+            let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
+            let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
+            format!("{}:{}", desc.res_type, value_str)
         };
 
         let output_key = if strip_root != 0 {
@@ -668,8 +706,10 @@ pub unsafe extern "C" fn res_GetResourceType(key: *const c_char) -> *const c_cha
 }
 
 /// Count the number of registered resource types.
+/// @plan PLAN-20260314-RESOURCE.P09
+/// @requirement REQ-RES-TYPE-004
 #[no_mangle]
-pub extern "C" fn CountResourceTypes() -> u16 {
+pub extern "C" fn CountResourceTypes() -> u32 {
     let mut guard = match RESOURCE_STATE.lock() {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
@@ -677,7 +717,7 @@ pub extern "C" fn CountResourceTypes() -> u16 {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    state.dispatch.type_registry.count() as u16
+    state.dispatch.type_registry.count() as u32
 }
 
 // =============================================================================
@@ -791,11 +831,19 @@ pub unsafe extern "C" fn res_IsColor(key: *const c_char) -> c_int {
 }
 
 /// Get a string value. Returns pointer that lives as long as the state entry.
+/// @plan PLAN-20260314-RESOURCE.P05
+/// @requirement REQ-RES-CONF-003
 #[no_mangle]
 pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
+    static EMPTY: &[u8] = b"\0";
+
+    if key.is_null() {
+        return EMPTY.as_ptr() as *const c_char;
+    }
+
     let key_str = match cstr_to_str(key) {
         Some(s) => s,
-        None => return ptr::null(),
+        None => return EMPTY.as_ptr() as *const c_char,
     };
 
     let mut guard = match RESOURCE_STATE.lock() {
@@ -805,23 +853,25 @@ pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    let value = match state.dispatch.entries.get(key_str) {
-        Some(desc) => desc.fname.clone(),
-        None => return ptr::null(),
+
+    // Check if entry exists
+    let entry = match state.dispatch.entries.get(key_str) {
+        Some(e) => e,
+        None => return EMPTY.as_ptr() as *const c_char,
     };
 
-    let entry = state
-        .string_cache
-        .entry(key_str.to_string())
-        .or_insert_with(|| CString::new(value.as_str()).unwrap_or_default());
-
-    // Update if the value has changed
-    let current = entry.to_str().unwrap_or("");
-    if current != value {
-        *entry = CString::new(value.as_str()).unwrap_or_default();
+    // Type check: must be STRING
+    if entry.res_type != "STRING" {
+        return EMPTY.as_ptr() as *const c_char;
     }
 
-    entry.as_ptr()
+    // Value check: str_ptr must be non-null
+    let str_ptr = entry.data.str_ptr;
+    if str_ptr.is_null() {
+        return EMPTY.as_ptr() as *const c_char;
+    }
+
+    str_ptr
 }
 
 /// Get an integer config value.
@@ -990,6 +1040,10 @@ pub unsafe extern "C" fn res_PutColor(key: *const c_char, value: u32) {
 // =============================================================================
 
 /// Open a resource file. Returns a UIO stream handle, or null on failure.
+/// Returns STREAM_SENTINEL (~0) if the target is a directory.
+/// @plan PLAN-20260314-RESOURCE.P08
+/// @requirement REQ-RES-FILE-002
+/// @requirement REQ-RES-FILE-003
 #[no_mangle]
 pub unsafe extern "C" fn res_OpenResFile(
     dir: *mut c_void,
@@ -999,8 +1053,22 @@ pub unsafe extern "C" fn res_OpenResFile(
     if filename.is_null() || mode.is_null() {
         return ptr::null_mut();
     }
+
+    // Check if target is a directory using uio_stat
+    let mut sb: libc::stat = std::mem::zeroed();
+    if uio_stat(dir, filename, &mut sb) == 0 {
+        // S_ISDIR: check if st_mode has the directory bit set
+        // Use libc::S_IFMT and libc::S_IFDIR macros for portability
+        if (sb.st_mode & libc::S_IFMT) == libc::S_IFDIR {
+            return STREAM_SENTINEL;
+        }
+    }
+
+
+    // Not a directory or stat failed — fall through to regular open
     uio_fopen(dir, filename, mode)
 }
+
 
 /// Close a resource file. Returns 1 on success, 0 on failure.
 /// NULL and sentinel pointers return 1 (no-op).
@@ -1128,6 +1196,9 @@ pub unsafe extern "C" fn DeleteResFile(dir: *mut c_void, filename: *const c_char
 ///
 /// Opens the file via UIO, gets its length, sets `_cur_resfile_name`,
 /// calls the load function, cleans up, and returns the loaded data.
+/// @plan PLAN-20260314-RESOURCE.P08
+/// @requirement REQ-RES-FILE-005
+/// @requirement REQ-RES-FILE-008
 #[no_mangle]
 pub unsafe extern "C" fn LoadResourceFromPath(
     pathname: *const c_char,
@@ -1143,32 +1214,41 @@ pub unsafe extern "C" fn LoadResourceFromPath(
     };
 
     let mode = b"rb\0".as_ptr() as *const c_char;
-    let fp = uio_fopen(contentDir, pathname, mode);
-    if fp.is_null() {
+    let fp = res_OpenResFile(contentDir, pathname, mode);
+    
+    // Reject null, sentinel (directory), and check for zero-length files
+    if fp.is_null() || fp == STREAM_SENTINEL {
         return ptr::null_mut();
     }
 
     // Get file length
-    uio_fseek(fp, 0, 2); // SEEK_END
-    let length = uio_ftell(fp) as u32;
-    uio_fseek(fp, 0, 0); // SEEK_SET
+    let length = LengthResFile(fp);
+    if length == 0 {
+        log::warn!("LoadResourceFromPath: zero-length file, closing and returning null");
+        res_CloseResFile(fp);
+        return ptr::null_mut();
+    }
 
     // Set global file name for C callers
     _cur_resfile_name = pathname;
 
-    let result = load_fn(fp, length);
+    let result = load_fn(fp, length as u32);
 
     // Clear global file name
     _cur_resfile_name = ptr::null();
 
-    uio_fclose(fp);
+    res_CloseResFile(fp);
     result
 }
 
 /// Read resource data from a file stream.
 ///
-/// Reads a u32 prefix. If it's 0xFFFFFFFF, the data is uncompressed —
-/// seek back 4 bytes and read `length` bytes raw.
+/// Reads the 4-byte legacy prefix from the provided stream.
+/// If the prefix is `0xFFFFFFFF` (uncompressed marker), allocates and reads
+/// the remaining `length - 4` payload bytes. Returns null on any failure
+/// or if the prefix indicates a compressed resource (not supported).
+/// @plan PLAN-20260314-RESOURCE.P09
+/// @requirement REQ-RES-FILE-006
 #[no_mangle]
 pub unsafe extern "C" fn GetResourceData(fp: *mut c_void, length: u32) -> *mut c_void {
     if fp.is_null() || fp == STREAM_SENTINEL || length == 0 {
@@ -1496,10 +1576,13 @@ mod tests {
             None,
         );
 
+        // @plan PLAN-20260314-RESOURCE.P04
+        // @requirement REQ-RES-UNK-001
         // GFXRES has no registered handler in test mode (C subsystem types not
         // available), so dispatch falls back to UNKNOWNRES for the handler_key,
         // but preserves the original type name for serialization.
-        // Data ptr is null (not loaded yet — no loadFun for UNKNOWNRES).
+        // UNKNOWNRES is now a value type with a load function, so str_ptr is set
+        // (eagerly loaded) to the descriptor string.
         let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
         assert_eq!(desc.res_type, "GFXRES", "Original type name preserved");
         assert_eq!(
@@ -1507,8 +1590,8 @@ mod tests {
             "Falls back to UNKNOWNRES handler"
         );
         assert!(
-            unsafe { desc.data.ptr.is_null() },
-            "Heap-type data not loaded yet"
+            !unsafe { desc.data.str_ptr.is_null() },
+            "UNKNOWNRES value type has str_ptr set via eager load"
         );
     }
 
@@ -1717,6 +1800,33 @@ mod tests {
         assert_eq!(result, 1, "Free null should return 1 (success)");
     }
 
+
+    // =========================================================================
+    // P08: Directory sentinel and LoadResourceFromPath guard tests
+    // =========================================================================
+
+    #[test]
+    #[serial]
+    fn test_stream_sentinel_constant_is_all_bits_set() {
+        // @plan PLAN-20260314-RESOURCE.P08
+        // @requirement REQ-RES-FILE-003
+        assert_eq!(
+            STREAM_SENTINEL,
+            !0usize as *mut c_void,
+            "STREAM_SENTINEL should be all bits set (~0)"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_length_res_file_returns_1_for_sentinel() {
+        // @plan PLAN-20260314-RESOURCE.P08
+        // @requirement REQ-RES-FILE-003
+        let result = unsafe { LengthResFile(STREAM_SENTINEL) };
+        assert_eq!(result, 1, "LengthResFile(STREAM_SENTINEL) should return 1");
+    }
+
+
     // =========================================================================
     // P19: Config Put/Get roundtrip tests via FFI functions
     // =========================================================================
@@ -1879,6 +1989,23 @@ mod tests {
         InitResourceSystem();
         assert_eq!(CountResourceTypes(), 5);
     }
+    /// @plan PLAN-20260314-RESOURCE.P09
+    /// @requirement REQ-RES-TYPE-004
+    #[test]
+    #[serial]
+    fn test_count_resource_types_returns_u32() {
+        reset_state();
+        InitResourceSystem();
+        
+        let count = CountResourceTypes();
+        // Should return correct count as u32 (not u16)
+        assert_eq!(count, 5);
+        
+        // Verify the return type is u32 (this compiles correctly if type is u32)
+        let _type_check: u32 = count;
+    }
+
+
 
     #[test]
     #[serial]
@@ -1892,7 +2019,14 @@ mod tests {
             assert_eq!(res_IsInteger(ptr::null()), 0);
             assert_eq!(res_IsBoolean(ptr::null()), 0);
             assert_eq!(res_IsColor(ptr::null()), 0);
-            assert!(res_GetString(ptr::null()).is_null());
+            // @plan PLAN-20260314-RESOURCE.P05: res_GetString now returns empty string, never null
+            let str_ptr = res_GetString(ptr::null());
+            assert!(!str_ptr.is_null(), "res_GetString should never return null");
+            assert_eq!(
+                CStr::from_ptr(str_ptr).to_str().unwrap(),
+                "",
+                "res_GetString should return empty string for null key"
+            );
             assert_eq!(res_GetInteger(ptr::null()), 0);
             assert_eq!(res_GetBoolean(ptr::null()), 0);
             assert_eq!(res_GetColor(ptr::null()), 0);
@@ -1944,5 +2078,439 @@ mod tests {
         let key = CString::new("config.fullscreen").unwrap();
         let result = unsafe { res_GetBooleanResource(key.as_ptr()) };
         assert_eq!(result, 1);
+    }
+
+    // =========================================================================
+    // P05: res_GetString Parity tests
+    // @plan PLAN-20260314-RESOURCE.P05
+    // =========================================================================
+
+    #[test]
+    #[serial]
+    fn test_res_get_string_returns_empty_for_missing_key() {
+        // @plan PLAN-20260314-RESOURCE.P05
+        // @requirement REQ-RES-CONF-003
+        reset_state();
+        InitResourceSystem();
+
+        let key = CString::new("nonexistent.key").unwrap();
+        let result = unsafe { res_GetString(key.as_ptr()) };
+
+        assert!(!result.is_null(), "res_GetString should never return null");
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert_eq!(
+            result_str, "",
+            "res_GetString should return empty string for missing key"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_res_get_string_returns_empty_for_integer_entry() {
+        // @plan PLAN-20260314-RESOURCE.P05
+        // @requirement REQ-RES-CONF-003
+        reset_state();
+        InitResourceSystem();
+
+        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_mut().unwrap();
+        state
+            .dispatch
+            .process_resource_desc("config.sfxvol", "INT32:128");
+        drop(guard);
+
+        let key = CString::new("config.sfxvol").unwrap();
+        let result = unsafe { res_GetString(key.as_ptr()) };
+
+        assert!(!result.is_null(), "res_GetString should never return null");
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert_eq!(
+            result_str, "",
+            "res_GetString should return empty string for INT32 entry, not the integer value"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_res_get_string_returns_empty_for_boolean_entry() {
+        // @plan PLAN-20260314-RESOURCE.P05
+        // @requirement REQ-RES-CONF-003
+        reset_state();
+        InitResourceSystem();
+
+        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_mut().unwrap();
+        state
+            .dispatch
+            .process_resource_desc("config.fullscreen", "BOOLEAN:true");
+        drop(guard);
+
+        let key = CString::new("config.fullscreen").unwrap();
+        let result = unsafe { res_GetString(key.as_ptr()) };
+
+        assert!(!result.is_null(), "res_GetString should never return null");
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert_eq!(
+            result_str, "",
+            "res_GetString should return empty string for BOOLEAN entry"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_res_get_string_returns_value_for_string_entry() {
+        // @plan PLAN-20260314-RESOURCE.P05
+        // @requirement REQ-RES-CONF-003
+        reset_state();
+        InitResourceSystem();
+
+        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_mut().unwrap();
+        state
+            .dispatch
+            .process_resource_desc("config.name", "STRING:Player");
+        drop(guard);
+
+        let key = CString::new("config.name").unwrap();
+        let result = unsafe { res_GetString(key.as_ptr()) };
+
+        assert!(!result.is_null(), "res_GetString should never return null");
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert_eq!(
+            result_str, "Player",
+            "res_GetString should return actual string value for STRING entry"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_res_get_string_returns_empty_for_null_key() {
+        // @plan PLAN-20260314-RESOURCE.P05
+        // @requirement REQ-RES-ERR-003
+        reset_state();
+        InitResourceSystem();
+
+        let result = unsafe { res_GetString(ptr::null()) };
+
+        assert!(
+            !result.is_null(),
+            "res_GetString should never return null, even for null key"
+        );
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert_eq!(
+            result_str, "",
+            "res_GetString should return empty string for null key"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_res_get_string_returns_empty_for_unknownres_entry() {
+        // @plan PLAN-20260314-RESOURCE.P05
+        // @requirement REQ-RES-UNK-003
+        reset_state();
+        InitResourceSystem();
+
+        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_mut().unwrap();
+        state
+            .dispatch
+            .process_resource_desc("unknown.key", "FAKETYPE:somedata.dat");
+        drop(guard);
+
+        let key = CString::new("unknown.key").unwrap();
+        let result = unsafe { res_GetString(key.as_ptr()) };
+
+        assert!(!result.is_null(), "res_GetString should never return null");
+        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+        assert_eq!(
+            result_str, "",
+            "res_GetString should return empty string for UNKNOWNRES entry (type mismatch)"
+        );
+    }
+
+    // =========================================================================
+    // P07: SaveResourceIndex Filtering tests
+    // @plan PLAN-20260314-RESOURCE.P07
+    // =========================================================================
+
+    /// Helper: Get the serialized entries that would be written by SaveResourceIndex
+    /// filtering logic. This tests the filtering at the dispatch level since UIO
+    /// isn't available in tests.
+    fn get_saveable_entries(state: &ResourceState, root: Option<&str>) -> Vec<(String, String)> {
+        let mut results = Vec::new();
+        let mut keys: Vec<&String> = state.dispatch.entries.keys().collect();
+        keys.sort();
+
+        for key in keys {
+            if let Some(prefix) = root {
+                if !key.starts_with(prefix) {
+                    continue;
+                }
+            }
+
+            let desc = &state.dispatch.entries[key];
+
+            // Apply same filtering logic as SaveResourceIndex
+            let handler = state.dispatch.type_registry.lookup(&desc.type_handler_key);
+            let to_string_fn = match handler.and_then(|h| h.to_string) {
+                Some(f) => f,
+                None => continue, // Skip entries without toString
+            };
+
+            let serialized = if desc.res_type == "STRING" {
+                format!("{}:{}", desc.res_type, desc.fname)
+            } else {
+                let mut buf = [0u8; 256];
+                let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
+                unsafe {
+                    to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
+                }
+                let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
+                let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
+                format!("{}:{}", desc.res_type, value_str)
+            };
+
+            results.push((key.clone(), serialized));
+        }
+
+        results
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_resource_index_skips_entries_without_to_string() {
+        // @plan PLAN-20260314-RESOURCE.P07
+        // @requirement REQ-RES-IDX-005
+        //
+        // SaveResourceIndex should skip entries whose handler has no toString function.
+        // This tests the filtering logic at the dispatch level.
+
+        reset_state();
+        InitResourceSystem();
+
+        // Add a STRING entry (has toString)
+        let key1 = CString::new("config.name").unwrap();
+        let val1 = CString::new("Player").unwrap();
+        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+
+        // Register a heap type without toString (like GFXRES)
+        unsafe extern "C" fn dummy_heap_load(_path: *const c_char, data: *mut ResourceData) {
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+        unsafe extern "C" fn dummy_heap_free(_data: *mut c_void) -> c_int {
+            1
+        }
+
+        {
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state.dispatch.type_registry.install(
+                "HEAPTYPE",
+                Some(dummy_heap_load),
+                Some(dummy_heap_free),
+                None, // No toString
+            );
+
+            // Add a heap entry
+            state
+                .dispatch
+                .process_resource_desc("gfx.test", "HEAPTYPE:test.gfx");
+        }
+
+        // Get saveable entries
+        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_ref().unwrap();
+        let entries = get_saveable_entries(state, None);
+
+        // Should only contain the STRING entry, not the HEAPTYPE entry
+        assert_eq!(entries.len(), 1, "Should only save entries with toString");
+        assert_eq!(entries[0].0, "config.name");
+        assert_eq!(entries[0].1, "STRING:Player");
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_resource_index_skips_unknownres_entries() {
+        // @plan PLAN-20260314-RESOURCE.P07
+        // @requirement REQ-RES-UNK-002
+        //
+        // SaveResourceIndex should skip UNKNOWNRES entries because they have no toString.
+
+        reset_state();
+        InitResourceSystem();
+
+        // Add a valid STRING entry
+        let key1 = CString::new("config.name").unwrap();
+        let val1 = CString::new("Player").unwrap();
+        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+
+        // Add an unknown type entry
+        {
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .process_resource_desc("addon.bar", "FAKETYPE:addon/bar.dat");
+        }
+
+        // Get saveable entries
+        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_ref().unwrap();
+        let entries = get_saveable_entries(state, None);
+
+        // Should only contain the STRING entry, not the UNKNOWNRES entry
+        assert_eq!(entries.len(), 1, "Should skip UNKNOWNRES entries");
+        assert_eq!(entries[0].0, "config.name");
+        assert_eq!(entries[0].1, "STRING:Player");
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_emits_all_value_types_with_to_string() {
+        // @plan PLAN-20260314-RESOURCE.P07
+        // @requirement REQ-RES-IDX-005
+        //
+        // SaveResourceIndex should emit all value types with toString functions.
+
+        reset_state();
+        InitResourceSystem();
+
+        // Add STRING, INT32, BOOLEAN, COLOR entries (all have toString)
+        let key1 = CString::new("config.name").unwrap();
+        let val1 = CString::new("Player").unwrap();
+        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+
+        let key2 = CString::new("config.sfxvol").unwrap();
+        unsafe { res_PutInteger(key2.as_ptr(), 128) };
+
+        let key3 = CString::new("config.fullscreen").unwrap();
+        unsafe { res_PutBoolean(key3.as_ptr(), 1) };
+
+        let key4 = CString::new("config.menucolor").unwrap();
+        // Packed: (0x1a << 24) | (0x00 << 16) | (0x1a << 8) | 0xff = 0x1a001aff
+        unsafe { res_PutColor(key4.as_ptr(), 0x1a001aff) };
+
+        // Get saveable entries
+        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_ref().unwrap();
+        let entries = get_saveable_entries(state, None);
+
+        // All four should be present
+        assert_eq!(
+            entries.len(),
+            4,
+            "Should emit all value types with toString"
+        );
+
+        // Verify each entry
+        assert_eq!(entries[0].0, "config.fullscreen");
+        assert_eq!(entries[0].1, "BOOLEAN:true");
+
+        assert_eq!(entries[1].0, "config.menucolor");
+        assert_eq!(entries[1].1, "COLOR:rgb(0x1a, 0x00, 0x1a)");
+
+        assert_eq!(entries[2].0, "config.name");
+        assert_eq!(entries[2].1, "STRING:Player");
+
+        assert_eq!(entries[3].0, "config.sfxvol");
+        assert_eq!(entries[3].1, "INT32:128");
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_respects_root_filter() {
+        // @plan PLAN-20260314-RESOURCE.P07
+        // @requirement REQ-RES-IDX-005
+        //
+        // SaveResourceIndex should only emit entries matching the root prefix.
+
+        reset_state();
+        InitResourceSystem();
+
+        // Add entries with different prefixes
+        let key1 = CString::new("config.name").unwrap();
+        let val1 = CString::new("Player").unwrap();
+        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+
+        let key2 = CString::new("addon.bar").unwrap();
+        let val2 = CString::new("SomeAddon").unwrap();
+        unsafe { res_PutString(key2.as_ptr(), val2.as_ptr()) };
+
+        let key3 = CString::new("config.sfxvol").unwrap();
+        unsafe { res_PutInteger(key3.as_ptr(), 128) };
+
+        // Get saveable entries with root filter
+        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_ref().unwrap();
+        let entries = get_saveable_entries(state, Some("config."));
+
+        // Should only contain config.* entries
+        assert_eq!(
+            entries.len(),
+            2,
+            "Should only emit entries matching root prefix"
+        );
+        assert_eq!(entries[0].0, "config.name");
+        assert_eq!(entries[1].0, "config.sfxvol");
+    }
+
+    #[test]
+    #[serial]
+    fn test_save_filters_heap_and_unknown_before_root_check() {
+        // @plan PLAN-20260314-RESOURCE.P07
+        // @requirement REQ-RES-IDX-005
+        //
+        // Filtering by toString should happen independently of root filtering.
+
+        reset_state();
+        InitResourceSystem();
+
+        // Register heap type without toString
+        unsafe extern "C" fn dummy_heap_load(_path: *const c_char, data: *mut ResourceData) {
+            (*data).ptr = 0xDEADBEEF as *mut c_void;
+        }
+        unsafe extern "C" fn dummy_heap_free(_data: *mut c_void) -> c_int {
+            1
+        }
+
+        {
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state.dispatch.type_registry.install(
+                "HEAPTYPE",
+                Some(dummy_heap_load),
+                Some(dummy_heap_free),
+                None,
+            );
+
+            // Add heap entry with "config." prefix
+            state
+                .dispatch
+                .process_resource_desc("config.gfx", "HEAPTYPE:test.gfx");
+
+            // Add unknown entry with "config." prefix
+            state
+                .dispatch
+                .process_resource_desc("config.unknown", "FAKETYPE:test.dat");
+        }
+
+        // Add valid STRING entry
+        let key = CString::new("config.name").unwrap();
+        let val = CString::new("Player").unwrap();
+        unsafe { res_PutString(key.as_ptr(), val.as_ptr()) };
+
+        // Get saveable entries with root filter
+        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let state = guard.as_ref().unwrap();
+        let entries = get_saveable_entries(state, Some("config."));
+
+        // Should only contain the STRING entry, even though heap/unknown entries match prefix
+        assert_eq!(
+            entries.len(),
+            1,
+            "Should filter by toString before root check"
+        );
+        assert_eq!(entries[0].0, "config.name");
     }
 }
