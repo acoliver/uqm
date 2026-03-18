@@ -8,6 +8,7 @@ pub mod ffi;
 pub mod files;
 pub mod temp;
 pub mod uio_bridge;
+pub mod zip_reader; // @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
 
 // Re-exports for convenience
 pub use dirs::{

@@ -32,12 +32,7 @@ typedef struct uio_Handle uio_Handle;
 uio_Stream *uio_fopen(uio_DirHandle *dir, const char *path, const char *mode);
 int uio_fclose(uio_Stream *stream);
 
-#if defined(USE_RUST_UIO)
-size_t uio_fread(void *buf, size_t size, size_t nmemb, uio_Stream *stream)
-	__attribute__((noinline));
-#else
 size_t uio_fread(void *buf, size_t size, size_t nmemb, uio_Stream *stream);
-#endif
 
 char *uio_fgets(char *buf, int size, uio_Stream *stream);
 int uio_fgetc(uio_Stream *stream);

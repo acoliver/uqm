@@ -13,6 +13,15 @@ fn main() {
         .compile("uqm_core");
 
     println!("cargo:rerun-if-changed=../sc2/src/mem_wrapper.c");
+
+    // Compile internal helper for uio_vfprintf (not an exported UIO symbol)
+    cc::Build::new()
+        .warnings(true)
+        .file("src/io/uio_vfprintf_helper.c")
+        .cpp(false)
+        .compile("uio_vfprintf_helper");
+
+    println!("cargo:rerun-if-changed=src/io/uio_vfprintf_helper.c");
 }
 
 fn generate_state_bindings(globdata_path: &Path) {

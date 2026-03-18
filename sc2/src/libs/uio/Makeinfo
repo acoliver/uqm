@@ -13,7 +13,7 @@ uqm_HFILES="charhashtable.h defaultfs.h fileblock.h fstypes.h getint.h
 
 	# Exclude C UIO sources when Rust implementations are enabled
 if [ -n "$USE_RUST_UIO" ]; then
-	uqm_CFILES="charhashtable.c paths.c uioutils.c uio_fread_shim.c"
+	uqm_CFILES="charhashtable.c paths.c uioutils.c"
 	uqm_HFILES="charhashtable.h paths.h uioutils.h"
 	uqm_SUBDIRS=""
 fi

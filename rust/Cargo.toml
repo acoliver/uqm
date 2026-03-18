@@ -31,6 +31,10 @@ xbrz-rs = "0.1.0"
 memoffset = "0.9.1"
 rodio = { version = "0.19", default-features = false, features = ["wav", "vorbis"] }
 cpal = "0.15"
+regex = "1" # @plan PLAN-20260314-FILE-IO.P07 @requirement REQ-FIO-DIRLIST-REGEX
+zip = "2" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
+crc32fast = "1.4" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
+
 mod_player = "0.1"
 fast_image_resize = "5.0"
 

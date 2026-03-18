@@ -40,7 +40,6 @@ extern "C" {
     // @requirement REQ-RES-FILE-003
     fn uio_stat(dir: *mut c_void, path: *const c_char, stat_buf: *mut libc::stat) -> c_int;
 
-
     static contentDir: *mut c_void;
 
     // C subsystem type registration functions — called from InitResourceSystem
@@ -1064,11 +1063,9 @@ pub unsafe extern "C" fn res_OpenResFile(
         }
     }
 
-
     // Not a directory or stat failed — fall through to regular open
     uio_fopen(dir, filename, mode)
 }
-
 
 /// Close a resource file. Returns 1 on success, 0 on failure.
 /// NULL and sentinel pointers return 1 (no-op).
@@ -1215,7 +1212,7 @@ pub unsafe extern "C" fn LoadResourceFromPath(
 
     let mode = b"rb\0".as_ptr() as *const c_char;
     let fp = res_OpenResFile(contentDir, pathname, mode);
-    
+
     // Reject null, sentinel (directory), and check for zero-length files
     if fp.is_null() || fp == STREAM_SENTINEL {
         return ptr::null_mut();
@@ -1800,7 +1797,6 @@ mod tests {
         assert_eq!(result, 1, "Free null should return 1 (success)");
     }
 
-
     // =========================================================================
     // P08: Directory sentinel and LoadResourceFromPath guard tests
     // =========================================================================
@@ -1811,8 +1807,7 @@ mod tests {
         // @plan PLAN-20260314-RESOURCE.P08
         // @requirement REQ-RES-FILE-003
         assert_eq!(
-            STREAM_SENTINEL,
-            !0usize as *mut c_void,
+            STREAM_SENTINEL, !0usize as *mut c_void,
             "STREAM_SENTINEL should be all bits set (~0)"
         );
     }
@@ -1825,7 +1820,6 @@ mod tests {
         let result = unsafe { LengthResFile(STREAM_SENTINEL) };
         assert_eq!(result, 1, "LengthResFile(STREAM_SENTINEL) should return 1");
     }
-
 
     // =========================================================================
     // P19: Config Put/Get roundtrip tests via FFI functions
@@ -1996,16 +1990,14 @@ mod tests {
     fn test_count_resource_types_returns_u32() {
         reset_state();
         InitResourceSystem();
-        
+
         let count = CountResourceTypes();
         // Should return correct count as u32 (not u16)
         assert_eq!(count, 5);
-        
+
         // Verify the return type is u32 (this compiles correctly if type is u32)
         let _type_check: u32 = count;
     }
-
-
 
     #[test]
     #[serial]
