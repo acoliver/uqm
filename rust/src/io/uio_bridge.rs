@@ -232,13 +232,14 @@ pub unsafe extern "C" fn uio_access(
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
+
         let input = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input);
         let registry = get_mount_registry().lock().unwrap();
 
         // Resolve to topmost visible object in mount order
@@ -379,13 +380,13 @@ pub unsafe extern "C" fn uio_stat(
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
         let input = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input);
         let registry = get_mount_registry().lock().unwrap();
 
         // Resolve to topmost visible object in mount order
@@ -463,13 +464,14 @@ pub unsafe extern "C" fn uio_mkdir(
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_path = &(*dir).path;
+        let dir_host_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input_path);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
@@ -486,7 +488,7 @@ pub unsafe extern "C" fn uio_mkdir(
         } else {
             drop(registry);
             // No mount - fall back to direct path resolution
-            resolve_path(dir_path, &input_path)
+            resolve_path(dir_host_path, &input_path)
         };
 
         match fs::create_dir(&host_path) {
@@ -510,13 +512,14 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_path = &(*dir).path;
+        let dir_host_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input_path);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
@@ -533,7 +536,7 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
         } else {
             drop(registry);
             // No mount - fall back to direct path resolution
-            resolve_path(dir_path, &input_path)
+            resolve_path(dir_host_path, &input_path)
         };
 
         match fs::remove_dir(&host_path) {
@@ -2148,7 +2151,7 @@ pub unsafe extern "C" fn uio_getStdioAccess(
             return ptr::null_mut();
         }
 
-        let dir_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => {
@@ -2157,7 +2160,7 @@ pub unsafe extern "C" fn uio_getStdioAccess(
             }
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input_path);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
         let registry = get_mount_registry().lock().unwrap();
 
         // Resolve to topmost visible object
@@ -2818,7 +2821,6 @@ pub unsafe extern "C" fn uio_openDir(
         "RUST_UIO: uio_openDir called with path: {:?}",
         c_path
     ));
-    eprintln!("RUST_UIO: uio_openDir called with path: {:?}", c_path);
 
     // Resolve through mount registry
     let resolved = resolve_mount_path(&c_path);
@@ -2827,7 +2829,6 @@ pub unsafe extern "C" fn uio_openDir(
         "RUST_UIO: uio_openDir resolved to: {:?}",
         resolved
     ));
-    eprintln!("RUST_UIO: uio_openDir resolved to: {:?}", resolved);
 
     // Create directory handle (don't fail if it doesn't exist - may be created later)
     let handle = Box::new(uio_DirHandle {
@@ -2875,7 +2876,6 @@ pub unsafe extern "C" fn uio_mountDir(
     flags: c_int,
     relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
-
     let mount_point = match cstr_to_pathbuf(mountPoint) {
         Some(p) => p,
         None => {
@@ -2884,8 +2884,20 @@ pub unsafe extern "C" fn uio_mountDir(
         }
     };
 
-    let source_path_str = if sourcePath.is_null() { "(null)".to_string() } else { std::ffi::CStr::from_ptr(sourcePath).to_string_lossy().into_owned() };
-    let in_path_str = if inPath.is_null() { "(null)".to_string() } else { std::ffi::CStr::from_ptr(inPath).to_string_lossy().into_owned() };
+    let source_path_str = if sourcePath.is_null() {
+        "(null)".to_string()
+    } else {
+        std::ffi::CStr::from_ptr(sourcePath)
+            .to_string_lossy()
+            .into_owned()
+    };
+    let in_path_str = if inPath.is_null() {
+        "(null)".to_string()
+    } else {
+        std::ffi::CStr::from_ptr(inPath)
+            .to_string_lossy()
+            .into_owned()
+    };
     eprintln!(
         "RUST_UIO: uio_mountDir: mountPoint={:?}, sourcePath='{}', inPath='{}', sourceDir={:?}, flags={}, relative={:?}",
         mount_point, source_path_str, in_path_str, sourceDir, flags, relative
@@ -3037,7 +3049,8 @@ pub unsafe extern "C" fn uio_open(
             return ptr::null_mut();
         }
 
-        let dir_path = &(*dir).path;
+        let dir_host_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => {
@@ -3046,7 +3059,7 @@ pub unsafe extern "C" fn uio_open(
             }
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input_path);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
 
         // Check if this is a write operation
         let is_write_mode =
@@ -3071,7 +3084,7 @@ pub unsafe extern "C" fn uio_open(
                 } else {
                     drop(registry);
                     // No mount - fall back to direct path resolution
-                    resolve_path(dir_path, &input_path)
+                    resolve_path(dir_host_path, &input_path)
                 };
 
             let mut opts = OpenOptions::new();
@@ -3161,7 +3174,7 @@ pub unsafe extern "C" fn uio_open(
         } else {
             drop(registry);
             // No mount - fall back to direct path resolution
-            resolve_path(dir_path, &input_path)
+            resolve_path(dir_host_path, &input_path)
         };
 
         let mut opts = OpenOptions::new();
@@ -3272,13 +3285,14 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_path = &(*dir).path;
+        let dir_host_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_path, &input_path);
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
@@ -3295,7 +3309,7 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
         } else {
             drop(registry);
             // No mount - fall back to direct path resolution
-            resolve_path(dir_path, &input_path)
+            resolve_path(dir_host_path, &input_path)
         };
 
         match fs::remove_file(&file_path) {
@@ -3335,7 +3349,9 @@ pub unsafe extern "C" fn uio_fopen(
             return ptr::null_mut();
         }
 
-        let dir_path = &(*dir).path;
+        let dir_host_path = &(*dir).path;
+        let dir_virt_path = &(*dir).virtual_path;
+
         let input = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => {
@@ -3357,8 +3373,9 @@ pub unsafe extern "C" fn uio_fopen(
 
         // @plan PLAN-20260314-FILE-IO.P09
         // @requirement REQ-FIO-ARCHIVE-MOUNT
-        // Check if path is in a ZIP mount
-        let virtual_path = normalize_virtual_path_full(dir_path, &input);
+        // Use virtual path (not host path) for mount resolution
+        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input);
+
         let registry = get_mount_registry().lock().unwrap();
 
         // Find the mount for this path
@@ -3405,7 +3422,7 @@ pub unsafe extern "C" fn uio_fopen(
                 }
             } else {
                 // Regular file mount
-                let file_path = resolve_path(dir_path, &input);
+                let file_path = resolve_path(dir_host_path, &input);
                 rust_bridge_log_msg(&format!(
                     "RUST_UIO: uio_fopen path={:?} mode={}",
                     file_path, mode_str
@@ -3440,7 +3457,7 @@ pub unsafe extern "C" fn uio_fopen(
             }
         } else {
             // No mount found - try as regular file (for backward compatibility)
-            let file_path = resolve_path(dir_path, &input);
+            let file_path = resolve_path(dir_host_path, &input);
             rust_bridge_log_msg(&format!(
                 "RUST_UIO: uio_fopen path={:?} mode={} (no mount)",
                 file_path, mode_str

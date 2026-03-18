@@ -1213,8 +1213,10 @@ pub unsafe extern "C" fn LoadResourceFromPath(
     let mode = b"rb\0".as_ptr() as *const c_char;
     let fp = res_OpenResFile(contentDir, pathname, mode);
 
-    // Reject null, sentinel (directory), and check for zero-length files
-    if fp.is_null() || fp == STREAM_SENTINEL {
+    // Reject null only. STREAM_SENTINEL means "directory" and must be
+    // passed through to the load function (e.g. _GetFontData reads glyph
+    // PNGs from directory entries). The C original does NOT reject sentinel.
+    if fp.is_null() {
         return ptr::null_mut();
     }
 
