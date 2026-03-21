@@ -2414,6 +2414,7 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "bindgen 0.70.1",
+ "bitflags 2.10.0",
  "cc",
  "clap",
  "cpal",

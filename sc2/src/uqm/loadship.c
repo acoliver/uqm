@@ -24,6 +24,11 @@
 #include "races.h"
 #include "init.h"
 
+#ifdef USE_RUST_SHIPS
+extern RACE_DESC *rust_ships_load(int species, BOOLEAN battle_ready);
+extern void rust_ships_free(RACE_DESC *desc, BOOLEAN free_battle, BOOLEAN free_metadata);
+#endif
+
 static RESOURCE code_resources[] = {
 		NULL_RESOURCE,
 		ARILOU_CODE,
@@ -58,6 +63,9 @@ static RESOURCE code_resources[] = {
 RACE_DESC *
 load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData)
 {
+#ifdef USE_RUST_SHIPS
+	return rust_ships_load(SpeciesID, LoadBattleData);
+#else
 	RACE_DESC *RDPtr = 0;
 	void *CodeRef;
 	
@@ -164,12 +172,16 @@ BadLoad:
 	RDPtr = 0; /* failed */
 
 	goto ExitFunc;
+#endif /* USE_RUST_SHIPS */
 }
 
 void
 free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 		BOOLEAN FreeBattleData)
 {
+#ifdef USE_RUST_SHIPS
+	rust_ships_free(raceDescPtr, FreeBattleData, FreeIconData);
+#else
 	if (raceDescPtr->uninit_func != NULL)
 		(*raceDescPtr->uninit_func) (raceDescPtr);
 
@@ -197,4 +209,5 @@ free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 	}
 
 	DestroyCodeRes (ReleaseCodeRes (raceDescPtr->CodeRef));
+#endif /* USE_RUST_SHIPS */
 }

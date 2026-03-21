@@ -35,6 +35,10 @@
 #include "setup.h"
 #include "units.h"
 
+#ifdef USE_RUST_SHIPS
+extern COUNT rust_ships_init(void);
+extern void rust_ships_uninit(void);
+#endif
 
 FRAME stars_in_space;
 FRAME asteroid[NUM_VIEWS];
@@ -177,6 +181,9 @@ BuildSIS (void)
 SIZE
 InitShips (void)
 {
+#ifdef USE_RUST_SHIPS
+	return rust_ships_init();
+#else
 	SIZE num_ships;
 
 	InitSpace ();
@@ -239,6 +246,7 @@ InitShips (void)
 	// FlushInput ();
 
 	return (num_ships);
+#endif /* USE_RUST_SHIPS */
 }
 
 // Count the crew elements in the display list.
@@ -268,6 +276,9 @@ CountCrewElements (void)
 void
 UninitShips (void)
 {
+#ifdef USE_RUST_SHIPS
+	rust_ships_uninit();
+#else
 	COUNT crew_retrieved;
 	int i;
 	HELEMENT hElement, hNextElement;
@@ -346,6 +357,7 @@ UninitShips (void)
 		if (inHQSpace ())
 			FreeHyperspace ();
 	}
+#endif /* USE_RUST_SHIPS */
 }
 
 

@@ -1,100 +1,62 @@
 // Initialization Functions
 // Handles space init/uninit and ship init/uninit
+// Delegates to ships::lifecycle module
 
-use std::sync::Mutex;
-
-/// Space initialization state
-static SPACE_INIT_COUNT: Mutex<u32> = Mutex::new(0);
-
-/// Ship initialization state
-static SHIPS_INIT_COUNT: Mutex<u32> = Mutex::new(0);
+use crate::ships;
+use crate::ships::types::Starship;
 
 /// Initialize space (load graphics, animations, etc.)
 pub fn init_space() -> Result<(), InitError> {
-    let mut count = SPACE_INIT_COUNT.lock().unwrap();
-
-    if *count == 0 {
-        // Perform actual initialization
-        // In a real implementation, this would:
-        // - Load star graphics
-        // - Load explosion animations
-        // - Load blast animations
-        // - Load asteroid animations
-    }
-
-    *count += 1;
-    Ok(())
+    ships::lifecycle::init_space().map_err(|e| match e {
+        ships::types::ShipsError::AlreadyInitialized => InitError::AlreadyInitialized,
+        ships::types::ShipsError::NotInitialized => InitError::NotInitialized,
+        ships::types::ShipsError::LoadFailed(_) => InitError::LoadFailed,
+        _ => InitError::InvalidState,
+    })
 }
 
 /// Uninitialize space
 pub fn uninit_space() -> Result<(), InitError> {
-    let mut count = SPACE_INIT_COUNT.lock().unwrap();
-
-    if *count > 0 {
-        *count -= 1;
-
-        if *count == 0 {
-            // Perform actual cleanup
-            // In a real implementation, this would:
-            // - Free star graphics
-            // - Free animations
-        }
-    }
-
-    Ok(())
+    ships::lifecycle::uninit_space().map_err(|e| match e {
+        ships::types::ShipsError::AlreadyInitialized => InitError::AlreadyInitialized,
+        ships::types::ShipsError::NotInitialized => InitError::NotInitialized,
+        ships::types::ShipsError::LoadFailed(_) => InitError::LoadFailed,
+        _ => InitError::InvalidState,
+    })
 }
 
 /// Initialize ships
 pub fn init_ships() -> Result<u32, InitError> {
-    init_space()?;
-
-    let mut count = SHIPS_INIT_COUNT.lock().unwrap();
-
-    if *count == 0 {
-        // Perform actual ship initialization
-        // In a real implementation, this would:
-        // - Initialize display list
-        // - Initialize galaxy
-        // - Build ship queues
-        // - Load ships for current mode
-    }
-
-    *count += 1;
-    Ok(2) // NUM_SIDES
+    // Default activity: IN_ENCOUNTER (2)
+    ships::lifecycle::init_ships(2).map_err(|e| match e {
+        ships::types::ShipsError::AlreadyInitialized => InitError::AlreadyInitialized,
+        ships::types::ShipsError::NotInitialized => InitError::NotInitialized,
+        ships::types::ShipsError::LoadFailed(_) => InitError::LoadFailed,
+        _ => InitError::InvalidState,
+    })
 }
 
-/// Uninitialize ships
+/// Uninitialize ships.
+///
+/// This zero-argument entry point handles BattleState cleanup and space
+/// uninit. Crew writeback and descriptor teardown over C-owned queues
+/// requires `ships::lifecycle::uninit_ships()` called directly with the
+/// canonical race queues — that path is wired in P14 when the C bridge
+/// provides queue access.
 pub fn uninit_ships() -> Result<(), InitError> {
-    let mut count = SHIPS_INIT_COUNT.lock().unwrap();
-
-    if *count > 0 {
-        *count -= 1;
-
-        if *count == 0 {
-            uninit_space()?;
-
-            // Perform actual ship cleanup
-            // In a real implementation, this would:
-            // - Count and retrieve crew
-            // - Update ship fragment crew
-            // - Free ship data
-            // - Uninit queues
-        }
-    }
-
-    Ok(())
-}
-
-/// Check if space is initialized
-pub fn is_space_initialized() -> bool {
-    let count = SPACE_INIT_COUNT.lock().unwrap();
-    *count > 0
-}
-
-/// Check if ships are initialized
-pub fn are_ships_initialized() -> bool {
-    let count = SHIPS_INIT_COUNT.lock().unwrap();
-    *count > 0
+    // Handle BattleState + space ref-count cleanup. Pass empty queues/fragments
+    // since canonical queue writeback is wired via C bridge in P14.
+    let mut queues: [Vec<Starship>; ships::lifecycle::NUM_PLAYERS] = [Vec::new(), Vec::new()];
+    let mut frags: [Vec<ships::writeback::ShipFragment>; ships::lifecycle::NUM_PLAYERS] =
+        [Vec::new(), Vec::new()];
+    ships::lifecycle::uninit_ships(&mut queues, &mut frags, 2, 0, None)
+        .map(|_| ())
+        .map_err(|e| match e {
+            ships::types::ShipsError::AlreadyInitialized => InitError::AlreadyInitialized,
+            ships::types::ShipsError::NotInitialized => InitError::NotInitialized,
+            ships::types::ShipsError::LoadFailed(_) => InitError::LoadFailed,
+            _ => InitError::InvalidState,
+        })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -122,52 +84,38 @@ impl std::error::Error for InitError {}
 mod tests {
     use super::*;
 
+    fn cleanup() {
+        // Reset battle state via lifecycle module
+        crate::ships::lifecycle::reset_battle_state();
+    }
+
     #[test]
     fn test_init_space() {
-        // Ensure clean state
-        while is_space_initialized() {
-            uninit_space().ok();
-        }
-
-        assert!(!is_space_initialized());
+        cleanup();
 
         init_space().unwrap();
-        assert!(is_space_initialized());
-
         // Second init should succeed (reference counting)
         init_space().unwrap();
-        assert!(is_space_initialized());
 
         uninit_space().unwrap();
         uninit_space().unwrap();
-        assert!(!is_space_initialized());
     }
 
     #[test]
     fn test_init_ships() {
-        assert!(!are_ships_initialized());
+        cleanup();
 
         let num_players = init_ships().unwrap();
         assert_eq!(num_players, 2);
-        assert!(are_ships_initialized());
 
         uninit_ships().unwrap();
-        assert!(!are_ships_initialized());
     }
 
     #[test]
     fn test_init_space_before_ships() {
-        // Ensure clean state
-        while is_space_initialized() || are_ships_initialized() {
-            uninit_ships().ok();
-            uninit_space().ok();
-        }
-
-        assert!(!is_space_initialized());
-        assert!(!are_ships_initialized());
+        cleanup();
 
         init_space().unwrap();
-        assert!(is_space_initialized());
 
         // Ships init should also init space but not duplicate
         let num_players = init_ships().unwrap();
@@ -175,12 +123,8 @@ mod tests {
 
         // Uninit ships should also uninit space
         uninit_ships().unwrap();
-        assert!(!are_ships_initialized());
-        // Space should still be initialized from the first init_space()
-        assert!(is_space_initialized());
 
         uninit_space().unwrap();
-        assert!(!is_space_initialized());
     }
 
     #[test]

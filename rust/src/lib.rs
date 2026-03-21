@@ -4,6 +4,8 @@
 // Phase 6: Input/VControl system
 // Phase 7: Alien Communication system
 
+pub mod battle;
+
 pub mod bridge_log;
 pub mod c_bindings;
 pub mod cli;
@@ -16,6 +18,7 @@ pub mod io;
 pub mod logging;
 pub mod memory;
 pub mod resource;
+pub mod ships;
 pub mod sound;
 pub mod state;
 pub mod threading;

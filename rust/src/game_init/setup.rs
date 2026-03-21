@@ -229,6 +229,9 @@ mod tests {
 
     #[test]
     fn test_get_kernel_mut() {
+        // Ensure clean state
+        uninit_game_kernel().ok();
+
         init_game_kernel().unwrap();
 
         get_kernel_mut(|k| {

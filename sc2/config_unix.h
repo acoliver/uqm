@@ -122,3 +122,6 @@
 /* Defined if using Rust game state helpers */
 #define USE_RUST_STATE
 
+/* Defined if using Rust ships subsystem */
+#define USE_RUST_SHIPS
+

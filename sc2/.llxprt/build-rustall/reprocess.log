@@ -1,0 +1,41 @@
+'echo -n' capable echo found.
+Sed stream editor found.
+tr found.
+Make found.
+build/unix/config_proginfo_host: line 291: libmikmod-config: command not found
+build/unix/config_proginfo_host: line 292: libmikmod-config: command not found
+build/unix/config_proginfo_host: line 293: libmikmod-config: command not found
+GNU C compiler found.
+We have a C preprocessor.
+We have a C dependency generator.
+We have a C compiler.
+We have a C++ preprocessor.
+We have a C++ dependency generator.
+We have a C++ compiler.
+We have a linker.
+We have a Objective-C preprocessor.
+We have a Objective-C dependency generator.
+We have a Objective-C compiler.
+Rez resource compiler (Apple Developer Tools) found.
+We have a MacOS X resource compiler (Rez).
+Little-endian machine detected.
+Simple DirectMedia Layer not found.
+Simple DirectMedia Layer version 2.x found.
+libpng found.
+Symbol 'readdir_r' found.
+Symbol 'setenv' found.
+Symbol 'strupr' not found.
+Symbol 'strcasecmp' found.
+Symbol 'stricmp' not found.
+Symbol 'acos' not found.
+Symbol 'iswgraph' found.
+Type 'wchar_t' found.
+Type 'wint_t' found.
+Symbol 'getopt_long' found.
+Header 'regex.h' found.
+Type '_Bool' found.
+Preprocessor macro 'WIN32' not found.
+Preprocessor macro '__MINGW32__' not found.
+Platform-specific network libraries found.
+zlib found.
+Reconfiguring complete...

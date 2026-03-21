@@ -23,12 +23,22 @@
 #include "displist.h"
 #include "supermelee/melee.h"
 
+#ifdef USE_RUST_SHIPS
+extern BOOLEAN rust_ships_load_catalog(void);
+extern void rust_ships_free_catalog(void);
+extern COUNT rust_ships_get_cost_by_index(COUNT index);
+#endif
+
 
 QUEUE master_q;
 
 void
 LoadMasterShipList (void (* YieldProcessing)(void))
 {
+#ifdef USE_RUST_SHIPS
+	(void) YieldProcessing;
+	rust_ships_load_catalog();
+#else
 	COUNT num_entries;
 	SPECIES_ID s_id = ARILOU_ID;
 	num_entries = LAST_MELEE_ID - ARILOU_ID + 1;
@@ -88,11 +98,15 @@ LoadMasterShipList (void (* YieldProcessing)(void))
 		}
 		InsertQueue (&master_q, hBuiltShip, hStarShip);
 	}
+#endif /* USE_RUST_SHIPS */
 }
 
 void
 FreeMasterShipList (void)
 {
+#ifdef USE_RUST_SHIPS
+	rust_ships_free_catalog();
+#else
 	HMASTERSHIP hStarShip, hNextShip;
 
 	for (hStarShip = GetHeadLink (&master_q);
@@ -112,6 +126,7 @@ FreeMasterShipList (void)
 	}
 
 	UninitQueue (&master_q);
+#endif /* USE_RUST_SHIPS */
 }
 
 HMASTERSHIP
@@ -163,6 +178,9 @@ FindMasterShipIndex (SPECIES_ID ship_ref)
 COUNT
 GetShipCostFromIndex (unsigned Index)
 {
+#ifdef USE_RUST_SHIPS
+	return rust_ships_get_cost_by_index((COUNT)Index);
+#else
 	HMASTERSHIP hMasterShip;
 	MASTER_SHIP_INFO *MasterPtr;
 	COUNT val;
@@ -176,6 +194,7 @@ GetShipCostFromIndex (unsigned Index)
 	UnlockMasterShip (&master_q, hMasterShip);
 
 	return val;
+#endif /* USE_RUST_SHIPS */
 }
 
 FRAME

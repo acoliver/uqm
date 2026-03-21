@@ -1,0 +1,4 @@
+.llxprt/build-rustall/obj/debug/src/libs/uio/paths.c.o: \
+  src/libs/uio/paths.c src/libs/uio/paths.h src/libs/uio/types.h \
+  src/config.h .llxprt/build-rustall/config_unix.h \
+  src/libs/uio/uioport.h src/libs/uio/mem.h

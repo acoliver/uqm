@@ -24,6 +24,11 @@ if [ "$uqm_USE_RUST_COMM" = "1" ]; then
 	uqm_CFILES="$uqm_CFILES rust_comm.c"
 fi
 
+# Include Rust ships bridge helper when USE_RUST_SHIPS is enabled
+if [ "$uqm_USE_RUST_SHIPS" = "1" ]; then
+	uqm_CFILES="$uqm_CFILES rust_bridge_ships.c"
+fi
+
 uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		collide.h colors.h commanim.h commglue.h comm.h cons_res.h controls.h
 		corecode.h credits.h demo.h displist.h dummy.h element.h encount.h

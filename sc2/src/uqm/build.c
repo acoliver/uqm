@@ -25,11 +25,19 @@
 #include "libs/compiler.h"
 #include "libs/mathlib.h"
 
+#ifdef USE_RUST_SHIPS
+extern HLINK rust_ships_build(void *queue, int species);
+extern BOOLEAN rust_ships_clone_fragment(const void *src, void *dst);
+#endif
+
 
 // Allocate a new STARSHIP or SHIP_FRAGMENT and put it in the queue
 HLINK
 Build (QUEUE *pQueue, SPECIES_ID SpeciesID)
 {
+#ifdef USE_RUST_SHIPS
+	return rust_ships_build(pQueue, SpeciesID);
+#else
 	HLINK hNewShip;
 	SHIP_BASE *ShipPtr;
 
@@ -48,6 +56,7 @@ Build (QUEUE *pQueue, SPECIES_ID SpeciesID)
 	PutQueue (pQueue, hNewShip);
 
 	return hNewShip;
+#endif /* USE_RUST_SHIPS */
 }
 
 HLINK
@@ -460,6 +469,10 @@ NameCaptain (QUEUE *pQueue, SPECIES_ID SpeciesID)
 
 // crew_level can be set to INFINITE_FLEET for a ship which is to
 // represent an infinite number of ships.
+// TODO(P14-WIRE): CloneShipFragment needs a dedicated Rust FFI function
+// matching its actual signature (shipIndex, pDstQueue, crew_level) rather
+// than the simplified (src, dst) contract. The internal Build() call is
+// already guarded. Full bridge deferred to runtime integration.
 HSHIPFRAG
 CloneShipFragment (COUNT shipIndex, QUEUE *pDstQueue, COUNT crew_level)
 {

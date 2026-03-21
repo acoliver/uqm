@@ -1,0 +1,2 @@
+.llxprt/build-rustall/obj/debug/src/libs/network/network_bsd.c.o: \
+  src/libs/network/network_bsd.c src/libs/network/network.h
