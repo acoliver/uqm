@@ -142,6 +142,7 @@ impl MeleeTeam {
 
 /// Complete setup for a two-sided SuperMelee: both teams, cached fleet
 /// values, and per-side control modes.
+#[derive(Debug)]
 pub struct MeleeSetup {
     /// The two teams (index 0 = player 1, index 1 = player 2).
     pub teams: [MeleeTeam; NUM_SIDES],
