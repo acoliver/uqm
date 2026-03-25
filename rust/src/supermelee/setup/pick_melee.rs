@@ -65,6 +65,11 @@ impl SideSelectionState {
         (0..MELEE_FLEET_SIZE as FleetShipIndex).find(|&slot| self.is_available(slot, team))
     }
 
+    /// Returns the currently active slot, if any.
+    pub fn current_slot(&self) -> Option<FleetShipIndex> {
+        self.current_slot
+    }
+
     /// Resets all consumed flags (for new match).
     pub fn reset(&mut self) {
         self.consumed = [false; MELEE_FLEET_SIZE];

@@ -4,6 +4,7 @@
 pub mod build_pick;
 pub mod config;
 pub mod melee;
+pub mod netplay_boundary;
 pub mod persistence;
 pub mod pick_melee;
 pub mod team;
