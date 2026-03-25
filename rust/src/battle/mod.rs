@@ -2,7 +2,7 @@
 // @plan PLAN-20260320-BATTLE.P03, P04, P06, P08, P09, P10, P11, P12, P13, P14, P15, P16
 // @requirement Foundation module for shared types extracted from ships
 
-pub mod ai_types;
+pub mod ai;
 pub mod battle_types;
 pub mod c_bridge;
 pub mod collision;
@@ -18,7 +18,7 @@ pub mod tactical;
 pub mod velocity;
 pub mod weapon;
 
-pub use ai_types::*;
+pub use ai::*;
 pub use battle_types::*;
 pub use collision::*;
 pub use display_list::*;

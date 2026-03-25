@@ -250,6 +250,103 @@ pub fn advance_ion_trail(color_cycle_index: u8) -> Option<u8> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// P10: Flee + Warp + Winner (tactrans.c)
+// @plan PLAN-20260320-BATTLEPT2.P10
+// @requirement REQ-FLEE, REQ-WARP, REQ-WINNER, REQ-OPPONENT-ALIVE
+// ---------------------------------------------------------------------------
+
+/// Number of color steps in the flee pulse animation.
+pub const FLEE_PULSE_STEPS: usize = FLEE_PULSE_COLORS.len();
+
+/// Winner tracking state for the current battle.
+///
+/// In C this is a global `winnerStarShip` pointer.
+/// Rust uses an explicit state struct to avoid global mutation.
+pub struct WinnerState {
+    /// Player number of the winner (0 or 1), or None if no winner yet.
+    pub winner_player: Option<u8>,
+    /// Whether the winner starship has PLAY_VICTORY_DITTY set.
+    pub play_victory_ditty: bool,
+}
+
+impl WinnerState {
+    pub fn new() -> Self {
+        Self {
+            winner_player: None,
+            play_victory_ditty: false,
+        }
+    }
+
+    /// Reset winner state. C reference: tactrans.c ResetWinnerStarShip
+    pub fn reset(&mut self) {
+        self.winner_player = None;
+        self.play_victory_ditty = false;
+    }
+
+    /// Set winner. First call wins; subsequent calls are no-ops.
+    /// C reference: tactrans.c SetWinnerStarShip
+    pub fn set_winner(&mut self, player_nr: u8) {
+        if self.winner_player.is_none() {
+            self.winner_player = Some(player_nr);
+            self.play_victory_ditty = true;
+        }
+    }
+
+    /// Get current winner player number.
+    /// C reference: tactrans.c GetWinnerStarShip
+    pub fn winner(&self) -> Option<u8> {
+        self.winner_player
+    }
+}
+
+impl Default for WinnerState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Check if a flee attempt should be allowed.
+///
+/// C reference: battle.c:63-70 RunAwayAllowed
+///
+/// Flee is allowed only when:
+/// - Activity is IN_ENCOUNTER or IN_LAST_BATTLE, AND
+/// - STARBASE_AVAILABLE is set, AND
+/// - Ship is NOT a BOMB_CARRIER
+pub fn run_away_allowed(activity: u8, starbase_available: bool, is_bomb_carrier: bool) -> bool {
+    let is_encounter_or_last_battle = activity == 2 || activity == 3; // IN_ENCOUNTER=2, IN_LAST_BATTLE=3
+    is_encounter_or_last_battle && starbase_available && !is_bomb_carrier
+}
+
+/// Compute the flee pulse color index for the current animation frame.
+///
+/// C reference: tactrans.c flee_preprocess
+///
+/// Returns the color table index (0..19) based on current cycle position,
+/// or None if the pulse is complete (should trigger warp-out).
+pub fn flee_pulse_advance(current_step: u8) -> Option<u8> {
+    let next = current_step + 1;
+    if (next as usize) < FLEE_PULSE_STEPS {
+        Some(next)
+    } else {
+        None // Pulse complete, trigger warp-out
+    }
+}
+
+/// Initialize flee state on a ship element.
+///
+/// C reference: tactrans.c DoRunAway
+///
+/// Sets mass_points above MAX_SHIP_MASS to signal fleeing,
+/// extends life_span for the flee animation.
+pub fn init_flee_state(element: &mut Element) {
+    element.mass_points = FLEE_MASS;
+    element.life_span = HYPERJUMP_LIFE as u16;
+    element.color_cycle_index = 0;
+    // Callbacks set by caller (flee_preprocess, etc.)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -445,5 +542,69 @@ mod tests {
     fn test_ion_trail_color_table_length() {
         assert_eq!(ION_TRAIL_COLOR_TABLE.len(), 12);
         assert_eq!(ION_TRAIL_LIFE, 12);
+    }
+
+    // ---- P10: Flee + Warp + Winner tests ----
+
+    #[test]
+    fn test_winner_state_default() {
+        let ws = WinnerState::new();
+        assert!(ws.winner().is_none());
+        assert!(!ws.play_victory_ditty);
+    }
+
+    #[test]
+    fn test_winner_state_set_once() {
+        let mut ws = WinnerState::new();
+        ws.set_winner(0);
+        assert_eq!(ws.winner(), Some(0));
+        assert!(ws.play_victory_ditty);
+    }
+
+    #[test]
+    fn test_winner_state_first_wins() {
+        let mut ws = WinnerState::new();
+        ws.set_winner(0);
+        ws.set_winner(1); // no-op
+        assert_eq!(ws.winner(), Some(0), "First winner preserved");
+    }
+
+    #[test]
+    fn test_winner_state_reset() {
+        let mut ws = WinnerState::new();
+        ws.set_winner(1);
+        ws.reset();
+        assert!(ws.winner().is_none());
+        assert!(!ws.play_victory_ditty);
+    }
+
+    #[test]
+    fn test_run_away_allowed() {
+        // IN_ENCOUNTER (2) + starbase + not bomb
+        assert!(run_away_allowed(2, true, false));
+        // IN_LAST_BATTLE (3) + starbase + not bomb
+        assert!(run_away_allowed(3, true, false));
+        // SUPER_MELEE (1) — not allowed
+        assert!(!run_away_allowed(1, true, false));
+        // IN_ENCOUNTER but no starbase
+        assert!(!run_away_allowed(2, false, false));
+        // IN_ENCOUNTER but bomb carrier
+        assert!(!run_away_allowed(2, true, true));
+    }
+
+    #[test]
+    fn test_flee_pulse_advance() {
+        assert_eq!(flee_pulse_advance(0), Some(1));
+        assert_eq!(flee_pulse_advance(18), Some(19));
+        assert_eq!(flee_pulse_advance(19), None); // 20 colors, complete
+    }
+
+    #[test]
+    fn test_init_flee_state() {
+        let mut elem = Element::default();
+        init_flee_state(&mut elem);
+        assert_eq!(elem.mass_points, FLEE_MASS);
+        assert_eq!(elem.life_span, HYPERJUMP_LIFE as u16);
+        assert_eq!(elem.color_cycle_index, 0);
     }
 }
