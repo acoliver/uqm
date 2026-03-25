@@ -283,9 +283,9 @@ mod integration_tests {
 
     #[test]
     fn test_type_relocation_verification() {
-        // Verify constants are accessible from both battle_types and ship_runtime_types
+        // Verify constants are accessible from both battle_types and ship_runtime
         use super::battle_types::NUM_FACINGS as BT_NUM_FACINGS;
-        use super::ship_runtime_types::MAX_CREW_SIZE;
+        use super::ship_runtime::MAX_CREW_SIZE;
 
         // NUM_FACINGS should be 16
         assert_eq!(BT_NUM_FACINGS, 16, "NUM_FACINGS should be 16");
@@ -294,12 +294,12 @@ mod integration_tests {
         assert_eq!(MAX_CREW_SIZE, 42, "MAX_CREW_SIZE should be 42");
 
         // Verify ShipPipelineStage enum exists
-        use super::ship_runtime_types::ShipPipelineStage;
+        use super::ship_runtime::ShipPipelineStage;
         let stage = ShipPipelineStage::Input;
         assert_eq!(stage as u8, 0, "ShipPipelineStage::Input should be stage 0");
 
         // Verify SpawnPositionType enum exists
-        use super::ship_runtime_types::SpawnPositionType;
+        use super::ship_runtime::SpawnPositionType;
         let spawn_type = SpawnPositionType::Random;
         assert_eq!(spawn_type as u8, 0, "SpawnPositionType::Random should be 0");
     }
