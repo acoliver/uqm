@@ -6,6 +6,8 @@
 
 pub mod battle;
 
+pub mod supermelee;
+
 pub mod bridge_log;
 pub mod c_bindings;
 pub mod cli;
