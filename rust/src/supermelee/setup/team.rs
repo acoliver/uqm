@@ -67,7 +67,7 @@ const TEAM_NAME_BUF: usize = MAX_TEAM_CHARS + 1 + 24;
 ///
 /// Memory layout intentionally mirrors the C `struct MeleeTeam` so that
 /// future serialisation code can validate byte offsets easily.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MeleeTeam {
     /// Fleet slots; initialised to `MeleeShip::MeleeNone`.
     pub ships: [MeleeShip; MELEE_FLEET_SIZE],
