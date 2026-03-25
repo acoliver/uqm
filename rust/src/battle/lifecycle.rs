@@ -68,6 +68,179 @@ pub const MIN_SHIPS_FOR_BATTLE: i16 = 1;
 /// Hyperspace exit indicator (negative return)
 pub const HYPERSPACE_EXIT: i16 = -1;
 
+// ---------------------------------------------------------------------------
+// P12: Battle Lifecycle (battle.c, init.c)
+// @plan PLAN-20260320-BATTLEPT2.P12
+// @requirement REQ-BATTLE-ENTRY, REQ-SHIP-INIT, REQ-SPACE-INIT, REQ-INPUT-PROCESSING
+// ---------------------------------------------------------------------------
+
+/// Activity type constants matching C (globdata.h)
+pub const SUPER_MELEE: u8 = 1;
+pub const IN_ENCOUNTER: u8 = 2;
+pub const IN_LAST_BATTLE: u8 = 3;
+
+/// Number of sides in battle (always 2)
+pub const NUM_SIDES: i32 = 2;
+
+/// Reference-counted shared asset state.
+///
+/// C reference: init.c InitSpace/UninitSpace use `++count` / `--count`
+/// to manage explosion, blast, asteroid frames loaded once and shared.
+pub struct SharedAssetState {
+    pub ref_count: u32,
+    pub loaded: bool,
+}
+
+impl SharedAssetState {
+    pub fn new() -> Self {
+        Self {
+            ref_count: 0,
+            loaded: false,
+        }
+    }
+
+    /// Increment reference count. Returns true if this is the first reference
+    /// (assets need loading).
+    pub fn acquire(&mut self) -> bool {
+        self.ref_count += 1;
+        if !self.loaded {
+            self.loaded = true;
+            true // caller should load assets
+        } else {
+            false // assets already loaded
+        }
+    }
+
+    /// Decrement reference count. Returns true if count reaches zero
+    /// (assets should be freed).
+    pub fn release(&mut self) -> bool {
+        if self.ref_count == 0 {
+            return false;
+        }
+        self.ref_count -= 1;
+        if self.ref_count == 0 {
+            self.loaded = false;
+            true // caller should free assets
+        } else {
+            false // still referenced
+        }
+    }
+}
+
+impl Default for SharedAssetState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Battle sequence state tracking.
+///
+/// Tracks where we are in the Battle() entry/exit sequence.
+/// C reference: battle.c:396-516 Battle()
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BattleSequenceState {
+    /// Not started
+    Idle,
+    /// RNG seeded, music loading
+    Initializing,
+    /// Ships initialized, ready for selection
+    ShipsReady,
+    /// Ship selection in progress
+    Selecting,
+    /// Main battle loop active
+    InBattle,
+    /// AbortBattle cleanup
+    Aborting,
+    /// Normal exit cleanup
+    Finishing,
+}
+
+/// Map a single abstract battle input to ship input flags.
+///
+/// C reference: battle.c ProcessInput:144-226
+///
+/// Maps BATTLE_LEFT/RIGHT/THRUST/WEAPON/SPECIAL to corresponding
+/// ship input constants (LEFT/RIGHT/THRUST/WEAPON/SPECIAL).
+pub fn map_battle_input(input: BattleInputState) -> u32 {
+    let mut flags = 0u32;
+    if input.0 & BattleInputState::LEFT.0 != 0 {
+        flags |= super::ship_runtime::LEFT as u32;
+    }
+    if input.0 & BattleInputState::RIGHT.0 != 0 {
+        flags |= super::ship_runtime::RIGHT as u32;
+    }
+    if input.0 & BattleInputState::THRUST.0 != 0 {
+        flags |= super::ship_runtime::THRUST as u32;
+    }
+    if input.0 & BattleInputState::WEAPON.0 != 0 {
+        flags |= super::ship_runtime::WEAPON as u32;
+    }
+    if input.0 & BattleInputState::SPECIAL.0 != 0 {
+        flags |= super::ship_runtime::SPECIAL as u32;
+    }
+    flags
+}
+
+/// Check if battle input contains escape request.
+pub fn has_escape_input(input: BattleInputState) -> bool {
+    input.0 & BattleInputState::ESCAPE.0 != 0
+}
+
+/// Determine the music type for the current battle context.
+///
+/// C reference: battle.c BattleSong:234-249
+///
+/// Returns which music resource to load/play.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BattleMusicType {
+    HyperSpace,
+    QuasiSpace,
+    Normal,
+}
+
+/// Select battle music type based on current location.
+pub fn select_battle_music(in_hyperspace: bool, in_quasispace: bool) -> BattleMusicType {
+    if in_hyperspace {
+        BattleMusicType::HyperSpace
+    } else if in_quasispace {
+        BattleMusicType::QuasiSpace
+    } else {
+        BattleMusicType::Normal
+    }
+}
+
+/// Determine player input processing order.
+///
+/// C reference: battle.c GetPlayerOrder:357-372
+///
+/// Returns (first_player, second_player). In normal battles,
+/// player 0 goes first. In network play, may be reversed.
+pub fn get_player_order(is_network: bool, local_player: u8) -> (u8, u8) {
+    if is_network && local_player == 1 {
+        (1, 0) // network: local player goes first
+    } else {
+        (0, 1) // default order
+    }
+}
+
+/// Check if battle should use instant victory (skip combat).
+///
+/// C reference: battle.c:418-424
+pub fn check_instant_victory(instant_victory_flag: bool) -> Option<[i32; 2]> {
+    if instant_victory_flag {
+        Some([1, 0]) // battle_counter: player 0 wins immediately
+    } else {
+        None
+    }
+}
+
+/// Compute initial battle_counter values from fleet sizes.
+///
+/// C reference: battle.c:431-432
+pub fn compute_battle_counters(fleet_size_0: i32, fleet_size_1: i32) -> [i32; 2] {
+    [fleet_size_0, fleet_size_1]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +292,115 @@ mod tests {
     #[test]
     fn test_min_ships_constant() {
         assert_eq!(MIN_SHIPS_FOR_BATTLE, 1);
+    }
+
+    // ---- P12: Battle Lifecycle tests ----
+
+    #[test]
+    fn test_shared_asset_acquire_release() {
+        let mut state = SharedAssetState::new();
+        assert!(!state.loaded);
+        assert_eq!(state.ref_count, 0);
+
+        // First acquire loads
+        assert!(state.acquire());
+        assert!(state.loaded);
+        assert_eq!(state.ref_count, 1);
+
+        // Second acquire doesn't reload
+        assert!(!state.acquire());
+        assert_eq!(state.ref_count, 2);
+
+        // First release doesn't free
+        assert!(!state.release());
+        assert_eq!(state.ref_count, 1);
+        assert!(state.loaded);
+
+        // Second release frees
+        assert!(state.release());
+        assert_eq!(state.ref_count, 0);
+        assert!(!state.loaded);
+    }
+
+    #[test]
+    fn test_shared_asset_release_at_zero() {
+        let mut state = SharedAssetState::new();
+        assert!(!state.release()); // no-op at zero
+    }
+
+    #[test]
+    fn test_map_battle_input() {
+        let input = BattleInputState(
+            BattleInputState::LEFT.0 | BattleInputState::THRUST.0 | BattleInputState::WEAPON.0,
+        );
+        let flags = map_battle_input(input);
+        use super::super::ship_runtime::{LEFT, RIGHT, THRUST, WEAPON};
+        assert!(flags & (LEFT as u32) != 0);
+        assert!(flags & (THRUST as u32) != 0);
+        assert!(flags & (WEAPON as u32) != 0);
+        assert!(flags & (RIGHT as u32) == 0);
+    }
+
+    #[test]
+    fn test_has_escape_input() {
+        assert!(!has_escape_input(BattleInputState::NONE));
+        assert!(has_escape_input(BattleInputState::ESCAPE));
+        assert!(has_escape_input(BattleInputState(
+            BattleInputState::LEFT.0 | BattleInputState::ESCAPE.0
+        )));
+    }
+
+    #[test]
+    fn test_select_battle_music() {
+        assert_eq!(
+            select_battle_music(true, false),
+            BattleMusicType::HyperSpace
+        );
+        assert_eq!(
+            select_battle_music(false, true),
+            BattleMusicType::QuasiSpace
+        );
+        assert_eq!(select_battle_music(false, false), BattleMusicType::Normal);
+    }
+
+    #[test]
+    fn test_get_player_order() {
+        assert_eq!(get_player_order(false, 0), (0, 1));
+        assert_eq!(get_player_order(true, 0), (0, 1));
+        assert_eq!(get_player_order(true, 1), (1, 0));
+    }
+
+    #[test]
+    fn test_check_instant_victory() {
+        assert!(check_instant_victory(false).is_none());
+        assert_eq!(check_instant_victory(true), Some([1, 0]));
+    }
+
+    #[test]
+    fn test_compute_battle_counters() {
+        assert_eq!(compute_battle_counters(3, 5), [3, 5]);
+    }
+
+    #[test]
+    fn test_battle_sequence_states() {
+        // Verify all states exist and are distinct
+        let states = [
+            BattleSequenceState::Idle,
+            BattleSequenceState::Initializing,
+            BattleSequenceState::ShipsReady,
+            BattleSequenceState::Selecting,
+            BattleSequenceState::InBattle,
+            BattleSequenceState::Aborting,
+            BattleSequenceState::Finishing,
+        ];
+        assert_eq!(states.len(), 7);
+        assert_ne!(states[0], states[1]);
+    }
+
+    #[test]
+    fn test_activity_constants() {
+        assert_eq!(SUPER_MELEE, 1);
+        assert_eq!(IN_ENCOUNTER, 2);
+        assert_eq!(IN_LAST_BATTLE, 3);
     }
 }
