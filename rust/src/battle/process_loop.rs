@@ -367,6 +367,441 @@ fn init_intersect_frame(element: &mut Element) {
     element.intersect_control.intersect_stamp.frame = element.current.frame;
 }
 
+// ---------------------------------------------------------------------------
+// P04: ProcessCollisions (process.c:362-628)
+// ---------------------------------------------------------------------------
+
+/// Time value type matching C's TIME_VALUE (unsigned 16-bit).
+pub type TimeValue = u16;
+
+/// Maximum time value for collision checks.
+pub const MAX_TIME_VALUE: TimeValue = u16::MAX;
+
+/// Sentinel value returned by DrawablesIntersect when elements are
+/// stuck overlapping at maximum time (not a valid collision time).
+const STUCK_SENTINEL: TimeValue = 1;
+
+/// Bridge to C's DrawablesIntersect. Returns 0 (no hit),
+/// 1 (stuck sentinel), or >1 (collision time).
+///
+/// In production this calls the C function via FFI.
+/// For testing, this can be overridden via the `collision_test_fn` field
+/// on CollisionContext.
+type DrawablesIntersectFn = unsafe fn(a: &Element, b: &Element, min_time: TimeValue) -> TimeValue;
+
+/// Bridge to C's do_damage function.
+type DoDamageFn = unsafe fn(element: *mut Element, damage: u16);
+
+/// Bridge to C's collide (elastic collision) function.
+type CollideFn = unsafe fn(a: *mut Element, b: *mut Element);
+
+/// Context for collision processing, carrying function pointers
+/// to bridge functions and the display list.
+pub struct CollisionContext<'a> {
+    pub display_list: &'a mut DisplayList,
+    pub drawables_intersect: DrawablesIntersectFn,
+    pub do_damage: DoDamageFn,
+    pub collide: CollideFn,
+    pub process_flags: ElementFlags,
+}
+
+/// Recursive collision detection and dispatch.
+///
+/// C reference: `ProcessCollisions()` (process.c:362-628)
+///
+/// Walks successor elements from `succ_handle`, checking each against
+/// `element_ptr` for collisions. Handles:
+/// - APPEARING+FINITE_LIFE prefilter (skip DrawablesIntersect)
+/// - Stuck overlap sentinel (frame normalization, APPEARING destruction)
+/// - COLLISION flag alternate intersection check
+/// - Recursive earlier-time collision detection
+/// - PLAYER_SHIP-aware dispatch ordering
+/// - Post-collision position snapping (conditional on newly-set COLLISION)
+/// - Post-bounce elastic collision + recursive recheck from head
+///
+/// Returns the element's COLLISION flag state.
+///
+/// # Safety
+/// - All element pointers must be valid
+/// - Callback function pointers must be valid C-ABI
+/// - DisplayList must contain all referenced elements
+pub unsafe fn process_collisions(
+    ctx: &mut CollisionContext<'_>,
+    succ_handle: Option<ElementHandle>,
+    element_ptr: *mut Element,
+    min_time: TimeValue,
+) -> bool {
+    let mut current_succ = succ_handle;
+
+    while let Some(test_handle) = current_succ {
+        let test_ptr: *mut Element = match ctx.display_list.get_mut(test_handle) {
+            Some(e) => e as *mut Element,
+            None => break,
+        };
+        let test_elem = &mut *test_ptr;
+
+        // PreProcess unprocessed elements encountered during walk
+        if !test_elem.state_flags.intersects(ctx.process_flags) {
+            pre_process(test_handle, ctx.display_list);
+        }
+
+        // Advance to next successor before any modifications
+        current_succ = ctx.display_list.next(test_handle);
+
+        let element = &mut *element_ptr;
+        let test_elem = &mut *test_ptr;
+
+        // Skip self-collision
+        if std::ptr::eq(element_ptr, test_ptr) {
+            continue;
+        }
+
+        // Check collision eligibility (Phase 1 collision_possible)
+        if !test_elem.collision_possible(element) {
+            continue;
+        }
+
+        let state_flags = element.state_flags;
+        let test_state_flags = test_elem.state_flags;
+
+        // APPEARING+FINITE_LIFE prefilter (process.c:389-394)
+        let time_val;
+        if (state_flags | test_state_flags).contains(ElementFlags::FINITE_LIFE)
+            && ((state_flags.contains(ElementFlags::APPEARING) && element.life_span > 1)
+                || (test_state_flags.contains(ElementFlags::APPEARING) && test_elem.life_span > 1))
+        {
+            time_val = 0;
+        } else {
+            time_val = process_collision_loop(
+                ctx,
+                element_ptr,
+                test_ptr,
+                min_time,
+                state_flags,
+                test_state_flags,
+            );
+        }
+
+        if time_val > 0 {
+            if dispatch_collision(
+                ctx,
+                element_ptr,
+                test_ptr,
+                test_handle,
+                time_val,
+                state_flags,
+                test_state_flags,
+            ) {
+                return true;
+            }
+        }
+    }
+
+    let element = &*element_ptr;
+    element.state_flags.contains(ElementFlags::COLLISION)
+}
+
+/// Inner while loop for DrawablesIntersect + stuck overlap resolution.
+/// Returns the final time_val (0 = no collision, >0 = collision time).
+///
+/// C reference: process.c:397-516
+unsafe fn process_collision_loop(
+    ctx: &mut CollisionContext<'_>,
+    element_ptr: *mut Element,
+    test_ptr: *mut Element,
+    min_time: TimeValue,
+    state_flags: ElementFlags,
+    test_state_flags: ElementFlags,
+) -> TimeValue {
+    let element = &mut *element_ptr;
+    let test_elem = &mut *test_ptr;
+
+    let mut time_val = (ctx.drawables_intersect)(element, test_elem, min_time);
+
+    // Stuck overlap while loop (process.c:397-516)
+    while time_val == STUCK_SENTINEL
+        && !(state_flags | test_state_flags).contains(ElementFlags::FINITE_LIFE)
+    {
+        #[cfg(feature = "debug-process")]
+        tracing::debug!("BAD NEWS: stuck overlap between elements");
+
+        let element = &mut *element_ptr;
+        let test_elem = &mut *test_ptr;
+
+        // Alternate intersection check when COLLISION already set
+        if state_flags.contains(ElementFlags::COLLISION) {
+            init_intersect_end_point(test_elem);
+            test_elem.intersect_control.intersect_stamp.origin =
+                test_elem.intersect_control.end_point;
+            time_val = (ctx.drawables_intersect)(element, test_elem, 1);
+            init_intersect_start_point(test_elem);
+        }
+
+        if time_val == STUCK_SENTINEL {
+            let cur_frame = element.current.frame;
+            let next_frame = element.next.frame;
+            let test_cur_frame = test_elem.current.frame;
+            let test_next_frame = test_elem.next.frame;
+
+            if next_frame == cur_frame && test_next_frame == test_cur_frame {
+                // Identical frames — destroy APPEARING elements
+                if test_state_flags.contains(ElementFlags::APPEARING) {
+                    (ctx.do_damage)(test_ptr, test_elem.crew_or_hp);
+                    let test_elem = &mut *test_ptr;
+                    if !test_elem.p_parent.is_null() {
+                        untarget(ctx.display_list, test_ptr);
+                    }
+                    let test_elem = &mut *test_ptr;
+                    test_elem
+                        .state_flags
+                        .insert(ElementFlags::COLLISION | ElementFlags::DISAPPEARING);
+                    if let Some(death_func) = test_elem.death_func {
+                        death_func(test_ptr);
+                    }
+                }
+                if state_flags.contains(ElementFlags::APPEARING) {
+                    let element = &mut *element_ptr;
+                    (ctx.do_damage)(element_ptr, element.crew_or_hp);
+                    let element = &mut *element_ptr;
+                    if !element.p_parent.is_null() {
+                        untarget(ctx.display_list, element_ptr);
+                    }
+                    let element = &mut *element_ptr;
+                    element
+                        .state_flags
+                        .insert(ElementFlags::COLLISION | ElementFlags::DISAPPEARING);
+                    if let Some(death_func) = element.death_func {
+                        death_func(element_ptr);
+                    }
+                    return 0; // C returns COLLISION here
+                }
+
+                time_val = 0;
+            } else {
+                // Differing frames — normalize (process.c:454-505)
+                normalize_stuck_frames(element_ptr, test_ptr);
+            }
+        }
+
+        if time_val == 0 {
+            let element = &mut *element_ptr;
+            let test_elem = &mut *test_ptr;
+            init_intersect_end_point(element);
+            init_intersect_end_point(test_elem);
+            break;
+        }
+
+        // Re-check DrawablesIntersect after normalization
+        let element = &mut *element_ptr;
+        let test_elem = &mut *test_ptr;
+        time_val = (ctx.drawables_intersect)(element, test_elem, min_time);
+    }
+
+    time_val
+}
+
+/// Frame normalization for stuck overlap resolution.
+///
+/// C reference: process.c:454-505
+///
+/// When frames differ between current and next, try to normalize
+/// them to resolve the overlap. Also reinitializes intersection
+/// data for both elements.
+unsafe fn normalize_stuck_frames(element_ptr: *mut Element, test_ptr: *mut Element) {
+    let element = &mut *element_ptr;
+    let test_elem = &mut *test_ptr;
+
+    // Normalize element's frame
+    let cur_frame = element.current.frame;
+    let next_frame = element.next.frame;
+    if next_frame != cur_frame {
+        // In C this uses GetFrameIndex/SetEquFrameIndex for frame index comparison.
+        // For Rust, we copy current image to next and clamp life_span.
+        element.next.frame = cur_frame;
+        if element.life_span > super::element::NORMAL_LIFE {
+            element.life_span = super::element::NORMAL_LIFE;
+        }
+    }
+
+    // Normalize test element's frame
+    let test_cur = test_elem.current.frame;
+    let test_next = test_elem.next.frame;
+    if test_next != test_cur {
+        test_elem.next.frame = test_cur;
+        if test_elem.life_span > super::element::NORMAL_LIFE {
+            test_elem.life_span = super::element::NORMAL_LIFE;
+        }
+    }
+
+    // Reinitialize intersection data for both
+    init_intersect_start_point(element);
+    init_intersect_end_point(element);
+    init_intersect_frame(element);
+
+    init_intersect_start_point(test_elem);
+    init_intersect_end_point(test_elem);
+    init_intersect_frame(test_elem);
+
+    // Note: PLAYER_SHIP ShipFacing update is deferred to ship_runtime (P07)
+    // because we don't have StarShip access here yet.
+}
+
+/// Collision dispatch — recursive earlier-time check + handler invocation.
+///
+/// C reference: process.c:519-620
+///
+/// Returns true if COLLISION flag was set (caller should return).
+unsafe fn dispatch_collision(
+    ctx: &mut CollisionContext<'_>,
+    element_ptr: *mut Element,
+    test_ptr: *mut Element,
+    test_handle: ElementHandle,
+    time_val: TimeValue,
+    pre_state_flags: ElementFlags,
+    pre_test_state_flags: ElementFlags,
+) -> bool {
+    let element = &mut *element_ptr;
+    let test_elem = &mut *test_ptr;
+
+    #[cfg(feature = "debug-process")]
+    tracing::debug!("Collision candidate at time {}", time_val);
+
+    // Save collision points
+    let save_pt = element.intersect_control.end_point;
+    let test_save_pt = test_elem.intersect_control.end_point;
+
+    // Reinitialize end points
+    init_intersect_end_point(element);
+    init_intersect_end_point(test_elem);
+
+    // Recursive earlier-time checks (process.c:531-540)
+    let should_dispatch = time_val == STUCK_SENTINEL || {
+        let element = &*element_ptr;
+        let test_elem = &*test_ptr;
+
+        // Check if element has earlier collision with something else
+        let elem_earlier = element.state_flags.contains(ElementFlags::COLLISION) || {
+            let succ = ctx.display_list.next(test_handle);
+            !process_collisions(ctx, succ, element_ptr, time_val - 1)
+        };
+
+        // Check if test element has earlier collision
+        elem_earlier && {
+            let test_earlier = test_elem.state_flags.contains(ElementFlags::COLLISION) || {
+                // APPEARING elements check from head; others from element's successor
+                let start = if test_elem.state_flags.contains(ElementFlags::APPEARING) {
+                    ctx.display_list.head()
+                } else {
+                    // Find element_ptr's handle and get its successor
+                    find_handle_for_ptr(ctx.display_list, element_ptr)
+                        .and_then(|h| ctx.display_list.next(h))
+                };
+                !process_collisions(ctx, start, test_ptr, time_val - 1)
+            };
+            test_earlier
+        }
+    };
+
+    if !should_dispatch {
+        return false;
+    }
+
+    // Re-read flags after recursive calls
+    let element = &mut *element_ptr;
+    let test_elem = &mut *test_ptr;
+    let state_flags = element.state_flags;
+    let test_state_flags = test_elem.state_flags;
+
+    #[cfg(feature = "debug-process")]
+    tracing::debug!("PROCESSING collision at time {}", time_val);
+
+    // Dispatch collision handlers in PLAYER_SHIP-aware order
+    // collision_func signature: (self, &self_save_pt, other, &other_save_pt)
+    let save_pt_ref = &save_pt as *const super::element::Point;
+    let test_save_pt_ref = &test_save_pt as *const super::element::Point;
+
+    if test_state_flags.contains(ElementFlags::PLAYER_SHIP) {
+        if let Some(collision_func) = test_elem.collision_func {
+            collision_func(test_ptr, test_save_pt_ref, element_ptr, save_pt_ref);
+        }
+        let element = &mut *element_ptr;
+        if let Some(collision_func) = element.collision_func {
+            collision_func(element_ptr, save_pt_ref, test_ptr, test_save_pt_ref);
+        }
+    } else {
+        if let Some(collision_func) = element.collision_func {
+            collision_func(element_ptr, save_pt_ref, test_ptr, test_save_pt_ref);
+        }
+        let test_elem = &mut *test_ptr;
+        if let Some(collision_func) = test_elem.collision_func {
+            collision_func(test_ptr, test_save_pt_ref, element_ptr, save_pt_ref);
+        }
+    }
+
+    // Post-collision position snapping (process.c:572-610)
+    let element = &mut *element_ptr;
+    let test_elem = &mut *test_ptr;
+
+    // Test element snapping (conditional on COLLISION being newly set)
+    if test_elem.state_flags.contains(ElementFlags::COLLISION)
+        && !pre_test_state_flags.contains(ElementFlags::COLLISION)
+    {
+        test_elem.intersect_control.intersect_stamp.origin = test_save_pt;
+        test_elem.next.location.x =
+            super::battle_types::display_to_world(test_save_pt.x as i32) as i16;
+        test_elem.next.location.y =
+            super::battle_types::display_to_world(test_save_pt.y as i32) as i16;
+        init_intersect_end_point(test_elem);
+    }
+
+    // Element snapping (conditional on COLLISION being newly set)
+    if element.state_flags.contains(ElementFlags::COLLISION) {
+        if !pre_state_flags.contains(ElementFlags::COLLISION) {
+            element.intersect_control.intersect_stamp.origin = save_pt;
+            element.next.location.x =
+                super::battle_types::display_to_world(save_pt.x as i32) as i16;
+            element.next.location.y =
+                super::battle_types::display_to_world(save_pt.y as i32) as i16;
+            init_intersect_end_point(element);
+
+            // Post-bounce elastic collision for non-FINITE_LIFE pairs
+            if !pre_state_flags.contains(ElementFlags::FINITE_LIFE)
+                && !pre_test_state_flags.contains(ElementFlags::FINITE_LIFE)
+            {
+                (ctx.collide)(element_ptr, test_ptr);
+
+                // Re-check from head for both elements
+                let head = ctx.display_list.head();
+                process_collisions(ctx, head, element_ptr, MAX_TIME_VALUE);
+                let head = ctx.display_list.head();
+                process_collisions(ctx, head, test_ptr, MAX_TIME_VALUE);
+            }
+        }
+        return true;
+    }
+
+    // If element is no longer collidable, set COLLISION and return
+    let element = &*element_ptr;
+    if !element.is_collidable() {
+        let element = &mut *element_ptr;
+        element.state_flags.insert(ElementFlags::COLLISION);
+        return true;
+    }
+
+    false
+}
+
+/// Find the handle for an element given its raw pointer.
+/// Needed for determining successor in recursive checks.
+fn find_handle_for_ptr(display_list: &DisplayList, ptr: *mut Element) -> Option<ElementHandle> {
+    for (handle, elem) in display_list.iter() {
+        if std::ptr::eq(elem as *const Element, ptr as *const Element) {
+            return Some(handle);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::display_list::DisplayList;
@@ -692,5 +1127,285 @@ mod tests {
             format!("{}", ProcessError::InvalidHandle),
             "invalid element handle"
         );
+    }
+
+    // -- P04: ProcessCollisions tests --
+
+    /// No-op DrawablesIntersect that returns 0 (no collision)
+    unsafe fn intersect_never(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
+        0
+    }
+
+    /// No-op do_damage
+    unsafe fn damage_noop(_e: *mut Element, _d: u16) {}
+
+    /// No-op collide
+    unsafe fn collide_noop(_a: *mut Element, _b: *mut Element) {}
+
+    fn make_collision_ctx(dl: &mut DisplayList) -> CollisionContext<'_> {
+        CollisionContext {
+            display_list: dl,
+            drawables_intersect: intersect_never,
+            do_damage: damage_noop,
+            collide: collide_noop,
+            process_flags: ElementFlags::PRE_PROCESS,
+        }
+    }
+
+    #[test]
+    fn test_process_collisions_no_elements() {
+        let mut dl = DisplayList::with_default_capacity();
+        let h = alloc_element(&mut dl).unwrap();
+        dl.push_back(h);
+        let elem_ptr = dl.get_mut(h).map(|e| e as *mut Element).unwrap();
+
+        let mut ctx = make_collision_ctx(&mut dl);
+        unsafe {
+            let result = process_collisions(&mut ctx, None, elem_ptr, MAX_TIME_VALUE);
+            assert!(!result);
+        }
+    }
+
+    #[test]
+    fn test_process_collisions_self_skip() {
+        let mut dl = DisplayList::with_default_capacity();
+        let h = alloc_element(&mut dl).unwrap();
+        {
+            let elem = dl.get_mut(h).unwrap();
+            elem.life_span = 10;
+            elem.mass_points = 5;
+            elem.state_flags = ElementFlags::PRE_PROCESS;
+        }
+        dl.push_back(h);
+
+        let elem_ptr = dl.get_mut(h).map(|e| e as *mut Element).unwrap();
+        let mut ctx = make_collision_ctx(&mut dl);
+        unsafe {
+            // Passing h as both succ and element — should skip self
+            let result = process_collisions(&mut ctx, Some(h), elem_ptr, MAX_TIME_VALUE);
+            assert!(!result);
+        }
+    }
+
+    #[test]
+    fn test_process_collisions_no_collision_possible() {
+        let mut dl = DisplayList::with_default_capacity();
+        let h1 = alloc_element(&mut dl).unwrap();
+        let h2 = alloc_element(&mut dl).unwrap();
+
+        // Both elements have zero mass — collision_possible returns false
+        {
+            let e1 = dl.get_mut(h1).unwrap();
+            e1.life_span = 10;
+            e1.state_flags = ElementFlags::PRE_PROCESS;
+        }
+        {
+            let e2 = dl.get_mut(h2).unwrap();
+            e2.life_span = 10;
+            e2.state_flags = ElementFlags::PRE_PROCESS;
+        }
+        dl.push_back(h1);
+        dl.push_back(h2);
+
+        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+        let mut ctx = make_collision_ctx(&mut dl);
+        unsafe {
+            let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+            assert!(!result);
+        }
+    }
+
+    #[test]
+    fn test_process_collisions_appearing_finite_life_prefilter() {
+        let mut dl = DisplayList::with_default_capacity();
+        let h1 = alloc_element(&mut dl).unwrap();
+        let h2 = alloc_element(&mut dl).unwrap();
+
+        {
+            let e1 = dl.get_mut(h1).unwrap();
+            e1.life_span = 10;
+            e1.mass_points = 5;
+            e1.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::FINITE_LIFE;
+        }
+        {
+            let e2 = dl.get_mut(h2).unwrap();
+            e2.life_span = 5; // life_span > 1
+            e2.mass_points = 5;
+            e2.state_flags =
+                ElementFlags::PRE_PROCESS | ElementFlags::APPEARING | ElementFlags::FINITE_LIFE;
+        }
+        dl.push_back(h1);
+        dl.push_back(h2);
+
+        // DrawablesIntersect should NOT be called — prefilter skips it
+        unsafe fn intersect_should_not_be_called(
+            _a: &Element,
+            _b: &Element,
+            _min: TimeValue,
+        ) -> TimeValue {
+            panic!("DrawablesIntersect should not be called for APPEARING+FINITE_LIFE prefilter");
+        }
+
+        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+        let mut ctx = CollisionContext {
+            display_list: &mut dl,
+            drawables_intersect: intersect_should_not_be_called,
+            do_damage: damage_noop,
+            collide: collide_noop,
+            process_flags: ElementFlags::PRE_PROCESS,
+        };
+
+        unsafe {
+            let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+            assert!(!result); // time_val = 0, no collision
+        }
+    }
+
+    #[test]
+    fn test_process_collisions_basic_hit() {
+        // DrawablesIntersect returns a valid collision time > 1
+        unsafe fn intersect_at_5(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
+            5
+        }
+
+        static mut COLLISION_COUNT: u32 = 0;
+        unsafe extern "C" fn counting_collision(
+            _self: *mut Element,
+            _self_pt: *const Point,
+            _other: *mut Element,
+            _other_pt: *const Point,
+        ) {
+            COLLISION_COUNT += 1;
+        }
+
+        let mut dl = DisplayList::with_default_capacity();
+        let h1 = alloc_element(&mut dl).unwrap();
+        let h2 = alloc_element(&mut dl).unwrap();
+
+        {
+            let e1 = dl.get_mut(h1).unwrap();
+            e1.life_span = 10;
+            e1.mass_points = 5;
+            e1.state_flags = ElementFlags::PRE_PROCESS;
+            e1.collision_func = Some(counting_collision);
+        }
+        {
+            let e2 = dl.get_mut(h2).unwrap();
+            e2.life_span = 10;
+            e2.mass_points = 5;
+            e2.state_flags = ElementFlags::PRE_PROCESS;
+            e2.collision_func = Some(counting_collision);
+        }
+        dl.push_back(h1);
+        dl.push_back(h2);
+
+        unsafe { COLLISION_COUNT = 0 };
+        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+        let mut ctx = CollisionContext {
+            display_list: &mut dl,
+            drawables_intersect: intersect_at_5,
+            do_damage: damage_noop,
+            collide: collide_noop,
+            process_flags: ElementFlags::PRE_PROCESS,
+        };
+
+        unsafe {
+            let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+            // Both collision handlers should have been called
+            assert_eq!(COLLISION_COUNT, 2);
+            // Result depends on whether COLLISION flag got set
+            // (collision_func needs to set it; our counting_collision doesn't)
+            let _ = result;
+        }
+    }
+
+    #[test]
+    fn test_process_collisions_player_ship_dispatch_order() {
+        // When test element is PLAYER_SHIP, test's collision_func is called first
+        static mut CALL_ORDER: [u8; 2] = [0, 0];
+        static mut CALL_IDX: usize = 0;
+
+        unsafe extern "C" fn elem_collision(
+            _self: *mut Element,
+            _self_pt: *const Point,
+            _other: *mut Element,
+            _other_pt: *const Point,
+        ) {
+            CALL_ORDER[CALL_IDX] = 1;
+            CALL_IDX += 1;
+        }
+
+        unsafe extern "C" fn test_collision(
+            _self: *mut Element,
+            _self_pt: *const Point,
+            _other: *mut Element,
+            _other_pt: *const Point,
+        ) {
+            CALL_ORDER[CALL_IDX] = 2;
+            CALL_IDX += 1;
+        }
+
+        unsafe fn intersect_at_3(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
+            3
+        }
+
+        let mut dl = DisplayList::with_default_capacity();
+        let h1 = alloc_element(&mut dl).unwrap();
+        let h2 = alloc_element(&mut dl).unwrap();
+
+        {
+            let e1 = dl.get_mut(h1).unwrap();
+            e1.life_span = 10;
+            e1.mass_points = 5;
+            e1.state_flags = ElementFlags::PRE_PROCESS;
+            e1.collision_func = Some(elem_collision);
+        }
+        {
+            let e2 = dl.get_mut(h2).unwrap();
+            e2.life_span = 10;
+            e2.mass_points = 5;
+            e2.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::PLAYER_SHIP;
+            e2.collision_func = Some(test_collision);
+        }
+        dl.push_back(h1);
+        dl.push_back(h2);
+
+        unsafe {
+            CALL_IDX = 0;
+            CALL_ORDER = [0, 0];
+        }
+
+        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+        let mut ctx = CollisionContext {
+            display_list: &mut dl,
+            drawables_intersect: intersect_at_3,
+            do_damage: damage_noop,
+            collide: collide_noop,
+            process_flags: ElementFlags::PRE_PROCESS,
+        };
+
+        unsafe {
+            let _ = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+            // PLAYER_SHIP test element's collision should be called FIRST
+            assert_eq!(
+                CALL_ORDER[0], 2,
+                "test (PLAYER_SHIP) should be called first"
+            );
+            assert_eq!(CALL_ORDER[1], 1, "element should be called second");
+        }
+    }
+
+    #[test]
+    fn test_find_handle_for_ptr() {
+        let mut dl = DisplayList::with_default_capacity();
+        let h = alloc_element(&mut dl).unwrap();
+        dl.push_back(h);
+        let ptr = dl.get(h).unwrap() as *const Element as *mut Element;
+        assert_eq!(find_handle_for_ptr(&dl, ptr), Some(h));
+    }
+
+    #[test]
+    fn test_max_time_value() {
+        assert_eq!(MAX_TIME_VALUE, u16::MAX);
     }
 }
