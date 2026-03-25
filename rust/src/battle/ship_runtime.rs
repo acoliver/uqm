@@ -267,6 +267,82 @@ pub unsafe extern "C" fn ship_collision_func(
     ship_collision(element, save_pt, other, other_save_pt);
 }
 
+// ---------------------------------------------------------------------------
+// P08: Ship Spawn + Init (ship.c:393-591)
+// ---------------------------------------------------------------------------
+
+/// Spawn configuration for ship element initialization.
+///
+/// Contains the parameters needed to create a ship element, extracted
+/// from the opaque C STARSHIP/RaceDesc types via bridge calls.
+pub struct SpawnConfig {
+    /// Player number (0 or 1, NPC_PLAYER_NUM=1)
+    pub player_nr: u8,
+    /// Ship mass from characteristics
+    pub ship_mass: u8,
+    /// Initial ship facing (frame index)
+    pub ship_facing: u16,
+    /// Position X in world coordinates
+    pub position_x: i16,
+    /// Position Y in world coordinates
+    pub position_y: i16,
+    /// Whether this is the Sa-Matra (gets life_span+1)
+    pub is_sa_matra: bool,
+}
+
+/// NPC player number constant (matches C NPC_PLAYER_NUM)
+pub const NPC_PLAYER_NUM: u8 = 1;
+
+/// Initialize a ship element from spawn configuration.
+///
+/// C reference: ship.c:443-510 (element initialization portion of spawn_ship)
+///
+/// Sets up the element with APPEARING|PLAYER_SHIP|IGNORE_SIMILAR flags,
+/// STAMP_PRIM display type, and context-dependent position.
+pub fn init_ship_element(element: &mut Element, config: &SpawnConfig) {
+    element.player_nr = config.player_nr as i16;
+    element.crew_or_hp = 0; // crew_level = 0 (initialized in APPEARING path)
+    element.mass_points = config.ship_mass;
+    element.state_flags =
+        ElementFlags::APPEARING | ElementFlags::PLAYER_SHIP | ElementFlags::IGNORE_SIMILAR;
+    element.turn_wait = 0;
+    element.thrust_or_blast = 0; // thrust_wait = 0
+    element.life_span = super::element::NORMAL_LIFE;
+    element.color_cycle_index = 0;
+
+    // Position
+    element.current.location.x = config.position_x;
+    element.current.location.y = config.position_y;
+    element.next.location = element.current.location;
+
+    // Sa-Matra gets extended life_span
+    if config.is_sa_matra {
+        element.life_span += 1;
+    }
+
+    // Zero velocity
+    element.velocity = VelocityDesc::default();
+}
+
+/// Determine spawn position type based on game context.
+///
+/// C reference: ship.c:459-499 (positioning branches in spawn_ship)
+///
+/// Returns the appropriate SpawnPositionType for the current game state.
+pub fn determine_spawn_position(
+    player_nr: u8,
+    is_last_battle: bool,
+    is_hq_space: bool,
+) -> SpawnPositionType {
+    if player_nr == NPC_PLAYER_NUM && is_last_battle {
+        SpawnPositionType::Center
+    } else if is_hq_space {
+        SpawnPositionType::HyperSpace
+    } else {
+        SpawnPositionType::Random
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,5 +563,77 @@ mod tests {
         assert_eq!(INPUT_MASK, LEFT | RIGHT | THRUST | WEAPON | SPECIAL);
         // Verify no overlap with speed flags
         assert_eq!(INPUT_MASK & SHIP_AT_MAX_SPEED, 0);
+    }
+
+    // ---- P08: Ship Spawn tests ----
+
+    #[test]
+    fn test_init_ship_element_basic() {
+        let mut elem = Element::default();
+        let config = SpawnConfig {
+            player_nr: 0,
+            ship_mass: 6,
+            ship_facing: 8,
+            position_x: 100,
+            position_y: 200,
+            is_sa_matra: false,
+        };
+        init_ship_element(&mut elem, &config);
+        assert_eq!(elem.player_nr, 0);
+        assert_eq!(elem.mass_points, 6);
+        assert!(elem.state_flags.contains(ElementFlags::APPEARING));
+        assert!(elem.state_flags.contains(ElementFlags::PLAYER_SHIP));
+        assert!(elem.state_flags.contains(ElementFlags::IGNORE_SIMILAR));
+        assert_eq!(elem.life_span, super::super::element::NORMAL_LIFE);
+        assert_eq!(elem.crew_or_hp, 0);
+        assert_eq!(elem.turn_wait, 0);
+        assert_eq!(elem.thrust_or_blast, 0);
+        assert_eq!(elem.current.location.x, 100);
+        assert_eq!(elem.current.location.y, 200);
+    }
+
+    #[test]
+    fn test_init_ship_element_sa_matra() {
+        let mut elem = Element::default();
+        let config = SpawnConfig {
+            player_nr: NPC_PLAYER_NUM,
+            ship_mass: 10,
+            ship_facing: 0,
+            position_x: 5000,
+            position_y: 4000,
+            is_sa_matra: true,
+        };
+        init_ship_element(&mut elem, &config);
+        assert_eq!(
+            elem.life_span,
+            super::super::element::NORMAL_LIFE + 1,
+            "Sa-Matra gets extended life_span"
+        );
+        assert_eq!(elem.player_nr, NPC_PLAYER_NUM as i16);
+    }
+
+    #[test]
+    fn test_determine_spawn_position_sa_matra() {
+        let pos = determine_spawn_position(NPC_PLAYER_NUM, true, false);
+        assert!(matches!(pos, SpawnPositionType::Center));
+    }
+
+    #[test]
+    fn test_determine_spawn_position_hyperspace() {
+        let pos = determine_spawn_position(0, false, true);
+        assert!(matches!(pos, SpawnPositionType::HyperSpace));
+    }
+
+    #[test]
+    fn test_determine_spawn_position_normal() {
+        let pos = determine_spawn_position(0, false, false);
+        assert!(matches!(pos, SpawnPositionType::Random));
+    }
+
+    #[test]
+    fn test_determine_spawn_position_npc_not_last_battle() {
+        // NPC but not last battle → normal random
+        let pos = determine_spawn_position(NPC_PLAYER_NUM, false, false);
+        assert!(matches!(pos, SpawnPositionType::Random));
     }
 }
