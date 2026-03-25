@@ -4,6 +4,7 @@
 
 pub mod ai_types;
 pub mod battle_types;
+pub mod c_bridge;
 pub mod collision;
 pub mod display_list;
 pub mod element;
