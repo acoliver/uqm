@@ -217,7 +217,12 @@ impl CommState {
     }
 
     /// Add a response option
-    pub fn add_response(&mut self, response_ref: u32, text: &str, func: Option<usize>) -> bool {
+    pub fn add_response(
+        &mut self,
+        response_ref: u32,
+        text: &str,
+        func: Option<super::response::ResponseFunc>,
+    ) -> bool {
         self.responses.do_response_phrase(response_ref, text, func)
     }
 

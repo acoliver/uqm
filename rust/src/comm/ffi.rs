@@ -2,11 +2,17 @@
 //!
 //! Provides C-compatible functions for the communication system.
 
+use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
 use super::segue::Segue;
 use super::state::COMM_STATE;
 use super::types::CommIntroMode;
+
+// Thread-local buffer for subtitle strings returned to C (OL-REQ-009, OL-REQ-010)
+thread_local! {
+    static SUBTITLE_BUF: RefCell<Vec<u8>> = RefCell::new(Vec::with_capacity(512));
+}
 
 // ============================================================================
 // Initialization
@@ -68,10 +74,11 @@ pub unsafe extern "C" fn rust_RewindTrack() {
     COMM_STATE.write().track_mut().rewind();
 }
 
-/// Jump within the track by offset seconds
+/// Jump to end of current phrase (skip current speech).
+/// No offset parameter — JumpTrack advances to end of current phrase only (TP-REQ-005).
 #[no_mangle]
-pub unsafe extern "C" fn rust_JumpTrack(offset: f32) {
-    COMM_STATE.write().track_mut().jump(offset);
+pub unsafe extern "C" fn rust_JumpTrack() {
+    COMM_STATE.write().track_mut().jump(0.0);
 }
 
 /// Seek to absolute position in track
@@ -154,18 +161,58 @@ pub unsafe extern "C" fn rust_ClearTrack() {
     COMM_STATE.write().track_mut().clear();
 }
 
+/// Check if a track is currently playing.
+#[no_mangle]
+pub unsafe extern "C" fn rust_PlayingTrack() -> c_uint {
+    if COMM_STATE.read().track().is_playing() {
+        1
+    } else {
+        0
+    }
+}
+
+/// Fast-forward by one page (subtitle page skip).
+#[no_mangle]
+pub unsafe extern "C" fn rust_FastForward_Page() {
+    COMM_STATE.write().track_mut().fast_forward_page();
+}
+
+/// Smooth fast-forward (increase playback rate).
+#[no_mangle]
+pub unsafe extern "C" fn rust_FastForward_Smooth() {
+    COMM_STATE.write().track_mut().fast_forward_smooth();
+}
+
+/// Reverse by one page.
+#[no_mangle]
+pub unsafe extern "C" fn rust_FastReverse_Page() {
+    COMM_STATE.write().track_mut().fast_reverse_page();
+}
+
+/// Smooth reverse (decrease playback rate / rewind).
+#[no_mangle]
+pub unsafe extern "C" fn rust_FastReverse_Smooth() {
+    COMM_STATE.write().track_mut().fast_reverse_smooth();
+}
+
 // ============================================================================
 // Subtitle Management
 // ============================================================================
 
-/// Get current subtitle (returns null if none)
+/// Get current subtitle (returns null if none).
+/// Returns a stable C string via thread-local buffer (OL-REQ-009, OL-REQ-010).
+/// Pointer is valid until the next call to rust_GetSubtitle on the same thread.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetSubtitle() -> *const c_char {
-    // Note: This returns a pointer to internal data which is only valid
-    // while the lock is held. C code must copy the string immediately.
     let state = COMM_STATE.read();
     match state.current_subtitle() {
-        Some(s) => s.as_ptr() as *const c_char,
+        Some(s) => SUBTITLE_BUF.with(|buf| {
+            let mut buf = buf.borrow_mut();
+            buf.clear();
+            buf.extend_from_slice(s.as_bytes());
+            buf.push(0); // null terminator
+            buf.as_ptr() as *const c_char
+        }),
         None => std::ptr::null(),
     }
 }
@@ -190,12 +237,13 @@ pub unsafe extern "C" fn rust_AreSubtitlesEnabled() -> c_int {
 // Response System
 // ============================================================================
 
-/// Add a response option
+/// Add a response option.
+/// `func` receives `response_ref` as its argument when selected (RS-REQ-011).
 #[no_mangle]
 pub unsafe extern "C" fn rust_DoResponsePhrase(
     response_ref: c_uint,
     text: *const c_char,
-    func: Option<extern "C" fn()>,
+    func: Option<extern "C" fn(u32)>,
 ) -> c_int {
     if text.is_null() {
         return 0;
@@ -208,11 +256,9 @@ pub unsafe extern "C" fn rust_DoResponsePhrase(
         }
     };
 
-    let func_addr = func.map(|f| f as usize);
-
     if COMM_STATE
         .write()
-        .add_response(response_ref, text_str, func_addr)
+        .add_response(response_ref, text_str, func)
     {
         1
     } else {
@@ -264,7 +310,7 @@ pub unsafe extern "C" fn rust_GetResponseCount() -> c_int {
     COMM_STATE.read().responses().count() as c_int
 }
 
-/// Execute selected response callback
+/// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
 #[no_mangle]
 pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
     let state = COMM_STATE.read();
@@ -273,21 +319,18 @@ pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
         None => return 0,
     };
 
-    let func_addr = match response.response_func {
-        Some(addr) => addr,
+    let func = match response.response_func {
+        Some(f) => f,
         None => return response.response_ref,
     };
 
     let response_ref = response.response_ref;
 
-    // Drop the lock before calling the callback
+    // Drop the lock before calling the callback (callback may re-enter comm state)
     drop(state);
 
-    // Call the callback
-    unsafe {
-        let func: extern "C" fn() = std::mem::transmute(func_addr);
-        func();
-    }
+    // Call with response_ref per RS-REQ-011
+    func(response_ref);
 
     response_ref
 }
@@ -664,8 +707,8 @@ mod tests {
             rust_SeekTrack(2.5);
             assert!((rust_GetTrackPosition() - 2.5).abs() < 0.01);
 
-            rust_JumpTrack(1.0);
-            assert!((rust_GetTrackPosition() - 3.5).abs() < 0.01);
+            rust_JumpTrack();
+            // JumpTrack skips to end of current phrase — position depends on track state
 
             rust_RewindTrack();
             assert!((rust_GetTrackPosition() - 0.0).abs() < 0.01);

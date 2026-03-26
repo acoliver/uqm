@@ -303,6 +303,44 @@ impl TrackManager {
     pub fn commit(&mut self) -> f32 {
         self.position
     }
+
+    /// Skip forward by one subtitle page (advance to next chunk boundary).
+    pub fn fast_forward_page(&mut self) {
+        if self.current_chunk >= 0 {
+            let idx = self.current_chunk as usize;
+            if idx + 1 < self.chunks.len() {
+                self.current_chunk = (idx + 1) as i32;
+                self.position = self.chunks[idx + 1].start_time;
+            } else {
+                self.position = self.length();
+            }
+        }
+    }
+
+    /// Smooth fast-forward: advance position by a small increment.
+    pub fn fast_forward_smooth(&mut self) {
+        let advance = 0.5; // 500ms per call
+        self.position = (self.position + advance).min(self.length());
+        self.update_current_chunk();
+    }
+
+    /// Skip backward by one subtitle page (go to previous chunk boundary).
+    pub fn fast_reverse_page(&mut self) {
+        if self.current_chunk > 0 {
+            let idx = self.current_chunk as usize;
+            self.current_chunk = (idx - 1) as i32;
+            self.position = self.chunks[idx - 1].start_time;
+        } else if self.current_chunk == 0 {
+            self.position = 0.0;
+        }
+    }
+
+    /// Smooth reverse: move position back by a small increment.
+    pub fn fast_reverse_smooth(&mut self) {
+        let rewind = 0.5; // 500ms per call
+        self.position = (self.position - rewind).max(0.0);
+        self.update_current_chunk();
+    }
 }
 
 #[cfg(test)]

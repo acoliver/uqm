@@ -2,20 +2,34 @@
 //!
 //! Handles player response options during conversations.
 
+/// C-compatible response callback: receives the response_ref as argument.
+/// Matches C `RESPONSE_FUNC` which is `void (*)(RESPONSE_REF)`.
+pub type ResponseFunc = extern "C" fn(u32);
+
 /// A response option in a conversation
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ResponseEntry {
     /// Reference ID for this response
     pub response_ref: u32,
     /// Display text for the response
     pub response_text: String,
-    /// Callback function address (as usize for FFI)
-    pub response_func: Option<usize>,
+    /// Callback function — receives response_ref when selected (RS-REQ-011)
+    pub response_func: Option<ResponseFunc>,
+}
+
+impl std::fmt::Debug for ResponseEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResponseEntry")
+            .field("response_ref", &self.response_ref)
+            .field("response_text", &self.response_text)
+            .field("response_func", &self.response_func.map(|f| f as usize))
+            .finish()
+    }
 }
 
 impl ResponseEntry {
     /// Create a new response entry
-    pub fn new(response_ref: u32, text: &str, func: Option<usize>) -> Self {
+    pub fn new(response_ref: u32, text: &str, func: Option<ResponseFunc>) -> Self {
         Self {
             response_ref,
             response_text: text.to_string(),
@@ -69,7 +83,7 @@ impl ResponseSystem {
         &mut self,
         response_ref: u32,
         text: &str,
-        func: Option<usize>,
+        func: Option<ResponseFunc>,
     ) -> bool {
         self.add_response(ResponseEntry::new(response_ref, text, func))
     }
@@ -165,17 +179,16 @@ impl ResponseSystem {
         self.displaying
     }
 
-    /// Execute the selected response's callback
+    /// Execute the selected response's callback, passing the response_ref.
     ///
-    /// # Safety
-    /// Caller must ensure the callback address is a valid function pointer
-    pub unsafe fn execute_selected(&self) -> Option<u32> {
+    /// Returns the response_ref of the selected response if a callback was
+    /// invoked, or None if no response is selected or it has no callback.
+    pub fn execute_selected(&self) -> Option<u32> {
         let response = self.get_selected()?;
-        let func_addr = response.response_func?;
+        let func = response.response_func?;
 
-        // Cast to function pointer and call
-        let func: extern "C" fn() = std::mem::transmute(func_addr);
-        func();
+        // Call with response_ref as argument per RS-REQ-011
+        func(response.response_ref);
 
         Some(response.response_ref)
     }
@@ -185,12 +198,14 @@ impl ResponseSystem {
 mod tests {
     use super::*;
 
+    extern "C" fn test_callback(_ref: u32) {}
+
     #[test]
     fn test_response_entry_new() {
-        let entry = ResponseEntry::new(1, "Hello", Some(0x1000));
+        let entry = ResponseEntry::new(1, "Hello", Some(test_callback));
         assert_eq!(entry.response_ref, 1);
         assert_eq!(entry.response_text, "Hello");
-        assert_eq!(entry.response_func, Some(0x1000));
+        assert!(entry.response_func.is_some());
     }
 
     #[test]
@@ -310,10 +325,29 @@ mod tests {
     fn test_do_response_phrase() {
         let mut sys = ResponseSystem::new();
         assert!(sys.do_response_phrase(1, "Hello", None));
-        assert!(sys.do_response_phrase(2, "Goodbye", Some(0x1000)));
+        assert!(sys.do_response_phrase(2, "Goodbye", Some(test_callback)));
 
         assert_eq!(sys.count(), 2);
         assert!(sys.get(1).unwrap().response_func.is_some());
+    }
+
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static CALLBACK_ARG: AtomicU32 = AtomicU32::new(0);
+
+    extern "C" fn recording_callback(response_ref: u32) {
+        CALLBACK_ARG.store(response_ref, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn test_execute_selected_passes_response_ref() {
+        CALLBACK_ARG.store(0, Ordering::SeqCst);
+        let mut sys = ResponseSystem::new();
+        sys.do_response_phrase(42, "Test", Some(recording_callback));
+        sys.start_display();
+
+        let result = sys.execute_selected();
+        assert_eq!(result, Some(42));
+        assert_eq!(CALLBACK_ARG.load(Ordering::SeqCst), 42);
     }
 
     #[test]
