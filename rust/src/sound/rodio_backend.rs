@@ -4,14 +4,13 @@
 //! It replaces the mixer.c implementation entirely.
 
 use std::collections::HashMap;
-use std::io::Cursor;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use rodio::buffer::SamplesBuffer;
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{OutputStream, Sink, Source};
 
 use crate::bridge_log::rust_bridge_log_msg;
 
@@ -274,14 +273,11 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
 
                 AudioCmd::SourceSetFloat(id, prop, value) => {
                     if let Some(src) = sources.get_mut(&id) {
-                        match prop {
-                            AUDIO_GAIN => {
-                                src.gain = value;
-                                if let Some(ref sink) = src.sink {
-                                    sink.set_volume(value);
-                                }
+                        if prop == AUDIO_GAIN {
+                            src.gain = value;
+                            if let Some(ref sink) = src.sink {
+                                sink.set_volume(value);
                             }
-                            _ => {}
                         }
                     }
                 }
@@ -604,7 +600,7 @@ fn send_cmd_wait<T>(cmd_fn: impl FnOnce(Sender<T>) -> AudioCmd) -> Option<T> {
 
 /// Initialize the rodio audio backend
 #[no_mangle]
-pub extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
+pub unsafe extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
     rust_bridge_log_msg("RODIO_BACKEND_INIT");
 
     // Check if already running
@@ -650,7 +646,7 @@ pub extern "C" fn rust_audio_backend_init(_flags: i32) -> i32 {
 
 /// Shutdown the rodio audio backend
 #[no_mangle]
-pub extern "C" fn rust_audio_backend_uninit() {
+pub unsafe extern "C" fn rust_audio_backend_uninit() {
     rust_bridge_log_msg("RODIO_BACKEND_UNINIT");
 
     send_cmd(AudioCmd::Shutdown);
@@ -673,7 +669,7 @@ pub extern "C" fn rust_audio_backend_uninit() {
 // =============================================================================
 
 #[no_mangle]
-pub extern "C" fn rust_audio_gen_sources(n: u32, out: *mut AudioObject) {
+pub unsafe extern "C" fn rust_audio_gen_sources(n: u32, out: *mut AudioObject) {
     if out.is_null() {
         return;
     }
@@ -688,7 +684,7 @@ pub extern "C" fn rust_audio_gen_sources(n: u32, out: *mut AudioObject) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_delete_sources(n: u32, ids: *const AudioObject) {
+pub unsafe extern "C" fn rust_audio_delete_sources(n: u32, ids: *const AudioObject) {
     if ids.is_null() {
         return;
     }
@@ -698,17 +694,21 @@ pub extern "C" fn rust_audio_delete_sources(n: u32, ids: *const AudioObject) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_i(src: AudioObject, prop: i32, value: AudioIntVal) {
+pub unsafe extern "C" fn rust_audio_source_i(src: AudioObject, prop: i32, value: AudioIntVal) {
     send_cmd(AudioCmd::SourceSetInt(src, prop, value));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_f(src: AudioObject, prop: i32, value: f32) {
+pub unsafe extern "C" fn rust_audio_source_f(src: AudioObject, prop: i32, value: f32) {
     send_cmd(AudioCmd::SourceSetFloat(src, prop, value));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_get_source_i(src: AudioObject, prop: i32, out: *mut AudioIntVal) {
+pub unsafe extern "C" fn rust_audio_get_source_i(
+    src: AudioObject,
+    prop: i32,
+    out: *mut AudioIntVal,
+) {
     if out.is_null() {
         return;
     }
@@ -726,27 +726,27 @@ pub extern "C" fn rust_audio_get_source_i(src: AudioObject, prop: i32, out: *mut
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_play(src: AudioObject) {
+pub unsafe extern "C" fn rust_audio_source_play(src: AudioObject) {
     send_cmd(AudioCmd::SourcePlay(src));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_pause(src: AudioObject) {
+pub unsafe extern "C" fn rust_audio_source_pause(src: AudioObject) {
     send_cmd(AudioCmd::SourcePause(src));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_stop(src: AudioObject) {
+pub unsafe extern "C" fn rust_audio_source_stop(src: AudioObject) {
     send_cmd(AudioCmd::SourceStop(src));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_rewind(src: AudioObject) {
+pub unsafe extern "C" fn rust_audio_source_rewind(src: AudioObject) {
     send_cmd(AudioCmd::SourceRewind(src));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_queue_buffers(
+pub unsafe extern "C" fn rust_audio_source_queue_buffers(
     src: AudioObject,
     n: u32,
     bufs: *const AudioObject,
@@ -761,7 +761,7 @@ pub extern "C" fn rust_audio_source_queue_buffers(
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_unqueue_buffers(
+pub unsafe extern "C" fn rust_audio_source_unqueue_buffers(
     src: AudioObject,
     n: u32,
     out: *mut AudioObject,
@@ -784,7 +784,7 @@ pub extern "C" fn rust_audio_source_unqueue_buffers(
 // =============================================================================
 
 #[no_mangle]
-pub extern "C" fn rust_audio_gen_buffers(n: u32, out: *mut AudioObject) {
+pub unsafe extern "C" fn rust_audio_gen_buffers(n: u32, out: *mut AudioObject) {
     if out.is_null() {
         return;
     }
@@ -799,7 +799,7 @@ pub extern "C" fn rust_audio_gen_buffers(n: u32, out: *mut AudioObject) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_delete_buffers(n: u32, ids: *const AudioObject) {
+pub unsafe extern "C" fn rust_audio_delete_buffers(n: u32, ids: *const AudioObject) {
     if ids.is_null() {
         return;
     }
@@ -809,7 +809,7 @@ pub extern "C" fn rust_audio_delete_buffers(n: u32, ids: *const AudioObject) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_buffer_data(
+pub unsafe extern "C" fn rust_audio_buffer_data(
     buf: AudioObject,
     format: u32,
     data: *const u8,
@@ -829,7 +829,11 @@ pub extern "C" fn rust_audio_buffer_data(
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_get_buffer_i(buf: AudioObject, prop: i32, out: *mut AudioIntVal) {
+pub unsafe extern "C" fn rust_audio_get_buffer_i(
+    buf: AudioObject,
+    prop: i32,
+    out: *mut AudioIntVal,
+) {
     if out.is_null() {
         return;
     }
@@ -842,29 +846,29 @@ pub extern "C" fn rust_audio_get_buffer_i(buf: AudioObject, prop: i32, out: *mut
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_is_source(src: AudioObject) -> i32 {
+pub unsafe extern "C" fn rust_audio_is_source(_src: AudioObject) -> i32 {
     // For now, just return 1 - we don't have a way to query without blocking
     1
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_is_buffer(buf: AudioObject) -> i32 {
+pub unsafe extern "C" fn rust_audio_is_buffer(_buf: AudioObject) -> i32 {
     1
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_get_error() -> i32 {
+pub unsafe extern "C" fn rust_audio_get_error() -> i32 {
     0 // No error
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_source_fv(src: AudioObject, prop: i32, values: *const f32) {
+pub unsafe extern "C" fn rust_audio_source_fv(_src: AudioObject, _prop: i32, _values: *const f32) {
     // Position is the only fv property we care about
     // For now, ignore positioning (rodio doesn't do spatial audio easily)
 }
 
 #[no_mangle]
-pub extern "C" fn rust_audio_get_source_f(src: AudioObject, prop: i32, out: *mut f32) {
+pub unsafe extern "C" fn rust_audio_get_source_f(_src: AudioObject, _prop: i32, out: *mut f32) {
     if out.is_null() {
         return;
     }

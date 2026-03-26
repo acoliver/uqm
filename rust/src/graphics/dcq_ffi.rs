@@ -99,7 +99,7 @@ fn color_from_u32(c: u32) -> Color {
 /// @requirement REQ-DCQ-010
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_init() -> c_int {
+pub unsafe extern "C" fn rust_dcq_init() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         if get_dcq_state().is_some() {
             rust_bridge_log_msg("rust_dcq_init: already initialized");
@@ -134,7 +134,7 @@ pub extern "C" fn rust_dcq_init() -> c_int {
 /// @requirement REQ-DCQ-010
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_uninit() {
+pub unsafe extern "C" fn rust_dcq_uninit() {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(state) = get_dcq_state() {
             state.queue.clear();
@@ -156,7 +156,7 @@ pub extern "C" fn rust_dcq_uninit() {
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_drawline(
+pub unsafe extern "C" fn rust_dcq_push_drawline(
     x1: c_int,
     y1: c_int,
     x2: c_int,
@@ -197,7 +197,7 @@ pub extern "C" fn rust_dcq_push_drawline(
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_drawrect(
+pub unsafe extern "C" fn rust_dcq_push_drawrect(
     x: c_int,
     y: c_int,
     w: c_int,
@@ -241,7 +241,7 @@ pub extern "C" fn rust_dcq_push_drawrect(
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_fillrect(
+pub unsafe extern "C" fn rust_dcq_push_fillrect(
     x: c_int,
     y: c_int,
     w: c_int,
@@ -283,7 +283,7 @@ pub extern "C" fn rust_dcq_push_fillrect(
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_drawimage(image_id: u32, x: c_int, y: c_int) -> c_int {
+pub unsafe extern "C" fn rust_dcq_push_drawimage(image_id: u32, x: c_int, y: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -418,7 +418,7 @@ pub unsafe extern "C" fn rust_dcq_push_copytoimage(
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
+pub unsafe extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -444,7 +444,7 @@ pub extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_waitsignal() -> c_int {
+pub unsafe extern "C" fn rust_dcq_push_waitsignal() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -469,7 +469,7 @@ pub extern "C" fn rust_dcq_push_waitsignal() -> c_int {
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_reinitvideo(
+pub unsafe extern "C" fn rust_dcq_push_reinitvideo(
     driver: c_int,
     flags: c_int,
     width: c_int,
@@ -502,7 +502,7 @@ pub extern "C" fn rust_dcq_push_reinitvideo(
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
+pub unsafe extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -533,7 +533,12 @@ pub extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_scissor_enable(x: c_int, y: c_int, w: c_int, h: c_int) -> c_int {
+pub unsafe extern "C" fn rust_dcq_push_scissor_enable(
+    x: c_int,
+    y: c_int,
+    w: c_int,
+    h: c_int,
+) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -558,7 +563,7 @@ pub extern "C" fn rust_dcq_push_scissor_enable(x: c_int, y: c_int, w: c_int, h: 
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
+pub unsafe extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -588,7 +593,7 @@ pub extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
 /// @requirement REQ-DCQ-030
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_flush() -> c_int {
+pub unsafe extern "C" fn rust_dcq_flush() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -613,7 +618,7 @@ pub extern "C" fn rust_dcq_flush() -> c_int {
 /// @requirement REQ-DCQ-050
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_batch() -> c_int {
+pub unsafe extern "C" fn rust_dcq_batch() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -637,7 +642,7 @@ pub extern "C" fn rust_dcq_batch() -> c_int {
 /// @requirement REQ-DCQ-050
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_unbatch() -> c_int {
+pub unsafe extern "C" fn rust_dcq_unbatch() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -658,7 +663,7 @@ pub extern "C" fn rust_dcq_unbatch() -> c_int {
 /// @requirement REQ-DCQ-040
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
+pub unsafe extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -681,7 +686,7 @@ pub extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
 /// @requirement REQ-DCQ-040
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_get_screen() -> c_int {
+pub unsafe extern "C" fn rust_dcq_get_screen() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -700,7 +705,7 @@ pub extern "C" fn rust_dcq_get_screen() -> c_int {
 /// @requirement REQ-DCQ-010
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_dcq_len() -> c_int {
+pub unsafe extern "C" fn rust_dcq_len() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_dcq_state() {
             Some(s) => s,
@@ -729,7 +734,7 @@ mod tests {
     /// Initialize DCQ and return success status. Resets first for isolation.
     fn init_dcq() -> c_int {
         reset_dcq();
-        rust_dcq_init()
+        unsafe { rust_dcq_init() }
     }
 
     // -- REQ-DCQ-010: Lifecycle tests ----------------------------------------
@@ -738,37 +743,45 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_init_success() {
-        let rc = init_dcq();
-        assert_eq!(rc, 0);
-        reset_dcq();
+        unsafe {
+            let rc = init_dcq();
+            assert_eq!(rc, 0);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-010
     #[serial]
     #[test]
     fn test_dcq_init_double_init_fails() {
-        reset_dcq();
-        assert_eq!(rust_dcq_init(), 0);
-        assert_eq!(rust_dcq_init(), -1);
-        reset_dcq();
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_init(), 0);
+            assert_eq!(rust_dcq_init(), -1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-010
     #[serial]
     #[test]
     fn test_dcq_uninit_cleans_up() {
-        assert_eq!(init_dcq(), 0);
-        rust_dcq_uninit();
-        assert!(get_dcq_state().is_none());
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            rust_dcq_uninit();
+            assert!(get_dcq_state().is_none());
+        }
     }
 
     /// @requirement REQ-DCQ-010
     #[serial]
     #[test]
     fn test_dcq_uninit_when_not_initialized() {
-        reset_dcq();
-        rust_dcq_uninit();
-        assert!(get_dcq_state().is_none());
+        unsafe {
+            reset_dcq();
+            rust_dcq_uninit();
+            assert!(get_dcq_state().is_none());
+        }
     }
 
     // -- REQ-DCQ-020: Push command tests -------------------------------------
@@ -777,173 +790,201 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_push_drawline() {
-        assert_eq!(init_dcq(), 0);
-        let white = 0xFFFFFFFF_u32;
-        let rc = rust_dcq_push_drawline(0, 0, 10, 10, white);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let white = 0xFFFFFFFF_u32;
+            let rc = rust_dcq_push_drawline(0, 0, 10, 10, white);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_drawrect() {
-        assert_eq!(init_dcq(), 0);
-        let red = 0xFF0000FF_u32;
-        let rc = rust_dcq_push_drawrect(5, 5, 20, 15, red);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let red = 0xFF0000FF_u32;
+            let rc = rust_dcq_push_drawrect(5, 5, 20, 15, red);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_fillrect() {
-        assert_eq!(init_dcq(), 0);
-        let blue = 0x0000FFFF_u32;
-        let rc = rust_dcq_push_fillrect(0, 0, 100, 50, blue);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let blue = 0x0000FFFF_u32;
+            let rc = rust_dcq_push_fillrect(0, 0, 100, 50, blue);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_drawimage() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_drawimage(42, 10, 20);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_drawimage(42, 10, 20);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_deleteimage() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_deleteimage(7);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_deleteimage(7);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_waitsignal() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_waitsignal();
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_waitsignal();
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_reinitvideo() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_reinitvideo(0, 0x01, 640, 480);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_reinitvideo(0, 0x01, 640, 480);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_multiple() {
-        assert_eq!(init_dcq(), 0);
-        let c = 0xFFFFFFFF_u32;
-        assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
-        assert_eq!(rust_dcq_push_drawrect(0, 0, 5, 5, c), 0);
-        assert_eq!(rust_dcq_push_fillrect(0, 0, 5, 5, c), 0);
-        assert_eq!(rust_dcq_push_drawimage(1, 0, 0), 0);
-        assert_eq!(rust_dcq_push_deleteimage(1), 0);
-        assert_eq!(rust_dcq_len(), 5);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let c = 0xFFFFFFFF_u32;
+            assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
+            assert_eq!(rust_dcq_push_drawrect(0, 0, 5, 5, c), 0);
+            assert_eq!(rust_dcq_push_fillrect(0, 0, 5, 5, c), 0);
+            assert_eq!(rust_dcq_push_drawimage(1, 0, 0), 0);
+            assert_eq!(rust_dcq_push_deleteimage(1), 0);
+            assert_eq!(rust_dcq_len(), 5);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_copy_null_rect() {
-        assert_eq!(init_dcq(), 0);
-        let rc = unsafe { rust_dcq_push_copy(std::ptr::null(), 0, 10, 20) };
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = unsafe { rust_dcq_push_copy(std::ptr::null(), 0, 10, 20) };
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_copy_with_rect() {
-        assert_eq!(init_dcq(), 0);
-        let rect = SDL_Rect {
-            x: 0,
-            y: 0,
-            w: 50,
-            h: 50,
-        };
-        let rc = unsafe { rust_dcq_push_copy(&rect as *const SDL_Rect, 0, 100, 100) };
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rect = SDL_Rect {
+                x: 0,
+                y: 0,
+                w: 50,
+                h: 50,
+            };
+            let rc = unsafe { rust_dcq_push_copy(&rect as *const SDL_Rect, 0, 100, 100) };
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_copytoimage() {
-        assert_eq!(init_dcq(), 0);
-        let rect = SDL_Rect {
-            x: 0,
-            y: 0,
-            w: 32,
-            h: 32,
-        };
-        let rc = unsafe { rust_dcq_push_copytoimage(99, &rect as *const SDL_Rect) };
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rect = SDL_Rect {
+                x: 0,
+                y: 0,
+                w: 32,
+                h: 32,
+            };
+            let rc = unsafe { rust_dcq_push_copytoimage(99, &rect as *const SDL_Rect) };
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_setpalette() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_setpalette(5);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_setpalette(5);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_scissor_enable() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_scissor_enable(10, 20, 100, 80);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_scissor_enable(10, 20, 100, 80);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-020
     #[serial]
     #[test]
     fn test_dcq_push_scissor_disable() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_push_scissor_disable();
-        assert_eq!(rc, 0);
-        assert_eq!(rust_dcq_len(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_push_scissor_disable();
+            assert_eq!(rc, 0);
+            assert_eq!(rust_dcq_len(), 1);
+            reset_dcq();
+        }
     }
 
     // -- REQ-DCQ-030: Flush tests --------------------------------------------
@@ -952,49 +993,57 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_flush_empty() {
-        assert_eq!(init_dcq(), 0);
-        let rc = rust_dcq_flush();
-        assert_eq!(rc, 0);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let rc = rust_dcq_flush();
+            assert_eq!(rc, 0);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-030
     #[serial]
     #[test]
     fn test_dcq_flush_processes_all() {
-        assert_eq!(init_dcq(), 0);
-        let c = 0xFFFFFFFF_u32;
-        assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
-        assert_eq!(rust_dcq_push_drawrect(0, 0, 5, 5, c), 0);
-        assert_eq!(rust_dcq_push_deleteimage(1), 0);
-        assert_eq!(rust_dcq_len(), 3);
-        assert_eq!(rust_dcq_flush(), 0);
-        assert_eq!(rust_dcq_len(), 0);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let c = 0xFFFFFFFF_u32;
+            assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
+            assert_eq!(rust_dcq_push_drawrect(0, 0, 5, 5, c), 0);
+            assert_eq!(rust_dcq_push_deleteimage(1), 0);
+            assert_eq!(rust_dcq_len(), 3);
+            assert_eq!(rust_dcq_flush(), 0);
+            assert_eq!(rust_dcq_len(), 0);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-030
     #[serial]
     #[test]
     fn test_dcq_flush_signal_processed() {
-        assert_eq!(init_dcq(), 0);
-        let signal = Arc::new(AtomicBool::new(false));
-        let state = get_dcq_state().expect("dcq initialized");
-        let cmd = DrawCommand::SendSignal {
-            signal: Arc::clone(&signal),
-        };
-        assert!(state.queue.push(cmd).is_ok());
-        assert_eq!(rust_dcq_flush(), 0);
-        assert!(signal.load(Ordering::Acquire));
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            let signal = Arc::new(AtomicBool::new(false));
+            let state = get_dcq_state().expect("dcq initialized");
+            let cmd = DrawCommand::SendSignal {
+                signal: Arc::clone(&signal),
+            };
+            assert!(state.queue.push(cmd).is_ok());
+            assert_eq!(rust_dcq_flush(), 0);
+            assert!(signal.load(Ordering::Acquire));
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-030
     #[serial]
     #[test]
     fn test_dcq_flush_not_initialized() {
-        reset_dcq();
-        assert_eq!(rust_dcq_flush(), -1);
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_flush(), -1);
+        }
     }
 
     // -- REQ-DCQ-040: Screen binding tests -----------------------------------
@@ -1003,40 +1052,48 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_set_screen_valid() {
-        assert_eq!(init_dcq(), 0);
-        assert_eq!(rust_dcq_set_screen(0), 0);
-        assert_eq!(rust_dcq_get_screen(), 0);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            assert_eq!(rust_dcq_set_screen(0), 0);
+            assert_eq!(rust_dcq_get_screen(), 0);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-040
     #[serial]
     #[test]
     fn test_dcq_set_screen_invalid() {
-        assert_eq!(init_dcq(), 0);
-        assert_eq!(rust_dcq_set_screen(99), -1);
-        assert_eq!(rust_dcq_set_screen(-1), -1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            assert_eq!(rust_dcq_set_screen(99), -1);
+            assert_eq!(rust_dcq_set_screen(-1), -1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-040
     #[serial]
     #[test]
     fn test_dcq_set_screen_roundtrip() {
-        assert_eq!(init_dcq(), 0);
-        assert_eq!(rust_dcq_set_screen(2), 0);
-        assert_eq!(rust_dcq_get_screen(), 2);
-        assert_eq!(rust_dcq_set_screen(1), 0);
-        assert_eq!(rust_dcq_get_screen(), 1);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            assert_eq!(rust_dcq_set_screen(2), 0);
+            assert_eq!(rust_dcq_get_screen(), 2);
+            assert_eq!(rust_dcq_set_screen(1), 0);
+            assert_eq!(rust_dcq_get_screen(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-040
     #[serial]
     #[test]
     fn test_dcq_get_screen_not_initialized() {
-        reset_dcq();
-        assert_eq!(rust_dcq_get_screen(), -1);
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_get_screen(), -1);
+        }
     }
 
     // -- REQ-DCQ-050: Batch mode tests ---------------------------------------
@@ -1045,52 +1102,58 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_batch_mode() {
-        assert_eq!(init_dcq(), 0);
-        assert_eq!(rust_dcq_batch(), 0);
-        let c = 0xFFFFFFFF_u32;
-        assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
-        assert_eq!(rust_dcq_push_drawline(2, 2, 3, 3, c), 0);
-        // Commands pushed but not visible to consumer during batch
-        let state = get_dcq_state().expect("dcq initialized");
-        assert_eq!(state.queue.len(), 0);
-        assert_eq!(state.queue.full_size(), 2);
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            assert_eq!(rust_dcq_batch(), 0);
+            let c = 0xFFFFFFFF_u32;
+            assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
+            assert_eq!(rust_dcq_push_drawline(2, 2, 3, 3, c), 0);
+            // Commands pushed but not visible to consumer during batch
+            let state = get_dcq_state().expect("dcq initialized");
+            assert_eq!(state.queue.len(), 0);
+            assert_eq!(state.queue.full_size(), 2);
 
-        assert_eq!(rust_dcq_unbatch(), 0);
-        // After unbatch, commands become visible
-        let state = get_dcq_state().expect("dcq initialized");
-        assert_eq!(state.queue.len(), 2);
-        reset_dcq();
+            assert_eq!(rust_dcq_unbatch(), 0);
+            // After unbatch, commands become visible
+            let state = get_dcq_state().expect("dcq initialized");
+            assert_eq!(state.queue.len(), 2);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-050
     #[serial]
     #[test]
     fn test_dcq_nested_batch() {
-        assert_eq!(init_dcq(), 0);
-        assert_eq!(rust_dcq_batch(), 0);
-        assert_eq!(rust_dcq_batch(), 0);
-        let c = 0xFFFFFFFF_u32;
-        assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            assert_eq!(rust_dcq_batch(), 0);
+            assert_eq!(rust_dcq_batch(), 0);
+            let c = 0xFFFFFFFF_u32;
+            assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, c), 0);
 
-        assert_eq!(rust_dcq_unbatch(), 0);
-        // Still batched (depth was 2, now 1)
-        let state = get_dcq_state().expect("dcq initialized");
-        assert_eq!(state.queue.len(), 0);
+            assert_eq!(rust_dcq_unbatch(), 0);
+            // Still batched (depth was 2, now 1)
+            let state = get_dcq_state().expect("dcq initialized");
+            assert_eq!(state.queue.len(), 0);
 
-        assert_eq!(rust_dcq_unbatch(), 0);
-        // Now fully unbatched, commands visible
-        let state = get_dcq_state().expect("dcq initialized");
-        assert_eq!(state.queue.len(), 1);
-        reset_dcq();
+            assert_eq!(rust_dcq_unbatch(), 0);
+            // Now fully unbatched, commands visible
+            let state = get_dcq_state().expect("dcq initialized");
+            assert_eq!(state.queue.len(), 1);
+            reset_dcq();
+        }
     }
 
     /// @requirement REQ-DCQ-050
     #[serial]
     #[test]
     fn test_dcq_unbatch_without_batch() {
-        assert_eq!(init_dcq(), 0);
-        assert_eq!(rust_dcq_unbatch(), 0);
-        reset_dcq();
+        unsafe {
+            assert_eq!(init_dcq(), 0);
+            assert_eq!(rust_dcq_unbatch(), 0);
+            reset_dcq();
+        }
     }
 
     // -- REQ-FFI-030: Panic safety tests -------------------------------------
@@ -1099,78 +1162,94 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_push_not_initialized() {
-        reset_dcq();
-        assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, 0xFFFFFFFF), -1);
-        assert_eq!(rust_dcq_push_drawrect(0, 0, 5, 5, 0xFFFFFFFF), -1);
-        assert_eq!(rust_dcq_push_fillrect(0, 0, 5, 5, 0xFFFFFFFF), -1);
-        assert_eq!(rust_dcq_push_drawimage(1, 0, 0), -1);
-        assert_eq!(rust_dcq_push_deleteimage(1), -1);
-        assert_eq!(rust_dcq_push_waitsignal(), -1);
-        assert_eq!(unsafe { rust_dcq_push_copy(std::ptr::null(), 0, 0, 0) }, -1);
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_push_drawline(0, 0, 1, 1, 0xFFFFFFFF), -1);
+            assert_eq!(rust_dcq_push_drawrect(0, 0, 5, 5, 0xFFFFFFFF), -1);
+            assert_eq!(rust_dcq_push_fillrect(0, 0, 5, 5, 0xFFFFFFFF), -1);
+            assert_eq!(rust_dcq_push_drawimage(1, 0, 0), -1);
+            assert_eq!(rust_dcq_push_deleteimage(1), -1);
+            assert_eq!(rust_dcq_push_waitsignal(), -1);
+            assert_eq!(unsafe { rust_dcq_push_copy(std::ptr::null(), 0, 0, 0) }, -1);
+        }
     }
 
     /// @requirement REQ-FFI-030
     #[serial]
     #[test]
     fn test_dcq_batch_not_initialized() {
-        reset_dcq();
-        assert_eq!(rust_dcq_batch(), -1);
-        assert_eq!(rust_dcq_unbatch(), -1);
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_batch(), -1);
+            assert_eq!(rust_dcq_unbatch(), -1);
+        }
     }
 
     /// @requirement REQ-FFI-030
     #[serial]
     #[test]
     fn test_dcq_set_screen_not_initialized() {
-        reset_dcq();
-        assert_eq!(rust_dcq_set_screen(0), -1);
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_set_screen(0), -1);
+        }
     }
 
     /// @requirement REQ-DCQ-010
     #[serial]
     #[test]
     fn test_dcq_len_not_initialized() {
-        reset_dcq();
-        assert_eq!(rust_dcq_len(), -1);
+        unsafe {
+            reset_dcq();
+            assert_eq!(rust_dcq_len(), -1);
+        }
     }
 
     // -- Color conversion test -----------------------------------------------
 
     #[test]
     fn test_color_from_u32() {
-        let c = color_from_u32(0xFF8040C0);
-        assert_eq!(c.r, 0xFF);
-        assert_eq!(c.g, 0x80);
-        assert_eq!(c.b, 0x40);
-        assert_eq!(c.a, 0xC0);
+        unsafe {
+            let c = color_from_u32(0xFF8040C0);
+            assert_eq!(c.r, 0xFF);
+            assert_eq!(c.g, 0x80);
+            assert_eq!(c.b, 0x40);
+            assert_eq!(c.a, 0xC0);
+        }
     }
 
     #[test]
     fn test_color_from_u32_black() {
-        let c = color_from_u32(0x00000000);
-        assert_eq!(c.r, 0);
-        assert_eq!(c.g, 0);
-        assert_eq!(c.b, 0);
-        assert_eq!(c.a, 0);
+        unsafe {
+            let c = color_from_u32(0x00000000);
+            assert_eq!(c.r, 0);
+            assert_eq!(c.g, 0);
+            assert_eq!(c.b, 0);
+            assert_eq!(c.a, 0);
+        }
     }
 
     #[test]
     fn test_color_from_u32_white() {
-        let c = color_from_u32(0xFFFFFFFF);
-        assert_eq!(c.r, 0xFF);
-        assert_eq!(c.g, 0xFF);
-        assert_eq!(c.b, 0xFF);
-        assert_eq!(c.a, 0xFF);
+        unsafe {
+            let c = color_from_u32(0xFFFFFFFF);
+            assert_eq!(c.r, 0xFF);
+            assert_eq!(c.g, 0xFF);
+            assert_eq!(c.b, 0xFF);
+            assert_eq!(c.a, 0xFF);
+        }
     }
 
     // -- Screen conversion test ----------------------------------------------
 
     #[test]
     fn test_screen_from_index() {
-        assert_eq!(screen_from_index(0), Some(Screen::Main));
-        assert_eq!(screen_from_index(1), Some(Screen::Extra));
-        assert_eq!(screen_from_index(2), Some(Screen::Transition));
-        assert_eq!(screen_from_index(3), None);
-        assert_eq!(screen_from_index(-1), None);
+        unsafe {
+            assert_eq!(screen_from_index(0), Some(Screen::Main));
+            assert_eq!(screen_from_index(1), Some(Screen::Extra));
+            assert_eq!(screen_from_index(2), Some(Screen::Transition));
+            assert_eq!(screen_from_index(3), None);
+            assert_eq!(screen_from_index(-1), None);
+        }
     }
 }

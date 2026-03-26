@@ -3,8 +3,8 @@
 // @requirement Weapon collision, damage application, blast effects, ship tracking
 
 use super::battle_types::{
-    angle_to_facing, arctan, cosine, facing_to_angle, normalize_angle, normalize_facing,
-    shortest_path_delta, sine, HALF_CIRCLE, LOG_SPACE_HEIGHT, LOG_SPACE_WIDTH,
+    angle_to_facing, arctan, normalize_facing, shortest_path_delta, HALF_CIRCLE, LOG_SPACE_HEIGHT,
+    LOG_SPACE_WIDTH,
 };
 use super::element::{Element, ElementFlags, ElementProcessFunc, FrameHandle, Point, NORMAL_LIFE};
 
@@ -448,6 +448,7 @@ pub fn compute_track_facing(tracker_pos: Point, target_pos: Point, current_facin
 
 #[cfg(test)]
 mod tests {
+    use super::super::battle_types::{cosine, facing_to_angle, sine};
     use super::super::element::Element;
     use super::super::velocity::world_to_velocity;
     use super::*;
@@ -456,123 +457,131 @@ mod tests {
 
     #[test]
     fn laser_block_construction() {
-        let origin = Point::new(100, 200);
-        let end_point = Point::new(150, 250);
-        let face = 4; // Facing 4 (right-up diagonal)
-        let sender = 0; // Player 0
-        let flags = ElementFlags::FINITE_LIFE.bits();
+        unsafe {
+            let origin = Point::new(100, 200);
+            let end_point = Point::new(150, 250);
+            let face = 4; // Facing 4 (right-up diagonal)
+            let sender = 0; // Player 0
+            let flags = ElementFlags::FINITE_LIFE.bits();
 
-        let laser = LaserBlock::new(origin, end_point, face, sender, flags);
+            let laser = LaserBlock::new(origin, end_point, face, sender, flags);
 
-        assert_eq!(laser.cx, 100);
-        assert_eq!(laser.cy, 200);
-        assert_eq!(laser.ex, 150);
-        assert_eq!(laser.ey, 250);
-        assert_eq!(laser.face, 4);
-        assert_eq!(laser.sender, 0);
-        assert_eq!(laser.flags, flags);
+            assert_eq!(laser.cx, 100);
+            assert_eq!(laser.cy, 200);
+            assert_eq!(laser.ex, 150);
+            assert_eq!(laser.ey, 250);
+            assert_eq!(laser.face, 4);
+            assert_eq!(laser.sender, 0);
+            assert_eq!(laser.flags, flags);
+        }
     }
 
     // -- MissileBlock Construction --
 
     #[test]
     fn missile_block_construction() {
-        let origin = Point::new(100, 200);
-        let face = 8; // Facing 8 (left)
-        let index = 0;
-        let speed = 10; // 10 world units/frame
-        let hit_points = 1;
-        let damage = 2;
-        let life = 30; // 30 frames
-        let blast_offs = 4; // 4 pixels offset
-        let sender = 1; // Player 1
-        let flags = ElementFlags::FINITE_LIFE.bits();
+        unsafe {
+            let origin = Point::new(100, 200);
+            let face = 8; // Facing 8 (left)
+            let index = 0;
+            let speed = 10; // 10 world units/frame
+            let hit_points = 1;
+            let damage = 2;
+            let life = 30; // 30 frames
+            let blast_offs = 4; // 4 pixels offset
+            let sender = 1; // Player 1
+            let flags = ElementFlags::FINITE_LIFE.bits();
 
-        let missile = MissileBlock::new(
-            origin, face, index, speed, hit_points, damage, life, blast_offs, sender, flags,
-        );
+            let missile = MissileBlock::new(
+                origin, face, index, speed, hit_points, damage, life, blast_offs, sender, flags,
+            );
 
-        assert_eq!(missile.cx, 100);
-        assert_eq!(missile.cy, 200);
-        assert_eq!(missile.face, 8);
-        assert_eq!(missile.index, 0);
-        assert_eq!(missile.speed, 10);
-        assert_eq!(missile.hit_points, 1);
-        assert_eq!(missile.damage, 2);
-        assert_eq!(missile.life, 30);
-        assert_eq!(missile.blast_offs, 4);
-        assert_eq!(missile.sender, 1);
-        assert_eq!(missile.flags, flags);
+            assert_eq!(missile.cx, 100);
+            assert_eq!(missile.cy, 200);
+            assert_eq!(missile.face, 8);
+            assert_eq!(missile.index, 0);
+            assert_eq!(missile.speed, 10);
+            assert_eq!(missile.hit_points, 1);
+            assert_eq!(missile.damage, 2);
+            assert_eq!(missile.life, 30);
+            assert_eq!(missile.blast_offs, 4);
+            assert_eq!(missile.sender, 1);
+            assert_eq!(missile.flags, flags);
+        }
     }
 
     #[test]
     fn missile_backup_one_step() {
-        // Test that missile origin can be backed up by one velocity step
-        // Facing 0 = North (up), Facing 4 = East (right), Facing 8 = South (down), Facing 12 = West (left)
-        let origin = Point::new(100, 200);
-        let face = 4; // Facing 4 (East/right)
-        let speed = 10; // 10 world units/frame
+        unsafe {
+            // Test that missile origin can be backed up by one velocity step
+            // Facing 0 = North (up), Facing 4 = East (right), Facing 8 = South (down), Facing 12 = West (left)
+            let origin = Point::new(100, 200);
+            let face = 4; // Facing 4 (East/right)
+            let speed = 10; // 10 world units/frame
 
-        // Create missile at origin
-        let mut missile = MissileBlock::new(origin, face, 0, speed, 1, 1, 30, 0, 0, 0);
+            // Create missile at origin
+            let mut missile = MissileBlock::new(origin, face, 0, speed, 1, 1, 30, 0, 0, 0);
 
-        // Compute one-step backup (same as initialize_missile in C weapon.c:120-126)
-        let angle = facing_to_angle(face);
-        let delta_x = cosine(angle, world_to_velocity(speed as i32));
-        let delta_y = sine(angle, world_to_velocity(speed as i32));
+            // Compute one-step backup (same as initialize_missile in C weapon.c:120-126)
+            let angle = facing_to_angle(face);
+            let delta_x = cosine(angle, world_to_velocity(speed as i32));
+            let delta_y = sine(angle, world_to_velocity(speed as i32));
 
-        // Back up origin by one step
-        missile.cx -= (delta_x >> 5) as i16; // VELOCITY_TO_WORLD
-        missile.cy -= (delta_y >> 5) as i16;
+            // Back up origin by one step
+            missile.cx -= (delta_x >> 5) as i16; // VELOCITY_TO_WORLD
+            missile.cy -= (delta_y >> 5) as i16;
 
-        // Missile should be backed up by ~10 world units to the left (since facing right)
-        assert!(
-            missile.cx < origin.x,
-            "Missile facing right should be backed up to the left, got cx={} vs origin.x={}",
-            missile.cx,
-            origin.x
-        );
-        assert_eq!(
-            missile.cy, origin.y,
-            "Y coordinate should be unchanged for horizontal facing"
-        );
+            // Missile should be backed up by ~10 world units to the left (since facing right)
+            assert!(
+                missile.cx < origin.x,
+                "Missile facing right should be backed up to the left, got cx={} vs origin.x={}",
+                missile.cx,
+                origin.x
+            );
+            assert_eq!(
+                missile.cy, origin.y,
+                "Y coordinate should be unchanged for horizontal facing"
+            );
+        }
     }
 
     // -- Blast Direction Calculation --
 
     #[test]
     fn blast_direction_8bins() {
-        // Test weapon velocity angles map to 8 directional blast bins
-        // When weapon is traveling at angle X, blast points in opposite direction
-        // The 8 bins represent: N, NE, E, SE, S, SW, W, NW (0-7)
-        //
-        // Weapon angle → reversed (+ HALF_CIRCLE) → facing → bin
-        let test_cases = [
-            // Weapon traveling North (angle 0) → blast South (angle 32) → facing 8 → bin 4
-            (0, 4),
-            // Weapon traveling NE (angle 8) → blast SW (angle 40) → facing 10 → bin 5
-            (8, 5),
-            // Weapon traveling East (angle 16) → blast West (angle 48) → facing 12 → bin 6
-            (16, 6),
-            // Weapon traveling SE (angle 24) → blast NW (angle 56) → facing 14 → bin 7
-            (24, 7),
-            // Weapon traveling South (angle 32) → blast North (angle 64/0) → facing 0 → bin 0
-            (32, 0),
-            // Weapon traveling SW (angle 40) → blast NE (angle 72/8) → facing 2 → bin 1
-            (40, 1),
-            // Weapon traveling West (angle 48) → blast East (angle 80/16) → facing 4 → bin 2
-            (48, 2),
-            // Weapon traveling NW (angle 56) → blast SE (angle 88/24) → facing 6 → bin 3
-            (56, 3),
-        ];
+        unsafe {
+            // Test weapon velocity angles map to 8 directional blast bins
+            // When weapon is traveling at angle X, blast points in opposite direction
+            // The 8 bins represent: N, NE, E, SE, S, SW, W, NW (0-7)
+            //
+            // Weapon angle → reversed (+ HALF_CIRCLE) → facing → bin
+            let test_cases = [
+                // Weapon traveling North (angle 0) → blast South (angle 32) → facing 8 → bin 4
+                (0, 4),
+                // Weapon traveling NE (angle 8) → blast SW (angle 40) → facing 10 → bin 5
+                (8, 5),
+                // Weapon traveling East (angle 16) → blast West (angle 48) → facing 12 → bin 6
+                (16, 6),
+                // Weapon traveling SE (angle 24) → blast NW (angle 56) → facing 14 → bin 7
+                (24, 7),
+                // Weapon traveling South (angle 32) → blast North (angle 64/0) → facing 0 → bin 0
+                (32, 0),
+                // Weapon traveling SW (angle 40) → blast NE (angle 72/8) → facing 2 → bin 1
+                (40, 1),
+                // Weapon traveling West (angle 48) → blast East (angle 80/16) → facing 4 → bin 2
+                (48, 2),
+                // Weapon traveling NW (angle 56) → blast SE (angle 88/24) → facing 6 → bin 3
+                (56, 3),
+            ];
 
-        for (weapon_angle, expected_bin) in test_cases.iter() {
-            let bin = compute_blast_direction(*weapon_angle);
-            assert_eq!(
-                bin, *expected_bin,
-                "Weapon angle {} should produce blast bin {}, got {}",
-                weapon_angle, expected_bin, bin
-            );
+            for (weapon_angle, expected_bin) in test_cases.iter() {
+                let bin = compute_blast_direction(*weapon_angle);
+                assert_eq!(
+                    bin, *expected_bin,
+                    "Weapon angle {} should produce blast bin {}, got {}",
+                    weapon_angle, expected_bin, bin
+                );
+            }
         }
     }
 
@@ -580,370 +589,399 @@ mod tests {
 
     #[test]
     fn weapon_collision_damage_application() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        weapon.mass_points = 5; // 5 damage
-        weapon.crew_or_hp = 1; // 1 hit point (will be destroyed)
-        weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
+            weapon.mass_points = 5; // 5 damage
+            weapon.crew_or_hp = 1; // 1 hit point (will be destroyed)
+            weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
 
-        target.mass_points = 10; // Target is heavier
-        target.crew_or_hp = 10; // 10 hit points
-        target.state_flags.insert(ElementFlags::FINITE_LIFE);
-        target.life_span = NORMAL_LIFE;
+            target.mass_points = 10; // Target is heavier
+            target.crew_or_hp = 10; // 10 hit points
+            target.state_flags.insert(ElementFlags::FINITE_LIFE);
+            target.life_span = NORMAL_LIFE;
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should take 5 damage
-        assert_eq!(target.crew_or_hp, 5, "Target should take 5 damage");
+            // Target should take 5 damage
+            assert_eq!(target.crew_or_hp, 5, "Target should take 5 damage");
 
-        // Weapon should be destroyed (weaker than target)
-        assert_eq!(weapon.crew_or_hp, 0, "Weapon should be destroyed");
-        assert_eq!(weapon.life_span, 0, "Weapon life_span should be 0");
-        assert!(
-            weapon.state_flags.contains(ElementFlags::COLLISION),
-            "Weapon should have COLLISION flag"
-        );
-        assert!(
-            weapon.state_flags.contains(ElementFlags::NONSOLID),
-            "Weapon should have NONSOLID flag"
-        );
+            // Weapon should be destroyed (weaker than target)
+            assert_eq!(weapon.crew_or_hp, 0, "Weapon should be destroyed");
+            assert_eq!(weapon.life_span, 0, "Weapon life_span should be 0");
+            assert!(
+                weapon.state_flags.contains(ElementFlags::COLLISION),
+                "Weapon should have COLLISION flag"
+            );
+            assert!(
+                weapon.state_flags.contains(ElementFlags::NONSOLID),
+                "Weapon should have NONSOLID flag"
+            );
+        }
     }
 
     #[test]
     fn weapon_collision_exact_kill() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        weapon.mass_points = 10; // 10 damage (exact kill)
-        weapon.crew_or_hp = 1;
-        weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
+            weapon.mass_points = 10; // 10 damage (exact kill)
+            weapon.crew_or_hp = 1;
+            weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
 
-        target.mass_points = 5;
-        target.crew_or_hp = 10; // 10 hit points
-        target.state_flags.insert(ElementFlags::FINITE_LIFE);
-        target.life_span = NORMAL_LIFE;
+            target.mass_points = 5;
+            target.crew_or_hp = 10; // 10 hit points
+            target.state_flags.insert(ElementFlags::FINITE_LIFE);
+            target.life_span = NORMAL_LIFE;
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should be destroyed (exact kill)
-        assert_eq!(target.crew_or_hp, 0, "Target should be destroyed");
-        assert_eq!(target.life_span, 0, "Target life_span should be 0");
-        assert!(
-            target.state_flags.contains(ElementFlags::NONSOLID),
-            "Target should have NONSOLID flag"
-        );
+            // Target should be destroyed (exact kill)
+            assert_eq!(target.crew_or_hp, 0, "Target should be destroyed");
+            assert_eq!(target.life_span, 0, "Target life_span should be 0");
+            assert!(
+                target.state_flags.contains(ElementFlags::NONSOLID),
+                "Target should have NONSOLID flag"
+            );
+        }
     }
 
     #[test]
     fn weapon_collision_overkill() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        weapon.mass_points = 20; // 20 damage (overkill)
-        weapon.crew_or_hp = 1;
-        weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
+            weapon.mass_points = 20; // 20 damage (overkill)
+            weapon.crew_or_hp = 1;
+            weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
 
-        target.mass_points = 5;
-        target.crew_or_hp = 5; // 5 hit points
-        target.state_flags.insert(ElementFlags::FINITE_LIFE);
-        target.life_span = NORMAL_LIFE;
+            target.mass_points = 5;
+            target.crew_or_hp = 5; // 5 hit points
+            target.state_flags.insert(ElementFlags::FINITE_LIFE);
+            target.life_span = NORMAL_LIFE;
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should be destroyed (overkill)
-        assert_eq!(target.crew_or_hp, 0, "Target should be destroyed");
-        assert_eq!(target.life_span, 0, "Target life_span should be 0");
-        assert!(
-            target.state_flags.contains(ElementFlags::NONSOLID),
-            "Target should have NONSOLID flag"
-        );
+            // Target should be destroyed (overkill)
+            assert_eq!(target.crew_or_hp, 0, "Target should be destroyed");
+            assert_eq!(target.life_span, 0, "Target life_span should be 0");
+            assert!(
+                target.state_flags.contains(ElementFlags::NONSOLID),
+                "Target should have NONSOLID flag"
+            );
+        }
     }
 
     #[test]
     fn weapon_collision_already_dead() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        weapon.mass_points = 10;
-        weapon.crew_or_hp = 1;
-        weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
+            weapon.mass_points = 10;
+            weapon.crew_or_hp = 1;
+            weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
 
-        target.mass_points = 5;
-        target.crew_or_hp = 0; // Already dead
-        target.life_span = 0;
-        target
-            .state_flags
-            .insert(ElementFlags::FINITE_LIFE | ElementFlags::NONSOLID);
+            target.mass_points = 5;
+            target.crew_or_hp = 0; // Already dead
+            target.life_span = 0;
+            target
+                .state_flags
+                .insert(ElementFlags::FINITE_LIFE | ElementFlags::NONSOLID);
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should remain at 0 hit points (do_damage on already-dead target)
-        assert_eq!(target.crew_or_hp, 0, "Target should remain dead");
+            // Target should remain at 0 hit points (do_damage on already-dead target)
+            assert_eq!(target.crew_or_hp, 0, "Target should remain dead");
+        }
     }
 
     #[test]
     fn weapon_collision_double_hit_guard() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        weapon.mass_points = 5;
-        weapon.crew_or_hp = 1;
-        weapon
-            .state_flags
-            .insert(ElementFlags::FINITE_LIFE | ElementFlags::COLLISION);
+            weapon.mass_points = 5;
+            weapon.crew_or_hp = 1;
+            weapon
+                .state_flags
+                .insert(ElementFlags::FINITE_LIFE | ElementFlags::COLLISION);
 
-        target.mass_points = 10;
-        target.crew_or_hp = 10;
-        target.state_flags.insert(ElementFlags::FINITE_LIFE);
-        target.life_span = NORMAL_LIFE;
+            target.mass_points = 10;
+            target.crew_or_hp = 10;
+            target.state_flags.insert(ElementFlags::FINITE_LIFE);
+            target.life_span = NORMAL_LIFE;
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should NOT take damage (weapon already has COLLISION flag)
-        assert_eq!(
-            target.crew_or_hp, 10,
-            "Target should not take damage on double-hit"
-        );
+            // Target should NOT take damage (weapon already has COLLISION flag)
+            assert_eq!(
+                target.crew_or_hp, 10,
+                "Target should not take damage on double-hit"
+            );
+        }
     }
 
     #[test]
     fn weapon_collision_target_survives() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        // Setup: weak weapon (HP=1, mass=3) vs strong target (HP=10, mass=10)
-        weapon.mass_points = 3; // 3 damage
-        weapon.crew_or_hp = 1; // 1 hit point
-        weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
+            // Setup: weak weapon (HP=1, mass=3) vs strong target (HP=10, mass=10)
+            weapon.mass_points = 3; // 3 damage
+            weapon.crew_or_hp = 1; // 1 hit point
+            weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
 
-        target.mass_points = 10; // 10 mass points
-        target.crew_or_hp = 10; // 10 hit points (will survive 3 damage)
-        target.state_flags.insert(ElementFlags::FINITE_LIFE);
-        target.life_span = NORMAL_LIFE;
+            target.mass_points = 10; // 10 mass points
+            target.crew_or_hp = 10; // 10 hit points (will survive 3 damage)
+            target.state_flags.insert(ElementFlags::FINITE_LIFE);
+            target.life_span = NORMAL_LIFE;
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should take damage but survive
-        assert_eq!(target.crew_or_hp, 7, "Target should take 3 damage");
-        assert!(target.life_span > 0, "Target should still be alive");
+            // Target should take damage but survive
+            assert_eq!(target.crew_or_hp, 7, "Target should take 3 damage");
+            assert!(target.life_span > 0, "Target should still be alive");
 
-        // Weapon WILL be destroyed because weapon.HP (1) <= target.mass (10)
-        // Even though target survived, the weapon is too weak and gets destroyed
-        assert!(
-            weapon.state_flags.contains(ElementFlags::COLLISION),
-            "Weapon should have COLLISION flag"
-        );
-        assert_eq!(weapon.crew_or_hp, 0, "Weak weapon should be destroyed");
-        assert_eq!(weapon.life_span, 0, "Weapon life_span should be 0");
+            // Weapon WILL be destroyed because weapon.HP (1) <= target.mass (10)
+            // Even though target survived, the weapon is too weak and gets destroyed
+            assert!(
+                weapon.state_flags.contains(ElementFlags::COLLISION),
+                "Weapon should have COLLISION flag"
+            );
+            assert_eq!(weapon.crew_or_hp, 0, "Weak weapon should be destroyed");
+            assert_eq!(weapon.life_span, 0, "Weapon life_span should be 0");
+        }
     }
 
     #[test]
     fn weapon_collision_strong_weapon_target_survives() {
-        let mut weapon = Element::new();
-        let mut target = Element::new();
+        unsafe {
+            let mut weapon = Element::new();
+            let mut target = Element::new();
 
-        // Setup: strong weapon (HP=15, mass=3) vs weak target (HP=10, mass=5)
-        weapon.mass_points = 3; // 3 damage
-        weapon.crew_or_hp = 15; // 15 hit points (stronger than target mass)
-        weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
-        weapon.life_span = 10; // Weapon has life remaining
+            // Setup: strong weapon (HP=15, mass=3) vs weak target (HP=10, mass=5)
+            weapon.mass_points = 3; // 3 damage
+            weapon.crew_or_hp = 15; // 15 hit points (stronger than target mass)
+            weapon.state_flags.insert(ElementFlags::FINITE_LIFE);
+            weapon.life_span = 10; // Weapon has life remaining
 
-        target.mass_points = 5; // 5 mass points
-        target.crew_or_hp = 10; // 10 hit points (will survive 3 damage)
-        target.state_flags.insert(ElementFlags::FINITE_LIFE);
-        target.life_span = NORMAL_LIFE;
+            target.mass_points = 5; // 5 mass points
+            target.crew_or_hp = 10; // 10 hit points (will survive 3 damage)
+            target.state_flags.insert(ElementFlags::FINITE_LIFE);
+            target.life_span = NORMAL_LIFE;
 
-        let w_pt = Point::new(100, 100);
-        let h_pt = Point::new(100, 100);
+            let w_pt = Point::new(100, 100);
+            let h_pt = Point::new(100, 100);
 
-        weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
+            weapon_collision(&mut weapon, &w_pt, &mut target, &h_pt);
 
-        // Target should take damage but survive
-        assert_eq!(target.crew_or_hp, 7, "Target should take 3 damage");
-        assert!(target.life_span > 0, "Target should still be alive");
+            // Target should take damage but survive
+            assert_eq!(target.crew_or_hp, 7, "Target should take 3 damage");
+            assert!(target.life_span > 0, "Target should still be alive");
 
-        // Weapon should NOT be destroyed because weapon.HP (15) > target.mass (5)
-        // The strong weapon persists after hitting the target
-        assert!(
-            weapon.state_flags.contains(ElementFlags::COLLISION),
-            "Weapon should have COLLISION flag (target survived)"
-        );
-        assert_eq!(
-            weapon.crew_or_hp, 15,
-            "Strong weapon should retain hit points"
-        );
-        assert_ne!(
-            weapon.life_span, 0,
-            "Strong weapon should not be marked for death"
-        );
-        assert!(
-            !weapon.state_flags.contains(ElementFlags::NONSOLID),
-            "Strong weapon should remain solid"
-        );
+            // Weapon should NOT be destroyed because weapon.HP (15) > target.mass (5)
+            // The strong weapon persists after hitting the target
+            assert!(
+                weapon.state_flags.contains(ElementFlags::COLLISION),
+                "Weapon should have COLLISION flag (target survived)"
+            );
+            assert_eq!(
+                weapon.crew_or_hp, 15,
+                "Strong weapon should retain hit points"
+            );
+            assert_ne!(
+                weapon.life_span, 0,
+                "Strong weapon should not be marked for death"
+            );
+            assert!(
+                !weapon.state_flags.contains(ElementFlags::NONSOLID),
+                "Strong weapon should remain solid"
+            );
+        }
     }
 
     // -- do_damage Edge Cases --
 
     #[test]
     fn do_damage_ship_exact_kill() {
-        let mut ship = Element::new();
-        ship.state_flags.insert(ElementFlags::PLAYER_SHIP);
-        ship.crew_or_hp = 5;
-        ship.life_span = NORMAL_LIFE;
+        unsafe {
+            let mut ship = Element::new();
+            ship.state_flags.insert(ElementFlags::PLAYER_SHIP);
+            ship.crew_or_hp = 5;
+            ship.life_span = NORMAL_LIFE;
 
-        do_damage(&mut ship, 5);
+            do_damage(&mut ship, 5);
 
-        assert_eq!(ship.crew_or_hp, 0);
-        assert_eq!(ship.life_span, 0);
-        assert!(ship.state_flags.contains(ElementFlags::NONSOLID));
+            assert_eq!(ship.crew_or_hp, 0);
+            assert_eq!(ship.life_span, 0);
+            assert!(ship.state_flags.contains(ElementFlags::NONSOLID));
+        }
     }
 
     #[test]
     fn do_damage_ship_overkill() {
-        let mut ship = Element::new();
-        ship.state_flags.insert(ElementFlags::PLAYER_SHIP);
-        ship.crew_or_hp = 3;
-        ship.life_span = NORMAL_LIFE;
+        unsafe {
+            let mut ship = Element::new();
+            ship.state_flags.insert(ElementFlags::PLAYER_SHIP);
+            ship.crew_or_hp = 3;
+            ship.life_span = NORMAL_LIFE;
 
-        do_damage(&mut ship, 10);
+            do_damage(&mut ship, 10);
 
-        assert_eq!(ship.crew_or_hp, 0);
-        assert_eq!(ship.life_span, 0);
-        assert!(ship.state_flags.contains(ElementFlags::NONSOLID));
+            assert_eq!(ship.crew_or_hp, 0);
+            assert_eq!(ship.life_span, 0);
+            assert!(ship.state_flags.contains(ElementFlags::NONSOLID));
+        }
     }
 
     #[test]
     fn do_damage_non_ship() {
-        let mut elem = Element::new();
-        elem.mass_points = 5; // Non-gravity-mass
-        elem.crew_or_hp = 10;
-        elem.life_span = 5;
+        unsafe {
+            let mut elem = Element::new();
+            elem.mass_points = 5; // Non-gravity-mass
+            elem.crew_or_hp = 10;
+            elem.life_span = 5;
 
-        do_damage(&mut elem, 3);
+            do_damage(&mut elem, 3);
 
-        assert_eq!(elem.crew_or_hp, 7);
-        assert_eq!(elem.life_span, 5); // Not killed
+            assert_eq!(elem.crew_or_hp, 7);
+            assert_eq!(elem.life_span, 5); // Not killed
+        }
     }
 
     #[test]
     fn do_damage_gravity_mass_immune() {
-        let mut planet = Element::new();
-        planet.mass_points = 100; // Gravity mass
-        planet.crew_or_hp = 100;
-        planet.life_span = NORMAL_LIFE;
+        unsafe {
+            let mut planet = Element::new();
+            planet.mass_points = 100; // Gravity mass
+            planet.crew_or_hp = 100;
+            planet.life_span = NORMAL_LIFE;
 
-        do_damage(&mut planet, 50);
+            do_damage(&mut planet, 50);
 
-        // Gravity mass should take no damage
-        assert_eq!(planet.crew_or_hp, 100);
-        assert_eq!(planet.life_span, NORMAL_LIFE);
+            // Gravity mass should take no damage
+            assert_eq!(planet.crew_or_hp, 100);
+            assert_eq!(planet.life_span, NORMAL_LIFE);
+        }
     }
 
     // -- Track Ship Facing Adjustment --
 
     #[test]
     fn track_ship_facing_10_positions() {
-        // Test 10 different target positions around a tracker
-        let tracker_pos = Point::new(1000, 1000); // Center
+        unsafe {
+            // Test 10 different target positions around a tracker
+            let tracker_pos = Point::new(1000, 1000); // Center
 
-        let test_cases = [
-            // (target_pos, current_facing, description)
-            (Point::new(1100, 1000), 12, "Target to the right (East)"),
-            (Point::new(900, 1000), 4, "Target to the left (West)"),
-            (Point::new(1000, 900), 0, "Target above (North)"),
-            (Point::new(1000, 1100), 8, "Target below (South)"),
-            (Point::new(1100, 900), 14, "Target NE diagonal"),
-            (Point::new(900, 900), 2, "Target NW diagonal"),
-            (Point::new(900, 1100), 6, "Target SW diagonal"),
-            (Point::new(1100, 1100), 10, "Target SE diagonal"),
-            (Point::new(1050, 950), 15, "Target slightly NE"),
-            (Point::new(950, 1050), 5, "Target slightly SW"),
-        ];
+            let test_cases = [
+                // (target_pos, current_facing, description)
+                (Point::new(1100, 1000), 12, "Target to the right (East)"),
+                (Point::new(900, 1000), 4, "Target to the left (West)"),
+                (Point::new(1000, 900), 0, "Target above (North)"),
+                (Point::new(1000, 1100), 8, "Target below (South)"),
+                (Point::new(1100, 900), 14, "Target NE diagonal"),
+                (Point::new(900, 900), 2, "Target NW diagonal"),
+                (Point::new(900, 1100), 6, "Target SW diagonal"),
+                (Point::new(1100, 1100), 10, "Target SE diagonal"),
+                (Point::new(1050, 950), 15, "Target slightly NE"),
+                (Point::new(950, 1050), 5, "Target slightly SW"),
+            ];
 
-        for (target_pos, initial_facing, description) in test_cases.iter() {
-            let adjusted_facing = compute_track_facing(tracker_pos, *target_pos, *initial_facing);
+            for (target_pos, initial_facing, description) in test_cases.iter() {
+                let adjusted_facing =
+                    compute_track_facing(tracker_pos, *target_pos, *initial_facing);
 
-            // Adjusted facing should be different from initial (turned toward target)
-            // or same if already facing target exactly
-            assert!(
-                adjusted_facing < 16,
-                "{}: adjusted_facing should be valid (0-15), got {}",
-                description,
-                adjusted_facing
-            );
+                // Adjusted facing should be different from initial (turned toward target)
+                // or same if already facing target exactly
+                assert!(
+                    adjusted_facing < 16,
+                    "{}: adjusted_facing should be valid (0-15), got {}",
+                    description,
+                    adjusted_facing
+                );
 
-            // Verify it's a one-step adjustment (±1 or same)
-            let delta = if adjusted_facing >= *initial_facing {
-                adjusted_facing - *initial_facing
+                // Verify it's a one-step adjustment (±1 or same)
+                let delta = if adjusted_facing >= *initial_facing {
+                    adjusted_facing - *initial_facing
+                } else {
+                    *initial_facing - adjusted_facing
+                };
+
+                assert!(
+                    delta <= 1 || delta >= 15,
+                    "{}: should turn by ±1 step, got delta={}",
+                    description,
+                    delta
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn track_ship_facing_180_degree() {
+        unsafe {
+            // Target is exactly behind tracker (180° case)
+            let tracker_pos = Point::new(1000, 1000);
+            let target_pos = Point::new(1000, 800); // Directly above (North)
+            let initial_facing = 8; // Facing South (opposite direction)
+
+            let adjusted_facing = compute_track_facing(tracker_pos, target_pos, initial_facing);
+
+            // Should turn by ±1 (deterministic for Phase 1, random in Phase 2+)
+            let delta = if adjusted_facing >= initial_facing {
+                adjusted_facing - initial_facing
             } else {
-                *initial_facing - adjusted_facing
+                initial_facing - adjusted_facing
             };
 
             assert!(
-                delta <= 1 || delta >= 15,
-                "{}: should turn by ±1 step, got delta={}",
-                description,
+                delta == 1 || delta == 15,
+                "180° case should turn by ±1, got delta={}",
                 delta
             );
         }
     }
 
     #[test]
-    fn track_ship_facing_180_degree() {
-        // Target is exactly behind tracker (180° case)
-        let tracker_pos = Point::new(1000, 1000);
-        let target_pos = Point::new(1000, 800); // Directly above (North)
-        let initial_facing = 8; // Facing South (opposite direction)
-
-        let adjusted_facing = compute_track_facing(tracker_pos, target_pos, initial_facing);
-
-        // Should turn by ±1 (deterministic for Phase 1, random in Phase 2+)
-        let delta = if adjusted_facing >= initial_facing {
-            adjusted_facing - initial_facing
-        } else {
-            initial_facing - adjusted_facing
-        };
-
-        assert!(
-            delta == 1 || delta == 15,
-            "180° case should turn by ±1, got delta={}",
-            delta
-        );
-    }
-
-    #[test]
     fn track_ship_facing_already_aligned() {
-        // Tracker already facing target
-        let tracker_pos = Point::new(1000, 1000);
-        let target_pos = Point::new(1100, 1000); // Directly to the right
-        let initial_facing = 12; // Facing East (right)
+        unsafe {
+            // Tracker already facing target
+            let tracker_pos = Point::new(1000, 1000);
+            let target_pos = Point::new(1100, 1000); // Directly to the right
+            let initial_facing = 12; // Facing East (right)
 
-        let adjusted_facing = compute_track_facing(tracker_pos, target_pos, initial_facing);
+            let adjusted_facing = compute_track_facing(tracker_pos, target_pos, initial_facing);
 
-        // Should turn slightly (or not at all if exactly aligned)
-        // The algorithm always turns ±1 toward target unless exact
-        assert!(
-            adjusted_facing < 16,
-            "Adjusted facing should be valid (0-15)"
-        );
+            // Should turn slightly (or not at all if exactly aligned)
+            // The algorithm always turns ±1 toward target unless exact
+            assert!(
+                adjusted_facing < 16,
+                "Adjusted facing should be valid (0-15)"
+            );
+        }
     }
 }

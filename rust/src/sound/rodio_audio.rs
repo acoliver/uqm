@@ -329,7 +329,7 @@ fn send_command(cmd: AudioCommand) -> bool {
 
 /// Initialize the audio system
 #[no_mangle]
-pub extern "C" fn rust_audio_init() -> i32 {
+pub unsafe extern "C" fn rust_audio_init() -> i32 {
     rust_bridge_log_msg("RUST_AUDIO_INIT: starting rodio audio system");
 
     // Check if already running
@@ -370,7 +370,7 @@ pub extern "C" fn rust_audio_init() -> i32 {
 
 /// Shutdown the audio system
 #[no_mangle]
-pub extern "C" fn rust_audio_uninit() {
+pub unsafe extern "C" fn rust_audio_uninit() {
     rust_bridge_log_msg("RUST_AUDIO_UNINIT");
 
     // Send shutdown command
@@ -393,7 +393,7 @@ pub extern "C" fn rust_audio_uninit() {
 
 /// Play a WAV sound from raw bytes
 #[no_mangle]
-pub extern "C" fn rust_audio_play_wav(
+pub unsafe extern "C" fn rust_audio_play_wav(
     data: *const u8,
     len: usize,
     category: i32,
@@ -420,7 +420,7 @@ pub extern "C" fn rust_audio_play_wav(
 
 /// Play an OGG sound from raw bytes
 #[no_mangle]
-pub extern "C" fn rust_audio_play_ogg(
+pub unsafe extern "C" fn rust_audio_play_ogg(
     data: *const u8,
     len: usize,
     category: i32,
@@ -447,7 +447,7 @@ pub extern "C" fn rust_audio_play_ogg(
 
 /// Play raw PCM audio data
 #[no_mangle]
-pub extern "C" fn rust_audio_play_raw(
+pub unsafe extern "C" fn rust_audio_play_raw(
     data: *const u8,
     len: usize,
     sample_rate: u32,
@@ -520,55 +520,55 @@ pub fn stop_sound(handle: u32) {
 
 /// Stop a playing sound
 #[no_mangle]
-pub extern "C" fn rust_audio_stop(handle: u32) {
+pub unsafe extern "C" fn rust_audio_stop(handle: u32) {
     send_command(AudioCommand::Stop(handle));
 }
 
 /// Pause a playing sound
 #[no_mangle]
-pub extern "C" fn rust_audio_pause(handle: u32) {
+pub unsafe extern "C" fn rust_audio_pause(handle: u32) {
     send_command(AudioCommand::Pause(handle));
 }
 
 /// Resume a paused sound
 #[no_mangle]
-pub extern "C" fn rust_audio_resume(handle: u32) {
+pub unsafe extern "C" fn rust_audio_resume(handle: u32) {
     send_command(AudioCommand::Resume(handle));
 }
 
 /// Set volume for a specific sound (0.0 - 1.0)
 #[no_mangle]
-pub extern "C" fn rust_audio_set_volume(handle: u32, volume: f32) {
+pub unsafe extern "C" fn rust_audio_set_volume(handle: u32, volume: f32) {
     send_command(AudioCommand::SetVolume(handle, volume));
 }
 
 /// Set master volume (0.0 - 1.0)
 #[no_mangle]
-pub extern "C" fn rust_audio_set_master_volume(volume: f32) {
+pub unsafe extern "C" fn rust_audio_set_master_volume(volume: f32) {
     send_command(AudioCommand::SetMasterVolume(volume));
 }
 
 /// Set music volume (0.0 - 1.0)
 #[no_mangle]
-pub extern "C" fn rust_audio_set_music_volume(volume: f32) {
+pub unsafe extern "C" fn rust_audio_set_music_volume(volume: f32) {
     send_command(AudioCommand::SetMusicVolume(volume));
 }
 
 /// Set SFX volume (0.0 - 1.0)
 #[no_mangle]
-pub extern "C" fn rust_audio_set_sfx_volume(volume: f32) {
+pub unsafe extern "C" fn rust_audio_set_sfx_volume(volume: f32) {
     send_command(AudioCommand::SetSfxVolume(volume));
 }
 
 /// Set speech volume (0.0 - 1.0)
 #[no_mangle]
-pub extern "C" fn rust_audio_set_speech_volume(volume: f32) {
+pub unsafe extern "C" fn rust_audio_set_speech_volume(volume: f32) {
     send_command(AudioCommand::SetSpeechVolume(volume));
 }
 
 /// Check if a sound is still playing
 #[no_mangle]
-pub extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
+pub unsafe extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
     let (tx, rx) = mpsc::channel();
     if send_command(AudioCommand::IsPlaying(handle, tx)) {
         if rx.recv().unwrap_or(false) {
@@ -583,13 +583,13 @@ pub extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
 
 /// Stop all sounds
 #[no_mangle]
-pub extern "C" fn rust_audio_stop_all() {
+pub unsafe extern "C" fn rust_audio_stop_all() {
     send_command(AudioCommand::StopAll);
 }
 
 /// Cleanup finished sounds
 #[no_mangle]
-pub extern "C" fn rust_audio_cleanup() {
+pub unsafe extern "C" fn rust_audio_cleanup() {
     send_command(AudioCommand::Cleanup);
 }
 

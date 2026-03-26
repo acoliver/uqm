@@ -38,18 +38,13 @@ const MAX_SAMPLE_RATE: i32 = 96000;
 const MAX_FILE_SIZE: usize = 64 * 1024 * 1024;
 
 /// Compression type for AIFF-C files
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CompressionType {
     /// Uncompressed PCM (AIFF or AIFC with "NONE")
+    #[default]
     None,
     /// SDX2 ADPCM compression
     Sdx2,
-}
-
-impl Default for CompressionType {
-    fn default() -> Self {
-        CompressionType::None
-    }
 }
 
 /// COMM chunk data from AIFF header
@@ -235,7 +230,7 @@ impl AiffDecoder {
         cursor: &mut Cursor<&[u8]>,
         chunk_size: u32,
     ) -> DecodeResult<CommonChunk> {
-        if chunk_size < AIFF_COMM_SIZE as u32 {
+        if chunk_size < AIFF_COMM_SIZE {
             self.last_error = -2;
             return Err(DecodeError::InvalidData("COMM chunk too small".into()));
         }
@@ -245,7 +240,7 @@ impl AiffDecoder {
         common.sample_frames = read_be_u32(cursor)?;
         common.sample_size = read_be_u16(cursor)?;
         common.sample_rate = read_be_f80(cursor)?;
-        if chunk_size >= AIFF_EXT_COMM_SIZE as u32 {
+        if chunk_size >= AIFF_EXT_COMM_SIZE {
             common.ext_type_id = read_be_u32(cursor)?;
         }
         let consumed = cursor.position() - start_pos;
@@ -499,7 +494,7 @@ impl SoundDecoder for AiffDecoder {
                     let ssnd_hdr = self.read_sound_data_header(&mut cursor)?;
                     data_ofs = cursor.position() + ssnd_hdr.offset as u64;
                     ssnd_found = true;
-                    let skip = chunk_hdr.size.saturating_sub(AIFF_SSND_SIZE as u32);
+                    let skip = chunk_hdr.size.saturating_sub(AIFF_SSND_SIZE);
                     if skip > 0 {
                         cursor
                             .seek(SeekFrom::Current(skip as i64))
@@ -557,9 +552,7 @@ impl SoundDecoder for AiffDecoder {
         }
 
         // REQ-SV-4: sample rate range
-        if self.common.sample_rate < MIN_SAMPLE_RATE as i32
-            || self.common.sample_rate > MAX_SAMPLE_RATE as i32
-        {
+        if self.common.sample_rate < MIN_SAMPLE_RATE || self.common.sample_rate > MAX_SAMPLE_RATE {
             self.last_error = -2;
             self.close();
             return Err(DecodeError::UnsupportedFormat("sample_rate".into()));
@@ -579,15 +572,13 @@ impl SoundDecoder for AiffDecoder {
                 return Err(DecodeError::UnsupportedFormat("AIFF with extension".into()));
             }
             self.comp_type = CompressionType::None;
+        } else if self.common.ext_type_id == SDX2_COMPRESSION {
+            self.comp_type = CompressionType::Sdx2;
         } else {
-            if self.common.ext_type_id == SDX2_COMPRESSION {
-                self.comp_type = CompressionType::Sdx2;
-            } else {
-                self.close();
-                return Err(DecodeError::UnsupportedFormat(
-                    "unknown AIFC compression".into(),
-                ));
-            }
+            self.close();
+            return Err(DecodeError::UnsupportedFormat(
+                "unknown AIFC compression".into(),
+            ));
         }
 
         // SDX2-specific validation (REQ-CH-5, REQ-CH-6)

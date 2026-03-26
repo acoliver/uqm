@@ -369,47 +369,51 @@ mod tests {
 
     #[test]
     fn test_rust_file_exists() {
-        let test_dir = get_test_dir();
-        fs::create_dir_all(&test_dir).unwrap();
-        let test_file = test_dir.join("test_ffi_file.txt");
-
-        // Should not exist initially
-        let c_path = CString::new(test_file.to_str().unwrap()).unwrap();
         unsafe {
-            assert_eq!(rust_file_exists(c_path.as_ptr()), 0);
+            let test_dir = get_test_dir();
+            fs::create_dir_all(&test_dir).unwrap();
+            let test_file = test_dir.join("test_ffi_file.txt");
 
-            // Create file
-            fs::write(&test_file, "test").unwrap();
+            // Should not exist initially
+            let c_path = CString::new(test_file.to_str().unwrap()).unwrap();
+            unsafe {
+                assert_eq!(rust_file_exists(c_path.as_ptr()), 0);
 
-            // Should exist now
-            assert_eq!(rust_file_exists(c_path.as_ptr()), 1);
+                // Create file
+                fs::write(&test_file, "test").unwrap();
+
+                // Should exist now
+                assert_eq!(rust_file_exists(c_path.as_ptr()), 1);
+            }
+
+            // Cleanup
+            cleanup_test_dir(&test_dir);
         }
-
-        // Cleanup
-        cleanup_test_dir(&test_dir);
     }
 
     #[test]
     fn test_rust_copy_file() {
-        let test_dir = get_test_dir();
-        fs::create_dir_all(&test_dir).unwrap();
-        let base_dir = &test_dir;
-        let src = base_dir.join("ffi_src.txt");
-        let dst = base_dir.join("ffi_dst.txt");
-
-        // Create source file
-        fs::write(&src, "test content").unwrap();
-
-        let c_src = CString::new(src.to_str().unwrap()).unwrap();
-        let c_dst = CString::new(dst.to_str().unwrap()).unwrap();
-
-        // Copy file
         unsafe {
-            assert_eq!(rust_copy_file(c_src.as_ptr(), c_dst.as_ptr()), 1);
-        }
-        assert!(dst.exists());
+            let test_dir = get_test_dir();
+            fs::create_dir_all(&test_dir).unwrap();
+            let base_dir = &test_dir;
+            let src = base_dir.join("ffi_src.txt");
+            let dst = base_dir.join("ffi_dst.txt");
 
-        // Cleanup
-        cleanup_test_dir(&test_dir);
+            // Create source file
+            fs::write(&src, "test content").unwrap();
+
+            let c_src = CString::new(src.to_str().unwrap()).unwrap();
+            let c_dst = CString::new(dst.to_str().unwrap()).unwrap();
+
+            // Copy file
+            unsafe {
+                assert_eq!(rust_copy_file(c_src.as_ptr(), c_dst.as_ptr()), 1);
+            }
+            assert!(dst.exists());
+
+            // Cleanup
+            cleanup_test_dir(&test_dir);
+        }
     }
 }

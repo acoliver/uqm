@@ -164,19 +164,19 @@ pub enum BattleSequenceState {
 pub fn map_battle_input(input: BattleInputState) -> u32 {
     let mut flags = 0u32;
     if input.0 & BattleInputState::LEFT.0 != 0 {
-        flags |= super::ship_runtime::LEFT as u32;
+        flags |= super::ship_runtime::LEFT;
     }
     if input.0 & BattleInputState::RIGHT.0 != 0 {
-        flags |= super::ship_runtime::RIGHT as u32;
+        flags |= super::ship_runtime::RIGHT;
     }
     if input.0 & BattleInputState::THRUST.0 != 0 {
-        flags |= super::ship_runtime::THRUST as u32;
+        flags |= super::ship_runtime::THRUST;
     }
     if input.0 & BattleInputState::WEAPON.0 != 0 {
-        flags |= super::ship_runtime::WEAPON as u32;
+        flags |= super::ship_runtime::WEAPON;
     }
     if input.0 & BattleInputState::SPECIAL.0 != 0 {
-        flags |= super::ship_runtime::SPECIAL as u32;
+        flags |= super::ship_runtime::SPECIAL;
     }
     flags
 }

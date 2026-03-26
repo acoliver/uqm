@@ -97,7 +97,7 @@ fn fade_type_from_direction(direction: c_int) -> Option<FadeType> {
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_init() -> c_int {
+pub unsafe extern "C" fn rust_cmap_init() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         if get_cmap_state().is_some() {
             rust_bridge_log_msg("rust_cmap_init: already initialized");
@@ -128,7 +128,7 @@ pub extern "C" fn rust_cmap_init() -> c_int {
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_uninit() {
+pub unsafe extern "C" fn rust_cmap_uninit() {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if let Some(state) = get_cmap_state() {
             state.manager.uninit();
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn rust_cmap_set(index: c_int, data: *const u8, len: c_int
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind + null checks.
 #[no_mangle]
-pub extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
+pub unsafe extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
     /// Static buffer for returning colormap data to C. Valid until next call.
     static GET_BUFFER: CmapGetBuffer = CmapGetBuffer(UnsafeCell::new(
         [0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE],
@@ -270,7 +270,7 @@ pub extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
+pub unsafe extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
             Some(s) => s,
@@ -304,7 +304,7 @@ pub extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -> c_int {
+pub unsafe extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
             Some(s) => s,
@@ -338,7 +338,7 @@ pub extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -> c_int
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_get_fade_amount() -> c_int {
+pub unsafe extern "C" fn rust_cmap_get_fade_amount() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
             Some(s) => s,
@@ -362,7 +362,7 @@ pub extern "C" fn rust_cmap_get_fade_amount() -> c_int {
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_xform_step() -> c_int {
+pub unsafe extern "C" fn rust_cmap_xform_step() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
             Some(s) => s,
@@ -386,7 +386,7 @@ pub extern "C" fn rust_cmap_xform_step() -> c_int {
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
 #[no_mangle]
-pub extern "C" fn rust_cmap_flush_xforms() -> c_int {
+pub unsafe extern "C" fn rust_cmap_flush_xforms() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
         let state = match get_cmap_state() {
             Some(s) => s,
@@ -474,7 +474,7 @@ mod tests {
     /// Initialize colormap and return success status. Resets first.
     fn init_cmap() -> c_int {
         reset_cmap();
-        rust_cmap_init()
+        unsafe { rust_cmap_init() }
     }
 
     // -- REQ-CMAP-010: Lifecycle tests ---------------------------------------
@@ -483,37 +483,45 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_init_success() {
-        let rc = init_cmap();
-        assert_eq!(rc, 0);
-        reset_cmap();
+        unsafe {
+            let rc = init_cmap();
+            assert_eq!(rc, 0);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_init_double_init_fails() {
-        reset_cmap();
-        assert_eq!(rust_cmap_init(), 0);
-        assert_eq!(rust_cmap_init(), -1);
-        reset_cmap();
+        unsafe {
+            reset_cmap();
+            assert_eq!(rust_cmap_init(), 0);
+            assert_eq!(rust_cmap_init(), -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_uninit_cleans_up() {
-        assert_eq!(init_cmap(), 0);
-        rust_cmap_uninit();
-        assert!(get_cmap_state().is_none());
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            rust_cmap_uninit();
+            assert!(get_cmap_state().is_none());
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_uninit_when_not_initialized() {
-        reset_cmap();
-        rust_cmap_uninit();
-        assert!(get_cmap_state().is_none());
+        unsafe {
+            reset_cmap();
+            rust_cmap_uninit();
+            assert!(get_cmap_state().is_none());
+        }
     }
 
     // -- REQ-CMAP-010: Set / Get colormap tests ------------------------------
@@ -522,141 +530,165 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_basic() {
-        assert_eq!(init_cmap(), 0);
-        let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-        let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
-        assert_eq!(rc, 0);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
+            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+            assert_eq!(rc, 0);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_set_multiple_maps() {
-        assert_eq!(init_cmap(), 0);
-        let map_size = NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;
-        let data = vec![0u8; map_size * 3];
-        let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
-        assert_eq!(rc, 0);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let map_size = NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;
+            let data = vec![0u8; map_size * 3];
+            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+            assert_eq!(rc, 0);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_set_null_data() {
-        assert_eq!(init_cmap(), 0);
-        let rc = unsafe { rust_cmap_set(0, ptr::null(), 768) };
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = unsafe { rust_cmap_set(0, ptr::null(), 768) };
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_set_zero_len() {
-        assert_eq!(init_cmap(), 0);
-        let data = [0u8; 1];
-        let rc = unsafe { rust_cmap_set(0, data.as_ptr(), 0) };
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let data = [0u8; 1];
+            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), 0) };
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_set_not_initialized() {
-        reset_cmap();
-        let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-        let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
-        assert_eq!(rc, -1);
+        unsafe {
+            reset_cmap();
+            let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
+            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+            assert_eq!(rc, -1);
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_get_roundtrip() {
-        assert_eq!(init_cmap(), 0);
-        let map_size = NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;
-        let mut data = vec![0u8; map_size];
-        // Set a known color at index 0: R=0xAA, G=0xBB, B=0xCC
-        data[0] = 0xAA;
-        data[1] = 0xBB;
-        data[2] = 0xCC;
-        let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
-        assert_eq!(rc, 0);
-
-        let result = rust_cmap_get(0);
-        assert!(!result.is_null());
         unsafe {
-            assert_eq!(*result, 0xAA);
-            assert_eq!(*result.add(1), 0xBB);
-            assert_eq!(*result.add(2), 0xCC);
+            assert_eq!(init_cmap(), 0);
+            let map_size = NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;
+            let mut data = vec![0u8; map_size];
+            // Set a known color at index 0: R=0xAA, G=0xBB, B=0xCC
+            data[0] = 0xAA;
+            data[1] = 0xBB;
+            data[2] = 0xCC;
+            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+            assert_eq!(rc, 0);
+
+            let result = rust_cmap_get(0);
+            assert!(!result.is_null());
+            unsafe {
+                assert_eq!(*result, 0xAA);
+                assert_eq!(*result.add(1), 0xBB);
+                assert_eq!(*result.add(2), 0xCC);
+            }
+            reset_cmap();
         }
-        reset_cmap();
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_get_invalid_index() {
-        assert_eq!(init_cmap(), 0);
-        let result = rust_cmap_get(-1);
-        assert!(result.is_null());
-        let result = rust_cmap_get(MAX_COLORMAPS as c_int);
-        assert!(result.is_null());
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let result = rust_cmap_get(-1);
+            assert!(result.is_null());
+            let result = rust_cmap_get(MAX_COLORMAPS as c_int);
+            assert!(result.is_null());
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_get_unset_index() {
-        assert_eq!(init_cmap(), 0);
-        let result = rust_cmap_get(5);
-        assert!(result.is_null());
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let result = rust_cmap_get(5);
+            assert!(result.is_null());
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_get_not_initialized() {
-        reset_cmap();
-        let result = rust_cmap_get(0);
-        assert!(result.is_null());
+        unsafe {
+            reset_cmap();
+            let result = rust_cmap_get(0);
+            assert!(result.is_null());
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_from_index_found() {
-        assert_eq!(init_cmap(), 0);
-        let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-        unsafe { rust_cmap_set(3, data.as_ptr(), data.len() as c_int) };
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
+            unsafe { rust_cmap_set(3, data.as_ptr(), data.len() as c_int) };
 
-        let idx = rust_cmap_from_index(3);
-        assert_eq!(idx, 3);
-        reset_cmap();
+            let idx = rust_cmap_from_index(3);
+            assert_eq!(idx, 3);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_from_index_not_found() {
-        assert_eq!(init_cmap(), 0);
-        let idx = rust_cmap_from_index(42);
-        assert_eq!(idx, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let idx = rust_cmap_from_index(42);
+            assert_eq!(idx, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-010
     #[serial]
     #[test]
     fn test_cmap_from_index_not_initialized() {
-        reset_cmap();
-        let idx = rust_cmap_from_index(0);
-        assert_eq!(idx, -1);
+        unsafe {
+            reset_cmap();
+            let idx = rust_cmap_from_index(0);
+            assert_eq!(idx, -1);
+        }
     }
 
     // -- REQ-CMAP-020: Fade tests -------------------------------------------
@@ -665,73 +697,87 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_fade_screen_to_black_immediate() {
-        assert_eq!(init_cmap(), 0);
-        let rc = rust_cmap_fade_screen(0, 0);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NO_INTENSITY);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = rust_cmap_fade_screen(0, 0);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NO_INTENSITY);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_fade_screen_to_white_immediate() {
-        assert_eq!(init_cmap(), 0);
-        let rc = rust_cmap_fade_screen(2, 0);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_FULL_INTENSITY);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = rust_cmap_fade_screen(2, 0);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_FULL_INTENSITY);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_fade_screen_to_normal_immediate() {
-        assert_eq!(init_cmap(), 0);
-        // First fade to black
-        rust_cmap_fade_screen(0, 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NO_INTENSITY);
-        // Then back to normal
-        let rc = rust_cmap_fade_screen(1, 0);
-        assert_eq!(rc, 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            // First fade to black
+            rust_cmap_fade_screen(0, 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NO_INTENSITY);
+            // Then back to normal
+            let rc = rust_cmap_fade_screen(1, 0);
+            assert_eq!(rc, 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_fade_screen_invalid_direction() {
-        assert_eq!(init_cmap(), 0);
-        let rc = rust_cmap_fade_screen(99, 100);
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = rust_cmap_fade_screen(99, 100);
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_fade_screen_not_initialized() {
-        reset_cmap();
-        let rc = rust_cmap_fade_screen(0, 100);
-        assert_eq!(rc, -1);
+        unsafe {
+            reset_cmap();
+            let rc = rust_cmap_fade_screen(0, 100);
+            assert_eq!(rc, -1);
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_get_fade_amount_default() {
-        assert_eq!(init_cmap(), 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_get_fade_amount_not_initialized() {
-        reset_cmap();
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
+        unsafe {
+            reset_cmap();
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
+        }
     }
 
     // -- REQ-CMAP-020: Xform step tests -------------------------------------
@@ -740,38 +786,46 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_xform_step_no_active() {
-        assert_eq!(init_cmap(), 0);
-        let rc = rust_cmap_xform_step();
-        assert_eq!(rc, 0);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = rust_cmap_xform_step();
+            assert_eq!(rc, 0);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_xform_step_not_initialized() {
-        reset_cmap();
-        let rc = rust_cmap_xform_step();
-        assert_eq!(rc, -1);
+        unsafe {
+            reset_cmap();
+            let rc = rust_cmap_xform_step();
+            assert_eq!(rc, -1);
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_flush_xforms_success() {
-        assert_eq!(init_cmap(), 0);
-        let rc = rust_cmap_flush_xforms();
-        assert_eq!(rc, 0);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = rust_cmap_flush_xforms();
+            assert_eq!(rc, 0);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-020
     #[serial]
     #[test]
     fn test_cmap_flush_xforms_not_initialized() {
-        reset_cmap();
-        let rc = rust_cmap_flush_xforms();
-        assert_eq!(rc, -1);
+        unsafe {
+            reset_cmap();
+            let rc = rust_cmap_flush_xforms();
+            assert_eq!(rc, -1);
+        }
     }
 
     // -- REQ-CMAP-030: Set palette tests ------------------------------------
@@ -780,66 +834,77 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_palette_basic() {
-        assert_eq!(init_cmap(), 0);
-        let mut palette_data = vec![0u8; NUMBER_OF_PLUTVALS * 3];
-        palette_data[0] = 0xFF;
-        palette_data[1] = 0x00;
-        palette_data[2] = 0x80;
-        let rc =
-            unsafe { rust_cmap_set_palette(palette_data.as_ptr(), NUMBER_OF_PLUTVALS as c_int) };
-        assert_eq!(rc, 0);
-
-        // Verify via get
-        let result = rust_cmap_get(0);
-        assert!(!result.is_null());
         unsafe {
-            assert_eq!(*result, 0xFF);
-            assert_eq!(*result.add(1), 0x00);
-            assert_eq!(*result.add(2), 0x80);
+            assert_eq!(init_cmap(), 0);
+            let mut palette_data = vec![0u8; NUMBER_OF_PLUTVALS * 3];
+            palette_data[0] = 0xFF;
+            palette_data[1] = 0x00;
+            palette_data[2] = 0x80;
+            let rc = unsafe {
+                rust_cmap_set_palette(palette_data.as_ptr(), NUMBER_OF_PLUTVALS as c_int)
+            };
+            assert_eq!(rc, 0);
+
+            // Verify via get
+            let result = rust_cmap_get(0);
+            assert!(!result.is_null());
+            unsafe {
+                assert_eq!(*result, 0xFF);
+                assert_eq!(*result.add(1), 0x00);
+                assert_eq!(*result.add(2), 0x80);
+            }
+            reset_cmap();
         }
-        reset_cmap();
     }
 
     /// @requirement REQ-CMAP-030
     #[serial]
     #[test]
     fn test_cmap_set_palette_partial() {
-        assert_eq!(init_cmap(), 0);
-        let palette_data = [0xAAu8, 0xBB, 0xCC]; // Just one color
-        let rc = unsafe { rust_cmap_set_palette(palette_data.as_ptr(), 1) };
-        assert_eq!(rc, 0);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let palette_data = [0xAAu8, 0xBB, 0xCC]; // Just one color
+            let rc = unsafe { rust_cmap_set_palette(palette_data.as_ptr(), 1) };
+            assert_eq!(rc, 0);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-030
     #[serial]
     #[test]
     fn test_cmap_set_palette_null_data() {
-        assert_eq!(init_cmap(), 0);
-        let rc = unsafe { rust_cmap_set_palette(ptr::null(), 256) };
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let rc = unsafe { rust_cmap_set_palette(ptr::null(), 256) };
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-030
     #[serial]
     #[test]
     fn test_cmap_set_palette_zero_count() {
-        assert_eq!(init_cmap(), 0);
-        let data = [0u8; 3];
-        let rc = unsafe { rust_cmap_set_palette(data.as_ptr(), 0) };
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let data = [0u8; 3];
+            let rc = unsafe { rust_cmap_set_palette(data.as_ptr(), 0) };
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-CMAP-030
     #[serial]
     #[test]
     fn test_cmap_set_palette_not_initialized() {
-        reset_cmap();
-        let data = vec![0u8; 768];
-        let rc = unsafe { rust_cmap_set_palette(data.as_ptr(), 256) };
-        assert_eq!(rc, -1);
+        unsafe {
+            reset_cmap();
+            let data = vec![0u8; 768];
+            let rc = unsafe { rust_cmap_set_palette(data.as_ptr(), 256) };
+            assert_eq!(rc, -1);
+        }
     }
 
     // -- REQ-FFI-030: Panic safety / edge case tests -------------------------
@@ -848,70 +913,77 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_too_small_data() {
-        assert_eq!(init_cmap(), 0);
-        let data = [0u8; 10];
-        let rc = unsafe { rust_cmap_set(0, data.as_ptr(), 10) };
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let data = [0u8; 10];
+            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), 10) };
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-FFI-030
     #[serial]
     #[test]
     fn test_cmap_set_out_of_range_index() {
-        assert_eq!(init_cmap(), 0);
-        let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-        let rc =
-            unsafe { rust_cmap_set(MAX_COLORMAPS as c_int, data.as_ptr(), data.len() as c_int) };
-        assert_eq!(rc, -1);
-        reset_cmap();
+        unsafe {
+            assert_eq!(init_cmap(), 0);
+            let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
+            let rc = unsafe {
+                rust_cmap_set(MAX_COLORMAPS as c_int, data.as_ptr(), data.len() as c_int)
+            };
+            assert_eq!(rc, -1);
+            reset_cmap();
+        }
     }
 
     /// @requirement REQ-FFI-030
     #[serial]
     #[test]
     fn test_cmap_full_lifecycle() {
-        assert_eq!(init_cmap(), 0);
-
-        // Set a palette
-        let mut data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-        data[0] = 255;
-        data[1] = 128;
-        data[2] = 64;
-        unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
-
-        // Read it back
-        let result = rust_cmap_get(0);
-        assert!(!result.is_null());
         unsafe {
-            assert_eq!(*result, 255);
-            assert_eq!(*result.add(1), 128);
-            assert_eq!(*result.add(2), 64);
+            assert_eq!(init_cmap(), 0);
+
+            // Set a palette
+            let mut data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
+            data[0] = 255;
+            data[1] = 128;
+            data[2] = 64;
+            unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+
+            // Read it back
+            let result = rust_cmap_get(0);
+            assert!(!result.is_null());
+            unsafe {
+                assert_eq!(*result, 255);
+                assert_eq!(*result.add(1), 128);
+                assert_eq!(*result.add(2), 64);
+            }
+
+            // Check fade default
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
+
+            // Fade to black immediately
+            assert_eq!(rust_cmap_fade_screen(0, 0), 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NO_INTENSITY);
+
+            // Fade back to normal
+            assert_eq!(rust_cmap_fade_screen(1, 0), 0);
+            assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
+
+            // Step xforms (none active)
+            assert_eq!(rust_cmap_xform_step(), 0);
+
+            // Flush xforms
+            assert_eq!(rust_cmap_flush_xforms(), 0);
+
+            // Look up by index
+            assert_eq!(rust_cmap_from_index(0), 0);
+            assert_eq!(rust_cmap_from_index(99), -1);
+
+            // Uninit
+            rust_cmap_uninit();
+            assert!(get_cmap_state().is_none());
         }
-
-        // Check fade default
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
-
-        // Fade to black immediately
-        assert_eq!(rust_cmap_fade_screen(0, 0), 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NO_INTENSITY);
-
-        // Fade back to normal
-        assert_eq!(rust_cmap_fade_screen(1, 0), 0);
-        assert_eq!(rust_cmap_get_fade_amount(), FADE_NORMAL_INTENSITY);
-
-        // Step xforms (none active)
-        assert_eq!(rust_cmap_xform_step(), 0);
-
-        // Flush xforms
-        assert_eq!(rust_cmap_flush_xforms(), 0);
-
-        // Look up by index
-        assert_eq!(rust_cmap_from_index(0), 0);
-        assert_eq!(rust_cmap_from_index(99), -1);
-
-        // Uninit
-        rust_cmap_uninit();
-        assert!(get_cmap_state().is_none());
     }
 }

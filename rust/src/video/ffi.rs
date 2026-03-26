@@ -12,7 +12,7 @@ use crate::sound::rodio_audio::{self, SoundCategory};
 
 use super::decoder::DukVideoDecoder;
 use super::player::VideoPlayer;
-use super::scaler::{LanczosVideoScaler, VideoScaler};
+use super::scaler::VideoScaler;
 use super::{VideoError, VideoFrame, DUCK_FPS};
 
 pub use crate::graphics::ffi::SDL_Surface;
@@ -427,9 +427,9 @@ unsafe fn render_frame_to_canvas(
                 }
                 for x in 0..w {
                     let pixel = frame.data[y * w + x];
-                    let r = (pixel & 0xFF) as u32;
-                    let g = ((pixel >> 8) & 0xFF) as u32;
-                    let b = ((pixel >> 16) & 0xFF) as u32;
+                    let r = (pixel & 0xFF);
+                    let g = ((pixel >> 8) & 0xFF);
+                    let b = ((pixel >> 16) & 0xFF);
                     let out = ((r >> fmt.Rloss) << fmt.Rshift)
                         | ((g >> fmt.Gloss) << fmt.Gshift)
                         | ((b >> fmt.Bloss) << fmt.Bshift);
@@ -445,10 +445,10 @@ unsafe fn render_frame_to_canvas(
                 }
                 for x in 0..w {
                     let pixel = frame.data[y * w + x];
-                    let r = (pixel & 0xFF) as u32;
-                    let g = ((pixel >> 8) & 0xFF) as u32;
-                    let b = ((pixel >> 16) & 0xFF) as u32;
-                    let a = ((pixel >> 24) & 0xFF) as u32;
+                    let r = (pixel & 0xFF);
+                    let g = ((pixel >> 8) & 0xFF);
+                    let b = ((pixel >> 16) & 0xFF);
+                    let a = ((pixel >> 24) & 0xFF);
                     let out = ((r >> fmt.Rloss) << fmt.Rshift)
                         | ((g >> fmt.Gloss) << fmt.Gshift)
                         | ((b >> fmt.Bloss) << fmt.Bshift)
@@ -681,14 +681,14 @@ pub unsafe extern "C" fn rust_play_video(
 }
 
 #[no_mangle]
-pub extern "C" fn rust_stop_video() {
+pub unsafe extern "C" fn rust_stop_video() {
     if let Ok(mut guard) = PLAYER.lock() {
         *guard = None;
     }
 }
 
 #[no_mangle]
-pub extern "C" fn rust_video_playing() -> bool {
+pub unsafe extern "C" fn rust_video_playing() -> bool {
     if let Ok(guard) = PLAYER.lock() {
         if let Some(ref p) = *guard {
             return p.playing();
@@ -872,7 +872,7 @@ pub unsafe extern "C" fn rust_present_video_to_window(
 }
 
 #[no_mangle]
-pub extern "C" fn rust_get_video_position() -> u32 {
+pub unsafe extern "C" fn rust_get_video_position() -> u32 {
     if let Ok(guard) = PLAYER.lock() {
         if let Some(ref p) = *guard {
             return p.position_ms();
@@ -1047,12 +1047,12 @@ const VID_NO_LOOP: u32 = 0xFFFF_FFFF;
 // ============================================================================
 
 #[no_mangle]
-pub extern "C" fn TFB_InitVideoPlayer() -> bool {
+pub unsafe extern "C" fn TFB_InitVideoPlayer() -> bool {
     true
 }
 
 #[no_mangle]
-pub extern "C" fn TFB_UninitVideoPlayer() {
+pub unsafe extern "C" fn TFB_UninitVideoPlayer() {
     rust_stop_video();
 }
 

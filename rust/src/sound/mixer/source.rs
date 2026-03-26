@@ -180,7 +180,7 @@ pub fn mixer_get_source(handle: usize) -> Option<Arc<Mutex<MixerSource>>> {
         return None;
     }
 
-    pool[handle].as_ref().map(|s| Arc::clone(s))
+    pool[handle].as_ref().map(Arc::clone)
 }
 
 /// Get all sources with their handles (for mixing)
@@ -362,15 +362,16 @@ pub fn mixer_source_play(handle: usize) -> Result<(), MixerError> {
     src.check_state()?;
 
     // Activate source if not already playing
-    if src.state < (SourceState::Playing as u32) {
-        if src.first_queued.is_some() && src.next_queued.is_none() {
-            // Rewind if at end
-            src.pos = 0;
-            src.count = 0;
-            src.processed_count = 0;
-            src.next_queued = src.first_queued;
-            src.prev_queued = None;
-        }
+    if src.state < (SourceState::Playing as u32)
+        && src.first_queued.is_some()
+        && src.next_queued.is_none()
+    {
+        // Rewind if at end
+        src.pos = 0;
+        src.count = 0;
+        src.processed_count = 0;
+        src.next_queued = src.first_queued;
+        src.prev_queued = None;
     }
 
     src.state = SourceState::Playing as u32;

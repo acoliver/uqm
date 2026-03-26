@@ -63,7 +63,7 @@ pub fn plr_play_song(music_ref: &MusicRef, continuous: bool, _priority: i32) -> 
 
 /// Stop music playback.
 pub fn plr_stop(music_ref: &MusicRef) -> AudioResult<()> {
-    let mut state = MUSIC_STATE.lock();
+    let state = MUSIC_STATE.lock();
     let matches = state
         .cur_music_ref
         .as_ref()
@@ -370,19 +370,23 @@ mod tests {
 
     #[test]
     fn test_music_state_new() {
-        let state = MusicState::new();
-        assert!(state.cur_music_ref.is_none());
-        assert!(state.cur_speech_ref.is_none());
-        assert_eq!(state.music_volume, MAX_VOLUME);
-        assert!((state.music_volume_scale - 1.0).abs() < f32::EPSILON);
+        unsafe {
+            let state = MusicState::new();
+            assert!(state.cur_music_ref.is_none());
+            assert!(state.cur_speech_ref.is_none());
+            assert_eq!(state.music_volume, MAX_VOLUME);
+            assert!((state.music_volume_scale - 1.0).abs() < f32::EPSILON);
+        }
     }
 
     #[test]
     fn test_music_ref_clone() {
-        let sample =
-            stream::create_sound_sample(None, 4, None).expect("create_sound_sample should succeed");
-        let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
-        let cloned = music_ref.clone();
-        assert!(Arc::ptr_eq(&music_ref.0, &cloned.0));
+        unsafe {
+            let sample = stream::create_sound_sample(None, 4, None)
+                .expect("create_sound_sample should succeed");
+            let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
+            let cloned = music_ref.clone();
+            assert!(Arc::ptr_eq(&music_ref.0, &cloned.0));
+        }
     }
 }

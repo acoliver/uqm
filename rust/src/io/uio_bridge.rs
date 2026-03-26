@@ -564,8 +564,8 @@ pub unsafe extern "C" fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whenc
 
     let seek_from = match whence {
         SEEK_SET => SeekFrom::Start(offset as u64),
-        SEEK_CUR => SeekFrom::Current(offset as i64),
-        SEEK_END => SeekFrom::End(offset as i64),
+        SEEK_CUR => SeekFrom::Current(offset),
+        SEEK_END => SeekFrom::End(offset),
         _ => return -1,
     };
 
@@ -1163,7 +1163,7 @@ pub unsafe extern "C" fn uio_transplantDir(
 
     let location = flags & UIO_MOUNT_LOCATION_MASK;
     let relative_required = location == UIO_MOUNT_ABOVE || location == UIO_MOUNT_BELOW;
-    if relative_required != !relative.is_null() {
+    if relative_required == relative.is_null() {
         return ptr::null_mut();
     }
 
@@ -1464,7 +1464,6 @@ pub unsafe extern "C" fn uio_ferror(stream: *mut uio_Stream) -> c_int {
     }
 }
 
-#[no_mangle]
 #[no_mangle]
 pub unsafe extern "C" fn uio_fwrite(
     ptr: *const libc::c_void,
@@ -2369,7 +2368,7 @@ pub unsafe extern "C" fn uio_copyFile(
             return -1;
         }
 
-        let src_input = match cstr_to_pathbuf(src_path) {
+        let _src_input = match cstr_to_pathbuf(src_path) {
             Some(p) => p,
             None => {
                 set_errno(libc::EINVAL);
@@ -2377,7 +2376,7 @@ pub unsafe extern "C" fn uio_copyFile(
             }
         };
 
-        let dst_input = match cstr_to_pathbuf(dst_path) {
+        let _dst_input = match cstr_to_pathbuf(dst_path) {
             Some(p) => p,
             None => {
                 set_errno(libc::EINVAL);
@@ -3510,7 +3509,7 @@ pub unsafe extern "C" fn uio_fopen(
             handle: Box::leak(Box::new(Mutex::new(handle_inner))) as *mut uio_Handle,
             status: UIO_STREAM_STATUS_OK,
             operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: open_flags,
+            open_flags,
         });
 
         let stream_ptr = Box::leak(stream) as *mut uio_Stream;
@@ -3668,8 +3667,8 @@ pub unsafe extern "C" fn uio_fseek(
 
     let seek_from = match whence {
         SEEK_SET => SeekFrom::Start(offset as u64),
-        SEEK_CUR => SeekFrom::Current(offset as i64),
-        SEEK_END => SeekFrom::End(offset as i64),
+        SEEK_CUR => SeekFrom::Current(offset),
+        SEEK_END => SeekFrom::End(offset),
         _ => return -1,
     };
 
@@ -3758,10 +3757,9 @@ pub unsafe extern "C" fn uio_getDirList(
         let pattern_str = if _pattern.is_null() {
             ""
         } else {
-            match std::ffi::CStr::from_ptr(_pattern).to_str() {
-                Ok(s) => s,
-                Err(_) => "",
-            }
+            std::ffi::CStr::from_ptr(_pattern)
+                .to_str()
+                .unwrap_or_default()
         };
         log_marker(&format!(
             "uio_getDirList: virtual_path={:?} pattern='{}' matchType={}",
@@ -4147,226 +4145,264 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_registry_basic() {
-        clear_mount_registry();
+        unsafe {
+            clear_mount_registry();
 
-        add_test_mount("/content", "/tmp/content");
+            add_test_mount("/content", "/tmp/content");
 
-        {
-            let registry = get_mount_registry().lock().unwrap();
-            let info = registry
-                .iter()
-                .find(|entry| entry.mount_point == "/content")
-                .unwrap();
-            assert_eq!(info.mounted_root, PathBuf::from("/tmp/content"));
-            assert_eq!(info.fs_type, UIO_FSTYPE_STDIO);
-            assert!(info.active_in_registry);
+            {
+                let registry = get_mount_registry().lock().unwrap();
+                let info = registry
+                    .iter()
+                    .find(|entry| entry.mount_point == "/content")
+                    .unwrap();
+                assert_eq!(info.mounted_root, PathBuf::from("/tmp/content"));
+                assert_eq!(info.fs_type, UIO_FSTYPE_STDIO);
+                assert!(info.active_in_registry);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_resolve_mount_path_with_mount() {
-        clear_mount_registry();
+        unsafe {
+            clear_mount_registry();
 
-        add_test_mount("/", "/Users/test/game");
+            add_test_mount("/", "/Users/test/game");
 
-        let path = PathBuf::from("/content/packages");
-        let resolved = resolve_mount_path(&path);
+            let path = PathBuf::from("/content/packages");
+            let resolved = resolve_mount_path(&path);
 
-        assert_eq!(resolved, PathBuf::from("/Users/test/game/content/packages"));
+            assert_eq!(resolved, PathBuf::from("/Users/test/game/content/packages"));
 
-        clear_mount_registry();
+            clear_mount_registry();
+        }
     }
 
     #[test]
     #[serial]
     fn test_resolve_mount_path_no_mount() {
-        clear_mount_registry();
+        unsafe {
+            clear_mount_registry();
 
-        let path = PathBuf::from("/some/random/path");
-        let resolved = resolve_mount_path(&path);
+            let path = PathBuf::from("/some/random/path");
+            let resolved = resolve_mount_path(&path);
 
-        assert_eq!(resolved, path);
+            assert_eq!(resolved, path);
 
-        clear_mount_registry();
+            clear_mount_registry();
+        }
     }
 
     #[test]
     #[serial]
     fn test_resolve_mount_path_absolute_fs_path() {
-        clear_mount_registry();
+        unsafe {
+            clear_mount_registry();
 
-        add_test_mount("/", "/Users/test/game");
+            add_test_mount("/", "/Users/test/game");
 
-        let path = PathBuf::from("/Users/acoliver/projects/uqm/content");
-        let resolved = resolve_mount_path(&path);
+            let path = PathBuf::from("/Users/acoliver/projects/uqm/content");
+            let resolved = resolve_mount_path(&path);
 
-        assert_eq!(resolved, path);
+            assert_eq!(resolved, path);
 
-        clear_mount_registry();
+            clear_mount_registry();
+        }
     }
 
     #[test]
     #[serial]
     fn test_cstr_to_pathbuf_valid() {
-        let test_path = CString::new("/test/path").unwrap();
-        let result = unsafe { cstr_to_pathbuf(test_path.as_ptr()) };
+        unsafe {
+            let test_path = CString::new("/test/path").unwrap();
+            let result = unsafe { cstr_to_pathbuf(test_path.as_ptr()) };
 
-        assert!(result.is_some());
-        assert_eq!(result.unwrap(), PathBuf::from("/test/path"));
+            assert!(result.is_some());
+            assert_eq!(result.unwrap(), PathBuf::from("/test/path"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_cstr_to_pathbuf_null() {
-        let result = unsafe { cstr_to_pathbuf(std::ptr::null()) };
-        assert!(result.is_none());
+        unsafe {
+            let result = unsafe { cstr_to_pathbuf(std::ptr::null()) };
+            assert!(result.is_none());
+        }
     }
 
     #[test]
     #[serial]
     fn test_resolve_path_relative() {
-        let base = PathBuf::from("/home/user");
-        let rel = PathBuf::from("documents/file.txt");
+        unsafe {
+            let base = PathBuf::from("/home/user");
+            let rel = PathBuf::from("documents/file.txt");
 
-        let result = resolve_path(&base, &rel);
-        assert_eq!(result, PathBuf::from("/home/user/documents/file.txt"));
+            let result = resolve_path(&base, &rel);
+            assert_eq!(result, PathBuf::from("/home/user/documents/file.txt"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_resolve_path_absolute() {
-        let base = PathBuf::from("/home/user");
-        let abs = PathBuf::from("/etc/config");
+        unsafe {
+            let base = PathBuf::from("/home/user");
+            let abs = PathBuf::from("/etc/config");
 
-        let result = resolve_path(&base, &abs);
-        // Absolute paths should be returned as-is
-        assert_eq!(result, PathBuf::from("/etc/config"));
+            let result = resolve_path(&base, &abs);
+            // Absolute paths should be returned as-is
+            assert_eq!(result, PathBuf::from("/etc/config"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_literal() {
-        assert!(matches_pattern("test.txt", "test.txt", MATCH_LITERAL));
-        assert!(!matches_pattern("test.txt", "other.txt", MATCH_LITERAL));
-        assert!(!matches_pattern("test.txt", "TEST.TXT", MATCH_LITERAL)); // Case-sensitive
+        unsafe {
+            assert!(matches_pattern("test.txt", "test.txt", MATCH_LITERAL));
+            assert!(!matches_pattern("test.txt", "other.txt", MATCH_LITERAL));
+            assert!(!matches_pattern("test.txt", "TEST.TXT", MATCH_LITERAL)); // Case-sensitive
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_prefix() {
-        assert!(matches_pattern("test.txt", "test", MATCH_PREFIX));
-        assert!(!matches_pattern("test.txt", "txt", MATCH_PREFIX));
+        unsafe {
+            assert!(matches_pattern("test.txt", "test", MATCH_PREFIX));
+            assert!(!matches_pattern("test.txt", "txt", MATCH_PREFIX));
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_suffix() {
-        assert!(matches_pattern("test.txt", ".txt", MATCH_SUFFIX));
-        assert!(!matches_pattern("test.txt", ".doc", MATCH_SUFFIX));
+        unsafe {
+            assert!(matches_pattern("test.txt", ".txt", MATCH_SUFFIX));
+            assert!(!matches_pattern("test.txt", ".doc", MATCH_SUFFIX));
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_substring() {
-        assert!(matches_pattern("mytest.txt", "test", MATCH_SUBSTRING));
-        assert!(!matches_pattern("mytest.txt", "foo", MATCH_SUBSTRING));
+        unsafe {
+            assert!(matches_pattern("mytest.txt", "test", MATCH_SUBSTRING));
+            assert!(!matches_pattern("mytest.txt", "foo", MATCH_SUBSTRING));
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_regex_rmp() {
-        // Test the .rmp regex pattern
-        assert!(matches_pattern("file.rmp", r"\.[rR][mM][pP]$", MATCH_REGEX));
-        assert!(matches_pattern("file.RMP", r"\.[rR][mM][pP]$", MATCH_REGEX));
-        assert!(!matches_pattern(
-            "file.txt",
-            r"\.[rR][mM][pP]$",
-            MATCH_REGEX
-        ));
+        unsafe {
+            // Test the .rmp regex pattern
+            assert!(matches_pattern("file.rmp", r"\.[rR][mM][pP]$", MATCH_REGEX));
+            assert!(matches_pattern("file.RMP", r"\.[rR][mM][pP]$", MATCH_REGEX));
+            assert!(!matches_pattern(
+                "file.txt",
+                r"\.[rR][mM][pP]$",
+                MATCH_REGEX
+            ));
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_regex_zip_uqm() {
-        // Test the .zip/.uqm regex pattern
-        assert!(matches_pattern(
-            "file.zip",
-            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
-            MATCH_REGEX
-        ));
-        assert!(matches_pattern(
-            "file.uqm",
-            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
-            MATCH_REGEX
-        ));
-        assert!(matches_pattern(
-            "file.ZIP",
-            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
-            MATCH_REGEX
-        ));
-        assert!(!matches_pattern(
-            "file.txt",
-            r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
-            MATCH_REGEX
-        ));
+        unsafe {
+            // Test the .zip/.uqm regex pattern
+            assert!(matches_pattern(
+                "file.zip",
+                r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+                MATCH_REGEX
+            ));
+            assert!(matches_pattern(
+                "file.uqm",
+                r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+                MATCH_REGEX
+            ));
+            assert!(matches_pattern(
+                "file.ZIP",
+                r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+                MATCH_REGEX
+            ));
+            assert!(!matches_pattern(
+                "file.txt",
+                r"\.([zZ][iI][pP]|[uU][qQ][mM])$",
+                MATCH_REGEX
+            ));
+        }
     }
 
     #[test]
     #[serial]
     fn test_matches_pattern_empty_pattern() {
-        // Empty pattern should match everything
-        assert!(matches_pattern("anything.txt", "", MATCH_LITERAL));
-        assert!(matches_pattern("anything.txt", "", MATCH_REGEX));
+        unsafe {
+            // Empty pattern should match everything
+            assert!(matches_pattern("anything.txt", "", MATCH_LITERAL));
+            assert!(matches_pattern("anything.txt", "", MATCH_REGEX));
+        }
     }
 
     #[test]
     #[serial]
     fn test_buffer_size_registry() {
-        let test_ptr = 0x12345678 as *mut c_char;
+        unsafe {
+            let test_ptr = 0x12345678 as *mut c_char;
 
-        // Register a size
-        register_buffer_size(test_ptr, 1024);
+            // Register a size
+            register_buffer_size(test_ptr, 1024);
 
-        // Verify we can retrieve it
-        let size = get_buffer_size(test_ptr);
-        assert_eq!(size, Some(1024));
+            // Verify we can retrieve it
+            let size = get_buffer_size(test_ptr);
+            assert_eq!(size, Some(1024));
 
-        // Remove it
-        remove_buffer_size(test_ptr);
+            // Remove it
+            remove_buffer_size(test_ptr);
 
-        // Verify it's gone
-        let size = get_buffer_size(test_ptr);
-        assert_eq!(size, None);
+            // Verify it's gone
+            let size = get_buffer_size(test_ptr);
+            assert_eq!(size, None);
+        }
     }
 
     #[test]
     #[serial]
     fn test_buffer_size_registry_null() {
-        let result = get_buffer_size(std::ptr::null_mut());
-        assert_eq!(result, None);
+        unsafe {
+            let result = get_buffer_size(std::ptr::null_mut());
+            assert_eq!(result, None);
+        }
     }
 
     #[test]
     #[serial]
     fn test_seek_constants() {
-        // Verify our seek constants match expected values
-        assert_eq!(SEEK_SET, 0);
-        assert_eq!(SEEK_CUR, 1);
-        assert_eq!(SEEK_END, 2);
+        unsafe {
+            // Verify our seek constants match expected values
+            assert_eq!(SEEK_SET, 0);
+            assert_eq!(SEEK_CUR, 1);
+            assert_eq!(SEEK_END, 2);
+        }
     }
 
     #[test]
     #[serial]
     fn test_open_flags_constants() {
-        // Verify file open flags
-        assert_eq!(O_RDONLY, 0);
-        assert_eq!(O_WRONLY, 1);
-        assert_eq!(O_RDWR, 2);
-        assert_eq!(O_CREAT, 0o100);
-        assert_eq!(O_TRUNC, 0o1000);
+        unsafe {
+            // Verify file open flags
+            assert_eq!(O_RDONLY, 0);
+            assert_eq!(O_WRONLY, 1);
+            assert_eq!(O_RDWR, 2);
+            assert_eq!(O_CREAT, 0o100);
+            assert_eq!(O_TRUNC, 0o1000);
+        }
     }
 
     // =============================================================================
@@ -4376,398 +4412,431 @@ mod tests {
     #[test]
     #[serial]
     fn test_stream_status_constants() {
-        assert_eq!(UIO_STREAM_STATUS_OK, 0);
-        assert_eq!(UIO_STREAM_STATUS_EOF, 1);
-        assert_eq!(UIO_STREAM_STATUS_ERROR, 2);
+        unsafe {
+            assert_eq!(UIO_STREAM_STATUS_OK, 0);
+            assert_eq!(UIO_STREAM_STATUS_EOF, 1);
+            assert_eq!(UIO_STREAM_STATUS_ERROR, 2);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_feof_returns_zero_when_not_eof() {
-        let mut stream = uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: ptr::null_mut(),
-            status: UIO_STREAM_STATUS_OK,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: 0,
-        };
+        unsafe {
+            let mut stream = uio_Stream {
+                buf: ptr::null_mut(),
+                data_start: ptr::null_mut(),
+                data_end: ptr::null_mut(),
+                buf_end: ptr::null_mut(),
+                handle: ptr::null_mut(),
+                status: UIO_STREAM_STATUS_OK,
+                operation: UIO_STREAM_OPERATION_NONE,
+                open_flags: 0,
+            };
 
-        let result = unsafe { uio_feof(&mut stream) };
-        assert_eq!(result, 0);
+            let result = unsafe { uio_feof(&mut stream) };
+            assert_eq!(result, 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_feof_returns_nonzero_when_eof() {
-        let mut stream = uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: ptr::null_mut(),
-            status: UIO_STREAM_STATUS_EOF,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: 0,
-        };
+        unsafe {
+            let mut stream = uio_Stream {
+                buf: ptr::null_mut(),
+                data_start: ptr::null_mut(),
+                data_end: ptr::null_mut(),
+                buf_end: ptr::null_mut(),
+                handle: ptr::null_mut(),
+                status: UIO_STREAM_STATUS_EOF,
+                operation: UIO_STREAM_OPERATION_NONE,
+                open_flags: 0,
+            };
 
-        let result = unsafe { uio_feof(&mut stream) };
-        assert_eq!(result, 1);
+            let result = unsafe { uio_feof(&mut stream) };
+            assert_eq!(result, 1);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_feof_null_stream() {
-        let result = unsafe { uio_feof(ptr::null_mut()) };
-        assert_eq!(result, 0);
+        unsafe {
+            let result = unsafe { uio_feof(ptr::null_mut()) };
+            assert_eq!(result, 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_ferror_returns_zero_when_no_error() {
-        let mut stream = uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: ptr::null_mut(),
-            status: UIO_STREAM_STATUS_OK,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: 0,
-        };
+        unsafe {
+            let mut stream = uio_Stream {
+                buf: ptr::null_mut(),
+                data_start: ptr::null_mut(),
+                data_end: ptr::null_mut(),
+                buf_end: ptr::null_mut(),
+                handle: ptr::null_mut(),
+                status: UIO_STREAM_STATUS_OK,
+                operation: UIO_STREAM_OPERATION_NONE,
+                open_flags: 0,
+            };
 
-        let result = unsafe { uio_ferror(&mut stream) };
-        assert_eq!(result, 0);
+            let result = unsafe { uio_ferror(&mut stream) };
+            assert_eq!(result, 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_ferror_returns_nonzero_when_error() {
-        let mut stream = uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: ptr::null_mut(),
-            status: UIO_STREAM_STATUS_ERROR,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: 0,
-        };
+        unsafe {
+            let mut stream = uio_Stream {
+                buf: ptr::null_mut(),
+                data_start: ptr::null_mut(),
+                data_end: ptr::null_mut(),
+                buf_end: ptr::null_mut(),
+                handle: ptr::null_mut(),
+                status: UIO_STREAM_STATUS_ERROR,
+                operation: UIO_STREAM_OPERATION_NONE,
+                open_flags: 0,
+            };
 
-        let result = unsafe { uio_ferror(&mut stream) };
-        assert_eq!(result, 1);
+            let result = unsafe { uio_ferror(&mut stream) };
+            assert_eq!(result, 1);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_ferror_null_stream() {
-        let result = unsafe { uio_ferror(ptr::null_mut()) };
-        assert_eq!(result, 0);
+        unsafe {
+            let result = unsafe { uio_ferror(ptr::null_mut()) };
+            assert_eq!(result, 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_clearerr_clears_eof() {
-        let mut stream = uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: ptr::null_mut(),
-            status: UIO_STREAM_STATUS_EOF,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: 0,
-        };
-
         unsafe {
-            uio_clearerr(&mut stream);
-        }
+            let mut stream = uio_Stream {
+                buf: ptr::null_mut(),
+                data_start: ptr::null_mut(),
+                data_end: ptr::null_mut(),
+                buf_end: ptr::null_mut(),
+                handle: ptr::null_mut(),
+                status: UIO_STREAM_STATUS_EOF,
+                operation: UIO_STREAM_OPERATION_NONE,
+                open_flags: 0,
+            };
 
-        assert_eq!(stream.status, UIO_STREAM_STATUS_OK);
+            unsafe {
+                uio_clearerr(&mut stream);
+            }
+
+            assert_eq!(stream.status, UIO_STREAM_STATUS_OK);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_clearerr_clears_error() {
-        let mut stream = uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: ptr::null_mut(),
-            status: UIO_STREAM_STATUS_ERROR,
-            operation: UIO_STREAM_OPERATION_NONE,
-            open_flags: 0,
-        };
-
         unsafe {
-            uio_clearerr(&mut stream);
-        }
+            let mut stream = uio_Stream {
+                buf: ptr::null_mut(),
+                data_start: ptr::null_mut(),
+                data_end: ptr::null_mut(),
+                buf_end: ptr::null_mut(),
+                handle: ptr::null_mut(),
+                status: UIO_STREAM_STATUS_ERROR,
+                operation: UIO_STREAM_OPERATION_NONE,
+                open_flags: 0,
+            };
 
-        assert_eq!(stream.status, UIO_STREAM_STATUS_OK);
+            unsafe {
+                uio_clearerr(&mut stream);
+            }
+
+            assert_eq!(stream.status, UIO_STREAM_STATUS_OK);
+        }
     }
 
     #[test]
     #[serial]
     fn test_uio_clearerr_null_stream() {
-        // Should not crash
         unsafe {
-            uio_clearerr(ptr::null_mut());
+            // Should not crash
+            unsafe {
+                uio_clearerr(ptr::null_mut());
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_fopen_initializes_status_to_ok() {
-        use std::fs;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"test content").unwrap();
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let mode = CString::new("r").unwrap();
-
-        let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-        assert!(!stream.is_null());
-
         unsafe {
-            assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
-            uio_fclose(stream);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            use std::fs;
+            use tempfile::TempDir;
+
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"test content").unwrap();
+
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
+
+            let path = CString::new("test.txt").unwrap();
+            let mode = CString::new("r").unwrap();
+
+            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
+            assert!(!stream.is_null());
+
+            unsafe {
+                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+                uio_fclose(stream);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_read_eof_sets_eof_status() {
-        use std::fs;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"A").unwrap(); // Single byte file
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let mode = CString::new("r").unwrap();
-
-        let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-        assert!(!stream.is_null());
-
         unsafe {
-            // Read the single byte
-            let mut buf = [0u8; 1];
-            let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-            assert_eq!(read, 1);
-            assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+            use std::fs;
+            use tempfile::TempDir;
 
-            // Try to read again - should hit EOF
-            let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-            assert_eq!(read, 0);
-            assert_eq!((*stream).status, UIO_STREAM_STATUS_EOF);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"A").unwrap(); // Single byte file
 
-            // Verify uio_feof returns non-zero
-            assert_eq!(uio_feof(stream), 1);
-            assert_eq!(uio_ferror(stream), 0);
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
 
-            uio_fclose(stream);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let path = CString::new("test.txt").unwrap();
+            let mode = CString::new("r").unwrap();
+
+            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
+            assert!(!stream.is_null());
+
+            unsafe {
+                // Read the single byte
+                let mut buf = [0u8; 1];
+                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
+                assert_eq!(read, 1);
+                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+
+                // Try to read again - should hit EOF
+                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
+                assert_eq!(read, 0);
+                assert_eq!((*stream).status, UIO_STREAM_STATUS_EOF);
+
+                // Verify uio_feof returns non-zero
+                assert_eq!(uio_feof(stream), 1);
+                assert_eq!(uio_ferror(stream), 0);
+
+                uio_fclose(stream);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_clearerr_after_eof() {
-        use std::fs;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"").unwrap(); // Empty file
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let mode = CString::new("r").unwrap();
-
-        let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-        assert!(!stream.is_null());
-
         unsafe {
-            // Try to read - should hit EOF immediately
-            let mut buf = [0u8; 1];
-            let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-            assert_eq!(read, 0);
-            assert_eq!(uio_feof(stream), 1);
+            use std::fs;
+            use tempfile::TempDir;
 
-            // Clear the error/eof state
-            uio_clearerr(stream);
-            assert_eq!(uio_feof(stream), 0);
-            assert_eq!(uio_ferror(stream), 0);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"").unwrap(); // Empty file
 
-            uio_fclose(stream);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
+
+            let path = CString::new("test.txt").unwrap();
+            let mode = CString::new("r").unwrap();
+
+            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
+            assert!(!stream.is_null());
+
+            unsafe {
+                // Try to read - should hit EOF immediately
+                let mut buf = [0u8; 1];
+                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
+                assert_eq!(read, 0);
+                assert_eq!(uio_feof(stream), 1);
+
+                // Clear the error/eof state
+                uio_clearerr(stream);
+                assert_eq!(uio_feof(stream), 0);
+                assert_eq!(uio_ferror(stream), 0);
+
+                uio_fclose(stream);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_fseek_clears_eof() {
-        use std::fs;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"ABCD").unwrap();
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let mode = CString::new("r").unwrap();
-
-        let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-        assert!(!stream.is_null());
-
         unsafe {
-            // Read all data to hit EOF
-            let mut buf = [0u8; 10];
-            let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 10, stream);
-            assert_eq!(read, 4); // Only 4 bytes available
+            use std::fs;
+            use tempfile::TempDir;
 
-            // Try to read again - should hit EOF
-            let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
-            assert_eq!(read, 0);
-            assert_eq!(uio_feof(stream), 1);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"ABCD").unwrap();
 
-            // Seek back to start
-            let seek_result = uio_fseek(stream, 0, SEEK_SET);
-            assert_eq!(seek_result, 0);
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
 
-            // EOF flag should be cleared
-            assert_eq!(uio_feof(stream), 0);
+            let path = CString::new("test.txt").unwrap();
+            let mode = CString::new("r").unwrap();
 
-            uio_fclose(stream);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
+            assert!(!stream.is_null());
+
+            unsafe {
+                // Read all data to hit EOF
+                let mut buf = [0u8; 10];
+                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 10, stream);
+                assert_eq!(read, 4); // Only 4 bytes available
+
+                // Try to read again - should hit EOF
+                let read = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 1, 1, stream);
+                assert_eq!(read, 0);
+                assert_eq!(uio_feof(stream), 1);
+
+                // Seek back to start
+                let seek_result = uio_fseek(stream, 0, SEEK_SET);
+                assert_eq!(seek_result, 0);
+
+                // EOF flag should be cleared
+                assert_eq!(uio_feof(stream), 0);
+
+                uio_fclose(stream);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_write_error_sets_error_status() {
-        use std::fs;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"").unwrap();
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let mode = CString::new("w").unwrap();
-
-        let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-        assert!(!stream.is_null());
-
         unsafe {
-            // Write some data - should succeed
-            let data = b"test data";
-            let written = uio_fwrite(data.as_ptr() as *const libc::c_void, 1, data.len(), stream);
-            assert_eq!(written, data.len());
-            assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+            use std::fs;
+            use tempfile::TempDir;
 
-            uio_fclose(stream);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"").unwrap();
+
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
+
+            let path = CString::new("test.txt").unwrap();
+            let mode = CString::new("w").unwrap();
+
+            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
+            assert!(!stream.is_null());
+
+            unsafe {
+                // Write some data - should succeed
+                let data = b"test data";
+                let written =
+                    uio_fwrite(data.as_ptr() as *const libc::c_void, 1, data.len(), stream);
+                assert_eq!(written, data.len());
+                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+
+                uio_fclose(stream);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_fgetc_sets_eof() {
-        use std::fs;
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"X").unwrap();
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let mode = CString::new("r").unwrap();
-
-        let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
-        assert!(!stream.is_null());
-
         unsafe {
-            // Read the single character
-            let ch = uio_fgetc(stream);
-            assert_eq!(ch, b'X' as c_int);
-            assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+            use std::fs;
+            use tempfile::TempDir;
 
-            // Try to read again - should hit EOF
-            let ch = uio_fgetc(stream);
-            assert_eq!(ch, -1);
-            assert_eq!((*stream).status, UIO_STREAM_STATUS_EOF);
-            assert_eq!(uio_feof(stream), 1);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"X").unwrap();
 
-            uio_fclose(stream);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
+
+            let path = CString::new("test.txt").unwrap();
+            let mode = CString::new("r").unwrap();
+
+            let stream = unsafe { uio_fopen(dir_handle, path.as_ptr(), mode.as_ptr()) };
+            assert!(!stream.is_null());
+
+            unsafe {
+                // Read the single character
+                let ch = uio_fgetc(stream);
+                assert_eq!(ch, b'X' as c_int);
+                assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
+
+                // Try to read again - should hit EOF
+                let ch = uio_fgetc(stream);
+                assert_eq!(ch, -1);
+                assert_eq!((*stream).status, UIO_STREAM_STATUS_EOF);
+                assert_eq!(uio_feof(stream), 1);
+
+                uio_fclose(stream);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
@@ -4778,92 +4847,112 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_removes_dot_components() {
-        let base = PathBuf::from("/base");
-        let input = PathBuf::from("./foo/./bar");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/base/foo/bar"));
+        unsafe {
+            let base = PathBuf::from("/base");
+            let input = PathBuf::from("./foo/./bar");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/base/foo/bar"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_normalize_path_resolves_dotdot() {
-        let base = PathBuf::from("/base");
-        let input = PathBuf::from("foo/../bar");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/base/bar"));
+        unsafe {
+            let base = PathBuf::from("/base");
+            let input = PathBuf::from("foo/../bar");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/base/bar"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_normalize_path_clamps_at_root() {
-        let base = PathBuf::from("/base");
-        let input = PathBuf::from("../../above_root");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/above_root"));
+        unsafe {
+            let base = PathBuf::from("/base");
+            let input = PathBuf::from("../../above_root");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/above_root"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_normalize_path_collapses_repeated_slashes() {
-        let base = PathBuf::from("/");
-        let input = PathBuf::from("//foo///bar//");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/foo/bar"));
+        unsafe {
+            let base = PathBuf::from("/");
+            let input = PathBuf::from("//foo///bar//");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/foo/bar"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_normalize_path_empty_returns_base() {
-        let base = PathBuf::from("/content/addons");
-        let input = PathBuf::from("");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/content/addons"));
+        unsafe {
+            let base = PathBuf::from("/content/addons");
+            let input = PathBuf::from("");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/content/addons"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_normalize_path_absolute_ignores_base() {
-        let base = PathBuf::from("/base");
-        let input = PathBuf::from("/absolute/path");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/absolute/path"));
+        unsafe {
+            let base = PathBuf::from("/base");
+            let input = PathBuf::from("/absolute/path");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/absolute/path"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_normalize_path_complex_case() {
-        let base = PathBuf::from("/");
-        let input = PathBuf::from("/foo/./bar/../baz");
-        let result = normalize_virtual_path_full(&base, &input);
-        assert_eq!(result, PathBuf::from("/foo/baz"));
+        unsafe {
+            let base = PathBuf::from("/");
+            let input = PathBuf::from("/foo/./bar/../baz");
+            let result = normalize_virtual_path_full(&base, &input);
+            assert_eq!(result, PathBuf::from("/foo/baz"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_map_virtual_to_host_confined() {
-        let mount_root = PathBuf::from("/host/mount/point");
-        let relative = PathBuf::from("subdir/file.txt");
-        let result = map_virtual_to_host_confined(&mount_root, &relative);
-        assert_eq!(result, PathBuf::from("/host/mount/point/subdir/file.txt"));
+        unsafe {
+            let mount_root = PathBuf::from("/host/mount/point");
+            let relative = PathBuf::from("subdir/file.txt");
+            let result = map_virtual_to_host_confined(&mount_root, &relative);
+            assert_eq!(result, PathBuf::from("/host/mount/point/subdir/file.txt"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_map_virtual_to_host_confined_prevents_escape() {
-        let mount_root = PathBuf::from("/host/mount/point");
-        let relative = PathBuf::from("../../above/mount");
-        let result = map_virtual_to_host_confined(&mount_root, &relative);
-        // Should clamp at mount root, not escape above it
-        assert_eq!(result, PathBuf::from("/host/mount/point/above/mount"));
+        unsafe {
+            let mount_root = PathBuf::from("/host/mount/point");
+            let relative = PathBuf::from("../../above/mount");
+            let result = map_virtual_to_host_confined(&mount_root, &relative);
+            // Should clamp at mount root, not escape above it
+            assert_eq!(result, PathBuf::from("/host/mount/point/above/mount"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_map_virtual_to_host_confined_single_dotdot() {
-        let mount_root = PathBuf::from("/host/mount/point");
-        let relative = PathBuf::from("foo/../bar");
-        let result = map_virtual_to_host_confined(&mount_root, &relative);
-        assert_eq!(result, PathBuf::from("/host/mount/point/bar"));
+        unsafe {
+            let mount_root = PathBuf::from("/host/mount/point");
+            let relative = PathBuf::from("foo/../bar");
+            let result = map_virtual_to_host_confined(&mount_root, &relative);
+            assert_eq!(result, PathBuf::from("/host/mount/point/bar"));
+        }
     }
 
     // =============================================================================
@@ -4873,125 +4962,133 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_access_sets_enoent_on_missing_file() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("nonexistent.txt").unwrap();
-
         unsafe {
-            // Clear errno first
-            *libc::__error() = 0;
+            use tempfile::TempDir;
 
-            let result = uio_access(dir_handle, path.as_ptr(), 0);
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::ENOENT);
+            let temp_dir = TempDir::new().unwrap();
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let path = CString::new("nonexistent.txt").unwrap();
+
+            unsafe {
+                // Clear errno first
+                *libc::__error() = 0;
+
+                let result = uio_access(dir_handle, path.as_ptr(), 0);
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::ENOENT);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_uio_mkdir_sets_eexist_on_existing_dir() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let existing_dir = temp_dir.path().join("existing");
-        fs::create_dir(&existing_dir).unwrap();
-
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("existing").unwrap();
-
         unsafe {
-            // Clear errno first
-            *libc::__error() = 0;
+            use tempfile::TempDir;
 
-            let result = uio_mkdir(dir_handle, path.as_ptr(), 0o755);
-            assert_eq!(result, -1);
-            // errno should be EEXIST (directory already exists)
-            assert_eq!(*libc::__error(), libc::EEXIST);
+            let temp_dir = TempDir::new().unwrap();
+            let existing_dir = temp_dir.path().join("existing");
+            fs::create_dir(&existing_dir).unwrap();
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
+
+            let path = CString::new("existing").unwrap();
+
+            unsafe {
+                // Clear errno first
+                *libc::__error() = 0;
+
+                let result = uio_mkdir(dir_handle, path.as_ptr(), 0o755);
+                assert_eq!(result, -1);
+                // errno should be EEXIST (directory already exists)
+                assert_eq!(*libc::__error(), libc::EEXIST);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_uio_fopen_sets_einval_on_invalid_mode() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-        let invalid_mode = CString::new("x").unwrap(); // Invalid mode
-
         unsafe {
-            // Clear errno first
-            *libc::__error() = 0;
+            use tempfile::TempDir;
 
-            let stream = uio_fopen(dir_handle, path.as_ptr(), invalid_mode.as_ptr());
-            assert!(stream.is_null());
-            assert_eq!(*libc::__error(), libc::EINVAL);
+            let temp_dir = TempDir::new().unwrap();
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let path = CString::new("test.txt").unwrap();
+            let invalid_mode = CString::new("x").unwrap(); // Invalid mode
+
+            unsafe {
+                // Clear errno first
+                *libc::__error() = 0;
+
+                let stream = uio_fopen(dir_handle, path.as_ptr(), invalid_mode.as_ptr());
+                assert!(stream.is_null());
+                assert_eq!(*libc::__error(), libc::EINVAL);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_uio_open_sets_enoent_on_missing_file() {
-        use tempfile::TempDir;
-
-        let temp_dir = TempDir::new().unwrap();
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp_dir.path().to_path_buf(),
-            virtual_path: temp_dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository,
-            root_end: temp_dir.path().to_path_buf(),
-        }));
-
-        let path = CString::new("nonexistent.txt").unwrap();
-
         unsafe {
-            // Clear errno first
-            *libc::__error() = 0;
+            use tempfile::TempDir;
 
-            let handle = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
-            assert!(handle.is_null());
-            assert_eq!(*libc::__error(), libc::ENOENT);
+            let temp_dir = TempDir::new().unwrap();
+            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: temp_dir.path().to_path_buf(),
+                virtual_path: temp_dir.path().to_path_buf(),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository,
+                root_end: temp_dir.path().to_path_buf(),
+            }));
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repository);
+            let path = CString::new("nonexistent.txt").unwrap();
+
+            unsafe {
+                // Clear errno first
+                *libc::__error() = 0;
+
+                let handle = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
+                assert!(handle.is_null());
+                assert_eq!(*libc::__error(), libc::ENOENT);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repository);
+            }
         }
     }
 
@@ -5002,205 +5099,213 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_top_gives_highest_priority() {
-        clear_mount_registry();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        // Add first mount at BOTTOM
-        let mount1 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount1"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_BOTTOM,
-                ptr::null_mut(),
-                true,
-            )
-        };
-        assert!(!mount1.is_null());
-
-        // Add second mount at TOP
-        let mount2 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount2"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            )
-        };
-        assert!(!mount2.is_null());
-
-        // Verify mount2 has higher priority (lower position)
-        let registry = get_mount_registry().lock().unwrap();
-        let m1 = registry
-            .iter()
-            .find(|m| m.handle_ptr == mount1 as usize)
-            .unwrap();
-        let m2 = registry
-            .iter()
-            .find(|m| m.handle_ptr == mount2 as usize)
-            .unwrap();
-        assert!(
-            m2.position < m1.position,
-            "TOP mount should have lower position than BOTTOM"
-        );
-
-        drop(registry);
         unsafe {
-            let _ = Box::from_raw(mount1);
-            let _ = Box::from_raw(mount2);
-            let _ = Box::from_raw(repo);
+            clear_mount_registry();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            // Add first mount at BOTTOM
+            let mount1 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount1"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_BOTTOM,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+            assert!(!mount1.is_null());
+
+            // Add second mount at TOP
+            let mount2 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount2"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_TOP,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+            assert!(!mount2.is_null());
+
+            // Verify mount2 has higher priority (lower position)
+            let registry = get_mount_registry().lock().unwrap();
+            let m1 = registry
+                .iter()
+                .find(|m| m.handle_ptr == mount1 as usize)
+                .unwrap();
+            let m2 = registry
+                .iter()
+                .find(|m| m.handle_ptr == mount2 as usize)
+                .unwrap();
+            assert!(
+                m2.position < m1.position,
+                "TOP mount should have lower position than BOTTOM"
+            );
+
+            drop(registry);
+            unsafe {
+                let _ = Box::from_raw(mount1);
+                let _ = Box::from_raw(mount2);
+                let _ = Box::from_raw(repo);
+            }
+            clear_mount_registry();
         }
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_mount_above_below_placement() {
-        clear_mount_registry();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        // Add base mount
-        let mount1 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount1"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_BOTTOM,
-                ptr::null_mut(),
-                true,
-            )
-        };
-
-        // Add mount ABOVE mount1
-        let mount2 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount2"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_ABOVE,
-                mount1,
-                true,
-            )
-        };
-
-        // Add mount BELOW mount1
-        let mount3 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount3"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_BELOW,
-                mount1,
-                true,
-            )
-        };
-
-        let registry = get_mount_registry().lock().unwrap();
-        let m1 = registry
-            .iter()
-            .find(|m| m.handle_ptr == mount1 as usize)
-            .unwrap();
-        let m2 = registry
-            .iter()
-            .find(|m| m.handle_ptr == mount2 as usize)
-            .unwrap();
-        let m3 = registry
-            .iter()
-            .find(|m| m.handle_ptr == mount3 as usize)
-            .unwrap();
-
-        assert!(
-            m2.position < m1.position,
-            "ABOVE mount should have lower position"
-        );
-        assert!(
-            m3.position > m1.position,
-            "BELOW mount should have higher position"
-        );
-
-        drop(registry);
         unsafe {
-            let _ = Box::from_raw(mount1);
-            let _ = Box::from_raw(mount2);
-            let _ = Box::from_raw(mount3);
-            let _ = Box::from_raw(repo);
+            clear_mount_registry();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            // Add base mount
+            let mount1 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount1"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_BOTTOM,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+
+            // Add mount ABOVE mount1
+            let mount2 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount2"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_ABOVE,
+                    mount1,
+                    true,
+                )
+            };
+
+            // Add mount BELOW mount1
+            let mount3 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount3"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_BELOW,
+                    mount1,
+                    true,
+                )
+            };
+
+            let registry = get_mount_registry().lock().unwrap();
+            let m1 = registry
+                .iter()
+                .find(|m| m.handle_ptr == mount1 as usize)
+                .unwrap();
+            let m2 = registry
+                .iter()
+                .find(|m| m.handle_ptr == mount2 as usize)
+                .unwrap();
+            let m3 = registry
+                .iter()
+                .find(|m| m.handle_ptr == mount3 as usize)
+                .unwrap();
+
+            assert!(
+                m2.position < m1.position,
+                "ABOVE mount should have lower position"
+            );
+            assert!(
+                m3.position > m1.position,
+                "BELOW mount should have higher position"
+            );
+
+            drop(registry);
+            unsafe {
+                let _ = Box::from_raw(mount1);
+                let _ = Box::from_raw(mount2);
+                let _ = Box::from_raw(mount3);
+                let _ = Box::from_raw(repo);
+            }
+            clear_mount_registry();
         }
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_mount_top_requires_null_relative() {
-        clear_mount_registry();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let dummy_mount = Box::into_raw(Box::new(uio_MountHandle {
-            repository: repo,
-            id: 999,
-            fs_type: UIO_FSTYPE_STDIO,
-        }));
-
-        // TOP with non-null relative should fail
-        let result = unsafe {
-            *libc::__error() = 0;
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_TOP,
-                dummy_mount,
-                true,
-            )
-        };
-
-        assert!(result.is_null());
-        assert_eq!(unsafe { *libc::__error() }, libc::EINVAL);
-
         unsafe {
-            let _ = Box::from_raw(dummy_mount);
-            let _ = Box::from_raw(repo);
+            clear_mount_registry();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            let dummy_mount = Box::into_raw(Box::new(uio_MountHandle {
+                repository: repo,
+                id: 999,
+                fs_type: UIO_FSTYPE_STDIO,
+            }));
+
+            // TOP with non-null relative should fail
+            let result = unsafe {
+                *libc::__error() = 0;
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_TOP,
+                    dummy_mount,
+                    true,
+                )
+            };
+
+            assert!(result.is_null());
+            assert_eq!(unsafe { *libc::__error() }, libc::EINVAL);
+
+            unsafe {
+                let _ = Box::from_raw(dummy_mount);
+                let _ = Box::from_raw(repo);
+            }
+            clear_mount_registry();
         }
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_mount_above_requires_nonnull_relative() {
-        clear_mount_registry();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        // ABOVE with null relative should fail
-        let result = unsafe {
-            *libc::__error() = 0;
-            register_mount(
-                repo,
-                Path::new("/content"),
-                PathBuf::from("/tmp/mount"),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_ABOVE,
-                ptr::null_mut(),
-                true,
-            )
-        };
-
-        assert!(result.is_null());
-        assert_eq!(unsafe { *libc::__error() }, libc::EINVAL);
-
         unsafe {
-            let _ = Box::from_raw(repo);
+            clear_mount_registry();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            // ABOVE with null relative should fail
+            let result = unsafe {
+                *libc::__error() = 0;
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    PathBuf::from("/tmp/mount"),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_ABOVE,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+
+            assert!(result.is_null());
+            assert_eq!(unsafe { *libc::__error() }, libc::EINVAL);
+
+            unsafe {
+                let _ = Box::from_raw(repo);
+            }
+            clear_mount_registry();
         }
-        clear_mount_registry();
     }
 
     // =============================================================================
@@ -5210,223 +5315,231 @@ mod tests {
     #[test]
     #[serial]
     fn test_access_w_ok_fails_on_readonly_mount() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"test").unwrap();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        // Create a read-only mount
-        let mount = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                temp_dir.path().to_path_buf(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_RDONLY | UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            )
-        };
-        assert!(!mount.is_null());
-
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: PathBuf::from("/content"),
-            virtual_path: PathBuf::from("/content"),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: PathBuf::from("/content"),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-
         unsafe {
-            *libc::__error() = 0;
-            let result = uio_access(dir_handle, path.as_ptr(), W_OK);
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::EACCES);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(mount);
-            let _ = Box::from_raw(repo);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"test").unwrap();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            // Create a read-only mount
+            let mount = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    temp_dir.path().to_path_buf(),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_RDONLY | UIO_MOUNT_TOP,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+            assert!(!mount.is_null());
+
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: PathBuf::from("/content"),
+                virtual_path: PathBuf::from("/content"),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository: repo,
+                root_end: PathBuf::from("/content"),
+            }));
+
+            let path = CString::new("test.txt").unwrap();
+
+            unsafe {
+                *libc::__error() = 0;
+                let result = uio_access(dir_handle, path.as_ptr(), W_OK);
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::EACCES);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(mount);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_access_r_ok_succeeds_on_readonly_mount() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        fs::write(&test_file, b"test").unwrap();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        let mount = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                temp_dir.path().to_path_buf(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_RDONLY | UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            )
-        };
-
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: PathBuf::from("/content"),
-            virtual_path: PathBuf::from("/content"),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: PathBuf::from("/content"),
-        }));
-
-        let path = CString::new("test.txt").unwrap();
-
         unsafe {
-            let result = uio_access(dir_handle, path.as_ptr(), R_OK);
-            assert_eq!(result, 0);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(mount);
-            let _ = Box::from_raw(repo);
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            fs::write(&test_file, b"test").unwrap();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            let mount = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    temp_dir.path().to_path_buf(),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_RDONLY | UIO_MOUNT_TOP,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: PathBuf::from("/content"),
+                virtual_path: PathBuf::from("/content"),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository: repo,
+                root_end: PathBuf::from("/content"),
+            }));
+
+            let path = CString::new("test.txt").unwrap();
+
+            unsafe {
+                let result = uio_access(dir_handle, path.as_ptr(), R_OK);
+                assert_eq!(result, 0);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(mount);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_access_x_ok_on_directory() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let subdir = temp_dir.path().join("subdir");
-        fs::create_dir(&subdir).unwrap();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        let mount = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                temp_dir.path().to_path_buf(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            )
-        };
-
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: PathBuf::from("/content"),
-            virtual_path: PathBuf::from("/content"),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: PathBuf::from("/content"),
-        }));
-
-        let path = CString::new("subdir").unwrap();
-
         unsafe {
-            let result = uio_access(dir_handle, path.as_ptr(), X_OK);
-            assert_eq!(result, 0);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(mount);
-            let _ = Box::from_raw(repo);
+            let temp_dir = TempDir::new().unwrap();
+            let subdir = temp_dir.path().join("subdir");
+            fs::create_dir(&subdir).unwrap();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            let mount = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    temp_dir.path().to_path_buf(),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_TOP,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: PathBuf::from("/content"),
+                virtual_path: PathBuf::from("/content"),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository: repo,
+                root_end: PathBuf::from("/content"),
+            }));
+
+            let path = CString::new("subdir").unwrap();
+
+            unsafe {
+                let result = uio_access(dir_handle, path.as_ptr(), X_OK);
+                assert_eq!(result, 0);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(mount);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_access_topmost_visible_object() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir1 = TempDir::new().unwrap();
-        let temp_dir2 = TempDir::new().unwrap();
-
-        // Create file in lower mount only
-        let file1 = temp_dir1.path().join("file.txt");
-        fs::write(&file1, b"lower").unwrap();
-
-        // Create file in upper mount only
-        let file2 = temp_dir2.path().join("other.txt");
-        fs::write(&file2, b"upper").unwrap();
-
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-
-        // Add lower mount
-        let mount1 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                temp_dir1.path().to_path_buf(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_BOTTOM,
-                ptr::null_mut(),
-                true,
-            )
-        };
-
-        // Add upper mount (higher priority)
-        let mount2 = unsafe {
-            register_mount(
-                repo,
-                Path::new("/content"),
-                temp_dir2.path().to_path_buf(),
-                UIO_FSTYPE_STDIO,
-                UIO_MOUNT_TOP,
-                ptr::null_mut(),
-                true,
-            )
-        };
-
-        let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: PathBuf::from("/content"),
-            virtual_path: PathBuf::from("/content"),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: PathBuf::from("/content"),
-        }));
-
         unsafe {
-            // file.txt exists only in lower mount - should be found
-            let path1 = CString::new("file.txt").unwrap();
-            let result = uio_access(dir_handle, path1.as_ptr(), F_OK);
-            assert_eq!(result, 0);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            // other.txt exists only in upper mount - should be found
-            let path2 = CString::new("other.txt").unwrap();
-            let result = uio_access(dir_handle, path2.as_ptr(), F_OK);
-            assert_eq!(result, 0);
+            let temp_dir1 = TempDir::new().unwrap();
+            let temp_dir2 = TempDir::new().unwrap();
 
-            // nonexistent.txt doesn't exist - should fail
-            let path3 = CString::new("nonexistent.txt").unwrap();
-            *libc::__error() = 0;
-            let result = uio_access(dir_handle, path3.as_ptr(), F_OK);
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::ENOENT);
+            // Create file in lower mount only
+            let file1 = temp_dir1.path().join("file.txt");
+            fs::write(&file1, b"lower").unwrap();
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(mount1);
-            let _ = Box::from_raw(mount2);
-            let _ = Box::from_raw(repo);
+            // Create file in upper mount only
+            let file2 = temp_dir2.path().join("other.txt");
+            fs::write(&file2, b"upper").unwrap();
+
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+
+            // Add lower mount
+            let mount1 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    temp_dir1.path().to_path_buf(),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_BOTTOM,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+
+            // Add upper mount (higher priority)
+            let mount2 = unsafe {
+                register_mount(
+                    repo,
+                    Path::new("/content"),
+                    temp_dir2.path().to_path_buf(),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_TOP,
+                    ptr::null_mut(),
+                    true,
+                )
+            };
+
+            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                path: PathBuf::from("/content"),
+                virtual_path: PathBuf::from("/content"),
+                refcount: std::sync::atomic::AtomicI32::new(1),
+                repository: repo,
+                root_end: PathBuf::from("/content"),
+            }));
+
+            unsafe {
+                // file.txt exists only in lower mount - should be found
+                let path1 = CString::new("file.txt").unwrap();
+                let result = uio_access(dir_handle, path1.as_ptr(), F_OK);
+                assert_eq!(result, 0);
+
+                // other.txt exists only in upper mount - should be found
+                let path2 = CString::new("other.txt").unwrap();
+                let result = uio_access(dir_handle, path2.as_ptr(), F_OK);
+                assert_eq!(result, 0);
+
+                // nonexistent.txt doesn't exist - should fail
+                let path3 = CString::new("nonexistent.txt").unwrap();
+                *libc::__error() = 0;
+                let result = uio_access(dir_handle, path3.as_ptr(), F_OK);
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::ENOENT);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(mount1);
+                let _ = Box::from_raw(mount2);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     // =========================================================================
@@ -5436,292 +5549,304 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_open_write_fails_on_readonly_top_mount() {
-        use std::fs;
-        use std::io::Write;
-
-        clear_mount_registry();
-
-        // Create temp directory and file
-        let temp_dir = std::env::temp_dir().join("uqm_test_readonly_write");
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        // Create a file in the directory
-        let test_file = temp_dir.join("test.txt");
-        fs::write(&test_file, b"original content").unwrap();
-
-        // Mount as read-only
-        add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            use std::fs;
+            use std::io::Write;
 
-            // Try to open for writing - should fail with EACCES
-            let path = CString::new("test.txt").unwrap();
-            *libc::__error() = 0;
-            let handle = uio_open(dir_handle, path.as_ptr(), O_WRONLY, 0o644);
+            clear_mount_registry();
 
-            assert!(handle.is_null());
-            assert_eq!(*libc::__error(), libc::EACCES);
+            // Create temp directory and file
+            let temp_dir = std::env::temp_dir().join("uqm_test_readonly_write");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
 
-            // Try to open with O_CREAT - should also fail
-            let new_file = CString::new("newfile.txt").unwrap();
-            *libc::__error() = 0;
-            let handle2 = uio_open(dir_handle, new_file.as_ptr(), O_WRONLY | O_CREAT, 0o644);
+            // Create a file in the directory
+            let test_file = temp_dir.join("test.txt");
+            fs::write(&test_file, b"original content").unwrap();
 
-            assert!(handle2.is_null());
-            assert_eq!(*libc::__error(), libc::EACCES);
+            // Mount as read-only
+            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
 
-            // Reading should still work
-            let handle3 = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
-            assert!(!handle3.is_null());
-            uio_close(handle3);
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+                // Try to open for writing - should fail with EACCES
+                let path = CString::new("test.txt").unwrap();
+                *libc::__error() = 0;
+                let handle = uio_open(dir_handle, path.as_ptr(), O_WRONLY, 0o644);
+
+                assert!(handle.is_null());
+                assert_eq!(*libc::__error(), libc::EACCES);
+
+                // Try to open with O_CREAT - should also fail
+                let new_file = CString::new("newfile.txt").unwrap();
+                *libc::__error() = 0;
+                let handle2 = uio_open(dir_handle, new_file.as_ptr(), O_WRONLY | O_CREAT, 0o644);
+
+                assert!(handle2.is_null());
+                assert_eq!(*libc::__error(), libc::EACCES);
+
+                // Reading should still work
+                let handle3 = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
+                assert!(!handle3.is_null());
+                uio_close(handle3);
+
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            let _ = fs::remove_dir_all(&temp_dir);
+            clear_mount_registry();
         }
-
-        let _ = fs::remove_dir_all(&temp_dir);
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_uio_rename_cross_mount_fails_with_exdev() {
-        use std::fs;
-
-        clear_mount_registry();
-
-        // Create two temp directories for two different mounts
-        let temp_dir1 = std::env::temp_dir().join("uqm_test_mount1");
-        let temp_dir2 = std::env::temp_dir().join("uqm_test_mount2");
-        let _ = fs::remove_dir_all(&temp_dir1);
-        let _ = fs::remove_dir_all(&temp_dir2);
-        fs::create_dir_all(&temp_dir1).unwrap();
-        fs::create_dir_all(&temp_dir2).unwrap();
-
-        // Create a file in mount1
-        fs::write(temp_dir1.join("file.txt"), b"test content").unwrap();
-
-        // Add two separate mounts
-        add_test_mount_readonly("/mount1", temp_dir1.to_str().unwrap(), false);
-        add_test_mount_readonly("/mount2", temp_dir2.to_str().unwrap(), false);
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir1 = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/mount1"),
-                virtual_path: PathBuf::from("/mount1"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/mount1"),
-            }));
-            let dir2 = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/mount2"),
-                virtual_path: PathBuf::from("/mount2"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/mount2"),
-            }));
+            use std::fs;
 
-            // Try to rename across mounts - should fail with EXDEV
-            let old_path = CString::new("file.txt").unwrap();
-            let new_path = CString::new("moved.txt").unwrap();
-            *libc::__error() = 0;
-            let result = uio_rename(dir1, old_path.as_ptr(), dir2, new_path.as_ptr());
+            clear_mount_registry();
 
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::EXDEV);
+            // Create two temp directories for two different mounts
+            let temp_dir1 = std::env::temp_dir().join("uqm_test_mount1");
+            let temp_dir2 = std::env::temp_dir().join("uqm_test_mount2");
+            let _ = fs::remove_dir_all(&temp_dir1);
+            let _ = fs::remove_dir_all(&temp_dir2);
+            fs::create_dir_all(&temp_dir1).unwrap();
+            fs::create_dir_all(&temp_dir2).unwrap();
 
-            // File should still exist in original location
-            assert!(temp_dir1.join("file.txt").exists());
-            assert!(!temp_dir2.join("moved.txt").exists());
+            // Create a file in mount1
+            fs::write(temp_dir1.join("file.txt"), b"test content").unwrap();
 
-            let _ = Box::from_raw(dir1);
-            let _ = Box::from_raw(dir2);
-            let _ = Box::from_raw(repo);
+            // Add two separate mounts
+            add_test_mount_readonly("/mount1", temp_dir1.to_str().unwrap(), false);
+            add_test_mount_readonly("/mount2", temp_dir2.to_str().unwrap(), false);
+
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir1 = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/mount1"),
+                    virtual_path: PathBuf::from("/mount1"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/mount1"),
+                }));
+                let dir2 = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/mount2"),
+                    virtual_path: PathBuf::from("/mount2"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/mount2"),
+                }));
+
+                // Try to rename across mounts - should fail with EXDEV
+                let old_path = CString::new("file.txt").unwrap();
+                let new_path = CString::new("moved.txt").unwrap();
+                *libc::__error() = 0;
+                let result = uio_rename(dir1, old_path.as_ptr(), dir2, new_path.as_ptr());
+
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::EXDEV);
+
+                // File should still exist in original location
+                assert!(temp_dir1.join("file.txt").exists());
+                assert!(!temp_dir2.join("moved.txt").exists());
+
+                let _ = Box::from_raw(dir1);
+                let _ = Box::from_raw(dir2);
+                let _ = Box::from_raw(repo);
+            }
+
+            let _ = fs::remove_dir_all(&temp_dir1);
+            let _ = fs::remove_dir_all(&temp_dir2);
+            clear_mount_registry();
         }
-
-        let _ = fs::remove_dir_all(&temp_dir1);
-        let _ = fs::remove_dir_all(&temp_dir2);
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_uio_unlink_fails_on_readonly_mount() {
-        use std::fs;
-
-        clear_mount_registry();
-
-        let temp_dir = std::env::temp_dir().join("uqm_test_unlink_readonly");
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        // Create a file
-        fs::write(temp_dir.join("file.txt"), b"test content").unwrap();
-
-        // Mount as read-only
-        add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            use std::fs;
 
-            // Try to unlink - should fail with EACCES
-            let path = CString::new("file.txt").unwrap();
-            *libc::__error() = 0;
-            let result = uio_unlink(dir, path.as_ptr());
+            clear_mount_registry();
 
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::EACCES);
+            let temp_dir = std::env::temp_dir().join("uqm_test_unlink_readonly");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
 
-            // File should still exist
-            assert!(temp_dir.join("file.txt").exists());
+            // Create a file
+            fs::write(temp_dir.join("file.txt"), b"test content").unwrap();
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+            // Mount as read-only
+            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
+
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                // Try to unlink - should fail with EACCES
+                let path = CString::new("file.txt").unwrap();
+                *libc::__error() = 0;
+                let result = uio_unlink(dir, path.as_ptr());
+
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::EACCES);
+
+                // File should still exist
+                assert!(temp_dir.join("file.txt").exists());
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            let _ = fs::remove_dir_all(&temp_dir);
+            clear_mount_registry();
         }
-
-        let _ = fs::remove_dir_all(&temp_dir);
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_uio_mkdir_fails_on_readonly_mount() {
-        use std::fs;
-
-        clear_mount_registry();
-
-        let temp_dir = std::env::temp_dir().join("uqm_test_mkdir_readonly");
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        // Mount as read-only
-        add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            use std::fs;
 
-            // Try to create directory - should fail with EACCES
-            let path = CString::new("newdir").unwrap();
-            *libc::__error() = 0;
-            let result = uio_mkdir(dir, path.as_ptr(), 0o755);
+            clear_mount_registry();
 
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::EACCES);
+            let temp_dir = std::env::temp_dir().join("uqm_test_mkdir_readonly");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
 
-            // Directory should not exist
-            assert!(!temp_dir.join("newdir").exists());
+            // Mount as read-only
+            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                // Try to create directory - should fail with EACCES
+                let path = CString::new("newdir").unwrap();
+                *libc::__error() = 0;
+                let result = uio_mkdir(dir, path.as_ptr(), 0o755);
+
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::EACCES);
+
+                // Directory should not exist
+                assert!(!temp_dir.join("newdir").exists());
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            let _ = fs::remove_dir_all(&temp_dir);
+            clear_mount_registry();
         }
-
-        let _ = fs::remove_dir_all(&temp_dir);
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_uio_rmdir_fails_on_readonly_mount() {
-        use std::fs;
-
-        clear_mount_registry();
-
-        let temp_dir = std::env::temp_dir().join("uqm_test_rmdir_readonly");
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
-
-        // Create a directory
-        fs::create_dir(temp_dir.join("testdir")).unwrap();
-
-        // Mount as read-only
-        add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            use std::fs;
 
-            // Try to remove directory - should fail with EACCES
-            let path = CString::new("testdir").unwrap();
-            *libc::__error() = 0;
-            let result = uio_rmdir(dir, path.as_ptr());
+            clear_mount_registry();
 
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::EACCES);
+            let temp_dir = std::env::temp_dir().join("uqm_test_rmdir_readonly");
+            let _ = fs::remove_dir_all(&temp_dir);
+            fs::create_dir_all(&temp_dir).unwrap();
 
-            // Directory should still exist
-            assert!(temp_dir.join("testdir").exists());
+            // Create a directory
+            fs::create_dir(temp_dir.join("testdir")).unwrap();
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+            // Mount as read-only
+            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
+
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                // Try to remove directory - should fail with EACCES
+                let path = CString::new("testdir").unwrap();
+                *libc::__error() = 0;
+                let result = uio_rmdir(dir, path.as_ptr());
+
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::EACCES);
+
+                // Directory should still exist
+                assert!(temp_dir.join("testdir").exists());
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            let _ = fs::remove_dir_all(&temp_dir);
+            clear_mount_registry();
         }
-
-        let _ = fs::remove_dir_all(&temp_dir);
-        clear_mount_registry();
     }
 
     #[test]
     #[serial]
     fn test_mount_position_no_underflow() {
-        clear_mount_registry();
+        unsafe {
+            clear_mount_registry();
 
-        // Add a mount with TOP - should not underflow
-        add_test_mount("/first", "/tmp/first");
+            // Add a mount with TOP - should not underflow
+            add_test_mount("/first", "/tmp/first");
 
-        {
-            let registry = get_mount_registry().lock().unwrap();
-            let mount = registry.iter().find(|m| m.mount_point == "/first").unwrap();
-            // Position should be reasonable (starting at 1000 or near it)
-            assert!(mount.position < 10000);
+            {
+                let registry = get_mount_registry().lock().unwrap();
+                let mount = registry.iter().find(|m| m.mount_point == "/first").unwrap();
+                // Position should be reasonable (starting at 1000 or near it)
+                assert!(mount.position < 10000);
+            }
+
+            // Add another mount with TOP - should still not underflow
+            add_test_mount("/second", "/tmp/second");
+
+            {
+                let registry = get_mount_registry().lock().unwrap();
+                let mount1 = registry.iter().find(|m| m.mount_point == "/first").unwrap();
+                let mount2 = registry
+                    .iter()
+                    .find(|m| m.mount_point == "/second")
+                    .unwrap();
+
+                // Both positions should be valid and different
+                assert!(mount1.position < 10000);
+                assert!(mount2.position < 10000);
+                assert_ne!(mount1.position, mount2.position);
+            }
+
+            clear_mount_registry();
         }
-
-        // Add another mount with TOP - should still not underflow
-        add_test_mount("/second", "/tmp/second");
-
-        {
-            let registry = get_mount_registry().lock().unwrap();
-            let mount1 = registry.iter().find(|m| m.mount_point == "/first").unwrap();
-            let mount2 = registry
-                .iter()
-                .find(|m| m.mount_point == "/second")
-                .unwrap();
-
-            // Both positions should be valid and different
-            assert!(mount1.position < 10000);
-            assert!(mount2.position < 10000);
-            assert_ne!(mount1.position, mount2.position);
-        }
-
-        clear_mount_registry();
     }
 
     // =============================================================================
@@ -5733,47 +5858,50 @@ mod tests {
     #[test]
     #[serial]
     fn test_regex_pattern_rmp_files() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_dir = tempdir().unwrap();
-        let dir_path = temp_dir.path();
-
-        // Create test files
-        std::fs::write(dir_path.join("index.rmp"), b"test").unwrap();
-        std::fs::write(dir_path.join("music.RMP"), b"test").unwrap();
-
-        std::fs::write(dir_path.join("INDEX.RMP"), b"test").unwrap();
-        std::fs::write(dir_path.join("data.txt"), b"test").unwrap();
-        std::fs::write(dir_path.join("file.zip"), b"test").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            clear_mount_registry();
 
-            // Test .rmp pattern
-            let pattern = std::ffi::CString::new(r"\.[rR][mM][pP]$").unwrap();
-            let list = uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+            let temp_dir = tempdir().unwrap();
+            let dir_path = temp_dir.path();
 
-            assert!(!list.is_null());
-            let num_names = (*list).numNames;
-            assert_eq!(num_names, 2, "Should match both .rmp and .RMP files");
+            // Create test files
+            std::fs::write(dir_path.join("index.rmp"), b"test").unwrap();
+            std::fs::write(dir_path.join("music.RMP"), b"test").unwrap();
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+            std::fs::write(dir_path.join("INDEX.RMP"), b"test").unwrap();
+            std::fs::write(dir_path.join("data.txt"), b"test").unwrap();
+            std::fs::write(dir_path.join("file.zip"), b"test").unwrap();
+
+            unsafe {
+                add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
+
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                // Test .rmp pattern
+                let pattern = std::ffi::CString::new(r"\.[rR][mM][pP]$").unwrap();
+                let list =
+                    uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+
+                assert!(!list.is_null());
+                let num_names = (*list).numNames;
+                assert_eq!(num_names, 2, "Should match both .rmp and .RMP files");
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P07
@@ -5781,46 +5909,49 @@ mod tests {
     #[test]
     #[serial]
     fn test_regex_pattern_zip_uqm_files() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_dir = tempdir().unwrap();
-        let dir_path = temp_dir.path();
-        // Create test files
-        std::fs::write(dir_path.join("package.zip"), b"test").unwrap();
-        std::fs::write(dir_path.join("data.uqm"), b"test").unwrap();
-        std::fs::write(dir_path.join("music.UQM"), b"test").unwrap();
-
-        std::fs::write(dir_path.join("file.rmp"), b"test").unwrap();
-        std::fs::write(dir_path.join("readme.txt"), b"test").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            clear_mount_registry();
 
-            // Test .zip/.uqm pattern
-            let pattern = std::ffi::CString::new(r"\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
-            let list = uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+            let temp_dir = tempdir().unwrap();
+            let dir_path = temp_dir.path();
+            // Create test files
+            std::fs::write(dir_path.join("package.zip"), b"test").unwrap();
+            std::fs::write(dir_path.join("data.uqm"), b"test").unwrap();
+            std::fs::write(dir_path.join("music.UQM"), b"test").unwrap();
 
-            assert!(!list.is_null());
-            let num_names = (*list).numNames;
-            assert_eq!(num_names, 3, "Should match .zip, .uqm, and .UQM files");
+            std::fs::write(dir_path.join("file.rmp"), b"test").unwrap();
+            std::fs::write(dir_path.join("readme.txt"), b"test").unwrap();
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+            unsafe {
+                add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
+
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                // Test .zip/.uqm pattern
+                let pattern = std::ffi::CString::new(r"\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
+                let list =
+                    uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+
+                assert!(!list.is_null());
+                let num_names = (*list).numNames;
+                assert_eq!(num_names, 3, "Should match .zip, .uqm, and .UQM files");
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P07
@@ -5828,41 +5959,44 @@ mod tests {
     #[test]
     #[serial]
     fn test_invalid_regex_returns_empty() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_dir = tempdir().unwrap();
-        let dir_path = temp_dir.path();
-
-        std::fs::write(dir_path.join("file.txt"), b"test").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            clear_mount_registry();
 
-            // Use invalid regex pattern
-            let pattern = std::ffi::CString::new(r"[invalid(regex").unwrap();
-            let list = uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+            let temp_dir = tempdir().unwrap();
+            let dir_path = temp_dir.path();
 
-            // Should return non-null empty list, not crash
-            assert!(!list.is_null());
-            assert_eq!((*list).numNames, 0, "Invalid regex should match nothing");
+            std::fs::write(dir_path.join("file.txt"), b"test").unwrap();
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+            unsafe {
+                add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
+
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                // Use invalid regex pattern
+                let pattern = std::ffi::CString::new(r"[invalid(regex").unwrap();
+                let list =
+                    uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+
+                // Should return non-null empty list, not crash
+                assert!(!list.is_null());
+                assert_eq!((*list).numNames, 0, "Invalid regex should match nothing");
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P07
@@ -5870,64 +6004,66 @@ mod tests {
     #[test]
     #[serial]
     fn test_cross_mount_directory_listing_union() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_a = tempdir().unwrap();
-        let temp_b = tempdir().unwrap();
-
-        // Create files in mount A
-        std::fs::write(temp_a.path().join("a.txt"), b"a").unwrap();
-        std::fs::write(temp_a.path().join("shared.txt"), b"a_version").unwrap();
-
-        // Create files in mount B
-        std::fs::write(temp_b.path().join("b.txt"), b"b").unwrap();
-        std::fs::write(temp_b.path().join("shared.txt"), b"b_version").unwrap();
-
         unsafe {
-            // Add mounts manually with proper precedence
-            add_test_mount_readonly("/content", temp_a.path().to_str().unwrap(), true);
-            add_test_mount_readonly("/content", temp_b.path().to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/content"),
-                virtual_path: PathBuf::from("/content"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/content"),
-            }));
+            clear_mount_registry();
 
-            // List all files
-            let list = uio_getDirList(
-                dir_handle,
-                std::ptr::null(),
-                std::ptr::null(),
-                MATCH_LITERAL,
-            );
-            assert!(!list.is_null());
+            let temp_a = tempdir().unwrap();
+            let temp_b = tempdir().unwrap();
 
-            // Should see union: a.txt, b.txt, shared.txt (only once, from mount A)
-            let num_names = (*list).numNames;
-            assert_eq!(num_names, 3, "Should see union of both mounts");
+            // Create files in mount A
+            std::fs::write(temp_a.path().join("a.txt"), b"a").unwrap();
+            std::fs::write(temp_a.path().join("shared.txt"), b"a_version").unwrap();
 
-            // Verify names
-            let names_slice = std::slice::from_raw_parts((*list).names, num_names as usize);
-            let mut names: Vec<String> = names_slice
-                .iter()
-                .map(|&ptr| std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned())
-                .collect();
-            names.sort();
+            // Create files in mount B
+            std::fs::write(temp_b.path().join("b.txt"), b"b").unwrap();
+            std::fs::write(temp_b.path().join("shared.txt"), b"b_version").unwrap();
 
-            assert_eq!(names, vec!["a.txt", "b.txt", "shared.txt"]);
+            unsafe {
+                // Add mounts manually with proper precedence
+                add_test_mount_readonly("/content", temp_a.path().to_str().unwrap(), true);
+                add_test_mount_readonly("/content", temp_b.path().to_str().unwrap(), true);
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/content"),
+                    virtual_path: PathBuf::from("/content"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/content"),
+                }));
+
+                // List all files
+                let list = uio_getDirList(
+                    dir_handle,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    MATCH_LITERAL,
+                );
+                assert!(!list.is_null());
+
+                // Should see union: a.txt, b.txt, shared.txt (only once, from mount A)
+                let num_names = (*list).numNames;
+                assert_eq!(num_names, 3, "Should see union of both mounts");
+
+                // Verify names
+                let names_slice = std::slice::from_raw_parts((*list).names, num_names as usize);
+                let mut names: Vec<String> = names_slice
+                    .iter()
+                    .map(|&ptr| std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned())
+                    .collect();
+                names.sort();
+
+                assert_eq!(names, vec!["a.txt", "b.txt", "shared.txt"]);
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P07
@@ -5935,47 +6071,49 @@ mod tests {
     #[test]
     #[serial]
     fn test_cross_mount_listing_deduplication() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_a = tempdir().unwrap();
-        let temp_b = tempdir().unwrap();
-
-        // Both mounts have the same file
-        std::fs::write(temp_a.path().join("duplicate.txt"), b"version_a").unwrap();
-        std::fs::write(temp_b.path().join("duplicate.txt"), b"version_b").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_a.path().to_str().unwrap(), true);
-            add_test_mount_readonly("/data", temp_b.path().to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            clear_mount_registry();
 
-            let list = uio_getDirList(
-                dir_handle,
-                std::ptr::null(),
-                std::ptr::null(),
-                MATCH_LITERAL,
-            );
+            let temp_a = tempdir().unwrap();
+            let temp_b = tempdir().unwrap();
 
-            assert!(!list.is_null());
-            // Should see only one entry (from higher precedence mount A)
-            assert_eq!((*list).numNames, 1, "Duplicate should appear only once");
+            // Both mounts have the same file
+            std::fs::write(temp_a.path().join("duplicate.txt"), b"version_a").unwrap();
+            std::fs::write(temp_b.path().join("duplicate.txt"), b"version_b").unwrap();
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+            unsafe {
+                add_test_mount_readonly("/data", temp_a.path().to_str().unwrap(), true);
+                add_test_mount_readonly("/data", temp_b.path().to_str().unwrap(), true);
+
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                let list = uio_getDirList(
+                    dir_handle,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    MATCH_LITERAL,
+                );
+
+                assert!(!list.is_null());
+                // Should see only one entry (from higher precedence mount A)
+                assert_eq!((*list).numNames, 1, "Duplicate should appear only once");
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P07
@@ -5983,49 +6121,51 @@ mod tests {
     #[test]
     #[serial]
     fn test_empty_directory_returns_nonnull() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_dir = tempdir().unwrap();
-        // Don't create any files
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            clear_mount_registry();
 
-            let list = uio_getDirList(
-                dir_handle,
-                std::ptr::null(),
-                std::ptr::null(),
-                MATCH_LITERAL,
-            );
+            let temp_dir = tempdir().unwrap();
+            // Don't create any files
 
-            // Should return non-null list with numNames=0
-            assert!(
-                !list.is_null(),
-                "Empty directory should return non-null list"
-            );
-            assert_eq!(
-                (*list).numNames,
-                0,
-                "Empty directory should have numNames=0"
-            );
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), true);
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
+
+                let list = uio_getDirList(
+                    dir_handle,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    MATCH_LITERAL,
+                );
+
+                // Should return non-null list with numNames=0
+                assert!(
+                    !list.is_null(),
+                    "Empty directory should return non-null list"
+                );
+                assert_eq!(
+                    (*list).numNames,
+                    0,
+                    "Empty directory should have numNames=0"
+                );
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P07
@@ -6033,62 +6173,66 @@ mod tests {
     #[test]
     #[serial]
     fn test_regex_with_cross_mount_listing() {
-        use tempfile::tempdir;
-
-        clear_mount_registry();
-
-        let temp_a = tempdir().unwrap();
-        let temp_b = tempdir().unwrap();
-
-        // Mount A has .rmp files
-        std::fs::write(temp_a.path().join("index1.rmp"), b"a").unwrap();
-        std::fs::write(temp_a.path().join("data.txt"), b"a").unwrap();
-
-        // Mount B has .rmp files
-        std::fs::write(temp_b.path().join("index2.rmp"), b"b").unwrap();
-        std::fs::write(temp_b.path().join("readme.md"), b"b").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/indices", temp_a.path().to_str().unwrap(), true);
-            add_test_mount_readonly("/indices", temp_b.path().to_str().unwrap(), true);
+            use tempfile::tempdir;
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/indices"),
-                virtual_path: PathBuf::from("/indices"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/indices"),
-            }));
+            clear_mount_registry();
 
-            // List only .rmp files
-            let pattern = std::ffi::CString::new(r"\.[rR][mM][pP]$").unwrap();
-            let list = uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+            let temp_a = tempdir().unwrap();
+            let temp_b = tempdir().unwrap();
 
-            assert!(!list.is_null());
-            // Should see both .rmp files from both mounts
-            assert_eq!(
-                (*list).numNames,
-                2,
-                "Should match .rmp files from both mounts"
-            );
+            // Mount A has .rmp files
+            std::fs::write(temp_a.path().join("index1.rmp"), b"a").unwrap();
+            std::fs::write(temp_a.path().join("data.txt"), b"a").unwrap();
 
-            // Verify names
-            let names_slice = std::slice::from_raw_parts((*list).names, (*list).numNames as usize);
-            let mut names: Vec<String> = names_slice
-                .iter()
-                .map(|&ptr| std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned())
-                .collect();
-            names.sort();
+            // Mount B has .rmp files
+            std::fs::write(temp_b.path().join("index2.rmp"), b"b").unwrap();
+            std::fs::write(temp_b.path().join("readme.md"), b"b").unwrap();
 
-            assert_eq!(names, vec!["index1.rmp", "index2.rmp"]);
+            unsafe {
+                add_test_mount_readonly("/indices", temp_a.path().to_str().unwrap(), true);
+                add_test_mount_readonly("/indices", temp_b.path().to_str().unwrap(), true);
 
-            uio_DirList_free(list);
-            let _ = Box::from_raw(dir_handle);
-            let _ = Box::from_raw(repo);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/indices"),
+                    virtual_path: PathBuf::from("/indices"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/indices"),
+                }));
+
+                // List only .rmp files
+                let pattern = std::ffi::CString::new(r"\.[rR][mM][pP]$").unwrap();
+                let list =
+                    uio_getDirList(dir_handle, std::ptr::null(), pattern.as_ptr(), MATCH_REGEX);
+
+                assert!(!list.is_null());
+                // Should see both .rmp files from both mounts
+                assert_eq!(
+                    (*list).numNames,
+                    2,
+                    "Should match .rmp files from both mounts"
+                );
+
+                // Verify names
+                let names_slice =
+                    std::slice::from_raw_parts((*list).names, (*list).numNames as usize);
+                let mut names: Vec<String> = names_slice
+                    .iter()
+                    .map(|&ptr| std::ffi::CStr::from_ptr(ptr).to_string_lossy().into_owned())
+                    .collect();
+                names.sort();
+
+                assert_eq!(names, vec!["index1.rmp", "index2.rmp"]);
+
+                uio_DirList_free(list);
+                let _ = Box::from_raw(dir_handle);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     // =============================================================================
@@ -6099,26 +6243,28 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_open_whole_file() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello, World!").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello, World!").unwrap();
+            temp.flush().unwrap();
 
-            let inner = &*(block as *const FileBlockInner);
-            assert_eq!(inner.base_offset, 0);
-            assert_eq!(inner.size, 13);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
+
+                let inner = &*(block as *const FileBlockInner);
+                assert_eq!(inner.base_offset, 0);
+                assert_eq!(inner.size, 13);
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6126,27 +6272,29 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_open_with_range() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"0123456789ABCDEF").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            // Create block covering bytes 5-10 (5 bytes)
-            let block = uio_openFileBlock2(handle, 5, 5);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"0123456789ABCDEF").unwrap();
+            temp.flush().unwrap();
 
-            let inner = &*(block as *const FileBlockInner);
-            assert_eq!(inner.base_offset, 5);
-            assert_eq!(inner.size, 5);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                // Create block covering bytes 5-10 (5 bytes)
+                let block = uio_openFileBlock2(handle, 5, 5);
+                assert!(!block.is_null());
+
+                let inner = &*(block as *const FileBlockInner);
+                assert_eq!(inner.base_offset, 5);
+                assert_eq!(inner.size, 5);
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6154,23 +6302,25 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_open2_invalid_range() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            // Try to create block beyond file size
-            let block = uio_openFileBlock2(handle, 0, 100);
-            assert!(block.is_null());
-            assert_eq!(*libc::__error(), libc::EINVAL);
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello").unwrap();
+            temp.flush().unwrap();
 
-            let _ = Box::from_raw(handle);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+
+                // Try to create block beyond file size
+                let block = uio_openFileBlock2(handle, 0, 100);
+                assert!(block.is_null());
+                assert_eq!(*libc::__error(), libc::EINVAL);
+
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6178,31 +6328,33 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_basic() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello, World!").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello, World!").unwrap();
+            temp.flush().unwrap();
 
-            let mut buffer: *mut c_char = ptr::null_mut();
-            let bytes_read = uio_accessFileBlock(block, 0, 5, &mut buffer);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            assert_eq!(bytes_read, 5);
-            assert!(!buffer.is_null());
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            let data = slice::from_raw_parts(buffer as *const u8, 5);
-            assert_eq!(data, b"Hello");
+                let mut buffer: *mut c_char = ptr::null_mut();
+                let bytes_read = uio_accessFileBlock(block, 0, 5, &mut buffer);
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                assert_eq!(bytes_read, 5);
+                assert!(!buffer.is_null());
+
+                let data = slice::from_raw_parts(buffer as *const u8, 5);
+                assert_eq!(data, b"Hello");
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6210,31 +6362,33 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_with_offset() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello, World!").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello, World!").unwrap();
+            temp.flush().unwrap();
 
-            let mut buffer: *mut c_char = ptr::null_mut();
-            let bytes_read = uio_accessFileBlock(block, 7, 5, &mut buffer);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            assert_eq!(bytes_read, 5);
-            assert!(!buffer.is_null());
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            let data = slice::from_raw_parts(buffer as *const u8, 5);
-            assert_eq!(data, b"World");
+                let mut buffer: *mut c_char = ptr::null_mut();
+                let bytes_read = uio_accessFileBlock(block, 7, 5, &mut buffer);
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                assert_eq!(bytes_read, 5);
+                assert!(!buffer.is_null());
+
+                let data = slice::from_raw_parts(buffer as *const u8, 5);
+                assert_eq!(data, b"World");
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6242,33 +6396,35 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_short_at_eof() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello").unwrap();
+            temp.flush().unwrap();
 
-            // Request more bytes than available
-            let mut buffer: *mut c_char = ptr::null_mut();
-            let bytes_read = uio_accessFileBlock(block, 3, 100, &mut buffer);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            // Should return only 2 bytes (positions 3-4)
-            assert_eq!(bytes_read, 2);
-            assert!(!buffer.is_null());
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            let data = slice::from_raw_parts(buffer as *const u8, 2);
-            assert_eq!(data, b"lo");
+                // Request more bytes than available
+                let mut buffer: *mut c_char = ptr::null_mut();
+                let bytes_read = uio_accessFileBlock(block, 3, 100, &mut buffer);
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                // Should return only 2 bytes (positions 3-4)
+                assert_eq!(bytes_read, 2);
+                assert!(!buffer.is_null());
+
+                let data = slice::from_raw_parts(buffer as *const u8, 2);
+                assert_eq!(data, b"lo");
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6276,29 +6432,31 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_past_eof() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello").unwrap();
+            temp.flush().unwrap();
 
-            // Access beyond file size
-            let mut buffer: *mut c_char = ptr::null_mut();
-            let bytes_read = uio_accessFileBlock(block, 100, 10, &mut buffer);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            assert_eq!(bytes_read, 0);
-            assert!(buffer.is_null());
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                // Access beyond file size
+                let mut buffer: *mut c_char = ptr::null_mut();
+                let bytes_read = uio_accessFileBlock(block, 100, 10, &mut buffer);
+
+                assert_eq!(bytes_read, 0);
+                assert!(buffer.is_null());
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6306,33 +6464,35 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_ranged_block() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"0123456789ABCDEF").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            // Block covering bytes 5-10 (6 bytes: "56789A")
-            let block = uio_openFileBlock2(handle, 5, 6);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"0123456789ABCDEF").unwrap();
+            temp.flush().unwrap();
 
-            // Access from offset 2 within block (byte 7 in file)
-            let mut buffer: *mut c_char = ptr::null_mut();
-            let bytes_read = uio_accessFileBlock(block, 2, 3, &mut buffer);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            assert_eq!(bytes_read, 3);
-            assert!(!buffer.is_null());
+                // Block covering bytes 5-10 (6 bytes: "56789A")
+                let block = uio_openFileBlock2(handle, 5, 6);
+                assert!(!block.is_null());
 
-            let data = slice::from_raw_parts(buffer as *const u8, 3);
-            assert_eq!(data, b"789");
+                // Access from offset 2 within block (byte 7 in file)
+                let mut buffer: *mut c_char = ptr::null_mut();
+                let bytes_read = uio_accessFileBlock(block, 2, 3, &mut buffer);
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                assert_eq!(bytes_read, 3);
+                assert!(!buffer.is_null());
+
+                let data = slice::from_raw_parts(buffer as *const u8, 3);
+                assert_eq!(data, b"789");
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6340,28 +6500,30 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_copy_basic() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello, World!").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello, World!").unwrap();
+            temp.flush().unwrap();
 
-            let mut buffer = [0u8; 10];
-            let result = uio_copyFileBlock(block, 7, buffer.as_mut_ptr() as *mut c_char, 5);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            assert_eq!(result, 0); // Success
-            assert_eq!(&buffer[..5], b"World");
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                let mut buffer = [0u8; 10];
+                let result = uio_copyFileBlock(block, 7, buffer.as_mut_ptr() as *mut c_char, 5);
+
+                assert_eq!(result, 0); // Success
+                assert_eq!(&buffer[..5], b"World");
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6369,41 +6531,43 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_clear_buffers() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello, World!").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello, World!").unwrap();
+            temp.flush().unwrap();
 
-            // Access data to populate cache
-            let mut buffer: *mut c_char = ptr::null_mut();
-            let bytes_read = uio_accessFileBlock(block, 0, 5, &mut buffer);
-            assert_eq!(bytes_read, 5);
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            let inner = &*(block as *const FileBlockInner);
-            assert!(!inner.cache.is_empty());
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            // Clear buffers
-            uio_clearFileBlockBuffers(block);
+                // Access data to populate cache
+                let mut buffer: *mut c_char = ptr::null_mut();
+                let bytes_read = uio_accessFileBlock(block, 0, 5, &mut buffer);
+                assert_eq!(bytes_read, 5);
 
-            let inner = &*(block as *const FileBlockInner);
-            assert!(inner.cache.is_empty());
+                let inner = &*(block as *const FileBlockInner);
+                assert!(!inner.cache.is_empty());
 
-            // Block should still be usable
-            let bytes_read = uio_accessFileBlock(block, 7, 5, &mut buffer);
-            assert_eq!(bytes_read, 5);
-            assert!(!buffer.is_null());
+                // Clear buffers
+                uio_clearFileBlockBuffers(block);
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                let inner = &*(block as *const FileBlockInner);
+                assert!(inner.cache.is_empty());
+
+                // Block should still be usable
+                let bytes_read = uio_accessFileBlock(block, 7, 5, &mut buffer);
+                assert_eq!(bytes_read, 5);
+                assert!(!buffer.is_null());
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6411,38 +6575,40 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_multiple_access_stable_pointer() {
-        use std::io::Write;
-        use tempfile::NamedTempFile;
-
-        let mut temp = NamedTempFile::new().unwrap();
-        temp.write_all(b"Hello, World!").unwrap();
-        temp.flush().unwrap();
-
         unsafe {
-            let file = std::fs::File::open(temp.path()).unwrap();
-            let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+            use std::io::Write;
+            use tempfile::NamedTempFile;
 
-            let block = uio_openFileBlock(handle);
-            assert!(!block.is_null());
+            let mut temp = NamedTempFile::new().unwrap();
+            temp.write_all(b"Hello, World!").unwrap();
+            temp.flush().unwrap();
 
-            // First access
-            let mut buffer1: *mut c_char = ptr::null_mut();
-            let bytes_read1 = uio_accessFileBlock(block, 0, 5, &mut buffer1);
-            assert_eq!(bytes_read1, 5);
-            let first_ptr = buffer1;
+            unsafe {
+                let file = std::fs::File::open(temp.path()).unwrap();
+                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
 
-            // Second access invalidates first pointer
-            let mut buffer2: *mut c_char = ptr::null_mut();
-            let bytes_read2 = uio_accessFileBlock(block, 7, 5, &mut buffer2);
-            assert_eq!(bytes_read2, 5);
+                let block = uio_openFileBlock(handle);
+                assert!(!block.is_null());
 
-            // First pointer should not be used after second access
-            // (This test just documents the behavior)
-            let data2 = slice::from_raw_parts(buffer2 as *const u8, 5);
-            assert_eq!(data2, b"World");
+                // First access
+                let mut buffer1: *mut c_char = ptr::null_mut();
+                let bytes_read1 = uio_accessFileBlock(block, 0, 5, &mut buffer1);
+                assert_eq!(bytes_read1, 5);
+                let first_ptr = buffer1;
 
-            uio_closeFileBlock(block);
-            let _ = Box::from_raw(handle);
+                // Second access invalidates first pointer
+                let mut buffer2: *mut c_char = ptr::null_mut();
+                let bytes_read2 = uio_accessFileBlock(block, 7, 5, &mut buffer2);
+                assert_eq!(bytes_read2, 5);
+
+                // First pointer should not be used after second access
+                // (This test just documents the behavior)
+                let data2 = slice::from_raw_parts(buffer2 as *const u8, 5);
+                assert_eq!(data2, b"World");
+
+                uio_closeFileBlock(block);
+                let _ = Box::from_raw(handle);
+            }
         }
     }
 
@@ -6476,52 +6642,54 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_direct_path_on_stdio_mount() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let test_file = temp_dir.path().join("test.txt");
-        std::fs::write(&test_file, b"direct path content").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
+            let test_file = temp_dir.path().join("test.txt");
+            std::fs::write(&test_file, b"direct path content").unwrap();
 
-            let path = CString::new("test.txt").unwrap();
-            let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            assert!(!handle.is_null());
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            // Get path
-            let path_ptr = uio_StdioAccessHandle_getPath(handle);
-            assert!(!path_ptr.is_null());
+                let path = CString::new("test.txt").unwrap();
+                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
 
-            let returned_path = CStr::from_ptr(path_ptr).to_str().unwrap();
-            assert!(returned_path.contains("test.txt"));
+                assert!(!handle.is_null());
 
-            // Verify we can read the file from the returned path
-            let content = std::fs::read_to_string(returned_path).unwrap();
-            assert_eq!(content, "direct path content");
+                // Get path
+                let path_ptr = uio_StdioAccessHandle_getPath(handle);
+                assert!(!path_ptr.is_null());
 
-            // Release handle
-            uio_releaseStdioAccess(handle);
+                let returned_path = CStr::from_ptr(path_ptr).to_str().unwrap();
+                assert!(returned_path.contains("test.txt"));
 
-            // File should still exist (direct path, not temp copy)
-            assert!(test_file.exists());
+                // Verify we can read the file from the returned path
+                let content = std::fs::read_to_string(returned_path).unwrap();
+                assert_eq!(content, "direct path content");
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                // Release handle
+                uio_releaseStdioAccess(handle);
+
+                // File should still exist (direct path, not temp copy)
+                assert!(test_file.exists());
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6529,90 +6697,92 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_temp_copy_on_zip_mount() {
-        use std::io::Write;
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let zip_path = temp_dir.path().join("test.zip");
-
-        // Create a ZIP archive
-        let file = std::fs::File::create(&zip_path).unwrap();
-        let mut zip = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
-        zip.start_file("data.txt", options).unwrap();
-        zip.write_all(b"ZIP content").unwrap();
-        zip.finish().unwrap();
-
-        // Create temp directory for extraction
-        let temp_extract_dir = TempDir::new().unwrap();
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            use std::io::Write;
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            // Mount the ZIP
-            let mount = register_mount(
-                repo,
-                Path::new("/archive"),
-                zip_path.clone(),
-                UIO_FSTYPE_ZIP,
-                UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
-                ptr::null_mut(),
-                true,
-            );
-            assert!(!mount.is_null());
+            let temp_dir = TempDir::new().unwrap();
+            let zip_path = temp_dir.path().join("test.zip");
 
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/archive"),
-                virtual_path: PathBuf::from("/archive"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/archive"),
-            }));
+            // Create a ZIP archive
+            let file = std::fs::File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("data.txt", options).unwrap();
+            zip.write_all(b"ZIP content").unwrap();
+            zip.finish().unwrap();
 
-            let temp_dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_extract_dir.path().to_path_buf(),
-                virtual_path: temp_extract_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: temp_extract_dir.path().to_path_buf(),
-            }));
+            // Create temp directory for extraction
+            let temp_extract_dir = TempDir::new().unwrap();
 
-            let path = CString::new("data.txt").unwrap();
-            let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, temp_dir_handle);
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
-            assert!(!handle.is_null());
+                // Mount the ZIP
+                let mount = register_mount(
+                    repo,
+                    Path::new("/archive"),
+                    zip_path.clone(),
+                    UIO_FSTYPE_ZIP,
+                    UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+                    ptr::null_mut(),
+                    true,
+                );
+                assert!(!mount.is_null());
 
-            // Get path
-            let path_ptr = uio_StdioAccessHandle_getPath(handle);
-            assert!(!path_ptr.is_null());
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/archive"),
+                    virtual_path: PathBuf::from("/archive"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/archive"),
+                }));
 
-            let returned_path = CStr::from_ptr(path_ptr).to_str().unwrap();
+                let temp_dir_handle = Box::into_raw(Box::new(uio_DirHandle {
+                    path: temp_extract_dir.path().to_path_buf(),
+                    virtual_path: temp_extract_dir.path().to_path_buf(),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: temp_extract_dir.path().to_path_buf(),
+                }));
 
-            // Verify it's in the temp directory
-            assert!(returned_path.starts_with(temp_extract_dir.path().to_str().unwrap()));
+                let path = CString::new("data.txt").unwrap();
+                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, temp_dir_handle);
 
-            // Verify we can read the extracted content
-            let content = std::fs::read_to_string(returned_path).unwrap();
-            assert_eq!(content, "ZIP content");
+                assert!(!handle.is_null());
 
-            let temp_file_path = PathBuf::from(returned_path);
-            assert!(temp_file_path.exists());
+                // Get path
+                let path_ptr = uio_StdioAccessHandle_getPath(handle);
+                assert!(!path_ptr.is_null());
 
-            // Release handle - should delete temp file
-            uio_releaseStdioAccess(handle);
+                let returned_path = CStr::from_ptr(path_ptr).to_str().unwrap();
 
-            // Temp file should be deleted
-            assert!(!temp_file_path.exists());
+                // Verify it's in the temp directory
+                assert!(returned_path.starts_with(temp_extract_dir.path().to_str().unwrap()));
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(temp_dir_handle);
-            let _ = Box::from_raw(mount);
-            let _ = Box::from_raw(repo);
+                // Verify we can read the extracted content
+                let content = std::fs::read_to_string(returned_path).unwrap();
+                assert_eq!(content, "ZIP content");
+
+                let temp_file_path = PathBuf::from(returned_path);
+                assert!(temp_file_path.exists());
+
+                // Release handle - should delete temp file
+                uio_releaseStdioAccess(handle);
+
+                // Temp file should be deleted
+                assert!(!temp_file_path.exists());
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(temp_dir_handle);
+                let _ = Box::from_raw(mount);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6620,37 +6790,39 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_rejects_directory_with_eisdir() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let subdir = temp_dir.path().join("subdir");
-        std::fs::create_dir(&subdir).unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
+            let subdir = temp_dir.path().join("subdir");
+            std::fs::create_dir(&subdir).unwrap();
 
-            let path = CString::new("subdir").unwrap();
-            *libc::__error() = 0;
-            let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            assert!(handle.is_null());
-            assert_eq!(*libc::__error(), libc::EISDIR);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                let path = CString::new("subdir").unwrap();
+                *libc::__error() = 0;
+                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+
+                assert!(handle.is_null());
+                assert_eq!(*libc::__error(), libc::EISDIR);
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6658,35 +6830,37 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_missing_file_returns_enoent() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
 
-            let path = CString::new("nonexistent.txt").unwrap();
-            *libc::__error() = 0;
-            let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            assert!(handle.is_null());
-            assert_eq!(*libc::__error(), libc::ENOENT);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                let path = CString::new("nonexistent.txt").unwrap();
+                *libc::__error() = 0;
+                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+
+                assert!(handle.is_null());
+                assert_eq!(*libc::__error(), libc::ENOENT);
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6694,59 +6868,61 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_zip_without_tempdir_fails() {
-        use std::io::Write;
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let zip_path = temp_dir.path().join("test.zip");
-
-        // Create a ZIP archive
-        let file = std::fs::File::create(&zip_path).unwrap();
-        let mut zip = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
-        zip.start_file("data.txt", options).unwrap();
-        zip.write_all(b"content").unwrap();
-        zip.finish().unwrap();
-
         unsafe {
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            use std::io::Write;
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            // Mount the ZIP
-            let mount = register_mount(
-                repo,
-                Path::new("/archive"),
-                zip_path.clone(),
-                UIO_FSTYPE_ZIP,
-                UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
-                ptr::null_mut(),
-                true,
-            );
-            assert!(!mount.is_null());
+            let temp_dir = TempDir::new().unwrap();
+            let zip_path = temp_dir.path().join("test.zip");
 
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/archive"),
-                virtual_path: PathBuf::from("/archive"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/archive"),
-            }));
+            // Create a ZIP archive
+            let file = std::fs::File::create(&zip_path).unwrap();
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("data.txt", options).unwrap();
+            zip.write_all(b"content").unwrap();
+            zip.finish().unwrap();
 
-            let path = CString::new("data.txt").unwrap();
-            *libc::__error() = 0;
-            // No tempDir provided - should fail
-            let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+            unsafe {
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
-            assert!(handle.is_null());
-            assert_eq!(*libc::__error(), libc::EINVAL);
+                // Mount the ZIP
+                let mount = register_mount(
+                    repo,
+                    Path::new("/archive"),
+                    zip_path.clone(),
+                    UIO_FSTYPE_ZIP,
+                    UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+                    ptr::null_mut(),
+                    true,
+                );
+                assert!(!mount.is_null());
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(mount);
-            let _ = Box::from_raw(repo);
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/archive"),
+                    virtual_path: PathBuf::from("/archive"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/archive"),
+                }));
+
+                let path = CString::new("data.txt").unwrap();
+                *libc::__error() = 0;
+                // No tempDir provided - should fail
+                let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
+
+                assert!(handle.is_null());
+                assert_eq!(*libc::__error(), libc::EINVAL);
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(mount);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6778,44 +6954,46 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_basic() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let src_file = temp_dir.path().join("source.txt");
-        std::fs::write(&src_file, b"file content to copy").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
+            let src_file = temp_dir.path().join("source.txt");
+            std::fs::write(&src_file, b"file content to copy").unwrap();
 
-            let src_path = CString::new("source.txt").unwrap();
-            let dst_path = CString::new("dest.txt").unwrap();
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
-            assert_eq!(result, 0);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            // Verify destination exists
-            let dst_file = temp_dir.path().join("dest.txt");
-            assert!(dst_file.exists());
+                let src_path = CString::new("source.txt").unwrap();
+                let dst_path = CString::new("dest.txt").unwrap();
 
-            // Verify content
-            let content = std::fs::read_to_string(&dst_file).unwrap();
-            assert_eq!(content, "file content to copy");
+                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                assert_eq!(result, 0);
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                // Verify destination exists
+                let dst_file = temp_dir.path().join("dest.txt");
+                assert!(dst_file.exists());
+
+                // Verify content
+                let content = std::fs::read_to_string(&dst_file).unwrap();
+                assert_eq!(content, "file content to copy");
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6823,45 +7001,47 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_to_existing_dest_fails() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let src_file = temp_dir.path().join("source.txt");
-        let dst_file = temp_dir.path().join("dest.txt");
-        std::fs::write(&src_file, b"source").unwrap();
-        std::fs::write(&dst_file, b"existing").unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
+            let src_file = temp_dir.path().join("source.txt");
+            let dst_file = temp_dir.path().join("dest.txt");
+            std::fs::write(&src_file, b"source").unwrap();
+            std::fs::write(&dst_file, b"existing").unwrap();
 
-            let src_path = CString::new("source.txt").unwrap();
-            let dst_path = CString::new("dest.txt").unwrap();
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            *libc::__error() = 0;
-            let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
-            assert_eq!(result, -1);
-            // Should fail with EEXIST (O_EXCL semantics)
-            assert_eq!(*libc::__error(), libc::EEXIST);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            // Destination should still have original content
-            let content = std::fs::read_to_string(&dst_file).unwrap();
-            assert_eq!(content, "existing");
+                let src_path = CString::new("source.txt").unwrap();
+                let dst_path = CString::new("dest.txt").unwrap();
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                *libc::__error() = 0;
+                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                assert_eq!(result, -1);
+                // Should fail with EEXIST (O_EXCL semantics)
+                assert_eq!(*libc::__error(), libc::EEXIST);
+
+                // Destination should still have original content
+                let content = std::fs::read_to_string(&dst_file).unwrap();
+                assert_eq!(content, "existing");
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6869,40 +7049,42 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_missing_source() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
 
-            let src_path = CString::new("nonexistent.txt").unwrap();
-            let dst_path = CString::new("dest.txt").unwrap();
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            *libc::__error() = 0;
-            let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
-            assert_eq!(result, -1);
-            assert_eq!(*libc::__error(), libc::ENOENT);
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            // Destination should not exist
-            let dst_file = temp_dir.path().join("dest.txt");
-            assert!(!dst_file.exists());
+                let src_path = CString::new("nonexistent.txt").unwrap();
+                let dst_path = CString::new("dest.txt").unwrap();
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                *libc::__error() = 0;
+                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                assert_eq!(result, -1);
+                assert_eq!(*libc::__error(), libc::ENOENT);
+
+                // Destination should not exist
+                let dst_file = temp_dir.path().join("dest.txt");
+                assert!(!dst_file.exists());
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     /// @plan PLAN-20260314-FILE-IO.P10
@@ -6910,47 +7092,49 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_large() {
-        use tempfile::TempDir;
-        clear_mount_registry();
-
-        let temp_dir = TempDir::new().unwrap();
-        let src_file = temp_dir.path().join("large.dat");
-
-        // Create a file larger than the 8KB chunk size
-        let data = vec![0x42u8; 20000];
-        std::fs::write(&src_file, &data).unwrap();
-
         unsafe {
-            add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
+            use tempfile::TempDir;
+            clear_mount_registry();
 
-            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/data"),
-                virtual_path: PathBuf::from("/data"),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository: repo,
-                root_end: PathBuf::from("/data"),
-            }));
+            let temp_dir = TempDir::new().unwrap();
+            let src_file = temp_dir.path().join("large.dat");
 
-            let src_path = CString::new("large.dat").unwrap();
-            let dst_path = CString::new("large_copy.dat").unwrap();
+            // Create a file larger than the 8KB chunk size
+            let data = vec![0x42u8; 20000];
+            std::fs::write(&src_file, &data).unwrap();
 
-            let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
-            assert_eq!(result, 0);
+            unsafe {
+                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
 
-            // Verify destination exists and has same size
-            let dst_file = temp_dir.path().join("large_copy.dat");
-            assert!(dst_file.exists());
+                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                let dir = Box::into_raw(Box::new(uio_DirHandle {
+                    path: PathBuf::from("/data"),
+                    virtual_path: PathBuf::from("/data"),
+                    refcount: std::sync::atomic::AtomicI32::new(1),
+                    repository: repo,
+                    root_end: PathBuf::from("/data"),
+                }));
 
-            let copied_data = std::fs::read(&dst_file).unwrap();
-            assert_eq!(copied_data.len(), 20000);
-            assert_eq!(copied_data, data);
+                let src_path = CString::new("large.dat").unwrap();
+                let dst_path = CString::new("large_copy.dat").unwrap();
 
-            let _ = Box::from_raw(dir);
-            let _ = Box::from_raw(repo);
+                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                assert_eq!(result, 0);
+
+                // Verify destination exists and has same size
+                let dst_file = temp_dir.path().join("large_copy.dat");
+                assert!(dst_file.exists());
+
+                let copied_data = std::fs::read(&dst_file).unwrap();
+                assert_eq!(copied_data.len(), 20000);
+                assert_eq!(copied_data, data);
+
+                let _ = Box::from_raw(dir);
+                let _ = Box::from_raw(repo);
+            }
+
+            clear_mount_registry();
         }
-
-        clear_mount_registry();
     }
 
     // =============================================================================

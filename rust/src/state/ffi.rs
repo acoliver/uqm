@@ -15,7 +15,7 @@ static GLOBAL_GAME_STATE: Mutex<Option<GameState>> = Mutex::new(None);
 static GLOBAL_STATE_FILES: Mutex<Option<StateFileManager>> = Mutex::new(None);
 
 #[no_mangle]
-pub extern "C" fn rust_init_game_state() {
+pub unsafe extern "C" fn rust_init_game_state() {
     let mut global = GLOBAL_GAME_STATE.lock().unwrap();
     if global.is_none() {
         *global = Some(GameState::new());
@@ -50,7 +50,7 @@ pub unsafe extern "C" fn rust_set_game_state(key: *const c_char, value: c_uchar)
 }
 
 #[no_mangle]
-pub extern "C" fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> c_uchar {
+pub unsafe extern "C" fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> c_uchar {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
         guard_convert_value(&GLOBAL_GAME_STATE, |state| {
             state.get_state(start_bit, end_bit)
@@ -61,7 +61,11 @@ pub extern "C" fn rust_get_game_state_bits(start_bit: c_int, end_bit: c_int) -> 
 }
 
 #[no_mangle]
-pub extern "C" fn rust_set_game_state_bits(start_bit: c_int, end_bit: c_int, value: c_uchar) {
+pub unsafe extern "C" fn rust_set_game_state_bits(
+    start_bit: c_int,
+    end_bit: c_int,
+    value: c_uchar,
+) {
     if let Some((start_bit, end_bit)) = normalize_bit_range(start_bit, end_bit) {
         guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
             state.set_state(start_bit, end_bit, value);
@@ -70,7 +74,7 @@ pub extern "C" fn rust_set_game_state_bits(start_bit: c_int, end_bit: c_int, val
 }
 
 #[no_mangle]
-pub extern "C" fn rust_get_game_state_32(start_bit: c_int) -> u32 {
+pub unsafe extern "C" fn rust_get_game_state_32(start_bit: c_int) -> u32 {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return 0;
     };
@@ -79,7 +83,7 @@ pub extern "C" fn rust_get_game_state_32(start_bit: c_int) -> u32 {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_set_game_state_32(start_bit: c_int, value: u32) {
+pub unsafe extern "C" fn rust_set_game_state_32(start_bit: c_int, value: u32) {
     let Some(start_bit) = normalize_start_bit_32(start_bit) else {
         return;
     };
@@ -90,7 +94,11 @@ pub extern "C" fn rust_set_game_state_32(start_bit: c_int, value: u32) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_copy_game_state(dest_bit: c_int, src_start_bit: c_int, src_end_bit: c_int) {
+pub unsafe extern "C" fn rust_copy_game_state(
+    dest_bit: c_int,
+    src_start_bit: c_int,
+    src_end_bit: c_int,
+) {
     let Some((dest_bit, src_start_bit, src_end_bit)) =
         normalize_copy_bits(dest_bit, src_start_bit, src_end_bit)
     else {
@@ -109,7 +117,7 @@ pub extern "C" fn rust_copy_game_state(dest_bit: c_int, src_start_bit: c_int, sr
 }
 
 #[no_mangle]
-pub extern "C" fn rust_reset_game_state() {
+pub unsafe extern "C" fn rust_reset_game_state() {
     guard_convert_value_mut(&GLOBAL_GAME_STATE, |state| {
         state.reset();
     });
@@ -143,21 +151,21 @@ pub unsafe extern "C" fn rust_open_state_file(file_index: c_int, mode: *const c_
 }
 
 #[no_mangle]
-pub extern "C" fn rust_close_state_file(file_index: c_int) {
+pub unsafe extern "C" fn rust_close_state_file(file_index: c_int) {
     guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
         let _ = files.close(file_index as usize);
     });
 }
 
 #[no_mangle]
-pub extern "C" fn rust_delete_state_file(file_index: c_int) {
+pub unsafe extern "C" fn rust_delete_state_file(file_index: c_int) {
     guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
         let _ = files.delete(file_index as usize);
     });
 }
 
 #[no_mangle]
-pub extern "C" fn rust_length_state_file(file_index: c_int) -> usize {
+pub unsafe extern "C" fn rust_length_state_file(file_index: c_int) -> usize {
     guard_convert_state_value(&GLOBAL_STATE_FILES, |files| {
         files
             .get_file(file_index as usize)
@@ -214,7 +222,11 @@ pub unsafe extern "C" fn rust_write_state_file(
 }
 
 #[no_mangle]
-pub extern "C" fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c_int) -> c_int {
+pub unsafe extern "C" fn rust_seek_state_file(
+    file_index: c_int,
+    offset: i64,
+    whence: c_int,
+) -> c_int {
     use super::state_file::SeekWhence;
 
     let seek_whence = match whence {
@@ -236,12 +248,12 @@ pub extern "C" fn rust_seek_state_file(file_index: c_int, offset: i64, whence: c
 }
 
 #[no_mangle]
-pub extern "C" fn rust_get_game_state_bytes() -> *const u8 {
+pub unsafe extern "C" fn rust_get_game_state_bytes() -> *const u8 {
     guard_convert_value(&GLOBAL_GAME_STATE, |state| state.as_bytes().as_ptr())
 }
 
 #[no_mangle]
-pub extern "C" fn rust_get_game_state_size() -> usize {
+pub unsafe extern "C" fn rust_get_game_state_size() -> usize {
     super::game_state::NUM_GAME_STATE_BYTES
 }
 
@@ -366,7 +378,7 @@ pub unsafe extern "C" fn rust_init_planet_info(num_stars: c_int) -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_uninit_planet_info() {
+pub unsafe extern "C" fn rust_uninit_planet_info() {
     guard_convert_state_value_mut(&GLOBAL_STATE_FILES, |files| {
         let mut manager = PlanetInfoManager::new(files);
         let _ = manager.uninit_planet_info();
@@ -623,296 +635,328 @@ mod tests {
     #[test]
     #[serial]
     fn test_rust_init_game_state() {
-        rust_init_game_state();
+        unsafe {
+            rust_init_game_state();
 
-        let guard = GLOBAL_GAME_STATE.lock().unwrap();
-        assert!(guard.is_some());
+            let guard = GLOBAL_GAME_STATE.lock().unwrap();
+            assert!(guard.is_some());
+        }
     }
 
     #[test]
     #[serial]
     fn test_named_state_lookup_uses_generated_ranges() {
-        rust_init_game_state();
-
         unsafe {
-            rust_set_game_state(b"SHOFIXTI_VISITS\0".as_ptr() as *const c_char, 5);
-            rust_set_game_state(b"SHOFIXTI_RECRUITED\0".as_ptr() as *const c_char, 1);
-            rust_set_game_state(b"SPATHI_VISITS\0".as_ptr() as *const c_char, 3);
+            rust_init_game_state();
 
-            assert_eq!(
-                rust_get_game_state(b"SHOFIXTI_VISITS\0".as_ptr() as *const c_char),
-                5
-            );
-            assert_eq!(
-                rust_get_game_state(b"SHOFIXTI_RECRUITED\0".as_ptr() as *const c_char),
-                1
-            );
-            assert_eq!(
-                rust_get_game_state(b"SPATHI_VISITS\0".as_ptr() as *const c_char),
-                3
-            );
-            assert_eq!(
-                rust_get_game_state(b"NOT_A_REAL_STATE\0".as_ptr() as *const c_char),
-                0
-            );
+            unsafe {
+                rust_set_game_state(b"SHOFIXTI_VISITS\0".as_ptr() as *const c_char, 5);
+                rust_set_game_state(b"SHOFIXTI_RECRUITED\0".as_ptr() as *const c_char, 1);
+                rust_set_game_state(b"SPATHI_VISITS\0".as_ptr() as *const c_char, 3);
+
+                assert_eq!(
+                    rust_get_game_state(b"SHOFIXTI_VISITS\0".as_ptr() as *const c_char),
+                    5
+                );
+                assert_eq!(
+                    rust_get_game_state(b"SHOFIXTI_RECRUITED\0".as_ptr() as *const c_char),
+                    1
+                );
+                assert_eq!(
+                    rust_get_game_state(b"SPATHI_VISITS\0".as_ptr() as *const c_char),
+                    3
+                );
+                assert_eq!(
+                    rust_get_game_state(b"NOT_A_REAL_STATE\0".as_ptr() as *const c_char),
+                    0
+                );
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_set_game_state_bits() {
-        rust_init_game_state();
-        rust_set_game_state_bits(0, 2, 5);
-        let result = rust_get_game_state_bits(0, 2);
-        assert_eq!(result, 5);
+        unsafe {
+            rust_init_game_state();
+            rust_set_game_state_bits(0, 2, 5);
+            let result = rust_get_game_state_bits(0, 2);
+            assert_eq!(result, 5);
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_set_game_state_32() {
-        rust_init_game_state();
+        unsafe {
+            rust_init_game_state();
 
-        let test_value = 0xDEADBEEF;
-        rust_set_game_state_32(0, test_value);
+            let test_value = 0xDEADBEEF;
+            rust_set_game_state_32(0, test_value);
 
-        let result = rust_get_game_state_32(0);
-        assert_eq!(result, test_value);
+            let result = rust_get_game_state_32(0);
+            assert_eq!(result, test_value);
+        }
     }
 
     #[test]
     #[serial]
     fn test_raw_byte_buffer_ffi_access() {
-        let mut bytes = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
-
         unsafe {
-            rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 0, 2, 5);
-            rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 12, 12, 1);
-            rust_set_game_state32_in_bytes(bytes.as_mut_ptr(), 32, 0xCAFEBABE);
+            let mut bytes = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
 
-            assert_eq!(rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 0, 2), 5);
-            assert_eq!(
-                rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 12, 12),
-                1
-            );
-            assert_eq!(
-                rust_get_game_state32_from_bytes(bytes.as_ptr(), 32),
-                0xCAFEBABE
-            );
+            unsafe {
+                rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 0, 2, 5);
+                rust_set_game_state_bits_in_bytes(bytes.as_mut_ptr(), 12, 12, 1);
+                rust_set_game_state32_in_bytes(bytes.as_mut_ptr(), 32, 0xCAFEBABE);
+
+                assert_eq!(rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 0, 2), 5);
+                assert_eq!(
+                    rust_get_game_state_bits_from_bytes(bytes.as_ptr(), 12, 12),
+                    1
+                );
+                assert_eq!(
+                    rust_get_game_state32_from_bytes(bytes.as_ptr(), 32),
+                    0xCAFEBABE
+                );
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_raw_byte_buffer_copy_matches_c_semantics() {
-        let mut src = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
-        let mut dest = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
-
         unsafe {
-            rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 0, 7, 0xAB);
-            rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 8, 15, 0xCD);
+            let mut src = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
+            let mut dest = [0u8; super::super::game_state::NUM_GAME_STATE_BYTES];
 
-            rust_copy_game_state_bits_between_bytes(dest.as_mut_ptr(), 32, src.as_ptr(), 0, 15);
-            rust_copy_game_state_bits_between_bytes(dest.as_mut_ptr(), 80, src.as_ptr(), 0, 0);
+            unsafe {
+                rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 0, 7, 0xAB);
+                rust_set_game_state_bits_in_bytes(src.as_mut_ptr(), 8, 15, 0xCD);
 
-            assert_eq!(
-                rust_get_game_state_bits_from_bytes(dest.as_ptr(), 32, 39),
-                0xAB
-            );
-            assert_eq!(
-                rust_get_game_state_bits_from_bytes(dest.as_ptr(), 40, 47),
-                0xCD
-            );
-            assert_eq!(
-                rust_get_game_state_bits_from_bytes(dest.as_ptr(), 80, 80),
-                0
-            );
+                rust_copy_game_state_bits_between_bytes(dest.as_mut_ptr(), 32, src.as_ptr(), 0, 15);
+                rust_copy_game_state_bits_between_bytes(dest.as_mut_ptr(), 80, src.as_ptr(), 0, 0);
+
+                assert_eq!(
+                    rust_get_game_state_bits_from_bytes(dest.as_ptr(), 32, 39),
+                    0xAB
+                );
+                assert_eq!(
+                    rust_get_game_state_bits_from_bytes(dest.as_ptr(), 40, 47),
+                    0xCD
+                );
+                assert_eq!(
+                    rust_get_game_state_bits_from_bytes(dest.as_ptr(), 80, 80),
+                    0
+                );
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_reset_game_state() {
-        rust_init_game_state();
+        unsafe {
+            rust_init_game_state();
 
-        rust_set_game_state_bits(0, 7, 0xFF);
-        rust_reset_game_state();
+            rust_set_game_state_bits(0, 7, 0xFF);
+            rust_reset_game_state();
 
-        let result = rust_get_game_state_bits(0, 7);
-        assert_eq!(result, 0);
+            let result = rust_get_game_state_bits(0, 7);
+            assert_eq!(result, 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_planet_info_round_trip() {
-        rust_init_game_state();
-
-        let moon_counts = [2u8, 0u8];
-        let input_mask = [0x11u32, 0x22u32, 0x33u32];
-        let mut output_mask = [0u32; NUM_SCAN_TYPES];
-
         unsafe {
-            assert_eq!(rust_init_planet_info(8), 1);
-            assert_eq!(
-                rust_put_planet_info(
-                    1,
-                    0,
-                    1,
-                    moon_counts.as_ptr(),
-                    moon_counts.len() as c_int,
-                    input_mask.as_ptr()
-                ),
-                1
-            );
-            assert_eq!(
-                rust_get_planet_info(
-                    1,
-                    0,
-                    1,
-                    moon_counts.as_ptr(),
-                    moon_counts.len() as c_int,
-                    output_mask.as_mut_ptr(),
-                ),
-                1
-            );
-        }
+            rust_init_game_state();
 
-        assert_eq!(output_mask, input_mask);
+            let moon_counts = [2u8, 0u8];
+            let input_mask = [0x11u32, 0x22u32, 0x33u32];
+            let mut output_mask = [0u32; NUM_SCAN_TYPES];
+
+            unsafe {
+                assert_eq!(rust_init_planet_info(8), 1);
+                assert_eq!(
+                    rust_put_planet_info(
+                        1,
+                        0,
+                        1,
+                        moon_counts.as_ptr(),
+                        moon_counts.len() as c_int,
+                        input_mask.as_ptr()
+                    ),
+                    1
+                );
+                assert_eq!(
+                    rust_get_planet_info(
+                        1,
+                        0,
+                        1,
+                        moon_counts.as_ptr(),
+                        moon_counts.len() as c_int,
+                        output_mask.as_mut_ptr(),
+                    ),
+                    1
+                );
+            }
+
+            assert_eq!(output_mask, input_mask);
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_open_state_file() {
-        rust_init_game_state();
-
         unsafe {
-            let result = rust_open_state_file(0, b"wb\0".as_ptr() as *const c_char);
-            assert_eq!(result, 1);
+            rust_init_game_state();
+
+            unsafe {
+                let result = rust_open_state_file(0, b"wb\0".as_ptr() as *const c_char);
+                assert_eq!(result, 1);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_write_read_state_file() {
-        rust_init_game_state();
-
-        let test_data = b"Hello, World!";
-
         unsafe {
-            rust_open_state_file(0, b"wb\0".as_ptr() as *const c_char);
-            let written = rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
-            assert_eq!(written, test_data.len());
+            rust_init_game_state();
 
-            rust_seek_state_file(0, 0, 0);
+            let test_data = b"Hello, World!";
 
-            let mut buf = vec![0u8; test_data.len()];
-            let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, test_data.len());
-            assert_eq!(read, test_data.len());
-            assert_eq!(&buf, test_data);
+            unsafe {
+                rust_open_state_file(0, b"wb\0".as_ptr() as *const c_char);
+                let written = rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
+                assert_eq!(written, test_data.len());
+
+                rust_seek_state_file(0, 0, 0);
+
+                let mut buf = vec![0u8; test_data.len()];
+                let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, test_data.len());
+                assert_eq!(read, test_data.len());
+                assert_eq!(&buf, test_data);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_length_state_file() {
-        rust_init_game_state();
-
-        let test_data = b"Test";
-
         unsafe {
-            rust_open_state_file(1, b"wb\0".as_ptr() as *const c_char);
-            rust_write_state_file(1, test_data.as_ptr(), 1, test_data.len());
-        }
+            rust_init_game_state();
 
-        let length = rust_length_state_file(1);
-        assert_eq!(length, test_data.len());
+            let test_data = b"Test";
+
+            unsafe {
+                rust_open_state_file(1, b"wb\0".as_ptr() as *const c_char);
+                rust_write_state_file(1, test_data.as_ptr(), 1, test_data.len());
+            }
+
+            let length = rust_length_state_file(1);
+            assert_eq!(length, test_data.len());
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_delete_state_file() {
-        rust_init_game_state();
-
-        let test_data = b"Test";
-
         unsafe {
-            rust_open_state_file(2, b"wb\0".as_ptr() as *const c_char);
-            rust_write_state_file(2, test_data.as_ptr(), 1, test_data.len());
-        }
+            rust_init_game_state();
 
-        rust_delete_state_file(2);
-        let length = rust_length_state_file(2);
-        assert_eq!(length, 0);
+            let test_data = b"Test";
+
+            unsafe {
+                rust_open_state_file(2, b"wb\0".as_ptr() as *const c_char);
+                rust_write_state_file(2, test_data.as_ptr(), 1, test_data.len());
+            }
+
+            rust_delete_state_file(2);
+            let length = rust_length_state_file(2);
+            assert_eq!(length, 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_seek_state_file() {
-        rust_init_game_state();
-
-        let test_data = b"HelloWorld";
-
         unsafe {
-            rust_open_state_file(0, b"wb\0".as_ptr() as *const c_char);
-            rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
-        }
+            rust_init_game_state();
 
-        let result = rust_seek_state_file(0, 5, 0);
-        assert_eq!(result, 1);
+            let test_data = b"HelloWorld";
 
-        let mut buf = vec![0u8; 5];
-        unsafe {
-            let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, 5);
-            assert_eq!(read, 5);
+            unsafe {
+                rust_open_state_file(0, b"wb\0".as_ptr() as *const c_char);
+                rust_write_state_file(0, test_data.as_ptr(), 1, test_data.len());
+            }
+
+            let result = rust_seek_state_file(0, 5, 0);
+            assert_eq!(result, 1);
+
+            let mut buf = vec![0u8; 5];
+            unsafe {
+                let read = rust_read_state_file(0, buf.as_mut_ptr(), 1, 5);
+                assert_eq!(read, 5);
+            }
+            assert_eq!(&buf, b"World");
         }
-        assert_eq!(&buf, b"World");
     }
 
     #[test]
     #[serial]
     fn test_rust_get_game_state_bytes() {
-        rust_init_game_state();
-
-        let test_value: u8 = 0xAB;
-        rust_set_game_state_bits(0, 7, test_value);
-
-        let ptr = rust_get_game_state_bytes();
-        assert!(!ptr.is_null());
-
         unsafe {
-            assert_eq!(*ptr, test_value);
+            rust_init_game_state();
+
+            let test_value: u8 = 0xAB;
+            rust_set_game_state_bits(0, 7, test_value);
+
+            let ptr = rust_get_game_state_bytes();
+            assert!(!ptr.is_null());
+
+            unsafe {
+                assert_eq!(*ptr, test_value);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_game_state_size() {
-        let size = rust_get_game_state_size();
-        assert_eq!(size, super::super::game_state::NUM_GAME_STATE_BYTES);
+        unsafe {
+            let size = rust_get_game_state_size();
+            assert_eq!(size, super::super::game_state::NUM_GAME_STATE_BYTES);
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_restore_game_state_from_bytes() {
-        rust_init_game_state();
-
-        rust_set_game_state_bits(0, 7, 0xAB);
-        let ptr = rust_get_game_state_bytes();
-        let size = rust_get_game_state_size();
-
-        let mut buffer = vec![0u8; size];
         unsafe {
-            std::ptr::copy_nonoverlapping(ptr, buffer.as_mut_ptr(), size);
+            rust_init_game_state();
+
+            rust_set_game_state_bits(0, 7, 0xAB);
+            let ptr = rust_get_game_state_bytes();
+            let size = rust_get_game_state_size();
+
+            let mut buffer = vec![0u8; size];
+            unsafe {
+                std::ptr::copy_nonoverlapping(ptr, buffer.as_mut_ptr(), size);
+            }
+
+            rust_reset_game_state();
+            rust_init_game_state();
+
+            assert_eq!(rust_get_game_state_bits(0, 7), 0);
+
+            unsafe {
+                rust_restore_game_state_from_bytes(buffer.as_ptr(), size);
+            }
+
+            assert_eq!(rust_get_game_state_bits(0, 7), 0xAB);
         }
-
-        rust_reset_game_state();
-        rust_init_game_state();
-
-        assert_eq!(rust_get_game_state_bits(0, 7), 0);
-
-        unsafe {
-            rust_restore_game_state_from_bytes(buffer.as_ptr(), size);
-        }
-
-        assert_eq!(rust_get_game_state_bits(0, 7), 0xAB);
     }
 }

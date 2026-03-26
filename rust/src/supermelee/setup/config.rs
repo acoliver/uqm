@@ -8,7 +8,7 @@ use crate::supermelee::setup::persistence::{
 };
 use crate::supermelee::setup::team::MeleeSetup;
 use crate::supermelee::types::{PlayerControl, NUM_SIDES};
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use std::path::Path;
 
 // ---------------------------------------------------------------------------
@@ -142,81 +142,93 @@ mod tests {
 
     #[test]
     fn missing_config_returns_missing() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut setup = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut setup);
-        assert!(matches!(result, ConfigLoadResult::Missing));
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            let mut setup = MeleeSetup::new();
+            let result = load_melee_config(dir.path(), &mut setup);
+            assert!(matches!(result, ConfigLoadResult::Missing));
+        }
     }
 
     #[test]
     fn invalid_config_size_returns_invalid() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("melee.cfg"), &[0u8; 10]).unwrap();
-        let mut setup = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut setup);
-        assert!(matches!(result, ConfigLoadResult::Invalid(_)));
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join("melee.cfg"), &[0u8; 10]).unwrap();
+            let mut setup = MeleeSetup::new();
+            let result = load_melee_config(dir.path(), &mut setup);
+            assert!(matches!(result, ConfigLoadResult::Invalid(_)));
+        }
     }
 
     #[test]
     fn valid_config_roundtrip() {
-        let dir = tempfile::tempdir().unwrap();
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
 
-        let mut setup = MeleeSetup::new();
-        setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
-        setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
-        setup.set_team_name(0, "Side A").unwrap();
-        setup.set_team_name(1, "Side B").unwrap();
-        setup.player_control[0] = PlayerControl::HUMAN_CONTROL;
-        setup.player_control[1] = PlayerControl::COMPUTER_CONTROL;
+            let mut setup = MeleeSetup::new();
+            setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
+            setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
+            setup.set_team_name(0, "Side A").unwrap();
+            setup.set_team_name(1, "Side B").unwrap();
+            setup.player_control[0] = PlayerControl::HUMAN_CONTROL;
+            setup.player_control[1] = PlayerControl::COMPUTER_CONTROL;
 
-        save_melee_config(dir.path(), &setup).unwrap();
+            save_melee_config(dir.path(), &setup).unwrap();
 
-        let mut restored = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut restored);
-        assert!(matches!(result, ConfigLoadResult::Ok));
+            let mut restored = MeleeSetup::new();
+            let result = load_melee_config(dir.path(), &mut restored);
+            assert!(matches!(result, ConfigLoadResult::Ok));
 
-        assert_eq!(restored.teams[0].ships[0], MeleeShip::Chmmr);
-        assert_eq!(restored.teams[1].ships[0], MeleeShip::Shofixti);
-        assert_eq!(restored.teams[0].name_str(), "Side A");
-        assert_eq!(restored.teams[1].name_str(), "Side B");
-        assert_eq!(restored.player_control[0], PlayerControl::HUMAN_CONTROL);
-        assert_eq!(restored.player_control[1], PlayerControl::COMPUTER_CONTROL);
+            assert_eq!(restored.teams[0].ships[0], MeleeShip::Chmmr);
+            assert_eq!(restored.teams[1].ships[0], MeleeShip::Shofixti);
+            assert_eq!(restored.teams[0].name_str(), "Side A");
+            assert_eq!(restored.teams[1].name_str(), "Side B");
+            assert_eq!(restored.player_control[0], PlayerControl::HUMAN_CONTROL);
+            assert_eq!(restored.player_control[1], PlayerControl::COMPUTER_CONTROL);
+        }
     }
 
     #[test]
     fn network_control_is_sanitized_on_load() {
-        let dir = tempfile::tempdir().unwrap();
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
 
-        let mut setup = MeleeSetup::new();
-        setup.player_control[0] = PlayerControl::NETWORK_CONTROL;
-        setup.player_control[1] = PlayerControl::HUMAN_CONTROL;
-        save_melee_config(dir.path(), &setup).unwrap();
+            let mut setup = MeleeSetup::new();
+            setup.player_control[0] = PlayerControl::NETWORK_CONTROL;
+            setup.player_control[1] = PlayerControl::HUMAN_CONTROL;
+            save_melee_config(dir.path(), &setup).unwrap();
 
-        let mut restored = MeleeSetup::new();
-        let result = load_melee_config(dir.path(), &mut restored);
-        assert!(matches!(result, ConfigLoadResult::Ok));
+            let mut restored = MeleeSetup::new();
+            let result = load_melee_config(dir.path(), &mut restored);
+            assert!(matches!(result, ConfigLoadResult::Ok));
 
-        // Network control should be sanitized to HUMAN + STANDARD_RATING
-        assert!(restored.player_control[0].contains(PlayerControl::HUMAN_CONTROL));
-        assert!(!restored.player_control[0].contains(PlayerControl::NETWORK_CONTROL));
-        // STANDARD_RATING bit should be set (bit 4 = 16)
-        assert_ne!(restored.player_control[0].bits() & STANDARD_RATING, 0);
+            // Network control should be sanitized to HUMAN + STANDARD_RATING
+            assert!(restored.player_control[0].contains(PlayerControl::HUMAN_CONTROL));
+            assert!(!restored.player_control[0].contains(PlayerControl::NETWORK_CONTROL));
+            // STANDARD_RATING bit should be set (bit 4 = 16)
+            assert_ne!(restored.player_control[0].bits() & STANDARD_RATING, 0);
+        }
     }
 
     #[test]
     fn config_write_failure_returns_error() {
-        let setup = MeleeSetup::new();
-        let result = save_melee_config(Path::new("/nonexistent/dir"), &setup);
-        assert!(result.is_err());
+        unsafe {
+            let setup = MeleeSetup::new();
+            let result = save_melee_config(Path::new("/nonexistent/dir"), &setup);
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn config_file_has_correct_size() {
-        let dir = tempfile::tempdir().unwrap();
-        let setup = MeleeSetup::new();
-        save_melee_config(dir.path(), &setup).unwrap();
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            let setup = MeleeSetup::new();
+            save_melee_config(dir.path(), &setup).unwrap();
 
-        let data = std::fs::read(dir.path().join("melee.cfg")).unwrap();
-        assert_eq!(data.len(), MELEE_CFG_SIZE);
+            let data = std::fs::read(dir.path().join("melee.cfg")).unwrap();
+            assert_eq!(data.len(), MELEE_CFG_SIZE);
+        }
     }
 }

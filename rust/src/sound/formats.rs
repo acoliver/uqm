@@ -5,6 +5,7 @@
 /// Audio sample format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
+#[derive(Default)]
 pub enum AudioFormat {
     /// 8-bit mono (1 byte per sample)
     Mono8 = 0x1100,
@@ -13,6 +14,7 @@ pub enum AudioFormat {
     /// 8-bit stereo (2 bytes per sample)
     Stereo8 = 0x1102,
     /// 16-bit stereo (4 bytes per sample)
+    #[default]
     Stereo16 = 0x1103,
 }
 
@@ -54,12 +56,6 @@ impl AudioFormat {
         let chans = self.channels() as u32;
         // MIX_FORMAT_DUMMYID = 0x0017_0000
         0x0017_0000 | (bpc & 0xFF) | ((chans & 0xFF) << 8)
-    }
-}
-
-impl Default for AudioFormat {
-    fn default() -> Self {
-        AudioFormat::Stereo16
     }
 }
 

@@ -89,6 +89,12 @@ pub struct ElementVisualState {
     pub farray: *mut FrameHandle, // Pointer to frame array
 }
 
+impl Default for ElementVisualState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ElementVisualState {
     pub const fn new() -> Self {
         ElementVisualState {

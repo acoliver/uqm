@@ -303,13 +303,13 @@ impl Default for SharedGameClock {
 
 // FFI wrappers
 #[no_mangle]
-pub extern "C" fn rust_game_clock_tick() {
+pub unsafe extern "C" fn rust_game_clock_tick() {
     // In a real implementation, this would tick the global clock
     // For now, this is a placeholder
 }
 
 #[no_mangle]
-pub extern "C" fn rust_set_clock_rate(seconds_per_day: i32) {
+pub unsafe extern "C" fn rust_set_clock_rate(seconds_per_day: i32) {
     // In a real implementation, this would set the global clock rate
     // For now, this is a placeholder
     if seconds_per_day > 0 {

@@ -255,7 +255,7 @@ unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
 /// Returns an opaque pointer to the state (non-null on success).
 /// Idempotent: if already initialized, returns the existing pointer.
 #[no_mangle]
-pub extern "C" fn InitResourceSystem() -> *mut c_void {
+pub unsafe extern "C" fn InitResourceSystem() -> *mut c_void {
     let mut guard = match RESOURCE_STATE.lock() {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
@@ -266,7 +266,7 @@ pub extern "C" fn InitResourceSystem() -> *mut c_void {
     }
 
     // Check if C subsystem types need registration
-    let needs_c_registration = guard.as_ref().map_or(false, |s| !s.c_types_registered);
+    let needs_c_registration = guard.as_ref().is_some_and(|s| !s.c_types_registered);
     if needs_c_registration {
         // Mark as registered BEFORE dropping lock to prevent re-entry
         if let Some(ref mut state) = *guard {
@@ -308,13 +308,13 @@ pub extern "C" fn InitResourceSystem() -> *mut c_void {
     }
 
     // Return a non-null sentinel (not actually dereferenceable by C)
-    1usize as *mut c_void
+    std::ptr::dangling_mut::<c_void>()
 }
 
 /// Uninitialize the resource system. Drops all state.
 /// Safe to call multiple times.
 #[no_mangle]
-pub extern "C" fn UninitResourceSystem() {
+pub unsafe extern "C" fn UninitResourceSystem() {
     let mut guard = match RESOURCE_STATE.lock() {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
@@ -708,7 +708,7 @@ pub unsafe extern "C" fn res_GetResourceType(key: *const c_char) -> *const c_cha
 /// @plan PLAN-20260314-RESOURCE.P09
 /// @requirement REQ-RES-TYPE-004
 #[no_mangle]
-pub extern "C" fn CountResourceTypes() -> u32 {
+pub unsafe extern "C" fn CountResourceTypes() -> u32 {
     let mut guard = match RESOURCE_STATE.lock() {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
@@ -1337,88 +1337,100 @@ mod tests {
     #[test]
     #[serial]
     fn test_init_creates_state() {
-        reset_state();
-        let ptr = InitResourceSystem();
-        assert!(!ptr.is_null(), "InitResourceSystem should return non-null");
+        unsafe {
+            reset_state();
+            let ptr = InitResourceSystem();
+            assert!(!ptr.is_null(), "InitResourceSystem should return non-null");
 
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        assert!(guard.is_some(), "State should be Some after init");
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            assert!(guard.is_some(), "State should be Some after init");
+        }
     }
 
     #[test]
     #[serial]
     fn test_init_registers_5_types() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        assert_eq!(
-            state.dispatch.type_registry.count(),
-            5,
-            "Should have 5 built-in types (STRING, INT32, BOOLEAN, COLOR, UNKNOWNRES)"
-        );
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            assert_eq!(
+                state.dispatch.type_registry.count(),
+                5,
+                "Should have 5 built-in types (STRING, INT32, BOOLEAN, COLOR, UNKNOWNRES)"
+            );
 
-        // Verify each type is registered
-        assert!(state.dispatch.type_registry.lookup("STRING").is_some());
-        assert!(state.dispatch.type_registry.lookup("INT32").is_some());
-        assert!(state.dispatch.type_registry.lookup("BOOLEAN").is_some());
-        assert!(state.dispatch.type_registry.lookup("COLOR").is_some());
-        assert!(state.dispatch.type_registry.lookup("UNKNOWNRES").is_some());
+            // Verify each type is registered
+            assert!(state.dispatch.type_registry.lookup("STRING").is_some());
+            assert!(state.dispatch.type_registry.lookup("INT32").is_some());
+            assert!(state.dispatch.type_registry.lookup("BOOLEAN").is_some());
+            assert!(state.dispatch.type_registry.lookup("COLOR").is_some());
+            assert!(state.dispatch.type_registry.lookup("UNKNOWNRES").is_some());
+        }
     }
 
     #[test]
     #[serial]
     fn test_init_idempotent() {
-        reset_state();
-        let ptr1 = InitResourceSystem();
-        let ptr2 = InitResourceSystem();
-        assert_eq!(ptr1, ptr2, "Init should be idempotent");
+        unsafe {
+            reset_state();
+            let ptr1 = InitResourceSystem();
+            let ptr2 = InitResourceSystem();
+            assert_eq!(ptr1, ptr2, "Init should be idempotent");
+        }
     }
 
     #[test]
     #[serial]
     fn test_uninit_clears_state() {
-        reset_state();
-        InitResourceSystem();
-        {
-            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-            assert!(guard.is_some());
-        }
-        UninitResourceSystem();
-        {
-            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-            assert!(guard.is_none(), "State should be None after uninit");
+        unsafe {
+            reset_state();
+            InitResourceSystem();
+            {
+                let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                assert!(guard.is_some());
+            }
+            UninitResourceSystem();
+            {
+                let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                assert!(guard.is_none(), "State should be None after uninit");
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_uninit_safe_to_call_twice() {
-        reset_state();
-        InitResourceSystem();
-        UninitResourceSystem();
-        UninitResourceSystem(); // Should not crash
+        unsafe {
+            reset_state();
+            InitResourceSystem();
+            UninitResourceSystem();
+            UninitResourceSystem(); // Should not crash
+        }
     }
 
     #[test]
     #[serial]
     fn test_uninit_then_reinit() {
-        reset_state();
-        InitResourceSystem();
-        UninitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
+            UninitResourceSystem();
 
-        // Fresh init after uninit
-        let ptr = InitResourceSystem();
-        assert!(!ptr.is_null());
+            // Fresh init after uninit
+            let ptr = InitResourceSystem();
+            assert!(!ptr.is_null());
 
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        assert_eq!(state.dispatch.type_registry.count(), 5);
-        assert!(
-            state.dispatch.entries.is_empty(),
-            "Fresh init should have no entries"
-        );
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            assert_eq!(state.dispatch.type_registry.count(), 5);
+            assert!(
+                state.dispatch.entries.is_empty(),
+                "Fresh init should have no entries"
+            );
+        }
     }
 
     // =========================================================================
@@ -1428,269 +1440,289 @@ mod tests {
     #[test]
     #[serial]
     fn test_load_index_parses_entries_internal() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        // Simulate LoadResourceIndex by parsing propfile content directly
-        let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            None,
-        );
+            // Simulate LoadResourceIndex by parsing propfile content directly
+            let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                None,
+            );
 
-        assert!(state.dispatch.entries.contains_key("comm.arilou.graphics"));
-        let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
-        assert_eq!(desc.res_type, "GFXRES");
-        assert_eq!(desc.fname, "base/comm/arilou/arilou.ani");
+            assert!(state.dispatch.entries.contains_key("comm.arilou.graphics"));
+            let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
+            assert_eq!(desc.res_type, "GFXRES");
+            assert_eq!(desc.fname, "base/comm/arilou/arilou.ani");
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_with_prefix_internal() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "sfxvol = INT32:20\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            Some("config."),
-        );
+            let content = "sfxvol = INT32:20\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                Some("config."),
+            );
 
-        assert!(state.dispatch.entries.contains_key("config.sfxvol"));
-        assert_eq!(state.dispatch.get_int_resource("config.sfxvol"), Some(20));
+            assert!(state.dispatch.entries.contains_key("config.sfxvol"));
+            assert_eq!(state.dispatch.get_int_resource("config.sfxvol"), Some(20));
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_multiple_calls_accumulate() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content_a = "key.a = STRING:alpha\n";
-        parse_propfile(
-            content_a,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            None,
-        );
+            let content_a = "key.a = STRING:alpha\n";
+            parse_propfile(
+                content_a,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                None,
+            );
 
-        let content_b = "key.b = STRING:beta\n";
-        parse_propfile(
-            content_b,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            None,
-        );
+            let content_b = "key.b = STRING:beta\n";
+            parse_propfile(
+                content_b,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                None,
+            );
 
-        assert!(state.dispatch.entries.contains_key("key.a"));
-        assert!(state.dispatch.entries.contains_key("key.b"));
+            assert!(state.dispatch.entries.contains_key("key.a"));
+            assert!(state.dispatch.entries.contains_key("key.b"));
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_last_writer_wins() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content_a = "music.battle = STRING:base/battle.mod\n";
-        parse_propfile(
-            content_a,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            None,
-        );
+            let content_a = "music.battle = STRING:base/battle.mod\n";
+            parse_propfile(
+                content_a,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                None,
+            );
 
-        let content_b = "music.battle = STRING:addons/3domusic/battle.ogg\n";
-        parse_propfile(
-            content_b,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            None,
-        );
+            let content_b = "music.battle = STRING:addons/3domusic/battle.ogg\n";
+            parse_propfile(
+                content_b,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                None,
+            );
 
-        let desc = state.dispatch.entries.get("music.battle").unwrap();
-        assert_eq!(desc.fname, "addons/3domusic/battle.ogg");
+            let desc = state.dispatch.entries.get("music.battle").unwrap();
+            assert_eq!(desc.fname, "addons/3domusic/battle.ogg");
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_value_types_parsed_immediately() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "sfxvol = INT32:20\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            Some("config."),
-        );
+            let content = "sfxvol = INT32:20\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                Some("config."),
+            );
 
-        // INT32 is a value type — parsed immediately, data.num should be 20
-        let desc = state.dispatch.entries.get("config.sfxvol").unwrap();
-        assert_eq!(unsafe { desc.data.num }, 20);
+            // INT32 is a value type — parsed immediately, data.num should be 20
+            let desc = state.dispatch.entries.get("config.sfxvol").unwrap();
+            assert_eq!(unsafe { desc.data.num }, 20);
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_heap_types_deferred() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            None,
-        );
+            let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                None,
+            );
 
-        // @plan PLAN-20260314-RESOURCE.P04
-        // @requirement REQ-RES-UNK-001
-        // GFXRES has no registered handler in test mode (C subsystem types not
-        // available), so dispatch falls back to UNKNOWNRES for the handler_key,
-        // but preserves the original type name for serialization.
-        // UNKNOWNRES is now a value type with a load function, so str_ptr is set
-        // (eagerly loaded) to the descriptor string.
-        let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
-        assert_eq!(desc.res_type, "GFXRES", "Original type name preserved");
-        assert_eq!(
-            desc.type_handler_key, "UNKNOWNRES",
-            "Falls back to UNKNOWNRES handler"
-        );
-        assert!(
-            !unsafe { desc.data.str_ptr.is_null() },
-            "UNKNOWNRES value type has str_ptr set via eager load"
-        );
+            // @plan PLAN-20260314-RESOURCE.P04
+            // @requirement REQ-RES-UNK-001
+            // GFXRES has no registered handler in test mode (C subsystem types not
+            // available), so dispatch falls back to UNKNOWNRES for the handler_key,
+            // but preserves the original type name for serialization.
+            // UNKNOWNRES is now a value type with a load function, so str_ptr is set
+            // (eagerly loaded) to the descriptor string.
+            let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
+            assert_eq!(desc.res_type, "GFXRES", "Original type name preserved");
+            assert_eq!(
+                desc.type_handler_key, "UNKNOWNRES",
+                "Falls back to UNKNOWNRES handler"
+            );
+            assert!(
+                !unsafe { desc.data.str_ptr.is_null() },
+                "UNKNOWNRES value type has str_ptr set via eager load"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_boolean_true_internal() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "fullscreen = BOOLEAN:true\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            Some("config."),
-        );
+            let content = "fullscreen = BOOLEAN:true\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                Some("config."),
+            );
 
-        assert_eq!(
-            state.dispatch.get_boolean_resource("config.fullscreen"),
-            Some(true)
-        );
+            assert_eq!(
+                state.dispatch.get_boolean_resource("config.fullscreen"),
+                Some(true)
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_boolean_false_internal() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "fullscreen = BOOLEAN:false\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            Some("config."),
-        );
+            let content = "fullscreen = BOOLEAN:false\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                Some("config."),
+            );
 
-        assert_eq!(
-            state.dispatch.get_boolean_resource("config.fullscreen"),
-            Some(false)
-        );
+            assert_eq!(
+                state.dispatch.get_boolean_resource("config.fullscreen"),
+                Some(false)
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_color_internal() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "color = COLOR:rgb(0x1a, 0x00, 0x1a)\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            Some("config."),
-        );
+            let content = "color = COLOR:rgb(0x1a, 0x00, 0x1a)\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                Some("config."),
+            );
 
-        let desc = state.dispatch.entries.get("config.color").unwrap();
-        let packed = unsafe { desc.data.num };
-        let r = ((packed >> 24) & 0xFF) as u8;
-        let g = ((packed >> 16) & 0xFF) as u8;
-        let b = ((packed >> 8) & 0xFF) as u8;
-        let a = (packed & 0xFF) as u8;
-        assert_eq!((r, g, b, a), (0x1a, 0x00, 0x1a, 0xff));
+            let desc = state.dispatch.entries.get("config.color").unwrap();
+            let packed = unsafe { desc.data.num };
+            let r = ((packed >> 24) & 0xFF) as u8;
+            let g = ((packed >> 16) & 0xFF) as u8;
+            let b = ((packed >> 8) & 0xFF) as u8;
+            let a = (packed & 0xFF) as u8;
+            assert_eq!((r, g, b, a), (0x1a, 0x00, 0x1a, 0xff));
+        }
     }
 
     #[test]
     #[serial]
     fn test_load_index_string_internal() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
 
-        let content = "up.1 = STRING:key Up\n";
-        parse_propfile(
-            content,
-            &mut |key, value| {
-                state.dispatch.process_resource_desc(key, value);
-            },
-            Some("keys."),
-        );
+            let content = "up.1 = STRING:key Up\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value);
+                },
+                Some("keys."),
+            );
 
-        assert_eq!(
-            state.dispatch.get_string_resource("keys.up.1"),
-            Some("key Up")
-        );
+            assert_eq!(
+                state.dispatch.get_string_resource("keys.up.1"),
+                Some("key Up")
+            );
+        }
     }
 
     // =========================================================================
@@ -1700,26 +1732,30 @@ mod tests {
     #[test]
     #[serial]
     fn test_auto_init_on_has_key() {
-        reset_state();
-        // No InitResourceSystem call
+        unsafe {
+            reset_state();
+            // No InitResourceSystem call
 
-        let key = CString::new("nonexistent").unwrap();
-        let result = unsafe { res_HasKey(key.as_ptr()) };
-        assert_eq!(result, 0, "Non-existent key should return 0");
+            let key = CString::new("nonexistent").unwrap();
+            let result = unsafe { res_HasKey(key.as_ptr()) };
+            assert_eq!(result, 0, "Non-existent key should return 0");
 
-        // State should have been auto-initialized
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        assert!(guard.is_some(), "State should be auto-initialized");
+            // State should have been auto-initialized
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            assert!(guard.is_some(), "State should be auto-initialized");
+        }
     }
 
     #[test]
     #[serial]
     fn test_auto_init_on_count_resource_types() {
-        reset_state();
-        // No InitResourceSystem call
+        unsafe {
+            reset_state();
+            // No InitResourceSystem call
 
-        let count = CountResourceTypes();
-        assert_eq!(count, 5, "Auto-init should register 5 types");
+            let count = CountResourceTypes();
+            assert_eq!(count, 5, "Auto-init should register 5 types");
+        }
     }
 
     // =========================================================================
@@ -1729,74 +1765,95 @@ mod tests {
     #[test]
     #[serial]
     fn test_length_res_file_sentinel() {
-        let result = unsafe { LengthResFile(STREAM_SENTINEL) };
-        assert_eq!(result, 1, "Sentinel should return length 1");
+        unsafe {
+            let result = unsafe { LengthResFile(STREAM_SENTINEL) };
+            assert_eq!(result, 1, "Sentinel should return length 1");
+        }
     }
 
     #[test]
     #[serial]
     fn test_close_res_file_sentinel() {
-        let result = unsafe { res_CloseResFile(STREAM_SENTINEL) };
-        assert_eq!(result, 1, "Sentinel close should return 1 (success)");
+        unsafe {
+            let result = unsafe { res_CloseResFile(STREAM_SENTINEL) };
+            assert_eq!(result, 1, "Sentinel close should return 1 (success)");
+        }
     }
 
     #[test]
     #[serial]
     fn test_close_res_file_null() {
-        let result = unsafe { res_CloseResFile(ptr::null_mut()) };
-        assert_eq!(result, 1, "Null close should return 1 (success)");
+        unsafe {
+            let result = unsafe { res_CloseResFile(ptr::null_mut()) };
+            assert_eq!(result, 1, "Null close should return 1 (success)");
+        }
     }
 
     #[test]
     #[serial]
     fn test_read_res_file_null() {
-        let mut buf = [0u8; 16];
-        let result =
-            unsafe { ReadResFile(buf.as_mut_ptr() as *mut c_void, 1, 16, ptr::null_mut()) };
-        assert_eq!(result, 0, "Read from null should return 0");
+        unsafe {
+            let mut buf = [0u8; 16];
+            let result =
+                unsafe { ReadResFile(buf.as_mut_ptr() as *mut c_void, 1, 16, ptr::null_mut()) };
+            assert_eq!(result, 0, "Read from null should return 0");
+        }
     }
 
     #[test]
     #[serial]
     fn test_write_res_file_null() {
-        let buf = [0u8; 16];
-        let result = unsafe { WriteResFile(buf.as_ptr() as *const c_void, 1, 16, ptr::null_mut()) };
-        assert_eq!(result, 0, "Write to null should return 0");
+        unsafe {
+            let buf = [0u8; 16];
+            let result =
+                unsafe { WriteResFile(buf.as_ptr() as *const c_void, 1, 16, ptr::null_mut()) };
+            assert_eq!(result, 0, "Write to null should return 0");
+        }
     }
 
     #[test]
     #[serial]
     fn test_get_res_file_char_null() {
-        let result = unsafe { GetResFileChar(ptr::null_mut()) };
-        assert_eq!(result, -1, "GetChar from null should return -1 (EOF)");
+        unsafe {
+            let result = unsafe { GetResFileChar(ptr::null_mut()) };
+            assert_eq!(result, -1, "GetChar from null should return -1 (EOF)");
+        }
     }
 
     #[test]
     #[serial]
     fn test_seek_res_file_null() {
-        let result = unsafe { SeekResFile(ptr::null_mut(), 0, 0) };
-        assert_eq!(result, -1, "Seek on null should return -1");
+        unsafe {
+            let result = unsafe { SeekResFile(ptr::null_mut(), 0, 0) };
+            assert_eq!(result, -1, "Seek on null should return -1");
+        }
     }
 
     #[test]
     #[serial]
     fn test_tell_res_file_null() {
-        let result = unsafe { TellResFile(ptr::null_mut()) };
-        assert_eq!(result, -1, "Tell on null should return -1");
+        unsafe {
+            let result = unsafe { TellResFile(ptr::null_mut()) };
+            assert_eq!(result, -1, "Tell on null should return -1");
+        }
     }
 
     #[test]
     #[serial]
     fn test_length_res_file_null() {
-        let result = unsafe { LengthResFile(ptr::null_mut()) };
-        assert_eq!(result, 0, "Length of null should return 0");
+        unsafe {
+            let result = unsafe { LengthResFile(ptr::null_mut()) };
+            assert_eq!(result, 0, "Length of null should return 0");
+        }
     }
 
     #[test]
     #[serial]
     fn test_free_resource_data_null() {
-        let result = unsafe { FreeResourceData(ptr::null_mut()) };
-        assert_eq!(result, 1, "Free null should return 1 (success)");
+        unsafe {
+            let result = unsafe { FreeResourceData(ptr::null_mut()) };
+            assert_eq!(result, 1, "Free null should return 1 (success)");
+        }
     }
 
     // =========================================================================
@@ -1806,21 +1863,25 @@ mod tests {
     #[test]
     #[serial]
     fn test_stream_sentinel_constant_is_all_bits_set() {
-        // @plan PLAN-20260314-RESOURCE.P08
-        // @requirement REQ-RES-FILE-003
-        assert_eq!(
-            STREAM_SENTINEL, !0usize as *mut c_void,
-            "STREAM_SENTINEL should be all bits set (~0)"
-        );
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P08
+            // @requirement REQ-RES-FILE-003
+            assert_eq!(
+                STREAM_SENTINEL, !0usize as *mut c_void,
+                "STREAM_SENTINEL should be all bits set (~0)"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_length_res_file_returns_1_for_sentinel() {
-        // @plan PLAN-20260314-RESOURCE.P08
-        // @requirement REQ-RES-FILE-003
-        let result = unsafe { LengthResFile(STREAM_SENTINEL) };
-        assert_eq!(result, 1, "LengthResFile(STREAM_SENTINEL) should return 1");
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P08
+            // @requirement REQ-RES-FILE-003
+            let result = unsafe { LengthResFile(STREAM_SENTINEL) };
+            assert_eq!(result, 1, "LengthResFile(STREAM_SENTINEL) should return 1");
+        }
     }
 
     // =========================================================================
@@ -1830,248 +1891,274 @@ mod tests {
     #[test]
     #[serial]
     fn test_put_get_string_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("test.key").unwrap();
-        let value = CString::new("hello world").unwrap();
-
         unsafe {
-            res_PutString(key.as_ptr(), value.as_ptr());
-            let result = res_GetString(key.as_ptr());
-            assert!(!result.is_null());
-            let result_str = CStr::from_ptr(result).to_str().unwrap();
-            assert_eq!(result_str, "hello world");
+            reset_state();
+            InitResourceSystem();
+
+            let key = CString::new("test.key").unwrap();
+            let value = CString::new("hello world").unwrap();
+
+            unsafe {
+                res_PutString(key.as_ptr(), value.as_ptr());
+                let result = res_GetString(key.as_ptr());
+                assert!(!result.is_null());
+                let result_str = CStr::from_ptr(result).to_str().unwrap();
+                assert_eq!(result_str, "hello world");
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_put_get_integer_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("test.num").unwrap();
         unsafe {
-            res_PutInteger(key.as_ptr(), 42);
-            let result = res_GetInteger(key.as_ptr());
-            assert_eq!(result, 42);
+            reset_state();
+            InitResourceSystem();
+
+            let key = CString::new("test.num").unwrap();
+            unsafe {
+                res_PutInteger(key.as_ptr(), 42);
+                let result = res_GetInteger(key.as_ptr());
+                assert_eq!(result, 42);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_put_get_boolean_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("test.flag").unwrap();
         unsafe {
-            res_PutBoolean(key.as_ptr(), 1);
-            let result = res_GetBoolean(key.as_ptr());
-            assert_eq!(result, 1);
+            reset_state();
+            InitResourceSystem();
 
-            res_PutBoolean(key.as_ptr(), 0);
-            let result = res_GetBoolean(key.as_ptr());
-            assert_eq!(result, 0);
+            let key = CString::new("test.flag").unwrap();
+            unsafe {
+                res_PutBoolean(key.as_ptr(), 1);
+                let result = res_GetBoolean(key.as_ptr());
+                assert_eq!(result, 1);
+
+                res_PutBoolean(key.as_ptr(), 0);
+                let result = res_GetBoolean(key.as_ptr());
+                assert_eq!(result, 0);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_put_get_color_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("test.color").unwrap();
-        let packed: u32 = (0x1a << 24) | (0x00 << 16) | (0x1a << 8) | 0xff;
         unsafe {
-            res_PutColor(key.as_ptr(), packed);
-            let result = res_GetColor(key.as_ptr());
-            assert_eq!(result, packed);
+            reset_state();
+            InitResourceSystem();
+
+            let key = CString::new("test.color").unwrap();
+            let packed: u32 = (0x1a << 24) | (0x00 << 16) | (0x1a << 8) | 0xff;
+            unsafe {
+                res_PutColor(key.as_ptr(), packed);
+                let result = res_GetColor(key.as_ptr());
+                assert_eq!(result, packed);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_is_type_checks_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let str_key = CString::new("str.key").unwrap();
-        let int_key = CString::new("int.key").unwrap();
-        let bool_key = CString::new("bool.key").unwrap();
-        let color_key = CString::new("color.key").unwrap();
-
         unsafe {
-            res_PutString(str_key.as_ptr(), CString::new("val").unwrap().as_ptr());
-            res_PutInteger(int_key.as_ptr(), 1);
-            res_PutBoolean(bool_key.as_ptr(), 1);
-            res_PutColor(color_key.as_ptr(), 0xFF0000FF);
+            reset_state();
+            InitResourceSystem();
 
-            assert_eq!(res_IsString(str_key.as_ptr()), 1);
-            assert_eq!(res_IsString(int_key.as_ptr()), 0);
+            let str_key = CString::new("str.key").unwrap();
+            let int_key = CString::new("int.key").unwrap();
+            let bool_key = CString::new("bool.key").unwrap();
+            let color_key = CString::new("color.key").unwrap();
 
-            assert_eq!(res_IsInteger(int_key.as_ptr()), 1);
-            assert_eq!(res_IsInteger(str_key.as_ptr()), 0);
+            unsafe {
+                res_PutString(str_key.as_ptr(), CString::new("val").unwrap().as_ptr());
+                res_PutInteger(int_key.as_ptr(), 1);
+                res_PutBoolean(bool_key.as_ptr(), 1);
+                res_PutColor(color_key.as_ptr(), 0xFF0000FF);
 
-            assert_eq!(res_IsBoolean(bool_key.as_ptr()), 1);
-            assert_eq!(res_IsBoolean(str_key.as_ptr()), 0);
+                assert_eq!(res_IsString(str_key.as_ptr()), 1);
+                assert_eq!(res_IsString(int_key.as_ptr()), 0);
 
-            assert_eq!(res_IsColor(color_key.as_ptr()), 1);
-            assert_eq!(res_IsColor(str_key.as_ptr()), 0);
+                assert_eq!(res_IsInteger(int_key.as_ptr()), 1);
+                assert_eq!(res_IsInteger(str_key.as_ptr()), 0);
+
+                assert_eq!(res_IsBoolean(bool_key.as_ptr()), 1);
+                assert_eq!(res_IsBoolean(str_key.as_ptr()), 0);
+
+                assert_eq!(res_IsColor(color_key.as_ptr()), 1);
+                assert_eq!(res_IsColor(str_key.as_ptr()), 0);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_has_key_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("exists.key").unwrap();
-        let nokey = CString::new("does.not.exist").unwrap();
-
         unsafe {
-            assert_eq!(res_HasKey(key.as_ptr()), 0);
+            reset_state();
+            InitResourceSystem();
 
-            res_PutString(key.as_ptr(), CString::new("val").unwrap().as_ptr());
-            assert_eq!(res_HasKey(key.as_ptr()), 1);
-            assert_eq!(res_HasKey(nokey.as_ptr()), 0);
+            let key = CString::new("exists.key").unwrap();
+            let nokey = CString::new("does.not.exist").unwrap();
+
+            unsafe {
+                assert_eq!(res_HasKey(key.as_ptr()), 0);
+
+                res_PutString(key.as_ptr(), CString::new("val").unwrap().as_ptr());
+                assert_eq!(res_HasKey(key.as_ptr()), 1);
+                assert_eq!(res_HasKey(nokey.as_ptr()), 0);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_remove_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("remove.me").unwrap();
         unsafe {
-            res_PutString(key.as_ptr(), CString::new("val").unwrap().as_ptr());
-            assert_eq!(res_HasKey(key.as_ptr()), 1);
+            reset_state();
+            InitResourceSystem();
 
-            let result = res_Remove(key.as_ptr());
-            assert_eq!(result, 1);
-            assert_eq!(res_HasKey(key.as_ptr()), 0);
+            let key = CString::new("remove.me").unwrap();
+            unsafe {
+                res_PutString(key.as_ptr(), CString::new("val").unwrap().as_ptr());
+                assert_eq!(res_HasKey(key.as_ptr()), 1);
 
-            // Second remove should return 0
-            let result = res_Remove(key.as_ptr());
-            assert_eq!(result, 0);
+                let result = res_Remove(key.as_ptr());
+                assert_eq!(result, 1);
+                assert_eq!(res_HasKey(key.as_ptr()), 0);
+
+                // Second remove should return 0
+                let result = res_Remove(key.as_ptr());
+                assert_eq!(result, 0);
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_get_resource_type_ffi() {
-        reset_state();
-        InitResourceSystem();
-
-        let key = CString::new("typed.key").unwrap();
         unsafe {
-            res_PutInteger(key.as_ptr(), 42);
-            let type_ptr = res_GetResourceType(key.as_ptr());
-            assert!(!type_ptr.is_null());
-            let type_str = CStr::from_ptr(type_ptr).to_str().unwrap();
-            assert_eq!(type_str, "INT32");
+            reset_state();
+            InitResourceSystem();
+
+            let key = CString::new("typed.key").unwrap();
+            unsafe {
+                res_PutInteger(key.as_ptr(), 42);
+                let type_ptr = res_GetResourceType(key.as_ptr());
+                assert!(!type_ptr.is_null());
+                let type_str = CStr::from_ptr(type_ptr).to_str().unwrap();
+                assert_eq!(type_str, "INT32");
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_count_resource_types_ffi() {
-        reset_state();
-        InitResourceSystem();
-        assert_eq!(CountResourceTypes(), 5);
+        unsafe {
+            reset_state();
+            InitResourceSystem();
+            assert_eq!(CountResourceTypes(), 5);
+        }
     }
     /// @plan PLAN-20260314-RESOURCE.P09
     /// @requirement REQ-RES-TYPE-004
     #[test]
     #[serial]
     fn test_count_resource_types_returns_u32() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let count = CountResourceTypes();
-        // Should return correct count as u32 (not u16)
-        assert_eq!(count, 5);
+            let count = CountResourceTypes();
+            // Should return correct count as u32 (not u16)
+            assert_eq!(count, 5);
 
-        // Verify the return type is u32 (this compiles correctly if type is u32)
-        let _type_check: u32 = count;
+            // Verify the return type is u32 (this compiles correctly if type is u32)
+            let _type_check: u32 = count;
+        }
     }
 
     #[test]
     #[serial]
     fn test_null_key_handling() {
-        reset_state();
-        InitResourceSystem();
-
         unsafe {
-            assert_eq!(res_HasKey(ptr::null()), 0);
-            assert_eq!(res_IsString(ptr::null()), 0);
-            assert_eq!(res_IsInteger(ptr::null()), 0);
-            assert_eq!(res_IsBoolean(ptr::null()), 0);
-            assert_eq!(res_IsColor(ptr::null()), 0);
-            // @plan PLAN-20260314-RESOURCE.P05: res_GetString now returns empty string, never null
-            let str_ptr = res_GetString(ptr::null());
-            assert!(!str_ptr.is_null(), "res_GetString should never return null");
-            assert_eq!(
-                CStr::from_ptr(str_ptr).to_str().unwrap(),
-                "",
-                "res_GetString should return empty string for null key"
-            );
-            assert_eq!(res_GetInteger(ptr::null()), 0);
-            assert_eq!(res_GetBoolean(ptr::null()), 0);
-            assert_eq!(res_GetColor(ptr::null()), 0);
-            assert!(res_GetResource(ptr::null()).is_null());
-            assert!(res_DetachResource(ptr::null()).is_null());
-            assert_eq!(res_Remove(ptr::null()), 0);
-            assert_eq!(res_GetIntResource(ptr::null()), 0);
-            assert_eq!(res_GetBooleanResource(ptr::null()), 0);
-            assert!(res_GetResourceType(ptr::null()).is_null());
+            reset_state();
+            InitResourceSystem();
 
-            // Put functions with null should not crash
-            res_PutString(ptr::null(), ptr::null());
-            res_PutInteger(ptr::null(), 0);
-            res_PutBoolean(ptr::null(), 0);
-            res_PutColor(ptr::null(), 0);
-            res_FreeResource(ptr::null());
+            unsafe {
+                assert_eq!(res_HasKey(ptr::null()), 0);
+                assert_eq!(res_IsString(ptr::null()), 0);
+                assert_eq!(res_IsInteger(ptr::null()), 0);
+                assert_eq!(res_IsBoolean(ptr::null()), 0);
+                assert_eq!(res_IsColor(ptr::null()), 0);
+                // @plan PLAN-20260314-RESOURCE.P05: res_GetString now returns empty string, never null
+                let str_ptr = res_GetString(ptr::null());
+                assert!(!str_ptr.is_null(), "res_GetString should never return null");
+                assert_eq!(
+                    CStr::from_ptr(str_ptr).to_str().unwrap(),
+                    "",
+                    "res_GetString should return empty string for null key"
+                );
+                assert_eq!(res_GetInteger(ptr::null()), 0);
+                assert_eq!(res_GetBoolean(ptr::null()), 0);
+                assert_eq!(res_GetColor(ptr::null()), 0);
+                assert!(res_GetResource(ptr::null()).is_null());
+                assert!(res_DetachResource(ptr::null()).is_null());
+                assert_eq!(res_Remove(ptr::null()), 0);
+                assert_eq!(res_GetIntResource(ptr::null()), 0);
+                assert_eq!(res_GetBooleanResource(ptr::null()), 0);
+                assert!(res_GetResourceType(ptr::null()).is_null());
+
+                // Put functions with null should not crash
+                res_PutString(ptr::null(), ptr::null());
+                res_PutInteger(ptr::null(), 0);
+                res_PutBoolean(ptr::null(), 0);
+                res_PutColor(ptr::null(), 0);
+                res_FreeResource(ptr::null());
+            }
         }
     }
 
     #[test]
     #[serial]
     fn test_get_int_resource_ffi() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
-        state.dispatch.process_resource_desc("vol.sfx", "INT32:20");
-        drop(guard);
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state.dispatch.process_resource_desc("vol.sfx", "INT32:20");
+            drop(guard);
 
-        let key = CString::new("vol.sfx").unwrap();
-        let result = unsafe { res_GetIntResource(key.as_ptr()) };
-        assert_eq!(result, 20);
+            let key = CString::new("vol.sfx").unwrap();
+            let result = unsafe { res_GetIntResource(key.as_ptr()) };
+            assert_eq!(result, 20);
+        }
     }
 
     #[test]
     #[serial]
     fn test_get_boolean_resource_ffi() {
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
-        state
-            .dispatch
-            .process_resource_desc("config.fullscreen", "BOOLEAN:true");
-        drop(guard);
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .process_resource_desc("config.fullscreen", "BOOLEAN:true");
+            drop(guard);
 
-        let key = CString::new("config.fullscreen").unwrap();
-        let result = unsafe { res_GetBooleanResource(key.as_ptr()) };
-        assert_eq!(result, 1);
+            let key = CString::new("config.fullscreen").unwrap();
+            let result = unsafe { res_GetBooleanResource(key.as_ptr()) };
+            assert_eq!(result, 1);
+        }
     }
 
     // =========================================================================
@@ -2082,145 +2169,157 @@ mod tests {
     #[test]
     #[serial]
     fn test_res_get_string_returns_empty_for_missing_key() {
-        // @plan PLAN-20260314-RESOURCE.P05
-        // @requirement REQ-RES-CONF-003
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P05
+            // @requirement REQ-RES-CONF-003
+            reset_state();
+            InitResourceSystem();
 
-        let key = CString::new("nonexistent.key").unwrap();
-        let result = unsafe { res_GetString(key.as_ptr()) };
+            let key = CString::new("nonexistent.key").unwrap();
+            let result = unsafe { res_GetString(key.as_ptr()) };
 
-        assert!(!result.is_null(), "res_GetString should never return null");
-        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
-        assert_eq!(
-            result_str, "",
-            "res_GetString should return empty string for missing key"
-        );
+            assert!(!result.is_null(), "res_GetString should never return null");
+            let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+            assert_eq!(
+                result_str, "",
+                "res_GetString should return empty string for missing key"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_res_get_string_returns_empty_for_integer_entry() {
-        // @plan PLAN-20260314-RESOURCE.P05
-        // @requirement REQ-RES-CONF-003
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P05
+            // @requirement REQ-RES-CONF-003
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
-        state
-            .dispatch
-            .process_resource_desc("config.sfxvol", "INT32:128");
-        drop(guard);
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .process_resource_desc("config.sfxvol", "INT32:128");
+            drop(guard);
 
-        let key = CString::new("config.sfxvol").unwrap();
-        let result = unsafe { res_GetString(key.as_ptr()) };
+            let key = CString::new("config.sfxvol").unwrap();
+            let result = unsafe { res_GetString(key.as_ptr()) };
 
-        assert!(!result.is_null(), "res_GetString should never return null");
-        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
-        assert_eq!(
-            result_str, "",
-            "res_GetString should return empty string for INT32 entry, not the integer value"
-        );
+            assert!(!result.is_null(), "res_GetString should never return null");
+            let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+            assert_eq!(
+                result_str, "",
+                "res_GetString should return empty string for INT32 entry, not the integer value"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_res_get_string_returns_empty_for_boolean_entry() {
-        // @plan PLAN-20260314-RESOURCE.P05
-        // @requirement REQ-RES-CONF-003
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P05
+            // @requirement REQ-RES-CONF-003
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
-        state
-            .dispatch
-            .process_resource_desc("config.fullscreen", "BOOLEAN:true");
-        drop(guard);
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .process_resource_desc("config.fullscreen", "BOOLEAN:true");
+            drop(guard);
 
-        let key = CString::new("config.fullscreen").unwrap();
-        let result = unsafe { res_GetString(key.as_ptr()) };
+            let key = CString::new("config.fullscreen").unwrap();
+            let result = unsafe { res_GetString(key.as_ptr()) };
 
-        assert!(!result.is_null(), "res_GetString should never return null");
-        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
-        assert_eq!(
-            result_str, "",
-            "res_GetString should return empty string for BOOLEAN entry"
-        );
+            assert!(!result.is_null(), "res_GetString should never return null");
+            let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+            assert_eq!(
+                result_str, "",
+                "res_GetString should return empty string for BOOLEAN entry"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_res_get_string_returns_value_for_string_entry() {
-        // @plan PLAN-20260314-RESOURCE.P05
-        // @requirement REQ-RES-CONF-003
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P05
+            // @requirement REQ-RES-CONF-003
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
-        state
-            .dispatch
-            .process_resource_desc("config.name", "STRING:Player");
-        drop(guard);
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .process_resource_desc("config.name", "STRING:Player");
+            drop(guard);
 
-        let key = CString::new("config.name").unwrap();
-        let result = unsafe { res_GetString(key.as_ptr()) };
+            let key = CString::new("config.name").unwrap();
+            let result = unsafe { res_GetString(key.as_ptr()) };
 
-        assert!(!result.is_null(), "res_GetString should never return null");
-        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
-        assert_eq!(
-            result_str, "Player",
-            "res_GetString should return actual string value for STRING entry"
-        );
+            assert!(!result.is_null(), "res_GetString should never return null");
+            let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+            assert_eq!(
+                result_str, "Player",
+                "res_GetString should return actual string value for STRING entry"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_res_get_string_returns_empty_for_null_key() {
-        // @plan PLAN-20260314-RESOURCE.P05
-        // @requirement REQ-RES-ERR-003
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P05
+            // @requirement REQ-RES-ERR-003
+            reset_state();
+            InitResourceSystem();
 
-        let result = unsafe { res_GetString(ptr::null()) };
+            let result = unsafe { res_GetString(ptr::null()) };
 
-        assert!(
-            !result.is_null(),
-            "res_GetString should never return null, even for null key"
-        );
-        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
-        assert_eq!(
-            result_str, "",
-            "res_GetString should return empty string for null key"
-        );
+            assert!(
+                !result.is_null(),
+                "res_GetString should never return null, even for null key"
+            );
+            let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+            assert_eq!(
+                result_str, "",
+                "res_GetString should return empty string for null key"
+            );
+        }
     }
 
     #[test]
     #[serial]
     fn test_res_get_string_returns_empty_for_unknownres_entry() {
-        // @plan PLAN-20260314-RESOURCE.P05
-        // @requirement REQ-RES-UNK-003
-        reset_state();
-        InitResourceSystem();
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P05
+            // @requirement REQ-RES-UNK-003
+            reset_state();
+            InitResourceSystem();
 
-        let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_mut().unwrap();
-        state
-            .dispatch
-            .process_resource_desc("unknown.key", "FAKETYPE:somedata.dat");
-        drop(guard);
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+            state
+                .dispatch
+                .process_resource_desc("unknown.key", "FAKETYPE:somedata.dat");
+            drop(guard);
 
-        let key = CString::new("unknown.key").unwrap();
-        let result = unsafe { res_GetString(key.as_ptr()) };
+            let key = CString::new("unknown.key").unwrap();
+            let result = unsafe { res_GetString(key.as_ptr()) };
 
-        assert!(!result.is_null(), "res_GetString should never return null");
-        let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
-        assert_eq!(
-            result_str, "",
-            "res_GetString should return empty string for UNKNOWNRES entry (type mismatch)"
-        );
+            assert!(!result.is_null(), "res_GetString should never return null");
+            let result_str = unsafe { CStr::from_ptr(result) }.to_str().unwrap();
+            assert_eq!(
+                result_str, "",
+                "res_GetString should return empty string for UNKNOWNRES entry (type mismatch)"
+            );
+        }
     }
 
     // =========================================================================
@@ -2274,237 +2373,247 @@ mod tests {
     #[test]
     #[serial]
     fn test_save_resource_index_skips_entries_without_to_string() {
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-IDX-005
-        //
-        // SaveResourceIndex should skip entries whose handler has no toString function.
-        // This tests the filtering logic at the dispatch level.
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P07
+            // @requirement REQ-RES-IDX-005
+            //
+            // SaveResourceIndex should skip entries whose handler has no toString function.
+            // This tests the filtering logic at the dispatch level.
 
-        reset_state();
-        InitResourceSystem();
+            reset_state();
+            InitResourceSystem();
 
-        // Add a STRING entry (has toString)
-        let key1 = CString::new("config.name").unwrap();
-        let val1 = CString::new("Player").unwrap();
-        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+            // Add a STRING entry (has toString)
+            let key1 = CString::new("config.name").unwrap();
+            let val1 = CString::new("Player").unwrap();
+            unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
 
-        // Register a heap type without toString (like GFXRES)
-        unsafe extern "C" fn dummy_heap_load(_path: *const c_char, data: *mut ResourceData) {
-            (*data).ptr = 0xDEADBEEF as *mut c_void;
+            // Register a heap type without toString (like GFXRES)
+            unsafe extern "C" fn dummy_heap_load(_path: *const c_char, data: *mut ResourceData) {
+                (*data).ptr = 0xDEADBEEF as *mut c_void;
+            }
+            unsafe extern "C" fn dummy_heap_free(_data: *mut c_void) -> c_int {
+                1
+            }
+
+            {
+                let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                let state = guard.as_mut().unwrap();
+                state.dispatch.type_registry.install(
+                    "HEAPTYPE",
+                    Some(dummy_heap_load),
+                    Some(dummy_heap_free),
+                    None, // No toString
+                );
+
+                // Add a heap entry
+                state
+                    .dispatch
+                    .process_resource_desc("gfx.test", "HEAPTYPE:test.gfx");
+            }
+
+            // Get saveable entries
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            let entries = get_saveable_entries(state, None);
+
+            // Should only contain the STRING entry, not the HEAPTYPE entry
+            assert_eq!(entries.len(), 1, "Should only save entries with toString");
+            assert_eq!(entries[0].0, "config.name");
+            assert_eq!(entries[0].1, "STRING:Player");
         }
-        unsafe extern "C" fn dummy_heap_free(_data: *mut c_void) -> c_int {
-            1
-        }
-
-        {
-            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-            let state = guard.as_mut().unwrap();
-            state.dispatch.type_registry.install(
-                "HEAPTYPE",
-                Some(dummy_heap_load),
-                Some(dummy_heap_free),
-                None, // No toString
-            );
-
-            // Add a heap entry
-            state
-                .dispatch
-                .process_resource_desc("gfx.test", "HEAPTYPE:test.gfx");
-        }
-
-        // Get saveable entries
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        let entries = get_saveable_entries(state, None);
-
-        // Should only contain the STRING entry, not the HEAPTYPE entry
-        assert_eq!(entries.len(), 1, "Should only save entries with toString");
-        assert_eq!(entries[0].0, "config.name");
-        assert_eq!(entries[0].1, "STRING:Player");
     }
 
     #[test]
     #[serial]
     fn test_save_resource_index_skips_unknownres_entries() {
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-UNK-002
-        //
-        // SaveResourceIndex should skip UNKNOWNRES entries because they have no toString.
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P07
+            // @requirement REQ-RES-UNK-002
+            //
+            // SaveResourceIndex should skip UNKNOWNRES entries because they have no toString.
 
-        reset_state();
-        InitResourceSystem();
+            reset_state();
+            InitResourceSystem();
 
-        // Add a valid STRING entry
-        let key1 = CString::new("config.name").unwrap();
-        let val1 = CString::new("Player").unwrap();
-        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+            // Add a valid STRING entry
+            let key1 = CString::new("config.name").unwrap();
+            let val1 = CString::new("Player").unwrap();
+            unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
 
-        // Add an unknown type entry
-        {
-            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-            let state = guard.as_mut().unwrap();
-            state
-                .dispatch
-                .process_resource_desc("addon.bar", "FAKETYPE:addon/bar.dat");
+            // Add an unknown type entry
+            {
+                let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                let state = guard.as_mut().unwrap();
+                state
+                    .dispatch
+                    .process_resource_desc("addon.bar", "FAKETYPE:addon/bar.dat");
+            }
+
+            // Get saveable entries
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            let entries = get_saveable_entries(state, None);
+
+            // Should only contain the STRING entry, not the UNKNOWNRES entry
+            assert_eq!(entries.len(), 1, "Should skip UNKNOWNRES entries");
+            assert_eq!(entries[0].0, "config.name");
+            assert_eq!(entries[0].1, "STRING:Player");
         }
-
-        // Get saveable entries
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        let entries = get_saveable_entries(state, None);
-
-        // Should only contain the STRING entry, not the UNKNOWNRES entry
-        assert_eq!(entries.len(), 1, "Should skip UNKNOWNRES entries");
-        assert_eq!(entries[0].0, "config.name");
-        assert_eq!(entries[0].1, "STRING:Player");
     }
 
     #[test]
     #[serial]
     fn test_save_emits_all_value_types_with_to_string() {
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-IDX-005
-        //
-        // SaveResourceIndex should emit all value types with toString functions.
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P07
+            // @requirement REQ-RES-IDX-005
+            //
+            // SaveResourceIndex should emit all value types with toString functions.
 
-        reset_state();
-        InitResourceSystem();
+            reset_state();
+            InitResourceSystem();
 
-        // Add STRING, INT32, BOOLEAN, COLOR entries (all have toString)
-        let key1 = CString::new("config.name").unwrap();
-        let val1 = CString::new("Player").unwrap();
-        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+            // Add STRING, INT32, BOOLEAN, COLOR entries (all have toString)
+            let key1 = CString::new("config.name").unwrap();
+            let val1 = CString::new("Player").unwrap();
+            unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
 
-        let key2 = CString::new("config.sfxvol").unwrap();
-        unsafe { res_PutInteger(key2.as_ptr(), 128) };
+            let key2 = CString::new("config.sfxvol").unwrap();
+            unsafe { res_PutInteger(key2.as_ptr(), 128) };
 
-        let key3 = CString::new("config.fullscreen").unwrap();
-        unsafe { res_PutBoolean(key3.as_ptr(), 1) };
+            let key3 = CString::new("config.fullscreen").unwrap();
+            unsafe { res_PutBoolean(key3.as_ptr(), 1) };
 
-        let key4 = CString::new("config.menucolor").unwrap();
-        // Packed: (0x1a << 24) | (0x00 << 16) | (0x1a << 8) | 0xff = 0x1a001aff
-        unsafe { res_PutColor(key4.as_ptr(), 0x1a001aff) };
+            let key4 = CString::new("config.menucolor").unwrap();
+            // Packed: (0x1a << 24) | (0x00 << 16) | (0x1a << 8) | 0xff = 0x1a001aff
+            unsafe { res_PutColor(key4.as_ptr(), 0x1a001aff) };
 
-        // Get saveable entries
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        let entries = get_saveable_entries(state, None);
+            // Get saveable entries
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            let entries = get_saveable_entries(state, None);
 
-        // All four should be present
-        assert_eq!(
-            entries.len(),
-            4,
-            "Should emit all value types with toString"
-        );
+            // All four should be present
+            assert_eq!(
+                entries.len(),
+                4,
+                "Should emit all value types with toString"
+            );
 
-        // Verify each entry
-        assert_eq!(entries[0].0, "config.fullscreen");
-        assert_eq!(entries[0].1, "BOOLEAN:true");
+            // Verify each entry
+            assert_eq!(entries[0].0, "config.fullscreen");
+            assert_eq!(entries[0].1, "BOOLEAN:true");
 
-        assert_eq!(entries[1].0, "config.menucolor");
-        assert_eq!(entries[1].1, "COLOR:rgb(0x1a, 0x00, 0x1a)");
+            assert_eq!(entries[1].0, "config.menucolor");
+            assert_eq!(entries[1].1, "COLOR:rgb(0x1a, 0x00, 0x1a)");
 
-        assert_eq!(entries[2].0, "config.name");
-        assert_eq!(entries[2].1, "STRING:Player");
+            assert_eq!(entries[2].0, "config.name");
+            assert_eq!(entries[2].1, "STRING:Player");
 
-        assert_eq!(entries[3].0, "config.sfxvol");
-        assert_eq!(entries[3].1, "INT32:128");
+            assert_eq!(entries[3].0, "config.sfxvol");
+            assert_eq!(entries[3].1, "INT32:128");
+        }
     }
 
     #[test]
     #[serial]
     fn test_save_respects_root_filter() {
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-IDX-005
-        //
-        // SaveResourceIndex should only emit entries matching the root prefix.
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P07
+            // @requirement REQ-RES-IDX-005
+            //
+            // SaveResourceIndex should only emit entries matching the root prefix.
 
-        reset_state();
-        InitResourceSystem();
+            reset_state();
+            InitResourceSystem();
 
-        // Add entries with different prefixes
-        let key1 = CString::new("config.name").unwrap();
-        let val1 = CString::new("Player").unwrap();
-        unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
+            // Add entries with different prefixes
+            let key1 = CString::new("config.name").unwrap();
+            let val1 = CString::new("Player").unwrap();
+            unsafe { res_PutString(key1.as_ptr(), val1.as_ptr()) };
 
-        let key2 = CString::new("addon.bar").unwrap();
-        let val2 = CString::new("SomeAddon").unwrap();
-        unsafe { res_PutString(key2.as_ptr(), val2.as_ptr()) };
+            let key2 = CString::new("addon.bar").unwrap();
+            let val2 = CString::new("SomeAddon").unwrap();
+            unsafe { res_PutString(key2.as_ptr(), val2.as_ptr()) };
 
-        let key3 = CString::new("config.sfxvol").unwrap();
-        unsafe { res_PutInteger(key3.as_ptr(), 128) };
+            let key3 = CString::new("config.sfxvol").unwrap();
+            unsafe { res_PutInteger(key3.as_ptr(), 128) };
 
-        // Get saveable entries with root filter
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        let entries = get_saveable_entries(state, Some("config."));
+            // Get saveable entries with root filter
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            let entries = get_saveable_entries(state, Some("config."));
 
-        // Should only contain config.* entries
-        assert_eq!(
-            entries.len(),
-            2,
-            "Should only emit entries matching root prefix"
-        );
-        assert_eq!(entries[0].0, "config.name");
-        assert_eq!(entries[1].0, "config.sfxvol");
+            // Should only contain config.* entries
+            assert_eq!(
+                entries.len(),
+                2,
+                "Should only emit entries matching root prefix"
+            );
+            assert_eq!(entries[0].0, "config.name");
+            assert_eq!(entries[1].0, "config.sfxvol");
+        }
     }
 
     #[test]
     #[serial]
     fn test_save_filters_heap_and_unknown_before_root_check() {
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-IDX-005
-        //
-        // Filtering by toString should happen independently of root filtering.
+        unsafe {
+            // @plan PLAN-20260314-RESOURCE.P07
+            // @requirement REQ-RES-IDX-005
+            //
+            // Filtering by toString should happen independently of root filtering.
 
-        reset_state();
-        InitResourceSystem();
+            reset_state();
+            InitResourceSystem();
 
-        // Register heap type without toString
-        unsafe extern "C" fn dummy_heap_load(_path: *const c_char, data: *mut ResourceData) {
-            (*data).ptr = 0xDEADBEEF as *mut c_void;
-        }
-        unsafe extern "C" fn dummy_heap_free(_data: *mut c_void) -> c_int {
-            1
-        }
+            // Register heap type without toString
+            unsafe extern "C" fn dummy_heap_load(_path: *const c_char, data: *mut ResourceData) {
+                (*data).ptr = 0xDEADBEEF as *mut c_void;
+            }
+            unsafe extern "C" fn dummy_heap_free(_data: *mut c_void) -> c_int {
+                1
+            }
 
-        {
-            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-            let state = guard.as_mut().unwrap();
-            state.dispatch.type_registry.install(
-                "HEAPTYPE",
-                Some(dummy_heap_load),
-                Some(dummy_heap_free),
-                None,
+            {
+                let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+                let state = guard.as_mut().unwrap();
+                state.dispatch.type_registry.install(
+                    "HEAPTYPE",
+                    Some(dummy_heap_load),
+                    Some(dummy_heap_free),
+                    None,
+                );
+
+                // Add heap entry with "config." prefix
+                state
+                    .dispatch
+                    .process_resource_desc("config.gfx", "HEAPTYPE:test.gfx");
+
+                // Add unknown entry with "config." prefix
+                state
+                    .dispatch
+                    .process_resource_desc("config.unknown", "FAKETYPE:test.dat");
+            }
+
+            // Add valid STRING entry
+            let key = CString::new("config.name").unwrap();
+            let val = CString::new("Player").unwrap();
+            unsafe { res_PutString(key.as_ptr(), val.as_ptr()) };
+
+            // Get saveable entries with root filter
+            let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_ref().unwrap();
+            let entries = get_saveable_entries(state, Some("config."));
+
+            // Should only contain the STRING entry, even though heap/unknown entries match prefix
+            assert_eq!(
+                entries.len(),
+                1,
+                "Should filter by toString before root check"
             );
-
-            // Add heap entry with "config." prefix
-            state
-                .dispatch
-                .process_resource_desc("config.gfx", "HEAPTYPE:test.gfx");
-
-            // Add unknown entry with "config." prefix
-            state
-                .dispatch
-                .process_resource_desc("config.unknown", "FAKETYPE:test.dat");
+            assert_eq!(entries[0].0, "config.name");
         }
-
-        // Add valid STRING entry
-        let key = CString::new("config.name").unwrap();
-        let val = CString::new("Player").unwrap();
-        unsafe { res_PutString(key.as_ptr(), val.as_ptr()) };
-
-        // Get saveable entries with root filter
-        let guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
-        let state = guard.as_ref().unwrap();
-        let entries = get_saveable_entries(state, Some("config."));
-
-        // Should only contain the STRING entry, even though heap/unknown entries match prefix
-        assert_eq!(
-            entries.len(),
-            1,
-            "Should filter by toString before root check"
-        );
-        assert_eq!(entries[0].0, "config.name");
     }
 }

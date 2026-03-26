@@ -3,13 +3,13 @@
 //
 // These functions are exported with C ABI so the C game code can call
 // into the Rust SuperMelee implementation. They follow the project
-// pattern: `#[no_mangle] pub extern "C" fn rust_supermelee_*`.
+// pattern: `#[no_mangle] pub unsafe extern "C" fn rust_supermelee_*`.
 
 use crate::supermelee::setup::persistence::{
     deserialize_team, serialize_team, MELEE_TEAM_SERIAL_SIZE,
 };
-use crate::supermelee::setup::team::{ship_cost, MeleeSetup, MeleeTeam};
-use crate::supermelee::types::{FleetShipIndex, MeleeShip, MELEE_FLEET_SIZE, NUM_SIDES};
+use crate::supermelee::setup::team::{ship_cost, MeleeTeam};
+use crate::supermelee::types::{MeleeShip, MELEE_FLEET_SIZE};
 use std::io::Cursor;
 use std::os::raw::c_int;
 
@@ -21,7 +21,7 @@ use std::os::raw::c_int;
 /// Returns 0 on success, -1 on failure.
 /// Buffer must be at least MELEE_TEAM_SERIAL_SIZE bytes.
 #[no_mangle]
-pub extern "C" fn rust_supermelee_team_serialize(
+pub unsafe extern "C" fn rust_supermelee_team_serialize(
     ships: *const u8,
     name: *const u8,
     out_buf: *mut u8,
@@ -60,7 +60,7 @@ pub extern "C" fn rust_supermelee_team_serialize(
 /// Deserialize a MeleeTeam from a buffer.
 /// Returns 0 on success, -1 on failure.
 #[no_mangle]
-pub extern "C" fn rust_supermelee_team_deserialize(
+pub unsafe extern "C" fn rust_supermelee_team_deserialize(
     in_buf: *const u8,
     buf_len: usize,
     out_ships: *mut u8,
@@ -97,7 +97,7 @@ pub extern "C" fn rust_supermelee_team_deserialize(
 /// Returns the fleet-point cost of a ship by its raw ID.
 /// Returns 0 for invalid/sentinel values.
 #[no_mangle]
-pub extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
+pub unsafe extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
     match MeleeShip::from_u8(ship_id) {
         Some(ship) => ship_cost(ship),
         None => 0,
@@ -111,14 +111,14 @@ pub extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
 /// Computes fleet value for 14 ship slots.
 /// `ships` must point to MELEE_FLEET_SIZE bytes.
 #[no_mangle]
-pub extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
+pub unsafe extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
     if ships.is_null() {
         return 0;
     }
     let ships_slice = unsafe { std::slice::from_raw_parts(ships, MELEE_FLEET_SIZE) };
     ships_slice
         .iter()
-        .map(|&raw| MeleeShip::from_u8(raw).map(|s| ship_cost(s)).unwrap_or(0))
+        .map(|&raw| MeleeShip::from_u8(raw).map(ship_cost).unwrap_or(0))
         .sum()
 }
 
@@ -128,7 +128,7 @@ pub extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
 
 /// Returns the serial size of a MeleeTeam (for C callers that need it).
 #[no_mangle]
-pub extern "C" fn rust_supermelee_team_serial_size() -> usize {
+pub unsafe extern "C" fn rust_supermelee_team_serial_size() -> usize {
     MELEE_TEAM_SERIAL_SIZE
 }
 
@@ -143,102 +143,112 @@ mod tests {
 
     #[test]
     fn ship_cost_ffi_matches_rust() {
-        assert_eq!(
-            rust_supermelee_ship_cost(0),
-            ship_cost(MeleeShip::Androsynth)
-        );
-        assert_eq!(
-            rust_supermelee_ship_cost(24),
-            ship_cost(MeleeShip::ZoqFotPik)
-        );
-        assert_eq!(rust_supermelee_ship_cost(255), 0); // MELEE_NONE
-        assert_eq!(rust_supermelee_ship_cost(200), 0); // invalid
+        unsafe {
+            assert_eq!(
+                rust_supermelee_ship_cost(0),
+                ship_cost(MeleeShip::Androsynth)
+            );
+            assert_eq!(
+                rust_supermelee_ship_cost(24),
+                ship_cost(MeleeShip::ZoqFotPik)
+            );
+            assert_eq!(rust_supermelee_ship_cost(255), 0); // MELEE_NONE
+            assert_eq!(rust_supermelee_ship_cost(200), 0); // invalid
+        }
     }
 
     #[test]
     fn fleet_value_ffi_works() {
-        let ships = [
-            MeleeShip::Chmmr as u8,
-            MeleeShip::Shofixti as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-            MeleeShip::MeleeNone as u8,
-        ];
-        let val = rust_supermelee_fleet_value(ships.as_ptr());
-        assert_eq!(
-            val,
-            ship_cost(MeleeShip::Chmmr) + ship_cost(MeleeShip::Shofixti)
-        );
+        unsafe {
+            let ships = [
+                MeleeShip::Chmmr as u8,
+                MeleeShip::Shofixti as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+                MeleeShip::MeleeNone as u8,
+            ];
+            let val = rust_supermelee_fleet_value(ships.as_ptr());
+            assert_eq!(
+                val,
+                ship_cost(MeleeShip::Chmmr) + ship_cost(MeleeShip::Shofixti)
+            );
+        }
     }
 
     #[test]
     fn serial_size_matches() {
-        assert_eq!(rust_supermelee_team_serial_size(), MELEE_TEAM_SERIAL_SIZE);
+        unsafe {
+            assert_eq!(rust_supermelee_team_serial_size(), MELEE_TEAM_SERIAL_SIZE);
+        }
     }
 
     #[test]
     fn serialize_deserialize_roundtrip_ffi() {
-        let mut ships = [MeleeShip::MeleeNone as u8; MELEE_FLEET_SIZE];
-        ships[0] = MeleeShip::Urquan as u8;
-        ships[3] = MeleeShip::Pkunk as u8;
+        unsafe {
+            let mut ships = [MeleeShip::MeleeNone as u8; MELEE_FLEET_SIZE];
+            ships[0] = MeleeShip::Urquan as u8;
+            ships[3] = MeleeShip::Pkunk as u8;
 
-        let name_buf_size = crate::supermelee::types::MAX_TEAM_CHARS + 1 + 24;
-        let mut name = vec![0u8; name_buf_size];
-        let test_name = b"FFI Test";
-        name[..test_name.len()].copy_from_slice(test_name);
+            let name_buf_size = crate::supermelee::types::MAX_TEAM_CHARS + 1 + 24;
+            let mut name = vec![0u8; name_buf_size];
+            let test_name = b"FFI Test";
+            name[..test_name.len()].copy_from_slice(test_name);
 
-        let mut serial_buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
-        let ret = rust_supermelee_team_serialize(
-            ships.as_ptr(),
-            name.as_ptr(),
-            serial_buf.as_mut_ptr(),
-            serial_buf.len(),
-        );
-        assert_eq!(ret, 0);
+            let mut serial_buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
+            let ret = rust_supermelee_team_serialize(
+                ships.as_ptr(),
+                name.as_ptr(),
+                serial_buf.as_mut_ptr(),
+                serial_buf.len(),
+            );
+            assert_eq!(ret, 0);
 
-        let mut out_ships = vec![0u8; MELEE_FLEET_SIZE];
-        let mut out_name = vec![0u8; name_buf_size];
-        let ret = rust_supermelee_team_deserialize(
-            serial_buf.as_ptr(),
-            serial_buf.len(),
-            out_ships.as_mut_ptr(),
-            out_name.as_mut_ptr(),
-        );
-        assert_eq!(ret, 0);
-        assert_eq!(out_ships[0], MeleeShip::Urquan as u8);
-        assert_eq!(out_ships[3], MeleeShip::Pkunk as u8);
-        assert_eq!(&out_name[..test_name.len()], test_name);
+            let mut out_ships = vec![0u8; MELEE_FLEET_SIZE];
+            let mut out_name = vec![0u8; name_buf_size];
+            let ret = rust_supermelee_team_deserialize(
+                serial_buf.as_ptr(),
+                serial_buf.len(),
+                out_ships.as_mut_ptr(),
+                out_name.as_mut_ptr(),
+            );
+            assert_eq!(ret, 0);
+            assert_eq!(out_ships[0], MeleeShip::Urquan as u8);
+            assert_eq!(out_ships[3], MeleeShip::Pkunk as u8);
+            assert_eq!(&out_name[..test_name.len()], test_name);
+        }
     }
 
     #[test]
     fn null_pointers_return_error() {
-        assert_eq!(
-            rust_supermelee_team_serialize(
-                std::ptr::null(),
-                std::ptr::null(),
-                std::ptr::null_mut(),
-                0
-            ),
-            -1
-        );
-        assert_eq!(
-            rust_supermelee_team_deserialize(
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                std::ptr::null_mut()
-            ),
-            -1
-        );
-        assert_eq!(rust_supermelee_fleet_value(std::ptr::null()), 0);
+        unsafe {
+            assert_eq!(
+                rust_supermelee_team_serialize(
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    0
+                ),
+                -1
+            );
+            assert_eq!(
+                rust_supermelee_team_deserialize(
+                    std::ptr::null(),
+                    0,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut()
+                ),
+                -1
+            );
+            assert_eq!(rust_supermelee_fleet_value(std::ptr::null()), 0);
+        }
     }
 }

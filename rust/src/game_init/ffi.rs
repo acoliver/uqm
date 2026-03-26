@@ -12,7 +12,7 @@ use super::setup::{init_contexts, init_game_kernel, uninit_contexts, uninit_game
 
 /// Initialize space (FFI wrapper)
 #[no_mangle]
-pub extern "C" fn rust_init_space() -> c_int {
+pub unsafe extern "C" fn rust_init_space() -> c_int {
     match init_space() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -21,7 +21,7 @@ pub extern "C" fn rust_init_space() -> c_int {
 
 /// Uninitialize space (FFI wrapper)
 #[no_mangle]
-pub extern "C" fn rust_uninit_space() -> c_int {
+pub unsafe extern "C" fn rust_uninit_space() -> c_int {
     match uninit_space() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -32,13 +32,13 @@ pub extern "C" fn rust_uninit_space() -> c_int {
 
 /// Initialize ships (FFI wrapper - delegates to ships::ffi)
 #[no_mangle]
-pub extern "C" fn rust_init_ships() -> c_int {
+pub unsafe extern "C" fn rust_init_ships() -> c_int {
     crate::ships::ffi::rust_ships_init() as c_int
 }
 
 /// Uninitialize ships (FFI wrapper - delegates to ships::ffi)
 #[no_mangle]
-pub extern "C" fn rust_uninit_ships() -> c_int {
+pub unsafe extern "C" fn rust_uninit_ships() -> c_int {
     crate::ships::ffi::rust_ships_uninit();
     1
 }
@@ -47,7 +47,7 @@ pub extern "C" fn rust_uninit_ships() -> c_int {
 
 /// Initialize the game kernel (FFI wrapper)
 #[no_mangle]
-pub extern "C" fn rust_init_game_kernel() -> c_int {
+pub unsafe extern "C" fn rust_init_game_kernel() -> c_int {
     match init_game_kernel() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -56,7 +56,7 @@ pub extern "C" fn rust_init_game_kernel() -> c_int {
 
 /// Uninitialize the game kernel (FFI wrapper)
 #[no_mangle]
-pub extern "C" fn rust_uninit_game_kernel() -> c_int {
+pub unsafe extern "C" fn rust_uninit_game_kernel() -> c_int {
     match uninit_game_kernel() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -67,7 +67,7 @@ pub extern "C" fn rust_uninit_game_kernel() -> c_int {
 
 /// Initialize all contexts (FFI wrapper)
 #[no_mangle]
-pub extern "C" fn rust_init_contexts() -> c_int {
+pub unsafe extern "C" fn rust_init_contexts() -> c_int {
     match init_contexts() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -76,7 +76,7 @@ pub extern "C" fn rust_init_contexts() -> c_int {
 
 /// Uninitialize all contexts (FFI wrapper)
 #[no_mangle]
-pub extern "C" fn rust_uninit_contexts() -> c_int {
+pub unsafe extern "C" fn rust_uninit_contexts() -> c_int {
     match uninit_contexts() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -87,20 +87,20 @@ pub extern "C" fn rust_uninit_contexts() -> c_int {
 
 /// Load the master ship list (FFI wrapper - delegates to ships::ffi)
 #[no_mangle]
-pub extern "C" fn rust_load_master_ship_list() -> c_int {
+pub unsafe extern "C" fn rust_load_master_ship_list() -> c_int {
     crate::ships::ffi::rust_ships_load_catalog() as c_int
 }
 
 /// Free the master ship list (FFI wrapper - delegates to ships::ffi)
 #[no_mangle]
-pub extern "C" fn rust_free_master_ship_list() -> c_int {
+pub unsafe extern "C" fn rust_free_master_ship_list() -> c_int {
     crate::ships::ffi::rust_ships_free_catalog();
     1
 }
 
 /// Get ship name by species ID
 #[no_mangle]
-pub extern "C" fn rust_get_ship_name(species_id: c_int) -> *mut c_char {
+pub unsafe extern "C" fn rust_get_ship_name(species_id: c_int) -> *mut c_char {
     use crate::ships::catalog::race_name_for_species;
     use crate::ships::types::SpeciesId;
 
@@ -117,7 +117,7 @@ pub extern "C" fn rust_get_ship_name(species_id: c_int) -> *mut c_char {
 
 /// Get ship crew count by species ID
 #[no_mangle]
-pub extern "C" fn rust_get_ship_crew(species_id: c_int) -> u16 {
+pub unsafe extern "C" fn rust_get_ship_crew(species_id: c_int) -> u16 {
     use super::master::find_master_ship;
     use crate::ships::catalog::with_catalog;
 
@@ -132,7 +132,7 @@ pub extern "C" fn rust_get_ship_crew(species_id: c_int) -> u16 {
 
 /// Get ship energy count by species ID
 #[no_mangle]
-pub extern "C" fn rust_get_ship_energy(species_id: c_int) -> u16 {
+pub unsafe extern "C" fn rust_get_ship_energy(species_id: c_int) -> u16 {
     use super::master::find_master_ship;
     use crate::ships::catalog::with_catalog;
 
@@ -149,7 +149,7 @@ pub extern "C" fn rust_get_ship_energy(species_id: c_int) -> u16 {
 
 /// Check if master ship list is loaded
 #[no_mangle]
-pub extern "C" fn rust_is_master_ship_list_loaded() -> c_int {
+pub unsafe extern "C" fn rust_is_master_ship_list_loaded() -> c_int {
     use super::master::is_master_ship_list_loaded;
 
     if is_master_ship_list_loaded() {
@@ -161,7 +161,7 @@ pub extern "C" fn rust_is_master_ship_list_loaded() -> c_int {
 
 /// Get number of ships in master list
 #[no_mangle]
-pub extern "C" fn rust_get_master_ship_count() -> c_int {
+pub unsafe extern "C" fn rust_get_master_ship_count() -> c_int {
     use super::master::get_master_ship_count;
 
     get_master_ship_count() as c_int
@@ -174,146 +174,164 @@ mod tests {
 
     #[test]
     fn test_rust_init_uninit_space() {
-        let result = rust_init_space();
-        assert_eq!(result, 1);
+        unsafe {
+            let result = rust_init_space();
+            assert_eq!(result, 1);
 
-        let result = rust_uninit_space();
-        assert_eq!(result, 1);
+            let result = rust_uninit_space();
+            assert_eq!(result, 1);
+        }
     }
 
     #[test]
     fn test_rust_init_uninit_ships() {
-        let result = rust_init_ships();
-        assert_eq!(result, 2); // Returns NUM_SIDES (2) for battle mode
+        unsafe {
+            let result = rust_init_ships();
+            assert_eq!(result, 2); // Returns NUM_SIDES (2) for battle mode
 
-        let result = rust_uninit_ships();
-        assert_eq!(result, 1);
+            let result = rust_uninit_ships();
+            assert_eq!(result, 1);
+        }
     }
 
     #[test]
     fn test_rust_init_uninit_game_kernel() {
-        let result = rust_init_game_kernel();
-        assert_eq!(result, 1);
+        unsafe {
+            let result = rust_init_game_kernel();
+            assert_eq!(result, 1);
 
-        let result = rust_uninit_game_kernel();
-        assert_eq!(result, 1);
+            let result = rust_uninit_game_kernel();
+            assert_eq!(result, 1);
+        }
     }
 
     #[test]
     fn test_rust_init_uninit_contexts() {
-        let result = rust_init_contexts();
-        assert_eq!(result, 1);
+        unsafe {
+            let result = rust_init_contexts();
+            assert_eq!(result, 1);
 
-        let result = rust_uninit_contexts();
-        assert_eq!(result, 1);
+            let result = rust_uninit_contexts();
+            assert_eq!(result, 1);
+        }
     }
 
     #[test]
     fn test_rust_load_free_master_ship_list() {
-        // Ensure clean state
-        rust_free_master_ship_list();
+        unsafe {
+            // Ensure clean state
+            rust_free_master_ship_list();
 
-        assert_eq!(rust_is_master_ship_list_loaded(), 0);
+            assert_eq!(rust_is_master_ship_list_loaded(), 0);
 
-        let result = rust_load_master_ship_list();
-        assert_eq!(result, 1);
-        assert_eq!(rust_is_master_ship_list_loaded(), 1);
+            let result = rust_load_master_ship_list();
+            assert_eq!(result, 1);
+            assert_eq!(rust_is_master_ship_list_loaded(), 1);
 
-        let result = rust_free_master_ship_list();
-        assert_eq!(result, 1);
-        assert_eq!(rust_is_master_ship_list_loaded(), 0);
+            let result = rust_free_master_ship_list();
+            assert_eq!(result, 1);
+            assert_eq!(rust_is_master_ship_list_loaded(), 0);
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_ship_name() {
-        use std::ffi::CStr;
-
-        // Ensure clean state
-        rust_free_master_ship_list();
-
-        rust_load_master_ship_list();
-
-        // Test with Vux (species ID 11)
-        let name_ptr = rust_get_ship_name(11);
-        assert!(!name_ptr.is_null());
-
         unsafe {
-            let name = CStr::from_ptr(name_ptr);
-            assert_eq!(name.to_str().unwrap(), "VUX");
+            use std::ffi::CStr;
+
+            // Ensure clean state
+            rust_free_master_ship_list();
+
+            rust_load_master_ship_list();
+
+            // Test with Vux (species ID 11)
+            let name_ptr = rust_get_ship_name(11);
+            assert!(!name_ptr.is_null());
+
+            unsafe {
+                let name = CStr::from_ptr(name_ptr);
+                assert_eq!(name.to_str().unwrap(), "VUX");
+            }
+
+            // Test with invalid species ID
+            let name_ptr = rust_get_ship_name(999);
+            assert!(name_ptr.is_null());
+
+            // Test with non-melee species (SisShip = 26) - returns "(Unknown)"
+            let name_ptr = rust_get_ship_name(26);
+            assert!(!name_ptr.is_null());
+            unsafe {
+                let name = CStr::from_ptr(name_ptr);
+                assert_eq!(name.to_str().unwrap(), "(Unknown)");
+            }
+
+            rust_free_master_ship_list();
         }
-
-        // Test with invalid species ID
-        let name_ptr = rust_get_ship_name(999);
-        assert!(name_ptr.is_null());
-
-        // Test with non-melee species (SisShip = 26) - returns "(Unknown)"
-        let name_ptr = rust_get_ship_name(26);
-        assert!(!name_ptr.is_null());
-        unsafe {
-            let name = CStr::from_ptr(name_ptr);
-            assert_eq!(name.to_str().unwrap(), "(Unknown)");
-        }
-
-        rust_free_master_ship_list();
     }
 
     #[test]
     #[serial]
     fn test_rust_get_ship_crew() {
-        // Ensure clean state
-        rust_free_master_ship_list();
+        unsafe {
+            // Ensure clean state
+            rust_free_master_ship_list();
 
-        rust_load_master_ship_list();
+            rust_load_master_ship_list();
 
-        // Test with Vux (species ID 11, max_crew = 20)
-        let crew = rust_get_ship_crew(11);
-        assert_eq!(crew, 20);
+            // Test with Vux (species ID 11, max_crew = 20)
+            let crew = rust_get_ship_crew(11);
+            assert_eq!(crew, 20);
 
-        // Test with invalid species ID
-        let crew = rust_get_ship_crew(999);
-        assert_eq!(crew, 0);
+            // Test with invalid species ID
+            let crew = rust_get_ship_crew(999);
+            assert_eq!(crew, 0);
 
-        // Test with non-melee species
-        let crew = rust_get_ship_crew(26);
-        assert_eq!(crew, 0);
+            // Test with non-melee species
+            let crew = rust_get_ship_crew(26);
+            assert_eq!(crew, 0);
 
-        rust_free_master_ship_list();
+            rust_free_master_ship_list();
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_ship_energy() {
-        rust_load_master_ship_list();
+        unsafe {
+            rust_load_master_ship_list();
 
-        // Test with Vux (species ID 11, max_energy = 40)
-        let energy = rust_get_ship_energy(11);
-        assert_eq!(energy, 40);
+            // Test with Vux (species ID 11, max_energy = 40)
+            let energy = rust_get_ship_energy(11);
+            assert_eq!(energy, 40);
 
-        // Test with invalid species ID
-        let energy = rust_get_ship_energy(999);
-        assert_eq!(energy, 0);
+            // Test with invalid species ID
+            let energy = rust_get_ship_energy(999);
+            assert_eq!(energy, 0);
 
-        // Test with non-melee species
-        let energy = rust_get_ship_energy(26);
-        assert_eq!(energy, 0);
+            // Test with non-melee species
+            let energy = rust_get_ship_energy(26);
+            assert_eq!(energy, 0);
 
-        rust_free_master_ship_list();
+            rust_free_master_ship_list();
+        }
     }
 
     #[test]
     #[serial]
     fn test_rust_get_master_ship_count() {
-        // Ensure clean state
-        rust_free_master_ship_list();
+        unsafe {
+            // Ensure clean state
+            rust_free_master_ship_list();
 
-        let count = rust_get_master_ship_count();
-        assert_eq!(count, 0);
+            let count = rust_get_master_ship_count();
+            assert_eq!(count, 0);
 
-        rust_load_master_ship_list();
-        let count = rust_get_master_ship_count();
-        assert!(count > 0);
+            rust_load_master_ship_list();
+            let count = rust_get_master_ship_count();
+            assert!(count > 0);
 
-        rust_free_master_ship_list();
+            rust_free_master_ship_list();
+        }
     }
 }

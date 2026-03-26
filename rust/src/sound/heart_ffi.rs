@@ -400,7 +400,7 @@ fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Sen
 // =============================================================================
 
 #[no_mangle]
-pub extern "C" fn InitStreamDecoder() -> c_int {
+pub unsafe extern "C" fn InitStreamDecoder() -> c_int {
     match stream::init_stream_decoder() {
         Ok(()) => 0,
         Err(e) => {
@@ -411,7 +411,7 @@ pub extern "C" fn InitStreamDecoder() -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn UninitStreamDecoder() {
+pub unsafe extern "C" fn UninitStreamDecoder() {
     let _ = stream::uninit_stream_decoder();
 }
 
@@ -523,27 +523,27 @@ pub unsafe extern "C" fn PlayStream(
 }
 
 #[no_mangle]
-pub extern "C" fn StopStream(source: u32) {
+pub unsafe extern "C" fn StopStream(source: u32) {
     let _ = stream::stop_stream(source as usize);
 }
 
 #[no_mangle]
-pub extern "C" fn PauseStream(source: u32) {
+pub unsafe extern "C" fn PauseStream(source: u32) {
     let _ = stream::pause_stream(source as usize);
 }
 
 #[no_mangle]
-pub extern "C" fn ResumeStream(source: u32) {
+pub unsafe extern "C" fn ResumeStream(source: u32) {
     let _ = stream::resume_stream(source as usize);
 }
 
 #[no_mangle]
-pub extern "C" fn SeekStream(source: u32, pos: u32) {
+pub unsafe extern "C" fn SeekStream(source: u32, pos: u32) {
     let _ = stream::seek_stream(source as usize, pos);
 }
 
 #[no_mangle]
-pub extern "C" fn PlayingStream(source: u32) -> u8 {
+pub unsafe extern "C" fn PlayingStream(source: u32) -> u8 {
     if stream::playing_stream(source as usize) {
         1
     } else {
@@ -595,7 +595,7 @@ pub unsafe extern "C" fn TFB_ClearBufferTag(tag_ptr: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn SetMusicStreamFade(how_long: i32, end_volume: c_int) -> bool {
+pub unsafe extern "C" fn SetMusicStreamFade(how_long: i32, end_volume: c_int) -> bool {
     stream::set_music_stream_fade(how_long.max(0) as u32, end_volume)
 }
 
@@ -682,76 +682,76 @@ pub unsafe extern "C" fn SpliceMultiTrack(
 }
 
 #[no_mangle]
-pub extern "C" fn PlayTrack() {
+pub unsafe extern "C" fn PlayTrack() {
     eprintln!("[PlayTrack] called");
     let _ = trackplayer::play_track(true);
 }
 
 #[no_mangle]
-pub extern "C" fn StopTrack() {
+pub unsafe extern "C" fn StopTrack() {
     let _ = trackplayer::stop_track();
 }
 
 #[no_mangle]
-pub extern "C" fn JumpTrack() {
+pub unsafe extern "C" fn JumpTrack() {
     let _ = trackplayer::jump_track(0);
 }
 
 #[no_mangle]
-pub extern "C" fn PauseTrack() {
+pub unsafe extern "C" fn PauseTrack() {
     let _ = trackplayer::pause_track();
 }
 
 #[no_mangle]
-pub extern "C" fn ResumeTrack() {
+pub unsafe extern "C" fn ResumeTrack() {
     let _ = trackplayer::resume_track();
 }
 
 #[no_mangle]
-pub extern "C" fn PlayingTrack() -> u16 {
+pub unsafe extern "C" fn PlayingTrack() -> u16 {
     trackplayer::playing_track_num()
 }
 
 #[no_mangle]
-pub extern "C" fn FastReverse_Smooth() {
+pub unsafe extern "C" fn FastReverse_Smooth() {
     let _ = trackplayer::fast_reverse_smooth();
 }
 
 #[no_mangle]
-pub extern "C" fn FastForward_Smooth() {
+pub unsafe extern "C" fn FastForward_Smooth() {
     let _ = trackplayer::fast_forward_smooth();
 }
 
 #[no_mangle]
-pub extern "C" fn FastReverse_Page() {
+pub unsafe extern "C" fn FastReverse_Page() {
     let _ = trackplayer::fast_reverse_page();
 }
 
 #[no_mangle]
-pub extern "C" fn FastForward_Page() {
+pub unsafe extern "C" fn FastForward_Page() {
     let _ = trackplayer::fast_forward_page();
 }
 
 #[no_mangle]
-pub extern "C" fn GetTrackPosition(in_units: c_int) -> c_int {
+pub unsafe extern "C" fn GetTrackPosition(in_units: c_int) -> c_int {
     trackplayer::get_track_position(in_units as u32) as c_int
 }
 
 #[no_mangle]
-pub extern "C" fn GetTrackSubtitle() -> *const c_char {
+pub unsafe extern "C" fn GetTrackSubtitle() -> *const c_char {
     // Return a stable pointer from the chunk's cached CString.
     // C's CheckSubtitles uses pointer identity to detect subtitle changes.
     trackplayer::get_track_subtitle_cstr()
 }
 
 #[no_mangle]
-pub extern "C" fn GetFirstTrackSubtitle() -> *mut c_void {
+pub unsafe extern "C" fn GetFirstTrackSubtitle() -> *mut c_void {
     // Return the actual chunks_head pointer (matches C: returns chunks_head as SUBTITLE_REF)
     trackplayer::get_first_chunk_ptr() as *mut c_void
 }
 
 #[no_mangle]
-pub extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void {
+pub unsafe extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void {
     // Match C ABI: GetNextTrackSubtitle(SUBTITLE_REF LastRef)
     // LastRef is an opaque pointer to a SoundChunk in the linked list
     if last_ref.is_null() {
@@ -872,17 +872,17 @@ pub unsafe extern "C" fn snd_PlaySpeech(music_ref_ptr: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn snd_StopSpeech() {
+pub unsafe extern "C" fn snd_StopSpeech() {
     let _ = music::snd_stop_speech();
 }
 
 #[no_mangle]
-pub extern "C" fn SetMusicVolume(volume: c_int) {
+pub unsafe extern "C" fn SetMusicVolume(volume: c_int) {
     music::set_music_volume(volume);
 }
 
 #[no_mangle]
-pub extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
+pub unsafe extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
     let interval = if how_long < 0 { 0u32 } else { how_long as u32 };
     if crate::sound::types::quit_posted() {
         // Don't make users wait for fades on quit
@@ -941,12 +941,12 @@ pub unsafe extern "C" fn PlayChannel(
 }
 
 #[no_mangle]
-pub extern "C" fn StopChannel(channel: c_uint, priority: c_int) {
+pub unsafe extern "C" fn StopChannel(channel: c_uint, priority: c_int) {
     let _ = sfx::stop_channel(channel as usize, priority);
 }
 
 #[no_mangle]
-pub extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
+pub unsafe extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
     if sfx::channel_playing(channel as usize) {
         1
     } else {
@@ -955,7 +955,7 @@ pub extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn SetChannelVolume(channel: c_uint, volume: c_int, priority: c_int) {
+pub unsafe extern "C" fn SetChannelVolume(channel: c_uint, volume: c_int, priority: c_int) {
     sfx::set_channel_volume(channel as usize, volume, priority);
 }
 
@@ -968,12 +968,12 @@ pub unsafe extern "C" fn UpdateSoundPosition(source_index: c_uint, pos_ptr: *con
 }
 
 #[no_mangle]
-pub extern "C" fn GetPositionalObject(source_index: c_uint) -> c_uint {
+pub unsafe extern "C" fn GetPositionalObject(source_index: c_uint) -> c_uint {
     sfx::get_positional_object(source_index as usize) as c_uint
 }
 
 #[no_mangle]
-pub extern "C" fn SetPositionalObject(source_index: c_uint, object: c_uint) {
+pub unsafe extern "C" fn SetPositionalObject(source_index: c_uint, object: c_uint) {
     sfx::set_positional_object(source_index as usize, object as usize);
 }
 
@@ -1007,7 +1007,7 @@ pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
 // =============================================================================
 
 #[no_mangle]
-pub extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int {
+pub unsafe extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int {
     eprintln!("[audio_heart] InitSound called");
     match control::init_sound() {
         Ok(()) => {
@@ -1022,17 +1022,17 @@ pub extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int 
 }
 
 #[no_mangle]
-pub extern "C" fn UninitSound() {
+pub unsafe extern "C" fn UninitSound() {
     control::uninit_sound();
 }
 
 #[no_mangle]
-pub extern "C" fn StopSound() {
+pub unsafe extern "C" fn StopSound() {
     control::stop_sound();
 }
 
 #[no_mangle]
-pub extern "C" fn SoundPlaying() -> c_int {
+pub unsafe extern "C" fn SoundPlaying() -> c_int {
     if control::sound_playing() {
         1
     } else {
@@ -1041,7 +1041,7 @@ pub extern "C" fn SoundPlaying() -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn WaitForSoundEnd(channel: u16) {
+pub unsafe extern "C" fn WaitForSoundEnd(channel: u16) {
     // COUNT is u16; TFBSOUND_WAIT_ALL is (COUNT)~0 = 0xFFFF
     let ch = if channel == 0xFFFF {
         None
@@ -1052,12 +1052,12 @@ pub extern "C" fn WaitForSoundEnd(channel: u16) {
 }
 
 #[no_mangle]
-pub extern "C" fn SetSFXVolume(volume: f32) {
+pub unsafe extern "C" fn SetSFXVolume(volume: f32) {
     control::set_sfx_volume((volume * MAX_VOLUME as f32) as i32);
 }
 
 #[no_mangle]
-pub extern "C" fn SetSpeechVolume(volume: f32) {
+pub unsafe extern "C" fn SetSpeechVolume(volume: f32) {
     control::set_speech_volume((volume * MAX_VOLUME as f32) as i32);
 }
 

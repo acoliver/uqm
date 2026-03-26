@@ -4,7 +4,6 @@
 //! vtable structure from `sc2/src/libs/sound/decoders/decoder.h`.
 
 use std::ffi::{c_char, c_int, c_void, CStr};
-use std::path::Path;
 use std::ptr;
 use std::sync::Mutex;
 
@@ -487,47 +486,55 @@ mod tests {
 
     #[test]
     fn test_vtable_exists() {
-        // Verify the vtable is properly initialized
-        let name_ptr = (rust_ova_DecoderVtbl.GetName)();
-        assert!(!name_ptr.is_null());
+        unsafe {
+            // Verify the vtable is properly initialized
+            let name_ptr = (rust_ova_DecoderVtbl.GetName)();
+            assert!(!name_ptr.is_null());
 
-        let name = unsafe { CStr::from_ptr(name_ptr) };
-        assert_eq!(name.to_str().unwrap(), "Rust Ogg Vorbis");
+            let name = unsafe { CStr::from_ptr(name_ptr) };
+            assert_eq!(name.to_str().unwrap(), "Rust Ogg Vorbis");
+        }
     }
 
     #[test]
     fn test_struct_sizes() {
-        // Verify struct sizes are reasonable
-        let size = rust_ova_GetStructSize();
-        assert!(size > 0);
-        assert!(size >= std::mem::size_of::<TFB_SoundDecoder>() as u32);
+        unsafe {
+            // Verify struct sizes are reasonable
+            let size = rust_ova_GetStructSize();
+            assert!(size > 0);
+            assert!(size >= std::mem::size_of::<TFB_SoundDecoder>() as u32);
+        }
     }
 
     #[test]
     fn test_init_module() {
-        let formats = TFB_DecoderFormats {
-            big_endian: false,
-            want_big_endian: false,
-            mono8: 0x1100,
-            stereo8: 0x1102,
-            mono16: 0x1101,
-            stereo16: 0x1103,
-        };
+        unsafe {
+            let formats = TFB_DecoderFormats {
+                big_endian: false,
+                want_big_endian: false,
+                mono8: 0x1100,
+                stereo8: 0x1102,
+                mono16: 0x1101,
+                stereo16: 0x1103,
+            };
 
-        let result = rust_ova_InitModule(0, &formats);
-        assert_eq!(result, 1);
+            let result = rust_ova_InitModule(0, &formats);
+            assert_eq!(result, 1);
 
-        rust_ova_TermModule();
+            rust_ova_TermModule();
+        }
     }
 
     #[test]
     fn test_null_decoder_handling() {
-        // All functions should handle null decoder gracefully
-        assert_eq!(rust_ova_GetError(ptr::null_mut()), -1);
-        rust_ova_Term(ptr::null_mut()); // Should not crash
-        rust_ova_Close(ptr::null_mut()); // Should not crash
-        assert_eq!(rust_ova_Decode(ptr::null_mut(), ptr::null_mut(), 0), -1);
-        assert_eq!(rust_ova_Seek(ptr::null_mut(), 0), 0);
-        assert_eq!(rust_ova_GetFrame(ptr::null_mut()), 0);
+        unsafe {
+            // All functions should handle null decoder gracefully
+            assert_eq!(rust_ova_GetError(ptr::null_mut()), -1);
+            rust_ova_Term(ptr::null_mut()); // Should not crash
+            rust_ova_Close(ptr::null_mut()); // Should not crash
+            assert_eq!(rust_ova_Decode(ptr::null_mut(), ptr::null_mut(), 0), -1);
+            assert_eq!(rust_ova_Seek(ptr::null_mut(), 0), 0);
+            assert_eq!(rust_ova_GetFrame(ptr::null_mut()), 0);
+        }
     }
 }

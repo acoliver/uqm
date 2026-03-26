@@ -2,10 +2,7 @@
 // @plan PLAN-20260314-SUPERMELEE.P07
 // @requirement fleet-edit ship pick
 
-use crate::supermelee::error::SuperMeleeError;
-use crate::supermelee::types::{
-    FleetShipIndex, MeleeShip, NUM_MELEE_SHIPS, NUM_PICK_COLS, NUM_PICK_ROWS,
-};
+use crate::supermelee::types::{MeleeShip, NUM_MELEE_SHIPS, NUM_PICK_COLS, NUM_PICK_ROWS};
 
 // ---------------------------------------------------------------------------
 // Picker state
@@ -113,94 +110,114 @@ mod tests {
 
     #[test]
     fn picker_default_position_is_top_left() {
-        let picker = ShipPicker::new();
-        assert_eq!(picker.row, 0);
-        assert_eq!(picker.col, 0);
-        assert_eq!(picker.index(), 0);
+        unsafe {
+            let picker = ShipPicker::new();
+            assert_eq!(picker.row, 0);
+            assert_eq!(picker.col, 0);
+            assert_eq!(picker.index(), 0);
+        }
     }
 
     #[test]
     fn picker_navigation_changes_highlighted_ship() {
-        let mut picker = ShipPicker::new();
-        // Move right → col 1
-        picker.move_right();
-        assert_eq!(picker.col, 1);
-        assert_eq!(picker.index(), 1);
+        unsafe {
+            let mut picker = ShipPicker::new();
+            // Move right → col 1
+            picker.move_right();
+            assert_eq!(picker.col, 1);
+            assert_eq!(picker.index(), 1);
 
-        // Move down → row 1, col 1
-        picker.move_down();
-        assert_eq!(picker.index(), NUM_PICK_COLS + 1);
+            // Move down → row 1, col 1
+            picker.move_down();
+            assert_eq!(picker.index(), NUM_PICK_COLS + 1);
 
-        // Verify it maps to a real ship
-        assert!(picker.selected_ship().is_some());
+            // Verify it maps to a real ship
+            assert!(picker.selected_ship().is_some());
+        }
     }
 
     #[test]
     fn picker_navigation_wraps_up() {
-        let mut picker = ShipPicker::new();
-        picker.move_up(); // wraps to last row
-        assert_eq!(picker.row, NUM_PICK_ROWS - 1);
+        unsafe {
+            let mut picker = ShipPicker::new();
+            picker.move_up(); // wraps to last row
+            assert_eq!(picker.row, NUM_PICK_ROWS - 1);
+        }
     }
 
     #[test]
     fn picker_navigation_wraps_down() {
-        let mut picker = ShipPicker::new();
-        for _ in 0..NUM_PICK_ROWS {
-            picker.move_down();
+        unsafe {
+            let mut picker = ShipPicker::new();
+            for _ in 0..NUM_PICK_ROWS {
+                picker.move_down();
+            }
+            assert_eq!(picker.row, 0); // wrapped back
         }
-        assert_eq!(picker.row, 0); // wrapped back
     }
 
     #[test]
     fn picker_navigation_wraps_left() {
-        let mut picker = ShipPicker::new();
-        picker.move_left(); // wraps to last col
-        assert_eq!(picker.col, NUM_PICK_COLS - 1);
+        unsafe {
+            let mut picker = ShipPicker::new();
+            picker.move_left(); // wraps to last col
+            assert_eq!(picker.col, NUM_PICK_COLS - 1);
+        }
     }
 
     #[test]
     fn picker_navigation_wraps_right() {
-        let mut picker = ShipPicker::new();
-        for _ in 0..NUM_PICK_COLS {
-            picker.move_right();
+        unsafe {
+            let mut picker = ShipPicker::new();
+            for _ in 0..NUM_PICK_COLS {
+                picker.move_right();
+            }
+            assert_eq!(picker.col, 0); // wrapped back
         }
-        assert_eq!(picker.col, 0); // wrapped back
     }
 
     #[test]
     fn picker_selected_ship_for_valid_positions() {
-        let mut picker = ShipPicker::new();
-        // Position 0 = Androsynth
-        assert_eq!(picker.selected_ship(), Some(MeleeShip::Androsynth));
-        // Last valid position (24) = ZoqFotPik
-        picker.row = 4;
-        picker.col = 4;
-        assert_eq!(picker.selected_ship(), Some(MeleeShip::ZoqFotPik));
+        unsafe {
+            let mut picker = ShipPicker::new();
+            // Position 0 = Androsynth
+            assert_eq!(picker.selected_ship(), Some(MeleeShip::Androsynth));
+            // Last valid position (24) = ZoqFotPik
+            picker.row = 4;
+            picker.col = 4;
+            assert_eq!(picker.selected_ship(), Some(MeleeShip::ZoqFotPik));
+        }
     }
 
     #[test]
     fn picker_grid_covers_all_25_ships() {
-        let mut seen = std::collections::HashSet::new();
-        for r in 0..NUM_PICK_ROWS {
-            for c in 0..NUM_PICK_COLS {
-                let picker = ShipPicker { row: r, col: c };
-                if let Some(ship) = picker.selected_ship() {
-                    seen.insert(ship as u8);
+        unsafe {
+            let mut seen = std::collections::HashSet::new();
+            for r in 0..NUM_PICK_ROWS {
+                for c in 0..NUM_PICK_COLS {
+                    let picker = ShipPicker { row: r, col: c };
+                    if let Some(ship) = picker.selected_ship() {
+                        seen.insert(ship as u8);
+                    }
                 }
             }
+            assert_eq!(seen.len(), NUM_MELEE_SHIPS);
         }
-        assert_eq!(seen.len(), NUM_MELEE_SHIPS);
     }
 
     #[test]
     fn picker_confirm_applies_selection() {
-        let result = PickResult::Confirmed(MeleeShip::Chmmr);
-        assert_eq!(resolve_pick(&result), Some(MeleeShip::Chmmr));
+        unsafe {
+            let result = PickResult::Confirmed(MeleeShip::Chmmr);
+            assert_eq!(resolve_pick(&result), Some(MeleeShip::Chmmr));
+        }
     }
 
     #[test]
     fn picker_cancel_leaves_no_selection() {
-        let result = PickResult::Cancelled;
-        assert_eq!(resolve_pick(&result), None);
+        unsafe {
+            let result = PickResult::Cancelled;
+            assert_eq!(resolve_pick(&result), None);
+        }
     }
 }

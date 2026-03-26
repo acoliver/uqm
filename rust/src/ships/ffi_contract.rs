@@ -223,22 +223,22 @@ pub struct CMasterShipInfo {
 // ownership, and lifetime for planned FFI entrypoints.
 //
 // These are CONTRACT SPECIFICATIONS, not implementations. The actual
-// `#[no_mangle] pub extern "C" fn` implementations live in `ffi.rs` (P14).
+// `#[no_mangle] pub unsafe extern "C" fn` implementations live in `ffi.rs` (P14).
 
 // ---------------------------------------------------------------------------
 // Catalog (P06)
 // ---------------------------------------------------------------------------
 //
 // C: BOOLEAN rust_load_master_ship_list(void);
-// Rust: pub extern "C" fn rust_load_master_ship_list() -> CBoolean;
+// Rust: pub unsafe extern "C" fn rust_load_master_ship_list() -> CBoolean;
 // Ownership: Rust allocates catalog; valid until rust_free_master_ship_list().
 //
 // C: void rust_free_master_ship_list(void);
-// Rust: pub extern "C" fn rust_free_master_ship_list();
+// Rust: pub unsafe extern "C" fn rust_free_master_ship_list();
 // Ownership: Rust frees all catalog entries and clears internal state.
 //
 // C: COUNT rust_get_ship_cost_from_index(COUNT index);
-// Rust: pub extern "C" fn rust_get_ship_cost_from_index(index: CCount) -> CCount;
+// Rust: pub unsafe extern "C" fn rust_get_ship_cost_from_index(index: CCount) -> CCount;
 // Ownership: pure lookup, no pointer returned.
 
 // ---------------------------------------------------------------------------
@@ -246,13 +246,13 @@ pub struct CMasterShipInfo {
 // ---------------------------------------------------------------------------
 //
 // C: RACE_DESC *rust_load_ship(SPECIES_ID species, BOOLEAN battle_ready);
-// Rust: pub extern "C" fn rust_load_ship(species: CSpeciesId, battle_ready: CBoolean)
+// Rust: pub unsafe extern "C" fn rust_load_ship(species: CSpeciesId, battle_ready: CBoolean)
 //                                         -> *mut CRaceDesc;
 // Ownership: returned pointer is Rust-owned; C must not free.
 // Lifetime: valid until rust_free_ship() or lifecycle teardown.
 //
 // C: void rust_free_ship(RACE_DESC *desc, BOOLEAN free_battle, BOOLEAN free_meta);
-// Rust: pub extern "C" fn rust_free_ship(desc: *mut CRaceDesc,
+// Rust: pub unsafe extern "C" fn rust_free_ship(desc: *mut CRaceDesc,
 //                                         free_battle: CBoolean,
 //                                         free_metadata: CBoolean);
 // Ownership: Rust frees internal resources; pointer becomes invalid.
@@ -262,12 +262,12 @@ pub struct CMasterShipInfo {
 // ---------------------------------------------------------------------------
 //
 // C: HSTARSHIP rust_build_ship(QUEUE *queue, SPECIES_ID species);
-// Rust: pub extern "C" fn rust_build_ship(queue: *mut CQueue,
+// Rust: pub unsafe extern "C" fn rust_build_ship(queue: *mut CQueue,
 //                                          species: CSpeciesId) -> HStarship;
 // Ownership: C queue owns storage; Rust inserts into C-owned queue.
 //
 // C: void rust_clone_ship_fragment(const SHIP_FRAGMENT *src, SHIP_FRAGMENT *dst);
-// Rust: pub extern "C" fn rust_clone_ship_fragment(src: *const CShipFragment,
+// Rust: pub unsafe extern "C" fn rust_clone_ship_fragment(src: *const CShipFragment,
 //                                                   dst: *mut CShipFragment);
 // Ownership: both pointers C-owned; Rust copies fields.
 
@@ -276,16 +276,16 @@ pub struct CMasterShipInfo {
 // ---------------------------------------------------------------------------
 //
 // C: BOOLEAN rust_spawn_ship(STARSHIP *starship);
-// Rust: pub extern "C" fn rust_spawn_ship(starship: *mut CStarship) -> CBoolean;
+// Rust: pub unsafe extern "C" fn rust_spawn_ship(starship: *mut CStarship) -> CBoolean;
 // Ownership: C owns starship; Rust loads RaceDesc (Rust-owned) and attaches
 //            it via starship->RaceDescPtr.
 //
 // C: COUNT rust_init_ships(void);
-// Rust: pub extern "C" fn rust_init_ships() -> CCount;
+// Rust: pub unsafe extern "C" fn rust_init_ships() -> CCount;
 // Ownership: Rust initializes battle state.
 //
 // C: void rust_uninit_ships(void);
-// Rust: pub extern "C" fn rust_uninit_ships();
+// Rust: pub unsafe extern "C" fn rust_uninit_ships();
 // Ownership: Rust tears down battle state, writes back crew, frees descriptors.
 
 // ---------------------------------------------------------------------------
@@ -293,16 +293,16 @@ pub struct CMasterShipInfo {
 // ---------------------------------------------------------------------------
 //
 // C: void rust_ship_preprocess(ELEMENT *element);
-// Rust: pub extern "C" fn rust_ship_preprocess(element: *mut CElement);
+// Rust: pub unsafe extern "C" fn rust_ship_preprocess(element: *mut CElement);
 // Ownership: C owns element; Rust borrows for frame processing.
 // Note: STARSHIP* is obtained via GetElementStarShip(element).
 //
 // C: void rust_ship_postprocess(ELEMENT *element);
-// Rust: pub extern "C" fn rust_ship_postprocess(element: *mut CElement);
+// Rust: pub unsafe extern "C" fn rust_ship_postprocess(element: *mut CElement);
 // Ownership: same as preprocess.
 //
 // C: void rust_ship_death(ELEMENT *element);
-// Rust: pub extern "C" fn rust_ship_death(element: *mut CElement);
+// Rust: pub unsafe extern "C" fn rust_ship_death(element: *mut CElement);
 // Ownership: C owns element; Rust performs death behavior and cleanup.
 
 // ---------------------------------------------------------------------------

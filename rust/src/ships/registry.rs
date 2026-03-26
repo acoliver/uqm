@@ -1092,54 +1092,58 @@ mod tests {
 
     #[test]
     fn descriptor_template_all_28_species_succeed() {
-        let all_species = [
-            SpeciesId::Arilou,
-            SpeciesId::Chmmr,
-            SpeciesId::Earthling,
-            SpeciesId::Orz,
-            SpeciesId::Pkunk,
-            SpeciesId::Shofixti,
-            SpeciesId::Spathi,
-            SpeciesId::Supox,
-            SpeciesId::Thraddash,
-            SpeciesId::Utwig,
-            SpeciesId::Vux,
-            SpeciesId::Yehat,
-            SpeciesId::Melnorme,
-            SpeciesId::Druuge,
-            SpeciesId::Ilwrath,
-            SpeciesId::Mycon,
-            SpeciesId::Slylandro,
-            SpeciesId::Umgah,
-            SpeciesId::UrQuan,
-            SpeciesId::Zoqfotpik,
-            SpeciesId::Syreen,
-            SpeciesId::KohrAh,
-            SpeciesId::Androsynth,
-            SpeciesId::Chenjesu,
-            SpeciesId::Mmrnmhrm,
-            SpeciesId::SisShip,
-            SpeciesId::SaMatra,
-            SpeciesId::UrQuanProbe,
-        ];
+        unsafe {
+            let all_species = [
+                SpeciesId::Arilou,
+                SpeciesId::Chmmr,
+                SpeciesId::Earthling,
+                SpeciesId::Orz,
+                SpeciesId::Pkunk,
+                SpeciesId::Shofixti,
+                SpeciesId::Spathi,
+                SpeciesId::Supox,
+                SpeciesId::Thraddash,
+                SpeciesId::Utwig,
+                SpeciesId::Vux,
+                SpeciesId::Yehat,
+                SpeciesId::Melnorme,
+                SpeciesId::Druuge,
+                SpeciesId::Ilwrath,
+                SpeciesId::Mycon,
+                SpeciesId::Slylandro,
+                SpeciesId::Umgah,
+                SpeciesId::UrQuan,
+                SpeciesId::Zoqfotpik,
+                SpeciesId::Syreen,
+                SpeciesId::KohrAh,
+                SpeciesId::Androsynth,
+                SpeciesId::Chenjesu,
+                SpeciesId::Mmrnmhrm,
+                SpeciesId::SisShip,
+                SpeciesId::SaMatra,
+                SpeciesId::UrQuanProbe,
+            ];
 
-        for species in &all_species {
-            let result = descriptor_template_for_species(*species);
-            assert!(
-                result.is_ok(),
-                "descriptor_template_for_species failed for {:?}",
-                species
-            );
+            for species in &all_species {
+                let result = descriptor_template_for_species(*species);
+                assert!(
+                    result.is_ok(),
+                    "descriptor_template_for_species failed for {:?}",
+                    species
+                );
+            }
         }
     }
 
     #[test]
     fn descriptor_template_no_id_returns_error() {
-        let result = descriptor_template_for_species(SpeciesId::NoId);
-        assert!(result.is_err());
-        match result {
-            Err(ShipsError::UnknownSpecies(0)) => {}
-            _ => panic!("Expected UnknownSpecies(0)"),
+        unsafe {
+            let result = descriptor_template_for_species(SpeciesId::NoId);
+            assert!(result.is_err());
+            match result {
+                Err(ShipsError::UnknownSpecies(0)) => {}
+                _ => panic!("Expected UnknownSpecies(0)"),
+            }
         }
     }
 
@@ -1147,307 +1151,345 @@ mod tests {
 
     #[test]
     fn arilou_template_values() {
-        let template = descriptor_template_for_species(SpeciesId::Arilou).unwrap();
-        assert_eq!(template.ship_info.ship_cost, 16);
-        assert_eq!(template.ship_info.max_crew, 6);
-        assert_eq!(template.ship_info.max_energy, 20);
-        assert!(template
-            .ship_info
-            .ship_flags
-            .contains(ShipFlags::IMMEDIATE_WEAPON));
-        assert_eq!(template.characteristics.max_thrust, 40);
-        assert_eq!(template.characteristics.thrust_increment, 40);
-        assert_eq!(template.fleet.strength, 44);
-        assert_eq!(template.fleet.known_loc, (438, 6372));
-        assert_eq!(template.intel.weapon_range, 218);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Arilou).unwrap();
+            assert_eq!(template.ship_info.ship_cost, 16);
+            assert_eq!(template.ship_info.max_crew, 6);
+            assert_eq!(template.ship_info.max_energy, 20);
+            assert!(template
+                .ship_info
+                .ship_flags
+                .contains(ShipFlags::IMMEDIATE_WEAPON));
+            assert_eq!(template.characteristics.max_thrust, 40);
+            assert_eq!(template.characteristics.thrust_increment, 40);
+            assert_eq!(template.fleet.strength, 44);
+            assert_eq!(template.fleet.known_loc, (438, 6372));
+            assert_eq!(template.intel.weapon_range, 218);
+        }
     }
 
     #[test]
     fn chmmr_template_values() {
-        let template = descriptor_template_for_species(SpeciesId::Chmmr).unwrap();
-        assert_eq!(template.ship_info.ship_cost, 30);
-        assert_eq!(template.ship_info.max_crew, 42);
-        assert_eq!(template.ship_info.max_energy, 42);
-        assert!(template
-            .ship_info
-            .ship_flags
-            .contains(ShipFlags::FIRES_FORE));
-        assert!(template
-            .ship_info
-            .ship_flags
-            .contains(ShipFlags::POINT_DEFENSE));
-        assert_eq!(template.characteristics.ship_mass, 10);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Chmmr).unwrap();
+            assert_eq!(template.ship_info.ship_cost, 30);
+            assert_eq!(template.ship_info.max_crew, 42);
+            assert_eq!(template.ship_info.max_energy, 42);
+            assert!(template
+                .ship_info
+                .ship_flags
+                .contains(ShipFlags::FIRES_FORE));
+            assert!(template
+                .ship_info
+                .ship_flags
+                .contains(ShipFlags::POINT_DEFENSE));
+            assert_eq!(template.characteristics.ship_mass, 10);
+        }
     }
 
     #[test]
     fn earthling_template_values() {
-        let template = descriptor_template_for_species(SpeciesId::Earthling).unwrap();
-        assert_eq!(template.ship_info.ship_cost, 11);
-        assert_eq!(template.characteristics.weapon_energy_cost, 9);
-        assert_eq!(template.intel.weapon_range, 4000);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Earthling).unwrap();
+            assert_eq!(template.ship_info.ship_cost, 11);
+            assert_eq!(template.characteristics.weapon_energy_cost, 9);
+            assert_eq!(template.intel.weapon_range, 4000);
+        }
     }
 
     #[test]
     fn spathi_template_values() {
-        let template = descriptor_template_for_species(SpeciesId::Spathi).unwrap();
-        assert!(template
-            .ship_info
-            .ship_flags
-            .contains(ShipFlags::DONT_CHASE));
-        assert!(template.ship_info.ship_flags.contains(ShipFlags::FIRES_AFT));
-        assert_eq!(template.fleet.known_loc, (2549, 3600));
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Spathi).unwrap();
+            assert!(template
+                .ship_info
+                .ship_flags
+                .contains(ShipFlags::DONT_CHASE));
+            assert!(template.ship_info.ship_flags.contains(ShipFlags::FIRES_AFT));
+            assert_eq!(template.fleet.known_loc, (2549, 3600));
+        }
     }
 
     #[test]
     fn melnorme_infinite_radius() {
-        let template = descriptor_template_for_species(SpeciesId::Melnorme).unwrap();
-        assert_eq!(template.fleet.strength, INFINITE_RADIUS);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Melnorme).unwrap();
+            assert_eq!(template.fleet.strength, INFINITE_RADIUS);
+        }
     }
 
     #[test]
     fn slylandro_infinite_radius_and_crew_immune() {
-        let template = descriptor_template_for_species(SpeciesId::Slylandro).unwrap();
-        assert_eq!(template.fleet.strength, INFINITE_RADIUS);
-        assert!(template
-            .ship_info
-            .ship_flags
-            .contains(ShipFlags::CREW_IMMUNE));
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Slylandro).unwrap();
+            assert_eq!(template.fleet.strength, INFINITE_RADIUS);
+            assert!(template
+                .ship_info
+                .ship_flags
+                .contains(ShipFlags::CREW_IMMUNE));
+        }
     }
 
     #[test]
     fn androsynth_infinite_radius() {
-        let template = descriptor_template_for_species(SpeciesId::Androsynth).unwrap();
-        assert_eq!(template.fleet.strength, INFINITE_RADIUS);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Androsynth).unwrap();
+            assert_eq!(template.fleet.strength, INFINITE_RADIUS);
+        }
     }
 
     #[test]
     fn urquan_probe_minimal_stats() {
-        let template = descriptor_template_for_species(SpeciesId::UrQuanProbe).unwrap();
-        assert_eq!(template.ship_info.ship_cost, 0);
-        assert_eq!(template.ship_info.max_crew, 1);
-        assert_eq!(template.characteristics.max_thrust, 0);
-        assert_eq!(template.characteristics.ship_mass, 0);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::UrQuanProbe).unwrap();
+            assert_eq!(template.ship_info.ship_cost, 0);
+            assert_eq!(template.ship_info.max_crew, 1);
+            assert_eq!(template.characteristics.max_thrust, 0);
+            assert_eq!(template.characteristics.ship_mass, 0);
+        }
     }
 
     #[test]
     fn sa_matra_crew_immune() {
-        let template = descriptor_template_for_species(SpeciesId::SaMatra).unwrap();
-        assert!(template
-            .ship_info
-            .ship_flags
-            .contains(ShipFlags::CREW_IMMUNE));
-        assert_eq!(template.ship_info.max_crew, 1);
-        assert_eq!(template.characteristics.ship_mass, 100);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::SaMatra).unwrap();
+            assert!(template
+                .ship_info
+                .ship_flags
+                .contains(ShipFlags::CREW_IMMUNE));
+            assert_eq!(template.ship_info.max_crew, 1);
+            assert_eq!(template.characteristics.ship_mass, 100);
+        }
     }
 
     // -- create_ship_behavior tests -----------------------------------------
 
     #[test]
     fn create_ship_behavior_all_28_species_succeed() {
-        let all_species = [
-            SpeciesId::Arilou,
-            SpeciesId::Chmmr,
-            SpeciesId::Earthling,
-            SpeciesId::Orz,
-            SpeciesId::Pkunk,
-            SpeciesId::Shofixti,
-            SpeciesId::Spathi,
-            SpeciesId::Supox,
-            SpeciesId::Thraddash,
-            SpeciesId::Utwig,
-            SpeciesId::Vux,
-            SpeciesId::Yehat,
-            SpeciesId::Melnorme,
-            SpeciesId::Druuge,
-            SpeciesId::Ilwrath,
-            SpeciesId::Mycon,
-            SpeciesId::Slylandro,
-            SpeciesId::Umgah,
-            SpeciesId::UrQuan,
-            SpeciesId::Zoqfotpik,
-            SpeciesId::Syreen,
-            SpeciesId::KohrAh,
-            SpeciesId::Androsynth,
-            SpeciesId::Chenjesu,
-            SpeciesId::Mmrnmhrm,
-            SpeciesId::SisShip,
-            SpeciesId::SaMatra,
-            SpeciesId::UrQuanProbe,
-        ];
+        unsafe {
+            let all_species = [
+                SpeciesId::Arilou,
+                SpeciesId::Chmmr,
+                SpeciesId::Earthling,
+                SpeciesId::Orz,
+                SpeciesId::Pkunk,
+                SpeciesId::Shofixti,
+                SpeciesId::Spathi,
+                SpeciesId::Supox,
+                SpeciesId::Thraddash,
+                SpeciesId::Utwig,
+                SpeciesId::Vux,
+                SpeciesId::Yehat,
+                SpeciesId::Melnorme,
+                SpeciesId::Druuge,
+                SpeciesId::Ilwrath,
+                SpeciesId::Mycon,
+                SpeciesId::Slylandro,
+                SpeciesId::Umgah,
+                SpeciesId::UrQuan,
+                SpeciesId::Zoqfotpik,
+                SpeciesId::Syreen,
+                SpeciesId::KohrAh,
+                SpeciesId::Androsynth,
+                SpeciesId::Chenjesu,
+                SpeciesId::Mmrnmhrm,
+                SpeciesId::SisShip,
+                SpeciesId::SaMatra,
+                SpeciesId::UrQuanProbe,
+            ];
 
-        for species in &all_species {
-            let result = create_ship_behavior(*species);
-            assert!(
-                result.is_ok(),
-                "create_ship_behavior failed for {:?}",
-                species
-            );
+            for species in &all_species {
+                let result = create_ship_behavior(*species);
+                assert!(
+                    result.is_ok(),
+                    "create_ship_behavior failed for {:?}",
+                    species
+                );
+            }
         }
     }
 
     #[test]
     fn create_ship_behavior_no_id_returns_error() {
-        let result = create_ship_behavior(SpeciesId::NoId);
-        assert!(result.is_err());
+        unsafe {
+            let result = create_ship_behavior(SpeciesId::NoId);
+            assert!(result.is_err());
+        }
     }
 
     // -- create_race_desc tests ----------------------------------------------
 
     #[test]
     fn create_race_desc_all_28_species_succeed() {
-        let all_species = [
-            SpeciesId::Arilou,
-            SpeciesId::Chmmr,
-            SpeciesId::Earthling,
-            SpeciesId::Orz,
-            SpeciesId::Pkunk,
-            SpeciesId::Shofixti,
-            SpeciesId::Spathi,
-            SpeciesId::Supox,
-            SpeciesId::Thraddash,
-            SpeciesId::Utwig,
-            SpeciesId::Vux,
-            SpeciesId::Yehat,
-            SpeciesId::Melnorme,
-            SpeciesId::Druuge,
-            SpeciesId::Ilwrath,
-            SpeciesId::Mycon,
-            SpeciesId::Slylandro,
-            SpeciesId::Umgah,
-            SpeciesId::UrQuan,
-            SpeciesId::Zoqfotpik,
-            SpeciesId::Syreen,
-            SpeciesId::KohrAh,
-            SpeciesId::Androsynth,
-            SpeciesId::Chenjesu,
-            SpeciesId::Mmrnmhrm,
-            SpeciesId::SisShip,
-            SpeciesId::SaMatra,
-            SpeciesId::UrQuanProbe,
-        ];
+        unsafe {
+            let all_species = [
+                SpeciesId::Arilou,
+                SpeciesId::Chmmr,
+                SpeciesId::Earthling,
+                SpeciesId::Orz,
+                SpeciesId::Pkunk,
+                SpeciesId::Shofixti,
+                SpeciesId::Spathi,
+                SpeciesId::Supox,
+                SpeciesId::Thraddash,
+                SpeciesId::Utwig,
+                SpeciesId::Vux,
+                SpeciesId::Yehat,
+                SpeciesId::Melnorme,
+                SpeciesId::Druuge,
+                SpeciesId::Ilwrath,
+                SpeciesId::Mycon,
+                SpeciesId::Slylandro,
+                SpeciesId::Umgah,
+                SpeciesId::UrQuan,
+                SpeciesId::Zoqfotpik,
+                SpeciesId::Syreen,
+                SpeciesId::KohrAh,
+                SpeciesId::Androsynth,
+                SpeciesId::Chenjesu,
+                SpeciesId::Mmrnmhrm,
+                SpeciesId::SisShip,
+                SpeciesId::SaMatra,
+                SpeciesId::UrQuanProbe,
+            ];
 
-        for species in &all_species {
-            let result = create_race_desc(*species);
-            assert!(result.is_ok(), "create_race_desc failed for {:?}", species);
-            let desc = result.unwrap();
-            assert_eq!(desc.ship_info.ship_cost, desc.ship_info.ship_cost);
+            for species in &all_species {
+                let result = create_race_desc(*species);
+                assert!(result.is_ok(), "create_race_desc failed for {:?}", species);
+                let desc = result.unwrap();
+                assert_eq!(desc.ship_info.ship_cost, desc.ship_info.ship_cost);
+            }
         }
     }
 
     #[test]
     fn create_race_desc_no_id_returns_error() {
-        let result = create_race_desc(SpeciesId::NoId);
-        assert!(result.is_err());
+        unsafe {
+            let result = create_race_desc(SpeciesId::NoId);
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn create_race_desc_aggregates_template() {
-        let desc = create_race_desc(SpeciesId::Arilou).unwrap();
-        assert_eq!(desc.ship_info.ship_cost, 16);
-        assert_eq!(desc.characteristics.max_thrust, 40);
-        assert_eq!(desc.intel.weapon_range, 218);
+        unsafe {
+            let desc = create_race_desc(SpeciesId::Arilou).unwrap();
+            assert_eq!(desc.ship_info.ship_cost, 16);
+            assert_eq!(desc.characteristics.max_thrust, 40);
+            assert_eq!(desc.intel.weapon_range, 218);
+        }
     }
 
     // -- create_metadata_only_desc tests -------------------------------------
 
     #[test]
     fn create_metadata_only_desc_all_28_species_succeed() {
-        let all_species = [
-            SpeciesId::Arilou,
-            SpeciesId::Chmmr,
-            SpeciesId::Earthling,
-            SpeciesId::Orz,
-            SpeciesId::Pkunk,
-            SpeciesId::Shofixti,
-            SpeciesId::Spathi,
-            SpeciesId::Supox,
-            SpeciesId::Thraddash,
-            SpeciesId::Utwig,
-            SpeciesId::Vux,
-            SpeciesId::Yehat,
-            SpeciesId::Melnorme,
-            SpeciesId::Druuge,
-            SpeciesId::Ilwrath,
-            SpeciesId::Mycon,
-            SpeciesId::Slylandro,
-            SpeciesId::Umgah,
-            SpeciesId::UrQuan,
-            SpeciesId::Zoqfotpik,
-            SpeciesId::Syreen,
-            SpeciesId::KohrAh,
-            SpeciesId::Androsynth,
-            SpeciesId::Chenjesu,
-            SpeciesId::Mmrnmhrm,
-            SpeciesId::SisShip,
-            SpeciesId::SaMatra,
-            SpeciesId::UrQuanProbe,
-        ];
+        unsafe {
+            let all_species = [
+                SpeciesId::Arilou,
+                SpeciesId::Chmmr,
+                SpeciesId::Earthling,
+                SpeciesId::Orz,
+                SpeciesId::Pkunk,
+                SpeciesId::Shofixti,
+                SpeciesId::Spathi,
+                SpeciesId::Supox,
+                SpeciesId::Thraddash,
+                SpeciesId::Utwig,
+                SpeciesId::Vux,
+                SpeciesId::Yehat,
+                SpeciesId::Melnorme,
+                SpeciesId::Druuge,
+                SpeciesId::Ilwrath,
+                SpeciesId::Mycon,
+                SpeciesId::Slylandro,
+                SpeciesId::Umgah,
+                SpeciesId::UrQuan,
+                SpeciesId::Zoqfotpik,
+                SpeciesId::Syreen,
+                SpeciesId::KohrAh,
+                SpeciesId::Androsynth,
+                SpeciesId::Chenjesu,
+                SpeciesId::Mmrnmhrm,
+                SpeciesId::SisShip,
+                SpeciesId::SaMatra,
+                SpeciesId::UrQuanProbe,
+            ];
 
-        for species in &all_species {
-            let result = create_metadata_only_desc(*species);
-            assert!(
-                result.is_ok(),
-                "create_metadata_only_desc failed for {:?}",
-                species
-            );
+            for species in &all_species {
+                let result = create_metadata_only_desc(*species);
+                assert!(
+                    result.is_ok(),
+                    "create_metadata_only_desc failed for {:?}",
+                    species
+                );
+            }
         }
     }
 
     #[test]
     fn create_metadata_only_desc_no_id_returns_error() {
-        let result = create_metadata_only_desc(SpeciesId::NoId);
-        assert!(result.is_err());
+        unsafe {
+            let result = create_metadata_only_desc(SpeciesId::NoId);
+            assert!(result.is_err());
+        }
     }
 
     // -- TemplateOnlyShip tests ----------------------------------------------
 
     #[test]
     fn template_only_ship_returns_correct_template() {
-        let ship = TemplateOnlyShip::new(SpeciesId::Spathi).unwrap();
-        let template = ship.descriptor_template();
-        assert_eq!(template.ship_info.ship_cost, 18);
+        unsafe {
+            let ship = TemplateOnlyShip::new(SpeciesId::Spathi).unwrap();
+            let template = ship.descriptor_template();
+            assert_eq!(template.ship_info.ship_cost, 18);
+        }
     }
 
     #[test]
     fn template_only_ship_defaults_are_safe() {
-        let mut ship = TemplateOnlyShip::new(SpeciesId::Arilou).unwrap();
-        let mut state = ShipState {
-            crew_level: 6,
-            max_crew: 6,
-            energy_level: 20,
-            max_energy: 20,
-            ship_facing: 0,
-            cur_status_flags: StatusFlags::empty(),
-            old_status_flags: StatusFlags::empty(),
-            player_nr: 0,
-            position: (0, 0),
-            velocity: (0, 0),
-        };
-        let ctx = BattleContext {
-            hyperspace: false,
-            frame_count: 0,
-            gravity_center: None,
-        };
+        unsafe {
+            let mut ship = TemplateOnlyShip::new(SpeciesId::Arilou).unwrap();
+            let mut state = ShipState {
+                crew_level: 6,
+                max_crew: 6,
+                energy_level: 20,
+                max_energy: 20,
+                ship_facing: 0,
+                cur_status_flags: StatusFlags::empty(),
+                old_status_flags: StatusFlags::empty(),
+                player_nr: 0,
+                position: (0, 0),
+                velocity: (0, 0),
+            };
+            let ctx = BattleContext {
+                hyperspace: false,
+                frame_count: 0,
+                gravity_center: None,
+            };
 
-        // All default hooks should be safe no-ops
-        assert!(ship.preprocess(&mut state, &ctx).is_ok());
-        assert!(ship.postprocess(&mut state, &ctx).is_ok());
-        assert!(ship.init_weapon(&state, &ctx).unwrap().is_empty());
-        assert!(ship.intelligence(&state, &ctx).is_empty());
-        ship.uninit(); // Should not panic
-        assert!(ship.collision_override().is_none());
+            // All default hooks should be safe no-ops
+            assert!(ship.preprocess(&mut state, &ctx).is_ok());
+            assert!(ship.postprocess(&mut state, &ctx).is_ok());
+            assert!(ship.init_weapon(&state, &ctx).unwrap().is_empty());
+            assert!(ship.intelligence(&state, &ctx).is_empty());
+            ship.uninit(); // Should not panic
+            assert!(ship.collision_override().is_none());
+        }
     }
 
     // -- Resource IDs are zero (P05's job) -----------------------------------
 
     #[test]
     fn template_ship_data_all_zeroes() {
-        let template = descriptor_template_for_species(SpeciesId::Chmmr).unwrap();
-        assert_eq!(template.ship_data.ship_res, [0; 3]);
-        assert_eq!(template.ship_data.weapon_res, [0; 3]);
-        assert_eq!(template.ship_data.special_res, [0; 3]);
-        assert_eq!(template.ship_data.captain.captain_res, 0);
-        assert_eq!(template.ship_data.victory_ditty_res, 0);
-        assert_eq!(template.ship_data.ship_sounds_res, 0);
+        unsafe {
+            let template = descriptor_template_for_species(SpeciesId::Chmmr).unwrap();
+            assert_eq!(template.ship_data.ship_res, [0; 3]);
+            assert_eq!(template.ship_data.weapon_res, [0; 3]);
+            assert_eq!(template.ship_data.special_res, [0; 3]);
+            assert_eq!(template.ship_data.captain.captain_res, 0);
+            assert_eq!(template.ship_data.victory_ditty_res, 0);
+            assert_eq!(template.ship_data.ship_sounds_res, 0);
+        }
     }
 }

@@ -64,7 +64,7 @@ pub const AWESOME_RATING: u8 = 1 << 6;
 /// - facing: COUNT  
 /// - object_ptr: *const ELEMENT
 /// - ObjectPtr: HELEMENT
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct EvaluateDesc {
     /// Turn counter for this evaluation
     pub which_turn: u16,
@@ -74,17 +74,6 @@ pub struct EvaluateDesc {
     pub distance: i32,
     /// Object handle (opaque in Phase 1)
     pub object_handle: usize,
-}
-
-impl Default for EvaluateDesc {
-    fn default() -> Self {
-        Self {
-            which_turn: 0,
-            facing: 0,
-            distance: 0,
-            object_handle: 0,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -132,19 +121,19 @@ impl AiInput {
     pub fn to_status_flags(&self) -> u32 {
         let mut flags = 0u32;
         if self.turn_left {
-            flags |= super::ship_runtime::LEFT as u32;
+            flags |= super::ship_runtime::LEFT;
         }
         if self.turn_right {
-            flags |= super::ship_runtime::RIGHT as u32;
+            flags |= super::ship_runtime::RIGHT;
         }
         if self.thrust {
-            flags |= super::ship_runtime::THRUST as u32;
+            flags |= super::ship_runtime::THRUST;
         }
         if self.fire_weapon {
-            flags |= super::ship_runtime::WEAPON as u32;
+            flags |= super::ship_runtime::WEAPON;
         }
         if self.fire_special {
-            flags |= super::ship_runtime::SPECIAL as u32;
+            flags |= super::ship_runtime::SPECIAL;
         }
         flags
     }

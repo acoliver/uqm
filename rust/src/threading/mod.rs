@@ -873,7 +873,7 @@ unsafe fn destroy_ffi_thread_local(thread_local: *mut FfiThreadLocal) {
 /// # Safety
 /// Safe to call from C.
 #[no_mangle]
-pub extern "C" fn rust_init_thread_system() -> c_int {
+pub unsafe extern "C" fn rust_init_thread_system() -> c_int {
     match init_thread_system() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -885,7 +885,7 @@ pub extern "C" fn rust_init_thread_system() -> c_int {
 /// # Safety
 /// Safe to call from C.
 #[no_mangle]
-pub extern "C" fn rust_uninit_thread_system() {
+pub unsafe extern "C" fn rust_uninit_thread_system() {
     uninit_thread_system();
 }
 
@@ -897,7 +897,7 @@ pub extern "C" fn rust_uninit_thread_system() {
 /// # Safety
 /// Safe to call from C.
 #[no_mangle]
-pub extern "C" fn rust_is_thread_system_initialized() -> c_int {
+pub unsafe extern "C" fn rust_is_thread_system_initialized() -> c_int {
     if is_thread_system_initialized() {
         1
     } else {
@@ -1034,7 +1034,7 @@ pub unsafe extern "C" fn rust_thread_join(
 /// # Safety
 /// Safe to call from C.
 #[no_mangle]
-pub extern "C" fn rust_thread_yield() {
+pub unsafe extern "C" fn rust_thread_yield() {
     task_switch();
 }
 
@@ -1046,12 +1046,12 @@ pub extern "C" fn rust_thread_yield() {
 /// # Safety
 /// Safe to call from C.
 #[no_mangle]
-pub extern "C" fn rust_hibernate_thread(msecs: u32) {
+pub unsafe extern "C" fn rust_hibernate_thread(msecs: u32) {
     hibernate_thread(Duration::from_millis(msecs as u64));
 }
 
 #[no_mangle]
-pub extern "C" fn rust_thread_local_create() -> *mut c_void {
+pub unsafe extern "C" fn rust_thread_local_create() -> *mut c_void {
     let existing = current_ffi_thread_local();
     if !existing.is_null() {
         return existing as *mut c_void;
@@ -1078,7 +1078,7 @@ pub unsafe extern "C" fn rust_thread_local_destroy(thread_local: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_get_my_thread_local() -> *mut c_void {
+pub unsafe extern "C" fn rust_get_my_thread_local() -> *mut c_void {
     current_ffi_thread_local() as *mut c_void
 }
 
@@ -1422,6 +1422,6 @@ pub unsafe extern "C" fn rust_semaphore_count(sem: *mut RustSemaphore) -> u32 {
 /// # Safety
 /// Safe to call from C.
 #[no_mangle]
-pub extern "C" fn rust_task_switch() {
+pub unsafe extern "C" fn rust_task_switch() {
     task_switch();
 }

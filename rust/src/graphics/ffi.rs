@@ -150,7 +150,7 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 // No .unwrap(), .expect(), or panicking indexing. format!() is the only
 // theoretical panic source (OOM), which is non-recoverable regardless.
 #[no_mangle]
-pub extern "C" fn rust_gfx_init(
+pub unsafe extern "C" fn rust_gfx_init(
     _driver: c_int,
     flags: c_int,
     _renderer: *const c_char,
@@ -360,7 +360,7 @@ pub extern "C" fn rust_gfx_init(
 // PANIC-FREE: Uses if-let guard, null checks, and explicit drops only.
 // Safe to call when never initialized (REQ-ERR-050, REQ-UNINIT-030).
 #[no_mangle]
-pub extern "C" fn rust_gfx_uninit() {
+pub unsafe extern "C" fn rust_gfx_uninit() {
     rust_bridge_log_msg("RUST_GFX_UNINIT");
 
     // Take ownership of the state so we can control drop order
@@ -400,21 +400,21 @@ pub extern "C" fn rust_gfx_uninit() {
 /// Get SDL_Screen pointer for C code (main screen = 0)
 // PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
 #[no_mangle]
-pub extern "C" fn rust_gfx_get_sdl_screen() -> *mut SDL_Surface {
+pub unsafe extern "C" fn rust_gfx_get_sdl_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(0)
 }
 
 /// Get TransitionScreen pointer for C code (screen = 2)
 // PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
 #[no_mangle]
-pub extern "C" fn rust_gfx_get_transition_screen() -> *mut SDL_Surface {
+pub unsafe extern "C" fn rust_gfx_get_transition_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(2)
 }
 
 /// Get SDL_Screens[i] pointer for C code
 // PANIC-FREE: Range check before indexing, if-let guard for uninitialized state.
 #[no_mangle]
-pub extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface {
+pub unsafe extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface {
     if screen < 0 || screen >= TFB_GFX_NUMSCREENS as c_int {
         return ptr::null_mut();
     }
@@ -428,7 +428,7 @@ pub extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface
 /// Get format_conv_surf for C code
 // PANIC-FREE: if-let guard returns null when uninitialized, no indexing.
 #[no_mangle]
-pub extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
+pub unsafe extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
     if let Some(state) = get_gfx_state() {
         return state.format_conv_surf;
     }
@@ -446,7 +446,7 @@ pub extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 // PANIC-FREE: if-let guard for uninitialized state. SDL2 set_blend_mode,
 // set_draw_color, and clear do not panic.
 #[no_mangle]
-pub extern "C" fn rust_gfx_preprocess(
+pub unsafe extern "C" fn rust_gfx_preprocess(
     _force_redraw: c_int,
     _transition_amount: c_int,
     _fade_amount: c_int,
@@ -475,7 +475,7 @@ pub extern "C" fn rust_gfx_preprocess(
 // PANIC-FREE: if-let guard for uninitialized state. All SDL operations use
 // if-let/let-discard patterns. NonZeroU32 and Pixmap use match with early return.
 #[no_mangle]
-pub extern "C" fn rust_gfx_postprocess() {
+pub unsafe extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
         // @plan P08: Remove this texture upload block once ScreenLayer composites.
         let texture_creator = state.canvas.texture_creator();
@@ -575,17 +575,15 @@ pub extern "C" fn rust_gfx_postprocess() {
                 }
             }
 
-            if !uploaded {
-                if !src_surface.is_null() {
-                    unsafe {
-                        let surf = &*src_surface;
-                        if !surf.pixels.is_null() && surf.pitch > 0 {
-                            let pitch = surf.pitch as usize;
-                            let total_size = pitch * SCREEN_HEIGHT as usize;
-                            let pixel_data =
-                                std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
-                            let _ = texture.update(None, pixel_data, pitch);
-                        }
+            if !uploaded && !src_surface.is_null() {
+                unsafe {
+                    let surf = &*src_surface;
+                    if !surf.pixels.is_null() && surf.pitch > 0 {
+                        let pitch = surf.pitch as usize;
+                        let total_size = pitch * SCREEN_HEIGHT as usize;
+                        let pixel_data =
+                            std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
+                        let _ = texture.update(None, pixel_data, pitch);
                     }
                 }
             }
@@ -610,7 +608,7 @@ pub extern "C" fn rust_gfx_postprocess() {
 /// @requirement REQ-UTS-010
 // PANIC-FREE: Empty function body, no operations.
 #[no_mangle]
-pub extern "C" fn rust_gfx_upload_transition_screen() {
+pub unsafe extern "C" fn rust_gfx_upload_transition_screen() {
     // Intentional no-op: see doc comment above.
 }
 
@@ -629,7 +627,7 @@ pub extern "C" fn rust_gfx_upload_transition_screen() {
 // PANIC-FREE: match/if-let guards throughout. Range check before array indexing.
 // All SDL operations use is_err()/let-discard. No .unwrap() or .expect().
 #[no_mangle]
-pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rect) {
+pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rect) {
     // REQ-SCR-140: uninitialized guard
     let state = match get_gfx_state() {
         Some(s) => s,
@@ -823,7 +821,7 @@ pub extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rec
 // PANIC-FREE: match guard for uninitialized state. Null check on rect pointer.
 // SDL fill_rect result discarded. No .unwrap() or .expect().
 #[no_mangle]
-pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
+pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
     // REQ-CLR-060: uninitialized guard
     let state = match get_gfx_state() {
         Some(s) => s,
@@ -865,12 +863,11 @@ pub extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Re
 // PANIC-FREE: if-let guard for uninitialized state. poll_iter and match
 // on event variants do not panic.
 #[no_mangle]
-pub extern "C" fn rust_gfx_process_events() -> c_int {
+pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
     if let Some(state) = get_gfx_state() {
         for event in state.event_pump.poll_iter() {
-            match event {
-                sdl2::event::Event::Quit { .. } => return 1,
-                _ => {}
+            if let sdl2::event::Event::Quit { .. } = event {
+                return 1;
             }
         }
     }
@@ -982,7 +979,7 @@ fn convert_c_rect(rect: *const SDL_Rect) -> Option<sdl2::rect::Rect> {
 // PANIC-FREE: if-let guard for uninitialized state. Bool flip and conditional
 // return value, no fallible operations.
 #[no_mangle]
-pub extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
+pub unsafe extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
         state.fullscreen = !state.fullscreen;
         return if state.fullscreen { 1 } else { 0 };
@@ -993,7 +990,7 @@ pub extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
 /// Check if fullscreen
 // PANIC-FREE: if-let guard for uninitialized state. Bool read only.
 #[no_mangle]
-pub extern "C" fn rust_gfx_is_fullscreen() -> c_int {
+pub unsafe extern "C" fn rust_gfx_is_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
         return if state.fullscreen { 1 } else { 0 };
     }
@@ -1003,21 +1000,21 @@ pub extern "C" fn rust_gfx_is_fullscreen() -> c_int {
 /// Set gamma (not supported in software mode)
 // PANIC-FREE: Returns constant -1, no operations.
 #[no_mangle]
-pub extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
+pub unsafe extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
     -1 // Not supported
 }
 
 /// Get screen width
 // PANIC-FREE: Returns constant, no operations.
 #[no_mangle]
-pub extern "C" fn rust_gfx_get_width() -> c_int {
+pub unsafe extern "C" fn rust_gfx_get_width() -> c_int {
     SCREEN_WIDTH as c_int
 }
 
 /// Get screen height
 // PANIC-FREE: Returns constant, no operations.
 #[no_mangle]
-pub extern "C" fn rust_gfx_get_height() -> c_int {
+pub unsafe extern "C" fn rust_gfx_get_height() -> c_int {
     SCREEN_HEIGHT as c_int
 }
 
@@ -1027,7 +1024,9 @@ mod tests {
 
     #[test]
     fn test_sdl_rect_size() {
-        assert_eq!(std::mem::size_of::<SDL_Rect>(), 16);
+        unsafe {
+            assert_eq!(std::mem::size_of::<SDL_Rect>(), 16);
+        }
     }
 
     // ========================================================================
@@ -1043,13 +1042,15 @@ mod tests {
     /// THEN:  Returns immediately with no side effects (no panic/crash)
     #[test]
     fn test_preprocess_uninitialized_no_panic() {
-        // Ensure uninitialized state
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        // Call preprocess — must not panic or crash
-        rust_gfx_preprocess(0, 0, 0);
+        unsafe {
+            // Ensure uninitialized state
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            // Call preprocess — must not panic or crash
+            rust_gfx_preprocess(0, 0, 0);
+        }
     }
 
     /// REQ-POST-030: Postprocess returns immediately when uninitialized.
@@ -1058,22 +1059,26 @@ mod tests {
     /// THEN:  Returns immediately with no side effects (no panic/crash)
     #[test]
     fn test_postprocess_uninitialized_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_postprocess();
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_postprocess();
+        }
     }
 
     /// Verify SDL_Rect::default() produces zeroed fields.
     /// This is important because C code depends on zero-initialized rects.
     #[test]
     fn test_sdl_rect_default() {
-        let rect = SDL_Rect::default();
-        assert_eq!(rect.x, 0);
-        assert_eq!(rect.y, 0);
-        assert_eq!(rect.w, 0);
-        assert_eq!(rect.h, 0);
+        unsafe {
+            let rect = SDL_Rect::default();
+            assert_eq!(rect.x, 0);
+            assert_eq!(rect.y, 0);
+            assert_eq!(rect.w, 0);
+            assert_eq!(rect.h, 0);
+        }
     }
 
     /// REQ-INIT-095: Calling init when already initialized returns -1.
@@ -1085,16 +1090,18 @@ mod tests {
     #[test]
     #[ignore]
     fn test_init_already_initialized_returns_neg1() {
-        // First init should succeed
-        let result1 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
-        assert_eq!(result1, 0, "first init should succeed");
+        unsafe {
+            // First init should succeed
+            let result1 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            assert_eq!(result1, 0, "first init should succeed");
 
-        // Second init should return -1
-        let result2 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
-        assert_eq!(result2, -1, "second init must return -1 (REQ-INIT-095)");
+            // Second init should return -1
+            let result2 = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            assert_eq!(result2, -1, "second init must return -1 (REQ-INIT-095)");
 
-        // Cleanup
-        rust_gfx_uninit();
+            // Cleanup
+            rust_gfx_uninit();
+        }
     }
 
     /// REQ-INIT-080: Successful init returns 0.
@@ -1102,9 +1109,11 @@ mod tests {
     #[test]
     #[ignore]
     fn test_init_returns_zero() {
-        let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
-        assert_eq!(result, 0, "init should return 0 on success (REQ-INIT-080)");
-        rust_gfx_uninit();
+        unsafe {
+            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            assert_eq!(result, 0, "init should return 0 on success (REQ-INIT-080)");
+            rust_gfx_uninit();
+        }
     }
 
     /// REQ-INIT-030: After init, get_screen_surface(0..2) returns non-null.
@@ -1112,19 +1121,21 @@ mod tests {
     #[test]
     #[ignore]
     fn test_init_creates_surfaces() {
-        let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
-        assert_eq!(result, 0, "init must succeed");
+        unsafe {
+            let result = rust_gfx_init(0, 0, std::ptr::null(), 640, 480);
+            assert_eq!(result, 0, "init must succeed");
 
-        for i in 0..TFB_GFX_NUMSCREENS as c_int {
-            let surface = rust_gfx_get_screen_surface(i);
-            assert!(
-                !surface.is_null(),
-                "screen surface {} must be non-null after init (REQ-INIT-030)",
-                i
-            );
+            for i in 0..TFB_GFX_NUMSCREENS as c_int {
+                let surface = rust_gfx_get_screen_surface(i);
+                assert!(
+                    !surface.is_null(),
+                    "screen surface {} must be non-null after init (REQ-INIT-030)",
+                    i
+                );
+            }
+
+            rust_gfx_uninit();
         }
-
-        rust_gfx_uninit();
     }
 
     /// REQ-INIT-060: Init with soft-scaler flags allocates scaled buffers.
@@ -1132,24 +1143,26 @@ mod tests {
     #[test]
     #[ignore]
     fn test_init_scaling_buffers() {
-        // Flag bit 7 = SCALE_HQXX (triggers soft scaler allocation)
-        let hqxx_flag: c_int = 1 << 7;
-        let result = rust_gfx_init(0, hqxx_flag, std::ptr::null(), 640, 480);
-        assert_eq!(result, 0, "init with SCALE_HQXX must succeed");
+        unsafe {
+            // Flag bit 7 = SCALE_HQXX (triggers soft scaler allocation)
+            let hqxx_flag: c_int = 1 << 7;
+            let result = rust_gfx_init(0, hqxx_flag, std::ptr::null(), 640, 480);
+            assert_eq!(result, 0, "init with SCALE_HQXX must succeed");
 
-        if let Some(state) = get_gfx_state() {
-            for i in 0..TFB_GFX_NUMSCREENS {
-                assert!(
-                    state.scaled_buffers[i].is_some(),
-                    "scaled_buffer[{}] must be allocated when soft scaler is active (REQ-INIT-060)",
-                    i
-                );
+            if let Some(state) = get_gfx_state() {
+                for i in 0..TFB_GFX_NUMSCREENS {
+                    assert!(
+                        state.scaled_buffers[i].is_some(),
+                        "scaled_buffer[{}] must be allocated when soft scaler is active (REQ-INIT-060)",
+                        i
+                    );
+                }
+            } else {
+                panic!("state must be Some after successful init");
             }
-        } else {
-            panic!("state must be Some after successful init");
-        }
 
-        rust_gfx_uninit();
+            rust_gfx_uninit();
+        }
     }
 
     // NOTE: test_init_partial_failure_cleanup (REQ-INIT-090) deferred to P13 (Error Handling)
@@ -1172,57 +1185,67 @@ mod tests {
     /// REQ-SCR-140: rust_gfx_screen returns immediately when uninitialized.
     #[test]
     fn test_gfx_screen_uninitialized_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_screen(0, 255, std::ptr::null());
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_screen(0, 255, std::ptr::null());
+        }
     }
 
     /// REQ-SCR-100: rust_gfx_screen returns for out-of-range screen indices.
     #[test]
     fn test_gfx_screen_out_of_range_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_screen(-1, 255, std::ptr::null());
-        rust_gfx_screen(3, 255, std::ptr::null());
-        rust_gfx_screen(100, 255, std::ptr::null());
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_screen(-1, 255, std::ptr::null());
+            rust_gfx_screen(3, 255, std::ptr::null());
+            rust_gfx_screen(100, 255, std::ptr::null());
+        }
     }
 
     /// REQ-SCR-090: rust_gfx_screen(1, ...) returns immediately (extra screen skip).
     #[test]
     fn test_gfx_screen_extra_skip_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_screen(TFB_SCREEN_EXTRA, 128, std::ptr::null());
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_screen(TFB_SCREEN_EXTRA, 128, std::ptr::null());
+        }
     }
 
     /// REQ-SCR-160: convert_c_rect null → None.
     #[test]
     fn test_convert_c_rect_null_returns_none() {
-        assert!(convert_c_rect(std::ptr::null()).is_none());
+        unsafe {
+            assert!(convert_c_rect(std::ptr::null()).is_none());
+        }
     }
 
     /// REQ-SCR-160: convert_c_rect non-null → Some with correct values.
     #[test]
     fn test_convert_c_rect_valid_rect() {
-        let c_rect = SDL_Rect {
-            x: 10,
-            y: 20,
-            w: 100,
-            h: 50,
-        };
-        let result = convert_c_rect(&c_rect as *const SDL_Rect);
-        assert!(result.is_some());
-        let r = result.unwrap();
-        assert_eq!(r.x(), 10);
-        assert_eq!(r.y(), 20);
-        assert_eq!(r.width(), 100);
-        assert_eq!(r.height(), 50);
+        unsafe {
+            let c_rect = SDL_Rect {
+                x: 10,
+                y: 20,
+                w: 100,
+                h: 50,
+            };
+            let result = convert_c_rect(&c_rect as *const SDL_Rect);
+            assert!(result.is_some());
+            let r = result.unwrap();
+            assert_eq!(r.x(), 10);
+            assert_eq!(r.y(), 20);
+            assert_eq!(r.width(), 100);
+            assert_eq!(r.height(), 50);
+        }
     }
 
     /// REQ-SCR-160: convert_c_rect clamps negative width/height to 0.
@@ -1230,38 +1253,42 @@ mod tests {
     /// that the clamped-to-0 value becomes 1 after sdl2's own clamp.
     #[test]
     fn test_convert_c_rect_negative_dimensions_clamped() {
-        let c_rect = SDL_Rect {
-            x: 5,
-            y: 5,
-            w: -10,
-            h: -20,
-        };
-        let result = convert_c_rect(&c_rect as *const SDL_Rect);
-        assert!(result.is_some());
-        let r = result.unwrap();
-        assert_eq!(r.x(), 5);
-        assert_eq!(r.y(), 5);
-        // We clamp to 0, sdl2::rect::Rect then clamps 0→1
-        assert_eq!(r.width(), 1);
-        assert_eq!(r.height(), 1);
+        unsafe {
+            let c_rect = SDL_Rect {
+                x: 5,
+                y: 5,
+                w: -10,
+                h: -20,
+            };
+            let result = convert_c_rect(&c_rect as *const SDL_Rect);
+            assert!(result.is_some());
+            let r = result.unwrap();
+            assert_eq!(r.x(), 5);
+            assert_eq!(r.y(), 5);
+            // We clamp to 0, sdl2::rect::Rect then clamps 0→1
+            assert_eq!(r.width(), 1);
+            assert_eq!(r.height(), 1);
+        }
     }
 
     /// convert_c_rect with zero-sized rect.
     /// sdl2::rect::Rect clamps minimum dimension to 1.
     #[test]
     fn test_convert_c_rect_zero_size() {
-        let c_rect = SDL_Rect {
-            x: 0,
-            y: 0,
-            w: 0,
-            h: 0,
-        };
-        let result = convert_c_rect(&c_rect as *const SDL_Rect);
-        assert!(result.is_some());
-        let r = result.unwrap();
-        // sdl2::rect::Rect clamps 0→1
-        assert_eq!(r.width(), 1);
-        assert_eq!(r.height(), 1);
+        unsafe {
+            let c_rect = SDL_Rect {
+                x: 0,
+                y: 0,
+                w: 0,
+                h: 0,
+            };
+            let result = convert_c_rect(&c_rect as *const SDL_Rect);
+            assert!(result.is_some());
+            let r = result.unwrap();
+            // sdl2::rect::Rect clamps 0→1
+            assert_eq!(r.width(), 1);
+            assert_eq!(r.height(), 1);
+        }
     }
 
     // ========================================================================
@@ -1273,39 +1300,45 @@ mod tests {
     /// REQ-CLR-060: rust_gfx_color returns immediately when uninitialized.
     #[test]
     fn test_gfx_color_uninitialized_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_color(255, 0, 0, 128, std::ptr::null());
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_color(255, 0, 0, 128, std::ptr::null());
+        }
     }
 
     /// REQ-CLR-055: rust_gfx_color returns for negative rect dimensions.
     #[test]
     fn test_gfx_color_negative_rect_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        // Negative rect dimensions — returns at uninitialized guard first,
-        // but verifies no panic with bad rect data
-        let bad_rect = SDL_Rect {
-            x: 0,
-            y: 0,
-            w: -10,
-            h: -20,
-        };
-        rust_gfx_color(255, 128, 0, 200, &bad_rect as *const SDL_Rect);
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            // Negative rect dimensions — returns at uninitialized guard first,
+            // but verifies no panic with bad rect data
+            let bad_rect = SDL_Rect {
+                x: 0,
+                y: 0,
+                w: -10,
+                h: -20,
+            };
+            rust_gfx_color(255, 128, 0, 200, &bad_rect as *const SDL_Rect);
+        }
     }
 
     /// rust_gfx_color with null rect does not panic when uninitialized.
     #[test]
     fn test_gfx_color_null_rect_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_color(0, 0, 0, 0, std::ptr::null());
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_color(0, 0, 0, 0, std::ptr::null());
+        }
     }
 
     // ========================================================================
@@ -1320,41 +1353,45 @@ mod tests {
     /// RGBX8888 `[X, B, G, R]` → RGBA `[R, G, B, 0xFF]`.
     #[test]
     fn test_convert_rgbx_to_rgba_basic() {
-        // Two pixels, tightly packed (pitch == width * 4)
-        let src: [u8; 8] = [
-            0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
-            0x00, 0x33, 0x66, 0x99, // pixel 1: X=0x00, B=0x33, G=0x66, R=0x99
-        ];
-        let mut dst = [0u8; 8];
-        convert_rgbx_to_rgba(&src, &mut dst, 2, 1, 8);
+        unsafe {
+            // Two pixels, tightly packed (pitch == width * 4)
+            let src: [u8; 8] = [
+                0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
+                0x00, 0x33, 0x66, 0x99, // pixel 1: X=0x00, B=0x33, G=0x66, R=0x99
+            ];
+            let mut dst = [0u8; 8];
+            convert_rgbx_to_rgba(&src, &mut dst, 2, 1, 8);
 
-        assert_eq!(
-            dst,
-            [
-                0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
-                0x99, 0x66, 0x33, 0xFF, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xFF
-            ]
-        );
+            assert_eq!(
+                dst,
+                [
+                    0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
+                    0x99, 0x66, 0x33, 0xFF, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xFF
+                ]
+            );
+        }
     }
 
     /// REQ-SCALE-060: convert_rgbx_to_rgba with pitch > width*4.
     #[test]
     fn test_convert_rgbx_to_rgba_with_pitch() {
-        // 1 pixel wide, pitch=8 (4 bytes padding per row)
-        let src: [u8; 16] = [
-            0xAA, 0x11, 0x22, 0x33, 0xDE, 0xAD, 0xBE, 0xEF, // row 0 + padding
-            0xBB, 0x44, 0x55, 0x66, 0xCA, 0xFE, 0xBA, 0xBE, // row 1 + padding
-        ];
-        let mut dst = [0u8; 8];
-        convert_rgbx_to_rgba(&src, &mut dst, 1, 2, 8);
+        unsafe {
+            // 1 pixel wide, pitch=8 (4 bytes padding per row)
+            let src: [u8; 16] = [
+                0xAA, 0x11, 0x22, 0x33, 0xDE, 0xAD, 0xBE, 0xEF, // row 0 + padding
+                0xBB, 0x44, 0x55, 0x66, 0xCA, 0xFE, 0xBA, 0xBE, // row 1 + padding
+            ];
+            let mut dst = [0u8; 8];
+            convert_rgbx_to_rgba(&src, &mut dst, 1, 2, 8);
 
-        assert_eq!(
-            dst,
-            [
-                0x33, 0x22, 0x11, 0xFF, // row 0: R=0x33, G=0x22, B=0x11, A=0xFF
-                0x66, 0x55, 0x44, 0xFF, // row 1: R=0x66, G=0x55, B=0x44, A=0xFF
-            ]
-        );
+            assert_eq!(
+                dst,
+                [
+                    0x33, 0x22, 0x11, 0xFF, // row 0: R=0x33, G=0x22, B=0x11, A=0xFF
+                    0x66, 0x55, 0x44, 0xFF, // row 1: R=0x66, G=0x55, B=0x44, A=0xFF
+                ]
+            );
+        }
     }
 
     /// REQ-SCALE-070: convert_rgba_to_rgbx basic test.
@@ -1362,20 +1399,22 @@ mod tests {
     /// RGBA `[R, G, B, A]` → RGBX8888 `[0xFF, B, G, R]`.
     #[test]
     fn test_convert_rgba_to_rgbx_basic() {
-        let src: [u8; 8] = [
-            0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
-            0x99, 0x66, 0x33, 0xAA, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xAA
-        ];
-        let mut dst = [0u8; 8];
-        convert_rgba_to_rgbx(&src, &mut dst, 2, 1);
+        unsafe {
+            let src: [u8; 8] = [
+                0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
+                0x99, 0x66, 0x33, 0xAA, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xAA
+            ];
+            let mut dst = [0u8; 8];
+            convert_rgba_to_rgbx(&src, &mut dst, 2, 1);
 
-        assert_eq!(
-            dst,
-            [
-                0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
-                0xFF, 0x33, 0x66, 0x99, // pixel 1: X=0xFF, B=0x33, G=0x66, R=0x99
-            ]
-        );
+            assert_eq!(
+                dst,
+                [
+                    0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
+                    0xFF, 0x33, 0x66, 0x99, // pixel 1: X=0xFF, B=0x33, G=0x66, R=0x99
+                ]
+            );
+        }
     }
 
     /// REQ-SCALE-060/070: RGBX→RGBA→RGBX roundtrip preserves R, G, B channels.
@@ -1385,41 +1424,43 @@ mod tests {
     /// because screen surfaces have no meaningful alpha.
     #[test]
     fn test_convert_rgbx_rgba_roundtrip() {
-        // 2×2 image, tightly packed
-        let original: [u8; 16] = [
-            0x00, 0x11, 0x22, 0x33, // pixel (0,0)
-            0xAA, 0xBB, 0xCC, 0xDD, // pixel (1,0)
-            0x12, 0x34, 0x56, 0x78, // pixel (0,1)
-            0x9A, 0xBC, 0xDE, 0xF0, // pixel (1,1)
-        ];
-        let mut rgba = [0u8; 16];
-        let mut roundtrip = [0u8; 16];
+        unsafe {
+            // 2×2 image, tightly packed
+            let original: [u8; 16] = [
+                0x00, 0x11, 0x22, 0x33, // pixel (0,0)
+                0xAA, 0xBB, 0xCC, 0xDD, // pixel (1,0)
+                0x12, 0x34, 0x56, 0x78, // pixel (0,1)
+                0x9A, 0xBC, 0xDE, 0xF0, // pixel (1,1)
+            ];
+            let mut rgba = [0u8; 16];
+            let mut roundtrip = [0u8; 16];
 
-        convert_rgbx_to_rgba(&original, &mut rgba, 2, 2, 8);
-        convert_rgba_to_rgbx(&rgba, &mut roundtrip, 2, 2);
+            convert_rgbx_to_rgba(&original, &mut rgba, 2, 2, 8);
+            convert_rgba_to_rgbx(&rgba, &mut roundtrip, 2, 2);
 
-        // R, G, B channels must survive the roundtrip; X becomes 0xFF
-        for i in 0..4 {
-            let off = i * 4;
-            assert_eq!(
-                roundtrip[off + 1],
-                original[off + 1],
-                "pixel {} B channel mismatch",
-                i
-            );
-            assert_eq!(
-                roundtrip[off + 2],
-                original[off + 2],
-                "pixel {} G channel mismatch",
-                i
-            );
-            assert_eq!(
-                roundtrip[off + 3],
-                original[off + 3],
-                "pixel {} R channel mismatch",
-                i
-            );
-            assert_eq!(roundtrip[off], 0xFF, "pixel {} X channel must be 0xFF", i);
+            // R, G, B channels must survive the roundtrip; X becomes 0xFF
+            for i in 0..4 {
+                let off = i * 4;
+                assert_eq!(
+                    roundtrip[off + 1],
+                    original[off + 1],
+                    "pixel {} B channel mismatch",
+                    i
+                );
+                assert_eq!(
+                    roundtrip[off + 2],
+                    original[off + 2],
+                    "pixel {} G channel mismatch",
+                    i
+                );
+                assert_eq!(
+                    roundtrip[off + 3],
+                    original[off + 3],
+                    "pixel {} R channel mismatch",
+                    i
+                );
+                assert_eq!(roundtrip[off], 0xFF, "pixel {} X channel must be 0xFF", i);
+            }
         }
     }
 
@@ -1428,20 +1469,22 @@ mod tests {
     /// Bit 7 = HQ2x (factor 2), bit 8 = xBRZ3 (factor 3), bit 9 = xBRZ4 (factor 4).
     #[test]
     fn test_scale_factor_from_flags() {
-        // No scaling flags → None
-        assert_eq!(scale_factor_from_flags(0), None);
+        unsafe {
+            // No scaling flags → None
+            assert_eq!(scale_factor_from_flags(0), None);
 
-        // HQ2x (bit 7) → Some(2)
-        assert_eq!(scale_factor_from_flags(1 << 7), Some(2));
+            // HQ2x (bit 7) → Some(2)
+            assert_eq!(scale_factor_from_flags(1 << 7), Some(2));
 
-        // xBRZ3 (bit 8) → Some(3)
-        assert_eq!(scale_factor_from_flags(1 << 8), Some(3));
+            // xBRZ3 (bit 8) → Some(3)
+            assert_eq!(scale_factor_from_flags(1 << 8), Some(3));
 
-        // xBRZ4 (bit 9) → Some(4)
-        assert_eq!(scale_factor_from_flags(1 << 9), Some(4));
+            // xBRZ4 (bit 9) → Some(4)
+            assert_eq!(scale_factor_from_flags(1 << 9), Some(4));
 
-        // xBRZ3 takes priority over HQ2x when both set
-        assert_eq!(scale_factor_from_flags((1 << 7) | (1 << 8)), Some(3));
+            // xBRZ3 takes priority over HQ2x when both set
+            assert_eq!(scale_factor_from_flags((1 << 7) | (1 << 8)), Some(3));
+        }
     }
 
     /// REQ-SCALE-025: bilinear-only does NOT trigger software scaling.
@@ -1450,17 +1493,19 @@ mod tests {
     /// scaler bits (7/8/9), the unscaled path should be used.
     #[test]
     fn test_bilinear_only_no_software_scale() {
-        // Bilinear only (bit 3) → None (no software scaling)
-        assert_eq!(scale_factor_from_flags(1 << 3), None);
+        unsafe {
+            // Bilinear only (bit 3) → None (no software scaling)
+            assert_eq!(scale_factor_from_flags(1 << 3), None);
 
-        // Bilinear + biadapt (bits 3+4), no soft scaler → None
-        assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 4)), None);
+            // Bilinear + biadapt (bits 3+4), no soft scaler → None
+            assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 4)), None);
 
-        // Bilinear + HQ2x → Some(2) (HQ2x wins)
-        assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 7)), Some(2));
+            // Bilinear + HQ2x → Some(2) (HQ2x wins)
+            assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 7)), Some(2));
 
-        // Bilinear + xBRZ3 → Some(3)
-        assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 8)), Some(3));
+            // Bilinear + xBRZ3 → Some(3)
+            assert_eq!(scale_factor_from_flags((1 << 3) | (1 << 8)), Some(3));
+        }
     }
 
     // ========================================================================
@@ -1476,13 +1521,15 @@ mod tests {
     /// THEN:  No-op, no crash
     #[test]
     fn test_uninit_without_init_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_uninit();
-        // Calling twice is also safe
-        rust_gfx_uninit();
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_uninit();
+            // Calling twice is also safe
+            rust_gfx_uninit();
+        }
     }
 
     /// REQ-UTS-010: upload_transition_screen is a no-op and never panics.
@@ -1491,14 +1538,16 @@ mod tests {
     /// THEN:  No-op, no crash
     #[test]
     fn test_upload_transition_screen_no_panic() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        rust_gfx_upload_transition_screen();
-        // Multiple calls are safe
-        rust_gfx_upload_transition_screen();
-        rust_gfx_upload_transition_screen();
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            rust_gfx_upload_transition_screen();
+            // Multiple calls are safe
+            rust_gfx_upload_transition_screen();
+            rust_gfx_upload_transition_screen();
+        }
     }
 
     /// REQ-SEQ-070: Out-of-sequence vtable calls do not crash.
@@ -1507,20 +1556,22 @@ mod tests {
     /// THEN:  No crash, no state corruption
     #[test]
     fn test_out_of_sequence_no_crash() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        // Call screen without preceding preprocess
-        rust_gfx_screen(0, 255, std::ptr::null());
-        // Call color without preceding preprocess
-        rust_gfx_color(255, 0, 0, 128, std::ptr::null());
-        // Call postprocess without preceding preprocess
-        rust_gfx_postprocess();
-        // Reverse order
-        rust_gfx_postprocess();
-        rust_gfx_color(0, 255, 0, 64, std::ptr::null());
-        rust_gfx_screen(2, 128, std::ptr::null());
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            // Call screen without preceding preprocess
+            rust_gfx_screen(0, 255, std::ptr::null());
+            // Call color without preceding preprocess
+            rust_gfx_color(255, 0, 0, 128, std::ptr::null());
+            // Call postprocess without preceding preprocess
+            rust_gfx_postprocess();
+            // Reverse order
+            rust_gfx_postprocess();
+            rust_gfx_color(0, 255, 0, 64, std::ptr::null());
+            rust_gfx_screen(2, 128, std::ptr::null());
+        }
     }
 
     /// REQ-INV-040: Repeated postprocess calls do not corrupt state.
@@ -1529,12 +1580,14 @@ mod tests {
     /// THEN:  No crash, no corruption
     #[test]
     fn test_repeated_postprocess_no_crash() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        for _ in 0..10 {
-            rust_gfx_postprocess();
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            for _ in 0..10 {
+                rust_gfx_postprocess();
+            }
         }
     }
 
@@ -1544,12 +1597,14 @@ mod tests {
     /// THEN:  No crash (each clears renderer when initialized)
     #[test]
     fn test_repeated_preprocess_no_crash() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-        for _ in 0..10 {
-            rust_gfx_preprocess(0, 0, 0);
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+            for _ in 0..10 {
+                rust_gfx_preprocess(0, 0, 0);
+            }
         }
     }
 
@@ -1559,47 +1614,49 @@ mod tests {
     /// THEN:  All return null pointers
     #[test]
     fn test_surface_accessors_uninitialized() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
-
-        // get_sdl_screen → null
-        assert!(
-            rust_gfx_get_sdl_screen().is_null(),
-            "get_sdl_screen must return null when uninitialized"
-        );
-
-        // get_transition_screen → null
-        assert!(
-            rust_gfx_get_transition_screen().is_null(),
-            "get_transition_screen must return null when uninitialized"
-        );
-
-        // get_screen_surface for all valid indices → null
-        for i in 0..TFB_GFX_NUMSCREENS as c_int {
+        unsafe {
             assert!(
-                rust_gfx_get_screen_surface(i).is_null(),
-                "get_screen_surface({}) must return null when uninitialized",
-                i
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
+
+            // get_sdl_screen → null
+            assert!(
+                rust_gfx_get_sdl_screen().is_null(),
+                "get_sdl_screen must return null when uninitialized"
+            );
+
+            // get_transition_screen → null
+            assert!(
+                rust_gfx_get_transition_screen().is_null(),
+                "get_transition_screen must return null when uninitialized"
+            );
+
+            // get_screen_surface for all valid indices → null
+            for i in 0..TFB_GFX_NUMSCREENS as c_int {
+                assert!(
+                    rust_gfx_get_screen_surface(i).is_null(),
+                    "get_screen_surface({}) must return null when uninitialized",
+                    i
+                );
+            }
+
+            // get_screen_surface out-of-range → null
+            assert!(
+                rust_gfx_get_screen_surface(-1).is_null(),
+                "get_screen_surface(-1) must return null"
+            );
+            assert!(
+                rust_gfx_get_screen_surface(3).is_null(),
+                "get_screen_surface(3) must return null"
+            );
+
+            // get_format_conv_surf → null
+            assert!(
+                rust_gfx_get_format_conv_surf().is_null(),
+                "get_format_conv_surf must return null when uninitialized"
             );
         }
-
-        // get_screen_surface out-of-range → null
-        assert!(
-            rust_gfx_get_screen_surface(-1).is_null(),
-            "get_screen_surface(-1) must return null"
-        );
-        assert!(
-            rust_gfx_get_screen_surface(3).is_null(),
-            "get_screen_surface(3) must return null"
-        );
-
-        // get_format_conv_surf → null
-        assert!(
-            rust_gfx_get_format_conv_surf().is_null(),
-            "get_format_conv_surf must return null when uninitialized"
-        );
     }
 
     /// REQ-AUX-060: Auxiliary functions return safe defaults when uninitialized.
@@ -1608,48 +1665,50 @@ mod tests {
     /// THEN:  Return safe defaults (0 for queries, -1 for operations)
     #[test]
     fn test_aux_functions_uninitialized() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
 
-        // toggle_fullscreen → -1 (operation failed)
-        assert_eq!(
-            rust_gfx_toggle_fullscreen(),
-            -1,
-            "toggle_fullscreen must return -1 when uninitialized"
-        );
+            // toggle_fullscreen → -1 (operation failed)
+            assert_eq!(
+                rust_gfx_toggle_fullscreen(),
+                -1,
+                "toggle_fullscreen must return -1 when uninitialized"
+            );
 
-        // is_fullscreen → 0 (safe default)
-        assert_eq!(
-            rust_gfx_is_fullscreen(),
-            0,
-            "is_fullscreen must return 0 when uninitialized"
-        );
+            // is_fullscreen → 0 (safe default)
+            assert_eq!(
+                rust_gfx_is_fullscreen(),
+                0,
+                "is_fullscreen must return 0 when uninitialized"
+            );
 
-        // set_gamma → -1 (always unsupported)
-        assert_eq!(rust_gfx_set_gamma(1.0), -1, "set_gamma must return -1");
+            // set_gamma → -1 (always unsupported)
+            assert_eq!(rust_gfx_set_gamma(1.0), -1, "set_gamma must return -1");
 
-        // get_width → 320 (constant, not state-dependent)
-        assert_eq!(
-            rust_gfx_get_width(),
-            SCREEN_WIDTH as c_int,
-            "get_width must return 320"
-        );
+            // get_width → 320 (constant, not state-dependent)
+            assert_eq!(
+                rust_gfx_get_width(),
+                SCREEN_WIDTH as c_int,
+                "get_width must return 320"
+            );
 
-        // get_height → 240 (constant, not state-dependent)
-        assert_eq!(
-            rust_gfx_get_height(),
-            SCREEN_HEIGHT as c_int,
-            "get_height must return 240"
-        );
+            // get_height → 240 (constant, not state-dependent)
+            assert_eq!(
+                rust_gfx_get_height(),
+                SCREEN_HEIGHT as c_int,
+                "get_height must return 240"
+            );
 
-        // process_events → 0 (no quit)
-        assert_eq!(
-            rust_gfx_process_events(),
-            0,
-            "process_events must return 0 when uninitialized"
-        );
+            // process_events → 0 (no quit)
+            assert_eq!(
+                rust_gfx_process_events(),
+                0,
+                "process_events must return 0 when uninitialized"
+            );
+        }
     }
 
     // ========================================================================
@@ -1671,44 +1730,46 @@ mod tests {
     /// THEN:  No crash, no panic, safe defaults returned
     #[test]
     fn test_full_vtable_sequence_uninitialized() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
 
-        // --- Full compositing sequence (TFB_SwapBuffers order) ---
-        rust_gfx_preprocess(0, 128, 64);
-        rust_gfx_screen(0, 255, std::ptr::null()); // MAIN, opaque
-        rust_gfx_screen(2, 128, std::ptr::null()); // TRANSITION, blended
-        rust_gfx_color(0, 0, 0, 64, std::ptr::null()); // fade
-        let clip = SDL_Rect {
-            x: 10,
-            y: 10,
-            w: 300,
-            h: 220,
-        };
-        rust_gfx_screen(0, 255, &clip as *const SDL_Rect); // MAIN with clip
-        rust_gfx_postprocess();
-        rust_gfx_upload_transition_screen();
+            // --- Full compositing sequence (TFB_SwapBuffers order) ---
+            rust_gfx_preprocess(0, 128, 64);
+            rust_gfx_screen(0, 255, std::ptr::null()); // MAIN, opaque
+            rust_gfx_screen(2, 128, std::ptr::null()); // TRANSITION, blended
+            rust_gfx_color(0, 0, 0, 64, std::ptr::null()); // fade
+            let clip = SDL_Rect {
+                x: 10,
+                y: 10,
+                w: 300,
+                h: 220,
+            };
+            rust_gfx_screen(0, 255, &clip as *const SDL_Rect); // MAIN with clip
+            rust_gfx_postprocess();
+            rust_gfx_upload_transition_screen();
 
-        // --- Surface accessors ---
-        assert!(rust_gfx_get_sdl_screen().is_null());
-        assert!(rust_gfx_get_transition_screen().is_null());
-        for i in 0..TFB_GFX_NUMSCREENS as c_int {
-            assert!(rust_gfx_get_screen_surface(i).is_null());
+            // --- Surface accessors ---
+            assert!(rust_gfx_get_sdl_screen().is_null());
+            assert!(rust_gfx_get_transition_screen().is_null());
+            for i in 0..TFB_GFX_NUMSCREENS as c_int {
+                assert!(rust_gfx_get_screen_surface(i).is_null());
+            }
+            assert!(rust_gfx_get_format_conv_surf().is_null());
+
+            // --- Auxiliary functions ---
+            assert_eq!(rust_gfx_process_events(), 0);
+            assert_eq!(rust_gfx_toggle_fullscreen(), -1);
+            assert_eq!(rust_gfx_is_fullscreen(), 0);
+            assert_eq!(rust_gfx_set_gamma(1.5), -1);
+            assert_eq!(rust_gfx_get_width(), 320);
+            assert_eq!(rust_gfx_get_height(), 240);
+
+            // --- Uninit without init ---
+            rust_gfx_uninit();
         }
-        assert!(rust_gfx_get_format_conv_surf().is_null());
-
-        // --- Auxiliary functions ---
-        assert_eq!(rust_gfx_process_events(), 0);
-        assert_eq!(rust_gfx_toggle_fullscreen(), -1);
-        assert_eq!(rust_gfx_is_fullscreen(), 0);
-        assert_eq!(rust_gfx_set_gamma(1.5), -1);
-        assert_eq!(rust_gfx_get_width(), 320);
-        assert_eq!(rust_gfx_get_height(), 240);
-
-        // --- Uninit without init ---
-        rust_gfx_uninit();
     }
 
     /// REQ-ASM-050: Constants match C-side definitions.
@@ -1718,13 +1779,15 @@ mod tests {
     /// THEN:  TFB_GFX_NUMSCREENS == 3, SCREEN_WIDTH == 320, SCREEN_HEIGHT == 240
     #[test]
     fn test_constants_match_c() {
-        assert_eq!(TFB_GFX_NUMSCREENS, 3, "TFB_GFX_NUMSCREENS must be 3");
-        assert_eq!(SCREEN_WIDTH, 320, "SCREEN_WIDTH must be 320");
-        assert_eq!(SCREEN_HEIGHT, 240, "SCREEN_HEIGHT must be 240");
+        unsafe {
+            assert_eq!(TFB_GFX_NUMSCREENS, 3, "TFB_GFX_NUMSCREENS must be 3");
+            assert_eq!(SCREEN_WIDTH, 320, "SCREEN_WIDTH must be 320");
+            assert_eq!(SCREEN_HEIGHT, 240, "SCREEN_HEIGHT must be 240");
 
-        // Verify through the FFI accessor functions too
-        assert_eq!(rust_gfx_get_width(), 320);
-        assert_eq!(rust_gfx_get_height(), 240);
+            // Verify through the FFI accessor functions too
+            assert_eq!(rust_gfx_get_width(), 320);
+            assert_eq!(rust_gfx_get_height(), 240);
+        }
     }
 
     /// REQ-SEQ-040/050/060/065: Preprocess with different force_redraw values — no crash.
@@ -1737,16 +1800,18 @@ mod tests {
     /// THEN:  No crash, no panic
     #[test]
     fn test_redraw_mode_invariance() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
 
-        // TFB_REDRAW_NO = 0, TFB_REDRAW_YES = 1, TFB_REDRAW_FADING = 2, EXPOSE = 3
-        for redraw_mode in 0..=3 {
-            rust_gfx_preprocess(redraw_mode, 128, 64);
-            rust_gfx_screen(0, 255, std::ptr::null());
-            rust_gfx_postprocess();
+            // TFB_REDRAW_NO = 0, TFB_REDRAW_YES = 1, TFB_REDRAW_FADING = 2, EXPOSE = 3
+            for redraw_mode in 0..=3 {
+                rust_gfx_preprocess(redraw_mode, 128, 64);
+                rust_gfx_screen(0, 255, std::ptr::null());
+                rust_gfx_postprocess();
+            }
         }
     }
 
@@ -1757,33 +1822,35 @@ mod tests {
     /// THEN:  No crash, returns safe default value
     #[test]
     fn test_all_ffi_functions_uninitialized_defaults() {
-        assert!(
-            get_gfx_state().is_none(),
-            "precondition: state must be None"
-        );
+        unsafe {
+            assert!(
+                get_gfx_state().is_none(),
+                "precondition: state must be None"
+            );
 
-        // Void-returning functions — just must not crash
-        rust_gfx_preprocess(1, 128, 64);
-        rust_gfx_postprocess();
-        rust_gfx_screen(0, 255, std::ptr::null());
-        rust_gfx_screen(1, 128, std::ptr::null());
-        rust_gfx_screen(2, 0, std::ptr::null());
-        rust_gfx_color(255, 255, 255, 255, std::ptr::null());
-        rust_gfx_upload_transition_screen();
-        rust_gfx_uninit();
+            // Void-returning functions — just must not crash
+            rust_gfx_preprocess(1, 128, 64);
+            rust_gfx_postprocess();
+            rust_gfx_screen(0, 255, std::ptr::null());
+            rust_gfx_screen(1, 128, std::ptr::null());
+            rust_gfx_screen(2, 0, std::ptr::null());
+            rust_gfx_color(255, 255, 255, 255, std::ptr::null());
+            rust_gfx_upload_transition_screen();
+            rust_gfx_uninit();
 
-        // Pointer-returning functions → null
-        assert!(rust_gfx_get_sdl_screen().is_null());
-        assert!(rust_gfx_get_transition_screen().is_null());
-        assert!(rust_gfx_get_screen_surface(0).is_null());
-        assert!(rust_gfx_get_format_conv_surf().is_null());
+            // Pointer-returning functions → null
+            assert!(rust_gfx_get_sdl_screen().is_null());
+            assert!(rust_gfx_get_transition_screen().is_null());
+            assert!(rust_gfx_get_screen_surface(0).is_null());
+            assert!(rust_gfx_get_format_conv_surf().is_null());
 
-        // Int-returning functions → safe defaults
-        assert_eq!(rust_gfx_toggle_fullscreen(), -1);
-        assert_eq!(rust_gfx_is_fullscreen(), 0);
-        assert_eq!(rust_gfx_set_gamma(2.0), -1);
-        assert_eq!(rust_gfx_get_width(), 320);
-        assert_eq!(rust_gfx_get_height(), 240);
-        assert_eq!(rust_gfx_process_events(), 0);
+            // Int-returning functions → safe defaults
+            assert_eq!(rust_gfx_toggle_fullscreen(), -1);
+            assert_eq!(rust_gfx_is_fullscreen(), 0);
+            assert_eq!(rust_gfx_set_gamma(2.0), -1);
+            assert_eq!(rust_gfx_get_width(), 320);
+            assert_eq!(rust_gfx_get_height(), 240);
+            assert_eq!(rust_gfx_process_events(), 0);
+        }
     }
 }

@@ -3,8 +3,6 @@
 //! Uses the `mod_player` crate for pure Rust MOD file playback.
 //! Supports Amiga ProTracker MOD format files.
 
-use std::fs::File;
-use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 
 use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
@@ -272,44 +270,54 @@ mod tests {
 
     #[test]
     fn test_mod_decoder_new() {
-        let decoder = ModDecoder::new();
-        assert_eq!(decoder.name(), "Rust MOD");
-        assert_eq!(decoder.frequency(), 44100);
-        assert_eq!(decoder.format(), AudioFormat::Stereo16);
-        assert!(!decoder.is_null());
-        assert!(!decoder.needs_swap());
+        unsafe {
+            let decoder = ModDecoder::new();
+            assert_eq!(decoder.name(), "Rust MOD");
+            assert_eq!(decoder.frequency(), 44100);
+            assert_eq!(decoder.format(), AudioFormat::Stereo16);
+            assert!(!decoder.is_null());
+            assert!(!decoder.needs_swap());
+        }
     }
 
     #[test]
     fn test_mod_decoder_init_term() {
-        let mut decoder = ModDecoder::new();
-        assert!(decoder.init());
-        assert!(decoder.initialized);
-        decoder.term();
-        assert!(!decoder.initialized);
+        unsafe {
+            let mut decoder = ModDecoder::new();
+            assert!(decoder.init());
+            assert!(decoder.initialized);
+            decoder.term();
+            assert!(!decoder.initialized);
+        }
     }
 
     #[test]
     fn test_mod_decoder_init_module() {
-        let mut decoder = ModDecoder::new();
-        let formats = DecoderFormats::default();
-        assert!(decoder.init_module(0, &formats));
-        assert!(decoder.formats.is_some());
-        decoder.term_module();
-        assert!(decoder.formats.is_none());
+        unsafe {
+            let mut decoder = ModDecoder::new();
+            let formats = DecoderFormats::default();
+            assert!(decoder.init_module(0, &formats));
+            assert!(decoder.formats.is_some());
+            decoder.term_module();
+            assert!(decoder.formats.is_none());
+        }
     }
 
     #[test]
     fn test_mod_decoder_decode_not_initialized() {
-        let mut decoder = ModDecoder::new();
-        let mut buf = [0u8; 1024];
-        let result = decoder.decode(&mut buf);
-        assert!(matches!(result, Err(DecodeError::NotInitialized)));
+        unsafe {
+            let mut decoder = ModDecoder::new();
+            let mut buf = [0u8; 1024];
+            let result = decoder.decode(&mut buf);
+            assert!(matches!(result, Err(DecodeError::NotInitialized)));
+        }
     }
 
     #[test]
     fn test_mod_decoder_is_send() {
-        fn assert_send<T: Send>() {}
-        assert_send::<ModDecoder>();
+        unsafe {
+            fn assert_send<T: Send>() {}
+            assert_send::<ModDecoder>();
+        }
     }
 }

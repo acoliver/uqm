@@ -62,7 +62,7 @@ fn log_clock_bridge(message: &str) {
 
 // Helper: Check if year is leap year
 fn is_leap_year(year: u16) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 // Helper: Get days in month
@@ -109,7 +109,7 @@ where
 
 // Initialize the game clock
 #[no_mangle]
-pub extern "C" fn rust_clock_init() -> c_int {
+pub unsafe extern "C" fn rust_clock_init() -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
 
     with_game_clock(|clock| {
@@ -127,7 +127,7 @@ pub extern "C" fn rust_clock_init() -> c_int {
 
 // Uninitialize the game clock
 #[no_mangle]
-pub extern "C" fn rust_clock_uninit() -> c_int {
+pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
 
     with_game_clock(|clock| {
@@ -141,10 +141,10 @@ pub extern "C" fn rust_clock_uninit() -> c_int {
 
 // Set game clock rate (seconds per day)
 #[no_mangle]
-pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
+pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
 
-    let new_day_in_ticks = (seconds_per_day as i32) * (CLOCK_BASE_FRAMERATE as i32);
+    let new_day_in_ticks = seconds_per_day * (CLOCK_BASE_FRAMERATE as i32);
 
     with_game_clock(|clock| {
         let new_tick_count = if clock.day_in_ticks == 0 {
@@ -169,7 +169,7 @@ pub extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 
 // Tick the game clock forward one tick
 #[no_mangle]
-pub extern "C" fn rust_clock_tick() {
+pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
 
     with_game_clock(|clock| {
@@ -189,7 +189,7 @@ pub extern "C" fn rust_clock_tick() {
 
 // Move game clock forward by specific number of days
 #[no_mangle]
-pub extern "C" fn rust_clock_advance_days(days: c_int) {
+pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
     log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
 
     with_game_clock(|clock| {
@@ -203,21 +203,21 @@ pub extern "C" fn rust_clock_advance_days(days: c_int) {
 
 // Lock the game clock (for debugging)
 #[no_mangle]
-pub extern "C" fn rust_clock_lock() {
+pub unsafe extern "C" fn rust_clock_lock() {
     log_clock_bridge("RUST_CLOCK_LOCK");
     // Note: The mutex lock is handled by C code
 }
 
 // Unlock the game clock (for debugging)
 #[no_mangle]
-pub extern "C" fn rust_clock_unlock() {
+pub unsafe extern "C" fn rust_clock_unlock() {
     log_clock_bridge("RUST_CLOCK_UNLOCK");
     // Note: The mutex unlock is handled by C code
 }
 
 // Check if game clock is running
 #[no_mangle]
-pub extern "C" fn rust_clock_is_running() -> c_int {
+pub unsafe extern "C" fn rust_clock_is_running() -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");
 
     with_game_clock(|clock| {

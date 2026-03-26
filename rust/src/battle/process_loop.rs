@@ -482,8 +482,8 @@ pub unsafe fn process_collisions(
             );
         }
 
-        if time_val > 0 {
-            if dispatch_collision(
+        if time_val > 0
+            && dispatch_collision(
                 ctx,
                 element_ptr,
                 test_ptr,
@@ -491,9 +491,9 @@ pub unsafe fn process_collisions(
                 time_val,
                 state_flags,
                 test_state_flags,
-            ) {
-                return true;
-            }
+            )
+        {
+            return true;
         }
     }
 
@@ -687,7 +687,7 @@ unsafe fn dispatch_collision(
 
         // Check if test element has earlier collision
         elem_earlier && {
-            let test_earlier = test_elem.state_flags.contains(ElementFlags::COLLISION) || {
+            test_elem.state_flags.contains(ElementFlags::COLLISION) || {
                 // APPEARING elements check from head; others from element's successor
                 let start = if test_elem.state_flags.contains(ElementFlags::APPEARING) {
                     ctx.display_list.head()
@@ -697,8 +697,7 @@ unsafe fn dispatch_collision(
                         .and_then(|h| ctx.display_list.next(h))
                 };
                 !process_collisions(ctx, start, test_ptr, time_val - 1)
-            };
-            test_earlier
+            }
         }
     };
 
@@ -709,7 +708,7 @@ unsafe fn dispatch_collision(
     // Re-read flags after recursive calls
     let element = &mut *element_ptr;
     let test_elem = &mut *test_ptr;
-    let state_flags = element.state_flags;
+    let _state_flags = element.state_flags;
     let test_state_flags = test_elem.state_flags;
 
     #[cfg(feature = "debug-process")]
@@ -839,7 +838,7 @@ pub fn wrap_delta_y(dy: i32) -> i32 {
 /// Align a coordinate to display grid (truncate lower bits).
 /// C reference: DISPLAY_ALIGN macro.
 pub fn display_align(x: i32) -> i32 {
-    x & !(((1 << ONE_SHIFT) - 1) as i32)
+    x & !((1 << ONE_SHIFT) - 1)
 }
 
 /// Calculate zoom reduction for step mode (discrete 3-level zoom).
@@ -947,8 +946,8 @@ pub fn calc_view(
     zoom_mode: ZoomMode,
     is_hq_space: bool,
 ) -> (ViewState, i32, i32) {
-    let mut dx = (LOG_SPACE_WIDTH / 2) as i32 - origin.x as i32;
-    let mut dy = (LOG_SPACE_HEIGHT / 2) as i32 - origin.y as i32;
+    let mut dx = (LOG_SPACE_WIDTH / 2) - origin.x as i32;
+    let mut dy = (LOG_SPACE_HEIGHT / 2) - origin.y as i32;
     dx = wrap_delta_x(dx);
     dy = wrap_delta_y(dy);
 
@@ -983,12 +982,10 @@ pub fn calc_view(
                     nr = *current_zoom_out - ZOOM_JUMP;
                 }
                 space_org.x = display_align(
-                    (LOG_SPACE_WIDTH / 2) as i32
-                        - (LOG_SPACE_WIDTH as i32 * nr / (MAX_ZOOM_OUT << 2)),
+                    (LOG_SPACE_WIDTH / 2) - (LOG_SPACE_WIDTH * nr / (MAX_ZOOM_OUT << 2)),
                 ) as i16;
                 space_org.y = display_align(
-                    (LOG_SPACE_HEIGHT / 2) as i32
-                        - (LOG_SPACE_HEIGHT as i32 * nr / (MAX_ZOOM_OUT << 2)),
+                    (LOG_SPACE_HEIGHT / 2) - (LOG_SPACE_HEIGHT * nr / (MAX_ZOOM_OUT << 2)),
                 ) as i16;
             }
         }
@@ -1253,7 +1250,7 @@ pub unsafe fn post_process_queue(
     mut scroll_x: i32,
     mut scroll_y: i32,
 ) {
-    let reduction = match state.zoom_mode {
+    let _reduction = match state.zoom_mode {
         ZoomMode::Step => state.zoom_out + ONE_SHIFT as i32,
         ZoomMode::Continuous => state.zoom_out << ONE_SHIFT,
     };
@@ -1398,321 +1395,371 @@ mod tests {
 
     #[test]
     fn test_view_state_variants() {
-        assert_eq!(ViewState::Stable as u8, 0);
-        assert_eq!(ViewState::Scroll as u8, 1);
-        assert_eq!(ViewState::Change as u8, 2);
+        unsafe {
+            assert_eq!(ViewState::Stable as u8, 0);
+            assert_eq!(ViewState::Scroll as u8, 1);
+            assert_eq!(ViewState::Change as u8, 2);
+        }
     }
 
     #[test]
     fn test_zoom_mode_variants() {
-        assert_eq!(ZoomMode::Step as u8, 0);
-        assert_eq!(ZoomMode::Continuous as u8, 1);
+        unsafe {
+            assert_eq!(ZoomMode::Step as u8, 0);
+            assert_eq!(ZoomMode::Continuous as u8, 1);
+        }
     }
 
     #[test]
     fn test_zoom_constants() {
-        assert_eq!(ZOOM_SHIFT, 8);
-        assert_eq!(MAX_REDUCTION, 3);
-        assert_eq!(MAX_VIS_REDUCTION, 2);
-        assert_eq!(REDUCTION_SHIFT, 1);
-        assert_eq!(NUM_VIEWS, 3);
-        assert_eq!(MAX_ZOOM_OUT, 1024);
+        unsafe {
+            assert_eq!(ZOOM_SHIFT, 8);
+            assert_eq!(MAX_REDUCTION, 3);
+            assert_eq!(MAX_VIS_REDUCTION, 2);
+            assert_eq!(REDUCTION_SHIFT, 1);
+            assert_eq!(NUM_VIEWS, 3);
+            assert_eq!(MAX_ZOOM_OUT, 1024);
+        }
     }
 
     #[test]
     fn test_hysteresis_constants() {
-        assert_eq!(HYSTERESIS_X, 96);
-        assert_eq!(HYSTERESIS_Y, 80);
+        unsafe {
+            assert_eq!(HYSTERESIS_X, 96);
+            assert_eq!(HYSTERESIS_Y, 80);
+        }
     }
 
     #[test]
     fn test_zoom_jump_constant() {
-        assert_eq!(ZOOM_JUMP, 32);
+        unsafe {
+            assert_eq!(ZOOM_JUMP, 32);
+        }
     }
 
     #[test]
     fn test_camera_clamp_constants() {
-        assert_eq!(ORG_JUMP_X, 4);
-        assert_eq!(ORG_JUMP_Y, 4);
+        unsafe {
+            assert_eq!(ORG_JUMP_X, 4);
+            assert_eq!(ORG_JUMP_Y, 4);
+        }
     }
 
     // -- P03: alloc/free tests --
 
     #[test]
     fn test_alloc_element_success() {
-        let mut dl = DisplayList::with_default_capacity();
-        let handle = alloc_element(&mut dl).unwrap();
-        // Verify element is zeroed
-        let elem = dl.get(handle).unwrap();
-        assert_eq!(elem.life_span, 0);
-        assert_eq!(elem.state_flags, ElementFlags::empty());
-        assert!(elem.preprocess_func.is_none());
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let handle = alloc_element(&mut dl).unwrap();
+            // Verify element is zeroed
+            let elem = dl.get(handle).unwrap();
+            assert_eq!(elem.life_span, 0);
+            assert_eq!(elem.state_flags, ElementFlags::empty());
+            assert!(elem.preprocess_func.is_none());
+        }
     }
 
     #[test]
     fn test_alloc_free_roundtrip() {
-        let mut dl = DisplayList::with_default_capacity();
-        let handle = alloc_element(&mut dl).unwrap();
-        assert!(free_element(&mut dl, handle).is_ok());
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let handle = alloc_element(&mut dl).unwrap();
+            assert!(free_element(&mut dl, handle).is_ok());
+        }
     }
 
     #[test]
     fn test_free_invalid_handle() {
-        let mut dl = DisplayList::with_default_capacity();
-        let handle = alloc_element(&mut dl).unwrap();
-        let _ = free_element(&mut dl, handle);
-        // Freeing again should fail (stale handle)
-        assert_eq!(
-            free_element(&mut dl, handle),
-            Err(ProcessError::InvalidHandle)
-        );
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let handle = alloc_element(&mut dl).unwrap();
+            let _ = free_element(&mut dl, handle);
+            // Freeing again should fail (stale handle)
+            assert_eq!(
+                free_element(&mut dl, handle),
+                Err(ProcessError::InvalidHandle)
+            );
+        }
     }
 
     #[test]
     fn test_pool_exhaustion() {
-        let mut dl = DisplayList::new(2); // tiny pool
-        let _h1 = alloc_element(&mut dl).unwrap();
-        let _h2 = alloc_element(&mut dl).unwrap();
-        assert_eq!(alloc_element(&mut dl), Err(ProcessError::PoolExhausted));
+        unsafe {
+            let mut dl = DisplayList::new(2); // tiny pool
+            let _h1 = alloc_element(&mut dl).unwrap();
+            let _h2 = alloc_element(&mut dl).unwrap();
+            assert_eq!(alloc_element(&mut dl), Err(ProcessError::PoolExhausted));
+        }
     }
 
     // -- P03: setup_element tests --
 
     #[test]
     fn test_setup_element_copies_current_to_next() {
-        let mut elem = Element::new();
-        elem.current.location = Point::new(100, 200);
-        setup_element(&mut elem);
-        assert_eq!(elem.next.location, Point::new(100, 200));
+        unsafe {
+            let mut elem = Element::new();
+            elem.current.location = Point::new(100, 200);
+            setup_element(&mut elem);
+            assert_eq!(elem.next.location, Point::new(100, 200));
+        }
     }
 
     #[test]
     fn test_setup_element_collidable_inits_intersect() {
-        let mut elem = Element::new();
-        // Make collidable (not NONSOLID, not DISAPPEARING)
-        elem.state_flags = ElementFlags::empty();
-        elem.current.location = Point::new(50, 75);
-        setup_element(&mut elem);
-        assert_eq!(
-            elem.intersect_control.intersect_stamp.origin,
-            Point::new(50, 75)
-        );
-        assert_eq!(elem.intersect_control.end_point, Point::new(50, 75));
+        unsafe {
+            let mut elem = Element::new();
+            // Make collidable (not NONSOLID, not DISAPPEARING)
+            elem.state_flags = ElementFlags::empty();
+            elem.current.location = Point::new(50, 75);
+            setup_element(&mut elem);
+            assert_eq!(
+                elem.intersect_control.intersect_stamp.origin,
+                Point::new(50, 75)
+            );
+            assert_eq!(elem.intersect_control.end_point, Point::new(50, 75));
+        }
     }
 
     // -- P03: untarget tests --
 
     #[test]
     fn test_untarget_clears_references() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h1 = alloc_element(&mut dl).unwrap();
-        let h2 = alloc_element(&mut dl).unwrap();
-        dl.push_back(h1);
-        dl.push_back(h2);
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h1 = alloc_element(&mut dl).unwrap();
+            let h2 = alloc_element(&mut dl).unwrap();
+            dl.push_back(h1);
+            dl.push_back(h2);
 
-        // Point h2's h_target at h1's element
-        let h1_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
-        dl.get_mut(h2).unwrap().h_target = h1_ptr;
+            // Point h2's h_target at h1's element
+            let h1_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+            dl.get_mut(h2).unwrap().h_target = h1_ptr;
 
-        // Untarget h1 — should clear h2's h_target
-        untarget(&mut dl, h1_ptr);
-        assert!(dl.get(h2).unwrap().h_target.is_null());
+            // Untarget h1 — should clear h2's h_target
+            untarget(&mut dl, h1_ptr);
+            assert!(dl.get(h2).unwrap().h_target.is_null());
+        }
     }
 
     #[test]
     fn test_untarget_null_is_noop() {
-        let mut dl = DisplayList::with_default_capacity();
-        untarget(&mut dl, std::ptr::null_mut()); // should not panic
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            untarget(&mut dl, std::ptr::null_mut()); // should not panic
+        }
     }
 
     // -- P03: remove_element tests --
 
     #[test]
     fn test_remove_element_removes_from_list() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
-        dl.push_back(h);
-        assert_eq!(dl.count(), 1);
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
+            dl.push_back(h);
+            assert_eq!(dl.count(), 1);
 
-        assert!(remove_element(&mut dl, h).is_ok());
-        assert_eq!(dl.count(), 0);
+            assert!(remove_element(&mut dl, h).is_ok());
+            assert_eq!(dl.count(), 0);
+        }
     }
 
     // -- P03: pre_process tests --
 
     #[test]
     fn test_pre_process_death_on_zero_lifespan() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
-        dl.push_back(h);
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
+            dl.push_back(h);
 
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 0;
-            elem.state_flags = ElementFlags::PRE_PROCESS;
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 0;
+                elem.state_flags = ElementFlags::PRE_PROCESS;
+            }
+
+            unsafe { pre_process(h, &mut dl) };
+
+            let elem = dl.get(h).unwrap();
+            assert!(elem.state_flags.contains(ElementFlags::DISAPPEARING));
         }
-
-        unsafe { pre_process(h, &mut dl) };
-
-        let elem = dl.get(h).unwrap();
-        assert!(elem.state_flags.contains(ElementFlags::DISAPPEARING));
     }
 
     #[test]
     fn test_pre_process_appearing_player_ship() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
 
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 10;
-            elem.state_flags = ElementFlags::APPEARING | ElementFlags::PLAYER_SHIP;
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 10;
+                elem.state_flags = ElementFlags::APPEARING | ElementFlags::PLAYER_SHIP;
+            }
+
+            unsafe { pre_process(h, &mut dl) };
+
+            let elem = dl.get(h).unwrap();
+            assert!(elem.state_flags.contains(ElementFlags::PRE_PROCESS));
+            assert!(!elem.state_flags.contains(ElementFlags::POST_PROCESS));
         }
-
-        unsafe { pre_process(h, &mut dl) };
-
-        let elem = dl.get(h).unwrap();
-        assert!(elem.state_flags.contains(ElementFlags::PRE_PROCESS));
-        assert!(!elem.state_flags.contains(ElementFlags::POST_PROCESS));
     }
 
     #[test]
     fn test_pre_process_appearing_non_player_skips_callback() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
 
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 10;
-            elem.state_flags = ElementFlags::APPEARING;
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 10;
+                elem.state_flags = ElementFlags::APPEARING;
+            }
+
+            unsafe { pre_process(h, &mut dl) };
+
+            let elem = dl.get(h).unwrap();
+            assert!(elem.state_flags.contains(ElementFlags::PRE_PROCESS));
         }
-
-        unsafe { pre_process(h, &mut dl) };
-
-        let elem = dl.get(h).unwrap();
-        assert!(elem.state_flags.contains(ElementFlags::PRE_PROCESS));
     }
 
     #[test]
     fn test_pre_process_velocity_stepping() {
-        use super::super::velocity::VELOCITY_SHIFT;
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
+        unsafe {
+            use super::super::velocity::VELOCITY_SHIFT;
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
 
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 10;
-            elem.state_flags = ElementFlags::empty();
-            elem.next.location = Point::new(100, 200);
-            // Use values large enough to survive fixed-point truncation
-            elem.velocity
-                .set_components(5 << VELOCITY_SHIFT, -(3i32 << VELOCITY_SHIFT));
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 10;
+                elem.state_flags = ElementFlags::empty();
+                elem.next.location = Point::new(100, 200);
+                // Use values large enough to survive fixed-point truncation
+                elem.velocity
+                    .set_components(5 << VELOCITY_SHIFT, -(3i32 << VELOCITY_SHIFT));
+            }
+
+            unsafe { pre_process(h, &mut dl) };
+
+            let elem = dl.get(h).unwrap();
+            assert!(elem.state_flags.contains(ElementFlags::CHANGING));
         }
-
-        unsafe { pre_process(h, &mut dl) };
-
-        let elem = dl.get(h).unwrap();
-        assert!(elem.state_flags.contains(ElementFlags::CHANGING));
     }
 
     #[test]
     fn test_pre_process_finite_life_decrement() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
 
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 5;
-            elem.state_flags = ElementFlags::FINITE_LIFE;
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 5;
+                elem.state_flags = ElementFlags::FINITE_LIFE;
+            }
+
+            unsafe { pre_process(h, &mut dl) };
+
+            let elem = dl.get(h).unwrap();
+            assert_eq!(elem.life_span, 4);
         }
-
-        unsafe { pre_process(h, &mut dl) };
-
-        let elem = dl.get(h).unwrap();
-        assert_eq!(elem.life_span, 4);
     }
 
     #[test]
     fn test_pre_process_ignore_velocity() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
 
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 10;
-            elem.state_flags = ElementFlags::IGNORE_VELOCITY;
-            elem.next.location = Point::new(100, 200);
-            elem.velocity.set_components(5, -3);
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 10;
+                elem.state_flags = ElementFlags::IGNORE_VELOCITY;
+                elem.next.location = Point::new(100, 200);
+                elem.velocity.set_components(5, -3);
+            }
+
+            unsafe { pre_process(h, &mut dl) };
+
+            let elem = dl.get(h).unwrap();
+            assert_eq!(elem.next.location, Point::new(100, 200));
         }
-
-        unsafe { pre_process(h, &mut dl) };
-
-        let elem = dl.get(h).unwrap();
-        assert_eq!(elem.next.location, Point::new(100, 200));
     }
 
     // -- P03: post_process tests --
 
     #[test]
     fn test_post_process_commits_state() {
-        let mut elem = Element::new();
-        elem.next.location = Point::new(42, 84);
-        elem.state_flags = ElementFlags::PRE_PROCESS;
-
         unsafe {
-            post_process(&mut elem);
-        }
+            let mut elem = Element::new();
+            elem.next.location = Point::new(42, 84);
+            elem.state_flags = ElementFlags::PRE_PROCESS;
 
-        assert_eq!(elem.current.location, Point::new(42, 84));
+            unsafe {
+                post_process(&mut elem);
+            }
+
+            assert_eq!(elem.current.location, Point::new(42, 84));
+        }
     }
 
     #[test]
     fn test_post_process_flag_transitions() {
-        let mut elem = Element::new();
-        elem.state_flags =
-            ElementFlags::PRE_PROCESS | ElementFlags::CHANGING | ElementFlags::APPEARING;
-
         unsafe {
-            post_process(&mut elem);
-        }
+            let mut elem = Element::new();
+            elem.state_flags =
+                ElementFlags::PRE_PROCESS | ElementFlags::CHANGING | ElementFlags::APPEARING;
 
-        assert!(elem.state_flags.contains(ElementFlags::POST_PROCESS));
-        assert!(!elem.state_flags.contains(ElementFlags::PRE_PROCESS));
-        assert!(!elem.state_flags.contains(ElementFlags::CHANGING));
-        assert!(!elem.state_flags.contains(ElementFlags::APPEARING));
+            unsafe {
+                post_process(&mut elem);
+            }
+
+            assert!(elem.state_flags.contains(ElementFlags::POST_PROCESS));
+            assert!(!elem.state_flags.contains(ElementFlags::PRE_PROCESS));
+            assert!(!elem.state_flags.contains(ElementFlags::CHANGING));
+            assert!(!elem.state_flags.contains(ElementFlags::APPEARING));
+        }
     }
 
     #[test]
     fn test_post_process_collidable_reinit() {
-        let mut elem = Element::new();
-        elem.state_flags = ElementFlags::empty(); // collidable (no NONSOLID/DISAPPEARING)
-        elem.current.location = Point::new(10, 20);
-        elem.next.location = Point::new(30, 40);
-
         unsafe {
-            post_process(&mut elem);
-        }
+            let mut elem = Element::new();
+            elem.state_flags = ElementFlags::empty(); // collidable (no NONSOLID/DISAPPEARING)
+            elem.current.location = Point::new(10, 20);
+            elem.next.location = Point::new(30, 40);
 
-        // After commit, current == next; intersect start should be updated
-        assert_eq!(elem.current.location, Point::new(30, 40));
-        assert_eq!(
-            elem.intersect_control.intersect_stamp.origin,
-            Point::new(30, 40)
-        );
+            unsafe {
+                post_process(&mut elem);
+            }
+
+            // After commit, current == next; intersect start should be updated
+            assert_eq!(elem.current.location, Point::new(30, 40));
+            assert_eq!(
+                elem.intersect_control.intersect_stamp.origin,
+                Point::new(30, 40)
+            );
+        }
     }
 
     // -- P03: ProcessError tests --
 
     #[test]
     fn test_process_error_display() {
-        assert_eq!(
-            format!("{}", ProcessError::PoolExhausted),
-            "display list pool exhausted"
-        );
-        assert_eq!(
-            format!("{}", ProcessError::InvalidHandle),
-            "invalid element handle"
-        );
+        unsafe {
+            assert_eq!(
+                format!("{}", ProcessError::PoolExhausted),
+                "display list pool exhausted"
+            );
+            assert_eq!(
+                format!("{}", ProcessError::InvalidHandle),
+                "invalid element handle"
+            );
+        }
     }
 
     // -- P04: ProcessCollisions tests --
@@ -1740,455 +1787,516 @@ mod tests {
 
     #[test]
     fn test_process_collisions_no_elements() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
-        dl.push_back(h);
-        let elem_ptr = dl.get_mut(h).map(|e| e as *mut Element).unwrap();
-
-        let mut ctx = make_collision_ctx(&mut dl);
         unsafe {
-            let result = process_collisions(&mut ctx, None, elem_ptr, MAX_TIME_VALUE);
-            assert!(!result);
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
+            dl.push_back(h);
+            let elem_ptr = dl.get_mut(h).map(|e| e as *mut Element).unwrap();
+
+            let mut ctx = make_collision_ctx(&mut dl);
+            unsafe {
+                let result = process_collisions(&mut ctx, None, elem_ptr, MAX_TIME_VALUE);
+                assert!(!result);
+            }
         }
     }
 
     #[test]
     fn test_process_collisions_self_skip() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
-        {
-            let elem = dl.get_mut(h).unwrap();
-            elem.life_span = 10;
-            elem.mass_points = 5;
-            elem.state_flags = ElementFlags::PRE_PROCESS;
-        }
-        dl.push_back(h);
-
-        let elem_ptr = dl.get_mut(h).map(|e| e as *mut Element).unwrap();
-        let mut ctx = make_collision_ctx(&mut dl);
         unsafe {
-            // Passing h as both succ and element — should skip self
-            let result = process_collisions(&mut ctx, Some(h), elem_ptr, MAX_TIME_VALUE);
-            assert!(!result);
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
+            {
+                let elem = dl.get_mut(h).unwrap();
+                elem.life_span = 10;
+                elem.mass_points = 5;
+                elem.state_flags = ElementFlags::PRE_PROCESS;
+            }
+            dl.push_back(h);
+
+            let elem_ptr = dl.get_mut(h).map(|e| e as *mut Element).unwrap();
+            let mut ctx = make_collision_ctx(&mut dl);
+            unsafe {
+                // Passing h as both succ and element — should skip self
+                let result = process_collisions(&mut ctx, Some(h), elem_ptr, MAX_TIME_VALUE);
+                assert!(!result);
+            }
         }
     }
 
     #[test]
     fn test_process_collisions_no_collision_possible() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h1 = alloc_element(&mut dl).unwrap();
-        let h2 = alloc_element(&mut dl).unwrap();
-
-        // Both elements have zero mass — collision_possible returns false
-        {
-            let e1 = dl.get_mut(h1).unwrap();
-            e1.life_span = 10;
-            e1.state_flags = ElementFlags::PRE_PROCESS;
-        }
-        {
-            let e2 = dl.get_mut(h2).unwrap();
-            e2.life_span = 10;
-            e2.state_flags = ElementFlags::PRE_PROCESS;
-        }
-        dl.push_back(h1);
-        dl.push_back(h2);
-
-        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
-        let mut ctx = make_collision_ctx(&mut dl);
         unsafe {
-            let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
-            assert!(!result);
+            let mut dl = DisplayList::with_default_capacity();
+            let h1 = alloc_element(&mut dl).unwrap();
+            let h2 = alloc_element(&mut dl).unwrap();
+
+            // Both elements have zero mass — collision_possible returns false
+            {
+                let e1 = dl.get_mut(h1).unwrap();
+                e1.life_span = 10;
+                e1.state_flags = ElementFlags::PRE_PROCESS;
+            }
+            {
+                let e2 = dl.get_mut(h2).unwrap();
+                e2.life_span = 10;
+                e2.state_flags = ElementFlags::PRE_PROCESS;
+            }
+            dl.push_back(h1);
+            dl.push_back(h2);
+
+            let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+            let mut ctx = make_collision_ctx(&mut dl);
+            unsafe {
+                let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+                assert!(!result);
+            }
         }
     }
 
     #[test]
     fn test_process_collisions_appearing_finite_life_prefilter() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h1 = alloc_element(&mut dl).unwrap();
-        let h2 = alloc_element(&mut dl).unwrap();
-
-        {
-            let e1 = dl.get_mut(h1).unwrap();
-            e1.life_span = 10;
-            e1.mass_points = 5;
-            e1.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::FINITE_LIFE;
-        }
-        {
-            let e2 = dl.get_mut(h2).unwrap();
-            e2.life_span = 5; // life_span > 1
-            e2.mass_points = 5;
-            e2.state_flags =
-                ElementFlags::PRE_PROCESS | ElementFlags::APPEARING | ElementFlags::FINITE_LIFE;
-        }
-        dl.push_back(h1);
-        dl.push_back(h2);
-
-        // DrawablesIntersect should NOT be called — prefilter skips it
-        unsafe fn intersect_should_not_be_called(
-            _a: &Element,
-            _b: &Element,
-            _min: TimeValue,
-        ) -> TimeValue {
-            panic!("DrawablesIntersect should not be called for APPEARING+FINITE_LIFE prefilter");
-        }
-
-        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
-        let mut ctx = CollisionContext {
-            display_list: &mut dl,
-            drawables_intersect: intersect_should_not_be_called,
-            do_damage: damage_noop,
-            collide: collide_noop,
-            process_flags: ElementFlags::PRE_PROCESS,
-        };
-
         unsafe {
-            let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
-            assert!(!result); // time_val = 0, no collision
+            let mut dl = DisplayList::with_default_capacity();
+            let h1 = alloc_element(&mut dl).unwrap();
+            let h2 = alloc_element(&mut dl).unwrap();
+
+            {
+                let e1 = dl.get_mut(h1).unwrap();
+                e1.life_span = 10;
+                e1.mass_points = 5;
+                e1.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::FINITE_LIFE;
+            }
+            {
+                let e2 = dl.get_mut(h2).unwrap();
+                e2.life_span = 5; // life_span > 1
+                e2.mass_points = 5;
+                e2.state_flags =
+                    ElementFlags::PRE_PROCESS | ElementFlags::APPEARING | ElementFlags::FINITE_LIFE;
+            }
+            dl.push_back(h1);
+            dl.push_back(h2);
+
+            // DrawablesIntersect should NOT be called — prefilter skips it
+            unsafe fn intersect_should_not_be_called(
+                _a: &Element,
+                _b: &Element,
+                _min: TimeValue,
+            ) -> TimeValue {
+                panic!(
+                    "DrawablesIntersect should not be called for APPEARING+FINITE_LIFE prefilter"
+                );
+            }
+
+            let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+            let mut ctx = CollisionContext {
+                display_list: &mut dl,
+                drawables_intersect: intersect_should_not_be_called,
+                do_damage: damage_noop,
+                collide: collide_noop,
+                process_flags: ElementFlags::PRE_PROCESS,
+            };
+
+            unsafe {
+                let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+                assert!(!result); // time_val = 0, no collision
+            }
         }
     }
 
     #[test]
     fn test_process_collisions_basic_hit() {
-        // DrawablesIntersect returns a valid collision time > 1
-        unsafe fn intersect_at_5(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
-            5
-        }
-
-        static mut COLLISION_COUNT: u32 = 0;
-        unsafe extern "C" fn counting_collision(
-            _self: *mut Element,
-            _self_pt: *const Point,
-            _other: *mut Element,
-            _other_pt: *const Point,
-        ) {
-            COLLISION_COUNT += 1;
-        }
-
-        let mut dl = DisplayList::with_default_capacity();
-        let h1 = alloc_element(&mut dl).unwrap();
-        let h2 = alloc_element(&mut dl).unwrap();
-
-        {
-            let e1 = dl.get_mut(h1).unwrap();
-            e1.life_span = 10;
-            e1.mass_points = 5;
-            e1.state_flags = ElementFlags::PRE_PROCESS;
-            e1.collision_func = Some(counting_collision);
-        }
-        {
-            let e2 = dl.get_mut(h2).unwrap();
-            e2.life_span = 10;
-            e2.mass_points = 5;
-            e2.state_flags = ElementFlags::PRE_PROCESS;
-            e2.collision_func = Some(counting_collision);
-        }
-        dl.push_back(h1);
-        dl.push_back(h2);
-
-        unsafe { COLLISION_COUNT = 0 };
-        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
-        let mut ctx = CollisionContext {
-            display_list: &mut dl,
-            drawables_intersect: intersect_at_5,
-            do_damage: damage_noop,
-            collide: collide_noop,
-            process_flags: ElementFlags::PRE_PROCESS,
-        };
-
         unsafe {
-            let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
-            // Both collision handlers should have been called
-            assert_eq!(COLLISION_COUNT, 2);
-            // Result depends on whether COLLISION flag got set
-            // (collision_func needs to set it; our counting_collision doesn't)
-            let _ = result;
+            // DrawablesIntersect returns a valid collision time > 1
+            unsafe fn intersect_at_5(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
+                5
+            }
+
+            static mut COLLISION_COUNT: u32 = 0;
+            unsafe extern "C" fn counting_collision(
+                _self: *mut Element,
+                _self_pt: *const Point,
+                _other: *mut Element,
+                _other_pt: *const Point,
+            ) {
+                COLLISION_COUNT += 1;
+            }
+
+            let mut dl = DisplayList::with_default_capacity();
+            let h1 = alloc_element(&mut dl).unwrap();
+            let h2 = alloc_element(&mut dl).unwrap();
+
+            {
+                let e1 = dl.get_mut(h1).unwrap();
+                e1.life_span = 10;
+                e1.mass_points = 5;
+                e1.state_flags = ElementFlags::PRE_PROCESS;
+                e1.collision_func = Some(counting_collision);
+            }
+            {
+                let e2 = dl.get_mut(h2).unwrap();
+                e2.life_span = 10;
+                e2.mass_points = 5;
+                e2.state_flags = ElementFlags::PRE_PROCESS;
+                e2.collision_func = Some(counting_collision);
+            }
+            dl.push_back(h1);
+            dl.push_back(h2);
+
+            unsafe { COLLISION_COUNT = 0 };
+            let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+            let mut ctx = CollisionContext {
+                display_list: &mut dl,
+                drawables_intersect: intersect_at_5,
+                do_damage: damage_noop,
+                collide: collide_noop,
+                process_flags: ElementFlags::PRE_PROCESS,
+            };
+
+            unsafe {
+                let result = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+                // Both collision handlers should have been called
+                assert_eq!(COLLISION_COUNT, 2);
+                // Result depends on whether COLLISION flag got set
+                // (collision_func needs to set it; our counting_collision doesn't)
+                let _ = result;
+            }
         }
     }
 
     #[test]
     fn test_process_collisions_player_ship_dispatch_order() {
-        // When test element is PLAYER_SHIP, test's collision_func is called first
-        static mut CALL_ORDER: [u8; 2] = [0, 0];
-        static mut CALL_IDX: usize = 0;
-
-        unsafe extern "C" fn elem_collision(
-            _self: *mut Element,
-            _self_pt: *const Point,
-            _other: *mut Element,
-            _other_pt: *const Point,
-        ) {
-            CALL_ORDER[CALL_IDX] = 1;
-            CALL_IDX += 1;
-        }
-
-        unsafe extern "C" fn test_collision(
-            _self: *mut Element,
-            _self_pt: *const Point,
-            _other: *mut Element,
-            _other_pt: *const Point,
-        ) {
-            CALL_ORDER[CALL_IDX] = 2;
-            CALL_IDX += 1;
-        }
-
-        unsafe fn intersect_at_3(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
-            3
-        }
-
-        let mut dl = DisplayList::with_default_capacity();
-        let h1 = alloc_element(&mut dl).unwrap();
-        let h2 = alloc_element(&mut dl).unwrap();
-
-        {
-            let e1 = dl.get_mut(h1).unwrap();
-            e1.life_span = 10;
-            e1.mass_points = 5;
-            e1.state_flags = ElementFlags::PRE_PROCESS;
-            e1.collision_func = Some(elem_collision);
-        }
-        {
-            let e2 = dl.get_mut(h2).unwrap();
-            e2.life_span = 10;
-            e2.mass_points = 5;
-            e2.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::PLAYER_SHIP;
-            e2.collision_func = Some(test_collision);
-        }
-        dl.push_back(h1);
-        dl.push_back(h2);
-
         unsafe {
-            CALL_IDX = 0;
-            CALL_ORDER = [0, 0];
-        }
+            // When test element is PLAYER_SHIP, test's collision_func is called first
+            static mut CALL_ORDER: [u8; 2] = [0, 0];
+            static mut CALL_IDX: usize = 0;
 
-        let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
-        let mut ctx = CollisionContext {
-            display_list: &mut dl,
-            drawables_intersect: intersect_at_3,
-            do_damage: damage_noop,
-            collide: collide_noop,
-            process_flags: ElementFlags::PRE_PROCESS,
-        };
+            unsafe extern "C" fn elem_collision(
+                _self: *mut Element,
+                _self_pt: *const Point,
+                _other: *mut Element,
+                _other_pt: *const Point,
+            ) {
+                CALL_ORDER[CALL_IDX] = 1;
+                CALL_IDX += 1;
+            }
 
-        unsafe {
-            let _ = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
-            // PLAYER_SHIP test element's collision should be called FIRST
-            assert_eq!(
-                CALL_ORDER[0], 2,
-                "test (PLAYER_SHIP) should be called first"
-            );
-            assert_eq!(CALL_ORDER[1], 1, "element should be called second");
+            unsafe extern "C" fn test_collision(
+                _self: *mut Element,
+                _self_pt: *const Point,
+                _other: *mut Element,
+                _other_pt: *const Point,
+            ) {
+                CALL_ORDER[CALL_IDX] = 2;
+                CALL_IDX += 1;
+            }
+
+            unsafe fn intersect_at_3(_a: &Element, _b: &Element, _min: TimeValue) -> TimeValue {
+                3
+            }
+
+            let mut dl = DisplayList::with_default_capacity();
+            let h1 = alloc_element(&mut dl).unwrap();
+            let h2 = alloc_element(&mut dl).unwrap();
+
+            {
+                let e1 = dl.get_mut(h1).unwrap();
+                e1.life_span = 10;
+                e1.mass_points = 5;
+                e1.state_flags = ElementFlags::PRE_PROCESS;
+                e1.collision_func = Some(elem_collision);
+            }
+            {
+                let e2 = dl.get_mut(h2).unwrap();
+                e2.life_span = 10;
+                e2.mass_points = 5;
+                e2.state_flags = ElementFlags::PRE_PROCESS | ElementFlags::PLAYER_SHIP;
+                e2.collision_func = Some(test_collision);
+            }
+            dl.push_back(h1);
+            dl.push_back(h2);
+
+            unsafe {
+                CALL_IDX = 0;
+                CALL_ORDER = [0, 0];
+            }
+
+            let elem_ptr = dl.get_mut(h1).map(|e| e as *mut Element).unwrap();
+            let mut ctx = CollisionContext {
+                display_list: &mut dl,
+                drawables_intersect: intersect_at_3,
+                do_damage: damage_noop,
+                collide: collide_noop,
+                process_flags: ElementFlags::PRE_PROCESS,
+            };
+
+            unsafe {
+                let _ = process_collisions(&mut ctx, Some(h2), elem_ptr, MAX_TIME_VALUE);
+                // PLAYER_SHIP test element's collision should be called FIRST
+                assert_eq!(
+                    CALL_ORDER[0], 2,
+                    "test (PLAYER_SHIP) should be called first"
+                );
+                assert_eq!(CALL_ORDER[1], 1, "element should be called second");
+            }
         }
     }
 
     #[test]
     fn test_find_handle_for_ptr() {
-        let mut dl = DisplayList::with_default_capacity();
-        let h = alloc_element(&mut dl).unwrap();
-        dl.push_back(h);
-        let ptr = dl.get(h).unwrap() as *const Element as *mut Element;
-        assert_eq!(find_handle_for_ptr(&dl, ptr), Some(h));
+        unsafe {
+            let mut dl = DisplayList::with_default_capacity();
+            let h = alloc_element(&mut dl).unwrap();
+            dl.push_back(h);
+            let ptr = dl.get(h).unwrap() as *const Element as *mut Element;
+            assert_eq!(find_handle_for_ptr(&dl, ptr), Some(h));
+        }
     }
 
     #[test]
     fn test_max_time_value() {
-        assert_eq!(MAX_TIME_VALUE, u16::MAX);
+        unsafe {
+            assert_eq!(MAX_TIME_VALUE, u16::MAX);
+        }
     }
 
     // -- P05: Zoom/Camera/Queue Orchestration tests --
 
     #[test]
     fn test_wrap_delta_x_no_wrap() {
-        assert_eq!(wrap_delta_x(100), 100);
-        assert_eq!(wrap_delta_x(-100), -100);
-        assert_eq!(wrap_delta_x(0), 0);
+        unsafe {
+            assert_eq!(wrap_delta_x(100), 100);
+            assert_eq!(wrap_delta_x(-100), -100);
+            assert_eq!(wrap_delta_x(0), 0);
+        }
     }
 
     #[test]
     fn test_wrap_delta_x_wraps_positive() {
-        let half = LOG_SPACE_WIDTH / 2;
-        assert_eq!(wrap_delta_x(half + 1), half + 1 - LOG_SPACE_WIDTH);
+        unsafe {
+            let half = LOG_SPACE_WIDTH / 2;
+            assert_eq!(wrap_delta_x(half + 1), half + 1 - LOG_SPACE_WIDTH);
+        }
     }
 
     #[test]
     fn test_wrap_delta_x_wraps_negative() {
-        let half = LOG_SPACE_WIDTH / 2;
-        assert_eq!(wrap_delta_x(-half - 1), -half - 1 + LOG_SPACE_WIDTH);
+        unsafe {
+            let half = LOG_SPACE_WIDTH / 2;
+            assert_eq!(wrap_delta_x(-half - 1), -half - 1 + LOG_SPACE_WIDTH);
+        }
     }
 
     #[test]
     fn test_wrap_delta_y_symmetry() {
-        assert_eq!(wrap_delta_y(100), 100);
-        let half = LOG_SPACE_HEIGHT / 2;
-        assert_eq!(wrap_delta_y(half + 1), half + 1 - LOG_SPACE_HEIGHT);
+        unsafe {
+            assert_eq!(wrap_delta_y(100), 100);
+            let half = LOG_SPACE_HEIGHT / 2;
+            assert_eq!(wrap_delta_y(half + 1), half + 1 - LOG_SPACE_HEIGHT);
+        }
     }
 
     #[test]
     fn test_display_align_truncates_low_bits() {
-        let mask = (1 << ONE_SHIFT) - 1;
-        assert_eq!(display_align(0), 0);
-        assert_eq!(display_align(mask as i32), 0);
-        assert_eq!(display_align((mask + 1) as i32), (mask + 1) as i32);
-        assert_eq!(display_align(0x1FF), 0x1FF & !(mask as i32));
+        unsafe {
+            let mask = (1 << ONE_SHIFT) - 1;
+            assert_eq!(display_align(0), 0);
+            assert_eq!(display_align(mask as i32), 0);
+            assert_eq!(display_align((mask + 1) as i32), (mask + 1) as i32);
+            assert_eq!(display_align(0x1FF), 0x1FF & !(mask as i32));
+        }
     }
 
     #[test]
     fn test_calc_reduction_step_closest_zoom() {
-        // Two ships very close → reduction should be 0
-        let r = calc_reduction_step(0, 0, MAX_VIS_REDUCTION as i32, false, false);
-        assert_eq!(r, 0);
+        unsafe {
+            // Two ships very close → reduction should be 0
+            let r = calc_reduction_step(0, 0, MAX_VIS_REDUCTION as i32, false, false);
+            assert_eq!(r, 0);
+        }
     }
 
     #[test]
     fn test_calc_reduction_step_beyond_encounter() {
-        let r = calc_reduction_step(1000, 1000, 0, false, true);
-        assert_eq!(r, 0);
+        unsafe {
+            let r = calc_reduction_step(1000, 1000, 0, false, true);
+            assert_eq!(r, 0);
+        }
     }
 
     #[test]
     fn test_calc_reduction_step_last_battle_minimum() {
-        // Should bump from 0 to REDUCTION_SHIFT in last battle
-        let r = calc_reduction_step(0, 0, MAX_VIS_REDUCTION as i32, true, false);
-        assert_eq!(r, REDUCTION_SHIFT as i32);
+        unsafe {
+            // Should bump from 0 to REDUCTION_SHIFT in last battle
+            let r = calc_reduction_step(0, 0, MAX_VIS_REDUCTION as i32, true, false);
+            assert_eq!(r, REDUCTION_SHIFT as i32);
+        }
     }
 
     #[test]
     fn test_calc_reduction_continuous_beyond_encounter() {
-        let r = calc_reduction_continuous(1000, 1000, false, true);
-        assert_eq!(r, 1 << ZOOM_SHIFT);
+        unsafe {
+            let r = calc_reduction_continuous(1000, 1000, false, true);
+            assert_eq!(r, 1 << ZOOM_SHIFT);
+        }
     }
 
     #[test]
     fn test_calc_reduction_continuous_close_ships() {
-        let r = calc_reduction_continuous(0, 0, false, false);
-        assert_eq!(r, 1 << ZOOM_SHIFT); // Clamped to minimum
+        unsafe {
+            let r = calc_reduction_continuous(0, 0, false, false);
+            assert_eq!(r, 1 << ZOOM_SHIFT); // Clamped to minimum
+        }
     }
 
     #[test]
     fn test_calc_reduction_continuous_last_battle_minimum() {
-        let r = calc_reduction_continuous(0, 0, true, false);
-        assert_eq!(r, 2 << ZOOM_SHIFT);
+        unsafe {
+            let r = calc_reduction_continuous(0, 0, true, false);
+            assert_eq!(r, 2 << ZOOM_SHIFT);
+        }
     }
 
     #[test]
     fn test_calc_display_coord_step() {
-        assert_eq!(calc_display_coord_step(100, 50, 1), 25);
-        assert_eq!(calc_display_coord_step(100, 100, 2), 0);
+        unsafe {
+            assert_eq!(calc_display_coord_step(100, 50, 1), 25);
+            assert_eq!(calc_display_coord_step(100, 100, 2), 0);
+        }
     }
 
     #[test]
     fn test_calc_display_coord_continuous() {
-        let zoom = 1 << ZOOM_SHIFT; // 1:1 zoom
-        assert_eq!(calc_display_coord_continuous(200, 100, zoom), 100);
+        unsafe {
+            let zoom = 1 << ZOOM_SHIFT; // 1:1 zoom
+            assert_eq!(calc_display_coord_continuous(200, 100, zoom), 100);
+        }
     }
 
     #[test]
     fn test_calc_view_stable() {
-        let mut origin = Point::new((LOG_SPACE_WIDTH / 2) as i16, (LOG_SPACE_HEIGHT / 2) as i16);
-        let mut zoom_out = 5;
-        let mut space_org = Point::zero();
-        let (vs, dx, dy) = calc_view(
-            &mut origin,
-            5, // same as current zoom_out
-            &mut zoom_out,
-            &mut space_org,
-            2,
-            ZoomMode::Step,
-            false,
-        );
-        assert_eq!(vs, ViewState::Stable);
-        assert_eq!(dx, 0);
-        assert_eq!(dy, 0);
+        unsafe {
+            let mut origin =
+                Point::new((LOG_SPACE_WIDTH / 2) as i16, (LOG_SPACE_HEIGHT / 2) as i16);
+            let mut zoom_out = 5;
+            let mut space_org = Point::zero();
+            let (vs, dx, dy) = calc_view(
+                &mut origin,
+                5, // same as current zoom_out
+                &mut zoom_out,
+                &mut space_org,
+                2,
+                ZoomMode::Step,
+                false,
+            );
+            assert_eq!(vs, ViewState::Stable);
+            assert_eq!(dx, 0);
+            assert_eq!(dy, 0);
+        }
     }
 
     #[test]
     fn test_calc_view_change_on_zoom_delta() {
-        let mut origin = Point::new((LOG_SPACE_WIDTH / 2) as i16, (LOG_SPACE_HEIGHT / 2) as i16);
-        let mut zoom_out = 5;
-        let mut space_org = Point::zero();
-        let (vs, _, _) = calc_view(
-            &mut origin,
-            3, // different from current zoom_out
-            &mut zoom_out,
-            &mut space_org,
-            2,
-            ZoomMode::Step,
-            false,
-        );
-        assert_eq!(vs, ViewState::Change);
-        assert_eq!(zoom_out, 3);
+        unsafe {
+            let mut origin =
+                Point::new((LOG_SPACE_WIDTH / 2) as i16, (LOG_SPACE_HEIGHT / 2) as i16);
+            let mut zoom_out = 5;
+            let mut space_org = Point::zero();
+            let (vs, _, _) = calc_view(
+                &mut origin,
+                3, // different from current zoom_out
+                &mut zoom_out,
+                &mut space_org,
+                2,
+                ZoomMode::Step,
+                false,
+            );
+            assert_eq!(vs, ViewState::Change);
+            assert_eq!(zoom_out, 3);
+        }
     }
 
     #[test]
     fn test_calc_view_single_ship_clamping() {
-        let mut origin = Point::new(0, 0); // far from center
-        let mut zoom_out = 5;
-        let mut space_org = Point::zero();
-        let (vs, dx, dy) = calc_view(
-            &mut origin,
-            5,
-            &mut zoom_out,
-            &mut space_org,
-            1, // single ship
-            ZoomMode::Step,
-            false,
-        );
-        // dx/dy should be clamped to ORG_JUMP_X/ORG_JUMP_Y
-        assert!(dx.abs() <= ORG_JUMP_X);
-        assert!(dy.abs() <= ORG_JUMP_Y);
-        assert_eq!(vs, ViewState::Scroll);
+        unsafe {
+            let mut origin = Point::new(0, 0); // far from center
+            let mut zoom_out = 5;
+            let mut space_org = Point::zero();
+            let (vs, dx, dy) = calc_view(
+                &mut origin,
+                5,
+                &mut zoom_out,
+                &mut space_org,
+                1, // single ship
+                ZoomMode::Step,
+                false,
+            );
+            // dx/dy should be clamped to ORG_JUMP_X/ORG_JUMP_Y
+            assert!(dx.abs() <= ORG_JUMP_X);
+            assert!(dy.abs() <= ORG_JUMP_Y);
+            assert_eq!(vs, ViewState::Scroll);
+        }
     }
 
     #[test]
     fn test_battle_state_init_display_list_step() {
-        let mut state = BattleState::new();
-        state.zoom_mode = ZoomMode::Step;
-        state.init_display_list();
-        assert_eq!(state.zoom_out, (MAX_VIS_REDUCTION + 1) as i32);
-        assert_eq!(state.opt_max_zoom_out, MAX_VIS_REDUCTION as i32);
+        unsafe {
+            let mut state = BattleState::new();
+            state.zoom_mode = ZoomMode::Step;
+            state.init_display_list();
+            assert_eq!(state.zoom_out, (MAX_VIS_REDUCTION + 1) as i32);
+            assert_eq!(state.opt_max_zoom_out, MAX_VIS_REDUCTION as i32);
+        }
     }
 
     #[test]
     fn test_battle_state_init_display_list_continuous() {
-        let mut state = BattleState::new();
-        state.zoom_mode = ZoomMode::Continuous;
-        state.init_display_list();
-        assert_eq!(state.zoom_out, MAX_ZOOM_OUT + (1 << ZOOM_SHIFT));
-        assert_eq!(state.opt_max_zoom_out, MAX_ZOOM_OUT);
+        unsafe {
+            let mut state = BattleState::new();
+            state.zoom_mode = ZoomMode::Continuous;
+            state.init_display_list();
+            assert_eq!(state.zoom_out, MAX_ZOOM_OUT + (1 << ZOOM_SHIFT));
+            assert_eq!(state.opt_max_zoom_out, MAX_ZOOM_OUT);
+        }
     }
 
     #[test]
     fn test_post_process_queue_removes_disappearing() {
-        let mut state = BattleState::new();
-
-        let h = state.display_list.alloc().unwrap();
-        {
-            let elem = state.display_list.get_mut(h).unwrap();
-            elem.state_flags =
-                ElementFlags::PRE_PROCESS | ElementFlags::POST_PROCESS | ElementFlags::DISAPPEARING;
-        }
-        state.display_list.push_back(h);
-
         unsafe {
-            post_process_queue(&mut state, ViewState::Stable, 0, 0);
-        }
+            let mut state = BattleState::new();
 
-        // Element should be removed
-        assert!(state.display_list.head().is_none());
+            let h = state.display_list.alloc().unwrap();
+            {
+                let elem = state.display_list.get_mut(h).unwrap();
+                elem.state_flags = ElementFlags::PRE_PROCESS
+                    | ElementFlags::POST_PROCESS
+                    | ElementFlags::DISAPPEARING;
+            }
+            state.display_list.push_back(h);
+
+            unsafe {
+                post_process_queue(&mut state, ViewState::Stable, 0, 0);
+            }
+
+            // Element should be removed
+            assert!(state.display_list.head().is_none());
+        }
     }
 
     #[test]
     fn test_redraw_queue_basic_frame() {
-        let mut state = BattleState::new();
-        // Empty display list: should complete without panic
         unsafe {
-            redraw_queue(
-                &mut state,
-                false,
-                intersect_never,
-                damage_noop,
-                collide_noop,
-            );
+            let mut state = BattleState::new();
+            // Empty display list: should complete without panic
+            unsafe {
+                redraw_queue(
+                    &mut state,
+                    false,
+                    intersect_never,
+                    damage_noop,
+                    collide_noop,
+                );
+            }
         }
     }
 }

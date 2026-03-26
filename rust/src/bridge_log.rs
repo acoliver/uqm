@@ -20,7 +20,7 @@ const LOG_PATH: &str = "rust-bridge.log";
 /// This function creates or truncates the log file and writes the Phase 0 marker.
 /// Returns 0 on success, -1 on failure.
 #[no_mangle]
-pub extern "C" fn rust_bridge_init() -> libc::c_int {
+pub unsafe extern "C" fn rust_bridge_init() -> libc::c_int {
     // Use absolute path to ensure log file is created in project root
     let log_path = std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
@@ -29,13 +29,13 @@ pub extern "C" fn rust_bridge_init() -> libc::c_int {
     match File::create(&log_path) {
         Ok(mut file) => {
             // Write the Phase 0 marker with timestamp
-            if let Err(_) = writeln!(file, "RUST_BRIDGE_PHASE0_OK") {
+            if writeln!(file, "RUST_BRIDGE_PHASE0_OK").is_err() {
                 eprintln!("rust_bridge_init: Failed to write marker to {:?}", log_path);
                 return -1;
             }
 
             // Write initialization timestamp
-            if let Err(_) = writeln!(file, "rust_bridge_init called at: {:?}", log_path) {
+            if writeln!(file, "rust_bridge_init called at: {:?}", log_path).is_err() {
                 eprintln!(
                     "rust_bridge_init: Failed to write timestamp to {:?}",
                     log_path
@@ -78,7 +78,7 @@ pub fn rust_bridge_log_msg(message: &str) {
 ///
 /// Returns 0 on success, -1 on failure.
 #[no_mangle]
-pub extern "C" fn rust_bridge_log(message: *const c_char) -> libc::c_int {
+pub unsafe extern "C" fn rust_bridge_log(message: *const c_char) -> libc::c_int {
     if message.is_null() {
         return -1;
     }
@@ -93,11 +93,11 @@ pub extern "C" fn rust_bridge_log(message: *const c_char) -> libc::c_int {
     // Get the log file handle from the global mutex
     let mut guard = LOG_FILE.lock().unwrap();
     if let Some(ref mut file) = *guard {
-        if let Err(_) = writeln!(file, "{}", message_str) {
+        if writeln!(file, "{}", message_str).is_err() {
             return -1;
         }
         // Flush immediately to ensure logs are written
-        if let Err(_) = file.flush() {
+        if file.flush().is_err() {
             return -1;
         }
         0

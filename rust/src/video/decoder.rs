@@ -164,7 +164,7 @@ impl DukVideoDecoder {
         let header = DukVideoHeader::from_bytes(hdr_data)?;
 
         // Parse frame offsets
-        if frm_data.len() % 4 != 0 {
+        if !frm_data.len().is_multiple_of(4) {
             return Err(VideoError::BadFile(format!(
                 "Frame file size {} not multiple of 4",
                 frm_data.len()

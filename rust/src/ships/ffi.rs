@@ -50,7 +50,7 @@ extern "C" {
 ///
 /// Returns 1 on success, 0 on failure.
 #[no_mangle]
-pub extern "C" fn rust_ships_load_catalog() -> CBoolean {
+pub unsafe extern "C" fn rust_ships_load_catalog() -> CBoolean {
     catch_unwind(|| match load_master_ship_list() {
         Ok(()) => 1,
         Err(_) => 0,
@@ -62,7 +62,7 @@ pub extern "C" fn rust_ships_load_catalog() -> CBoolean {
 ///
 /// C: `void rust_ships_free_catalog(void);`
 #[no_mangle]
-pub extern "C" fn rust_ships_free_catalog() {
+pub unsafe extern "C" fn rust_ships_free_catalog() {
     let _ = catch_unwind(free_master_ship_list);
 }
 
@@ -72,7 +72,7 @@ pub extern "C" fn rust_ships_free_catalog() {
 ///
 /// Returns 0 if the index is invalid or catalog is not loaded.
 #[no_mangle]
-pub extern "C" fn rust_ships_get_cost_by_index(index: CCount) -> CCount {
+pub unsafe extern "C" fn rust_ships_get_cost_by_index(index: CCount) -> CCount {
     catch_unwind(|| get_ship_cost_from_index(index as usize).unwrap_or_default())
         .unwrap_or_default()
 }
@@ -88,7 +88,10 @@ pub extern "C" fn rust_ships_get_cost_by_index(index: CCount) -> CCount {
 /// Returns a Rust-owned `*mut CRaceDesc` on success, or null on failure.
 /// Caller must free with `rust_ships_free()`.
 #[no_mangle]
-pub extern "C" fn rust_ships_load(species: CSpeciesId, battle_ready: CBoolean) -> *mut CRaceDesc {
+pub unsafe extern "C" fn rust_ships_load(
+    species: CSpeciesId,
+    battle_ready: CBoolean,
+) -> *mut CRaceDesc {
     match catch_unwind(|| {
         let species_enum = match SpeciesId::from_i32(species) {
             Some(s) => s,
@@ -118,7 +121,7 @@ pub extern "C" fn rust_ships_load(species: CSpeciesId, battle_ready: CBoolean) -
 /// # Safety
 /// `desc` must be a valid pointer returned by `rust_ships_load()` and not yet freed.
 #[no_mangle]
-pub extern "C" fn rust_ships_free(
+pub unsafe extern "C" fn rust_ships_free(
     desc: *mut CRaceDesc,
     free_battle: CBoolean,
     free_metadata: CBoolean,
@@ -147,7 +150,7 @@ pub extern "C" fn rust_ships_free(
 /// Allocates a new STARSHIP or SHIP_FRAGMENT entry in the C-owned queue,
 /// initializes it with the species ID, and adds it to the queue.
 #[no_mangle]
-pub extern "C" fn rust_ships_build(
+pub unsafe extern "C" fn rust_ships_build(
     queue: *mut std::os::raw::c_void,
     species: CSpeciesId,
 ) -> HStarship {
@@ -207,7 +210,7 @@ pub extern "C" fn rust_ships_build(
 /// # Safety
 /// Both `src` and `dst` must be valid pointers to C-owned `SHIP_FRAGMENT` structs.
 #[no_mangle]
-pub extern "C" fn rust_ships_clone_fragment(
+pub unsafe extern "C" fn rust_ships_clone_fragment(
     src: *const std::os::raw::c_void,
     dst: *mut std::os::raw::c_void,
 ) -> CBoolean {
@@ -252,7 +255,7 @@ pub extern "C" fn rust_ships_clone_fragment(
 /// # Safety
 /// `starship` must be a valid pointer to a C-owned `STARSHIP` struct.
 #[no_mangle]
-pub extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -> CBoolean {
+pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -> CBoolean {
     catch_unwind(|| {
         if starship.is_null() {
             return 0;
@@ -315,7 +318,7 @@ pub extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -> CBool
 ///
 /// Returns the number of players (2) on success, 0 on failure.
 #[no_mangle]
-pub extern "C" fn rust_ships_init() -> CCount {
+pub unsafe extern "C" fn rust_ships_init() -> CCount {
     catch_unwind(|| {
         // Get activity from C
         #[cfg(test)]
@@ -339,7 +342,7 @@ pub extern "C" fn rust_ships_init() -> CCount {
 /// and descriptor cleanup are handled by C's UninitShips() calling rust_ships_free()
 /// on each descriptor.
 #[no_mangle]
-pub extern "C" fn rust_ships_uninit() {
+pub unsafe extern "C" fn rust_ships_uninit() {
     let _ = catch_unwind(|| {
         // Free the master catalog if loaded
         free_master_ship_list();
@@ -471,7 +474,7 @@ unsafe fn extract_starship_from_element(
 /// # Safety
 /// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
 #[no_mangle]
-pub extern "C" fn rust_ships_preprocess(element: *mut c_void) {
+pub unsafe extern "C" fn rust_ships_preprocess(element: *mut c_void) {
     let _ = catch_unwind(|| {
         if element.is_null() {
             return;
@@ -520,7 +523,7 @@ pub extern "C" fn rust_ships_preprocess(element: *mut c_void) {
 /// # Safety
 /// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
 #[no_mangle]
-pub extern "C" fn rust_ships_postprocess(element: *mut c_void) {
+pub unsafe extern "C" fn rust_ships_postprocess(element: *mut c_void) {
     let _ = catch_unwind(|| {
         if element.is_null() {
             return;
@@ -560,7 +563,7 @@ pub extern "C" fn rust_ships_postprocess(element: *mut c_void) {
 /// # Safety
 /// `element` must be a valid pointer to a C-owned `ELEMENT` struct.
 #[no_mangle]
-pub extern "C" fn rust_ships_death(element: *mut c_void) {
+pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
     let _ = catch_unwind(|| {
         if element.is_null() {
             return;
@@ -607,77 +610,91 @@ mod tests {
 
     #[test]
     fn test_catalog_load_free() {
-        // Ensure clean state
-        rust_ships_free_catalog();
+        unsafe {
+            // Ensure clean state
+            rust_ships_free_catalog();
 
-        let result = rust_ships_load_catalog();
-        assert_eq!(result, 1);
+            let result = rust_ships_load_catalog();
+            assert_eq!(result, 1);
 
-        rust_ships_free_catalog();
+            rust_ships_free_catalog();
+        }
     }
 
     #[test]
     fn test_get_cost_by_index() {
-        rust_ships_load_catalog();
+        unsafe {
+            rust_ships_load_catalog();
 
-        // Index 0 should be valid (first melee ship after sorting)
-        let cost = rust_ships_get_cost_by_index(0);
-        assert!(cost > 0);
+            // Index 0 should be valid (first melee ship after sorting)
+            let cost = rust_ships_get_cost_by_index(0);
+            assert!(cost > 0);
 
-        // Invalid index should return 0
-        let cost = rust_ships_get_cost_by_index(9999);
-        assert_eq!(cost, 0);
+            // Invalid index should return 0
+            let cost = rust_ships_get_cost_by_index(9999);
+            assert_eq!(cost, 0);
 
-        rust_ships_free_catalog();
+            rust_ships_free_catalog();
+        }
     }
 
     #[test]
     fn test_load_free_ship() {
-        // Load VUX (species 11) metadata-only
-        let desc = rust_ships_load(11, 0);
-        assert!(!desc.is_null());
+        unsafe {
+            // Load VUX (species 11) metadata-only
+            let desc = rust_ships_load(11, 0);
+            assert!(!desc.is_null());
 
-        // Free it
-        rust_ships_free(desc, 1, 1);
+            // Free it
+            rust_ships_free(desc, 1, 1);
+        }
     }
 
     #[test]
     fn test_load_free_ship_battle_ready() {
-        // Load VUX (species 11) battle-ready
-        let desc = rust_ships_load(11, 1);
-        assert!(!desc.is_null());
+        unsafe {
+            // Load VUX (species 11) battle-ready
+            let desc = rust_ships_load(11, 1);
+            assert!(!desc.is_null());
 
-        // Free it
-        rust_ships_free(desc, 1, 1);
+            // Free it
+            rust_ships_free(desc, 1, 1);
+        }
     }
 
     #[test]
     fn test_load_ship_invalid_species() {
-        let desc = rust_ships_load(999, 0);
-        assert!(desc.is_null());
+        unsafe {
+            let desc = rust_ships_load(999, 0);
+            assert!(desc.is_null());
+        }
     }
 
     #[test]
     fn test_init_uninit_ships() {
-        let result = rust_ships_init();
-        assert_eq!(result, 2); // NUM_PLAYERS
+        unsafe {
+            let result = rust_ships_init();
+            assert_eq!(result, 2); // NUM_PLAYERS
 
-        rust_ships_uninit();
+            rust_ships_uninit();
+        }
     }
 
     #[test]
     fn test_null_pointer_safety() {
-        // All functions should handle null pointers gracefully
-        rust_ships_free(ptr::null_mut(), 0, 0);
-        assert_eq!(rust_ships_spawn(ptr::null_mut()), 0);
-        assert_eq!(
-            rust_ships_clone_fragment(ptr::null_mut(), ptr::null_mut()),
-            0
-        );
+        unsafe {
+            // All functions should handle null pointers gracefully
+            rust_ships_free(ptr::null_mut(), 0, 0);
+            assert_eq!(rust_ships_spawn(ptr::null_mut()), 0);
+            assert_eq!(
+                rust_ships_clone_fragment(ptr::null_mut(), ptr::null_mut()),
+                0
+            );
 
-        // These should not crash
-        rust_ships_preprocess(ptr::null_mut());
-        rust_ships_postprocess(ptr::null_mut());
-        rust_ships_death(ptr::null_mut());
+            // These should not crash
+            rust_ships_preprocess(ptr::null_mut());
+            rust_ships_postprocess(ptr::null_mut());
+            rust_ships_death(ptr::null_mut());
+        }
     }
 }

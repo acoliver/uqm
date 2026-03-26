@@ -4,7 +4,7 @@
 // These are C functions we need to call from Rust for integration.
 // They remain as extern declarations until they're needed at runtime.
 
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::c_void;
 
 // ---------------------------------------------------------------------------
 // Activity constants (from globdata.h)

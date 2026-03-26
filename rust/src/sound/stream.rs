@@ -820,7 +820,7 @@ fn start_mixer_pump() {
                         output.fill(0.0);
                         let panic_n =
                             CB_PANIC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if panic_n < 5 || panic_n % 1000 == 0 {
+                        if panic_n < 5 || panic_n.is_multiple_of(1000) {
                             eprintln!(
                                 "[mixer_pump_cb] recovered from panic in output callback #{}",
                                 panic_n
@@ -888,7 +888,7 @@ impl MixerPumpSource {
         // Periodic diagnostic: log mixer state every ~500 calls (~12s at 44100 Hz)
         static DIAG_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let count = DIAG_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if count < 5 || count % 500 == 0 {
+        if count < 5 || count.is_multiple_of(500) {
             let freq = super::mixer::mix::mixer_get_frequency();
             let fmt = super::mixer::mix::mixer_get_format();
             let non_zero = raw.iter().position(|&b| b != 0);

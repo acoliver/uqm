@@ -3,7 +3,7 @@
 // @requirement combatant selection
 
 use crate::supermelee::error::SuperMeleeError;
-use crate::supermelee::setup::team::{ship_cost, MeleeSetup, MeleeTeam};
+use crate::supermelee::setup::team::{MeleeSetup, MeleeTeam};
 use crate::supermelee::types::{
     BattleReadyCombatant, FleetShipIndex, MeleeShip, MELEE_FLEET_SIZE, NUM_SIDES,
 };
@@ -116,7 +116,7 @@ impl MatchSelectionState {
 ///
 /// This preserves the stronger contract: the returned object carries the
 /// fleet slot, ship type, and cost — not bare ship IDs.
-fn make_combatant(side: usize, slot: FleetShipIndex, ship: MeleeShip) -> BattleReadyCombatant {
+fn make_combatant(side: usize, slot: FleetShipIndex, _ship: MeleeShip) -> BattleReadyCombatant {
     BattleReadyCombatant {
         handle: (side << 16) | (slot as usize),
     }
@@ -257,123 +257,143 @@ mod tests {
 
     #[test]
     fn initial_combatants_return_battle_ready_entries() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
-        let result = select_initial_combatants(&setup, &mut state).unwrap();
-        assert!(result[0].is_some());
-        assert!(result[1].is_some());
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
+            let result = select_initial_combatants(&setup, &mut state).unwrap();
+            assert!(result[0].is_some());
+            assert!(result[1].is_some());
+        }
     }
 
     #[test]
     fn initial_combatants_fail_when_side_empty() {
-        let mut setup = MeleeSetup::new();
-        setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
-        // Side 1 empty
-        let mut state = MatchSelectionState::new();
-        let result = select_initial_combatants(&setup, &mut state);
-        assert!(result.is_err());
+        unsafe {
+            let mut setup = MeleeSetup::new();
+            setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
+            // Side 1 empty
+            let mut state = MatchSelectionState::new();
+            let result = select_initial_combatants(&setup, &mut state);
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn next_combatant_after_loss() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
-        select_initial_combatants(&setup, &mut state).unwrap();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
+            select_initial_combatants(&setup, &mut state).unwrap();
 
-        // Side 0's first ship dies
-        commit_ship_death(&mut state, 0, 0).unwrap();
+            // Side 0's first ship dies
+            commit_ship_death(&mut state, 0, 0).unwrap();
 
-        let next = select_next_combatant(&setup, &mut state, 0).unwrap();
-        assert!(next.is_some());
+            let next = select_next_combatant(&setup, &mut state, 0).unwrap();
+            assert!(next.is_some());
+        }
     }
 
     #[test]
     fn consumed_slot_is_not_reselected() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
 
-        // Consume slot 0
-        commit_ship_death(&mut state, 0, 0).unwrap();
-        assert!(!state.sides[0].is_available(0, &setup.teams[0]));
+            // Consume slot 0
+            commit_ship_death(&mut state, 0, 0).unwrap();
+            assert!(!state.sides[0].is_available(0, &setup.teams[0]));
 
-        // Next selection should skip slot 0
-        let next = select_next_combatant(&setup, &mut state, 0).unwrap();
-        assert!(next.is_some());
-        // Verify it picked slot 1 (the handle encodes slot in lower bits)
-        let combatant = next.unwrap();
-        assert_eq!(combatant.handle & 0xFFFF, 1); // slot 1
+            // Next selection should skip slot 0
+            let next = select_next_combatant(&setup, &mut state, 0).unwrap();
+            assert!(next.is_some());
+            // Verify it picked slot 1 (the handle encodes slot in lower bits)
+            let combatant = next.unwrap();
+            assert_eq!(combatant.handle & 0xFFFF, 1); // slot 1
+        }
     }
 
     #[test]
     fn no_valid_slot_returns_none_without_corrupting_state() {
-        let mut setup = MeleeSetup::new();
-        setup.set_ship(1, 0, MeleeShip::Vux).unwrap();
-        let mut state = MatchSelectionState::new();
+        unsafe {
+            let mut setup = MeleeSetup::new();
+            setup.set_ship(1, 0, MeleeShip::Vux).unwrap();
+            let mut state = MatchSelectionState::new();
 
-        // Consume the only ship on side 1
-        commit_ship_death(&mut state, 1, 0).unwrap();
+            // Consume the only ship on side 1
+            commit_ship_death(&mut state, 1, 0).unwrap();
 
-        let result = select_next_combatant(&setup, &mut state, 1).unwrap();
-        assert!(result.is_none()); // eliminated
+            let result = select_next_combatant(&setup, &mut state, 1).unwrap();
+            assert!(result.is_none()); // eliminated
 
-        // State is still valid
-        assert_eq!(state.sides[1].remaining_count(&setup.teams[1]), 0);
+            // State is still valid
+            assert_eq!(state.sides[1].remaining_count(&setup.teams[1]), 0);
+        }
     }
 
     #[test]
     fn commit_selection_works() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
 
-        let combatant = commit_selection(&setup, &mut state, 0, 2).unwrap();
-        assert_eq!(state.sides[0].current_slot, Some(2));
-        // Handle encodes side=0, slot=2
-        assert_eq!(combatant.handle, (0 << 16) | 2);
+            let combatant = commit_selection(&setup, &mut state, 0, 2).unwrap();
+            assert_eq!(state.sides[0].current_slot, Some(2));
+            // Handle encodes side=0, slot=2
+            assert_eq!(combatant.handle, (0 << 16) | 2);
+        }
     }
 
     #[test]
     fn commit_selection_rejects_consumed_slot() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
 
-        commit_ship_death(&mut state, 0, 1).unwrap();
-        let result = commit_selection(&setup, &mut state, 0, 1);
-        assert!(result.is_err());
+            commit_ship_death(&mut state, 0, 1).unwrap();
+            let result = commit_selection(&setup, &mut state, 0, 1);
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn auto_selection_works() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
 
-        let result = auto_select_combatant(&setup, &mut state, 0).unwrap();
-        assert!(result.is_some());
+            let result = auto_select_combatant(&setup, &mut state, 0).unwrap();
+            assert!(result.is_some());
+        }
     }
 
     #[test]
     fn handoff_contract_is_battle_ready_not_bare_id() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
-        let result = select_initial_combatants(&setup, &mut state).unwrap();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
+            let result = select_initial_combatants(&setup, &mut state).unwrap();
 
-        // BattleReadyCombatant encodes both side and slot
-        let c = result[0].unwrap();
-        let encoded_side = c.handle >> 16;
-        let encoded_slot = c.handle & 0xFFFF;
-        assert_eq!(encoded_side, 0);
-        assert!(encoded_slot < MELEE_FLEET_SIZE);
+            // BattleReadyCombatant encodes both side and slot
+            let c = result[0].unwrap();
+            let encoded_side = c.handle >> 16;
+            let encoded_slot = c.handle & 0xFFFF;
+            assert_eq!(encoded_side, 0);
+            assert!(encoded_slot < MELEE_FLEET_SIZE);
+        }
     }
 
     #[test]
     fn match_reset_clears_consumed_slots() {
-        let setup = setup_with_ships();
-        let mut state = MatchSelectionState::new();
+        unsafe {
+            let setup = setup_with_ships();
+            let mut state = MatchSelectionState::new();
 
-        commit_ship_death(&mut state, 0, 0).unwrap();
-        commit_ship_death(&mut state, 0, 1).unwrap();
-        assert_eq!(state.sides[0].remaining_count(&setup.teams[0]), 1);
+            commit_ship_death(&mut state, 0, 0).unwrap();
+            commit_ship_death(&mut state, 0, 1).unwrap();
+            assert_eq!(state.sides[0].remaining_count(&setup.teams[0]), 1);
 
-        state.reset();
-        assert_eq!(state.sides[0].remaining_count(&setup.teams[0]), 3);
+            state.reset();
+            assert_eq!(state.sides[0].remaining_count(&setup.teams[0]), 3);
+        }
     }
 }

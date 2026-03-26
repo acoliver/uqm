@@ -13,18 +13,13 @@ use crate::video::ffi::SDL_Surface;
 use xbrz::scale_rgba;
 
 /// Current state of video playback
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlaybackState {
+    #[default]
     Stopped,
     Playing,
     Paused,
     Finished,
-}
-
-impl Default for PlaybackState {
-    fn default() -> Self {
-        Self::Stopped
-    }
 }
 
 #[derive(Debug)]
@@ -275,7 +270,7 @@ impl VideoPlayer {
 
         let log_index = FRAME_LOG_COUNTER.fetch_add(1, Ordering::Relaxed);
         if log_index < 5 {
-            let sample = frame.data.get(0).copied().unwrap_or(0);
+            let sample = frame.data.first().copied().unwrap_or(0);
             rust_bridge_log_msg(&format!(
                 "RUST_VIDEO: frame {} size={}x{} dst=({}, {}) sample=0x{:08x}",
                 self.current_frame, frame.width, frame.height, self.dst_x, self.dst_y, sample
@@ -283,7 +278,7 @@ impl VideoPlayer {
         }
 
         if !self.direct_window_mode && log_index < 5 {
-            let post_sample = frame.data.get(0).copied().unwrap_or(0);
+            let post_sample = frame.data.first().copied().unwrap_or(0);
             rust_bridge_log_msg(&format!(
                 "RUST_VIDEO: blit done frame {} sample=0x{:08x}",
                 self.current_frame, post_sample
@@ -340,9 +335,9 @@ unsafe fn blit_frame_to_sdl_surface(
     super::ffi::tfb_drawcanvas_lock(surface as *mut std::ffi::c_void);
 
     let surf = &*surface;
-    let dst_w = surf.w as i32;
-    let dst_h = surf.h as i32;
-    let pitch = surf.pitch as i32;
+    let dst_w = surf.w;
+    let dst_h = surf.h;
+    let pitch = surf.pitch;
 
     if surf.pixels.is_null() {
         super::ffi::tfb_drawcanvas_unlock(surface as *mut std::ffi::c_void);
@@ -395,9 +390,9 @@ unsafe fn blit_frame_to_sdl_surface(
             let p = frame.data[(y as usize * frame.width as usize) + x as usize];
             // Frame pixels are RGBA in memory. The Rust graphics screen surface
             // uses RGBX8888 with masks R=0xFF000000, G=0x00FF0000, B=0x0000FF00.
-            let r = (p & 0xFF) as u32;
-            let g = ((p >> 8) & 0xFF) as u32;
-            let b = ((p >> 16) & 0xFF) as u32;
+            let r = (p & 0xFF);
+            let g = ((p >> 8) & 0xFF);
+            let b = ((p >> 16) & 0xFF);
 
             let out = (r << 24) | (g << 16) | (b << 8);
 

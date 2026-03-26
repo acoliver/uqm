@@ -12,7 +12,7 @@ static GLOBAL_GAME_CLOCK: Mutex<Option<GameClock>> = Mutex::new(None);
 
 /// Initialize the global game clock
 #[no_mangle]
-pub extern "C" fn rust_init_game_clock() {
+pub unsafe extern "C" fn rust_init_game_clock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if clock.is_none() {
         *clock = Some(GameClock::new());
@@ -21,7 +21,7 @@ pub extern "C" fn rust_init_game_clock() {
 
 /// Set the game clock rate (ticks per day)
 #[no_mangle]
-pub extern "C" fn rust_set_clock_rate(ticks_per_day: usize) {
+pub unsafe extern "C" fn rust_set_clock_rate(ticks_per_day: usize) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.set_rate(ticks_per_day);
@@ -31,7 +31,7 @@ pub extern "C" fn rust_set_clock_rate(ticks_per_day: usize) {
 /// Tick the clock forward one tick
 /// Returns 1 if day changed, 0 otherwise
 #[no_mangle]
-pub extern "C" fn rust_clock_tick() -> i32 {
+pub unsafe extern "C" fn rust_clock_tick() -> i32 {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         if gc.tick() { 1 } else { 0 }
@@ -42,7 +42,7 @@ pub extern "C" fn rust_clock_tick() -> i32 {
 
 /// Advance the clock by a specific number of ticks
 #[no_mangle]
-pub extern "C" fn rust_clock_advance_ticks(ticks: usize) {
+pub unsafe extern "C" fn rust_clock_advance_ticks(ticks: usize) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.advance_ticks(ticks);
@@ -51,7 +51,7 @@ pub extern "C" fn rust_clock_advance_ticks(ticks: usize) {
 
 /// Advance the clock by a specific number of days
 #[no_mangle]
-pub extern "C" fn rust_clock_advance_days(days: u32) {
+pub unsafe extern "C" fn rust_clock_advance_days(days: u32) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.advance_days(days);
@@ -60,35 +60,35 @@ pub extern "C" fn rust_clock_advance_days(days: u32) {
 
 /// Get the current day
 #[no_mangle]
-pub extern "C" fn rust_get_clock_day() -> u8 {
+pub unsafe extern "C" fn rust_get_clock_day() -> u8 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| gc.date().day).unwrap_or(0)
 }
 
 /// Get the current month
 #[no_mangle]
-pub extern "C" fn rust_get_clock_month() -> u8 {
+pub unsafe extern "C" fn rust_get_clock_month() -> u8 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| gc.date().month).unwrap_or(0)
 }
 
 /// Get the current year
 #[no_mangle]
-pub extern "C" fn rust_get_clock_year() -> u32 {
+pub unsafe extern "C" fn rust_get_clock_year() -> u32 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| gc.date().year).unwrap_or(0)
 }
 
 /// Get day fraction (0.0 to 1.0)
 #[no_mangle]
-pub extern "C" fn rust_get_day_fraction() -> f64 {
+pub unsafe extern "C" fn rust_get_day_fraction() -> f64 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| gc.day_fraction()).unwrap_or(0.0)
 }
 
 /// Add an absolute event
 #[no_mangle]
-pub extern "C" fn rust_add_event_absolute(
+pub unsafe extern "C" fn rust_add_event_absolute(
     year: u32,
     month: u8,
     day: u8,
@@ -112,7 +112,7 @@ pub extern "C" fn rust_add_event_absolute(
 
 /// Add a relative event (days from now)
 #[no_mangle]
-pub extern "C" fn rust_add_event_relative(
+pub unsafe extern "C" fn rust_add_event_relative(
     days_offset: u32,
     func_index: u8,
 ) -> u32 {
@@ -133,7 +133,7 @@ pub extern "C" fn rust_add_event_relative(
 
 /// Remove an event by ID
 #[no_mangle]
-pub extern "C" fn rust_remove_event(event_id: u32) -> i32 {
+pub unsafe extern "C" fn rust_remove_event(event_id: u32) -> i32 {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         match gc.remove_event(event_id) {
@@ -147,7 +147,7 @@ pub extern "C" fn rust_remove_event(event_id: u32) -> i32 {
 
 /// Clear all events
 #[no_mangle]
-pub extern "C" fn rust_clear_events() {
+pub unsafe extern "C" fn rust_clear_events() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.clear_events();
@@ -156,14 +156,14 @@ pub extern "C" fn rust_clear_events() {
 
 /// Check if the clock is running
 #[no_mangle]
-pub extern "C" fn rust_clock_is_running() -> i32 {
+pub unsafe extern "C" fn rust_clock_is_running() -> i32 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| if gc.is_running() { 1 } else { 0 }).unwrap_or(0)
 }
 
 /// Lock the clock (for debugging)
 #[no_mangle]
-pub extern "C" fn rust_clock_lock() {
+pub unsafe extern "C" fn rust_clock_lock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.lock();
@@ -172,7 +172,7 @@ pub extern "C" fn rust_clock_lock() {
 
 /// Unlock the clock
 #[no_mangle]
-pub extern "C" fn rust_clock_unlock() {
+pub unsafe extern "C" fn rust_clock_unlock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.unlock();
@@ -181,40 +181,40 @@ pub extern "C" fn rust_clock_unlock() {
 
 /// Check if the clock is locked
 #[no_mangle]
-pub extern "C" fn rust_clock_is_locked() -> i32 {
+pub unsafe extern "C" fn rust_clock_is_locked() -> i32 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| if gc.is_locked() { 1 } else { 0 }).unwrap_or(0)
 }
 
 /// Get number of ticks per day
 #[no_mangle]
-pub extern "C" fn rust_get_ticks_per_day() -> usize {
+pub unsafe extern "C" fn rust_get_ticks_per_day() -> usize {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| gc.day_in_ticks()).unwrap_or(0)
 }
 
 /// Get current tick count
 #[no_mangle]
-pub extern "C" fn rust_get_tick_count() -> usize {
+pub unsafe extern "C" fn rust_get_tick_count() -> usize {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     clock.as_ref().map(|gc| gc.tick_count()).unwrap_or(0)
 }
 
 /// Check if a year is a leap year
 #[no_mangle]
-pub extern "C" fn rust_is_leap_year(year: u32) -> i32 {
+pub unsafe extern "C" fn rust_is_leap_year(year: u32) -> i32 {
     if GameDate::is_leap_year(year) { 1 } else { 0 }
 }
 
 /// Get days in month for a given year
 #[no_mangle]
-pub extern "C" fn rust_days_in_month(month: u8, year: u32) -> u8 {
+pub unsafe extern "C" fn rust_days_in_month(month: u8, year: u32) -> u8 {
     GameDate::days_in_month(month, year)
 }
 
 /// Reset the clock to initial state
 #[no_mangle]
-pub extern "C" fn rust_reset_clock() {
+pub unsafe extern "C" fn rust_reset_clock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.reset();
@@ -223,7 +223,7 @@ pub extern "C" fn rust_reset_clock() {
 
 /// Set a specific date
 #[no_mangle]
-pub extern "C" fn rust_set_clock_date(day: u8, month: u8, year: u32) {
+pub unsafe extern "C" fn rust_set_clock_date(day: u8, month: u8, year: u32) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
     if let Some(gc) = clock.as_mut() {
         gc.date = GameDate::new(day, month, year);

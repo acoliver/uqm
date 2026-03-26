@@ -3,10 +3,8 @@
 // @requirement team/fleet model, persistence
 
 use crate::supermelee::error::SuperMeleeError;
-use crate::supermelee::setup::team::{ship_cost, MeleeSetup, MeleeTeam};
-use crate::supermelee::types::{
-    FleetShipIndex, MeleeShip, MAX_TEAM_CHARS, MELEE_FLEET_SIZE, NUM_MELEE_SHIPS,
-};
+use crate::supermelee::setup::team::MeleeTeam;
+use crate::supermelee::types::{MeleeShip, MAX_TEAM_CHARS, MELEE_FLEET_SIZE, NUM_MELEE_SHIPS};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -274,11 +272,11 @@ pub fn enumerate_teams(melee_dir: &Path) -> Vec<TeamEntry> {
             .filter(|e| {
                 e.path()
                     .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("mle"))
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("mle"))
             })
             .collect();
         // Sort by filename for deterministic ordering
-        files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
+        files.sort_by_key(|a| a.file_name());
 
         for entry in files {
             let path = entry.path();
@@ -301,6 +299,7 @@ pub fn enumerate_teams(melee_dir: &Path) -> Vec<TeamEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::supermelee::setup::team::MeleeSetup;
     use std::io::Cursor;
 
     // -----------------------------------------------------------------------
@@ -309,58 +308,68 @@ mod tests {
 
     #[test]
     fn serialize_deserialize_roundtrip() {
-        let mut team = MeleeTeam::new();
-        team.ships[0] = MeleeShip::Chmmr;
-        team.ships[5] = MeleeShip::Earthling;
-        team.set_name("Test Team");
+        unsafe {
+            let mut team = MeleeTeam::new();
+            team.ships[0] = MeleeShip::Chmmr;
+            team.ships[5] = MeleeShip::Earthling;
+            team.set_name("Test Team");
 
-        let mut buf = Vec::new();
-        serialize_team(&team, &mut buf).unwrap();
-        assert_eq!(buf.len(), MELEE_TEAM_SERIAL_SIZE);
+            let mut buf = Vec::new();
+            serialize_team(&team, &mut buf).unwrap();
+            assert_eq!(buf.len(), MELEE_TEAM_SERIAL_SIZE);
 
-        let restored = deserialize_team(&mut Cursor::new(&buf)).unwrap();
-        assert_eq!(restored.ships[0], MeleeShip::Chmmr);
-        assert_eq!(restored.ships[5], MeleeShip::Earthling);
-        assert_eq!(restored.ships[1], MeleeShip::MeleeNone);
-        assert_eq!(restored.name_str(), "Test Team");
+            let restored = deserialize_team(&mut Cursor::new(&buf)).unwrap();
+            assert_eq!(restored.ships[0], MeleeShip::Chmmr);
+            assert_eq!(restored.ships[5], MeleeShip::Earthling);
+            assert_eq!(restored.ships[1], MeleeShip::MeleeNone);
+            assert_eq!(restored.name_str(), "Test Team");
+        }
     }
 
     #[test]
     fn deserialize_replaces_invalid_ship_ids() {
-        let mut buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
-        // Set slot 0 to an invalid ship ID (200)
-        buf[0] = 200;
-        // Set slot 1 to a valid ship (Earthling = 5)
-        buf[1] = 5;
+        unsafe {
+            let mut buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
+            // Set slot 0 to an invalid ship ID (200)
+            buf[0] = 200;
+            // Set slot 1 to a valid ship (Earthling = 5)
+            buf[1] = 5;
 
-        let team = deserialize_team(&mut Cursor::new(&buf)).unwrap();
-        assert_eq!(team.ships[0], MeleeShip::MeleeNone); // replaced
-        assert_eq!(team.ships[1], MeleeShip::Earthling); // preserved
+            let team = deserialize_team(&mut Cursor::new(&buf)).unwrap();
+            assert_eq!(team.ships[0], MeleeShip::MeleeNone); // replaced
+            assert_eq!(team.ships[1], MeleeShip::Earthling); // preserved
+        }
     }
 
     #[test]
     fn deserialize_preserves_melee_none() {
-        let mut buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
-        buf[0] = MeleeShip::MeleeNone as u8; // 0xFF
+        unsafe {
+            let mut buf = vec![0u8; MELEE_TEAM_SERIAL_SIZE];
+            buf[0] = MeleeShip::MeleeNone as u8; // 0xFF
 
-        let team = deserialize_team(&mut Cursor::new(&buf)).unwrap();
-        assert_eq!(team.ships[0], MeleeShip::MeleeNone);
+            let team = deserialize_team(&mut Cursor::new(&buf)).unwrap();
+            assert_eq!(team.ships[0], MeleeShip::MeleeNone);
+        }
     }
 
     #[test]
     fn deserialize_truncated_data_returns_error() {
-        let buf = vec![0u8; 5]; // way too short
-        let result = deserialize_team(&mut Cursor::new(&buf));
-        assert!(result.is_err());
+        unsafe {
+            let buf = vec![0u8; 5]; // way too short
+            let result = deserialize_team(&mut Cursor::new(&buf));
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn serialize_size_matches_c() {
-        // C: MELEE_FLEET_SIZE + sizeof(name) = 14 + 55 = 69
-        assert_eq!(
-            MELEE_TEAM_SERIAL_SIZE,
-            MELEE_FLEET_SIZE + MAX_TEAM_CHARS + 1 + 24
-        );
+        unsafe {
+            // C: MELEE_FLEET_SIZE + sizeof(name) = 14 + 55 = 69
+            assert_eq!(
+                MELEE_TEAM_SERIAL_SIZE,
+                MELEE_FLEET_SIZE + MAX_TEAM_CHARS + 1 + 24
+            );
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -369,43 +378,51 @@ mod tests {
 
     #[test]
     fn builtin_catalog_has_correct_count() {
-        let teams = builtin_teams();
-        assert_eq!(teams.len(), PREBUILT_COUNT);
+        unsafe {
+            let teams = builtin_teams();
+            assert_eq!(teams.len(), PREBUILT_COUNT);
+        }
     }
 
     #[test]
     fn builtin_teams_have_names() {
-        for team in &builtin_teams() {
-            assert!(!team.name_str().is_empty(), "built-in team has no name");
+        unsafe {
+            for team in &builtin_teams() {
+                assert!(!team.name_str().is_empty(), "built-in team has no name");
+            }
         }
     }
 
     #[test]
     fn builtin_teams_have_at_least_one_ship() {
-        for team in &builtin_teams() {
-            let has_ship = team.ships.iter().any(|&s| s != MeleeShip::MeleeNone);
-            assert!(has_ship, "built-in team '{}' has no ships", team.name_str());
+        unsafe {
+            for team in &builtin_teams() {
+                let has_ship = team.ships.iter().any(|&s| s != MeleeShip::MeleeNone);
+                assert!(has_ship, "built-in team '{}' has no ships", team.name_str());
+            }
         }
     }
 
     #[test]
     fn builtin_team_names_match_c() {
-        let teams = builtin_teams();
-        assert_eq!(teams[0].name_str(), "Balanced Team 1");
-        assert_eq!(teams[1].name_str(), "Balanced Team 2");
-        assert_eq!(teams[2].name_str(), "200 points");
-        assert_eq!(teams[3].name_str(), "Behemoth Zenith");
-        assert_eq!(teams[4].name_str(), "The Peeled Eyes");
-        assert_eq!(teams[5].name_str(), "Ford's Fighters");
-        assert_eq!(teams[6].name_str(), "Leyland's Lashers");
-        assert_eq!(teams[7].name_str(), "The Gregorizers 200");
-        assert_eq!(teams[8].name_str(), "300 point Armada!");
-        assert_eq!(teams[9].name_str(), "Little Dudes with Attitudes");
-        assert_eq!(teams[10].name_str(), "New Alliance Ships");
-        assert_eq!(teams[11].name_str(), "Old Alliance Ships");
-        assert_eq!(teams[12].name_str(), "Old Hierarchy Ships");
-        assert_eq!(teams[13].name_str(), "Star Control 1");
-        assert_eq!(teams[14].name_str(), "Star Control 2");
+        unsafe {
+            let teams = builtin_teams();
+            assert_eq!(teams[0].name_str(), "Balanced Team 1");
+            assert_eq!(teams[1].name_str(), "Balanced Team 2");
+            assert_eq!(teams[2].name_str(), "200 points");
+            assert_eq!(teams[3].name_str(), "Behemoth Zenith");
+            assert_eq!(teams[4].name_str(), "The Peeled Eyes");
+            assert_eq!(teams[5].name_str(), "Ford's Fighters");
+            assert_eq!(teams[6].name_str(), "Leyland's Lashers");
+            assert_eq!(teams[7].name_str(), "The Gregorizers 200");
+            assert_eq!(teams[8].name_str(), "300 point Armada!");
+            assert_eq!(teams[9].name_str(), "Little Dudes with Attitudes");
+            assert_eq!(teams[10].name_str(), "New Alliance Ships");
+            assert_eq!(teams[11].name_str(), "Old Alliance Ships");
+            assert_eq!(teams[12].name_str(), "Old Hierarchy Ships");
+            assert_eq!(teams[13].name_str(), "Star Control 1");
+            assert_eq!(teams[14].name_str(), "Star Control 2");
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -414,36 +431,42 @@ mod tests {
 
     #[test]
     fn save_and_load_team_file_roundtrip() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.mle");
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("test.mle");
 
-        let mut team = MeleeTeam::new();
-        team.ships[0] = MeleeShip::Urquan;
-        team.ships[13] = MeleeShip::Shofixti;
-        team.set_name("Roundtrip Test");
+            let mut team = MeleeTeam::new();
+            team.ships[0] = MeleeShip::Urquan;
+            team.ships[13] = MeleeShip::Shofixti;
+            team.set_name("Roundtrip Test");
 
-        save_team_file(&team, &path).unwrap();
-        let loaded = load_team_file(&path).unwrap();
+            save_team_file(&team, &path).unwrap();
+            let loaded = load_team_file(&path).unwrap();
 
-        assert_eq!(loaded.ships[0], MeleeShip::Urquan);
-        assert_eq!(loaded.ships[13], MeleeShip::Shofixti);
-        assert_eq!(loaded.name_str(), "Roundtrip Test");
+            assert_eq!(loaded.ships[0], MeleeShip::Urquan);
+            assert_eq!(loaded.ships[13], MeleeShip::Shofixti);
+            assert_eq!(loaded.name_str(), "Roundtrip Test");
+        }
     }
 
     #[test]
     fn load_team_file_too_short_returns_error() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("bad.mle");
-        std::fs::write(&path, &[0u8; 10]).unwrap();
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("bad.mle");
+            std::fs::write(&path, &[0u8; 10]).unwrap();
 
-        let result = load_team_file(&path);
-        assert!(result.is_err());
+            let result = load_team_file(&path);
+            assert!(result.is_err());
+        }
     }
 
     #[test]
     fn load_team_file_missing_returns_error() {
-        let result = load_team_file(Path::new("/nonexistent/team.mle"));
-        assert!(result.is_err());
+        unsafe {
+            let result = load_team_file(Path::new("/nonexistent/team.mle"));
+            assert!(result.is_err());
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -452,50 +475,58 @@ mod tests {
 
     #[test]
     fn enumerate_includes_builtins() {
-        let dir = tempfile::tempdir().unwrap();
-        let entries = enumerate_teams(dir.path());
-        assert!(entries.len() >= PREBUILT_COUNT);
-        // First entries should be built-ins
-        for i in 0..PREBUILT_COUNT {
-            assert!(matches!(&entries[i], TeamEntry::BuiltIn { index, .. } if *index == i));
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            let entries = enumerate_teams(dir.path());
+            assert!(entries.len() >= PREBUILT_COUNT);
+            // First entries should be built-ins
+            for i in 0..PREBUILT_COUNT {
+                assert!(matches!(&entries[i], TeamEntry::BuiltIn { index, .. } if *index == i));
+            }
         }
     }
 
     #[test]
     fn enumerate_includes_saved_files() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut team = MeleeTeam::new();
-        team.ships[0] = MeleeShip::Pkunk;
-        team.set_name("Saved Team");
-        save_team_file(&team, &dir.path().join("saved.mle")).unwrap();
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            let mut team = MeleeTeam::new();
+            team.ships[0] = MeleeShip::Pkunk;
+            team.set_name("Saved Team");
+            save_team_file(&team, &dir.path().join("saved.mle")).unwrap();
 
-        let entries = enumerate_teams(dir.path());
-        assert_eq!(entries.len(), PREBUILT_COUNT + 1);
-        let last = entries.last().unwrap();
-        assert!(matches!(last, TeamEntry::Saved { .. }));
-        assert_eq!(last.name(), "Saved Team");
+            let entries = enumerate_teams(dir.path());
+            assert_eq!(entries.len(), PREBUILT_COUNT + 1);
+            let last = entries.last().unwrap();
+            assert!(matches!(last, TeamEntry::Saved { .. }));
+            assert_eq!(last.name(), "Saved Team");
+        }
     }
 
     #[test]
     fn enumerate_skips_invalid_mle_files() {
-        let dir = tempfile::tempdir().unwrap();
-        // Write a too-short file
-        std::fs::write(dir.path().join("bad.mle"), &[0u8; 5]).unwrap();
-        // Write a valid file
-        let mut team = MeleeTeam::new();
-        team.ships[0] = MeleeShip::Vux;
-        team.set_name("Good");
-        save_team_file(&team, &dir.path().join("good.mle")).unwrap();
+        unsafe {
+            let dir = tempfile::tempdir().unwrap();
+            // Write a too-short file
+            std::fs::write(dir.path().join("bad.mle"), &[0u8; 5]).unwrap();
+            // Write a valid file
+            let mut team = MeleeTeam::new();
+            team.ships[0] = MeleeShip::Vux;
+            team.set_name("Good");
+            save_team_file(&team, &dir.path().join("good.mle")).unwrap();
 
-        let entries = enumerate_teams(dir.path());
-        // Should have builtins + 1 valid saved team (bad.mle skipped)
-        assert_eq!(entries.len(), PREBUILT_COUNT + 1);
+            let entries = enumerate_teams(dir.path());
+            // Should have builtins + 1 valid saved team (bad.mle skipped)
+            assert_eq!(entries.len(), PREBUILT_COUNT + 1);
+        }
     }
 
     #[test]
     fn enumerate_nonexistent_dir_returns_only_builtins() {
-        let entries = enumerate_teams(Path::new("/nonexistent/melee/dir"));
-        assert_eq!(entries.len(), PREBUILT_COUNT);
+        unsafe {
+            let entries = enumerate_teams(Path::new("/nonexistent/melee/dir"));
+            assert_eq!(entries.len(), PREBUILT_COUNT);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -504,19 +535,21 @@ mod tests {
 
     #[test]
     fn invalid_saved_team_fails_without_corrupting_active_state() {
-        let mut setup = MeleeSetup::new();
-        setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
-        setup.set_team_name(0, "Original").unwrap();
-        let original_value = setup.get_fleet_value(0);
+        unsafe {
+            let mut setup = MeleeSetup::new();
+            setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
+            setup.set_team_name(0, "Original").unwrap();
+            let original_value = setup.get_fleet_value(0);
 
-        // Attempt to load a bad file
-        let result = load_team_file(Path::new("/nonexistent/bad.mle"));
-        assert!(result.is_err());
+            // Attempt to load a bad file
+            let result = load_team_file(Path::new("/nonexistent/bad.mle"));
+            assert!(result.is_err());
 
-        // Active setup unchanged
-        assert_eq!(setup.teams[0].ships[0], MeleeShip::Chmmr);
-        assert_eq!(setup.teams[0].name_str(), "Original");
-        assert_eq!(setup.get_fleet_value(0), original_value);
+            // Active setup unchanged
+            assert_eq!(setup.teams[0].ships[0], MeleeShip::Chmmr);
+            assert_eq!(setup.teams[0].name_str(), "Original");
+            assert_eq!(setup.get_fleet_value(0), original_value);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -525,10 +558,12 @@ mod tests {
 
     #[test]
     fn save_failure_to_readonly_dir_returns_error() {
-        // Saving to a nonexistent directory should fail
-        let path = Path::new("/nonexistent/dir/team.mle");
-        let team = MeleeTeam::new();
-        let result = save_team_file(&team, path);
-        assert!(result.is_err());
+        unsafe {
+            // Saving to a nonexistent directory should fail
+            let path = Path::new("/nonexistent/dir/team.mle");
+            let team = MeleeTeam::new();
+            let result = save_team_file(&team, path);
+            assert!(result.is_err());
+        }
     }
 }

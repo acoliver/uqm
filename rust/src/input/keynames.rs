@@ -671,7 +671,7 @@ pub fn key_from_name(name: &str) -> Option<i32> {
 /// C-compatible wrapper for key_from_name
 /// Returns 0 if not found (matches C behavior)
 #[no_mangle]
-pub extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {
+pub unsafe extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {
     if name.is_null() {
         return 0;
     }
@@ -684,7 +684,7 @@ pub extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {
 
 /// C-compatible null-terminated key name strings
 /// These must be static C strings for FFI use
-static CSTR_KEYNAMES: &[&'static [u8]] = &[
+static CSTR_KEYNAMES: &[&[u8]] = &[
     b"Backspace\0",
     b"Tab\0",
     b"Clear\0",
@@ -812,7 +812,7 @@ static CSTR_KEYNAMES: &[&'static [u8]] = &[
 /// # Safety
 /// The returned pointer is valid for the lifetime of the program
 #[no_mangle]
-pub extern "C" fn rust_VControl_code2name(code: c_int) -> *const c_char {
+pub unsafe extern "C" fn rust_VControl_code2name(code: c_int) -> *const c_char {
     // Find index in KEYNAMES by matching code
     for (i, k) in KEYNAMES.iter().enumerate() {
         if k.code == code || k.code == 0 {
