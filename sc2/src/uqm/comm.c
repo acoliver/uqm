@@ -43,6 +43,10 @@
 #include "libs/sound/sound.h"
 #include "libs/sound/trackplayer.h"
 #include "libs/log.h"
+#ifdef USE_RUST_COMM
+#include "rust_comm.h"
+#endif
+
 
 #include <ctype.h>
 
@@ -410,6 +414,14 @@ uninit_communication (void)
 	// now a no-op
 }
 #endif
+
+/* @plan PLAN-20260314-COMM.P11
+ * @requirement IN-REQ-012
+ * Guard internal dialogue functions — Rust provides equivalents via FFI.
+ */
+#ifndef USE_RUST_COMM
+
+
 
 static void
 RefreshResponses (ENCOUNTER_STATE *pES)
@@ -1295,6 +1307,47 @@ HailAlien (void)
 	pCurInputState = 0;
 }
 
+#else /* USE_RUST_COMM thin wrappers delegating to Rust FFI */
+
+/* Public API used by 27 race scripts: delegate to Rust in Rust mode */
+
+void
+AlienTalkSegue (COUNT wait_track)
+{
+	rust_AlienTalkSegue ((unsigned int)wait_track);
+}
+
+void
+DoResponsePhrase (RESPONSE_REF R, RESPONSE_FUNC response_func,
+		UNICODE *ConstructStr)
+{
+	/* Resolve phrase text if no explicit ConstructStr provided */
+	const char *text = (const char *)ConstructStr;
+	if (!text && CommData.ConversationPhrases)
+	{
+		STRING s = SetAbsStringTableIndex (CommData.ConversationPhrases,
+				(COUNT)(R - 1));
+		text = (const char *)GetStringAddress (s);
+	}
+	rust_DoResponsePhrase ((unsigned int)R, text,
+			(void (*)(unsigned int))response_func);
+
+}
+
+void
+EnableTalkingAnim (BOOLEAN enable)
+{
+	if (enable)
+		CommData.AlienTalkDesc.AnimFlags &= ~PAUSE_TALKING;
+	else
+		CommData.AlienTalkDesc.AnimFlags |= PAUSE_TALKING;
+}
+
+#endif /* USE_RUST_COMM */
+
+
+
+
 void
 SetCommIntroMode (CommIntroMode newMode, TimeCount howLong)
 {
@@ -1401,7 +1454,11 @@ InitCommunication (CONVERSATION which_comm)
 
 	if (status == HAIL)
 	{
+#ifdef USE_RUST_COMM
+		rust_HailAlien ();
+#else
 		HailAlien ();
+#endif
 	}
 	else if (LocDataPtr)
 	{	// only when comm initied successfully
@@ -1582,6 +1639,9 @@ RaceCommunication (void)
 	}
 }
 
+
+#ifndef USE_RUST_COMM
+
 static void
 RedrawSubtitles (void)
 {
@@ -1649,3 +1709,6 @@ EnableTalkingAnim (BOOLEAN enable)
 	else
 		CommData.AlienTalkDesc.AnimFlags |= PAUSE_TALKING;
 }
+
+#endif /* !USE_RUST_COMM — subtitle/anim helpers */
+

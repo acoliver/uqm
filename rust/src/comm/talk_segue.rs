@@ -76,7 +76,7 @@ mod c_bridge {
         pub fn c_SetStopTalkingAnim();
         pub fn c_SetRunIntroAnim();
         pub fn c_SetMenuSounds(up_down: c_int, select: c_int);
-        pub fn c_RefreshResponses();
+        pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
         pub fn c_SelectConversationSummary();
         pub fn c_GetOptSmoothScroll() -> c_int;
         pub fn c_GetLastActivityAbortFlag() -> c_int;
@@ -776,8 +776,10 @@ fn update_comm_graphics(state: &mut CommState) {
 fn refresh_responses(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
-        let _ = state;
-        c_bridge::c_RefreshResponses();
+        let top = state.response_ui().top_response() as u8;
+        let count = state.responses().count() as u8;
+        let cur = state.responses().selected().max(0) as u8;
+        c_bridge::c_RefreshResponses(top, count, cur);
     }
     #[cfg(test)]
     {

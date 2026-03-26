@@ -18,6 +18,15 @@ void rust_UninitCommunication(void);
 int rust_IsCommInitialized(void);
 void rust_ClearCommunication(void);
 
+/* HailAlien bridge (P11) */
+void rust_HailAlien(void);
+int rust_AlienTalkSegue(unsigned int wait_track);
+
+
+/* NPCPhrase routing (P11) */
+void rust_NPCPhrase_cb(int index, void (*cb)(void));
+void rust_NPCPhrase_splice(int index);
+
 /* Track Management */
 int rust_StartTrack(void);
 void rust_StopTrack(void);
@@ -55,6 +64,16 @@ void rust_StopAllCommAnimations(void);
 void rust_PauseCommAnimations(void);
 void rust_ResumeCommAnimations(void);
 unsigned int rust_GetCommAnimationFrame(unsigned int index);
+/* C-bridge signature matching commanim.c (clear=FullRedraw, paused=paused) */
+int rust_ProcessCommAnimations_cb(int clear, int paused);
+int rust_WantTalkingAnim(void);
+int rust_HaveTalkingAnim(void);
+int rust_HaveTransitionAnim(void);
+void rust_SetRunIntroAnim(int run);
+void rust_SetRunTalkingAnim(int run);
+void rust_SetStopTalkingAnim(void);
+int rust_RunningIntroAnim(void);
+int rust_RunningTalkingAnim(void);
 
 /* Oscilloscope */
 void rust_AddOscilloscopeSamples(const short *samples, unsigned int count);
@@ -80,6 +99,20 @@ void rust_FastForward_Page(void);
 void rust_FastForward_Smooth(void);
 void rust_FastReverse_Page(void);
 void rust_FastReverse_Smooth(void);
+
+/* Subtitle state (P10/P11) */
+void rust_ClearSubtitles(void);
+void rust_CheckSubtitles(void);
+void rust_RedrawSubtitles(void);
+
+/* Phrase state (P04/P11) */
+int rust_PhraseEnabled(int index);
+void rust_DisablePhrase(int index);
+
+/* Segue state (P04/P11) */
+void rust_SetSegue(unsigned int segue);
+unsigned int rust_GetSegue(void);
+unsigned int rust_GetBattleSegue(void);
 
 /*
  * ============================================================================
@@ -111,6 +144,27 @@ void c_FastForward_Smooth(void);
 void c_FastReverse_Page(void);
 void c_FastReverse_Smooth(void);
 int c_GetTrackPosition(int in_units);
+
+/*
+ * ============================================================================
+ *  C-side graphics/input/music bridge wrappers (P11)
+ *  Called from Rust via FFI when Rust needs to trigger C-side rendering.
+ * ============================================================================
+ */
+#include "oscill.h"
+
+void c_InitOscilloscope(unsigned int frame);
+void c_DrawOscilloscope(void);
+void c_DrawSlider(void);
+void c_SetSliderImage(unsigned int frame);
+void c_ClearSubtitles(void);
+void c_CheckSubtitles(void);
+void c_RedrawSubtitles(void);
+unsigned int c_FadeMusic(int vol, int duration);
+void c_StopMusic(void);
+void c_SetMenuSounds(unsigned int up_down, unsigned int select);
+
+void c_SetMenuSounds(unsigned int up_down, unsigned int select);
 
 #ifdef __cplusplus
 }

@@ -419,4 +419,420 @@ c_GetTrackPosition (int in_units)
 	return GetTrackPosition (in_units);
 }
 
+/*
+ * ============================================================================
+ *  Graphics / Input / Music / Game-state bridge wrappers (P11)
+ *
+ *  Called from Rust via FFI when Rust needs to trigger C-side rendering,
+ *  sound, animation, or game-state operations.
+ *  All names match the extern "C" declarations in the Rust source exactly.
+ * ============================================================================
+ */
+
+#include "colors.h"                    /* COMM_PLAYER_BACKGROUND_COLOR */
+#include "controls.h"                  /* PulsedInputState, CurrentInputState */
+#include "encount.h"                   /* InitEncounter, UninitEncounter */
+#include "options.h"                   /* optSmoothScroll, OPT_PC, OPT_3DO */
+#include "oscill.h"                    /* InitOscilloscope, DrawOscilloscope, etc. */
+#include "settings.h"                  /* PlayMusic, StopMusic */
+#include "sis.h"                       /* DrawSISFrame, DrawSISMessage, etc. */
+#include "sounds.h"                    /* SetMenuSounds, MENU_SOUND_FLAGS */
+#include "setup.h"                     /* ActivityFrame, LastActivity */
+#include "libs/graphics/gfx_common.h"  /* ScreenTransition */
+#include "libs/sndlib.h"               /* SetMusicVolume, FadeMusic */
+
+/* ---- Oscilloscope / Slider ----------------------------------------------- */
+
+void
+c_InitOscilloscope (unsigned int frame)
+{
+	InitOscilloscope (SetAbsFrameIndex (ActivityFrame, (COUNT)frame));
+}
+
+void
+c_InitSlider (int x, int y, int w, unsigned int bg_frame,
+		unsigned int cursor_frame)
+{
+	InitSlider (x, y, w,
+			SetAbsFrameIndex (ActivityFrame, (COUNT)bg_frame),
+			SetAbsFrameIndex (ActivityFrame, (COUNT)cursor_frame));
+}
+
+void
+c_DrawOscilloscope (void)
+{
+	DrawOscilloscope ();
+}
+
+void
+c_DrawSlider (void)
+{
+	DrawSlider ();
+}
+
+void
+c_SetSliderImage (unsigned int frame)
+{
+	SetSliderImage (SetAbsFrameIndex (ActivityFrame, (COUNT)frame));
+}
+
+/* ---- Subtitle state bridges -----------------------------------------------
+ * Under USE_RUST_COMM subtitle state is owned by Rust (P10).
+ * c_ClearSubtitles / c_CheckSubtitles / c_RedrawSubtitles are called from
+ * Rust code.  comm.c's static definitions are guarded by
+ * #ifndef USE_RUST_COMM so we forward to the Rust-side implementations. */
+
+void
+c_ClearSubtitles (void)
+{
+	rust_ClearSubtitles ();
+}
+
+void
+c_CheckSubtitles (void)
+{
+	rust_CheckSubtitles ();
+}
+
+void
+c_RedrawSubtitles (void)
+{
+	rust_RedrawSubtitles ();
+}
+
+/* ---- InitSpeechGraphics ---------------------------------------------------
+ * comm.c's InitSpeechGraphics() is guarded; here we replicate its logic. */
+
+void
+c_InitSpeechGraphics (void)
+{
+	c_InitOscilloscope (9);
+	c_InitSlider (0, SLIDER_Y, SIS_SCREEN_WIDTH, 5, 2);
+}
+
+/* ---- UpdateSpeechGraphics -------------------------------------------------
+ * Rate-limited oscilloscope + slider update.  Under USE_RUST_COMM the
+ * static C version is guarded; call C drawing primitives directly. */
+
+void
+c_UpdateSpeechGraphics (void)
+{
+	static TimeCount NextTime;
+	CONTEXT OldContext;
+
+	if (GetTimeCounter () < NextTime)
+		return;
+
+	NextTime = GetTimeCounter () + (ONE_SECOND / 32);
+
+	OldContext = SetContext (RadarContext);
+	DrawOscilloscope ();
+	SetContext (SpaceContext);
+	DrawSlider ();
+	SetContext (OldContext);
+}
+
+/* ---- DrawAlienFrame -------------------------------------------------------
+ * Initial draw of the alien frame at the start of an encounter. */
+
+void
+c_DrawAlienFrame (void)
+{
+	DrawAlienFrame (NULL, 0, TRUE);
+}
+
+/* ---- CommIntroTransition --------------------------------------------------
+ * Perform the intro screen transition.  Under USE_RUST_COMM the static C
+ * CommIntroTransition() is guarded; call the equivalent logic here. */
+
+void
+c_CommIntroTransition (void)
+{
+	/* Replicate comm.c CommIntroTransition() for the USE_RUST_COMM path.
+	 * rust_GetCommIntroMode() returns the mode set via rust_SetCommIntroMode(). */
+	unsigned int mode = rust_GetCommIntroMode ();
+
+	if (mode == CIM_CROSSFADE_SCREEN)
+	{
+		ScreenTransition (3, NULL);
+		UnbatchGraphics ();
+	}
+	else if (mode == CIM_CROSSFADE_SPACE)
+	{
+		RECT r;
+		r.corner.x = SIS_ORG_X;
+		r.corner.y = SIS_ORG_Y;
+		r.extent.width = SIS_SCREEN_WIDTH;
+		r.extent.height = SIS_SCREEN_HEIGHT;
+		ScreenTransition (3, &r);
+		UnbatchGraphics ();
+	}
+	else if (mode == CIM_CROSSFADE_WINDOW)
+	{
+		ScreenTransition (3, &CommWndRect);
+		UnbatchGraphics ();
+	}
+	else
+	{
+		/* CIM_FADE_IN_SCREEN or unknown — unbatch to avoid lockup */
+		UnbatchGraphics ();
+	}
+
+	rust_SetCommIntroMode (CIM_DEFAULT);
+}
+
+/* ---- Animation state bridges --------------------------------------------- */
+
+#include "commanim.h"  /* ProcessCommAnimations, InitCommAnimations, etc. */
+
+int
+c_WantTalkingAnim (void)
+{
+	return wantTalkingAnim () ? 1 : 0;
+}
+
+int
+c_HaveTalkingAnim (void)
+{
+	return haveTalkingAnim () ? 1 : 0;
+}
+
+void
+c_SetRunTalkingAnim (void)
+{
+	setRunTalkingAnim ();
+}
+
+void
+c_SetStopTalkingAnim (void)
+{
+	setStopTalkingAnim ();
+}
+
+void
+c_SetRunIntroAnim (void)
+{
+	setRunIntroAnim ();
+}
+
+int
+c_RunningIntroAnim (void)
+{
+	return runningIntroAnim () ? 1 : 0;
+}
+
+int
+c_RunningTalkingAnim (void)
+{
+	return runningTalkingAnim () ? 1 : 0;
+}
+
+void
+c_InitCommAnimations (void)
+{
+	InitCommAnimations ();
+}
+
+/* UpdateAnimations: under USE_RUST_COMM, ProcessCommAnimations routes to Rust
+ * via rust_ProcessCommAnimations_cb().  We still need a context switch and
+ * RedrawSubtitles call to drive rendering. */
+
+void
+c_UpdateAnimations (int seeking)
+{
+	/* ProcessCommAnimations is provided by commanim.c which under
+	 * USE_RUST_COMM delegates to rust_ProcessCommAnimations_cb(). */
+	BOOLEAN change;
+	change = ProcessCommAnimations (FALSE, (BOOLEAN)seeking);
+	if (change)
+		rust_RedrawSubtitles ();
+}
+
+/* c_RunCommAnimFrame: one animation + sleep cycle, matching C runCommAnimFrame(). */
+
+void
+c_RunCommAnimFrame (void)
+{
+	c_UpdateAnimations (FALSE);
+	SleepThread (ONE_SECOND / 40);
+}
+
+/* ---- Feedback / Response display -----------------------------------------
+ * These are C-rendering hooks called from Rust's response_ui.rs.
+ * comm.c's static implementations are guarded; stubs for now. */
+
+void
+c_FeedbackPlayerPhrase (const char *text)
+{
+	/* P11: Stub.  Full rendering wired in a later phase when the
+	 * Rust encounter loop drives the C comm window directly. */
+	(void)text;
+}
+
+void
+c_RefreshResponses (unsigned char top, unsigned char num_responses,
+		unsigned char cur_response)
+{
+	/* P11: Stub.  Response rendering stays in C's RefreshResponses()
+	 * until the Rust encounter loop is fully wired. */
+	(void)top;
+	(void)num_responses;
+	(void)cur_response;
+}
+
+void
+c_SelectConversationSummary (void)
+{
+	/* P11: Stub.  Conversation summary overlay driven by Rust in P12+. */
+}
+
+void
+c_DrawSISComWindow (void)
+{
+	/* P11: delegate to C DrawSISComWindow — it is not guarded since it
+	 * is also used by C mode.  But it is declared static in comm.c so
+	 * we cannot call it from here.  Replicate the body. */
+	if (LOBYTE (GLOBAL (CurrentActivity)) != WON_LAST_BATTLE)
+	{
+		RECT r;
+		CONTEXT OldContext;
+
+		OldContext = SetContext (SpaceContext);
+		r.corner.x = 0;
+		r.corner.y = SLIDER_Y + SLIDER_HEIGHT;
+		r.extent.width = SIS_SCREEN_WIDTH;
+		r.extent.height = SIS_SCREEN_HEIGHT - r.corner.y;
+		SetContextForeGroundColor (COMM_PLAYER_BACKGROUND_COLOR);
+		DrawFilledRectangle (&r);
+		SetContext (OldContext);
+	}
+}
+
+/* ---- Music bridges -------------------------------------------------------
+ * The Rust extern declarations use the non-suffixed names. */
+
+void
+c_PlayMusic (void *song, int looping, int priority)
+{
+	PlayMusic ((MUSIC_REF)song, (BOOLEAN)looping, (BYTE)priority);
+}
+
+unsigned int
+c_FadeMusic (int vol, int duration)
+{
+	return (unsigned int)FadeMusic ((BYTE)vol, (SIZE)duration);
+}
+
+void
+c_StopMusic (void)
+{
+	StopMusic ();
+}
+
+void
+c_SetMusicVolume (unsigned int vol)
+{
+	SetMusicVolume ((COUNT)vol);
+}
+
+/* ---- Colormap bridge ----------------------------------------------------- */
+
+void
+c_SetColorMap (void *colormap)
+{
+	SetColorMap (GetColorMapAddress ((COLORMAP)colormap));
+}
+
+/* ---- Input bridges ------------------------------------------------------- */
+
+int
+c_GetPulsedMenuKey (int key_index)
+{
+	return PulsedInputState.menu[key_index];
+}
+
+int
+c_GetCurrentMenuKey (int key_index)
+{
+	return CurrentInputState.menu[key_index];
+}
+
+void
+c_SetMenuSounds (unsigned int up_down, unsigned int select)
+{
+	SetMenuSounds ((MENU_SOUND_FLAGS)up_down, (MENU_SOUND_FLAGS)select);
+}
+
+/* ---- Game-state bridges -------------------------------------------------- */
+
+int
+c_CheckAbort (void)
+{
+	return (GLOBAL (CurrentActivity) & CHECK_ABORT) ? 1 : 0;
+}
+
+int
+c_WonLastBattle (void)
+{
+	return (LOBYTE (GLOBAL (CurrentActivity)) == WON_LAST_BATTLE) ? 1 : 0;
+}
+
+int
+c_GetLastActivityAbortFlag (void)
+{
+	return (LastActivity & CHECK_ABORT) ? 1 : 0;
+}
+
+void
+c_ClearLastActivityLoadFlag (void)
+{
+	LastActivity &= ~CHECK_LOAD;
+}
+
+int
+c_GetOptSmoothScroll (void)
+{
+	return optSmoothScroll;
+}
+
+unsigned int
+c_FadeOutMusicForReplay (void)
+{
+	return (unsigned int)FadeMusic (0, (SIZE)(ONE_SECOND * 2));
+}
+
+/* ---- Resource destroy bridges ------------------------------------------- */
+
+#include "libs/gfxlib.h"
+
+void
+c_DestroyDrawable (unsigned int handle)
+{
+	DestroyDrawable (ReleaseDrawable ((FRAME)(uintptr_t)handle));
+}
+
+void
+c_DestroyFont (unsigned int handle)
+{
+	DestroyFont ((FONT)(uintptr_t)handle);
+}
+
+void
+c_DestroyColorMap (unsigned int handle)
+{
+	DestroyColorMap (ReleaseColorMap ((COLORMAP)(uintptr_t)handle));
+}
+
+void
+c_DestroyMusic (unsigned int handle)
+{
+	DestroyMusic ((MUSIC_REF)(uintptr_t)handle);
+}
+
+void
+c_DestroyStringTable (unsigned int handle)
+{
+	DestroyStringTable (ReleaseStringTable ((STRING_TABLE)(uintptr_t)handle));
+}
+
 #endif /* USE_RUST_COMM */

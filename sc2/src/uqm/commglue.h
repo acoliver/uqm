@@ -62,6 +62,14 @@ extern LOCDATA CommData;
 extern UNICODE shared_phrase_buf[2048];
 
 #define PLAYER_SAID(r,i) ((r)==(i))
+
+/* @plan PLAN-20260314-COMM.P11
+ * @requirement SC-REQ-002 */
+#ifdef USE_RUST_COMM
+#include "rust_comm.h"
+#define PHRASE_ENABLED(p) (rust_PhraseEnabled(p))
+#define DISABLE_PHRASE(p) (rust_DisablePhrase(p))
+#else
 #define PHRASE_ENABLED(p) \
 		(*(UNICODE *)GetStringAddress ( \
 				SetAbsStringTableIndex (CommData.ConversationPhrases, (p)-1) \
@@ -70,9 +78,12 @@ extern UNICODE shared_phrase_buf[2048];
 		(*(UNICODE *)GetStringAddress ( \
 				SetAbsStringTableIndex (CommData.ConversationPhrases, (p)-1) \
 				) = '\0')
+#endif
 
 #define Response(i,a) \
 		DoResponsePhrase(i,(RESPONSE_FUNC)a,0)
+
+
 
 enum
 {
