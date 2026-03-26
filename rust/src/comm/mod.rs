@@ -19,6 +19,7 @@
 
 pub mod animation;
 pub mod ffi;
+pub mod locdata;
 pub mod oscilloscope;
 pub mod response;
 pub mod state;
@@ -32,4 +33,6 @@ pub use response::{ResponseEntry, ResponseSystem};
 pub use state::{CommState, COMM_STATE};
 pub use subtitle::{SubtitleChunk, SubtitleTracker};
 pub use track::{SoundChunk, TrackManager};
-pub use types::{CommData, CommError, CommIntroMode, CommResult};
+pub use types::{
+    AnimationDescData, CommData, CommError, CommIntroMode, CommResult, MAX_ANIMATIONS,
+};
