@@ -400,9 +400,9 @@ impl CommState {
         // Update subtitles
         self.subtitles.update(self.track.position());
 
-        // Update animations
-        let delta_duration = std::time::Duration::from_secs_f32(delta_time);
-        self.animations.update(delta_duration);
+        // Update animations (convert seconds to ticks, ~60fps = 1 tick per frame)
+        let delta_ticks = (delta_time * 60.0) as u32;
+        self.animations.process(delta_ticks);
 
         // Update oscilloscope
         self.oscilloscope.update();

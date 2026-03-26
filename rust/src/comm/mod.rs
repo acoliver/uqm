@@ -31,7 +31,7 @@ pub mod summary;
 pub mod track;
 pub mod types;
 
-pub use animation::{AnimContext, AnimDesc, AnimState};
+pub use animation::{AnimContext, CommAnimState};
 pub use oscilloscope::Oscilloscope;
 pub use response::{ResponseEntry, ResponseSystem};
 pub use state::{CommState, COMM_STATE};

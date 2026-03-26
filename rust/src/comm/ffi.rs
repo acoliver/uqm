@@ -339,50 +339,72 @@ pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
 // Animation Management
 // ============================================================================
 
-/// Start an animation
+/// Initialize communication animations from current CommData.
+/// @plan PLAN-20260314-COMM.P07
 #[no_mangle]
-pub unsafe extern "C" fn rust_StartCommAnimation(index: c_uint) {
-    COMM_STATE.write().animations_mut().start(index as usize);
+pub unsafe extern "C" fn rust_InitCommAnimations() {
+    // Animation initialization requires CommData to be loaded.
+    // In production, this is called after init_race populates CommData.
+    // For now, the actual descriptor population happens from C side.
 }
 
-/// Stop an animation
+/// Process communication animations for one frame.
+/// @plan PLAN-20260314-COMM.P07
 #[no_mangle]
-pub unsafe extern "C" fn rust_StopCommAnimation(index: c_uint) {
-    COMM_STATE.write().animations_mut().stop(index as usize);
+pub unsafe extern "C" fn rust_ProcessCommAnimations(delta_ticks: c_uint) -> c_int {
+    let changed = COMM_STATE.write().animations_mut().process(delta_ticks);
+    changed as c_int
 }
 
-/// Start all animations
+/// Check if talking animation is wanted (defined with frames).
 #[no_mangle]
-pub unsafe extern "C" fn rust_StartAllCommAnimations() {
-    COMM_STATE.write().animations_mut().start_all();
+pub unsafe extern "C" fn rust_WantTalkingAnim() -> c_int {
+    COMM_STATE.read().animations().want_talking_anim() as c_int
 }
 
-/// Stop all animations
+/// Check if talking animation is currently active.
 #[no_mangle]
-pub unsafe extern "C" fn rust_StopAllCommAnimations() {
-    COMM_STATE.write().animations_mut().stop_all();
+pub unsafe extern "C" fn rust_HaveTalkingAnim() -> c_int {
+    COMM_STATE.read().animations().have_talking_anim() as c_int
 }
 
-/// Pause all animations
+/// Start the talking animation.
 #[no_mangle]
-pub unsafe extern "C" fn rust_PauseCommAnimations() {
-    COMM_STATE.write().animations_mut().pause();
+pub unsafe extern "C" fn rust_SetRunTalkingAnim(_run: c_int) {
+    COMM_STATE.write().animations_mut().start_talking_anim();
 }
 
-/// Resume all animations
+/// Signal to stop the talking animation.
 #[no_mangle]
-pub unsafe extern "C" fn rust_ResumeCommAnimations() {
-    COMM_STATE.write().animations_mut().resume();
+pub unsafe extern "C" fn rust_SetStopTalkingAnim() {
+    COMM_STATE.write().animations_mut().stop_talking_anim();
 }
 
-/// Get current frame for an animation
+/// Set intro animation running state.
+#[no_mangle]
+pub unsafe extern "C" fn rust_SetRunIntroAnim(run: c_int) {
+    COMM_STATE.write().animations_mut().set_intro_anim(run != 0);
+}
+
+/// Check if intro animation is running.
+#[no_mangle]
+pub unsafe extern "C" fn rust_RunningIntroAnim() -> c_int {
+    COMM_STATE.read().animations().is_intro_anim_running() as c_int
+}
+
+/// Check if talking animation is running.
+#[no_mangle]
+pub unsafe extern "C" fn rust_RunningTalkingAnim() -> c_int {
+    COMM_STATE.read().animations().is_talking_anim_running() as c_int
+}
+
+/// Get current frame for an animation sequence.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetCommAnimationFrame(index: c_uint) -> c_uint {
     COMM_STATE
         .read()
         .animations()
-        .get(index as usize)
-        .map(|a| a.frame_index())
+        .get_frame(index as usize)
         .unwrap_or(0)
 }
 
