@@ -409,6 +409,53 @@ pub unsafe extern "C" fn rust_GetCommAnimationFrame(index: c_uint) -> c_uint {
 }
 
 // ============================================================================
+// Encounter Lifecycle
+// @plan PLAN-20260314-COMM.P08
+// ============================================================================
+
+/// Begin an encounter (marks active, records init callback).
+#[no_mangle]
+pub unsafe extern "C" fn rust_BeginEncounter() -> c_int {
+    match super::encounter::begin_encounter() {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// End encounter normally (post + uninit callbacks, resource teardown).
+#[no_mangle]
+pub unsafe extern "C" fn rust_EndEncounterNormal() -> c_int {
+    match super::encounter::end_encounter_normal() {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// End encounter on abort/load (uninit only, skip post).
+#[no_mangle]
+pub unsafe extern "C" fn rust_EndEncounterAbort() -> c_int {
+    match super::encounter::end_encounter_abort() {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// End encounter for attack-without-hail (post + uninit, no init).
+#[no_mangle]
+pub unsafe extern "C" fn rust_EndEncounterAttack() -> c_int {
+    match super::encounter::end_encounter_attack() {
+        Ok(()) => 1,
+        Err(_) => 0,
+    }
+}
+
+/// Check if encounter is active.
+#[no_mangle]
+pub unsafe extern "C" fn rust_IsEncounterActive() -> c_int {
+    super::encounter::is_encounter_active() as c_int
+}
+
+// ============================================================================
 // Oscilloscope
 // ============================================================================
 

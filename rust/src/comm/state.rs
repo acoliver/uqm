@@ -6,6 +6,7 @@ use parking_lot::RwLock;
 use std::sync::LazyLock;
 
 use super::animation::AnimContext;
+use super::encounter::EncounterState;
 use super::oscilloscope::Oscilloscope;
 use super::phrase_state::PhraseState;
 use super::response::ResponseSystem;
@@ -70,6 +71,10 @@ pub struct CommState {
     /// Conversation summary — derived cache over trackplayer subtitle history.
     /// @plan PLAN-20260314-COMM.P06
     summary: ConversationSummary,
+
+    /// Encounter lifecycle state (callback tracking, resource handles).
+    /// @plan PLAN-20260314-COMM.P08
+    pub encounter: EncounterState,
 }
 
 impl Default for CommState {
@@ -98,6 +103,7 @@ impl CommState {
             phrase_state: PhraseState::new(),
             segue: Segue::default(),
             summary: ConversationSummary::new(10),
+            encounter: EncounterState::new(),
         }
     }
 
@@ -140,6 +146,7 @@ impl CommState {
         self.phrase_state.reset();
         self.segue = Segue::default();
         self.summary.clear();
+        self.encounter.reset();
     }
 
     /// Set communication data for current encounter

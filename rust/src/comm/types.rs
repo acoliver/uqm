@@ -117,6 +117,8 @@ pub enum CommError {
     AudioError(String),
     /// Animation error
     AnimationError(String),
+    /// Invalid state for operation
+    InvalidState(String),
 }
 
 impl fmt::Display for CommError {
@@ -130,6 +132,7 @@ impl fmt::Display for CommError {
             CommError::InvalidResponse(idx) => write!(f, "Invalid response index: {}", idx),
             CommError::AudioError(s) => write!(f, "Audio error: {}", s),
             CommError::AnimationError(s) => write!(f, "Animation error: {}", s),
+            CommError::InvalidState(s) => write!(f, "Invalid state: {}", s),
         }
     }
 }
