@@ -22,7 +22,7 @@ void rust_ClearCommunication(void);
 int rust_StartTrack(void);
 void rust_StopTrack(void);
 void rust_RewindTrack(void);
-void rust_JumpTrack(float offset);
+void rust_JumpTrack(void);
 void rust_SeekTrack(float position);
 float rust_CommitTrack(void);
 int rust_WaitTrack(void);
@@ -38,7 +38,7 @@ void rust_SetSubtitlesEnabled(int enabled);
 int rust_AreSubtitlesEnabled(void);
 
 /* Response System */
-int rust_DoResponsePhrase(unsigned int response_ref, const char *text, void (*func)(void));
+int rust_DoResponsePhrase(unsigned int response_ref, const char *text, void (*func)(unsigned int));
 void rust_DisplayResponses(void);
 void rust_ClearResponses(void);
 int rust_SelectNextResponse(void);
@@ -73,6 +73,44 @@ void rust_SetCommFadeTime(unsigned int time);
 int rust_IsCommInputPaused(void);
 void rust_SetCommInputPaused(int paused);
 void rust_UpdateCommunication(float delta_time);
+
+/* Track Player */
+unsigned int rust_PlayingTrack(void);
+void rust_FastForward_Page(void);
+void rust_FastForward_Smooth(void);
+void rust_FastReverse_Page(void);
+void rust_FastReverse_Smooth(void);
+
+/*
+ * ============================================================================
+ *  C-side trackplayer wrapper seam (@plan PLAN-20260314-COMM.P05b)
+ *
+ *  Thin wrappers consumed by Rust comm FFI — backed by the authoritative
+ *  C trackplayer in sc2/src/libs/sound/trackplayer.c.
+ * ============================================================================
+ */
+#include "libs/compiler.h"
+#include "libs/callback.h"
+#include "libs/sound/trackplayer.h"
+
+void c_SpliceTrack(UNICODE *filespec, UNICODE *textspec,
+                   UNICODE *timestamp, CallbackFunction cb);
+void c_SpliceMultiTrack(UNICODE *track_names[], UNICODE *track_text);
+void c_PlayTrack(void);
+void c_StopTrack(void);
+void c_JumpTrack(void);
+COUNT c_PlayingTrack(void);
+void c_PauseTrack(void);
+void c_ResumeTrack(void);
+const UNICODE *c_GetTrackSubtitle(void);
+SUBTITLE_REF c_GetFirstTrackSubtitle(void);
+SUBTITLE_REF c_GetNextTrackSubtitle(SUBTITLE_REF last_ref);
+const UNICODE *c_GetTrackSubtitleText(SUBTITLE_REF sub_ref);
+void c_FastForward_Page(void);
+void c_FastForward_Smooth(void);
+void c_FastReverse_Page(void);
+void c_FastReverse_Smooth(void);
+int c_GetTrackPosition(int in_units);
 
 #ifdef __cplusplus
 }
