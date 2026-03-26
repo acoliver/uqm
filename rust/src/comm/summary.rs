@@ -5,6 +5,7 @@
 //! own the subtitle history — that belongs to the trackplayer.
 //!
 //! @plan PLAN-20260314-COMM.P06
+//! @plan PLAN-20260314-COMM.P10
 //! @requirement SS-REQ-013, SS-REQ-014, SS-REQ-015, SS-REQ-017
 
 /// A single page of conversation subtitles.
@@ -131,6 +132,126 @@ pub fn paginate_subtitles(entries: &[String], lines_per_page: usize) -> Vec<Summ
         .collect()
 }
 
+// ============================================================================
+// SummaryResult
+// ============================================================================
+
+/// Navigation result returned by `SummaryView::advance_page`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SummaryResult {
+    /// More pages remain; display the next page.
+    NextPage,
+    /// All pages shown; exit the summary view.
+    Exit,
+    /// Summary was aborted (e.g. player pressed cancel mid-view).
+    Aborted,
+}
+
+// ============================================================================
+// SummaryView
+// ============================================================================
+
+/// Summary view state for the conversation summary overlay.
+///
+/// Wraps a `ConversationSummary` with a simple page-navigation cursor and
+/// derived page count so callers never need to touch the underlying
+/// `ConversationSummary` directly during summary display.
+#[derive(Debug)]
+pub struct SummaryView {
+    initialized: bool,
+    current_page: usize,
+    total_pages: usize,
+    lines_per_page: usize,
+}
+
+impl Default for SummaryView {
+    fn default() -> Self {
+        Self::new(10)
+    }
+}
+
+impl SummaryView {
+    /// Create a new summary view with the given lines-per-page limit.
+    pub fn new(lines_per_page: usize) -> Self {
+        Self {
+            initialized: false,
+            current_page: 0,
+            total_pages: 0,
+            lines_per_page: lines_per_page.max(1),
+        }
+    }
+
+    /// Initialize the view from a `ConversationSummary`.
+    ///
+    /// Computes the number of pages and resets to page 0. Returns the total
+    /// page count.
+    pub fn init(&mut self, summary: &ConversationSummary) -> usize {
+        let entry_count = summary.entries().len();
+        self.total_pages = if entry_count == 0 {
+            0
+        } else {
+            (entry_count + self.lines_per_page - 1) / self.lines_per_page
+        };
+        self.current_page = 0;
+        self.initialized = true;
+        self.total_pages
+    }
+
+    /// Current page index (0-based).
+    pub fn current_page(&self) -> usize {
+        self.current_page
+    }
+
+    /// Total page count computed during `init`.
+    pub fn total_pages(&self) -> usize {
+        self.total_pages
+    }
+
+    /// Advance to the next page.
+    ///
+    /// Returns `NextPage` if there are more pages, or `Exit` when the last
+    /// page has been shown.
+    pub fn advance_page(&mut self) -> SummaryResult {
+        if self.total_pages == 0 {
+            return SummaryResult::Exit;
+        }
+
+        if self.current_page + 1 < self.total_pages {
+            self.current_page += 1;
+            SummaryResult::NextPage
+        } else {
+            SummaryResult::Exit
+        }
+    }
+
+    /// Return the lines for the current page, sourced from `summary`.
+    pub fn get_page_lines(&self, summary: &ConversationSummary) -> Vec<String> {
+        let entries = summary.entries();
+        let start = self.current_page * self.lines_per_page;
+        if start >= entries.len() {
+            return Vec::new();
+        }
+        let end = (start + self.lines_per_page).min(entries.len());
+        entries[start..end].to_vec()
+    }
+
+    /// Reset view to initial (uninitialized) state.
+    pub fn reset(&mut self) {
+        self.initialized = false;
+        self.current_page = 0;
+        self.total_pages = 0;
+    }
+
+    /// Whether the view has been initialized with a summary.
+    pub fn is_initialized(&self) -> bool {
+        self.initialized
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +340,97 @@ mod tests {
         assert!(summary.current_page().is_none());
         assert!(!summary.next_page());
         assert!(!summary.prev_page());
+    }
+
+    // ---- SummaryView -------------------------------------------------------
+
+    #[test]
+    fn test_single_page() {
+        let mut summary = ConversationSummary::new(10);
+        summary.rebuild(vec!["A".into(), "B".into()]);
+
+        let mut view = SummaryView::new(10);
+        let pages = view.init(&summary);
+        assert_eq!(pages, 1);
+
+        // Only 1 page — advance returns Exit.
+        let result = view.advance_page();
+        assert_eq!(result, SummaryResult::Exit);
+    }
+
+    #[test]
+    fn test_multi_page_navigation() {
+        let entries: Vec<String> = (0..7).map(|i| format!("Line {}", i)).collect();
+        let mut summary = ConversationSummary::new(10);
+        summary.rebuild(entries);
+
+        let mut view = SummaryView::new(3);
+        let pages = view.init(&summary);
+        assert_eq!(pages, 3);
+        assert_eq!(view.current_page(), 0);
+
+        assert_eq!(view.advance_page(), SummaryResult::NextPage);
+        assert_eq!(view.current_page(), 1);
+
+        assert_eq!(view.advance_page(), SummaryResult::NextPage);
+        assert_eq!(view.current_page(), 2);
+
+        assert_eq!(view.advance_page(), SummaryResult::Exit);
+        // current_page stays at 2 after Exit.
+        assert_eq!(view.current_page(), 2);
+    }
+
+    #[test]
+    fn test_lines_per_page_respected() {
+        let entries: Vec<String> = (0..5).map(|i| format!("L{}", i)).collect();
+        let mut summary = ConversationSummary::new(10);
+        summary.rebuild(entries);
+
+        let mut view = SummaryView::new(2);
+        view.init(&summary);
+
+        let page0 = view.get_page_lines(&summary);
+        assert_eq!(page0.len(), 2);
+        assert_eq!(page0[0], "L0");
+        assert_eq!(page0[1], "L1");
+
+        view.advance_page();
+        let page1 = view.get_page_lines(&summary);
+        assert_eq!(page1.len(), 2);
+
+        view.advance_page();
+        let page2 = view.get_page_lines(&summary);
+        assert_eq!(page2.len(), 1, "last page has 1 remaining entry");
+    }
+
+    #[test]
+    fn test_empty_summary() {
+        let summary = ConversationSummary::new(5);
+
+        let mut view = SummaryView::new(5);
+        let pages = view.init(&summary);
+        assert_eq!(pages, 0);
+
+        let result = view.advance_page();
+        assert_eq!(result, SummaryResult::Exit);
+    }
+
+    #[test]
+    fn test_reset() {
+        let entries: Vec<String> = vec!["A".into(), "B".into(), "C".into()];
+        let mut summary = ConversationSummary::new(10);
+        summary.rebuild(entries);
+
+        let mut view = SummaryView::new(2);
+        view.init(&summary);
+        view.advance_page();
+        assert!(view.is_initialized());
+        assert_eq!(view.current_page(), 1);
+
+        view.reset();
+
+        assert!(!view.is_initialized());
+        assert_eq!(view.current_page(), 0);
+        assert_eq!(view.total_pages(), 0);
     }
 }

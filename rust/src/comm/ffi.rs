@@ -692,6 +692,143 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
     }
 }
 
+// ============================================================================
+// Speech Graphics (P10)
+// @plan PLAN-20260314-COMM.P10
+// ============================================================================
+
+/// Initialize speech graphics (oscilloscope + slider) for this encounter.
+///
+/// Matches C `InitSpeechGraphics`.
+#[no_mangle]
+pub unsafe extern "C" fn rust_InitSpeechGraphics() {
+    COMM_STATE.write().speech_graphics_mut().init();
+}
+
+/// Rate-limited update of speech graphics display.
+///
+/// Matches C `UpdateSpeechGraphics`. Uses current system time for rate
+/// limiting. In test mode, operates on state fields only.
+#[no_mangle]
+pub unsafe extern "C" fn rust_UpdateSpeechGraphics() {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let mut state = COMM_STATE.write();
+    // We need split borrows: call update with the oscilloscope as a reference.
+    // We collect what we need first to avoid the double-borrow.
+    let osc_ptr: *const super::oscilloscope::Oscilloscope = state.oscilloscope();
+    // SAFETY: osc_ptr is valid for the duration of this call; the RwLock
+    // write guard keeps the allocation stable. The oscilloscope field is
+    // not mutated by speech_graphics_mut().update().
+    let osc_ref = unsafe { &*osc_ptr };
+    state.speech_graphics_mut().update(osc_ref, now_ms);
+}
+
+// ============================================================================
+// Response UI (P10)
+// @plan PLAN-20260314-COMM.P10
+// ============================================================================
+
+/// Refresh the response list display.
+///
+/// Matches C `RefreshResponses`. Delegates rendering to C bridge; Rust
+/// updates scroll state.
+#[no_mangle]
+pub unsafe extern "C" fn rust_RefreshResponses() {
+    let mut state = COMM_STATE.write();
+    let selected = state.responses().selected().max(0) as usize;
+    // We need an owned snapshot of responses to avoid split-borrow.
+    // response_ui_mut() borrows state mutably; responses() borrows it
+    // immutably. Collect what we need first.
+    let count = state.responses().count();
+    let _ = count; // used inside refresh_responses via ResponseSystem ref
+    let responses_ptr: *const super::response::ResponseSystem = state.responses();
+    // SAFETY: responses_ptr is valid for the duration of this call under the
+    // write guard. response_ui_mut() does not touch the responses field.
+    let responses_ref = unsafe { &*responses_ptr };
+    state
+        .response_ui_mut()
+        .refresh_responses(responses_ref, selected);
+}
+
+// ============================================================================
+// Subtitle Display (P10)
+// @plan PLAN-20260314-COMM.P10
+// ============================================================================
+
+/// Clear the subtitle display area.
+///
+/// Matches C `ClearSubtitles`.
+#[no_mangle]
+pub unsafe extern "C" fn rust_ClearSubtitles() {
+    COMM_STATE.write().subtitle_display_mut().clear();
+}
+
+/// Check subtitle timing and update display if the text has changed.
+///
+/// Matches C `CheckSubtitles`.
+#[no_mangle]
+pub unsafe extern "C" fn rust_CheckSubtitles() {
+    let mut state = COMM_STATE.write();
+    let current = state.current_subtitle().map(|s| s.to_owned());
+    state
+        .subtitle_display_mut()
+        .check_subtitle(current.as_deref());
+}
+
+/// Redraw the current subtitle text.
+///
+/// Matches C `RedrawSubtitles`.
+#[no_mangle]
+pub unsafe extern "C" fn rust_RedrawSubtitles() {
+    COMM_STATE.read().subtitle_display().redraw();
+}
+
+// ============================================================================
+// Conversation Summary (P10)
+// @plan PLAN-20260314-COMM.P10
+// ============================================================================
+
+/// Show the conversation summary overlay.
+///
+/// Matches C `SelectConversationSummary`. Rebuilds the summary from the
+/// current track history, then runs a simple page-advance loop until the
+/// player exits. Returns 1 when the player exits normally, 0 on abort.
+#[no_mangle]
+pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
+    use super::summary::SummaryResult;
+    use super::summary::SummaryView;
+
+    // Rebuild summary from current track history.
+    COMM_STATE.write().rebuild_summary();
+
+    let lines_per_page = 10usize;
+    let mut view = SummaryView::new(lines_per_page);
+
+    let total = {
+        let state = COMM_STATE.read();
+        view.init(state.summary())
+    };
+
+    if total == 0 {
+        return 1;
+    }
+
+    // Advance through pages until Exit or Abort (abort not yet wired — use
+    // a simple bounded loop so we can't spin forever in production if
+    // input handling is not yet implemented).
+    loop {
+        match view.advance_page() {
+            SummaryResult::NextPage => continue,
+            SummaryResult::Exit => return 1,
+            SummaryResult::Aborted => return 0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

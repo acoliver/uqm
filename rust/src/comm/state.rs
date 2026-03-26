@@ -10,8 +10,11 @@ use super::encounter::EncounterState;
 use super::oscilloscope::Oscilloscope;
 use super::phrase_state::PhraseState;
 use super::response::ResponseSystem;
+use super::response_ui::ResponseUI;
 use super::segue::Segue;
+use super::speech_graphics::SpeechGraphics;
 use super::subtitle::SubtitleTracker;
+use super::subtitle_display::SubtitleDisplay;
 use super::summary::ConversationSummary;
 use super::track::TrackManager;
 use super::types::{CommData, CommError, CommIntroMode, CommResult};
@@ -85,6 +88,22 @@ pub struct CommState {
     /// Matches C ENCOUNTER_STATE.top_response (~0 = not yet initialized).
     /// @plan PLAN-20260314-COMM.P09
     pub top_response: Option<u8>,
+
+    /// Speech graphics state (oscilloscope + slider).
+    /// @plan PLAN-20260314-COMM.P10
+    speech_graphics: SpeechGraphics,
+
+    /// Response list UI rendering state.
+    /// @plan PLAN-20260314-COMM.P10
+    response_ui: ResponseUI,
+
+    /// Subtitle display state with change detection.
+    /// @plan PLAN-20260314-COMM.P10
+    subtitle_display: SubtitleDisplay,
+
+    /// Previous subtitle text for change detection in the talk loop.
+    /// @plan PLAN-20260314-COMM.P10
+    prev_subtitle: Option<String>,
 }
 
 impl Default for CommState {
@@ -116,6 +135,10 @@ impl CommState {
             encounter: EncounterState::new(),
             first_talk_call: false,
             top_response: None,
+            speech_graphics: SpeechGraphics::new(),
+            response_ui: ResponseUI::new(),
+            subtitle_display: SubtitleDisplay::new(),
+            prev_subtitle: None,
         }
     }
 
@@ -161,6 +184,10 @@ impl CommState {
         self.encounter.reset();
         self.first_talk_call = false;
         self.top_response = None;
+        self.speech_graphics.clear();
+        self.response_ui.clear();
+        self.subtitle_display.clear();
+        self.prev_subtitle = None;
     }
 
     /// Set communication data for current encounter
@@ -395,6 +422,52 @@ impl CommState {
     /// Get conversation summary (mutable).
     pub fn summary_mut(&mut self) -> &mut ConversationSummary {
         &mut self.summary
+    }
+
+    // Speech graphics
+
+    /// Get speech graphics state.
+    pub fn speech_graphics(&self) -> &SpeechGraphics {
+        &self.speech_graphics
+    }
+
+    /// Get mutable speech graphics state.
+    pub fn speech_graphics_mut(&mut self) -> &mut SpeechGraphics {
+        &mut self.speech_graphics
+    }
+
+    // Response UI
+
+    /// Get response UI state.
+    pub fn response_ui(&self) -> &ResponseUI {
+        &self.response_ui
+    }
+
+    /// Get mutable response UI state.
+    pub fn response_ui_mut(&mut self) -> &mut ResponseUI {
+        &mut self.response_ui
+    }
+
+    // Subtitle display
+
+    /// Get subtitle display state.
+    pub fn subtitle_display(&self) -> &SubtitleDisplay {
+        &self.subtitle_display
+    }
+
+    /// Get mutable subtitle display state.
+    pub fn subtitle_display_mut(&mut self) -> &mut SubtitleDisplay {
+        &mut self.subtitle_display
+    }
+
+    /// Get previous subtitle text (for change detection).
+    pub fn prev_subtitle(&self) -> Option<&str> {
+        self.prev_subtitle.as_deref()
+    }
+
+    /// Set previous subtitle text.
+    pub fn set_prev_subtitle(&mut self, text: Option<String>) {
+        self.prev_subtitle = text;
     }
 
     /// Rebuild the summary from current track subtitle history.
