@@ -21,6 +21,10 @@
 #include "../master.h"
 #include "libs/log.h"
 
+#ifdef USE_RUST_SUPERMELEE
+#include "rust_supermelee.h"
+#endif
+
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -59,6 +63,57 @@ MeleeTeam_delete (MeleeTeam *team)
 	MeleeTeam_uninit (team);
 	HFree (team);
 }
+
+#ifdef USE_RUST_SUPERMELEE
+
+int
+MeleeTeam_serialize (const MeleeTeam *team, uio_Stream *stream)
+{
+	size_t serialSize = rust_supermelee_team_serial_size ();
+	uint8_t buf[256]; /* serialSize is 69, well within bounds */
+
+	if (serialSize > sizeof buf)
+		return -1;
+
+	if (rust_supermelee_team_serialize (
+			(const uint8_t *) team->ships,
+			(const uint8_t *) team->name,
+			buf, serialSize) != 0)
+		return -1;
+
+	if (uio_fwrite (buf, serialSize, 1, stream) != 1)
+		return -1;
+
+	return 0;
+}
+
+int
+MeleeTeam_deserialize (MeleeTeam *team, uio_Stream *stream)
+{
+	size_t serialSize = rust_supermelee_team_serial_size ();
+	uint8_t buf[256];
+
+	if (serialSize > sizeof buf)
+		goto err;
+
+	if (uio_fread (buf, serialSize, 1, stream) != 1)
+		goto err;
+
+	if (rust_supermelee_team_deserialize (
+			buf, serialSize,
+			(uint8_t *) team->ships,
+			(uint8_t *) team->name) != 0)
+		goto err;
+
+	team->name[MAX_TEAM_CHARS] = '\0';
+	return 0;
+
+err:
+	MeleeTeam_delete(team);
+	return -1;
+}
+
+#else /* !USE_RUST_SUPERMELEE */
 
 int
 MeleeTeam_serialize (const MeleeTeam *team, uio_Stream *stream)
@@ -113,6 +168,19 @@ err:
 	return -1;
 }
 
+#endif /* USE_RUST_SUPERMELEE */
+
+#ifdef USE_RUST_SUPERMELEE
+
+COUNT
+MeleeTeam_getValue (const MeleeTeam *team)
+{
+	return (COUNT) rust_supermelee_fleet_value (
+			(const uint8_t *) team->ships);
+}
+
+#else /* !USE_RUST_SUPERMELEE */
+
 // XXX: move this to elsewhere?
 COUNT
 MeleeTeam_getValue (const MeleeTeam *team)
@@ -134,6 +202,8 @@ MeleeTeam_getValue (const MeleeTeam *team)
 
 	return total;
 }
+
+#endif /* USE_RUST_SUPERMELEE */
 
 MeleeShip
 MeleeTeam_getShip (const MeleeTeam *team, FleetShipIndex slotNr)

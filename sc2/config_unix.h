@@ -125,3 +125,6 @@
 /* Defined if using Rust ships subsystem */
 #define USE_RUST_SHIPS
 
+/* Defined if using Rust SuperMelee team/setup logic */
+#define USE_RUST_SUPERMELEE
+

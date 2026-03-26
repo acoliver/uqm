@@ -64,6 +64,10 @@
 #include <assert.h>
 #include <string.h>
 
+#ifdef USE_RUST_SUPERMELEE
+#include "rust_supermelee.h"
+#endif
+
 
 static void StartMelee (MELEE_STATE *pMS);
 #ifdef NETPLAY
@@ -952,6 +956,15 @@ UpdateCurrentShip (MELEE_STATE *pMS)
 
 // returns (COUNT) ~0 for an invalid ship.
 COUNT
+#ifdef USE_RUST_SUPERMELEE
+GetShipValue (MeleeShip StarShip)
+{
+	uint16_t cost = rust_supermelee_ship_cost ((uint8_t) StarShip);
+	if (cost == 0 && StarShip != MELEE_NONE)
+		return (COUNT)~0;
+	return (COUNT) cost;
+}
+#else
 GetShipValue (MeleeShip StarShip)
 {
 	COUNT val;
@@ -965,6 +978,7 @@ GetShipValue (MeleeShip StarShip)
 
 	return val;
 }
+#endif
 
 static void
 DeleteCurrentShip (MELEE_STATE *pMS)

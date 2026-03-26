@@ -122,3 +122,6 @@
 /* Defined if using Rust game state helpers */
 @SYMBOL_USE_RUST_STATE_DEF@
 
+/* Defined if using Rust SuperMelee team/setup logic */
+@SYMBOL_USE_RUST_SUPERMELEE_DEF@
+
