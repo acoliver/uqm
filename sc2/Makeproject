@@ -32,6 +32,16 @@ if [ "$uqm_USE_RUST_UIO" = "1" ]; then
 	export USE_RUST_UIO=1
 fi
 
+# Export USE_RUST_SHIPS for Makeinfo visibility
+if [ "$uqm_USE_RUST_SHIPS" = "1" ]; then
+	export USE_RUST_SHIPS=1
+fi
+
+# Export USE_RUST_SUPERMELEE for Makeinfo visibility
+if [ "$uqm_USE_RUST_SUPERMELEE" = "1" ]; then
+	export USE_RUST_SUPERMELEE=1
+fi
+
 # Ensure Makeinfo sees OGGVORBIS, ZIP IO, NETPLAY, MIKMOD, THREADLIB, and GFXMODULE settings
 export uqm_OGGVORBIS
 export uqm_USE_ZIP_IO

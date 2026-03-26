@@ -32,8 +32,11 @@ extern "C" {
     // Queue management functions
     fn AllocLink(queue: *mut c_void) -> *mut c_void;
     fn PutQueue(queue: *mut c_void, link: *mut c_void);
+    #[link_name = "rust_bridge_LockLink"]
     fn LockLink(queue: *mut c_void, link: *mut c_void) -> *mut c_void;
+    #[link_name = "rust_bridge_UnlockLink"]
     fn UnlockLink(queue: *mut c_void, link: *mut c_void);
+    #[link_name = "rust_bridge_GetLinkSize"]
     fn GetLinkSize(queue: *mut c_void) -> usize;
 
     // Activity getter
