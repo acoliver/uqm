@@ -1,6 +1,139 @@
 //! Audio track management for speech playback
 //!
 //! Handles speech track loading, playback, and chunk management.
+//! In production (linked with C), the authoritative trackplayer in
+//! `sc2/src/libs/sound/trackplayer.c` owns playback state. This module
+//! provides a synthetic model for tests and delegates to C via FFI
+//! when linked.
+//!
+//! @plan PLAN-20260314-COMM.P06
+//! @requirement TP-REQ-001, TP-REQ-003, TP-REQ-007, TP-REQ-008, TP-REQ-009
+
+use std::ffi::{c_char, c_int, c_void, CStr};
+
+/// FFI declarations for the authoritative C trackplayer.
+/// These map to the c_* wrappers in rust_comm.c which delegate
+/// to trackplayer.c.
+#[cfg(not(test))]
+extern "C" {
+    fn c_SpliceTrack(
+        filespec: *mut c_char,
+        textspec: *mut c_char,
+        timestamp: *mut c_char,
+        cb: Option<unsafe extern "C" fn(*mut c_void)>,
+    );
+    fn c_SpliceMultiTrack(track_names: *const *mut c_char, track_text: *mut c_char);
+    fn c_PlayTrack();
+    fn c_StopTrack();
+    fn c_JumpTrack();
+    fn c_PlayingTrack() -> u16;
+    fn c_PauseTrack();
+    fn c_ResumeTrack();
+    fn c_GetTrackSubtitle() -> *const c_char;
+    fn c_GetFirstTrackSubtitle() -> *mut c_void;
+    fn c_GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void;
+    fn c_GetTrackSubtitleText(sub_ref: *mut c_void) -> *const c_char;
+    fn c_FastForward_Page();
+    fn c_FastForward_Smooth();
+    fn c_FastReverse_Page();
+    fn c_FastReverse_Smooth();
+    fn c_GetTrackPosition(in_units: c_int) -> c_int;
+}
+
+/// Bridge to the authoritative C trackplayer.
+/// Used in production to delegate real playback operations.
+#[cfg(not(test))]
+pub struct CTrackBridge;
+
+#[cfg(not(test))]
+impl CTrackBridge {
+    /// Check if a track is currently playing via the C trackplayer.
+    pub fn is_playing() -> bool {
+        unsafe { c_PlayingTrack() != 0 }
+    }
+
+    /// Get the current subtitle from the C trackplayer.
+    pub fn current_subtitle() -> Option<String> {
+        unsafe {
+            let ptr = c_GetTrackSubtitle();
+            if ptr.is_null() {
+                None
+            } else {
+                CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string())
+            }
+        }
+    }
+
+    /// Enumerate all subtitle history entries from the C trackplayer.
+    pub fn enumerate_subtitle_history() -> Vec<String> {
+        let mut entries = Vec::new();
+        unsafe {
+            let mut sub = c_GetFirstTrackSubtitle();
+            while !sub.is_null() {
+                let text_ptr = c_GetTrackSubtitleText(sub);
+                if !text_ptr.is_null() {
+                    if let Ok(s) = CStr::from_ptr(text_ptr).to_str() {
+                        if !s.is_empty() {
+                            entries.push(s.to_string());
+                        }
+                    }
+                }
+                sub = c_GetNextTrackSubtitle(sub);
+            }
+        }
+        entries
+    }
+
+    /// Stop playback via the C trackplayer.
+    pub fn stop() {
+        unsafe { c_StopTrack() }
+    }
+
+    /// Play via the C trackplayer.
+    pub fn play() {
+        unsafe { c_PlayTrack() }
+    }
+
+    /// Jump (skip current phrase) via the C trackplayer.
+    pub fn jump() {
+        unsafe { c_JumpTrack() }
+    }
+
+    /// Pause via the C trackplayer.
+    pub fn pause() {
+        unsafe { c_PauseTrack() }
+    }
+
+    /// Resume via the C trackplayer.
+    pub fn resume() {
+        unsafe { c_ResumeTrack() }
+    }
+
+    /// Fast forward by page.
+    pub fn fast_forward_page() {
+        unsafe { c_FastForward_Page() }
+    }
+
+    /// Fast forward smooth.
+    pub fn fast_forward_smooth() {
+        unsafe { c_FastForward_Smooth() }
+    }
+
+    /// Fast reverse by page.
+    pub fn fast_reverse_page() {
+        unsafe { c_FastReverse_Page() }
+    }
+
+    /// Fast reverse smooth.
+    pub fn fast_reverse_smooth() {
+        unsafe { c_FastReverse_Smooth() }
+    }
+
+    /// Get track position in the specified units.
+    pub fn get_position(in_units: i32) -> i32 {
+        unsafe { c_GetTrackPosition(in_units) }
+    }
+}
 
 /// A sound chunk in the speech track
 #[derive(Debug, Clone)]

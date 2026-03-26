@@ -11,6 +11,7 @@ use super::phrase_state::PhraseState;
 use super::response::ResponseSystem;
 use super::segue::Segue;
 use super::subtitle::SubtitleTracker;
+use super::summary::ConversationSummary;
 use super::track::TrackManager;
 use super::types::{CommData, CommError, CommIntroMode, CommResult};
 
@@ -65,6 +66,10 @@ pub struct CommState {
 
     /// Segue state (controls encounter exit behavior)
     segue: Segue,
+
+    /// Conversation summary — derived cache over trackplayer subtitle history.
+    /// @plan PLAN-20260314-COMM.P06
+    summary: ConversationSummary,
 }
 
 impl Default for CommState {
@@ -92,6 +97,7 @@ impl CommState {
             last_input_time: 0,
             phrase_state: PhraseState::new(),
             segue: Segue::default(),
+            summary: ConversationSummary::new(10),
         }
     }
 
@@ -133,6 +139,7 @@ impl CommState {
         self.input_paused = false;
         self.phrase_state.reset();
         self.segue = Segue::default();
+        self.summary.clear();
     }
 
     /// Set communication data for current encounter
@@ -357,6 +364,28 @@ impl CommState {
     /// Set segue for encounter exit.
     pub fn set_segue(&mut self, segue: Segue) {
         self.segue = segue;
+    }
+
+    /// Get conversation summary (read-only).
+    pub fn summary(&self) -> &ConversationSummary {
+        &self.summary
+    }
+
+    /// Get conversation summary (mutable).
+    pub fn summary_mut(&mut self) -> &mut ConversationSummary {
+        &mut self.summary
+    }
+
+    /// Rebuild the summary from current track subtitle history.
+    /// In test mode, reads from TrackManager chunks.
+    pub fn rebuild_summary(&mut self) {
+        let entries: Vec<String> = self
+            .track
+            .chunks()
+            .iter()
+            .filter_map(|c| c.subtitle.clone())
+            .collect();
+        self.summary.rebuild(entries);
     }
 
     /// Update communication state (call each frame)

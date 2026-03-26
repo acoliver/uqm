@@ -27,6 +27,7 @@ pub mod response;
 pub mod segue;
 pub mod state;
 pub mod subtitle;
+pub mod summary;
 pub mod track;
 pub mod types;
 
