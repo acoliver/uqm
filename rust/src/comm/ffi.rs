@@ -4,6 +4,7 @@
 
 use std::ffi::{c_char, c_int, c_uint, CStr};
 
+use super::segue::Segue;
 use super::state::COMM_STATE;
 use super::types::CommIntroMode;
 
@@ -449,6 +450,50 @@ pub unsafe extern "C" fn rust_SetCommInputPaused(paused: c_int) {
 #[no_mangle]
 pub unsafe extern "C" fn rust_UpdateCommunication(delta_time: f32) {
     COMM_STATE.write().update(delta_time);
+}
+
+// ============================================================================
+// Phrase State (P04)
+// @plan PLAN-20260314-COMM.P04
+// ============================================================================
+
+/// Check if a phrase is enabled (not disabled this encounter).
+#[no_mangle]
+pub unsafe extern "C" fn rust_PhraseEnabled(index: c_int) -> c_int {
+    if COMM_STATE.read().phrase_enabled(index) {
+        1
+    } else {
+        0
+    }
+}
+
+/// Disable a phrase for the remainder of this encounter.
+#[no_mangle]
+pub unsafe extern "C" fn rust_DisablePhrase(index: c_int) {
+    COMM_STATE.write().disable_phrase(index);
+}
+
+// ============================================================================
+// Segue (P04)
+// @plan PLAN-20260314-COMM.P04
+// ============================================================================
+
+/// Set segue state (0=Peace, 1=Hostile, 2=Victory, 3=Defeat).
+#[no_mangle]
+pub unsafe extern "C" fn rust_SetSegue(segue: c_uint) {
+    COMM_STATE.write().set_segue(Segue::from(segue));
+}
+
+/// Get segue state (0=Peace, 1=Hostile, 2=Victory, 3=Defeat).
+#[no_mangle]
+pub unsafe extern "C" fn rust_GetSegue() -> c_uint {
+    u32::from(COMM_STATE.read().get_segue())
+}
+
+/// Get BATTLE_SEGUE value for current segue (0=peace, 1=combat).
+#[no_mangle]
+pub unsafe extern "C" fn rust_GetBattleSegue() -> c_uint {
+    COMM_STATE.read().get_segue().to_battle_segue()
 }
 
 #[cfg(test)]

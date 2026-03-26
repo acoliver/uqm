@@ -19,9 +19,12 @@
 
 pub mod animation;
 pub mod ffi;
+pub mod glue;
 pub mod locdata;
 pub mod oscilloscope;
+pub mod phrase_state;
 pub mod response;
+pub mod segue;
 pub mod state;
 pub mod subtitle;
 pub mod track;

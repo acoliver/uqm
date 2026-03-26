@@ -7,7 +7,9 @@ use std::sync::LazyLock;
 
 use super::animation::AnimContext;
 use super::oscilloscope::Oscilloscope;
+use super::phrase_state::PhraseState;
 use super::response::ResponseSystem;
+use super::segue::Segue;
 use super::subtitle::SubtitleTracker;
 use super::track::TrackManager;
 use super::types::{CommData, CommError, CommIntroMode, CommResult};
@@ -57,6 +59,12 @@ pub struct CommState {
 
     /// Last input time (for timeout)
     last_input_time: u64,
+
+    /// Phrase enable/disable state (encounter-local)
+    phrase_state: PhraseState,
+
+    /// Segue state (controls encounter exit behavior)
+    segue: Segue,
 }
 
 impl Default for CommState {
@@ -82,6 +90,8 @@ impl CommState {
             fade_time: 0,
             input_paused: false,
             last_input_time: 0,
+            phrase_state: PhraseState::new(),
+            segue: Segue::default(),
         }
     }
 
@@ -121,6 +131,8 @@ impl CommState {
         self.intro_mode = CommIntroMode::Default;
         self.fade_time = 0;
         self.input_paused = false;
+        self.phrase_state.reset();
+        self.segue = Segue::default();
     }
 
     /// Set communication data for current encounter
@@ -311,6 +323,35 @@ impl CommState {
     /// Set input paused
     pub fn set_input_paused(&mut self, paused: bool) {
         self.input_paused = paused;
+    }
+
+    // Phrase state management
+
+    /// Check if a phrase is enabled (not disabled this encounter).
+    pub fn phrase_enabled(&self, index: i32) -> bool {
+        self.phrase_state.is_enabled(index)
+    }
+
+    /// Disable a phrase for the remainder of this encounter.
+    pub fn disable_phrase(&mut self, index: i32) {
+        self.phrase_state.disable(index);
+    }
+
+    /// Get phrase state (for direct access in glue functions).
+    pub fn phrase_state(&self) -> &PhraseState {
+        &self.phrase_state
+    }
+
+    // Segue management
+
+    /// Get current segue.
+    pub fn get_segue(&self) -> Segue {
+        self.segue
+    }
+
+    /// Set segue for encounter exit.
+    pub fn set_segue(&mut self, segue: Segue) {
+        self.segue = segue;
     }
 
     /// Update communication state (call each frame)
