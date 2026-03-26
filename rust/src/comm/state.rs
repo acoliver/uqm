@@ -75,6 +75,16 @@ pub struct CommState {
     /// Encounter lifecycle state (callback tracking, resource handles).
     /// @plan PLAN-20260314-COMM.P08
     pub encounter: EncounterState,
+
+    /// Whether alien_talk_segue has made its first call this encounter.
+    /// Tracks the `pCurInputState->Initialized` flag from C AlienTalkSegue.
+    /// @plan PLAN-20260314-COMM.P09
+    pub first_talk_call: bool,
+
+    /// Index of the topmost visible response in the scrolled response list.
+    /// Matches C ENCOUNTER_STATE.top_response (~0 = not yet initialized).
+    /// @plan PLAN-20260314-COMM.P09
+    pub top_response: Option<u8>,
 }
 
 impl Default for CommState {
@@ -104,6 +114,8 @@ impl CommState {
             segue: Segue::default(),
             summary: ConversationSummary::new(10),
             encounter: EncounterState::new(),
+            first_talk_call: false,
+            top_response: None,
         }
     }
 
@@ -147,6 +159,8 @@ impl CommState {
         self.segue = Segue::default();
         self.summary.clear();
         self.encounter.reset();
+        self.first_talk_call = false;
+        self.top_response = None;
     }
 
     /// Set communication data for current encounter

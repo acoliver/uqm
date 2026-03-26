@@ -608,6 +608,90 @@ pub unsafe extern "C" fn rust_GetBattleSegue() -> c_uint {
     COMM_STATE.read().get_segue().to_battle_segue()
 }
 
+// ============================================================================
+// Talk Segue & Main Loop (P09)
+// @plan PLAN-20260314-COMM.P09
+// ============================================================================
+
+/// Run one iteration of the alien talk segue for the given wait-track.
+///
+/// Matches C `AlienTalkSegue(wait_track)`.
+/// Returns 1 if talking finished (reached end), 0 otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn rust_AlienTalkSegue(wait: c_uint) -> c_int {
+    let mut state = COMM_STATE.write();
+    let was_finished = state.is_talking_finished();
+    super::talk_segue::alien_talk_segue(&mut state, wait);
+    if !was_finished && state.is_talking_finished() {
+        1
+    } else {
+        0
+    }
+}
+
+/// Run the full talk segue loop for the given wait-track.
+///
+/// Matches C `TalkSegue(wait_track)`.
+/// Returns 1 if playback ended naturally, 0 if aborted.
+#[no_mangle]
+pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
+    let wait_track = if wait <= 0 { 0 } else { wait as u32 };
+    let mut state = COMM_STATE.write();
+    if super::talk_segue::talk_segue(&mut state, wait_track) {
+        1
+    } else {
+        0
+    }
+}
+
+/// Run one iteration of the top-level communication state machine.
+///
+/// Matches C `DoCommunication(pES)`.
+/// Returns 1 to keep iterating (Continue), 0 when conversation is done.
+///
+/// Lock discipline: acquires COMM_STATE write lock, runs one iteration.
+/// If `select_response` returns a callback, releases the lock, calls the
+/// callback, then reacquires to continue.
+#[no_mangle]
+pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
+    use super::talk_segue::{
+        do_communication, player_response_input, select_response, CommunicationResult,
+        PlayerInputResult,
+    };
+
+    let mut state = COMM_STATE.write();
+
+    match do_communication(&mut state) {
+        CommunicationResult::Done => 0,
+        CommunicationResult::Continue => {
+            // If the last player_response_input returned Selected, execute
+            // the callback with the lock released.
+            // We detect this by checking whether responses were just cleared
+            // and a callback is pending.  The canonical path: do_communication
+            // called player_response_input which returned Selected → we need
+            // to re-run select_response here to actually dispatch.
+            if state.is_talking_finished() && state.responses().count() > 0 {
+                if let Some(selected_result) = {
+                    // Check if select was triggered by trying to select
+                    let check_result = player_response_input(&mut state);
+                    if check_result == PlayerInputResult::Selected {
+                        select_response(&mut state)
+                    } else {
+                        None
+                    }
+                } {
+                    let (func, rref) = selected_result;
+                    // Release lock, call callback, done
+                    drop(state);
+                    func(rref);
+                    return 1;
+                }
+            }
+            1
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

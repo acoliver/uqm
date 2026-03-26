@@ -29,6 +29,7 @@ pub mod segue;
 pub mod state;
 pub mod subtitle;
 pub mod summary;
+pub mod talk_segue;
 pub mod track;
 pub mod types;
 
