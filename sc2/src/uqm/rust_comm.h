@@ -165,8 +165,6 @@ unsigned int c_FadeMusic(int vol, int duration);
 void c_StopMusic(void);
 void c_SetMenuSounds(unsigned int up_down, unsigned int select);
 
-void c_SetMenuSounds(unsigned int up_down, unsigned int select);
-
 /* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
 int c_HasTransitionAnim(void);
 
@@ -178,6 +176,113 @@ const unsigned char *c_get_alliance_name_full(int adjusted_index, char *buf, int
  * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001 */
 void *c_get_phrase_sound_clip(const void *phrases, int index);
 void *c_get_phrase_timestamp(const void *phrases, int index);
+
+/*
+ * ============================================================================
+ *  Resource Bridge (P06, @plan PLAN-20260326-COMMPT2.P06)
+ *
+ *  Thin wrappers for resource load/capture/release, context management,
+ *  drawable management, batching, transitions, SIS drawing, DoInput,
+ *  and CommData/game-state accessors called from Rust.
+ * ============================================================================
+ */
+#include <stdint.h>
+
+/* Resource load bridges — @requirement REQ-HL-002 */
+uintptr_t c_LoadGraphic(const char *res);
+uintptr_t c_LoadFont(const char *res);
+uintptr_t c_LoadColorMap(const char *res);
+uintptr_t c_LoadMusic(const char *res);
+uintptr_t c_LoadStringTable(const char *res);
+
+/* Capture/Release bridges — @requirement REQ-HL-002 */
+uintptr_t c_CaptureDrawable(uintptr_t handle);
+uintptr_t c_CaptureColorMap(uintptr_t handle);
+uintptr_t c_CaptureStringTable(uintptr_t handle);
+uintptr_t c_ReleaseDrawable(uintptr_t handle);
+uintptr_t c_ReleaseColorMap(uintptr_t handle);
+uintptr_t c_ReleaseStringTable(uintptr_t handle);
+
+/* Context management bridges — @requirement REQ-HL-003 */
+uintptr_t c_CreateContext(const char *name);
+void      c_DestroyContext(uintptr_t ctx);
+uintptr_t c_SetContext(uintptr_t ctx);
+void      c_SetContextFGFrame(uintptr_t frame);
+void      c_SetContextClipRect(int x, int y, int w, int h);
+void      c_ClearContextClipRect(void);
+void      c_SetContextBackGroundColor(int r, int g, int b);
+uintptr_t c_SetContextFont(uintptr_t font);
+
+/* Drawable management bridges — @requirement REQ-HL-003 */
+uintptr_t c_CreateDrawable(unsigned int type, int w, int h, int num_frames);
+void      c_SetFrameTransparentColor(uintptr_t frame, int r, int g, int b);
+void      c_ClearDrawable(void);
+void      c_GetFrameRect(uintptr_t frame, int *x, int *y, int *w, int *h);
+
+/* Graphics batching bridges */
+void c_BatchGraphics(void);
+void c_UnbatchGraphics(void);
+
+/* Transition bridges */
+void c_SetTransitionSource(uintptr_t rect_ptr);
+void c_ScreenTransition(int num_frames, uintptr_t rect_ptr);
+
+/* SIS drawing bridges — @requirement REQ-HL-007 */
+void c_DrawSISFrame(void);
+void c_DrawSISMessage(const char *msg);
+void c_DrawSISTitle(const char *title);
+
+/* DoInput bridge — @requirement REQ-DI-001 */
+void c_DoInput(void *state, int exclusive);
+
+/* Screen / context accessor bridges */
+uintptr_t c_GetScreen(void);
+uintptr_t c_GetSpaceContext(void);
+void      c_SetLastActivityCheckLoad(void);
+
+/* CommData accessor bridges */
+const char  *c_GetCommDataAlienFrameRes(void);
+const char  *c_GetCommDataAlienFontRes(void);
+const char  *c_GetCommDataAlienColorMapRes(void);
+const char  *c_GetCommDataAlienSongRes(void);
+const char  *c_GetCommDataAlienAltSongRes(void);
+unsigned int c_GetCommDataAlienSongFlags(void);
+const char  *c_GetCommDataConversationPhrasesRes(void);
+void         c_SetCommDataAlienFrame(uintptr_t frame);
+void         c_SetCommDataAlienFont(uintptr_t font);
+void         c_SetCommDataAlienColorMap(uintptr_t cmap);
+void         c_SetCommDataAlienSong(uintptr_t song);
+void         c_SetCommDataConversationPhrases(uintptr_t phrases);
+void         c_ClearCommDataConversationPhrasesRes(void);
+void         c_ClearCommDataConversationPhrases(void);
+
+/* Encounter function call bridges */
+void c_CallInitEncounterFunc(void);
+void c_CallPostEncounterFunc(void);
+void c_CallUninitEncounterFunc(void);
+
+/* Game-state / layout query bridges */
+int          c_IsStarbaseConversation(void);
+const char  *c_GetGameString(int base, int offset);
+const char  *c_GetPlanetName(void);
+int          c_CheckLoad(void);
+int          c_GetSISScreenWidth(void);
+int          c_GetSISScreenHeight(void);
+int          c_GetSliderY(void);
+int          c_GetSliderHeight(void);
+void         c_GetSISOrigin(int *x, int *y);
+const char  *c_GetPlayerFontRes(void);
+unsigned int c_GetWantPixmap(void);
+
+/* CommWndRect accessor bridges */
+void c_GetCommWndRect(int *x, int *y, int *w, int *h);
+void c_SetCommWndRect(int x, int y, int w, int h);
+
+/* Comm-internal static variable accessors (implemented in comm.c) */
+void c_SetTalkingFinished(int finished);
+void c_SetupSubtitleTextFromCommData(void);
+void c_SetCurInputState(void *state);
+void c_ClearPhraseBuf(void);
 
 #ifdef __cplusplus
 }

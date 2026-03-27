@@ -1285,4 +1285,465 @@ c_DestroyStringTable (unsigned int handle)
 	DestroyStringTable (ReleaseStringTable ((STRING_TABLE)(uintptr_t)handle));
 }
 
+/*
+ * ============================================================================
+ *  Resource Bridge (P06, @plan PLAN-20260326-COMMPT2.P06)
+ *
+ *  Thin wrappers so Rust can load, capture, release, and manage C-side
+ *  graphics/audio/string resources without knowing internal type layouts.
+ *  All handles returned as uintptr_t; zero means load failure.
+ * ============================================================================
+ */
+
+#include "libs/reslib.h"   /* RESOURCE typedef (const char *) */
+#include "libs/strlib.h"   /* STRING_TABLE, CaptureStringTable, etc. */
+#include "libs/sndlib.h"   /* MUSIC_REF, LoadMusicInstance */
+#include "units.h"         /* SIS_ORG_X/Y, SIS_SCREEN_WIDTH/HEIGHT */
+#include "controls.h"      /* DoInput */
+
+/* ---- Resource load bridges ----------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-002 */
+
+uintptr_t
+c_LoadGraphic (const char *res)
+{
+	return (uintptr_t)LoadGraphic ((RESOURCE)res);
+}
+
+uintptr_t
+c_LoadFont (const char *res)
+{
+	return (uintptr_t)LoadFont ((RESOURCE)res);
+}
+
+uintptr_t
+c_LoadColorMap (const char *res)
+{
+	return (uintptr_t)LoadColorMap ((RESOURCE)res);
+}
+
+uintptr_t
+c_LoadMusic (const char *res)
+{
+	return (uintptr_t)LoadMusic ((RESOURCE)res);
+}
+
+uintptr_t
+c_LoadStringTable (const char *res)
+{
+	return (uintptr_t)LoadStringTable ((RESOURCE)res);
+}
+
+/* ---- Capture/Release bridges --------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-002 */
+
+uintptr_t
+c_CaptureDrawable (uintptr_t handle)
+{
+	return (uintptr_t)CaptureDrawable ((DRAWABLE)handle);
+}
+
+uintptr_t
+c_CaptureColorMap (uintptr_t handle)
+{
+	return (uintptr_t)CaptureColorMap ((COLORMAP_REF)handle);
+}
+
+uintptr_t
+c_CaptureStringTable (uintptr_t handle)
+{
+	return (uintptr_t)CaptureStringTable ((STRING_TABLE)handle);
+}
+
+uintptr_t
+c_ReleaseDrawable (uintptr_t handle)
+{
+	return (uintptr_t)ReleaseDrawable ((FRAME)handle);
+}
+
+uintptr_t
+c_ReleaseColorMap (uintptr_t handle)
+{
+	return (uintptr_t)ReleaseColorMap ((COLORMAP)handle);
+}
+
+uintptr_t
+c_ReleaseStringTable (uintptr_t handle)
+{
+	return (uintptr_t)ReleaseStringTable ((STRING)handle);
+}
+
+/* ---- Context management bridges ------------------------------------------ */
+/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-003 */
+
+uintptr_t
+c_CreateContext (const char *name)
+{
+	return (uintptr_t)CreateContext (name);
+}
+
+void
+c_DestroyContext (uintptr_t ctx)
+{
+	DestroyContext ((CONTEXT)ctx);
+}
+
+uintptr_t
+c_SetContext (uintptr_t ctx)
+{
+	return (uintptr_t)SetContext ((CONTEXT)ctx);
+}
+
+void
+c_SetContextFGFrame (uintptr_t frame)
+{
+	SetContextFGFrame ((FRAME)frame);
+}
+
+void
+c_SetContextClipRect (int x, int y, int w, int h)
+{
+	RECT r;
+	r.corner.x = (COORD)x;
+	r.corner.y = (COORD)y;
+	r.extent.width = (SIZE)w;
+	r.extent.height = (SIZE)h;
+	SetContextClipRect (&r);
+}
+
+void
+c_ClearContextClipRect (void)
+{
+	SetContextClipRect (NULL);
+}
+
+void
+c_SetContextBackGroundColor (int r, int g, int b)
+{
+	SetContextBackGroundColor (
+			BUILD_COLOR (MAKE_RGB15 ((BYTE)r, (BYTE)g, (BYTE)b), 0x00));
+}
+
+uintptr_t
+c_SetContextFont (uintptr_t font)
+{
+	return (uintptr_t)SetContextFont ((FONT)font);
+}
+
+/* ---- Drawable management bridges ----------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-003 */
+
+uintptr_t
+c_CreateDrawable (unsigned int type, int w, int h, int num_frames)
+{
+	return (uintptr_t)CreateDrawable (
+			(CREATE_FLAGS)type, (SIZE)w, (SIZE)h, (COUNT)num_frames);
+}
+
+void
+c_SetFrameTransparentColor (uintptr_t frame, int r, int g, int b)
+{
+	SetFrameTransparentColor ((FRAME)frame,
+			BUILD_COLOR (MAKE_RGB15 ((BYTE)r, (BYTE)g, (BYTE)b), 0x00));
+}
+
+void
+c_ClearDrawable (void)
+{
+	ClearDrawable ();
+}
+
+void
+c_GetFrameRect (uintptr_t frame, int *x, int *y, int *w, int *h)
+{
+	RECT r;
+	GetFrameRect ((FRAME)frame, &r);
+	if (x) *x = (int)r.corner.x;
+	if (y) *y = (int)r.corner.y;
+	if (w) *w = (int)r.extent.width;
+	if (h) *h = (int)r.extent.height;
+}
+
+/* ---- Graphics batching bridges ------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+void
+c_BatchGraphics (void)
+{
+	BatchGraphics ();
+}
+
+void
+c_UnbatchGraphics (void)
+{
+	UnbatchGraphics ();
+}
+
+/* ---- Transition bridges -------------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+void
+c_SetTransitionSource (uintptr_t rect_ptr)
+{
+	/* rect_ptr is a Rust *const RECT passed as uintptr_t; 0 means NULL. */
+	SetTransitionSource ((const RECT *)(uintptr_t)rect_ptr);
+}
+
+void
+c_ScreenTransition (int num_frames, uintptr_t rect_ptr)
+{
+	ScreenTransition (num_frames, (const RECT *)(uintptr_t)rect_ptr);
+}
+
+/* ---- SIS Drawing bridges ------------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-007 */
+
+void
+c_DrawSISFrame (void)
+{
+	DrawSISFrame ();
+}
+
+void
+c_DrawSISMessage (const char *msg)
+{
+	DrawSISMessage ((const UNICODE *)msg);
+}
+
+void
+c_DrawSISTitle (const char *title)
+{
+	DrawSISTitle ((UNICODE *)title);
+}
+
+/* ---- DoInput bridge ------------------------------------------------------ */
+/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-DI-001 */
+
+void
+c_DoInput (void *state, int exclusive)
+{
+	DoInput (state, (BOOLEAN)exclusive);
+}
+
+/* ---- Screen/context accessor bridges ------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+uintptr_t
+c_GetScreen (void)
+{
+	return (uintptr_t)Screen;
+}
+
+uintptr_t
+c_GetSpaceContext (void)
+{
+	return (uintptr_t)SpaceContext;
+}
+
+void
+c_SetLastActivityCheckLoad (void)
+{
+	LastActivity |= CHECK_LOAD;
+}
+
+/* ---- CommData accessor bridges ------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+const char *
+c_GetCommDataAlienFrameRes (void)
+{
+	return CommData.AlienFrameRes;
+}
+
+const char *
+c_GetCommDataAlienFontRes (void)
+{
+	return CommData.AlienFontRes;
+}
+
+const char *
+c_GetCommDataAlienColorMapRes (void)
+{
+	return CommData.AlienColorMapRes;
+}
+
+const char *
+c_GetCommDataAlienSongRes (void)
+{
+	return CommData.AlienSongRes;
+}
+
+const char *
+c_GetCommDataAlienAltSongRes (void)
+{
+	return CommData.AlienAltSongRes;
+}
+
+unsigned int
+c_GetCommDataAlienSongFlags (void)
+{
+	return (unsigned int)CommData.AlienSongFlags;
+}
+
+const char *
+c_GetCommDataConversationPhrasesRes (void)
+{
+	return CommData.ConversationPhrasesRes;
+}
+
+void
+c_SetCommDataAlienFrame (uintptr_t frame)
+{
+	CommData.AlienFrame = (FRAME)frame;
+}
+
+void
+c_SetCommDataAlienFont (uintptr_t font)
+{
+	CommData.AlienFont = (FONT)font;
+}
+
+void
+c_SetCommDataAlienColorMap (uintptr_t cmap)
+{
+	CommData.AlienColorMap = (COLORMAP)cmap;
+}
+
+void
+c_SetCommDataAlienSong (uintptr_t song)
+{
+	CommData.AlienSong = (MUSIC_REF)song;
+}
+
+void
+c_SetCommDataConversationPhrases (uintptr_t phrases)
+{
+	CommData.ConversationPhrases = (STRING)phrases;
+}
+
+void
+c_ClearCommDataConversationPhrasesRes (void)
+{
+	CommData.ConversationPhrasesRes = 0;
+}
+
+void
+c_ClearCommDataConversationPhrases (void)
+{
+	CommData.ConversationPhrases = 0;
+}
+
+/* ---- Encounter function call bridges ------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+void
+c_CallInitEncounterFunc (void)
+{
+	(*CommData.init_encounter_func) ();
+}
+
+void
+c_CallPostEncounterFunc (void)
+{
+	(*CommData.post_encounter_func) ();
+}
+
+void
+c_CallUninitEncounterFunc (void)
+{
+	(*CommData.uninit_encounter_func) ();
+}
+
+/* ---- Game-state / layout query bridges ----------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+int
+c_IsStarbaseConversation (void)
+{
+	return (GET_GAME_STATE (GLOBAL_FLAGS_AND_DATA) == (BYTE)~0
+			&& GET_GAME_STATE (STARBASE_AVAILABLE)) ? 1 : 0;
+}
+
+const char *
+c_GetGameString (int base, int offset)
+{
+	return (const char *)GAME_STRING (base + offset);
+}
+
+const char *
+c_GetPlanetName (void)
+{
+	return (const char *)GLOBAL_SIS (PlanetName);
+}
+
+int
+c_CheckLoad (void)
+{
+	return (GLOBAL (CurrentActivity) & CHECK_LOAD) ? 1 : 0;
+}
+
+int
+c_GetSISScreenWidth (void)
+{
+	return (int)SIS_SCREEN_WIDTH;
+}
+
+int
+c_GetSISScreenHeight (void)
+{
+	return (int)SIS_SCREEN_HEIGHT;
+}
+
+int
+c_GetSliderY (void)
+{
+	return (int)SLIDER_Y;
+}
+
+int
+c_GetSliderHeight (void)
+{
+	return (int)SLIDER_HEIGHT;
+}
+
+void
+c_GetSISOrigin (int *x, int *y)
+{
+	if (x) *x = (int)SIS_ORG_X;
+	if (y) *y = (int)SIS_ORG_Y;
+}
+
+const char *
+c_GetPlayerFontRes (void)
+{
+	return PLAYER_FONT;
+}
+
+unsigned int
+c_GetWantPixmap (void)
+{
+	return (unsigned int)WANT_PIXMAP;
+}
+
+/* ---- CommWndRect accessor bridge ----------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P06 */
+
+void
+c_GetCommWndRect (int *x, int *y, int *w, int *h)
+{
+	if (x) *x = (int)CommWndRect.corner.x;
+	if (y) *y = (int)CommWndRect.corner.y;
+	if (w) *w = (int)CommWndRect.extent.width;
+	if (h) *h = (int)CommWndRect.extent.height;
+}
+
+void
+c_SetCommWndRect (int x, int y, int w, int h)
+{
+	CommWndRect.corner.x = (COORD)x;
+	CommWndRect.corner.y = (COORD)y;
+	CommWndRect.extent.width = (SIZE)w;
+	CommWndRect.extent.height = (SIZE)h;
+}
+
 #endif /* USE_RUST_COMM */

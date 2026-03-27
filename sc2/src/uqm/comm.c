@@ -1712,3 +1712,42 @@ EnableTalkingAnim (BOOLEAN enable)
 
 #endif /* !USE_RUST_COMM — subtitle/anim helpers */
 
+#ifdef USE_RUST_COMM
+/*
+ * ============================================================================
+ *  Comm-internal static variable accessors (P06, @plan PLAN-20260326-COMMPT2.P06)
+ *
+ *  These must live in comm.c because they access static-scoped variables
+ *  (TalkingFinished, SubtitleText, pCurInputState) that are not visible
+ *  outside this translation unit.
+ * ============================================================================
+ */
+
+void
+c_SetTalkingFinished (int finished)
+{
+	TalkingFinished = (BOOLEAN)finished;
+}
+
+void
+c_SetupSubtitleTextFromCommData (void)
+{
+	SubtitleText.baseline = CommData.AlienTextBaseline;
+	SubtitleText.align = CommData.AlienTextAlign;
+}
+
+void
+c_SetCurInputState (void *state)
+{
+	pCurInputState = (ENCOUNTER_STATE *)state;
+}
+
+void
+c_ClearPhraseBuf (void)
+{
+	if (pCurInputState)
+		pCurInputState->phrase_buf[0] = '\0';
+}
+
+#endif /* USE_RUST_COMM — static comm variable accessors */
+
