@@ -166,6 +166,9 @@ void c_SetMenuSounds(unsigned int up_down, unsigned int select);
 
 void c_SetMenuSounds(unsigned int up_down, unsigned int select);
 
+/* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
+int c_HasTransitionAnim(void);
+
 #ifdef __cplusplus
 }
 #endif

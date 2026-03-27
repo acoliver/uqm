@@ -82,6 +82,10 @@ mod c_bridge {
         pub fn c_GetLastActivityAbortFlag() -> c_int;
         pub fn c_FadeOutMusicForReplay() -> c_uint;
         pub fn c_ClearLastActivityLoadFlag();
+        // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-007
+        pub fn c_GetPulsedMenuKey(key_index: c_int) -> c_int;
+        // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
+        pub fn c_HasTransitionAnim() -> c_int;
     }
 
     /// Slider image indices matching C ActivityFrame indices.
@@ -98,6 +102,24 @@ mod c_bridge {
         pub const NORMAL: i32 = 255; // NORMAL_VOLUME
     }
 }
+
+// Menu key indices — matches the second enum in sc2/src/uqm/controls.h
+// (KEY_PAUSE=0..KEY_FULLSCREEN=4 precede these)
+// @plan PLAN-20260326-COMMPT2.P03
+#[cfg(not(test))]
+use std::ffi::c_int;
+#[cfg(not(test))]
+const KEY_MENU_UP: c_int = 5;
+#[cfg(not(test))]
+const KEY_MENU_DOWN: c_int = 6;
+#[cfg(not(test))]
+const KEY_MENU_LEFT: c_int = 7;
+#[cfg(not(test))]
+const KEY_MENU_RIGHT: c_int = 8;
+#[cfg(not(test))]
+const KEY_MENU_SELECT: c_int = 9;
+#[cfg(not(test))]
+const KEY_MENU_CANCEL: c_int = 10;
 
 // ============================================================================
 // TalkingState — matches C TALKING_STATE
@@ -485,13 +507,11 @@ fn check_abort(state: &CommState) -> bool {
 }
 
 fn check_cancel_input(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-002
     #[cfg(not(test))]
-    {
+    unsafe {
         let _ = state;
-        // In production: PulsedInputState.menu[KEY_MENU_CANCEL] — checked by
-        // the C DoInput framework.  Here we always return false because real
-        // input is polled by C; our Rust loop is driven by explicit calls.
-        false
+        c_bridge::c_GetPulsedMenuKey(KEY_MENU_CANCEL) != 0
     }
     #[cfg(test)]
     {
@@ -502,10 +522,11 @@ fn check_cancel_input(state: &CommState) -> bool {
 }
 
 fn check_select_input(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-001
     #[cfg(not(test))]
-    {
+    unsafe {
         let _ = state;
-        false
+        c_bridge::c_GetPulsedMenuKey(KEY_MENU_SELECT) != 0
     }
     #[cfg(test)]
     {
@@ -515,10 +536,11 @@ fn check_select_input(state: &CommState) -> bool {
 }
 
 fn check_left_input(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-005
     #[cfg(not(test))]
-    {
+    unsafe {
         let _ = state;
-        false
+        c_bridge::c_GetPulsedMenuKey(KEY_MENU_LEFT) != 0
     }
     #[cfg(test)]
     {
@@ -528,10 +550,11 @@ fn check_left_input(state: &CommState) -> bool {
 }
 
 fn check_right_input(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-006
     #[cfg(not(test))]
-    {
+    unsafe {
         let _ = state;
-        false
+        c_bridge::c_GetPulsedMenuKey(KEY_MENU_RIGHT) != 0
     }
     #[cfg(test)]
     {
@@ -541,10 +564,11 @@ fn check_right_input(state: &CommState) -> bool {
 }
 
 fn check_up_input(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-003
     #[cfg(not(test))]
-    {
+    unsafe {
         let _ = state;
-        false
+        c_bridge::c_GetPulsedMenuKey(KEY_MENU_UP) != 0
     }
     #[cfg(test)]
     {
@@ -554,10 +578,11 @@ fn check_up_input(state: &CommState) -> bool {
 }
 
 fn check_down_input(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-004
     #[cfg(not(test))]
-    {
+    unsafe {
         let _ = state;
-        false
+        c_bridge::c_GetPulsedMenuKey(KEY_MENU_DOWN) != 0
     }
     #[cfg(test)]
     {
@@ -826,11 +851,11 @@ fn have_talking_anim(state: &CommState) -> bool {
 }
 
 fn has_transition_anim(state: &CommState) -> bool {
+    // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
     #[cfg(not(test))]
     unsafe {
-        // C haveTransitionAnim() checks the transit sequence num_frames
         let _ = state;
-        false // production checks the loaded CommData
+        c_bridge::c_HasTransitionAnim() != 0
     }
     #[cfg(test)]
     {

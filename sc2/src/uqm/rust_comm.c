@@ -777,6 +777,13 @@ c_WonLastBattle (void)
 	return (LOBYTE (GLOBAL (CurrentActivity)) == WON_LAST_BATTLE) ? 1 : 0;
 }
 
+/* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
+int
+c_HasTransitionAnim (void)
+{
+	return CommData.AlienTransitionDesc.NumFrames > 0 ? 1 : 0;
+}
+
 int
 c_GetLastActivityAbortFlag (void)
 {
