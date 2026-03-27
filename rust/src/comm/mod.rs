@@ -21,6 +21,7 @@ pub mod animation;
 pub mod encounter;
 pub mod ffi;
 pub mod glue;
+pub mod hail;
 pub mod locdata;
 pub mod oscilloscope;
 pub mod phrase_state;

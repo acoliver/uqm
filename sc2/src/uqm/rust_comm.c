@@ -1746,4 +1746,88 @@ c_SetCommWndRect (int x, int y, int w, int h)
 	CommWndRect.extent.height = (SIZE)h;
 }
 
+/* ---- HailAlien encounter loop bridge ------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P07 @requirement REQ-DI-001 */
+
+#include "libs/sndlib.h" /* StopSound */
+
+/*
+ * Minimal input state for the Rust encounter loop.
+ * The first field (InputFunc) is the only requirement for DoInput compatibility;
+ * the remaining fields provide the same layout used by comm.c ENCOUNTER_STATE
+ * so that pCurInputState = &rust_es is valid for C code that reads phrase_buf.
+ *
+ * @plan PLAN-20260326-COMMPT2.P07
+ */
+typedef struct rust_encounter_state
+{
+	/* First field: required by DoInput() */
+	BOOLEAN (*InputFunc) (struct rust_encounter_state *pES);
+
+	/* Mirrors comm.c ENCOUNTER_STATE fields used by bridge code */
+	COUNT  Initialized;
+	TimeCount NextTime;
+	BYTE   num_responses;
+	BYTE   cur_response;
+	BYTE   top_response;
+	/* phrase_buf: accessed by c_ClearPhraseBuf and c_SelectConversationSummary */
+	UNICODE phrase_buf[1024];
+} RUST_ENCOUNTER_STATE;
+
+/*
+ * C-side callback that DoInput invokes each frame for the encounter loop.
+ * Delegates to rust_DoCommunication(), which implements the Rust-side
+ * DoCommunication state machine.
+ */
+static BOOLEAN
+rust_do_communication_cb (RUST_ENCOUNTER_STATE *pES)
+{
+	(void)pES;
+	return (BOOLEAN)rust_DoCommunication ();
+}
+
+/*
+ * Allocate a RUST_ENCOUNTER_STATE on the stack, wire InputFunc to the Rust
+ * DoCommunication callback, register it as pCurInputState, run DoInput,
+ * then clear pCurInputState.  Rust calls this from hail_alien() to drive
+ * the encounter loop.
+ *
+ * @plan PLAN-20260326-COMMPT2.P07
+ * @requirement REQ-DI-001, REQ-HL-001
+ */
+void
+c_RunEncounterDoInput (void)
+{
+	RUST_ENCOUNTER_STATE ES;
+	memset (&ES, 0, sizeof ES);
+	ES.InputFunc = rust_do_communication_cb;
+	/* Register as pCurInputState so comm-internal bridge code can access
+	 * phrase_buf via c_ClearPhraseBuf and c_SetCurInputState. */
+	c_SetCurInputState (&ES);
+	SetMenuSounds (MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
+	DoInput (&ES, FALSE);
+	c_SetCurInputState (NULL);
+}
+
+/* ---- Audio teardown bridges ---------------------------------------------- */
+/* @plan PLAN-20260326-COMMPT2.P07 @requirement REQ-HL-005 */
+
+void
+c_StopSound (void)
+{
+	StopSound ();
+}
+
+void
+c_SleepThreadUntil (unsigned int time)
+{
+	SleepThreadUntil ((TimeCount)time);
+}
+
+void
+c_FlushColorXForms (void)
+{
+	FlushColorXForms ();
+}
+
 #endif /* USE_RUST_COMM */

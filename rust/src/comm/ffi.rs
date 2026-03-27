@@ -889,26 +889,20 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
 }
 
 // ============================================================================
-// HailAlien bridge (P11)
-// @plan PLAN-20260314-COMM.P11
+// HailAlien bridge
+// @plan PLAN-20260326-COMMPT2.P07
+// @requirement REQ-HL-001
 // ============================================================================
 
 /// Entry point for the alien hail sequence from C InitCommunication.
 ///
 /// Under USE_RUST_COMM, InitCommunication calls this instead of the C HailAlien().
-/// The Rust side runs the full encounter loop: init speech graphics, play music,
-/// run DoCommunication loop, teardown.
-///
-/// For P11, this is a delegation stub — the actual encounter loop is still
-/// driven by the C HailAlien() called via the existing path. This export
-/// satisfies the symbol requirement so the guard in InitCommunication compiles.
+/// Delegates to `hail::hail_alien()` which implements the full encounter loop:
+/// resource loading → context setup → init_encounter_func → DoInput loop →
+/// post/uninit_encounter_func → resource cleanup.
 #[no_mangle]
 pub unsafe extern "C" fn rust_HailAlien() {
-    // P11: Stub — full Rust HailAlien will replace C's in a later phase.
-    // For now this triggers the Rust encounter state machinery to record
-    // that a hail was initiated, then falls through to C via the bridge.
-    // The C guard in InitCommunication routes here; the actual HailAlien
-    // work continues in C for now (this function will be fleshed out in P12+).
+    super::hail::hail_alien();
 }
 
 // ============================================================================

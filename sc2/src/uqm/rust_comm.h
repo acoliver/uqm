@@ -18,9 +18,10 @@ void rust_UninitCommunication(void);
 int rust_IsCommInitialized(void);
 void rust_ClearCommunication(void);
 
-/* HailAlien bridge (P11) */
+/* HailAlien bridge (P07) */
 void rust_HailAlien(void);
 int rust_AlienTalkSegue(unsigned int wait_track);
+int rust_DoCommunication(void);
 
 
 /* NPCPhrase routing (P11) */
@@ -277,6 +278,14 @@ unsigned int c_GetWantPixmap(void);
 /* CommWndRect accessor bridges */
 void c_GetCommWndRect(int *x, int *y, int *w, int *h);
 void c_SetCommWndRect(int x, int y, int w, int h);
+
+/* HailAlien encounter loop bridge (@plan PLAN-20260326-COMMPT2.P07) */
+void c_RunEncounterDoInput(void);
+
+/* Audio teardown bridges (@plan PLAN-20260326-COMMPT2.P07) */
+void c_StopSound(void);
+void c_SleepThreadUntil(unsigned int time);
+void c_FlushColorXForms(void);
 
 /* Comm-internal static variable accessors (implemented in comm.c) */
 void c_SetTalkingFinished(int finished);
