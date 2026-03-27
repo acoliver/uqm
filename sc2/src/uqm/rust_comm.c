@@ -1154,6 +1154,24 @@ c_DrawSISComWindow (void)
 /* ---- Music bridges -------------------------------------------------------
  * The Rust extern declarations use the non-suffixed names. */
 
+/*
+ * c_PlayAlienMusic — play the alien encounter music from CommData.
+ * Reads CommData.AlienSong; no-op if the handle is zero.
+ * Calls PlayMusic(song, TRUE, 1) for looped background music.
+ *
+ * @plan PLAN-20260325-COMMPT3.P05
+ * @requirement REQ-MU-001, REQ-MU-002
+ * @pseudocode 001-colormap-music-bridges lines 09-15
+ */
+void
+c_PlayAlienMusic (void)
+{
+	MUSIC_REF song = CommData.AlienSong;
+	if (song == 0)
+		return;
+	PlayMusic (song, TRUE, 1);
+}
+
 void
 c_PlayMusic (void *song, int looping, int priority)
 {
@@ -1179,6 +1197,24 @@ c_SetMusicVolume (unsigned int vol)
 }
 
 /* ---- Colormap bridge ----------------------------------------------------- */
+
+/*
+ * c_SetColorMapFromCommData — apply the alien colormap from CommData.
+ * Reads CommData.AlienColorMap; no-op if the handle is zero.
+ * Calls SetColorMap(GetColorMapAddress(handle)) to install the palette.
+ *
+ * @plan PLAN-20260325-COMMPT3.P05
+ * @requirement REQ-CM-001, REQ-CM-002, REQ-CM-003
+ * @pseudocode 001-colormap-music-bridges lines 01-08
+ */
+void
+c_SetColorMapFromCommData (void)
+{
+	COLORMAP cmap = CommData.AlienColorMap;
+	if (cmap == 0)
+		return;
+	SetColorMap (GetColorMapAddress (cmap));
+}
 
 void
 c_SetColorMap (void *colormap)

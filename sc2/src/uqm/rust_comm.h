@@ -166,6 +166,13 @@ unsigned int c_FadeMusic(int vol, int duration);
 void c_StopMusic(void);
 void c_SetMenuSounds(unsigned int up_down, unsigned int select);
 
+/* Colormap + Music bridge functions sourced from CommData.
+ * @plan PLAN-20260325-COMMPT3.P05
+ * @requirement REQ-CM-001, REQ-CM-002, REQ-MU-001, REQ-MU-002
+ * @pseudocode 001-colormap-music-bridges lines 01-15 */
+void c_SetColorMapFromCommData(void);
+void c_PlayAlienMusic(void);
+
 /* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
 int c_HasTransitionAnim(void);
 

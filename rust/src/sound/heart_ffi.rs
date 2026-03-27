@@ -1421,27 +1421,27 @@ mod tests {
 
     fn test_init_stream_decoder_return_type() {
         // Verify FFI function signature returns c_int
-        let f: extern "C" fn() -> c_int = InitStreamDecoder;
+        let f: unsafe extern "C" fn() -> c_int = InitStreamDecoder;
         let _ = f; // type-check only; calling mutates global state
     }
 
     #[test]
     fn test_playing_stream_returns_int() {
-        let result = PlayingStream(0);
+        let result = unsafe { PlayingStream(0) };
         assert!(result == 0 || result == 1);
     }
 
     #[test]
 
     fn test_playing_track_returns_int() {
-        let result = PlayingTrack();
+        let result = unsafe { PlayingTrack() };
         assert!(result >= 0);
     }
 
     #[test]
 
     fn test_sound_playing_returns_int() {
-        let result = SoundPlaying();
+        let result = unsafe { SoundPlaying() };
         assert!(result == 0 || result == 1);
     }
 
