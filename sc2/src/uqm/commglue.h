@@ -102,9 +102,18 @@ extern void DoNPCPhrase (UNICODE *pStr);
 
 // The CallbackFunction is queued and executes synchronously
 // on the Starcon2Main thread
+/* @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001, REQ-NP-002 */
+#ifdef USE_RUST_COMM
+/* Under USE_RUST_COMM, NPCPhrase* routes to the Rust implementations.
+ * The C definitions in commglue.c are guarded by #ifndef USE_RUST_COMM. */
+#define NPCPhrase(index)        rust_NPCPhrase_cb ((index), NULL)
+#define NPCPhrase_cb(index, cb) rust_NPCPhrase_cb ((index), (void (*)(void))(cb))
+#define NPCPhrase_splice(index) rust_NPCPhrase_splice ((index))
+#else
 extern void NPCPhrase_cb (int index, CallbackFunction cb);
 #define NPCPhrase(index) NPCPhrase_cb ((index), NULL)
 extern void NPCPhrase_splice (int index);
+#endif
 extern void NPCNumber (int number, const char *fmt);
 
 #define ALLIANCE_NAME_BUFSIZE 256

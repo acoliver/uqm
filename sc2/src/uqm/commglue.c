@@ -30,6 +30,13 @@
 
 static int NPCNumberPhrase (int number, const char *fmt, UNICODE **ptrack);
 
+/* Under USE_RUST_COMM these functions are provided by the Rust implementation
+ * (rust_NPCPhrase_cb / rust_NPCPhrase_splice in rust/src/comm/ffi.rs).
+ * The commglue.h macros redirect all call sites to the Rust symbols, so the
+ * C definitions below are compiled only in non-Rust builds.
+ * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001, REQ-NP-002 */
+#ifndef USE_RUST_COMM
+
 // The CallbackFunction is queued and executes synchronously
 // on the Starcon2Main thread
 void
@@ -118,6 +125,8 @@ NPCPhrase_splice (int index)
 		SpliceMultiTrack (tracks, pStr);
 	}
 }
+
+#endif /* !USE_RUST_COMM */
 
 void
 NPCNumber (int number, const char *fmt)

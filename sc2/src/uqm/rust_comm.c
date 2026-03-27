@@ -316,6 +316,73 @@ c_get_alliance_name (int index)
 	return (const unsigned char *)GetStringAddress (S);
 }
 
+/* Full alliance-name lookup matching C NPCPhrase_cb branch 4.
+ * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001
+ *
+ * adjusted_index = phrase_id - GLOBAL_ALLIANCE_NAME (already done by caller).
+ * Writes into buf (size buf_len) with optional CommanderName append (state==3).
+ * Returns buf, or NULL if buf is too small or phrases unavailable.
+ */
+const unsigned char *
+c_get_alliance_name_full (int adjusted_index, char *buf, int buf_len)
+{
+	COUNT i;
+	STRING S;
+	const UNICODE *src;
+
+	if (!CommData.ConversationPhrases || !buf || buf_len <= 0)
+		return NULL;
+
+	i = GET_GAME_STATE (NEW_ALLIANCE_NAME);
+	S = SetAbsStringTableIndex (CommData.ConversationPhrases,
+			(adjusted_index - 1) + i);
+	src = (const UNICODE *)GetStringAddress (S);
+	if (!src)
+		return NULL;
+
+	strncpy (buf, src, (size_t)buf_len - 1);
+	buf[buf_len - 1] = '\0';
+
+	if (i == 3)
+	{
+		const UNICODE *cname = GLOBAL_SIS (CommanderName);
+		if (cname)
+		{
+			size_t used = strlen (buf);
+			strncat (buf + used, cname, (size_t)buf_len - used - 1);
+			buf[buf_len - 1] = '\0';
+		}
+	}
+
+	return (const unsigned char *)buf;
+}
+
+/* Return the sound-clip pointer for a phrase index (0-based into table).
+ * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001
+ */
+void *
+c_get_phrase_sound_clip (const void *phrases, int index)
+{
+	STRING S;
+	if (!phrases || index < 0)
+		return NULL;
+	S = SetAbsStringTableIndex ((STRING_TABLE)phrases, index);
+	return GetStringSoundClip (S);
+}
+
+/* Return the timestamp pointer for a phrase index (0-based into table).
+ * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001
+ */
+void *
+c_get_phrase_timestamp (const void *phrases, int index)
+{
+	STRING S;
+	if (!phrases || index < 0)
+		return NULL;
+	S = SetAbsStringTableIndex ((STRING_TABLE)phrases, index);
+	return GetStringTimeStamp (S);
+}
+
 void
 c_SpliceTrack (UNICODE *filespec, UNICODE *textspec,
 		UNICODE *timestamp, CallbackFunction cb)

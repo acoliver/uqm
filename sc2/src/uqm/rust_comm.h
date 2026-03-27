@@ -169,6 +169,15 @@ void c_SetMenuSounds(unsigned int up_down, unsigned int select);
 /* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
 int c_HasTransitionAnim(void);
 
+/* Alliance name lookup with full i==3 CommanderName concatenation.
+ * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001 */
+const unsigned char *c_get_alliance_name_full(int adjusted_index, char *buf, int buf_len);
+
+/* Sound-clip and timestamp for a 0-based phrase-table index.
+ * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001 */
+void *c_get_phrase_sound_clip(const void *phrases, int index);
+void *c_get_phrase_timestamp(const void *phrases, int index);
+
 #ifdef __cplusplus
 }
 #endif

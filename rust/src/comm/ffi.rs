@@ -874,22 +874,206 @@ pub unsafe extern "C" fn rust_HailAlien() {
     // work continues in C for now (this function will be fleshed out in P12+).
 }
 
-/// NPCPhrase with callback, routed from commglue.c under USE_RUST_COMM.
-///
-/// Routes phrase lookup and trackplayer splicing through the Rust track manager.
-/// The C commglue.c NPCPhrase_cb will call this instead of SpliceTrack directly.
-#[no_mangle]
-pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe extern "C" fn()>) {
-    // P11: Track splicing remains in C (SpliceTrack is authoritative C trackplayer).
-    // This stub satisfies the symbol requirement. Full routing in P12+.
-    let _ = (index, cb);
+// ============================================================================
+// NPC Phrase (P04)
+// @plan PLAN-20260326-COMMPT2.P04
+// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
+// ============================================================================
+
+// Special phrase-index constants matching commglue.h enum values.
+const GLOBAL_PLAYER_NAME: c_int = -1_000_000;
+const GLOBAL_SHIP_NAME: c_int = -999_999;
+const GLOBAL_ALLIANCE_NAME: c_int = -999_998;
+
+// Size of the per-call alliance-name working buffer (matches C NPCPhrase_cb buf[400]).
+const ALLIANCE_NAME_BUF_SIZE: usize = 400;
+
+// C bridge declarations used only by NPCPhrase (not test-compiled).
+#[cfg(not(test))]
+extern "C" {
+    // Return GLOBAL_SIS(CommanderName) as a UTF-8 C string.
+    fn c_get_commander_name() -> *const std::ffi::c_char;
+    // Return GLOBAL_SIS(ShipName) as a UTF-8 C string.
+    fn c_get_ship_name() -> *const std::ffi::c_char;
+    // Full alliance-name lookup (i==3 appends CommanderName into caller-supplied buf).
+    fn c_get_alliance_name_full(
+        adjusted_index: c_int,
+        buf: *mut std::ffi::c_char,
+        buf_len: c_int,
+    ) -> *const std::ffi::c_char;
+    // Return the text (GetStringAddress) for ConversationPhrases[1-based phrase index].
+    fn c_get_conversation_phrase(phrases: *const std::ffi::c_void, index: c_int) -> *const u8;
+    // Return the sound-clip pointer (GetStringSoundClip) for a 0-based index.
+    fn c_get_phrase_sound_clip(
+        phrases: *const std::ffi::c_void,
+        index: c_int,
+    ) -> *mut std::ffi::c_void;
+    // Return the timestamp pointer (GetStringTimeStamp) for a 0-based index.
+    fn c_get_phrase_timestamp(
+        phrases: *const std::ffi::c_void,
+        index: c_int,
+    ) -> *mut std::ffi::c_void;
+    // Splice text + optional audio into the C trackplayer.
+    fn c_SpliceTrack(
+        filespec: *mut std::ffi::c_char,
+        textspec: *mut std::ffi::c_char,
+        timestamp: *mut std::ffi::c_char,
+        cb: Option<unsafe extern "C" fn()>,
+    );
+    // Splice one or more voice clips with text (used by NPCPhrase_splice when clip exists).
+    fn c_SpliceMultiTrack(
+        track_names: *mut *mut std::ffi::c_char,
+        track_text: *mut std::ffi::c_char,
+    );
 }
 
-/// NPCPhrase_splice routed from commglue.c under USE_RUST_COMM.
+/// NPCPhrase with callback — the Rust replacement for C's NPCPhrase_cb.
+///
+/// Implements all six branches from commglue.c NPCPhrase_cb (lines 36–97):
+///  1. index == 0: no-op, return immediately
+///  2. GLOBAL_PLAYER_NAME: use commander name, null clip/timestamp
+///  3. GLOBAL_SHIP_NAME: use ship name, null clip/timestamp
+///  4. index < 0 (negative): alliance-name variant with GET_GAME_STATE lookup;
+///     state==3 appends CommanderName
+///  5. index > 0 (normal): look up ConversationPhrases[index-1] for text,
+///     clip, and timestamp
+///  6. For all non-zero paths: call c_SpliceTrack with resolved data + cb
+///
+/// # Safety
+/// Must be called from the game thread with a valid encounter active.
+///
+/// @plan PLAN-20260326-COMMPT2.P04
+/// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
+#[no_mangle]
+pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe extern "C" fn()>) {
+    // Branch 1: no-op
+    if index == 0 {
+        return;
+    }
+
+    // Suppress unused-variable warning in test builds where the #[cfg(not(test))]
+    // block below is omitted and cb is not consumed.
+    let _ = cb;
+
+    #[cfg(not(test))]
+    {
+        use std::ffi::c_void;
+        use std::ptr;
+
+        if index == GLOBAL_PLAYER_NAME {
+            // Branch 2: commander name
+            let name = c_get_commander_name();
+            c_SpliceTrack(ptr::null_mut(), name as *mut _, ptr::null_mut(), cb);
+        } else if index == GLOBAL_SHIP_NAME {
+            // Branch 3: ship name
+            let name = c_get_ship_name();
+            c_SpliceTrack(ptr::null_mut(), name as *mut _, ptr::null_mut(), cb);
+        } else if index < 0 {
+            // Branch 4: alliance-name variant
+            // adjusted = index - GLOBAL_ALLIANCE_NAME (undo the base offset from
+            // the enum so alliance-name phrases map to small positive numbers)
+            let adjusted = index - GLOBAL_ALLIANCE_NAME;
+            let mut buf = [0u8; ALLIANCE_NAME_BUF_SIZE];
+            let text_ptr = c_get_alliance_name_full(
+                adjusted,
+                buf.as_mut_ptr() as *mut _,
+                ALLIANCE_NAME_BUF_SIZE as c_int,
+            );
+            if text_ptr.is_null() {
+                return;
+            }
+            c_SpliceTrack(ptr::null_mut(), text_ptr as *mut _, ptr::null_mut(), cb);
+        } else {
+            // Branch 5: normal phrase from ConversationPhrases[index-1]
+            let phrases = {
+                let state = COMM_STATE.read();
+                state
+                    .comm_data()
+                    .map(|d| d.conversation_phrases as *const c_void)
+                    .unwrap_or(ptr::null())
+            };
+
+            if phrases.is_null() {
+                return;
+            }
+
+            // c_get_conversation_phrase expects 1-based phrase index (C legacy contract),
+            // while clip/timestamp wrappers take 0-based table index.
+            let text = c_get_conversation_phrase(phrases, index);
+            if text.is_null() {
+                return;
+            }
+            let table_idx = index - 1;
+            let clip = c_get_phrase_sound_clip(phrases, table_idx);
+            let timestamp = c_get_phrase_timestamp(phrases, table_idx);
+
+            c_SpliceTrack(clip as *mut _, text as *mut _, timestamp as *mut _, cb);
+        }
+    }
+
+    // Update conversation summary to record this phrase emission.
+    COMM_STATE.write().rebuild_summary();
+}
+
+/// NPCPhrase_splice variant preserving C `NPCPhrase_splice` behavior.
+///
+/// C semantics (commglue.c):
+/// - index == 0: return
+/// - resolve text and clip for phrase index-1
+/// - if clip is NULL: SpliceTrack(NULL, text, NULL, NULL)
+/// - else: SpliceMultiTrack([clip, NULL], text)
+///
+/// # Safety
+/// Must be called from the game thread with a valid encounter active.
+///
+/// @plan PLAN-20260326-COMMPT2.P04
+/// @requirement REQ-NP-002
 #[no_mangle]
 pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
-    // P11: Stub — routing in P12+.
-    let _ = index;
+    if index == 0 {
+        return;
+    }
+
+    #[cfg(not(test))]
+    {
+        use std::ffi::c_void;
+        use std::ptr;
+
+        if index < 0 {
+            // For special negative phrases, reuse NPCPhrase_cb behavior.
+            rust_NPCPhrase_cb(index, None);
+            return;
+        }
+
+        let phrases = {
+            let state = COMM_STATE.read();
+            state
+                .comm_data()
+                .map(|d| d.conversation_phrases as *const c_void)
+                .unwrap_or(ptr::null())
+        };
+        if phrases.is_null() {
+            return;
+        }
+
+        // c_get_conversation_phrase expects 1-based phrase index.
+        let text = c_get_conversation_phrase(phrases, index);
+        if text.is_null() {
+            return;
+        }
+
+        let table_idx = index - 1;
+        let clip = c_get_phrase_sound_clip(phrases, table_idx);
+
+        if clip.is_null() {
+            c_SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);
+        } else {
+            let mut tracks: [*mut std::ffi::c_char; 2] = [clip as *mut _, ptr::null_mut()];
+            c_SpliceMultiTrack(tracks.as_mut_ptr(), text as *mut _);
+        }
+    }
+
+    COMM_STATE.write().rebuild_summary();
 }
 
 #[cfg(test)]
