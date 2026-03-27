@@ -54,6 +54,7 @@ int rust_SelectNextResponse(void);
 int rust_SelectPrevResponse(void);
 int rust_GetSelectedResponse(void);
 int rust_GetResponseCount(void);
+int rust_GetResponseText(int index, char *buf, int buf_len);
 unsigned int rust_ExecuteResponse(void);
 
 /* Animation Management */

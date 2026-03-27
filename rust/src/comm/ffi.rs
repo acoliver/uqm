@@ -310,6 +310,43 @@ pub unsafe extern "C" fn rust_GetResponseCount() -> c_int {
     COMM_STATE.read().responses().count() as c_int
 }
 
+/// Copy response text at `index` into `buf` (max `buf_len` bytes, including NUL).
+///
+/// Returns 1 if the text was written, 0 if index is out of range or buf is NULL.
+/// The buffer is always NUL-terminated when returning 1.
+///
+/// Called from C's `c_RefreshResponses` to iterate over the Rust-owned response list.
+///
+/// @plan PLAN-20260326-COMMPT2.P05
+/// @requirement REQ-RB-002
+#[no_mangle]
+pub unsafe extern "C" fn rust_GetResponseText(
+    index: c_int,
+    buf: *mut c_char,
+    buf_len: c_int,
+) -> c_int {
+    if buf.is_null() || buf_len <= 0 || index < 0 {
+        return 0;
+    }
+
+    let state = COMM_STATE.read();
+    let entry = match state.responses().get(index as usize) {
+        Some(e) => e,
+        None => return 0,
+    };
+
+    let text = entry.response_text.as_bytes();
+    let max = (buf_len as usize).saturating_sub(1);
+    let copy_len = text.len().min(max);
+
+    // SAFETY: buf is non-null with at least buf_len bytes (caller contract).
+    unsafe {
+        std::ptr::copy_nonoverlapping(text.as_ptr() as *const c_char, buf, copy_len);
+        *buf.add(copy_len) = 0;
+    }
+    1
+}
+
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
 #[no_mangle]
 pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
