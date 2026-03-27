@@ -2,6 +2,8 @@
 
 Plan ID: `PLAN-20260325-COMMPT3`
 
+@plan PLAN-20260325-COMMPT3.P01
+
 ## 1. Entities
 
 ### 1.1 CommState (Rust — `rust/src/comm/state.rs`)
@@ -80,7 +82,13 @@ Authoritative audio playback engine. Owns:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 AlienTalkSegue First-Call Sequence
+### 2.2 AlienTalkSegue First-Call Sequence (REQ-TS-001)
+
+REQ-TS coverage in this section and 2.4:
+- REQ-TS-001: first-call intro sequence ordering
+- REQ-TS-002: per-frame subtitle/animation/speech-graphics updates
+- REQ-TS-003: talking animation start/stop tied to track state
+- REQ-TS-004: talking-finished transition and music fade behavior
 
 ```
 first_talk_call == false
