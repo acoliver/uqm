@@ -104,6 +104,12 @@ pub struct CommState {
     /// Previous subtitle text for change detection in the talk loop.
     /// @plan PLAN-20260314-COMM.P10
     prev_subtitle: Option<String>,
+
+    /// Simulated "select" key press for test mode.
+    /// In production, check_select_input reads c_GetPulsedMenuKey; in tests
+    /// this field drives the bridge so player_response_input can return Selected.
+    /// @plan PLAN-20260325-COMMPT3.P11
+    pub select_input_pending: bool,
 }
 
 impl Default for CommState {
@@ -139,6 +145,7 @@ impl CommState {
             response_ui: ResponseUI::new(),
             subtitle_display: SubtitleDisplay::new(),
             prev_subtitle: None,
+            select_input_pending: false,
         }
     }
 

@@ -706,48 +706,30 @@ pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
 /// Run one iteration of the top-level communication state machine.
 ///
 /// Matches C `DoCommunication(pES)`.
-/// Returns 1 to keep iterating (Continue), 0 when conversation is done.
+/// Returns 1 to keep iterating, 0 when conversation is done.
 ///
 /// Lock discipline: acquires COMM_STATE write lock, runs one iteration.
-/// If `select_response` returns a callback, releases the lock, calls the
-/// callback, then reacquires to continue.
+/// For `Selected`, releases the lock before invoking the callback so the
+/// callback can safely re-enter the communication state.
+///
+/// @plan PLAN-20260325-COMMPT3.P11
+/// @requirement REQ-RL-001..003, REQ-DC-001
+/// @pseudocode 003-do-communication-rewrite lines 41-81
 #[no_mangle]
 pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
-    use super::talk_segue::{
-        do_communication, player_response_input, select_response, CommunicationResult,
-        PlayerInputResult,
-    };
+    use super::talk_segue::{do_communication, CommunicationResult};
 
     let mut state = COMM_STATE.write();
 
     match do_communication(&mut state) {
-        CommunicationResult::Done => 0,
-        CommunicationResult::Continue => {
-            // If the last player_response_input returned Selected, execute
-            // the callback with the lock released.
-            // We detect this by checking whether responses were just cleared
-            // and a callback is pending.  The canonical path: do_communication
-            // called player_response_input which returned Selected → we need
-            // to re-run select_response here to actually dispatch.
-            if state.is_talking_finished() && state.responses().count() > 0 {
-                if let Some(selected_result) = {
-                    // Check if select was triggered by trying to select
-                    let check_result = player_response_input(&mut state);
-                    if check_result == PlayerInputResult::Selected {
-                        select_response(&mut state)
-                    } else {
-                        None
-                    }
-                } {
-                    let (func, rref) = selected_result;
-                    // Release lock, call callback, done
-                    drop(state);
-                    func(rref);
-                    return 1;
-                }
-            }
+        CommunicationResult::Talking => 1,
+        CommunicationResult::ResponseContinue => 1,
+        CommunicationResult::Selected(func, rref) => {
+            drop(state);
+            func(rref);
             1
         }
+        CommunicationResult::Done => 0,
     }
 }
 

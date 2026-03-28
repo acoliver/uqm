@@ -165,10 +165,18 @@ pub enum PlayerInputResult {
 }
 
 /// Result of one `do_communication` call.
+///
+/// @plan PLAN-20260325-COMMPT3.P09
+/// @requirement REQ-DC-001, REQ-RL-001
+/// @pseudocode 003-do-communication-rewrite lines 01-64
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommunicationResult {
-    /// Keep iterating.
-    Continue,
+    /// Alien is still talking — keep iterating.
+    Talking,
+    /// Alien finished; response loop continues — keep iterating.
+    ResponseContinue,
+    /// Player selected a response — carries callback and response_ref.
+    Selected(ResponseFunc, u32),
     /// Conversation is complete — caller should tear down.
     Done,
 }
@@ -343,23 +351,29 @@ pub fn alien_talk_segue(state: &mut CommState, wait_track: u32) {
 
 /// Process the player selecting a response.
 ///
-/// Matches C `SelectResponse`.  Returns the selected callback and its ref
-/// so the **caller** (in `ffi.rs`) can release the lock, invoke the callback,
-/// then reacquire.  Returns `None` if no response is selected.
+/// Extracts the callback and response_ref from the currently selected response,
+/// performs all pre-callback work (feedback phrase, stop track, clear subtitles,
+/// set slider, fade music), then clears responses and resets talking state.
+/// Returns `None` if no valid response with a callback is selected.
+///
+/// @plan PLAN-20260325-COMMPT3.P11
+/// @requirement REQ-RL-004
+/// @pseudocode 003-do-communication-rewrite lines 36-40
 pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
     let (func, response_ref) = {
         let resp = state.responses().get_selected()?;
-        // feedback_text comes from the response text
-        let _text = resp.response_text.clone();
         let func = resp.response_func?;
         let rref = resp.response_ref;
         (func, rref)
     };
 
-    feedback_player_phrase(
-        state,
-        &state.responses().get_selected()?.response_text.clone(),
-    );
+    let response_text = state
+        .responses()
+        .get_selected()
+        .map(|r| r.response_text.clone())
+        .unwrap_or_default();
+
+    feedback_player_phrase(state, &response_text);
     stop_track(state);
     clear_subtitles(state);
     set_slider_image(state, SliderImage::Play);
@@ -367,7 +381,6 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
     fade_music_to_background(state);
 
     state.set_talking_finished(false);
-    // Clear all responses — caller invokes the callback
     state.responses_mut().clear();
 
     Some((func, response_ref))
@@ -388,6 +401,10 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
     }
 
     if check_select_input(state) {
+        #[cfg(test)]
+        {
+            state.select_input_pending = false;
+        }
         return PlayerInputResult::Selected;
     }
 
@@ -437,12 +454,18 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
 
 /// One iteration of the top-level communication state machine.
 ///
-/// Matches C `DoCommunication`.
+/// While `talking_finished` is false, drives the alien talk segue.  Once
+/// talking is complete, checks for abort, then handles the response phase.
+/// Returns `Selected(func, rref)` when the player picks a response so the
+/// FFI layer can drop its lock before invoking the callback.
+///
+/// @plan PLAN-20260325-COMMPT3.P11
+/// @requirement REQ-DC-001..005, REQ-RL-004
+/// @pseudocode 003-do-communication-rewrite lines 07-40
 pub fn do_communication(state: &mut CommState) -> CommunicationResult {
     if !state.is_talking_finished() {
-        // Still talking — keep playing
         alien_talk_segue(state, WAIT_TRACK_ALL);
-        return CommunicationResult::Continue;
+        return CommunicationResult::Talking;
     }
 
     if check_abort(state) {
@@ -450,14 +473,19 @@ pub fn do_communication(state: &mut CommState) -> CommunicationResult {
     }
 
     if state.responses().count() == 0 {
-        // No responses — run last-replay loop then finish
         run_last_replay(state);
         return CommunicationResult::Done;
     }
 
-    // Show responses and handle input
-    player_response_input(state);
-    CommunicationResult::Continue
+    // Handle one frame of player input
+    let input = player_response_input(state);
+    match input {
+        PlayerInputResult::Selected => match select_response(state) {
+            Some((func, rref)) => CommunicationResult::Selected(func, rref),
+            None => CommunicationResult::ResponseContinue,
+        },
+        _ => CommunicationResult::ResponseContinue,
+    }
 }
 
 // ============================================================================
@@ -536,8 +564,10 @@ fn check_select_input(state: &CommState) -> bool {
     }
     #[cfg(test)]
     {
-        let _ = state;
-        false
+        // In tests, driven by the select_input_pending flag set by tests.
+        // The flag is consumed by player_response_input which has &mut state.
+        // We read it here; the &mut version resets it after reading.
+        state.select_input_pending
     }
 }
 
@@ -1270,44 +1300,42 @@ mod tests {
         s.add_response(1, "Option A", Some(noop));
         s.add_response(2, "Option B", Some(noop));
         s.responses_mut().start_display();
+        // Select response 0 so get_selected() returns Some.
+        s.responses_mut().select(0);
         drop(s);
 
         let mut s = COMM_STATE.write();
         let result = select_response(&mut s);
-        assert!(result.is_some(), "should return callback");
-        assert!(
-            s.responses().is_empty(),
-            "responses should be cleared after selection"
-        );
+        assert!(result.is_some(), "select_response must return Some when callback is present");
+        // Responses must have been cleared.
+        assert_eq!(s.responses().count(), 0, "responses must be cleared after selection");
     }
 
     #[test]
     #[serial]
     fn test_select_response_returns_callback() {
-        reset();
         use std::sync::atomic::{AtomicU32, Ordering};
         static CALLED_WITH: AtomicU32 = AtomicU32::new(0);
-
-        extern "C" fn recording_cb(r: u32) {
+        extern "C" fn marker(r: u32) {
             CALLED_WITH.store(r, Ordering::SeqCst);
         }
 
+        reset();
         let mut s = COMM_STATE.write();
-        s.add_response(42, "Pick me", Some(recording_cb));
+        s.add_response(42, "Pick me", Some(marker));
         s.responses_mut().start_display();
+        // start_display auto-selects index 0.
         drop(s);
 
         let mut s = COMM_STATE.write();
         let result = select_response(&mut s);
         drop(s);
 
-        // Simulate caller invoking the callback after releasing the lock
-        if let Some((func, rref)) = result {
-            func(rref);
-            assert_eq!(CALLED_WITH.load(Ordering::SeqCst), 42);
-        } else {
-            panic!("expected Some callback");
-        }
+        assert!(result.is_some(), "select_response must return Some with a valid callback");
+        let (func, rref) = result.unwrap();
+        assert_eq!(rref, 42, "response_ref must match");
+        func(rref);
+        assert_eq!(CALLED_WITH.load(Ordering::SeqCst), 42, "callback must be invocable");
     }
 
     #[test]
@@ -1355,18 +1383,12 @@ mod tests {
 
     #[test]
     fn test_communication_talks_first() {
-        // When talking_finished = false, do_communication enters talk segue
-        // and returns Continue.
         let mut s = CommState::new();
         s.init().unwrap();
-        // talking_finished starts false
         assert!(!s.is_talking_finished());
 
         let result = do_communication(&mut s);
-        // alien_talk_segue runs; since no track loaded, finished immediately
-        // → talking_finished = true. But do_communication returns Continue
-        // because it delegated to alien_talk_segue in this call.
-        assert_eq!(result, CommunicationResult::Continue);
+        assert_eq!(result, CommunicationResult::Talking);
     }
 
     #[test]
@@ -1374,7 +1396,7 @@ mod tests {
         let mut s = CommState::new();
         s.init().unwrap();
         s.set_talking_finished(true);
-        // no responses → last replay → Done
+        // No responses → run_last_replay + Done.
         let result = do_communication(&mut s);
         assert_eq!(result, CommunicationResult::Done);
     }
@@ -1385,10 +1407,9 @@ mod tests {
         s.init().unwrap();
         s.set_talking_finished(true);
         s.add_response(1, "Choice A", None);
-
+        // player_response_input returns Continue (no select input in tests) → ResponseContinue.
         let result = do_communication(&mut s);
-        // Has responses → player_response_input → Continue
-        assert_eq!(result, CommunicationResult::Continue);
+        assert_eq!(result, CommunicationResult::ResponseContinue);
     }
 
     // ========================================================================
@@ -1565,6 +1586,285 @@ mod tests {
             "c_PlayAlienMusic must have a real implementation body \
              (EXPECTED FAIL vs P03 stubs; stub body: {:?})",
             music_body
+        );
+    }
+
+    // ========================================================================
+    // P10: DoCommunication TDD
+    //
+    // @plan PLAN-20260325-COMMPT3.P10
+    // @requirement REQ-RL-001..004, REQ-DC-001..005
+    // @pseudocode 003-do-communication-rewrite lines 01-81
+    // ========================================================================
+
+    // Tests 1, 7-9: PASS against P09 stubs.
+    // Tests 2-6, 10: EXPECTED FAIL against P09 stubs — use #[ignore] so
+    //   `cargo test` still exits 0, while documenting the required behavior.
+
+    // ---- Test 1 ------------------------------------------------------------
+
+    /// REQ-DC-002: while talking_finished == false, do_communication must return
+    /// Talking without calling player_response_input.
+    ///
+    /// PASSES against stub (stub returns Talking unconditionally).
+    #[test]
+    fn test_do_comm_talking_phase_p10() {
+        let mut s = CommState::new();
+        s.init().unwrap();
+        // talking_finished starts false
+        assert!(!s.is_talking_finished());
+
+        let result = do_communication(&mut s);
+        assert_eq!(
+            result,
+            CommunicationResult::Talking,
+            "while talking_finished=false, must return Talking"
+        );
+        // top_response must NOT have been initialised (player_response_input
+        // initialises it on first call; it must not have been called).
+        assert!(
+            s.top_response.is_none(),
+            "player_response_input must not be called during talking phase"
+        );
+    }
+
+    // ---- Test 2 ------------------------------------------------------------
+
+    /// REQ-DC-005: when talking_finished=true and abort flag is set,
+    /// do_communication must return Done.
+    ///
+    /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
+    #[test]
+    fn test_do_comm_abort_exit_p10() {
+        let mut s = CommState::new();
+        s.init().unwrap();
+        s.set_talking_finished(true);
+        // In test mode check_abort() reads is_input_paused() as the abort flag.
+        s.set_input_paused(true);
+
+        let result = do_communication(&mut s);
+        assert_eq!(
+            result,
+            CommunicationResult::Done,
+            "abort with talking_finished=true must return Done"
+        );
+    }
+
+    // ---- Test 3 ------------------------------------------------------------
+
+    /// REQ-DC-004: when talking_finished=true and there are no responses,
+    /// do_communication must return Done.
+    ///
+    /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
+    #[test]
+    fn test_do_comm_no_responses_done_p10() {
+        let mut s = CommState::new();
+        s.init().unwrap();
+        s.set_talking_finished(true);
+        // No responses added — count() == 0.
+        assert_eq!(s.responses().count(), 0);
+
+        let result = do_communication(&mut s);
+        assert_eq!(
+            result,
+            CommunicationResult::Done,
+            "no responses after talking finished must return Done"
+        );
+    }
+
+    // ---- Test 4 ------------------------------------------------------------
+
+    /// REQ-DC-003: when talking_finished=true, responses exist, and none is
+    /// selected yet, do_communication must return ResponseContinue.
+    ///
+    /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
+    #[test]
+    fn test_do_comm_response_continue_p10() {
+        extern "C" fn noop(_: u32) {}
+
+        let mut s = CommState::new();
+        s.init().unwrap();
+        s.set_talking_finished(true);
+        s.add_response(1, "Option A", Some(noop));
+        s.add_response(2, "Option B", Some(noop));
+        // Do NOT select: player_response_input returns Continue this frame.
+
+        let result = do_communication(&mut s);
+        assert_eq!(
+            result,
+            CommunicationResult::ResponseContinue,
+            "with responses but no selection, must return ResponseContinue"
+        );
+    }
+
+    // ---- Test 5 ------------------------------------------------------------
+
+    /// REQ-DC-001: when talking_finished=true and a response is selected,
+    /// do_communication must return Selected(fn, ref).
+    ///
+    /// EXPECTED FAIL against P09 stubs (stub always returns Talking).
+    #[test]
+    fn test_do_comm_selected_p10() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static CALLED: AtomicBool = AtomicBool::new(false);
+        extern "C" fn marker(_: u32) {
+            CALLED.store(true, Ordering::SeqCst);
+        }
+
+        let mut s = CommState::new();
+        s.init().unwrap();
+        s.set_talking_finished(true);
+        s.add_response(99, "Pick me", Some(marker));
+        s.responses_mut().start_display();
+        // Ensure index 0 is selected and simulate the select key press.
+        s.responses_mut().select(0);
+        s.select_input_pending = true;
+
+        let result = do_communication(&mut s);
+        match result {
+            CommunicationResult::Selected(func, rref) => {
+                assert_eq!(rref, 99, "response_ref must match the registered value");
+                // Invoke to verify it is the right function pointer.
+                func(rref);
+                assert!(CALLED.load(Ordering::SeqCst), "callback must be callable");
+            }
+            other => panic!(
+                "expected Selected(fn, 99), got {:?}",
+                other
+            ),
+        }
+    }
+
+    // ---- Test 6 ------------------------------------------------------------
+
+    /// REQ-RL-004: with a valid callback registered and a response selected,
+    /// select_response must return Some((fn, ref)).
+    ///
+    /// EXPECTED FAIL against P09 stubs (stub always returns None).
+    #[test]
+    fn test_select_response_returns_tuple_p10() {
+        extern "C" fn noop(_: u32) {}
+
+        let mut s = CommState::new();
+        s.init().unwrap();
+        s.add_response(42, "Pick me", Some(noop));
+        s.responses_mut().start_display();
+        s.responses_mut().select(0);
+
+        let result = select_response(&mut s);
+        assert!(
+            result.is_some(),
+            "select_response must return Some(...) when a response with callback is selected"
+        );
+        let (_, rref) = result.unwrap();
+        assert_eq!(rref, 42, "response_ref must match");
+    }
+
+    // ---- Test 7 ------------------------------------------------------------
+
+    /// REQ-RL-003: with no callback (None), select_response must return None.
+    ///
+    /// PASSES against P09 stubs (stub always returns None).
+    #[test]
+    fn test_select_response_null_callback_p10() {
+        let mut s = CommState::new();
+        s.init().unwrap();
+        s.add_response(10, "Text only", None);
+        s.responses_mut().start_display();
+        s.responses_mut().select(0);
+
+        let result = select_response(&mut s);
+        assert!(
+            result.is_none(),
+            "null callback must yield None from select_response"
+        );
+    }
+
+    // ---- Test 8 ------------------------------------------------------------
+
+    /// Structural: rust_DoCommunication in ffi.rs must drop(state) before
+    /// calling func(rref) in the Selected arm (lock discipline).
+    ///
+    /// PASSES against P09 stubs (P09 already has the correct structure).
+    #[test]
+    fn test_lock_dropped_before_callback_p10() {
+        let source = include_str!("ffi.rs");
+        // Find the rust_DoCommunication function body.
+        let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
+            .expect("rust_DoCommunication must be in ffi.rs");
+        // drop(state) must appear before func(rref).
+        let drop_pos = fn_body.find("drop(state)").expect(
+            "rust_DoCommunication must contain drop(state) to release lock before callback"
+        );
+        let call_pos = fn_body.find("func(rref)").expect(
+            "rust_DoCommunication must contain func(rref) in Selected arm"
+        );
+        assert!(
+            drop_pos < call_pos,
+            "drop(state) (at {}) must appear before func(rref) (at {}) in rust_DoCommunication",
+            drop_pos,
+            call_pos
+        );
+    }
+
+    // ---- Test 9 ------------------------------------------------------------
+
+    /// Structural: player_response_input must NOT appear in ffi.rs —
+    /// it was moved into do_communication (talk_segue.rs).
+    ///
+    /// PASSES against P09 stubs (P09 already removed it from ffi.rs).
+    #[test]
+    fn test_no_double_player_response_input_p10() {
+        let source = include_str!("ffi.rs");
+        // Strip comment lines so doc references don't count.
+        let call_count = source
+            .lines()
+            .filter(|l| {
+                let t = l.trim();
+                !t.starts_with("//") && !t.starts_with('*')
+            })
+            .filter(|l| l.contains("player_response_input"))
+            .count();
+        assert_eq!(
+            call_count,
+            0,
+            "player_response_input must not appear in ffi.rs (it belongs in do_communication)"
+        );
+    }
+
+    // ---- Test 10 -----------------------------------------------------------
+
+    /// Structural: player_response_input must appear exactly once in the body
+    /// of do_communication (excluding fn-def, test, and doc/comment lines).
+    ///
+    /// EXPECTED FAIL against P09 stubs (stub never calls player_response_input).
+    #[test]
+    fn test_single_player_response_input_p10() {
+        let source = include_str!("talk_segue.rs");
+
+        // Extract the do_communication function body.
+        let fn_body = extract_fn_body(source, "pub fn do_communication")
+            .expect("do_communication must be in talk_segue.rs");
+
+        // Count non-comment, non-fn-def, non-test lines that call player_response_input.
+        let call_count = fn_body
+            .lines()
+            .filter(|l| {
+                let t = l.trim();
+                !t.starts_with("//")
+                    && !t.starts_with('*')
+                    && !t.starts_with("#[")
+                    && !t.contains("fn player_response_input")
+                    && !t.contains("mod tests")
+            })
+            .filter(|l| l.contains("player_response_input"))
+            .count();
+
+        assert_eq!(
+            call_count,
+            1,
+            "do_communication body must call player_response_input exactly once (found {})",
+            call_count
         );
     }
 
