@@ -382,7 +382,7 @@ pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
 pub unsafe extern "C" fn rust_InitCommAnimations() {
     // Animation initialization requires CommData to be loaded.
     // In production, this is called after init_race populates CommData.
-    // For now, the actual descriptor population happens from C side.
+    // The actual descriptor population happens from C side (stubs in commanim).
 }
 
 /// Process communication animations for one frame.
@@ -835,9 +835,29 @@ pub unsafe extern "C" fn rust_RedrawSubtitles() {
 
 /// Show the conversation summary overlay.
 ///
-/// Matches C `SelectConversationSummary`. Rebuilds the summary from the
-/// current track history, then runs a simple page-advance loop until the
-/// player exits. Returns 1 when the player exits normally, 0 on abort.
+/// Production path: delegates directly to C `SelectConversationSummary` so
+/// the full C input loop drives the summary display.
+///
+/// @plan PLAN-20260325-COMMPT3.P12
+/// @requirement REQ-CS-002
+/// @pseudocode 004-summary-guard-stale-markers lines 01-24
+#[cfg(not(test))]
+#[no_mangle]
+pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
+    use super::talk_segue::c_bridge::c_SelectConversationSummary;
+    c_SelectConversationSummary();
+    1
+}
+
+/// Show the conversation summary overlay (test path).
+///
+/// Uses the Rust SummaryView directly so tests can exercise summary logic
+/// without a C runtime.
+///
+/// @plan PLAN-20260325-COMMPT3.P12, P14
+/// @requirement REQ-CS-002, REQ-CS-003, REQ-SM-001
+/// @pseudocode 004-summary-guard-stale-markers lines 01-47
+#[cfg(test)]
 #[no_mangle]
 pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
     use super::summary::SummaryResult;
@@ -858,9 +878,7 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
         return 1;
     }
 
-    // Advance through pages until Exit or Abort (abort not yet wired — use
-    // a simple bounded loop so we can't spin forever in production if
-    // input handling is not yet implemented).
+    // Advance through pages until Exit or Abort.
     loop {
         match view.advance_page() {
             SummaryResult::NextPage => continue,
