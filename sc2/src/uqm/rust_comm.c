@@ -558,7 +558,7 @@ c_SetSliderImage (unsigned int frame)
  * @pseudocode 002-subtitle-display-fix lines 39-54
  *
  * c_ClearSubtitles / c_CheckSubtitles / c_RedrawSubtitles are called from
- * Rust via FFI.  They forward to comm_* stubs defined in comm.c
+ * Rust via FFI.  They forward to comm_* functions defined in comm.c
  * (inside #ifdef USE_RUST_COMM), breaking the former circular
  * rust_comm.c → rust_* → rust_comm.c routing. */
 

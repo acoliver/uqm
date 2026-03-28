@@ -1306,9 +1306,16 @@ mod tests {
 
         let mut s = COMM_STATE.write();
         let result = select_response(&mut s);
-        assert!(result.is_some(), "select_response must return Some when callback is present");
+        assert!(
+            result.is_some(),
+            "select_response must return Some when callback is present"
+        );
         // Responses must have been cleared.
-        assert_eq!(s.responses().count(), 0, "responses must be cleared after selection");
+        assert_eq!(
+            s.responses().count(),
+            0,
+            "responses must be cleared after selection"
+        );
     }
 
     #[test]
@@ -1331,11 +1338,18 @@ mod tests {
         let result = select_response(&mut s);
         drop(s);
 
-        assert!(result.is_some(), "select_response must return Some with a valid callback");
+        assert!(
+            result.is_some(),
+            "select_response must return Some with a valid callback"
+        );
         let (func, rref) = result.unwrap();
         assert_eq!(rref, 42, "response_ref must match");
         func(rref);
-        assert_eq!(CALLED_WITH.load(Ordering::SeqCst), 42, "callback must be invocable");
+        assert_eq!(
+            CALLED_WITH.load(Ordering::SeqCst),
+            42,
+            "callback must be invocable"
+        );
     }
 
     #[test]
@@ -1432,7 +1446,10 @@ mod tests {
     fn test_set_colormap_calls_bridge() {
         let mut s = CommState::new();
         s.init().unwrap();
-        assert!(!s.first_talk_call, "precondition: first_talk_call not yet set");
+        assert!(
+            !s.first_talk_call,
+            "precondition: first_talk_call not yet set"
+        );
 
         alien_talk_segue(&mut s, WAIT_TRACK_ALL);
 
@@ -1448,7 +1465,10 @@ mod tests {
     fn test_play_alien_music_calls_bridge() {
         let mut s = CommState::new();
         s.init().unwrap();
-        assert!(!s.first_talk_call, "precondition: first_talk_call not yet set");
+        assert!(
+            !s.first_talk_call,
+            "precondition: first_talk_call not yet set"
+        );
 
         alien_talk_segue(&mut s, WAIT_TRACK_ALL);
 
@@ -1464,10 +1484,7 @@ mod tests {
     fn test_for_now_marker_removed() {
         let source = include_str!("talk_segue.rs");
         let body = extract_fn_body(source, "fn set_colormap");
-        assert!(
-            body.is_some(),
-            "set_colormap must exist in talk_segue.rs"
-        );
+        assert!(body.is_some(), "set_colormap must exist in talk_segue.rs");
         assert!(
             !body.unwrap().to_lowercase().contains("for now"),
             "set_colormap must not contain 'for now' placeholder"
@@ -1728,10 +1745,7 @@ mod tests {
                 func(rref);
                 assert!(CALLED.load(Ordering::SeqCst), "callback must be callable");
             }
-            other => panic!(
-                "expected Selected(fn, 99), got {:?}",
-                other
-            ),
+            other => panic!("expected Selected(fn, 99), got {:?}", other),
         }
     }
 
@@ -1794,11 +1808,11 @@ mod tests {
             .expect("rust_DoCommunication must be in ffi.rs");
         // drop(state) must appear before func(rref).
         let drop_pos = fn_body.find("drop(state)").expect(
-            "rust_DoCommunication must contain drop(state) to release lock before callback"
+            "rust_DoCommunication must contain drop(state) to release lock before callback",
         );
-        let call_pos = fn_body.find("func(rref)").expect(
-            "rust_DoCommunication must contain func(rref) in Selected arm"
-        );
+        let call_pos = fn_body
+            .find("func(rref)")
+            .expect("rust_DoCommunication must contain func(rref) in Selected arm");
         assert!(
             drop_pos < call_pos,
             "drop(state) (at {}) must appear before func(rref) (at {}) in rust_DoCommunication",
@@ -1826,8 +1840,7 @@ mod tests {
             .filter(|l| l.contains("player_response_input"))
             .count();
         assert_eq!(
-            call_count,
-            0,
+            call_count, 0,
             "player_response_input must not appear in ffi.rs (it belongs in do_communication)"
         );
     }
@@ -1861,8 +1874,7 @@ mod tests {
             .count();
 
         assert_eq!(
-            call_count,
-            1,
+            call_count, 1,
             "do_communication body must call player_response_input exactly once (found {})",
             call_count
         );
@@ -2001,7 +2013,9 @@ mod tests {
                 }
                 // Case-insensitive check for stale marker patterns
                 let lower = line.to_lowercase();
-                stale_patterns.iter().any(|p| lower.contains(&p.to_lowercase()))
+                stale_patterns
+                    .iter()
+                    .any(|p| lower.contains(&p.to_lowercase()))
             })
             .map(|(i, line)| (i + 1, line))
             .collect();
@@ -2014,8 +2028,10 @@ mod tests {
                 .iter()
                 .map(|(ln, l)| format!("  line {}: {}", ln, l.trim()))
                 .collect::<Vec<_>>()
-                .join("
-")
+                .join(
+                    "
+"
+                )
         );
     }
 
@@ -2057,7 +2073,9 @@ mod tests {
                     return false;
                 }
                 let lower = line.to_lowercase();
-                stale_patterns.iter().any(|p| lower.contains(&p.to_lowercase()))
+                stale_patterns
+                    .iter()
+                    .any(|p| lower.contains(&p.to_lowercase()))
             })
             .map(|(i, line)| (i + 1, line))
             .collect();
@@ -2070,8 +2088,10 @@ mod tests {
                 .iter()
                 .map(|(ln, l)| format!("  line {}: {}", ln, l.trim()))
                 .collect::<Vec<_>>()
-                .join("
-")
+                .join(
+                    "
+"
+                )
         );
     }
 
@@ -2244,4 +2264,3 @@ mod tests {
         None
     }
 }
-
