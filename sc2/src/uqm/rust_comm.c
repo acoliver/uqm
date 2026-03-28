@@ -553,27 +553,31 @@ c_SetSliderImage (unsigned int frame)
 }
 
 /* ---- Subtitle state bridges -----------------------------------------------
- * Under USE_RUST_COMM subtitle state is owned by Rust (P10).
+ * @plan PLAN-20260325-COMMPT3.P06
+ * @requirement REQ-SD-001..REQ-SD-003
+ * @pseudocode 002-subtitle-display-fix lines 39-54
+ *
  * c_ClearSubtitles / c_CheckSubtitles / c_RedrawSubtitles are called from
- * Rust code.  comm.c's static definitions are guarded by
- * #ifndef USE_RUST_COMM so we forward to the Rust-side implementations. */
+ * Rust via FFI.  They forward to comm_* stubs defined in comm.c
+ * (inside #ifdef USE_RUST_COMM), breaking the former circular
+ * rust_comm.c → rust_* → rust_comm.c routing. */
 
 void
 c_ClearSubtitles (void)
 {
-	rust_ClearSubtitles ();
+	comm_ClearSubtitles ();
 }
 
 void
 c_CheckSubtitles (void)
 {
-	rust_CheckSubtitles ();
+	comm_CheckSubtitles ();
 }
 
 void
 c_RedrawSubtitles (void)
 {
-	rust_RedrawSubtitles ();
+	comm_RedrawSubtitles ();
 }
 
 /* ---- InitSpeechGraphics ---------------------------------------------------
@@ -721,7 +725,7 @@ c_UpdateAnimations (int seeking)
 	BOOLEAN change;
 	change = ProcessCommAnimations (FALSE, (BOOLEAN)seeking);
 	if (change)
-		rust_RedrawSubtitles ();
+		comm_RedrawSubtitles ();
 }
 
 /* c_RunCommAnimFrame: one animation + sleep cycle, matching C runCommAnimFrame(). */

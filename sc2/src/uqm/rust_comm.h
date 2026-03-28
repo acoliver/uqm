@@ -162,6 +162,14 @@ void c_SetSliderImage(unsigned int frame);
 void c_ClearSubtitles(void);
 void c_CheckSubtitles(void);
 void c_RedrawSubtitles(void);
+
+/* Subtitle bridge stubs — bodies in comm.c, behaviour added in P08.
+ * @plan PLAN-20260325-COMMPT3.P06
+ * @requirement REQ-SD-001..REQ-SD-003 */
+void comm_ClearSubtitles(void);
+void comm_CheckSubtitles(void);
+void comm_RedrawSubtitles(void);
+
 unsigned int c_FadeMusic(int vol, int duration);
 void c_StopMusic(void);
 void c_SetMenuSounds(unsigned int up_down, unsigned int select);

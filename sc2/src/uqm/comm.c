@@ -1715,6 +1715,76 @@ EnableTalkingAnim (BOOLEAN enable)
 #ifdef USE_RUST_COMM
 /*
  * ============================================================================
+ *  Subtitle bridge implementations (@plan PLAN-20260325-COMMPT3.P08)
+ *  @requirement REQ-SD-002, REQ-SD-003, REQ-SD-004
+ *  @pseudocode 002-subtitle-display-fix lines 01-37
+ *
+ *  Under USE_RUST_COMM, rust_comm.c c_* subtitle bridges route here so subtitle
+ *  rendering and state updates remain C-authoritative.
+ * ============================================================================
+ */
+
+void
+comm_ClearSubtitles (void)
+{
+	clear_subtitles = TRUE;
+	last_subtitle = NULL;
+	SubtitleText.pStr = NULL;
+	SubtitleText.CharCount = 0;
+}
+
+void
+comm_CheckSubtitles (void)
+{
+	const UNICODE *pStr;
+	POINT baseline;
+	TEXT_ALIGN align;
+
+	pStr = GetTrackSubtitle ();
+	baseline = CommData.AlienTextBaseline;
+	align = CommData.AlienTextAlign;
+
+	if (pStr != SubtitleText.pStr ||
+			SubtitleText.baseline.x != baseline.x ||
+			SubtitleText.baseline.y != baseline.y ||
+			SubtitleText.align != align)
+	{	// Subtitles changed
+		clear_subtitles = TRUE;
+		// Baseline may be updated by the ZFP
+		SubtitleText.baseline = baseline;
+		SubtitleText.align = align;
+		// Make a note in the logs if the update was multiframe
+		if (SubtitleText.pStr == pStr)
+		{
+			log_add (log_Warning, "Dialog text and location changed out of sync");
+		}
+
+		SubtitleText.pStr = pStr;
+		// may have been cleared too
+		if (pStr)
+			SubtitleText.CharCount = (COUNT)~0;
+		else
+			SubtitleText.CharCount = 0;
+	}
+}
+
+void
+comm_RedrawSubtitles (void)
+{
+	TEXT t;
+
+	if (!optSubtitles)
+		return;
+
+	if (SubtitleText.pStr)
+	{
+		t = SubtitleText;
+		add_text (1, &t);
+	}
+}
+
+/*
+ * ============================================================================
  *  Comm-internal static variable accessors (P06, @plan PLAN-20260326-COMMPT2.P06)
  *
  *  These must live in comm.c because they access static-scoped variables
