@@ -644,6 +644,16 @@ pub fn build_ship_state(
         player_nr: starship.player_nr,
         position: element.position,
         velocity: element.velocity.get_current_components(),
+        element_ptr: std::ptr::null_mut(),
+        starship_ptr: std::ptr::null_mut(),
+        weapon_counter: starship.weapon_counter,
+        special_counter: starship.special_counter,
+        energy_counter: starship.energy_counter,
+        ship_input_state: starship.ship_input_state,
+        thrust_wait: element.thrust_wait,
+        ship_sounds: race_desc.ship_data.ship_sounds,
+        weapon_farray: std::ptr::null_mut(),
+        special_farray: std::ptr::null_mut(),
     })
 }
 

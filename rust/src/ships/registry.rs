@@ -1460,7 +1460,7 @@ mod tests {
                 old_status_flags: StatusFlags::empty(),
                 player_nr: 0,
                 position: (0, 0),
-                velocity: (0, 0),
+                velocity: (0, 0), ..ShipState::default()
             };
             let ctx = BattleContext {
                 hyperspace: false,

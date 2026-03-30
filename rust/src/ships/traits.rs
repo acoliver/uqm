@@ -32,6 +32,97 @@ pub struct ShipState {
     pub position: (i32, i32),
     /// Velocity in world coordinates.
     pub velocity: (i32, i32),
+
+    // --- Fields needed for C FFI calls from ship behaviors ---
+
+    /// Opaque C ELEMENT pointer. Ship behaviors pass this to battle_bridge
+    /// functions (DeltaCrew, ProcessSound, etc.). Null in tests.
+    pub element_ptr: *mut std::os::raw::c_void,
+    /// Opaque C STARSHIP pointer. Null in tests.
+    pub starship_ptr: *mut std::os::raw::c_void,
+    /// Weapon cooldown counter.
+    pub weapon_counter: u8,
+    /// Special cooldown counter.
+    pub special_counter: u8,
+    /// Energy cooldown counter.
+    pub energy_counter: u8,
+    /// Ship input state (raw bitfield from C).
+    pub ship_input_state: u8,
+    /// Thrust wait from element.
+    pub thrust_wait: u8,
+    /// Ship sounds resource handle (for ProcessSound calls).
+    pub ship_sounds: usize,
+    /// Weapon animation frames array pointer (for MissileBlock.farray).
+    pub weapon_farray: *mut std::os::raw::c_void,
+    /// Special animation frames array pointer.
+    pub special_farray: *mut std::os::raw::c_void,
+}
+
+// Safety: ShipState contains raw pointers that are never dereferenced in Rust
+// without unsafe. They are only passed through to C bridge calls.
+unsafe impl Send for ShipState {}
+
+impl Default for ShipState {
+    fn default() -> Self {
+        Self {
+            crew_level: 0,
+            max_crew: 0,
+            energy_level: 0,
+            max_energy: 0,
+            ship_facing: 0,
+            cur_status_flags: StatusFlags::empty(),
+            old_status_flags: StatusFlags::empty(),
+            player_nr: 0,
+            position: (0, 0),
+            velocity: (0, 0),
+            element_ptr: std::ptr::null_mut(),
+            starship_ptr: std::ptr::null_mut(),
+            weapon_counter: 0,
+            special_counter: 0,
+            energy_counter: 0,
+            ship_input_state: 0,
+            thrust_wait: 0,
+            ship_sounds: 0,
+            weapon_farray: std::ptr::null_mut(),
+            special_farray: std::ptr::null_mut(),
+        }
+    }
+}
+
+impl ShipState {
+    /// Creates a ShipState with test defaults (null pointers, zero counters).
+    #[cfg(test)]
+    pub fn test_new(
+        crew_level: u16,
+        max_crew: u16,
+        energy_level: u16,
+        max_energy: u16,
+        ship_facing: u8,
+        player_nr: i16,
+    ) -> Self {
+        Self {
+            crew_level,
+            max_crew,
+            energy_level,
+            max_energy,
+            ship_facing,
+            cur_status_flags: StatusFlags::empty(),
+            old_status_flags: StatusFlags::empty(),
+            player_nr,
+            position: (0, 0),
+            velocity: (0, 0),
+            element_ptr: std::ptr::null_mut(),
+            starship_ptr: std::ptr::null_mut(),
+            weapon_counter: 0,
+            special_counter: 0,
+            energy_counter: 0,
+            ship_input_state: 0,
+            thrust_wait: 0,
+            ship_sounds: 0,
+            weapon_farray: std::ptr::null_mut(),
+            special_farray: std::ptr::null_mut(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -213,6 +304,16 @@ mod tests {
             player_nr: 0,
             position: (100, 200),
             velocity: (0, 0),
+            element_ptr: std::ptr::null_mut(),
+            starship_ptr: std::ptr::null_mut(),
+            weapon_counter: 0,
+            special_counter: 0,
+            energy_counter: 0,
+            ship_input_state: 0,
+            thrust_wait: 0,
+            ship_sounds: 0,
+            weapon_farray: std::ptr::null_mut(),
+            special_farray: std::ptr::null_mut(),
         }
     }
 
