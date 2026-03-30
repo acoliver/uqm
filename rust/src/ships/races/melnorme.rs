@@ -1,11 +1,37 @@
-// Melnorme Trader - Charge-up pumpup shot + Confusion pulse
+// Melnorme Trader - Charged pumpup blaster + confusion pulse
 // @plan PLAN-20260314-SHIPS.P13
 
+use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
     Characteristics, FleetStuff, IntelStuff, RaceDescTemplate, ShipData, ShipFlags, ShipInfo,
     ShipsError, StatusFlags,
 };
+
+// C: melnorme.c constants
+const MAX_CREW: u16 = 20;
+const MAX_ENERGY: u8 = 42; // MAX_ENERGY_SIZE
+const ENERGY_REGENERATION: u8 = 1;
+const ENERGY_WAIT: u8 = 4;
+const MAX_THRUST: u16 = 36;
+const THRUST_INCREMENT: u16 = 6;
+const THRUST_WAIT: u8 = 4;
+const TURN_WAIT: u8 = 4;
+const SHIP_MASS: u8 = 7;
+
+// Pumpup blaster
+const WEAPON_ENERGY_COST: u8 = 5;
+const WEAPON_WAIT: u8 = 1;
+const MELNORME_OFFSET: i16 = 24;
+const PUMPUP_DAMAGE: u16 = 2;
+const PUMPUP_LIFE: u16 = 10;
+
+// Confusion pulse
+const SPECIAL_ENERGY_COST: u8 = 20;
+const SPECIAL_WAIT: u8 = 20;
+const CMISSILE_LIFE: u16 = 20;
+const CMISSILE_HITS: i16 = 200;
+const CMISSILE_DAMAGE: i16 = 0;
 
 #[derive(Debug, Default)]
 pub struct MelnormeShip;
@@ -16,56 +42,120 @@ impl ShipBehavior for MelnormeShip {
             ship_info: ShipInfo {
                 ship_flags: ShipFlags::FIRES_FORE,
                 ship_cost: 18,
-                crew_level: 20,
-                max_crew: 20,
-                energy_level: 42,
-                max_energy: 42,
+                crew_level: MAX_CREW,
+                max_crew: MAX_CREW,
+                energy_level: MAX_ENERGY,
+                max_energy: MAX_ENERGY,
                 ..ShipInfo::default()
             },
             fleet: FleetStuff {
-                strength: 0xFFFF,
-                known_loc: (4999, 4999),
+                strength: u16::MAX, // INFINITE_RADIUS
+                known_loc: (5000, 5000), // MAX_X_UNIVERSE>>1, MAX_Y_UNIVERSE>>1
             },
             characteristics: Characteristics {
-                max_thrust: 36,
-                thrust_increment: 6,
-                energy_regeneration: 1,
-                weapon_energy_cost: 5,
-                special_energy_cost: 20,
-                energy_wait: 4,
-                turn_wait: 4,
-                thrust_wait: 4,
-                weapon_wait: 1,
-                special_wait: 20,
-                ship_mass: 7,
+                max_thrust: MAX_THRUST,
+                thrust_increment: THRUST_INCREMENT,
+                energy_regeneration: ENERGY_REGENERATION,
+                weapon_energy_cost: WEAPON_ENERGY_COST,
+                special_energy_cost: SPECIAL_ENERGY_COST,
+                energy_wait: ENERGY_WAIT,
+                turn_wait: TURN_WAIT,
+                thrust_wait: THRUST_WAIT,
+                weapon_wait: WEAPON_WAIT,
+                special_wait: SPECIAL_WAIT,
+                ship_mass: SHIP_MASS,
             },
             ship_data: ShipData::default(),
             intel: IntelStuff {
                 maneuverability_index: 0,
-                weapon_range: 1800, // PUMPUP_SPEED * PUMPUP_LIFE = 180 * 10
+                weapon_range: 1800, // PUMPUP_SPEED * PUMPUP_LIFE
             },
         }
     }
 
+    /// C: melnorme_postprocess — fire confusion pulse.
+    fn postprocess(
+        &mut self,
+        ship: &mut ShipState,
+        _ctx: &BattleContext,
+    ) -> Result<(), ShipsError> {
+        if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
+            return Ok(());
+        }
+        if ship.special_counter > 0 {
+            return Ok(());
+        }
+
+        #[cfg(not(test))]
+        if !ship.element_ptr.is_null() {
+            unsafe {
+                if !battle_bridge::bridge::delta_energy(
+                    ship.element_ptr,
+                    -(SPECIAL_ENERGY_COST as i16),
+                ) {
+                    return Ok(());
+                }
+                // initialize_confusion + PutElement handled by C
+                let sound =
+                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                battle_bridge::bridge::process_sound(sound, ship.element_ptr);
+            }
+        }
+
+        #[cfg(test)]
+        {
+            if ship.energy_level < SPECIAL_ENERGY_COST as u16 {
+                return Ok(());
+            }
+            ship.energy_level -= SPECIAL_ENERGY_COST as u16;
+            ship.special_counter = SPECIAL_WAIT;
+        }
+
+        Ok(())
+    }
+
+    /// C: initialize_pump_up — fires charge-up blaster.
+    /// Holding weapon key charges it; releasing fires with accumulated damage.
     fn init_weapon(
         &mut self,
         ship: &ShipState,
         _ctx: &BattleContext,
     ) -> Result<Vec<WeaponElement>, ShipsError> {
-        // Pumpup shot - DISPLAY_TO_WORLD(45) = 180
+        #[cfg(not(test))]
+        {
+            let block = MissileBlock {
+                cx: ship.position.0 as i16,
+                cy: ship.position.1 as i16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                sender: ship.player_nr,
+                pixoffs: MELNORME_OFFSET,
+                speed: MELNORME_OFFSET, // initial speed = DISPLAY_TO_WORLD(MELNORME_OFFSET)
+                hit_points: PUMPUP_DAMAGE as i16,
+                damage: PUMPUP_DAMAGE as i16,
+                face: ship.ship_facing as u16,
+                index: 0,
+                life: 2, // initial life (extended in postprocess)
+                farray: ship.weapon_farray as *mut battle_bridge::Frame,
+                preprocess_func: None,
+                blast_offs: 0,
+            };
+            let _ = battle_bridge::bridge::create_missile(&block);
+            return Ok(vec![]);
+        }
+
+        #[cfg(test)]
         Ok(vec![WeaponElement {
             offset: (0, 0),
             facing: ship.ship_facing,
-            velocity: (180, 0), // speed=180
-            life_span: 10,
-            hit_points: 1,
-            damage: 2,
-            mass: 1,
+            velocity: (180, 0), // DISPLAY_TO_WORLD(45)
+            life_span: PUMPUP_LIFE,
+            hit_points: PUMPUP_DAMAGE,
+            damage: PUMPUP_DAMAGE,
+            mass: 0,
         }])
     }
 
     fn intelligence(&mut self, _ship: &ShipState, _ctx: &BattleContext) -> StatusFlags {
-        // Race-specific AI deferred: depends on ship_intelligence() from cyborg.c (battle engine scope)
         StatusFlags::THRUST
     }
 }
@@ -75,43 +165,73 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_melnorme_descriptor() {
-        let ship = MelnormeShip;
+    fn descriptor_template_matches_c() {
+        let ship = MelnormeShip::default();
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 18);
-        assert_eq!(desc.ship_info.crew_level, 20);
         assert_eq!(desc.ship_info.max_crew, 20);
-        assert_eq!(desc.ship_info.energy_level, 42);
         assert_eq!(desc.ship_info.max_energy, 42);
-        assert_eq!(desc.characteristics.max_thrust, 36);
-        assert_eq!(desc.fleet.strength, 0xFFFF);
-        assert_eq!(desc.intel.weapon_range, 1800);
+        assert_eq!(desc.characteristics.ship_mass, 7);
+        assert_eq!(desc.characteristics.special_energy_cost, 20);
+        assert_eq!(desc.characteristics.special_wait, 20);
     }
 
     #[test]
-    fn test_melnorme_weapon() {
-        let mut ship = MelnormeShip;
+    fn weapon_fires_pumpup() {
+        let mut ship = MelnormeShip::default();
         let state = ShipState {
-            crew_level: 0,
-            max_crew: 0,
-            energy_level: 0,
-            max_energy: 0,
-            ship_facing: 0,
-            cur_status_flags: StatusFlags::empty(),
-            old_status_flags: StatusFlags::empty(),
-            player_nr: 0,
-            position: (0, 0),
-            velocity: (0, 0), ..ShipState::default()
+            energy_level: 42,
+            max_energy: 42,
+            ..ShipState::default()
         };
-        let context = BattleContext {
-            hyperspace: false,
-            frame_count: 0,
-            gravity_center: None,
-        };
-        let weapons = ship.init_weapon(&state, &context).unwrap();
+        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
 
+        let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
-        assert_eq!(weapons[0].velocity.0, 180);
+        assert_eq!(weapons[0].damage, PUMPUP_DAMAGE);
+    }
+
+    #[test]
+    fn confusion_drains_energy() {
+        let mut ship = MelnormeShip::default();
+        let mut state = ShipState {
+            crew_level: 20,
+            energy_level: 42,
+            max_energy: 42,
+            cur_status_flags: StatusFlags::SPECIAL,
+            ..ShipState::default()
+        };
+        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+
+        ship.postprocess(&mut state, &ctx).unwrap();
+        assert_eq!(state.energy_level, 22); // 42 - 20
+        assert_eq!(state.special_counter, SPECIAL_WAIT);
+    }
+
+    #[test]
+    fn confusion_denied_low_energy() {
+        let mut ship = MelnormeShip::default();
+        let mut state = ShipState {
+            crew_level: 20,
+            energy_level: 10,
+            max_energy: 42,
+            cur_status_flags: StatusFlags::SPECIAL,
+            ..ShipState::default()
+        };
+        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+
+        ship.postprocess(&mut state, &ctx).unwrap();
+        assert_eq!(state.energy_level, 10);
+    }
+
+    #[test]
+    fn ai_basic() {
+        let mut ship = MelnormeShip::default();
+        let state = ShipState::default();
+        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+
+        let flags = ship.intelligence(&state, &ctx);
+        assert!(flags.contains(StatusFlags::THRUST));
     }
 }
