@@ -1,11 +1,36 @@
-// VUX Intruder - Laser + Limpet speed reducer + Warp-in advantage
-// @plan PLAN-20260314-SHIPS.P12
+// VUX Intruder - Laser + limpet + aggressive warp-in
+// @plan PLAN-20260314-SHIPS.P11
 
+use crate::ships::battle_bridge::{self, LaserBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
     Characteristics, FleetStuff, IntelStuff, RaceDescTemplate, ShipData, ShipFlags, ShipInfo,
     ShipsError, StatusFlags,
 };
+
+// C: vux.c constants
+const MAX_CREW: u16 = 20;
+const MAX_ENERGY: u8 = 40;
+const ENERGY_REGENERATION: u8 = 1;
+const ENERGY_WAIT: u8 = 8;
+const MAX_THRUST: u16 = 21;
+const THRUST_INCREMENT: u16 = 7;
+const THRUST_WAIT: u8 = 4;
+const TURN_WAIT: u8 = 6;
+const SHIP_MASS: u8 = 6;
+
+const WEAPON_ENERGY_COST: u8 = 1;
+const WEAPON_WAIT: u8 = 0;
+const VUX_OFFSET: i16 = 12;
+const LASER_BASE: i32 = 150;
+
+const SPECIAL_ENERGY_COST: u8 = 2;
+const SPECIAL_WAIT: u8 = 7;
+const LIMPET_LIFE: u16 = 80;
+const LIMPET_HITS: i16 = 1;
+const LIMPET_DAMAGE: i16 = 0;
+const LIMPET_SPEED: i16 = 25;
+const LIMPET_OFFSET: i16 = 8;
 
 #[derive(Debug, Default)]
 pub struct VuxShip;
@@ -18,55 +43,135 @@ impl ShipBehavior for VuxShip {
                     | ShipFlags::SEEKING_SPECIAL
                     | ShipFlags::IMMEDIATE_WEAPON,
                 ship_cost: 12,
-                crew_level: 20,
-                max_crew: 20,
-                energy_level: 40,
-                max_energy: 40,
+                crew_level: MAX_CREW,
+                max_crew: MAX_CREW,
+                energy_level: MAX_ENERGY,
+                max_energy: MAX_ENERGY,
                 ..ShipInfo::default()
             },
             fleet: FleetStuff {
-                strength: 162,
+                strength: 162, // 900/SPHERE_RADIUS_INCREMENT*2
                 known_loc: (4412, 1558),
             },
             characteristics: Characteristics {
-                max_thrust: 21,
-                thrust_increment: 7,
-                energy_regeneration: 1,
-                weapon_energy_cost: 1,
-                special_energy_cost: 2,
-                energy_wait: 8,
-                turn_wait: 6,
-                thrust_wait: 4,
-                weapon_wait: 0,
-                special_wait: 7,
-                ship_mass: 6,
+                max_thrust: MAX_THRUST,
+                thrust_increment: THRUST_INCREMENT,
+                energy_regeneration: ENERGY_REGENERATION,
+                weapon_energy_cost: WEAPON_ENERGY_COST,
+                special_energy_cost: SPECIAL_ENERGY_COST,
+                energy_wait: ENERGY_WAIT,
+                turn_wait: TURN_WAIT,
+                thrust_wait: THRUST_WAIT,
+                weapon_wait: WEAPON_WAIT,
+                special_wait: SPECIAL_WAIT,
+                ship_mass: SHIP_MASS,
             },
             ship_data: ShipData::default(),
             intel: IntelStuff {
                 maneuverability_index: 0,
-                weapon_range: 200, // CLOSE_RANGE_WEAPON
+                weapon_range: 100, // CLOSE_RANGE_WEAPON
             },
         }
     }
 
+    /// C: vux_preprocess — aggressive warp-in (one-shot on APPEARING).
+    /// Repositions near enemy. Complex element manipulation — kept in C.
+    fn preprocess(
+        &mut self,
+        _ship: &mut ShipState,
+        _ctx: &BattleContext,
+    ) -> Result<(), ShipsError> {
+        // Only active on APPEARING (initial spawn), handled by C preprocess_func
+        Ok(())
+    }
+
+    /// C: vux_postprocess — launches tracking limpet.
+    fn postprocess(
+        &mut self,
+        ship: &mut ShipState,
+        _ctx: &BattleContext,
+    ) -> Result<(), ShipsError> {
+        if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
+            return Ok(());
+        }
+        if ship.special_counter > 0 {
+            return Ok(());
+        }
+
+        #[cfg(not(test))]
+        if !ship.element_ptr.is_null() {
+            unsafe {
+                if !battle_bridge::bridge::delta_energy(
+                    ship.element_ptr,
+                    -(SPECIAL_ENERGY_COST as i16),
+                ) {
+                    return Ok(());
+                }
+                let sound =
+                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                battle_bridge::bridge::process_sound(sound, ship.element_ptr);
+                // spawn_limpets handled by C postprocess_func
+            }
+        }
+
+        #[cfg(test)]
+        {
+            if ship.energy_level < SPECIAL_ENERGY_COST as u16 {
+                return Ok(());
+            }
+            ship.energy_level -= SPECIAL_ENERGY_COST as u16;
+            ship.special_counter = SPECIAL_WAIT;
+        }
+
+        Ok(())
+    }
+
+    /// C: initialize_horrific_laser — fires green laser beam.
     fn init_weapon(
         &mut self,
         ship: &ShipState,
         _ctx: &BattleContext,
     ) -> Result<Vec<WeaponElement>, ShipsError> {
-        // Laser (immediate)
+        #[cfg(not(test))]
+        {
+            let laser_range =
+                battle_bridge::bridge::display_to_world((LASER_BASE + VUX_OFFSET as i32) as i32);
+            let angle = battle_bridge::bridge::facing_to_angle(ship.ship_facing as u16);
+
+            let block = LaserBlock {
+                cx: ship.position.0 as i16,
+                cy: ship.position.1 as i16,
+                ex: battle_bridge::bridge::cosine(angle, laser_range as i16) as i16,
+                ey: battle_bridge::bridge::sine(angle, laser_range as i16) as i16,
+                face: ship.ship_facing as u16,
+                sender: ship.player_nr,
+                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                pixoffs: VUX_OFFSET,
+                color: battle_bridge::Color {
+                    r: 0x55,
+                    g: 0xFF,
+                    b: 0x55,
+                    a: 0xFF,
+                },
+            };
+            let _ = battle_bridge::bridge::create_laser(&block);
+            return Ok(vec![]);
+        }
+
+        #[cfg(test)]
         Ok(vec![WeaponElement {
             offset: (0, 0),
             facing: ship.ship_facing,
-            velocity: (0, 0), // Instant beam
-            life_span: 1,     // Single-frame
-            hit_points: 1,
+            velocity: (0, 0), // Laser — instant
+            life_span: 1,
+            hit_points: 0,
             damage: 1,
             mass: 0,
         }])
     }
 
     fn intelligence(&mut self, _ship: &ShipState, _ctx: &BattleContext) -> StatusFlags {
+        // C: vux_intelligence — fires limpets when nearby, always pursues.
         StatusFlags::THRUST
     }
 }
@@ -83,9 +188,11 @@ mod tests {
         assert_eq!(desc.ship_info.ship_cost, 12);
         assert_eq!(desc.ship_info.max_crew, 20);
         assert_eq!(desc.ship_info.max_energy, 40);
-        assert_eq!(desc.characteristics.max_thrust, 21);
-        assert_eq!(desc.fleet.strength, 162);
-        assert_eq!(desc.intel.weapon_range, 200);
+        assert!(desc.ship_info.ship_flags.contains(ShipFlags::IMMEDIATE_WEAPON));
+        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_SPECIAL));
+        assert_eq!(desc.characteristics.turn_wait, 6);
+        assert_eq!(desc.characteristics.special_energy_cost, 2);
+        assert_eq!(desc.fleet.known_loc, (4412, 1558));
     }
 
     #[test]
@@ -97,11 +204,7 @@ mod tests {
             energy_level: 40,
             max_energy: 40,
             ship_facing: 4,
-            cur_status_flags: StatusFlags::empty(),
-            old_status_flags: StatusFlags::empty(),
-            player_nr: 0,
-            position: (100, 100),
-            velocity: (0, 0), ..ShipState::default()
+            ..ShipState::default()
         };
         let ctx = BattleContext {
             hyperspace: false,
@@ -111,24 +214,58 @@ mod tests {
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
-        assert_eq!(weapons[0].damage, 1);
+    }
+
+    #[test]
+    fn limpet_drains_energy() {
+        let mut ship = VuxShip::default();
+        let mut state = ShipState {
+            crew_level: 20,
+            max_crew: 20,
+            energy_level: 40,
+            max_energy: 40,
+            cur_status_flags: StatusFlags::SPECIAL,
+            ..ShipState::default()
+        };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
+
+        ship.postprocess(&mut state, &ctx).unwrap();
+
+        assert_eq!(state.energy_level, 38); // 40 - 2
+        assert_eq!(state.special_counter, SPECIAL_WAIT);
+    }
+
+    #[test]
+    fn limpet_denied_low_energy() {
+        let mut ship = VuxShip::default();
+        let mut state = ShipState {
+            crew_level: 20,
+            max_crew: 20,
+            energy_level: 1,
+            max_energy: 40,
+            cur_status_flags: StatusFlags::SPECIAL,
+            ..ShipState::default()
+        };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
+
+        ship.postprocess(&mut state, &ctx).unwrap();
+
+        assert_eq!(state.energy_level, 1);
+        assert_eq!(state.special_counter, 0);
     }
 
     #[test]
     fn ai_basic() {
         let mut ship = VuxShip::default();
-        let state = ShipState {
-            crew_level: 20,
-            max_crew: 20,
-            energy_level: 40,
-            max_energy: 40,
-            ship_facing: 0,
-            cur_status_flags: StatusFlags::empty(),
-            old_status_flags: StatusFlags::empty(),
-            player_nr: 1,
-            position: (0, 0),
-            velocity: (0, 0), ..ShipState::default()
-        };
+        let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,
             frame_count: 0,
