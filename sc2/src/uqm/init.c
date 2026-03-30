@@ -181,8 +181,9 @@ BuildSIS (void)
 SIZE
 InitShips (void)
 {
-	// Rust battle runtime incomplete: init_ships doesn't set up display list,
-	// spawn asteroids/planets, or configure graphics contexts. Use C.
+#ifdef USE_RUST_SHIPS
+	return (SIZE) rust_ships_init ();
+#endif
 	SIZE num_ships;
 
 	InitSpace ();
@@ -274,6 +275,10 @@ CountCrewElements (void)
 void
 UninitShips (void)
 {
+#ifdef USE_RUST_SHIPS
+	rust_ships_uninit ();
+	return;
+#endif
 	COUNT crew_retrieved;
 	int i;
 	HELEMENT hElement, hNextElement;
