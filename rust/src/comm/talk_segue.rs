@@ -92,6 +92,8 @@ pub(super) mod c_bridge {
         pub fn c_GetPulsedMenuKey(key_index: c_int) -> c_int;
         // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
         pub fn c_HasTransitionAnim() -> c_int;
+        pub fn c_GetTimeCounter() -> c_uint;
+        pub fn c_SleepThread(duration: c_uint);
     }
 
     /// Slider image indices matching C ActivityFrame indices.
@@ -106,6 +108,27 @@ pub(super) mod c_bridge {
         pub const BACKGROUND: i32 = 64; // BACKGROUND_VOL
         pub const FOREGROUND: i32 = 255; // FOREGROUND_VOL
         pub const NORMAL: i32 = 255; // NORMAL_VOLUME
+    }
+
+    /// ONE_SECOND = 840 ticks (from timelib.h)
+    pub const ONE_SECOND_TICKS: i32 = 840;
+
+    // Safe wrappers for use from ffi.rs (outside lock)
+    #[cfg(not(test))]
+    pub fn call_refresh_responses(top: u8, count: u8, cur: u8) {
+        unsafe { c_RefreshResponses(top, count, cur) }
+    }
+    #[cfg(not(test))]
+    pub fn call_select_conversation_summary() {
+        unsafe { c_SelectConversationSummary() }
+    }
+    #[cfg(not(test))]
+    pub fn call_update_comm_graphics() {
+        unsafe { c_UpdateAnimations(0) }
+    }
+    #[cfg(not(test))]
+    pub fn call_feedback_player_phrase() {
+        unsafe { c_FeedbackPlayerPhrase(std::ptr::null()) }
     }
 }
 
@@ -231,9 +254,15 @@ pub fn do_talk_segue(state: &mut CommState, ts: &mut TalkingState) -> bool {
     update_speech_graphics(state);
 
     // In test mode, advance the track each iteration to prevent infinite loops.
-    // Production relies on real-time SleepThreadUntil for frame pacing.
     #[cfg(test)]
     state.track_mut().update(1.0 / 60.0);
+
+    // Yield to UQM cooperative threading so the track player can advance.
+    // Matches C DoTalkSegue: SleepThreadUntil(NextTime) with ONE_SECOND/60 rate.
+    #[cfg(not(test))]
+    unsafe {
+        c_bridge::c_SleepThread(14); // ONE_SECOND / 60 = 840 / 60 = 14
+    }
 
     let cur_track = playing_track(state);
     ts.ended = !ts.seeking && cur_track == 0;
@@ -382,6 +411,7 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 
     state.set_talking_finished(false);
     state.responses_mut().clear();
+    state.top_response = None;
 
     Some((func, response_ref))
 }
@@ -452,6 +482,41 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
 // do_communication — top-level dialogue state machine
 // ============================================================================
 
+/// First-call initialization for alien talk segue (called without COMM_STATE lock).
+///
+/// Performs the one-time setup for a new encounter: speech graphics, colormap,
+/// alien frame draw, intro transition, music, animations. These are all C bridge
+/// calls that don't need the Rust lock.
+///
+/// # Safety
+/// Must be called from the game thread with CommData fully initialized.
+pub unsafe fn alien_talk_first_call_init() {
+    #[cfg(not(test))]
+    {
+        c_bridge::c_InitSpeechGraphics();
+        c_bridge::c_SetColorMapFromCommData();
+        c_bridge::c_DrawAlienFrame();
+        rust_UpdateSpeechGraphics();
+        c_bridge::c_CommIntroTransition();
+        c_bridge::c_PlayAlienMusic();
+        c_bridge::c_FadeMusic(c_bridge::music_volume::BACKGROUND, 0);
+        c_bridge::c_InitCommAnimations();
+        c_bridge::c_ClearLastActivityLoadFlag();
+    }
+}
+
+extern "C" {
+    fn rust_UpdateSpeechGraphics();
+}
+
+/// Fade music to foreground volume after talk segue finishes (no lock needed).
+pub unsafe fn fade_music_to_foreground_bridge() {
+    #[cfg(not(test))]
+    {
+        c_bridge::c_FadeMusic(c_bridge::music_volume::FOREGROUND, c_bridge::ONE_SECOND_TICKS);
+    }
+}
+
 /// One iteration of the top-level communication state machine.
 ///
 /// While `talking_finished` is false, drives the alien talk segue.  Once
@@ -468,6 +533,14 @@ pub fn do_communication(state: &mut CommState) -> CommunicationResult {
         return CommunicationResult::Talking;
     }
 
+    do_communication_responses(state)
+}
+
+/// Response-only phase of do_communication (talking is already finished).
+///
+/// Called from rust_DoCommunication when talking_finished is true.
+/// Handles abort, last-replay, and player response input.
+pub fn do_communication_responses(state: &mut CommState) -> CommunicationResult {
     if check_abort(state) {
         return CommunicationResult::Done;
     }
@@ -636,6 +709,62 @@ fn won_last_battle(state: &CommState) -> bool {
     {
         let _ = state;
         false
+    }
+}
+
+// ---------- lock-free input checks for ffi.rs response phase ---------------
+// These are called from rust_DoCommunication WITHOUT holding COMM_STATE lock,
+// avoiding the deadlock where C bridges re-enter Rust.
+
+#[cfg(not(test))]
+pub fn check_abort_external() -> bool {
+    unsafe { c_bridge::c_CheckAbort() != 0 }
+}
+
+#[cfg(not(test))]
+pub fn check_select_external() -> bool {
+    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_SELECT) != 0 }
+}
+
+#[cfg(not(test))]
+pub fn check_cancel_external() -> bool {
+    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_CANCEL) != 0 }
+}
+
+#[cfg(not(test))]
+pub fn check_up_external() -> bool {
+    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_UP) != 0 }
+}
+
+#[cfg(not(test))]
+pub fn check_down_external() -> bool {
+    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_DOWN) != 0 }
+}
+
+#[cfg(not(test))]
+pub fn check_left_external() -> bool {
+    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_LEFT) != 0 }
+}
+
+#[cfg(not(test))]
+pub fn won_last_battle_external() -> bool {
+    unsafe { c_bridge::c_WonLastBattle() != 0 }
+}
+
+/// Run the "last replay" DoInput loop from C (no lock needed).
+#[cfg(not(test))]
+pub fn run_last_replay_bridge(timeout: i32) {
+    extern "C" {
+        fn c_RunLastReplay(timeout: std::ffi::c_int);
+    }
+    unsafe { c_RunLastReplay(timeout) }
+}
+
+/// Fade music to background volume (no lock needed).
+#[cfg(not(test))]
+pub fn fade_music_to_background_bridge() {
+    unsafe {
+        c_bridge::c_FadeMusic(c_bridge::music_volume::BACKGROUND, 0);
     }
 }
 
@@ -1855,9 +1984,9 @@ mod tests {
     fn test_single_player_response_input_p10() {
         let source = include_str!("talk_segue.rs");
 
-        // Extract the do_communication function body.
-        let fn_body = extract_fn_body(source, "pub fn do_communication")
-            .expect("do_communication must be in talk_segue.rs");
+        // Extract the do_communication_responses function body (response-phase handler).
+        let fn_body = extract_fn_body(source, "pub fn do_communication_responses")
+            .expect("do_communication_responses must be in talk_segue.rs");
 
         // Count non-comment, non-fn-def, non-test lines that call player_response_input.
         let call_count = fn_body

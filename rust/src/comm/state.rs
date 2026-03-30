@@ -212,6 +212,11 @@ impl CommState {
         self.comm_data.as_mut()
     }
 
+    /// Clear communication data (encounter teardown — resources already freed)
+    pub fn clear_comm_data(&mut self) {
+        self.comm_data = None;
+    }
+
     // Track management
 
     /// Get the track manager
@@ -356,6 +361,13 @@ impl CommState {
 
     /// Set talking finished
     pub fn set_talking_finished(&mut self, finished: bool) {
+        if finished != self.talking_finished {
+            eprintln!("[DBG] set_talking_finished: {}->{}",
+                self.talking_finished, finished);
+            if finished {
+                eprintln!("  backtrace: {:?}", std::backtrace::Backtrace::force_capture());
+            }
+        }
         self.talking_finished = finished;
         if finished {
             self.talking = false;

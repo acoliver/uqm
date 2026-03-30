@@ -60,12 +60,12 @@ static RESOURCE code_resources[] = {
 		SAMATRA_CODE,
 		URQUAN_DRONE_CODE };
 
+// C-native implementation: loads a ship descriptor via CodeRes and C resources.
+// Always available regardless of USE_RUST_SHIPS so that LoadMasterShipList
+// can populate the C master_q with real resource handles.
 RACE_DESC *
-load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData)
+c_load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData)
 {
-#ifdef USE_RUST_SHIPS
-	return rust_ships_load(SpeciesID, LoadBattleData);
-#else
 	RACE_DESC *RDPtr = 0;
 	void *CodeRef;
 	
@@ -172,16 +172,13 @@ BadLoad:
 	RDPtr = 0; /* failed */
 
 	goto ExitFunc;
-#endif /* USE_RUST_SHIPS */
 }
 
+// C-native free: always available for master_q resource cleanup.
 void
-free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
+c_free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 		BOOLEAN FreeBattleData)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_free(raceDescPtr, FreeBattleData, FreeIconData);
-#else
 	if (raceDescPtr->uninit_func != NULL)
 		(*raceDescPtr->uninit_func) (raceDescPtr);
 
@@ -209,5 +206,24 @@ free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 	}
 
 	DestroyCodeRes (ReleaseCodeRes (raceDescPtr->CodeRef));
-#endif /* USE_RUST_SHIPS */
+}
+
+// Public API: dispatches to Rust or C based on build config.
+// Public API: always uses C-native loading.
+// Rust's RaceDesc is not ABI-compatible with C's RACE_DESC (function pointer
+// layout mismatch), so battle-time loading must go through C until the Rust
+// ship behavior trait is properly wired into the C battle loop.
+// Rust metadata (catalog, costs, fleet values) is handled separately via
+// rust_ships_load_catalog() in LoadMasterShipList.
+RACE_DESC *
+load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData)
+{
+	return c_load_ship (SpeciesID, LoadBattleData);
+}
+
+void
+free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
+		BOOLEAN FreeBattleData)
+{
+	c_free_ship (raceDescPtr, FreeIconData, FreeBattleData);
 }

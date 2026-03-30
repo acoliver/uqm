@@ -201,6 +201,8 @@ BuildGroup (QUEUE *pDstQueue, BYTE race_id)
 	memset (GroupPtr, 0, GetLinkSize (pDstQueue));
 	GroupPtr->race_id = race_id;
 	GroupPtr->melee_icon = TemplatePtr->melee_icon;
+	fprintf(stderr, "[DEBUG] BuildGroup: race=%d icon=%p\n", (int)race_id, (void*)GroupPtr->melee_icon);
+
 	UnlockFleetInfo (&GLOBAL (avail_race_q), hFleet);
 	UnlockIpGroup (pDstQueue, hGroup);
 	PutQueue (pDstQueue, hGroup);

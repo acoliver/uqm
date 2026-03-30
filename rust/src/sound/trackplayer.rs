@@ -529,8 +529,11 @@ pub fn play_track(scope: bool) -> AudioResult<()> {
     let sample_arc = {
         let mut state = TRACK_STATE.lock();
         if state.sound_sample.is_none() {
+            eprintln!("[DBG] play_track: sound_sample is None, returning early");
             return Ok(());
         }
+        eprintln!("[DBG] play_track: sound_sample present, track_count={}, chunks_head={}", 
+            state.track_count, state.chunks_head.is_some());
 
         let end_time = tracks_end_time_inner(&state);
         state.tracks_length.store(end_time, Ordering::Release);
@@ -619,10 +622,14 @@ pub fn playing_track_num() -> u16 {
     if state.sound_sample.is_none() {
         return 0;
     }
-    state
+    let result = state
         .cur_chunk
         .map(|c| (unsafe { c.as_ref() }.track_num + 1) as u16)
-        .unwrap_or(0)
+        .unwrap_or(0);
+    if result == 0 {
+        eprintln!("[DBG] playing_track_num: 0 (cur_chunk={})", state.cur_chunk.is_some());
+    }
+    result
 }
 
 // =============================================================================

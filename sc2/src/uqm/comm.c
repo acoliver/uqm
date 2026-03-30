@@ -1819,5 +1819,42 @@ c_ClearPhraseBuf (void)
 		pCurInputState->phrase_buf[0] = '\0';
 }
 
+
+void
+c_SetAnimContext (uintptr_t ctx)
+{
+	AnimContext = (CONTEXT)ctx;
+}
+
+void
+c_SetTextCacheContext (uintptr_t ctx)
+{
+	TextCacheContext = (CONTEXT)ctx;
+}
+
+void
+c_SetTextCacheFrame (uintptr_t frame)
+{
+	TextCacheFrame = (FRAME)frame;
+}
+
+CONTEXT
+c_GetAnimContext (void)
+{
+	return AnimContext;
+}
+
+BOOLEAN
+c_GetClearSubtitles (void)
+{
+	return clear_subtitles;
+}
+
+void
+c_ResetClearSubtitles (void)
+{
+	clear_subtitles = FALSE;
+}
+
 #endif /* USE_RUST_COMM — static comm variable accessors */
 

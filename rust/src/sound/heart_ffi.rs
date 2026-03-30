@@ -684,7 +684,10 @@ pub unsafe extern "C" fn SpliceMultiTrack(
 #[no_mangle]
 pub unsafe extern "C" fn PlayTrack() {
     eprintln!("[PlayTrack] called");
-    let _ = trackplayer::play_track(true);
+    match trackplayer::play_track(true) {
+        Ok(()) => eprintln!("[PlayTrack] OK"),
+        Err(e) => eprintln!("[PlayTrack] ERROR: {:?}", e),
+    }
 }
 
 #[no_mangle]
@@ -709,7 +712,11 @@ pub unsafe extern "C" fn ResumeTrack() {
 
 #[no_mangle]
 pub unsafe extern "C" fn PlayingTrack() -> u16 {
-    trackplayer::playing_track_num()
+    let n = trackplayer::playing_track_num();
+    if n == 0 {
+        eprintln!("[PlayingTrack] returns 0 (not playing)");
+    }
+    n
 }
 
 #[no_mangle]

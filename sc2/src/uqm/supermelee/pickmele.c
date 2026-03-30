@@ -585,6 +585,14 @@ FillPickMeleeFrame (MeleeSetup *setup)
 				BYTE captains_name_index;
 
 				hMasterShip = GetStarShipFromIndex (&master_q, StarShip);
+				if (!hMasterShip)
+				{
+					fprintf (stderr,
+							"[BUG] FillPickMeleeFrame: StarShip=%d "
+							"master_q count=%d hMasterShip=NULL\n",
+							(int)StarShip, (int)CountLinks (&master_q));
+					continue;
+				}
 				MasterPtr = LockMasterShip (&master_q, hMasterShip);
 
 				captains_name_index = NameCaptain (&race_q[side],

@@ -69,10 +69,15 @@ impl ResponseSystem {
 
     /// Add a response option
     ///
-    /// Returns false if maximum responses reached
+    /// Returns false if maximum responses reached.
+    /// Auto-selects index 0 when the first response is added (matches C
+    /// DoResponsePhrase which sets cur_response=0 when num_responses==0).
     pub fn add_response(&mut self, entry: ResponseEntry) -> bool {
         if self.responses.len() >= MAX_RESPONSES {
             return false;
+        }
+        if self.responses.is_empty() {
+            self.selected = 0;
         }
         self.responses.push(entry);
         true

@@ -578,6 +578,8 @@ spawn_ip_group (IP_GROUP *GroupPtr)
 
 		SetPrimType (&DisplayArray[IPSHIPElementPtr->PrimIndex], STAMP_PRIM);
 		// XXX: Hack: farray points to FRAME[3] and given FRAME
+		fprintf(stderr, "[DEBUG] spawn_ip: race=%d icon=%p\n", (int)GroupPtr->race_id, (void*)GroupPtr->melee_icon);
+
 		IPSHIPElementPtr->current.image.farray = &GroupPtr->melee_icon;
 		IPSHIPElementPtr->current.image.frame = SetAbsFrameIndex (
 					GroupPtr->melee_icon, 1);

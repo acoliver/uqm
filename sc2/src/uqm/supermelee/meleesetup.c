@@ -71,12 +71,19 @@ MeleeTeam_serialize (const MeleeTeam *team, uio_Stream *stream)
 {
 	size_t serialSize = rust_supermelee_team_serial_size ();
 	uint8_t buf[256]; /* serialSize is 69, well within bounds */
+	uint8_t shipBytes[MELEE_FLEET_SIZE];
+	FleetShipIndex i;
 
 	if (serialSize > sizeof buf)
 		return -1;
 
+	/* MeleeShip is an enum (int), but the wire format uses one byte
+	 * per slot.  Pack int->byte before handing to Rust. */
+	for (i = 0; i < MELEE_FLEET_SIZE; i++)
+		shipBytes[i] = (uint8_t) team->ships[i];
+
 	if (rust_supermelee_team_serialize (
-			(const uint8_t *) team->ships,
+			shipBytes,
 			(const uint8_t *) team->name,
 			buf, serialSize) != 0)
 		return -1;
@@ -92,6 +99,8 @@ MeleeTeam_deserialize (MeleeTeam *team, uio_Stream *stream)
 {
 	size_t serialSize = rust_supermelee_team_serial_size ();
 	uint8_t buf[256];
+	uint8_t shipBytes[MELEE_FLEET_SIZE];
+	FleetShipIndex i;
 
 	if (serialSize > sizeof buf)
 		goto err;
@@ -101,9 +110,13 @@ MeleeTeam_deserialize (MeleeTeam *team, uio_Stream *stream)
 
 	if (rust_supermelee_team_deserialize (
 			buf, serialSize,
-			(uint8_t *) team->ships,
+			shipBytes,
 			(uint8_t *) team->name) != 0)
 		goto err;
+
+	/* Unpack byte->int (MeleeShip is an enum) */
+	for (i = 0; i < MELEE_FLEET_SIZE; i++)
+		team->ships[i] = (MeleeShip) shipBytes[i];
 
 	team->name[MAX_TEAM_CHARS] = '\0';
 	return 0;
@@ -112,6 +125,7 @@ err:
 	MeleeTeam_delete(team);
 	return -1;
 }
+
 
 #else /* !USE_RUST_SUPERMELEE */
 
@@ -175,8 +189,13 @@ err:
 COUNT
 MeleeTeam_getValue (const MeleeTeam *team)
 {
-	return (COUNT) rust_supermelee_fleet_value (
-			(const uint8_t *) team->ships);
+	uint8_t shipBytes[MELEE_FLEET_SIZE];
+	FleetShipIndex i;
+
+	for (i = 0; i < MELEE_FLEET_SIZE; i++)
+		shipBytes[i] = (uint8_t) team->ships[i];
+
+	return (COUNT) rust_supermelee_fleet_value (shipBytes);
 }
 
 #else /* !USE_RUST_SUPERMELEE */

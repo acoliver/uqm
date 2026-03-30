@@ -155,9 +155,9 @@ inertial_thrust (ELEMENT *ElementPtr)
 void
 ship_preprocess (ELEMENT *ElementPtr)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_preprocess(ElementPtr);
-#else
+	// Rust battle runtime incomplete (no element creation in spawn,
+	// RaceDesc not ABI-compatible with C RACE_DESC for function pointers).
+	// Use C implementation until Rust battle spawn/preprocess is wired.
 	STATUS_FLAGS cur_status_flags;
 	STARSHIP *StarShipPtr;
 	RACE_DESC *RDPtr;
@@ -286,15 +286,11 @@ ship_preprocess (ELEMENT *ElementPtr)
 
 	if (LOBYTE (GLOBAL (CurrentActivity)) <= IN_ENCOUNTER)
 		PreProcessStatus (ElementPtr);
-#endif /* USE_RUST_SHIPS */
 }
 
 void
 ship_postprocess (ELEMENT *ElementPtr)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_postprocess(ElementPtr);
-#else
 	STARSHIP *StarShipPtr;
 	RACE_DESC *RDPtr;
 
@@ -360,7 +356,6 @@ ship_postprocess (ELEMENT *ElementPtr)
 
 	if (LOBYTE (GLOBAL (CurrentActivity)) <= IN_ENCOUNTER)
 		PostProcessStatus (ElementPtr);
-#endif /* USE_RUST_SHIPS */
 }
 
 void
@@ -393,9 +388,8 @@ collision (ELEMENT *ElementPtr0, POINT *pPt0,
 static BOOLEAN
 spawn_ship (STARSHIP *StarShipPtr)
 {
-#ifdef USE_RUST_SHIPS
-	return rust_ships_spawn(StarShipPtr);
-#else
+	// Rust battle runtime incomplete: spawn_ship doesn't create ELEMENT
+	// or set display primitives. Use C implementation.
 	HELEMENT hShip;
 	RACE_DESC *RDPtr;
 
@@ -511,7 +505,6 @@ spawn_ship (STARSHIP *StarShipPtr)
 	}
 
 	return (hShip != 0);
-#endif /* USE_RUST_SHIPS */
 }
 
 // Select a new ship and spawn it.

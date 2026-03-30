@@ -384,13 +384,16 @@ c_get_phrase_timestamp (const void *phrases, int index)
 	return GetStringTimeStamp (S);
 }
 
+
 void
 c_SpliceTrack (UNICODE *filespec, UNICODE *textspec,
 		UNICODE *timestamp, CallbackFunction cb)
 {
+	fprintf (stderr, "[DBG] c_SpliceTrack: file=%p text=%p ts=%p cb=%p\n",
+		(void *)filespec, (void *)textspec, (void *)timestamp, (void *)cb);
 	SpliceTrack (filespec, textspec, timestamp, cb);
+	fprintf (stderr, "[DBG] c_SpliceTrack: done\n");
 }
-
 void
 c_SpliceMultiTrack (UNICODE *track_names[], UNICODE *track_text)
 {
@@ -720,12 +723,19 @@ c_InitCommAnimations (void)
 void
 c_UpdateAnimations (int seeking)
 {
-	/* ProcessCommAnimations is provided by commanim.c which under
-	 * USE_RUST_COMM delegates to rust_ProcessCommAnimations_cb(). */
+	CONTEXT OldContext;
 	BOOLEAN change;
-	change = ProcessCommAnimations (FALSE, (BOOLEAN)seeking);
-	if (change)
+	BOOLEAN do_clear;
+
+	do_clear = c_GetClearSubtitles ();
+	OldContext = SetContext (c_GetAnimContext ());
+	BatchGraphics ();
+	change = ProcessCommAnimations (do_clear, (BOOLEAN)seeking);
+	if (change || do_clear)
 		comm_RedrawSubtitles ();
+	UnbatchGraphics ();
+	c_ResetClearSubtitles ();
+	SetContext (OldContext);
 }
 
 /* c_RunCommAnimFrame: one animation + sleep cycle, matching C runCommAnimFrame(). */
@@ -736,6 +746,182 @@ c_RunCommAnimFrame (void)
 	c_UpdateAnimations (FALSE);
 	SleepThread (ONE_SECOND / 40);
 }
+
+/* ---- C-side TalkSegue (DoInput-driven) -----------------------------------
+ *
+ * Replaces Rust's blocking while-loop with a proper DoInput-driven loop
+ * that yields to UQM cooperative threading via SleepThreadUntil.
+ * This avoids holding the Rust COMM_STATE lock during blocking operations.
+ *
+ * Closely matches comm.c DoTalkSegue/TalkSegue but uses the bridge functions
+ * available under USE_RUST_COMM.
+ */
+
+#include "controls.h"     /* PulsedInputState, CurrentInputState */
+#include "settings.h"     /* optSmoothScroll, OPT_PC, OPT_3DO */
+
+/* Forward declarations for functions in comm.c USE_RUST_COMM block */
+extern void comm_CheckSubtitles (void);
+extern void comm_ClearSubtitles (void);
+
+/* TALKING_STATE for DoInput-driven talk segue */
+typedef struct c_talking_state
+{
+	BOOLEAN (*InputFunc) (struct c_talking_state *);
+	TimeCount NextTime;
+	COUNT waitTrack;
+	BOOLEAN rewind;
+	BOOLEAN seeking;
+	BOOLEAN ended;
+} C_TALKING_STATE;
+
+static BOOLEAN
+c_DoTalkSegue (C_TALKING_STATE *pTS)
+{
+	BOOLEAN left = FALSE;
+	BOOLEAN right = FALSE;
+	COUNT curTrack;
+
+	if (GLOBAL (CurrentActivity) & CHECK_ABORT)
+	{
+		pTS->ended = TRUE;
+		return FALSE;
+	}
+
+	if (PulsedInputState.menu[KEY_MENU_CANCEL])
+	{
+		JumpTrack ();
+		pTS->ended = TRUE;
+		return FALSE;
+	}
+
+	if (optSmoothScroll == OPT_PC)
+	{
+		left = PulsedInputState.menu[KEY_MENU_LEFT] != 0;
+		right = PulsedInputState.menu[KEY_MENU_RIGHT] != 0;
+	}
+	else if (optSmoothScroll == OPT_3DO)
+	{
+		left = CurrentInputState.menu[KEY_MENU_LEFT] != 0;
+		right = CurrentInputState.menu[KEY_MENU_RIGHT] != 0;
+	}
+
+	if (right)
+	{
+		SetSliderImage (SetAbsFrameIndex (ActivityFrame, 3));
+		if (optSmoothScroll == OPT_PC)
+			FastForward_Page ();
+		else if (optSmoothScroll == OPT_3DO)
+			FastForward_Smooth ();
+		pTS->seeking = TRUE;
+	}
+	else if (left || pTS->rewind)
+	{
+		pTS->rewind = FALSE;
+		SetSliderImage (SetAbsFrameIndex (ActivityFrame, 4));
+		if (optSmoothScroll == OPT_PC)
+			FastReverse_Page ();
+		else if (optSmoothScroll == OPT_3DO)
+			FastReverse_Smooth ();
+		pTS->seeking = TRUE;
+	}
+	else if (pTS->seeking)
+	{
+		pTS->seeking = FALSE;
+		SetSliderImage (SetAbsFrameIndex (ActivityFrame, 2));
+	}
+	else
+	{
+		comm_CheckSubtitles ();
+	}
+
+	c_UpdateAnimations (pTS->seeking);
+	c_UpdateSpeechGraphics ();
+
+	curTrack = PlayingTrack ();
+	pTS->ended = !pTS->seeking && !curTrack;
+
+	SleepThreadUntil (pTS->NextTime);
+	pTS->NextTime = GetTimeCounter () + ONE_SECOND / 60;
+
+	return pTS->seeking || (curTrack && curTrack <= pTS->waitTrack);
+}
+
+/*
+ * C-side TalkSegue: runs the talk segue via DoInput with proper frame pacing.
+ * Returns TRUE if playback reached its natural end.
+ */
+int
+c_RunTalkSegue (unsigned int wait_track)
+{
+	C_TALKING_STATE talkingState;
+
+	fprintf (stderr, "[DBG] c_RunTalkSegue: wait_track=%u\n", wait_track);
+
+	/* Transition animation to talking state */
+	if (wantTalkingAnim () && haveTalkingAnim ())
+	{
+		fprintf (stderr, "[DBG] c_RunTalkSegue: have talking anim\n");
+		if (haveTransitionAnim ())
+			setRunIntroAnim ();
+		setRunTalkingAnim ();
+		while (runningIntroAnim ())
+			c_RunCommAnimFrame ();
+	}
+	else
+	{
+		fprintf (stderr, "[DBG] c_RunTalkSegue: NO talking anim (want=%d have=%d)\n",
+			wantTalkingAnim (), haveTalkingAnim ());
+	}
+
+	memset (&talkingState, 0, sizeof talkingState);
+
+	if (wait_track == 0)
+	{
+		wait_track = (COUNT)~0;
+		talkingState.rewind = TRUE;
+		fprintf (stderr, "[DBG] c_RunTalkSegue: rewind mode\n");
+	}
+	else if (!PlayingTrack ())
+	{
+		fprintf (stderr, "[DBG] c_RunTalkSegue: calling PlayTrack()\n");
+		PlayTrack ();
+		fprintf (stderr, "[DBG] c_RunTalkSegue: PlayTrack() done, PlayingTrack()=%d\n",
+			PlayingTrack ());
+	}
+	else
+	{
+		fprintf (stderr, "[DBG] c_RunTalkSegue: already playing track=%d\n",
+			PlayingTrack ());
+	}
+
+	SetMenuSounds (MENU_SOUND_NONE, MENU_SOUND_NONE);
+	talkingState.InputFunc = c_DoTalkSegue;
+	talkingState.waitTrack = (COUNT)wait_track;
+
+	fprintf (stderr, "[DBG] c_RunTalkSegue: entering DoInput (waitTrack=%u)\n",
+		(unsigned)talkingState.waitTrack);
+	DoInput (&talkingState, FALSE);
+	fprintf (stderr, "[DBG] c_RunTalkSegue: DoInput returned (ended=%d)\n",
+		talkingState.ended);
+
+	comm_ClearSubtitles ();
+
+	if (talkingState.ended)
+	{
+		SetSliderImage (SetAbsFrameIndex (ActivityFrame, 8));
+	}
+
+	/* Transition back to silent */
+	if (runningTalkingAnim ())
+		setStopTalkingAnim ();
+	while (runningTalkingAnim ())
+		c_RunCommAnimFrame ();
+
+	return talkingState.ended;
+}
+
+
 
 /* ---- Feedback / Response display -----------------------------------------
  * C-rendering hooks called from Rust's response_ui.rs.
@@ -1296,34 +1482,43 @@ c_FadeOutMusicForReplay (void)
 #include "libs/gfxlib.h"
 
 void
-c_DestroyDrawable (unsigned int handle)
+c_DestroyDrawable (uintptr_t handle)
 {
-	DestroyDrawable (ReleaseDrawable ((FRAME)(uintptr_t)handle));
+	DRAWABLE d;
+	fprintf (stderr, "[DBG] c_DestroyDrawable: FRAME=%p\n", (void *)handle);
+	d = ReleaseDrawable ((FRAME)handle);
+	fprintf (stderr, "[DBG] c_DestroyDrawable: DRAWABLE=%p\n", (void *)d);
+	DestroyDrawable (d);
+	fprintf (stderr, "[DBG] c_DestroyDrawable: done\n");
+}
+
+
+void
+c_DestroyFont (uintptr_t handle)
+{
+	DestroyFont ((FONT)handle);
 }
 
 void
-c_DestroyFont (unsigned int handle)
+c_DestroyColorMap (uintptr_t handle)
 {
-	DestroyFont ((FONT)(uintptr_t)handle);
+	DestroyColorMap (ReleaseColorMap ((COLORMAP)handle));
 }
 
 void
-c_DestroyColorMap (unsigned int handle)
+c_DestroyMusic (uintptr_t handle)
 {
-	DestroyColorMap (ReleaseColorMap ((COLORMAP)(uintptr_t)handle));
+	DestroyMusic ((MUSIC_REF)handle);
 }
 
 void
-c_DestroyMusic (unsigned int handle)
+c_DestroyStringTable (uintptr_t handle)
 {
-	DestroyMusic ((MUSIC_REF)(uintptr_t)handle);
+	fprintf (stderr, "[DBG] c_DestroyStringTable: handle=%p\n", (void *)handle);
+	DestroyStringTable (ReleaseStringTable ((STRING_TABLE)handle));
+	fprintf (stderr, "[DBG] c_DestroyStringTable: done\n");
 }
 
-void
-c_DestroyStringTable (unsigned int handle)
-{
-	DestroyStringTable (ReleaseStringTable ((STRING_TABLE)(uintptr_t)handle));
-}
 
 /*
  * ============================================================================
@@ -1380,8 +1575,11 @@ c_LoadStringTable (const char *res)
 uintptr_t
 c_CaptureDrawable (uintptr_t handle)
 {
-	return (uintptr_t)CaptureDrawable ((DRAWABLE)handle);
+	FRAME f = CaptureDrawable ((DRAWABLE)handle);
+	fprintf (stderr, "[DBG] c_CaptureDrawable: DRAWABLE=%p -> FRAME=%p\n", (void *)handle, (void *)f);
+	return (uintptr_t)f;
 }
+
 
 uintptr_t
 c_CaptureColorMap (uintptr_t handle)
@@ -1673,13 +1871,22 @@ c_ClearCommDataConversationPhrases (void)
 	CommData.ConversationPhrases = 0;
 }
 
+const void *
+c_GetCommConversationPhrases (void)
+{
+	return (const void *)CommData.ConversationPhrases;
+}
+
 /* ---- Encounter function call bridges ------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
 
 void
 c_CallInitEncounterFunc (void)
 {
+	fprintf (stderr, "[DBG] c_CallInitEncounterFunc: func=%p\n",
+		(void *)CommData.init_encounter_func);
 	(*CommData.init_encounter_func) ();
+	fprintf (stderr, "[DBG] c_CallInitEncounterFunc: returned\n");
 }
 
 void
@@ -1826,6 +2033,57 @@ rust_do_communication_cb (RUST_ENCOUNTER_STATE *pES)
 	return (BOOLEAN)rust_DoCommunication ();
 }
 
+/* ---- Last-replay DoInput (no responses available) ----------------------- */
+
+typedef struct last_replay_state_rust
+{
+	BOOLEAN (*InputFunc) (struct last_replay_state_rust *);
+	TimeCount NextTime;
+	TimeCount TimeOut;
+} LAST_REPLAY_STATE_RUST;
+
+static BOOLEAN
+c_DoLastReplay (LAST_REPLAY_STATE_RUST *pLRS)
+{
+	if (GLOBAL (CurrentActivity) & CHECK_ABORT)
+		return FALSE;
+
+	if (GetTimeCounter () > pLRS->TimeOut)
+		return FALSE;
+
+	if (PulsedInputState.menu[KEY_MENU_CANCEL]
+		&& LOBYTE (GLOBAL (CurrentActivity)) != WON_LAST_BATTLE)
+	{
+		FadeMusic (usingSpeech ? (NORMAL_VOLUME / 2) : NORMAL_VOLUME, ONE_SECOND);
+		c_SelectConversationSummary ();
+		pLRS->TimeOut = FadeMusic (0, ONE_SECOND * 2) + ONE_SECOND / 60;
+	}
+	else if (PulsedInputState.menu[KEY_MENU_LEFT])
+	{
+		/* Replay handled via SelectReplay if available; for now use summary */
+		c_SelectConversationSummary ();
+		pLRS->TimeOut = FadeMusic (0, ONE_SECOND * 2) + ONE_SECOND / 60;
+	}
+
+	c_UpdateAnimations (0);
+
+	SleepThreadUntil (pLRS->NextTime);
+	pLRS->NextTime = GetTimeCounter () + (ONE_SECOND / 40);
+
+	return TRUE;
+}
+
+void
+c_RunLastReplay (int timeout)
+{
+	LAST_REPLAY_STATE_RUST replayState;
+	memset (&replayState, 0, sizeof replayState);
+	replayState.TimeOut = (TimeCount)timeout + ONE_SECOND / 60;
+	replayState.InputFunc = c_DoLastReplay;
+	DoInput (&replayState, FALSE);
+}
+
+
 /*
  * Allocate a RUST_ENCOUNTER_STATE on the stack, wire InputFunc to the Rust
  * DoCommunication callback, register it as pCurInputState, run DoInput,
@@ -1868,6 +2126,18 @@ void
 c_FlushColorXForms (void)
 {
 	FlushColorXForms ();
+}
+
+unsigned int
+c_GetTimeCounter (void)
+{
+	return (unsigned int)GetTimeCounter ();
+}
+
+void
+c_SleepThread (unsigned int duration)
+{
+	SleepThread ((TimeCount)duration);
 }
 
 #endif /* USE_RUST_COMM */

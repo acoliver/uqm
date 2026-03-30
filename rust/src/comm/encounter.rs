@@ -42,19 +42,19 @@ extern "C" {
     // SIS/display update
     fn c_UpdateSISForLoadedGame(which_comm: u32);
 
-    // Resource loading
-    fn c_LoadGraphic(res: u32) -> u32;
-    fn c_LoadFont(res: u32) -> u32;
-    fn c_LoadColorMap(res: u32) -> u32;
-    fn c_LoadMusic(res: u32) -> u32;
-    fn c_LoadStringTable(res: u32) -> u32;
+    // Resource loading (C returns uintptr_t; use usize on Rust side)
+    fn c_LoadGraphic(res: *const std::ffi::c_char) -> usize;
+    fn c_LoadFont(res: *const std::ffi::c_char) -> usize;
+    fn c_LoadColorMap(res: *const std::ffi::c_char) -> usize;
+    fn c_LoadMusic(res: *const std::ffi::c_char) -> usize;
+    fn c_LoadStringTable(res: *const std::ffi::c_char) -> usize;
 
     // Resource destruction
-    fn c_DestroyDrawable(handle: u32);
-    fn c_DestroyFont(handle: u32);
-    fn c_DestroyColorMap(handle: u32);
-    fn c_DestroyMusic(handle: u32);
-    fn c_DestroyStringTable(handle: u32);
+    fn c_DestroyDrawable(handle: usize);
+    fn c_DestroyFont(handle: usize);
+    fn c_DestroyColorMap(handle: usize);
+    fn c_DestroyMusic(handle: usize);
+    fn c_DestroyStringTable(handle: usize);
 }
 
 // ============================================================================
@@ -116,16 +116,17 @@ impl CallbackTracker {
 // ============================================================================
 
 /// Tracks resource handles loaded during HailAlien for teardown.
+/// All handles are pointer-sized (usize) since C returns uintptr_t.
 #[derive(Debug, Default)]
 pub struct EncounterResources {
-    pub alien_frame: u32,
-    pub alien_font: u32,
-    pub alien_colormap: u32,
-    pub alien_song: u32,
-    pub conversation_phrases: u32,
-    pub player_font: u32,
-    pub text_cache_context: u32,
-    pub text_cache_frame: u32,
+    pub alien_frame: usize,
+    pub alien_font: usize,
+    pub alien_colormap: usize,
+    pub alien_song: usize,
+    pub conversation_phrases: usize,
+    pub player_font: usize,
+    pub text_cache_context: usize,
+    pub text_cache_frame: usize,
 }
 
 impl EncounterResources {

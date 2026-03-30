@@ -245,6 +245,7 @@ pub unsafe extern "C" fn rust_DoResponsePhrase(
     text: *const c_char,
     func: Option<extern "C" fn(u32)>,
 ) -> c_int {
+    eprintln!("[DBG] rust_DoResponsePhrase: ref={} text_null={} func={}", response_ref, text.is_null(), func.is_some());
     if text.is_null() {
         return 0;
     }
@@ -256,14 +257,11 @@ pub unsafe extern "C" fn rust_DoResponsePhrase(
         }
     };
 
-    if COMM_STATE
+    let ok = COMM_STATE
         .write()
-        .add_response(response_ref, text_str, func)
-    {
-        1
-    } else {
-        0
-    }
+        .add_response(response_ref, text_str, func);
+    eprintln!("[DBG] rust_DoResponsePhrase: added={}, count={}", ok, COMM_STATE.read().responses().count());
+    if ok { 1 } else { 0 }
 }
 
 /// Display response choices
@@ -717,20 +715,189 @@ pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
 /// @pseudocode 003-do-communication-rewrite lines 41-81
 #[no_mangle]
 pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
-    use super::talk_segue::{do_communication, CommunicationResult};
+    use super::talk_segue::{
+        do_communication_responses, CommunicationResult, WAIT_TRACK_ALL,
+    };
 
-    let mut state = COMM_STATE.write();
+    eprintln!("[DBG] rust_DoCommunication: entry");
 
-    match do_communication(&mut state) {
-        CommunicationResult::Talking => 1,
-        CommunicationResult::ResponseContinue => 1,
-        CommunicationResult::Selected(func, rref) => {
-            drop(state);
-            func(rref);
-            1
+    // Phase 1: If still talking, run the talk segue in C (via DoInput)
+    // WITHOUT holding the COMM_STATE lock. The C-side talk segue uses
+    // DoInput for proper frame pacing and cooperative thread yielding.
+    // Holding the Rust lock here would deadlock because SleepThread
+    // yields to threads that call back into Rust FFI (which also lock).
+    {
+        let is_finished = COMM_STATE.read().is_talking_finished();
+        eprintln!("[DBG] rust_DoCommunication: is_talking_finished={}", is_finished);
+        if !is_finished {
+            // First-call initialization (only once per encounter)
+            {
+                let mut state = COMM_STATE.write();
+                if !state.first_talk_call {
+                    eprintln!("[DBG] rust_DoCommunication: first_talk_call init");
+                    state.first_talk_call = true;
+                    // Drop lock before calling C bridges
+                    drop(state);
+                    super::talk_segue::alien_talk_first_call_init();
+                }
+            }
+
+            // Run talk segue via C DoInput — NO Rust lock held
+            extern "C" {
+                fn c_RunTalkSegue(wait_track: std::ffi::c_uint) -> std::ffi::c_int;
+            }
+            eprintln!("[DBG] rust_DoCommunication: calling c_RunTalkSegue({})", WAIT_TRACK_ALL);
+            let ended = c_RunTalkSegue(WAIT_TRACK_ALL as std::ffi::c_uint) != 0;
+            eprintln!("[DBG] rust_DoCommunication: c_RunTalkSegue returned ended={}", ended);
+
+            // Update state with result
+            {
+                let mut state = COMM_STATE.write();
+                state.set_talking_finished(ended);
+            }
+
+            if ended {
+                super::talk_segue::fade_music_to_foreground_bridge();
+            }
+
+            return 1;
         }
-        CommunicationResult::Done => 0,
     }
+
+    // Phase 2: Response handling.
+    // IMPORTANT: C bridge calls in this phase (c_RefreshResponses,
+    // c_UpdateAnimations) re-enter Rust via rust_GetResponseText etc.
+    // We MUST NOT hold COMM_STATE lock during those calls.
+
+    // Step 2a: Quick state check (short lock)
+    let response_count = {
+        let state = COMM_STATE.read();
+        eprintln!("[DBG] rust_DoCommunication: response phase, num_responses={}", state.responses().count());
+        if super::talk_segue::check_abort_external() {
+            return 0;
+        }
+        state.responses().count()
+    };
+
+    if response_count == 0 {
+        // No responses — run last-replay then done.
+        // run_last_replay calls C bridges, so no lock.
+        extern "C" {
+            fn c_FadeMusic(target_vol: std::ffi::c_int, duration: std::ffi::c_int) -> std::ffi::c_int;
+        }
+        let timeout = c_FadeMusic(0, super::talk_segue::c_bridge::ONE_SECOND_TICKS as i32 * 3);
+        super::talk_segue::run_last_replay_bridge(timeout);
+        return 0;
+    }
+
+    // Step 2b: Initialize response display if needed (lock briefly, drop before C call)
+    {
+        let needs_init = COMM_STATE.read().top_response.is_none();
+        if needs_init {
+            COMM_STATE.write().top_response = Some(0);
+            // Drop lock, then render (C→Rust callback)
+            let (top, count, cur) = {
+                let s = COMM_STATE.read();
+                (0u8, s.responses().count() as u8, s.responses().selected().max(0) as u8)
+            };
+            super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
+        }
+    }
+
+    // Step 2c: Check input (short lock — no C callbacks)
+    let select = super::talk_segue::check_select_external();
+    let cancel = super::talk_segue::check_cancel_external();
+    let up = super::talk_segue::check_up_external();
+    let down = super::talk_segue::check_down_external();
+    let left = super::talk_segue::check_left_external();
+
+    if select {
+        eprintln!("[DBG] rust_DoCommunication: SELECT pressed");
+        // Player selected a response — extract callback info then drop lock
+        let selection = {
+            let mut state = COMM_STATE.write();
+            let sel = super::talk_segue::select_response(&mut state);
+            eprintln!("[DBG] rust_DoCommunication: select_response returned {:?}", sel.is_some());
+            eprintln!("[DBG] rust_DoCommunication: after select, talking_finished={}", state.is_talking_finished());
+            sel
+        };
+        match selection {
+            Some((func, rref)) => {
+                eprintln!("[DBG] rust_DoCommunication: calling response callback rref={}", rref);
+                // Lock is dropped — safe to call alien script callback
+                func(rref);
+                eprintln!("[DBG] rust_DoCommunication: callback returned, talking_finished={}", COMM_STATE.read().is_talking_finished());
+                return 1;
+            }
+            None => return 1,
+        }
+    }
+
+    if cancel {
+        let won = super::talk_segue::won_last_battle_external();
+        if !won {
+            // Conversation summary — C bridge, no lock needed
+            super::talk_segue::c_bridge::call_select_conversation_summary();
+            // After summary returns, re-render responses (no lock for C call)
+            let (top, count, cur) = {
+                let s = COMM_STATE.read();
+                (
+                    s.top_response.unwrap_or(0),
+                    s.responses().count() as u8,
+                    s.responses().selected().max(0) as u8,
+                )
+            };
+            super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
+            return 1;
+        }
+    }
+
+    if left {
+        // Replay last phrase — all C bridge calls, no lock
+        super::talk_segue::fade_music_to_background_bridge();
+        super::talk_segue::c_bridge::call_feedback_player_phrase();
+        extern "C" {
+            fn c_RunTalkSegue(wait_track: std::ffi::c_uint) -> std::ffi::c_int;
+        }
+        let _ = c_RunTalkSegue(0);
+        if !super::talk_segue::check_abort_external() {
+            let (top, count, cur) = {
+                let s = COMM_STATE.read();
+                (
+                    s.top_response.unwrap_or(0),
+                    s.responses().count() as u8,
+                    s.responses().selected().max(0) as u8,
+                )
+            };
+            super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
+            super::talk_segue::fade_music_to_foreground_bridge();
+        }
+        return 1;
+    }
+
+    // Step 2d: Navigate responses (short lock for state update)
+    if up || down {
+        let mut state = COMM_STATE.write();
+        let count = state.responses().count();
+        let cur = state.responses().selected().max(0) as usize;
+        let next = if up {
+            if cur == 0 { count - 1 } else { cur - 1 }
+        } else {
+            (cur + 1) % count
+        };
+        state.responses_mut().select(next as i32);
+        let top = state.top_response.unwrap_or(0);
+        let cnt = count as u8;
+        let sel = next as u8;
+        drop(state);
+        // Render updated selection (C→Rust callback, no lock)
+        super::talk_segue::c_bridge::call_refresh_responses(top, cnt, sel);
+    }
+
+    // Step 2e: Update animations (C bridge, no lock)
+    super::talk_segue::c_bridge::call_update_comm_graphics();
+
+    1
 }
 
 // ============================================================================
@@ -977,8 +1144,10 @@ extern "C" {
 /// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
 #[no_mangle]
 pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe extern "C" fn()>) {
+    eprintln!("[DBG] rust_NPCPhrase_cb: index={} cb={}", index, cb.is_some());
     // Branch 1: no-op
     if index == 0 {
+        eprintln!("[DBG] rust_NPCPhrase_cb: index=0, returning");
         return;
     }
 
@@ -1025,6 +1194,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             };
 
             if phrases.is_null() {
+                eprintln!("[DBG] rust_NPCPhrase_cb: phrases is NULL (comm_data not set?), returning");
                 return;
             }
 

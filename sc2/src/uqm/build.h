@@ -62,6 +62,12 @@ extern RACE_DESC *load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData);
 extern void free_ship (RACE_DESC *RaceDescPtr, BOOLEAN FreeIconData,
 		BOOLEAN FreeBattleData);
 
+// C-native load/free: always available, bypasses USE_RUST_SHIPS dispatch.
+// Used by LoadMasterShipList to populate the C master_q with real resource handles.
+extern RACE_DESC *c_load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData);
+extern void c_free_ship (RACE_DESC *RaceDescPtr, BOOLEAN FreeIconData,
+		BOOLEAN FreeBattleData);
+
 #if defined(__cplusplus)
 }
 #endif

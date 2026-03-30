@@ -35,12 +35,18 @@ QUEUE master_q;
 void
 LoadMasterShipList (void (* YieldProcessing)(void))
 {
-#ifdef USE_RUST_SHIPS
-	(void) YieldProcessing;
-	rust_ships_load_catalog();
-#else
 	COUNT num_entries;
 	SPECIES_ID s_id = ARILOU_ID;
+
+#ifdef USE_RUST_SHIPS
+	// Load the Rust-side catalog for Rust operations
+	rust_ships_load_catalog();
+#endif
+
+	// Always populate the C master_q with real C resource handles.
+	// Uses c_load_ship (C-native) so that icons, melee_icon, and
+	// race_strings are actual loaded C resources regardless of
+	// whether USE_RUST_SHIPS routes load_ship() to Rust.
 	num_entries = LAST_MELEE_ID - ARILOU_ID + 1;
 	InitQueue (&master_q, num_entries, sizeof (MASTER_SHIP_INFO));
 	while (num_entries--)
@@ -62,7 +68,7 @@ LoadMasterShipList (void (* YieldProcessing)(void))
 
 		BuiltPtr = LockMasterShip (&master_q, hBuiltShip);
 		BuiltPtr->SpeciesID = s_id++;
-		RDPtr = load_ship (BuiltPtr->SpeciesID, FALSE);
+		RDPtr = c_load_ship (BuiltPtr->SpeciesID, FALSE);
 		if (!RDPtr)
 		{
 			UnlockMasterShip (&master_q, hBuiltShip);
@@ -73,7 +79,9 @@ LoadMasterShipList (void (* YieldProcessing)(void))
 		// XXX: SHIP_INFO implicitly referenced here
 		BuiltPtr->ShipInfo = RDPtr->ship_info;
 		BuiltPtr->Fleet = RDPtr->fleet;
-		free_ship (RDPtr, FALSE, FALSE);
+		fprintf(stderr, "[DEBUG] LoadMaster: sp=%d icon=%p melee=%p\n", (int)BuiltPtr->SpeciesID, (void*)BuiltPtr->ShipInfo.icons, (void*)BuiltPtr->ShipInfo.melee_icon);
+
+		c_free_ship (RDPtr, FALSE, FALSE);
 
 		builtName = GetStringAddress (SetAbsStringTableIndex (
 				BuiltPtr->ShipInfo.race_strings, 2));
@@ -98,17 +106,19 @@ LoadMasterShipList (void (* YieldProcessing)(void))
 		}
 		InsertQueue (&master_q, hBuiltShip, hStarShip);
 	}
-#endif /* USE_RUST_SHIPS */
 }
 
 void
 FreeMasterShipList (void)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_free_catalog();
-#else
 	HMASTERSHIP hStarShip, hNextShip;
 
+#ifdef USE_RUST_SHIPS
+	// Free the Rust-side catalog
+	rust_ships_free_catalog();
+#endif
+
+	// Always free the C master_q resources
 	for (hStarShip = GetHeadLink (&master_q);
 			hStarShip != 0; hStarShip = hNextShip)
 	{
@@ -126,7 +136,6 @@ FreeMasterShipList (void)
 	}
 
 	UninitQueue (&master_q);
-#endif /* USE_RUST_SHIPS */
 }
 
 HMASTERSHIP

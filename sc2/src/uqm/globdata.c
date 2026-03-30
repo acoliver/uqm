@@ -252,6 +252,8 @@ copyFleetInfo (FLEET_INFO *dst, SHIP_INFO *src, FLEET_STUFF *fleet)
 	dst->race_strings = src->race_strings;
 	dst->icons = src->icons;
 	dst->melee_icon = src->melee_icon;
+	fprintf(stderr, "[DEBUG] copyFleetInfo: melee_icon=%p\n", (void*)src->melee_icon);
+
 
 	dst->actual_strength = fleet->strength;
 	dst->known_loc = fleet->known_loc;
@@ -307,15 +309,17 @@ InitGameStructures (void)
 			}
 			else
 			{
-				// Ur-Quan probe.
-				RACE_DESC *RDPtr = load_ship (FleetPtr->SpeciesID,
+				// Ur-Quan probe — always use C-native loader so that
+				// icon handles are real C resources (the Rust loader
+				// may return a struct with different layout/offsets).
+				RACE_DESC *RDPtr = c_load_ship (FleetPtr->SpeciesID,
 						FALSE);
 				if (RDPtr)
 				{	// Grab a copy of loaded icons and strings
 					copyFleetInfo (FleetPtr, &RDPtr->ship_info,
 							&RDPtr->fleet);
 					// avail_race_q owns these resources now
-					free_ship (RDPtr, FALSE, FALSE);
+					c_free_ship (RDPtr, FALSE, FALSE);
 				}
 			}
 

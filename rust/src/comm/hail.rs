@@ -49,6 +49,11 @@ mod c_bridge {
         pub fn c_SetContextBackGroundColor(r: c_int, g: c_int, b: c_int);
         pub fn c_SetContextFont(font: usize) -> usize;
 
+        // comm.c static variable setters
+        pub fn c_SetAnimContext(ctx: usize);
+        pub fn c_SetTextCacheContext(ctx: usize);
+        pub fn c_SetTextCacheFrame(frame: usize);
+
         // Drawable management
         pub fn c_CreateDrawable(dtype: c_uint, w: c_int, h: c_int, nframes: c_int) -> usize;
         pub fn c_SetFrameTransparentColor(frame: usize, r: c_int, g: c_int, b: c_int);
@@ -179,9 +184,15 @@ pub unsafe fn hail_alien() {
 
         // ----------------------------------------------------------------
         // Step 1: Encounter state initialization
-        // pCurInputState and TalkingFinished are managed via C bridges
-        // because they are static in comm.c.
+        // Reset Rust-side comm state for the new encounter, then sync
+        // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
+        eprintln!("[DBG] hail_alien: clearing COMM_STATE");
+        super::state::COMM_STATE.write().clear();
+        {
+            let s = super::state::COMM_STATE.read();
+            eprintln!("[DBG] hail_alien: after clear, talking_finished={}", s.is_talking_finished());
+        }
         c_SetTalkingFinished(0);
 
         // ----------------------------------------------------------------
@@ -228,6 +239,18 @@ pub unsafe fn hail_alien() {
         let phrases = c_CaptureStringTable(phrases_raw);
         c_SetCommDataConversationPhrases(phrases);
 
+        // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
+        // resolve conversation phrases without calling back into C.
+        {
+            let mut comm_data = super::types::CommData::default();
+            comm_data.conversation_phrases = phrases as *mut std::ffi::c_void;
+            comm_data.alien_frame = alien_frame as *mut std::ffi::c_void;
+            comm_data.alien_font = alien_font as *mut std::ffi::c_void;
+            comm_data.alien_color_map = alien_cmap as *mut std::ffi::c_void;
+            comm_data.alien_song = alien_song as *mut std::ffi::c_void;
+            super::state::COMM_STATE.write().set_comm_data(comm_data);
+        }
+
         // ----------------------------------------------------------------
         // Step 4: Subtitle text setup
         // ----------------------------------------------------------------
@@ -249,6 +272,8 @@ pub unsafe fn hail_alien() {
         let cache_frame_raw = c_CreateDrawable(want_pixmap, sis_w, cache_height, 1);
         let text_cache_frame = c_CaptureDrawable(cache_frame_raw);
 
+        c_SetTextCacheContext(text_cache_ctx);
+        c_SetTextCacheFrame(text_cache_frame);
         c_SetContext(text_cache_ctx);
         c_SetContextFGFrame(text_cache_frame);
         // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
@@ -273,6 +298,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         let anim_ctx_name = b"AnimContext\0".as_ptr() as *const _;
         let anim_ctx = c_CreateContext(anim_ctx_name);
+        c_SetAnimContext(anim_ctx);
         c_SetContext(anim_ctx);
         let screen = c_GetScreen();
         c_SetContextFGFrame(screen);
@@ -422,30 +448,30 @@ pub unsafe fn hail_alien() {
         //        → PlayerFont
         // ----------------------------------------------------------------
 
-        // ConversationPhrases — captured, Release before Destroy
-        let raw_phrases = c_ReleaseStringTable(phrases);
-        c_DestroyStringTable(raw_phrases);
+        // c_Destroy* for captured resources (Drawable, ColorMap, StringTable)
+        // already do Release+Destroy internally.  Non-captured resources
+        // (Font, Music) go straight to Destroy.
+
+        // ConversationPhrases — captured; c_DestroyStringTable does Release+Destroy
+        c_DestroyStringTable(phrases);
 
         // AlienSong — not captured, direct Destroy
         c_DestroyMusic(alien_song);
 
-        // AlienColorMap — captured, Release before Destroy
-        let raw_cmap = c_ReleaseColorMap(alien_cmap);
-        c_DestroyColorMap(raw_cmap);
+        // AlienColorMap — captured; c_DestroyColorMap does Release+Destroy
+        c_DestroyColorMap(alien_cmap);
 
         // AlienFont — not captured, direct Destroy
         c_DestroyFont(alien_font);
 
-        // AlienFrame — captured, Release before Destroy
-        let raw_frame = c_ReleaseDrawable(alien_frame);
-        c_DestroyDrawable(raw_frame);
+        // AlienFrame — captured; c_DestroyDrawable does Release+Destroy
+        c_DestroyDrawable(alien_frame);
 
         // TextCacheContext — context, direct destroy
         c_DestroyContext(text_cache_ctx);
 
-        // TextCacheFrame — captured, Release before Destroy
-        let raw_cache = c_ReleaseDrawable(text_cache_frame);
-        c_DestroyDrawable(raw_cache);
+        // TextCacheFrame — captured; c_DestroyDrawable does Release+Destroy
+        c_DestroyDrawable(text_cache_frame);
 
         // PlayerFont — not captured, direct Destroy
         c_DestroyFont(player_font);
@@ -455,6 +481,8 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         c_ClearCommDataConversationPhrasesRes();
         c_ClearCommDataConversationPhrases();
+        // Clear Rust-side comm_data (resources already destroyed above)
+        super::state::COMM_STATE.write().clear_comm_data();
         // pCurInputState was already cleared by c_RunEncounterDoInput
     }
 }

@@ -1,6 +1,7 @@
 // Ship Subsystem - Phase 2 Ships Modernization
 // @plan PLAN-20260314-SHIPS.P03
 
+pub mod battle_bridge;
 pub mod c_bridge;
 pub mod catalog;
 pub mod ffi_contract;

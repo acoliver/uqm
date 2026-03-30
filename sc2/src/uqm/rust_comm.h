@@ -271,6 +271,8 @@ void         c_SetCommDataAlienSong(uintptr_t song);
 void         c_SetCommDataConversationPhrases(uintptr_t phrases);
 void         c_ClearCommDataConversationPhrasesRes(void);
 void         c_ClearCommDataConversationPhrases(void);
+const void * c_GetCommConversationPhrases(void);
+
 
 /* Encounter function call bridges */
 void c_CallInitEncounterFunc(void);
@@ -301,12 +303,25 @@ void c_RunEncounterDoInput(void);
 void c_StopSound(void);
 void c_SleepThreadUntil(unsigned int time);
 void c_FlushColorXForms(void);
+unsigned int c_GetTimeCounter(void);
+void c_SleepThread(unsigned int duration);
+int c_RunTalkSegue(unsigned int wait_track);
+void rust_UpdateSpeechGraphics(void);
 
 /* Comm-internal static variable accessors (implemented in comm.c) */
 void c_SetTalkingFinished(int finished);
 void c_SetupSubtitleTextFromCommData(void);
 void c_SetCurInputState(void *state);
 void c_ClearPhraseBuf(void);
+
+/* AnimContext / TextCache setters (statics in comm.c) */
+void c_SetAnimContext(uintptr_t ctx);
+void c_SetTextCacheContext(uintptr_t ctx);
+void c_SetTextCacheFrame(uintptr_t frame);
+CONTEXT c_GetAnimContext(void);
+BOOLEAN c_GetClearSubtitles(void);
+void c_ResetClearSubtitles(void);
+
 
 #ifdef __cplusplus
 }
