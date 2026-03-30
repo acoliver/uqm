@@ -48,8 +48,10 @@ pub struct ShipState {
     pub energy_counter: u8,
     /// Ship input state (raw bitfield from C).
     pub ship_input_state: u8,
-    /// Thrust wait from element.
+    /// Thrust wait counter from element (frames until next thrust).
     pub thrust_wait: u8,
+    /// Turn wait counter from element (frames until next turn).
+    pub turn_wait: u8,
     /// Ship sounds resource handle (for ProcessSound calls).
     pub ship_sounds: usize,
     /// Weapon animation frames array pointer (for MissileBlock.farray).
@@ -82,6 +84,7 @@ impl Default for ShipState {
             energy_counter: 0,
             ship_input_state: 0,
             thrust_wait: 0,
+            turn_wait: 0,
             ship_sounds: 0,
             weapon_farray: std::ptr::null_mut(),
             special_farray: std::ptr::null_mut(),
@@ -118,6 +121,7 @@ impl ShipState {
             energy_counter: 0,
             ship_input_state: 0,
             thrust_wait: 0,
+            turn_wait: 0,
             ship_sounds: 0,
             weapon_farray: std::ptr::null_mut(),
             special_farray: std::ptr::null_mut(),
@@ -311,6 +315,7 @@ mod tests {
             energy_counter: 0,
             ship_input_state: 0,
             thrust_wait: 0,
+            turn_wait: 0,
             ship_sounds: 0,
             weapon_farray: std::ptr::null_mut(),
             special_farray: std::ptr::null_mut(),

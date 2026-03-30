@@ -39,6 +39,31 @@ pub enum ScrollMode {
 
 // Production C bridge — all calls go through these wrappers so tests can
 // override behaviour by operating on CommState fields directly.
+// Test-mode c_bridge stub — provides constants and no-op wrappers so ffi.rs
+// tests compile without real C linkage.
+#[cfg(test)]
+pub(super) mod c_bridge {
+    pub const ONE_SECOND_TICKS: i32 = 840;
+
+    pub mod slider {
+        pub const FAST_FORWARD: i32 = 3;
+        pub const FAST_REVERSE: i32 = 4;
+        pub const PLAY: i32 = 2;
+        pub const STOP: i32 = 8;
+    }
+
+    pub mod music_volume {
+        pub const BACKGROUND: i32 = 64;
+        pub const FOREGROUND: i32 = 255;
+        pub const NORMAL: i32 = 255;
+    }
+
+    pub fn call_refresh_responses(_top: u8, _count: u8, _cur: u8) {}
+    pub fn call_select_conversation_summary() {}
+    pub fn call_update_comm_graphics() {}
+    pub fn call_feedback_player_phrase() {}
+}
+
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use std::ffi::{c_char, c_int, c_uint};
@@ -767,6 +792,28 @@ pub fn fade_music_to_background_bridge() {
         c_bridge::c_FadeMusic(c_bridge::music_volume::BACKGROUND, 0);
     }
 }
+
+// Test stubs for lock-free external functions (prod versions are cfg(not(test)))
+#[cfg(test)]
+pub fn check_abort_external() -> bool { false }
+#[cfg(test)]
+pub fn check_select_external() -> bool { false }
+#[cfg(test)]
+pub fn check_cancel_external() -> bool { false }
+#[cfg(test)]
+pub fn check_up_external() -> bool { false }
+#[cfg(test)]
+pub fn check_down_external() -> bool { false }
+#[cfg(test)]
+pub fn check_left_external() -> bool { false }
+#[cfg(test)]
+pub fn won_last_battle_external() -> bool { false }
+#[cfg(test)]
+pub fn run_last_replay_bridge(_timeout: i32) {}
+#[cfg(test)]
+pub fn fade_music_to_background_bridge() {}
+
+
 
 // ---------- track operations -----------------------------------------------
 

@@ -651,6 +651,7 @@ pub fn build_ship_state(
         energy_counter: starship.energy_counter,
         ship_input_state: starship.ship_input_state,
         thrust_wait: element.thrust_wait,
+        turn_wait: element.turn_wait,
         ship_sounds: race_desc.ship_data.ship_sounds,
         weapon_farray: std::ptr::null_mut(),
         special_farray: std::ptr::null_mut(),
