@@ -315,6 +315,35 @@ pub struct CMasterShipInfo {
 // to STARSHIP entries, and frees RACE_DESC.
 
 // ===========================================================================
+// Layout verification (P05)
+// ===========================================================================
+
+/// Layout descriptor for RACE_DESC C-side field offsets.
+/// Matches C `RACE_DESC_LAYOUT` in `rust_bridge_ships.h`.
+#[repr(C)]
+pub struct RaceDescLayout {
+    pub race_desc_size: usize,
+    pub ship_data_offset: usize,
+    pub ship_info_offset: usize,
+    pub characteristics_offset: usize,
+    /// Offset of `DATA_STUFF.ship` within DATA_STUFF (not within RACE_DESC).
+    pub ship_data_ship_offset: usize,
+    /// Offset of `SHIP_INFO.crew_level` within SHIP_INFO (not within RACE_DESC).
+    pub ship_info_crew_offset: usize,
+    /// Offset of `SHIP_INFO.max_crew` within SHIP_INFO (not within RACE_DESC).
+    pub ship_info_max_crew_offset: usize,
+    /// Offset of `CHARACTERISTIC_STUFF.ship_mass` within CHARACTERISTIC_STUFF.
+    pub characteristics_mass_offset: usize,
+}
+
+extern "C" {
+    /// Query C-side RACE_DESC field offsets for layout verification.
+    /// C: `void rust_bridge_get_race_desc_layout(RACE_DESC_LAYOUT *out);`
+    /// Prototype: `rust_bridge_ships.h`
+    pub fn rust_bridge_get_race_desc_layout(out: *mut RaceDescLayout);
+}
+
+// ===========================================================================
 // C helper function imports needed by Rust runtime
 // ===========================================================================
 //
@@ -353,6 +382,36 @@ extern "C" {
     /// Play a sound effect.
     /// C: void ProcessSound(SOUND sound, ELEMENT *e);
     pub fn ProcessSound(sound: CSound, element: *mut CElement);
+
+    /// Initializes the battle arena (display list, galaxy, asteroids/planet, hyperspace).
+    /// C: SIZE rust_bridge_init_battle_arena(void);
+    /// Returns num_ships (NUM_SIDES for battle, 1 for hyperspace). <= 0 on failure.
+    /// Prototype: rust_bridge_ships.h
+    pub fn rust_bridge_init_battle_arena() -> CSize;
+
+    /// Creates a battle ELEMENT for a spawned ship.
+    /// C: BOOLEAN rust_bridge_spawn_element(STARSHIP*, RACE_DESC*, BYTE mass, BYTE activity);
+    /// Prototype: rust_bridge_ships.h
+    ///
+    /// Handles both fresh allocation (hShip==0) and element reuse (hShip!=0).
+    /// Reads StarShipPtr->hShip to decide the branch. Sets preprocess/postprocess/death
+    /// callbacks, position, facing, mass, and all other element fields.
+    pub fn rust_bridge_spawn_element(
+        starship: *mut CStarship,
+        race_desc: *mut c_void,
+        ship_mass: CByte,
+        activity: CByte,
+    ) -> CBoolean;
+
+    /// Performs full battle teardown: audio stop, space uninit, crew writeback,
+    /// descriptor freeing, IN_BATTLE clearing, queue reinit.
+    /// C: void rust_bridge_uninit_ships(void);
+    /// Prototype: rust_bridge_ships.h
+    ///
+    /// Iterates the display list, distributes floating crew to survivor,
+    /// writes back crew levels, calls free_ship() (→ rust_ships_free) for each
+    /// spawned ship, clears IN_BATTLE from CurrentActivity, and reinits queues.
+    pub fn rust_bridge_uninit_ships();
 }
 
 // ===========================================================================

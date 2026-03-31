@@ -30,7 +30,6 @@
 //! - Player order (GetPlayerOrder)
 
 use super::loader::{load_ship, LoadTier};
-use super::runtime::{APPEARING, IGNORE_SIMILAR, NORMAL_LIFE, PLAYER_SHIP};
 use super::types::{ShipsError, Starship};
 use std::sync::Mutex;
 
@@ -73,22 +72,6 @@ static BATTLE_STATE: Mutex<BattleState> = Mutex::new(BattleState {
 });
 
 // ---------------------------------------------------------------------------
-// ElementConfig
-// ---------------------------------------------------------------------------
-
-/// Configuration data for element initialization (actual element allocation is C-side via P14).
-#[derive(Debug, Clone)]
-pub struct ElementConfig {
-    pub player_nr: i16,
-    pub crew_level: u16,
-    pub mass_points: u8,
-    pub state_flags: u16,
-    pub turn_wait: u8,
-    pub thrust_wait: u8,
-    pub life_span: u16,
-}
-
-// ---------------------------------------------------------------------------
 // Result Types
 // ---------------------------------------------------------------------------
 
@@ -118,8 +101,11 @@ pub struct UninitResult {
 /// 3. Patch crew: If activity is IN_ENCOUNTER or IN_LAST_BATTLE and starship.crew_level > 0,
 ///    set `desc.ship_info.crew_level = starship.crew_level`. Clamp to max_crew.
 /// 4. Clear counters: `energy_counter = 0, weapon_counter = 0, special_counter = 0`
-/// 5. Configure element: Create an `ElementConfig` struct with appropriate values.
-/// 6. Store descriptor in starship: `starship.race_desc = Some(Box::new(desc))`
+/// 5. Store descriptor in starship: `starship.race_desc = Some(Box::new(desc))`
+///
+/// Element allocation and field setup (mass, state_flags, position, callbacks)
+/// are handled by C's `rust_bridge_spawn_element()`. See P00 for the C helper
+/// implementation.
 ///
 /// # Returns
 /// - `Ok(SpawnResult::Spawned)` on success
@@ -156,17 +142,9 @@ pub fn spawn_ship(starship: &mut Starship, activity: u8) -> Result<SpawnResult, 
     starship.weapon_counter = 0;
     starship.special_counter = 0;
 
-    // Configure element (data for C-side AllocElement in P14)
-    // C: ship.c lines 463-482
-    let _element_config = ElementConfig {
-        player_nr: starship.player_nr,
-        crew_level: 0, // C line 431: element crew_level is 0 for ships
-        mass_points: desc.characteristics.ship_mass,
-        state_flags: APPEARING | PLAYER_SHIP | IGNORE_SIMILAR,
-        turn_wait: 0,
-        thrust_wait: 0,
-        life_span: NORMAL_LIFE,
-    };
+    // Element allocation and field setup (mass, state_flags, position,
+    // callbacks) are handled by C's rust_bridge_spawn_element().
+    // See P00 for the C helper implementation.
 
     // Store descriptor in starship
     starship.race_desc = Some(Box::new(desc));
@@ -377,6 +355,41 @@ pub fn get_initial_starships(
 }
 
 // ---------------------------------------------------------------------------
+// Lifecycle State API (P02)
+// ---------------------------------------------------------------------------
+
+/// Mark battle ships as initialized (called after successful arena setup).
+pub(crate) fn mark_ships_initialized() {
+    let mut state = BATTLE_STATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    state.ships_initialized = true;
+}
+
+/// Mark battle ships as uninitialized (called after teardown).
+pub(crate) fn mark_ships_uninitialized() {
+    let mut state = BATTLE_STATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    state.ships_initialized = false;
+}
+
+/// Query whether ships are currently initialized.
+/// Used by uninit idempotence guard (P03) — not test-only.
+pub(crate) fn is_ships_initialized_for_uninit() -> bool {
+    let state = BATTLE_STATE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    state.ships_initialized
+}
+
+/// Query whether ships are currently initialized (test convenience).
+#[cfg(test)]
+pub(crate) fn is_ships_initialized() -> bool {
+    is_ships_initialized_for_uninit()
+}
+
+// ---------------------------------------------------------------------------
 // Testing Helper
 // ---------------------------------------------------------------------------
 
@@ -522,11 +535,12 @@ mod tests {
     }
 
     #[test]
-    fn spawn_ship_element_config_values() {
+    fn spawn_ship_descriptor_loaded_with_mass() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::Orz, 20, RPG_PLAYER_NUM);
         spawn_ship(&mut starship, IN_ENCOUNTER).unwrap();
-        // ElementConfig is internal but we can verify descriptor is loaded
+        // Verify descriptor is loaded and has valid ship mass
+        // (used by C helper rust_bridge_spawn_element for element creation)
         assert!(starship.race_desc.is_some());
         let desc = starship.race_desc.as_ref().unwrap();
         assert!(desc.characteristics.ship_mass > 0);

@@ -16,12 +16,146 @@ use super::catalog::{free_master_ship_list, get_ship_cost_from_index, load_maste
 use super::ffi_contract::*;
 use super::lifecycle::{init_ships, spawn_ship as lifecycle_spawn};
 use super::loader::{free_ship as loader_free_ship, load_ship, LoadTier};
-use super::types::{RaceDesc, SpeciesId, Starship};
+use super::types::{Characteristics, RaceDesc, ShipData, ShipInfo, SpeciesId, Starship};
 use crate::battle::element::{Element, FrameHandle};
 use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::panic::catch_unwind;
 use std::ptr;
+
+// ===========================================================================
+// Layout Verification (P05)
+// ===========================================================================
+
+/// Whether the RaceDesc/RACE_DESC layout check has been performed.
+/// Set to `true` after the first call to `verify_race_desc_layout()`.
+static mut LAYOUT_ACCESSOR_MODE: bool = false;
+
+/// Returns `true` if accessor functions must be used instead of direct
+/// struct casts for RaceDesc/RACE_DESC cross-language field access.
+///
+/// This is `true` when Rust's `RaceDesc` layout does not match C's
+/// `RACE_DESC` layout — which is the expected case because RaceDesc
+/// contains `Box<dyn ShipBehavior>` instead of C function pointers.
+#[inline]
+#[cfg(not(test))]
+fn is_accessor_mode() -> bool {
+    // SAFETY: read-only, written once during init before any concurrent access.
+    unsafe { LAYOUT_ACCESSOR_MODE }
+}
+
+/// Verify that Rust `RaceDesc` and C `RACE_DESC` have matching field offsets.
+///
+/// Called once during `rust_ships_init()`. Since RaceDesc is NOT `#[repr(C)]`
+/// and contains `Box<dyn ShipBehavior>` (a wide pointer) where C has function
+/// pointers, the layouts are expected to differ. When they differ, this sets
+/// `LAYOUT_ACCESSOR_MODE = true` so that accessor functions are used instead
+/// of direct struct casts.
+///
+/// This is NOT debug-only — it runs in all builds because a layout mismatch
+/// without accessor functions would mean silent memory corruption.
+#[cfg(not(test))]
+fn verify_race_desc_layout() {
+    use crate::ships::ffi_contract::{rust_bridge_get_race_desc_layout, RaceDescLayout};
+
+    unsafe {
+        let mut c_layout = std::mem::zeroed::<RaceDescLayout>();
+        rust_bridge_get_race_desc_layout(&mut c_layout);
+
+        let rust_size = std::mem::size_of::<RaceDesc>();
+        let mut mismatches: Vec<String> = Vec::new();
+
+        // --- Size check ---
+        if c_layout.race_desc_size != rust_size {
+            mismatches.push(format!(
+                "RACE_DESC size: C={} Rust={}",
+                c_layout.race_desc_size, rust_size
+            ));
+        }
+
+        // --- Top-level field offset checks ---
+        let rust_ship_info_offset = std::mem::offset_of!(RaceDesc, ship_info);
+        if rust_ship_info_offset != c_layout.ship_info_offset {
+            mismatches.push(format!(
+                "ship_info: C={} Rust={}",
+                c_layout.ship_info_offset, rust_ship_info_offset
+            ));
+        }
+
+        let rust_char_offset = std::mem::offset_of!(RaceDesc, characteristics);
+        if rust_char_offset != c_layout.characteristics_offset {
+            mismatches.push(format!(
+                "characteristics: C={} Rust={}",
+                c_layout.characteristics_offset, rust_char_offset
+            ));
+        }
+
+        let rust_ship_data_offset = std::mem::offset_of!(RaceDesc, ship_data);
+        if rust_ship_data_offset != c_layout.ship_data_offset {
+            mismatches.push(format!(
+                "ship_data: C={} Rust={}",
+                c_layout.ship_data_offset, rust_ship_data_offset
+            ));
+        }
+
+        // --- Nested field offset checks ---
+        let rust_ship_data_ship_offset = std::mem::offset_of!(ShipData, ship);
+        if rust_ship_data_ship_offset != c_layout.ship_data_ship_offset {
+            mismatches.push(format!(
+                "ship_data.ship: C={} Rust={}",
+                c_layout.ship_data_ship_offset, rust_ship_data_ship_offset
+            ));
+        }
+
+        let rust_crew_offset = std::mem::offset_of!(ShipInfo, crew_level);
+        if rust_crew_offset != c_layout.ship_info_crew_offset {
+            mismatches.push(format!(
+                "ship_info.crew_level: C={} Rust={}",
+                c_layout.ship_info_crew_offset, rust_crew_offset
+            ));
+        }
+
+        let rust_max_crew_offset = std::mem::offset_of!(ShipInfo, max_crew);
+        if rust_max_crew_offset != c_layout.ship_info_max_crew_offset {
+            mismatches.push(format!(
+                "ship_info.max_crew: C={} Rust={}",
+                c_layout.ship_info_max_crew_offset, rust_max_crew_offset
+            ));
+        }
+
+        let rust_mass_offset = std::mem::offset_of!(Characteristics, ship_mass);
+        if rust_mass_offset != c_layout.characteristics_mass_offset {
+            mismatches.push(format!(
+                "characteristics.ship_mass: C={} Rust={}",
+                c_layout.characteristics_mass_offset, rust_mass_offset
+            ));
+        }
+
+        if mismatches.is_empty() {
+            eprintln!(
+                "rust_ships: RaceDesc/RACE_DESC layout verified — \
+                 direct cast is safe."
+            );
+        } else {
+            // Layouts differ (expected) — switch to accessor mode.
+            // Do NOT abort: accessor functions handle field access safely.
+            LAYOUT_ACCESSOR_MODE = true;
+            eprintln!(
+                "rust_ships: RaceDesc/RACE_DESC layout mismatch detected \
+                 (expected — RaceDesc is not #[repr(C)]). \
+                 Switching to accessor-function mode.
+\
+                 Mismatches:
+  {}
+\
+                 Accessor functions will be used for all cross-language \
+                 RaceDesc field access.",
+                mismatches.join("
+  ")
+            );
+        }
+    }
+}
 
 // ===========================================================================
 // C Function Imports
@@ -268,6 +402,12 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
         unsafe {
             let starship_c = &mut *(starship as *mut CStarship);
 
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "LIFECYCLE: rust_ships_spawn entry (species={}, player={})",
+                starship_c.species_id, starship_c.player_nr
+            );
+
             let mut starship_rust = Starship {
                 species_id: match SpeciesId::from_i32(starship_c.species_id) {
                     Some(s) => s,
@@ -302,13 +442,70 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
 
             match lifecycle_spawn(&mut starship_rust, activity) {
                 Ok(_) => {
-                    starship_c.race_desc_ptr = match starship_rust.race_desc {
-                        Some(desc) => Box::into_raw(desc) as *mut std::os::raw::c_void,
-                        None => ptr::null_mut(),
+                    // Extract race_desc_ptr — the only CStarship mutation before
+                    // the C helper call (H3 rollback contract).
+                    let race_desc_ptr = match starship_rust.race_desc {
+                        Some(desc) => Box::into_raw(desc) as *mut c_void,
+                        None => return 0,
                     };
+                    starship_c.race_desc_ptr = race_desc_ptr;
+
+                    // Get ship mass from descriptor for element creation.
+                    // Safe: race_desc_ptr is a valid *mut RaceDesc from Box::into_raw.
+                    let ship_mass = (*(race_desc_ptr as *const RaceDesc))
+                        .characteristics
+                        .ship_mass;
+
+                    // Call C helper to create the ELEMENT.
+                    // C helper reads starship_c.hShip to decide fresh alloc vs reuse.
+                    // We do NOT modify hShip before this call.
+                    #[cfg(not(test))]
+                    {
+                        use crate::ships::ffi_contract::rust_bridge_spawn_element;
+
+                        let element_ok = rust_bridge_spawn_element(
+                            starship as *mut CStarship,
+                            race_desc_ptr,
+                            ship_mass,
+                            activity,
+                        );
+                        if element_ok == 0 {
+                            // H3: Element creation failed — rollback.
+                            // Free the descriptor we just allocated.
+                            let _desc = Box::from_raw(race_desc_ptr as *mut RaceDesc);
+                            // Null the pointer so C doesn't see a dangling ref.
+                            starship_c.race_desc_ptr = ptr::null_mut();
+                            // Do NOT write back counters/flags — CStarship
+                            // remains in its pre-spawn state.
+                            return 0;
+                        }
+
+                        // C helper succeeded. hShip and ShipFacing are already
+                        // set by the C helper via the pointer we passed.
+                    }
+
+                    // Post-helper success: write back cleared counters/flags.
+                    // These are safe to write because the element exists.
+                    starship_c.ship_input_state = starship_rust.ship_input_state;
+                    starship_c.cur_status_flags = starship_rust.cur_status_flags.0;
+                    starship_c.old_status_flags = starship_rust.old_status_flags.0;
+                    starship_c.energy_counter = starship_rust.energy_counter;
+                    starship_c.weapon_counter = starship_rust.weapon_counter;
+                    starship_c.special_counter = starship_rust.special_counter;
+
+                    #[cfg(debug_assertions)]
+                    eprintln!(
+                        "LIFECYCLE: rust_ships_spawn exit OK (species={}, player={})",
+                        starship_c.species_id, starship_c.player_nr
+                    );
+
                     1
                 }
-                Err(_) => 0,
+                Err(e) => {
+                    #[cfg(debug_assertions)]
+                    eprintln!("LIFECYCLE: rust_ships_spawn FAILED: {:?}", e);
+                    0
+                }
             }
         }
     })
@@ -319,40 +516,240 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
 ///
 /// C: `COUNT rust_ships_init(void);`
 ///
-/// Returns the number of players (2) on success, 0 on failure.
+/// Returns the number of players (2 for battle, 1 for hyperspace) on success,
+/// 0 on failure.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ships_init() -> CCount {
-    catch_unwind(|| {
-        // Get activity from C
-        #[cfg(test)]
-        let activity = 2u8; // IN_ENCOUNTER for tests
-        #[cfg(not(test))]
-        let activity = unsafe { uqm_get_current_activity_lobyte() };
+    #[cfg(debug_assertions)]
+    eprintln!("LIFECYCLE: rust_ships_init entry");
 
-        match init_ships(activity) {
-            Ok(num_players) => num_players as CCount,
-            Err(_) => 0,
+    let result = catch_unwind(|| {
+        #[cfg(test)]
+        {
+            let activity = 2u8;
+            return match init_ships(activity) {
+                Ok(num_players) => num_players as CCount,
+                Err(_) => 0,
+            };
+        }
+
+        #[cfg(not(test))]
+        unsafe {
+            use crate::ships::ffi_contract::rust_bridge_init_battle_arena;
+
+            // P05: One-time layout verification — logs result, does not abort.
+            // Sets LAYOUT_ACCESSOR_MODE if layouts differ (expected).
+            // Must run before any spawn.
+            static LAYOUT_VERIFIED: std::sync::Once = std::sync::Once::new();
+            LAYOUT_VERIFIED.call_once(|| {
+                verify_race_desc_layout();
+            });
+
+            // Delegate arena setup entirely to C — this calls the original
+            // InitShips() body which handles InitSpace, display list, galaxy,
+            // asteroids, planets, hyperspace setup, etc.
+            let num_ships = rust_bridge_init_battle_arena();
+            if num_ships <= 0 {
+                #[cfg(debug_assertions)]
+                eprintln!("LIFECYCLE: rust_ships_init FAILED (arena returned {})", num_ships);
+                return 0;
+            }
+
+            // Track initialization state on the Rust side
+            super::lifecycle::mark_ships_initialized();
+
+            #[cfg(debug_assertions)]
+            eprintln!("LIFECYCLE: rust_ships_init exit (num_ships={})", num_ships);
+
+            num_ships as CCount
         }
     })
-    .unwrap_or_default()
+    .unwrap_or_else(|_| {
+        #[cfg(debug_assertions)]
+        eprintln!("LIFECYCLE: rust_ships_init PANICKED");
+        0
+    });
+
+    result
 }
 
 /// Uninitializes the battle subsystem.
 ///
 /// C: `void rust_ships_uninit(void);`
 ///
-/// Frees Rust-owned resources (catalog). Since C owns the queues, crew writeback
-/// and descriptor cleanup are handled by C's UninitShips() calling rust_ships_free()
-/// on each descriptor.
+/// Performs complete battle teardown:
+/// - Stops audio (StopSound)
+/// - Frees space resources (UninitSpace — explosions, blasts, asteroids)
+/// - Counts floating crew in display list
+/// - Distributes floating crew to survivor's descriptor
+/// - Writes back descriptor crew → starship.crew_level
+/// - Frees each spawned ship's descriptor via free_ship() → rust_ships_free()
+/// - Clears IN_BATTLE from CurrentActivity
+/// - Reinits queues for non-IN_ENCOUNTER
+///
+/// Idempotent: calling twice is safe (idempotence guard checks Rust + C state).
 #[no_mangle]
 pub unsafe extern "C" fn rust_ships_uninit() {
-    let _ = catch_unwind(|| {
-        // Free the master catalog if loaded
-        free_master_ship_list();
+    #[cfg(debug_assertions)]
+    eprintln!("LIFECYCLE: rust_ships_uninit entry");
 
-        // Note: C handles queue iteration, crew writeback, and calling rust_ships_free()
-        // for each RACE_DESC. Rust uninit only needs to release global resources.
+    let _ = catch_unwind(|| {
+        #[cfg(test)]
+        {
+            // Test mode: defensive catalog cleanup (no C arena to tear down)
+            free_master_ship_list();
+            super::lifecycle::mark_ships_uninitialized();
+            return;
+        }
+
+        #[cfg(not(test))]
+        unsafe {
+            use crate::ships::ffi_contract::rust_bridge_uninit_ships;
+
+            // H2: Reconcile Rust-side state with C-side state before
+            // deciding whether to skip teardown. The Rust flag alone
+            // is not authoritative — it can desync from C arena state
+            // in failure/partial-init paths.
+            let rust_says_initialized = super::lifecycle::is_ships_initialized_for_uninit();
+
+            if !rust_says_initialized {
+                // Check C-side: does CurrentActivity still have IN_BATTLE?
+                let c_activity = uqm_get_current_activity_lobyte();
+                // IN_ENCOUNTER is 2, which implies battle context may exist
+                let c_might_have_arena = c_activity == 2;
+
+                if c_might_have_arena {
+                    // H2: Desync detected — Rust says uninitialized but C
+                    // may still have arena resources. Proceed with teardown
+                    // to prevent resource leak. C state is authoritative.
+                    #[cfg(debug_assertions)]
+                    eprintln!(
+                        "rust_ships_uninit: WARNING desync detected — \
+                         Rust says uninitialized but C activity={:#x} \
+                         suggests arena may exist. Proceeding with teardown.",
+                        c_activity
+                    );
+                    // Fall through to teardown below
+                } else {
+                    // Both Rust and C agree: no arena to tear down.
+                    #[cfg(debug_assertions)]
+                    eprintln!(
+                        "rust_ships_uninit: idempotence guard fired \
+                         (Rust=uninitialized, C activity={:#x})",
+                        c_activity
+                    );
+                    return;
+                }
+            }
+
+            #[cfg(debug_assertions)]
+            eprintln!("rust_ships_uninit: beginning teardown");
+
+            // Delegate full teardown to C helper.
+            // This performs:
+            //   - StopSound()
+            //   - UninitSpace() (free explosion/blast/asteroid resources)
+            //   - CountCrewElements() (count floating crew in display list)
+            //   - Iterate display list: add floating crew to survivor
+            //   - Write back descriptor crew -> StarShipPtr->crew_level
+            //   - free_ship() for each spawned ship (calls rust_ships_free)
+            //   - Clear IN_BATTLE from CurrentActivity
+            //   - UpdateShipFragCrew() for IN_ENCOUNTER
+            //   - ReinitQueue / FreeHyperspace for non-IN_ENCOUNTER
+            //
+            // C-side null guards (C3): The C helper guards against null
+            // StarShipPtr and null RaceDescPtr on each element, so
+            // partial-init states are handled safely.
+            rust_bridge_uninit_ships();
+
+            // Update Rust-side state tracking
+            super::lifecycle::mark_ships_uninitialized();
+
+            #[cfg(debug_assertions)]
+            {
+                assert!(
+                    !super::lifecycle::is_ships_initialized_for_uninit(),
+                    "ships_initialized should be false after uninit"
+                );
+                eprintln!("rust_ships_uninit: teardown complete, state cleared");
+            }
+        }
     });
+}
+
+// ===========================================================================
+// RaceDesc Accessor Functions (P05)
+// ===========================================================================
+//
+// These functions allow C to read/write RaceDesc fields without depending on
+// struct layout compatibility. Since Rust's RaceDesc is NOT #[repr(C)] and
+// contains Box<dyn ShipBehavior> (a wide pointer) where C has function
+// pointers, direct struct casting is NOT safe. These accessors are the
+// correct path for all cross-language field access.
+//
+// C calls these via declarations in rust_bridge_ships.h.
+
+/// C calls this to get `ship_data.ship` frame array pointer.
+///
+/// Returns a pointer to the first element of the `ship` array,
+/// which C treats as `FRAME *` (i.e., `FRAME_DESC **`).
+///
+/// C: `void *rust_race_desc_get_ship_frames(const void *rd);`
+#[no_mangle]
+pub unsafe extern "C" fn rust_race_desc_get_ship_frames(rd: *const c_void) -> *mut c_void {
+    if rd.is_null() {
+        return ptr::null_mut();
+    }
+    let desc = &*(rd as *const RaceDesc);
+    desc.ship_data.ship.as_ptr() as *mut c_void
+}
+
+/// C calls this to get `characteristics.ship_mass`.
+///
+/// C: `BYTE rust_race_desc_get_ship_mass(const void *rd);`
+#[no_mangle]
+pub unsafe extern "C" fn rust_race_desc_get_ship_mass(rd: *const c_void) -> CByte {
+    if rd.is_null() {
+        return 0;
+    }
+    let desc = &*(rd as *const RaceDesc);
+    desc.characteristics.ship_mass
+}
+
+/// C calls this to get `ship_info.crew_level`.
+///
+/// C: `COUNT rust_race_desc_get_crew_level(const void *rd);`
+#[no_mangle]
+pub unsafe extern "C" fn rust_race_desc_get_crew_level(rd: *const c_void) -> CCount {
+    if rd.is_null() {
+        return 0;
+    }
+    let desc = &*(rd as *const RaceDesc);
+    desc.ship_info.crew_level
+}
+
+/// C calls this to set `ship_info.crew_level` (for crew writeback during uninit).
+///
+/// C: `void rust_race_desc_set_crew_level(void *rd, COUNT crew);`
+#[no_mangle]
+pub unsafe extern "C" fn rust_race_desc_set_crew_level(rd: *mut c_void, crew: CCount) {
+    if rd.is_null() {
+        return;
+    }
+    let desc = &mut *(rd as *mut RaceDesc);
+    desc.ship_info.crew_level = crew;
+}
+
+/// C calls this to get `ship_info.max_crew`.
+///
+/// C: `COUNT rust_race_desc_get_max_crew(const void *rd);`
+#[no_mangle]
+pub unsafe extern "C" fn rust_race_desc_get_max_crew(rd: *const c_void) -> CCount {
+    if rd.is_null() {
+        return 0;
+    }
+    let desc = &*(rd as *const RaceDesc);
+    desc.ship_info.max_crew
 }
 
 // ===========================================================================
@@ -449,6 +846,20 @@ unsafe fn writeback_starship(starship_c: &mut CStarship, starship_rust: &Starshi
     starship_c.ship_facing = starship_rust.ship_facing;
 }
 
+/// Extracts the raw starship pointer from an element WITHOUT dereferencing it.
+///
+/// Reads the pointer VALUE from the element's `p_parent` field — does NOT
+/// follow the pointer. This is the "extraction-point check" required by
+/// REQ-REMED-CALLBACK-GUARD: null check must fire before any dereference.
+///
+/// # Safety
+/// `element` must be a valid pointer to a C-owned ELEMENT struct.
+#[cfg(not(test))]
+unsafe fn extract_raw_starship_ptr(element: *mut c_void) -> *mut CStarship {
+    let elem_ptr = element as *mut Element;
+    (*elem_ptr).p_parent as *mut CStarship
+}
+
 /// Extracts a mutable CStarship ref from an element's pParent, validating
 /// both the element pointer and the starship/race_desc pointers.
 ///
@@ -490,6 +901,21 @@ pub unsafe extern "C" fn rust_ships_preprocess(element: *mut c_void) {
 
         #[cfg(not(test))]
         unsafe {
+            // REQ-REMED-CALLBACK-GUARD: Extraction-point liveness check.
+            // The null check is UNCONDITIONAL (all builds). Only the
+            // logging is debug-only. Must fire before any dereference.
+            let starship_ptr = extract_raw_starship_ptr(element);
+            if starship_ptr.is_null() {
+                #[cfg(debug_assertions)]
+                eprintln!("rust_ships_preprocess: null StarShipPtr at entry, skipping");
+                return;
+            }
+            if (*starship_ptr).race_desc_ptr.is_null() {
+                #[cfg(debug_assertions)]
+                eprintln!("rust_ships_preprocess: null RaceDescPtr at entry, skipping");
+                return;
+            }
+
             let (elem_ptr, starship_c) = match extract_starship_from_element(element) {
                 Some(pair) => pair,
                 None => return,
@@ -539,6 +965,19 @@ pub unsafe extern "C" fn rust_ships_postprocess(element: *mut c_void) {
 
         #[cfg(not(test))]
         unsafe {
+            // REQ-REMED-CALLBACK-GUARD: Extraction-point liveness check.
+            let starship_ptr = extract_raw_starship_ptr(element);
+            if starship_ptr.is_null() {
+                #[cfg(debug_assertions)]
+                eprintln!("rust_ships_postprocess: null StarShipPtr at entry, skipping");
+                return;
+            }
+            if (*starship_ptr).race_desc_ptr.is_null() {
+                #[cfg(debug_assertions)]
+                eprintln!("rust_ships_postprocess: null RaceDescPtr at entry, skipping");
+                return;
+            }
+
             let (elem_ptr, starship_c) = match extract_starship_from_element(element) {
                 Some(pair) => pair,
                 None => return,
@@ -579,6 +1018,19 @@ pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
 
         #[cfg(not(test))]
         unsafe {
+            // REQ-REMED-CALLBACK-GUARD: Extraction-point liveness check.
+            let starship_ptr = extract_raw_starship_ptr(element);
+            if starship_ptr.is_null() {
+                #[cfg(debug_assertions)]
+                eprintln!("rust_ships_death: null StarShipPtr at entry, skipping");
+                return;
+            }
+            if (*starship_ptr).race_desc_ptr.is_null() {
+                #[cfg(debug_assertions)]
+                eprintln!("rust_ships_death: null RaceDescPtr at entry, skipping");
+                return;
+            }
+
             let (elem_ptr, starship_c) = match extract_starship_from_element(element) {
                 Some(pair) => pair,
                 None => return,
@@ -698,6 +1150,67 @@ mod tests {
             rust_ships_preprocess(ptr::null_mut());
             rust_ships_postprocess(ptr::null_mut());
             rust_ships_death(ptr::null_mut());
+        }
+    }
+
+    #[test]
+    fn full_lifecycle_roundtrip() {
+        unsafe {
+            // Ensure clean starting state
+            super::super::lifecycle::reset_battle_state();
+            assert!(!super::super::lifecycle::is_ships_initialized());
+
+            // Init
+            let result = rust_ships_init();
+            assert!(result > 0, "init should return positive ship count, got {}", result);
+            assert!(super::super::lifecycle::is_ships_initialized());
+
+            // Uninit
+            rust_ships_uninit();
+            assert!(!super::super::lifecycle::is_ships_initialized());
+
+            // Re-init (multi-battle scenario)
+            let result2 = rust_ships_init();
+            assert!(result2 > 0, "re-init should return positive ship count, got {}", result2);
+            assert!(super::super::lifecycle::is_ships_initialized());
+
+            // Final uninit
+            rust_ships_uninit();
+            assert!(!super::super::lifecycle::is_ships_initialized());
+        }
+    }
+
+    #[test]
+    fn uninit_without_init_is_safe() {
+        unsafe {
+            // Ensure ships are not initialized
+            super::super::lifecycle::reset_battle_state();
+            assert!(!super::super::lifecycle::is_ships_initialized());
+
+            // This should be a no-op — no crash
+            rust_ships_uninit();
+            assert!(!super::super::lifecycle::is_ships_initialized());
+        }
+    }
+
+    #[test]
+    fn double_uninit_is_idempotent() {
+        unsafe {
+            // Ensure clean starting state
+            super::super::lifecycle::reset_battle_state();
+
+            // Init
+            let result = rust_ships_init();
+            assert!(result > 0);
+            assert!(super::super::lifecycle::is_ships_initialized());
+
+            // First uninit
+            rust_ships_uninit();
+            assert!(!super::super::lifecycle::is_ships_initialized());
+
+            // Second uninit — should be no-op
+            rust_ships_uninit();
+            assert!(!super::super::lifecycle::is_ships_initialized());
         }
     }
 }
