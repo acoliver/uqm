@@ -22,6 +22,22 @@ fn main() {
         .compile("uio_vfprintf_helper");
 
     println!("cargo:rerun-if-changed=src/io/uio_vfprintf_helper.c");
+
+    // Compile the main loop test bridge shim. This static library
+    // provides test-local C globals for FFI boundary tests (Tier 2).
+    // The symbols (test_set_activity, test_get_activity) are only
+    // referenced from cfg(test) code, so linking this lib in non-test
+    // builds is harmless — the linker simply discards unreferenced
+    // object code from a static library.
+    //
+    // @plan PLAN-20260707-MAINLOOP.P03
+    cc::Build::new()
+        .warnings(true)
+        .file("src/mainloop/rust_test_bridge.c")
+        .cpp(false)
+        .compile("uqm_test_bridge");
+
+    println!("cargo:rerun-if-changed=src/mainloop/rust_test_bridge.c");
 }
 
 fn generate_state_bindings(globdata_path: &Path) {

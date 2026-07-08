@@ -125,3 +125,6 @@
 /* Defined if using Rust SuperMelee team/setup logic */
 #define USE_RUST_SUPERMELEE
 
+/* Defined if using Rust main game loop (Starcon2Main body) */
+#define USE_RUST_MAINLOOP
+

@@ -155,10 +155,6 @@ inertial_thrust (ELEMENT *ElementPtr)
 void
 ship_preprocess (ELEMENT *ElementPtr)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_preprocess (ElementPtr);
-	return;
-#endif
 	STATUS_FLAGS cur_status_flags;
 	STARSHIP *StarShipPtr;
 	RACE_DESC *RDPtr;
@@ -292,10 +288,6 @@ ship_preprocess (ELEMENT *ElementPtr)
 void
 ship_postprocess (ELEMENT *ElementPtr)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_postprocess (ElementPtr);
-	return;
-#endif
 	STARSHIP *StarShipPtr;
 	RACE_DESC *RDPtr;
 
@@ -393,9 +385,6 @@ collision (ELEMENT *ElementPtr0, POINT *pPt0,
 static BOOLEAN
 spawn_ship (STARSHIP *StarShipPtr)
 {
-#ifdef USE_RUST_SHIPS
-	return rust_ships_spawn (StarShipPtr);
-#endif
 	HELEMENT hShip;
 	RACE_DESC *RDPtr;
 

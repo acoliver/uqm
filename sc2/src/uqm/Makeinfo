@@ -32,6 +32,11 @@ fi
 # Macro/inline wrapper functions needed by Rust FFI
 uqm_CFILES="$uqm_CFILES rust_bridge_macros.c"
 
+# Main-loop wrapper functions (activity/global accessors, macro wrappers).
+# Always compiled -- references extern globals and public-header macros only.
+# The static-function wrappers live in starcon.c (already in the build).
+uqm_CFILES="$uqm_CFILES rust_bridge_mainloop.c"
+
 uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		collide.h colors.h commanim.h commglue.h comm.h cons_res.h controls.h
 		corecode.h credits.h demo.h displist.h dummy.h element.h encount.h
@@ -42,5 +47,6 @@ uqm_HFILES="battlecontrols.h battle.h build.h clock.h cnctdlg.h coderes.h
 		restart.h save.h settings.h setup.h setupmenu.h shipcont.h ship.h
 		sis.h sounds.h starbase.h starcon.h state.h status.h tactrans.h
 		starmap.h rust_comm.h
-		units.h uqmdebug.h util.h velocity.h weapon.h"
+		units.h uqmdebug.h util.h velocity.h weapon.h
+		rust_bridge_mainloop.h"
 

@@ -208,7 +208,6 @@ c_free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 	DestroyCodeRes (ReleaseCodeRes (raceDescPtr->CodeRef));
 }
 
-// Public API: dispatches to Rust or C based on build config.
 // Public API: always uses C-native loading.
 // Rust's RaceDesc is not ABI-compatible with C's RACE_DESC (function pointer
 // layout mismatch), so battle-time loading must go through C until the Rust
@@ -218,9 +217,6 @@ c_free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 RACE_DESC *
 load_ship (SPECIES_ID SpeciesID, BOOLEAN LoadBattleData)
 {
-#ifdef USE_RUST_SHIPS
-	return rust_ships_load ((int) SpeciesID, LoadBattleData);
-#endif
 	return c_load_ship (SpeciesID, LoadBattleData);
 }
 
@@ -228,9 +224,5 @@ void
 free_ship (RACE_DESC *raceDescPtr, BOOLEAN FreeIconData,
 		BOOLEAN FreeBattleData)
 {
-#ifdef USE_RUST_SHIPS
-	rust_ships_free (raceDescPtr, FreeIconData, FreeBattleData);
-	return;
-#endif
 	c_free_ship (raceDescPtr, FreeIconData, FreeBattleData);
 }

@@ -104,6 +104,24 @@ BackgroundInitKernel (DWORD TimeOut)
 	}
 }
 
+// @plan PLAN-20260707-MAINLOOP.P02b
+// Exported wrapper for Rust FFI -- calls static BackgroundInitKernel.
+// Must live in starcon.c because BackgroundInitKernel is static here.
+void
+uqm_splash_with_bg_init_kernel (void)
+{
+	SplashScreen (BackgroundInitKernel);
+}
+
+// @plan PLAN-20260707-MAINLOOP.P02b
+// Exported wrapper for Rust FFI -- calls Battle with static on_battle_frame.
+// Must live in starcon.c because on_battle_frame is static here.
+void
+uqm_battle_with_frame_callback (void)
+{
+	Battle (&on_battle_frame);
+}
+
 // Executes on the main() thread
 void
 SignalStopMainThread (void)
@@ -154,6 +172,14 @@ extern int snddriver, soundflags;
 int
 Starcon2Main (void *threadArg)
 {
+#ifdef USE_RUST_MAINLOOP
+	/* Rust owns the game loop body when USE_RUST_MAINLOOP is defined.
+	 * C main() still owns startup, the main-thread event pump, and
+	 * subsystem teardown after MainExited. */
+	extern int rust_game_loop (void);
+	(void) threadArg;
+	return rust_game_loop ();
+#else
 #ifdef DEBUG_SLEEP
 	mainThreadId = SDL_ThreadID();
 #endif
@@ -319,5 +345,6 @@ while (--ac > 0)
 
 	(void) threadArg;  /* Satisfying compiler (unused parameter) */
 	return 0;
+#endif /* !USE_RUST_MAINLOOP */
 }
 
