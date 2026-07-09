@@ -213,3 +213,29 @@ uqm_free_options_addons (void) {
 	if (optAddons)
 		HFree (optAddons);
 }
+
+/* ------------------------------------------------------------------ */
+/* Element queue + runtime-macro bridge for gravity.c replacement     */
+/* ------------------------------------------------------------------ */
+
+#include "element.h"
+#include "collide.h"
+#include "units.h"
+#include "displist.h"
+
+/* Returns the head of the display element queue. */
+HELEMENT
+uqm_get_head_element (void) {
+	return GetHeadElement ();
+}
+
+/* WRAP_DELTA_X/Y depend on runtime ScreenWidth/Height — bridge them. */
+SIZE
+uqm_wrap_delta_x (SIZE dx) {
+	return WRAP_DELTA_X (dx);
+}
+
+SIZE
+uqm_wrap_delta_y (SIZE dy) {
+	return WRAP_DELTA_Y (dy);
+}
