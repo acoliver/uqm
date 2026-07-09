@@ -529,10 +529,26 @@ uqm_c_do_init (int argc, char *argv[])
 	PlayerControls[0] = CONTROL_TEMPLATE_KB_1;
 	PlayerControls[1] = CONTROL_TEMPLATE_JOY_1;
 
+#ifdef RUST_OWNS_MAIN
+	/* Apply player control overrides from Rust-parsed config file */
+	{
+		extern int rust_options_player1_control(void);
+		extern int rust_options_player2_control(void);
+		int p1 = rust_options_player1_control();
+		int p2 = rust_options_player2_control();
+		if (p1 >= 0)
+			PlayerControls[0] = p1;
+		if (p2 >= 0)
+			PlayerControls[1] = p2;
+	}
+#endif
+
 	if (!options.safeMode.value)
 	{
+#ifndef RUST_OWNS_MAIN
 		LoadResourceIndex (configDir, "uqm.cfg", "config.");
 		getUserConfigOptions (&options);
+#endif
 	}
 
 	for (i = 0; i < 6; ++i)
@@ -755,8 +771,10 @@ main (int argc, char *argv[])
 	// Fill in the options struct based on uqm.cfg
 	if (!options.safeMode.value)
 	{
+#ifndef RUST_OWNS_MAIN
 		LoadResourceIndex (configDir, "uqm.cfg", "config.");
 		getUserConfigOptions (&options);
+#endif
 	}
 
 	{	/* remove old control template names */

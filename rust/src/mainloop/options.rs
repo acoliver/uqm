@@ -91,6 +91,10 @@ pub struct ParsedOptions {
     pub resolution_width: c_int,
     pub resolution_height: c_int,
 
+    /// Player control templates from config file (None = use C defaults).
+    pub player1_control: Option<c_int>,
+    pub player2_control: Option<c_int>,
+
     /// Non-zero if parsing failed.
     pub parse_error: bool,
 }
@@ -132,6 +136,8 @@ impl Default for ParsedOptions {
             speech_volume_scale: 1.0,
             resolution_width: 1280,
             resolution_height: 960,
+            player1_control: None,
+            player2_control: None,
             parse_error: false,
         }
     }
@@ -295,8 +301,15 @@ fn build_command() -> Command {
 ///
 /// On macOS, filters out the `-psn_XXXX` argument that Finder injects.
 /// If no content directory is specified, searches common locations.
+///
+/// Priority: CLI args > config file (`uqm.cfg`) > compiled defaults.
 pub fn parse_and_store(args: &[String]) -> ParsedOptions {
-    let mut opts = parse_args(args);
+    // Start with config file values (lowest explicit priority)
+    let mut opts = load_config_defaults();
+
+    // Override with CLI args (highest priority)
+    parse_args_into(args, &mut opts);
+
     if opts.content_dir.is_none() {
         opts.content_dir = discover_content_dir();
     }
@@ -304,12 +317,143 @@ pub fn parse_and_store(args: &[String]) -> ParsedOptions {
     opts
 }
 
-fn parse_args(args: &[String]) -> ParsedOptions {
+/// Load config file values from `{config_dir}/uqm.cfg`.
+///
+/// The config file format is `key = TYPE:value` where TYPE is
+/// BOOLEAN, INT32, or STRING. These values provide defaults that
+/// CLI args can override.
+fn load_config_defaults() -> ParsedOptions {
     let mut opts = ParsedOptions::default();
 
+    // Determine config dir (same logic as prepareConfigDir)
+    let config_dir = std::env::var("UQM_CONFIG_DIR")
+        .or_else(|_| {
+            std::env::var("HOME").map(|h| format!("{}/.uqm", h.trim_end_matches('/')))
+        })
+        .unwrap_or_else(|_| "~/.uqm".to_string());
+    let cfg_path = format!("{}/uqm.cfg", config_dir.trim_end_matches('/'));
+
+    let content = match std::fs::read_to_string(&cfg_path) {
+        Ok(c) => c,
+        Err(_) => return opts, // no config file is fine
+    };
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, val)) = line.split_once('=') {
+            apply_config_value(&mut opts, key.trim(), val.trim());
+        }
+    }
+    tracing::debug!("Loaded config from {}", cfg_path);
+    opts
+}
+
+/// Apply a single config file key=value pair to ParsedOptions.
+fn apply_config_value(opts: &mut ParsedOptions, key: &str, raw_val: &str) {
+    // raw_val is "TYPE:value" e.g. "BOOLEAN:true", "INT32:960", "STRING:mixsdl"
+    let (vtype, vstr) = match raw_val.split_once(':') {
+        Some((t, v)) => (t, v),
+        None => return,
+    };
+
+    match key {
+        "reswidth" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.resolution_width = v;
+            }
+        }
+        "resheight" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.resolution_height = v;
+            }
+        }
+        "alwaysgl" if vtype == "BOOLEAN" && vstr == "true" => {
+            opts.opengl = true; // alwaysgl only applies when true
+        }
+        "usegl" if vtype == "BOOLEAN" => {
+            opts.opengl = vstr == "true";
+        }
+        "scaler" if vtype == "STRING" => {
+            opts.scaler = match vstr {
+                "hq" => TFB_GFXFLAGS_SCALE_HQXX,
+                "xbrz3" => TFB_GFXFLAGS_SCALE_XBRZ3,
+                "xbrz4" => TFB_GFXFLAGS_SCALE_XBRZ4,
+                "none" => 0,
+                _ => opts.scaler,
+            };
+        }
+        "fullscreen" if vtype == "BOOLEAN" => opts.fullscreen = vstr == "true",
+        "scanlines" if vtype == "BOOLEAN" => opts.scanlines = vstr == "true",
+        "showfps" if vtype == "BOOLEAN" => opts.show_fps = vstr == "true",
+        "keepaspectratio" if vtype == "BOOLEAN" => opts.keep_aspect_ratio = vstr == "true",
+        "gamma" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.gamma = v as f32 / 1000.0;
+            }
+        }
+        "subtitles" if vtype == "BOOLEAN" => opts.subtitles = vstr == "true",
+        "textmenu" if vtype == "BOOLEAN" => opts.which_menu = if vstr == "true" { OPT_PC } else { OPT_3DO },
+        "textgradients" if vtype == "BOOLEAN" => opts.which_fonts = if vstr == "true" { OPT_PC } else { OPT_3DO },
+        "iconicscan" if vtype == "BOOLEAN" => opts.which_coarse_scan = if vstr == "true" { OPT_3DO } else { OPT_PC },
+        "smoothscroll" if vtype == "BOOLEAN" => opts.smooth_scroll = if vstr == "true" { OPT_3DO } else { OPT_PC },
+        "pulseshield" if vtype == "BOOLEAN" => opts.which_shield = if vstr == "true" { OPT_3DO } else { OPT_PC },
+        "3domovies" if vtype == "BOOLEAN" => opts.which_intro = if vstr == "true" { OPT_3DO } else { OPT_PC },
+        "3domusic" if vtype == "BOOLEAN" => opts.use_3do_music = vstr == "true",
+        "remixmusic" if vtype == "BOOLEAN" => opts.use_remix_music = vstr == "true",
+        "speech" if vtype == "BOOLEAN" => opts.use_speech = vstr == "true",
+        "smoothmelee" if vtype == "BOOLEAN" => opts.melee_scale = if vstr == "true" { TFB_SCALE_TRILINEAR } else { TFB_SCALE_STEP },
+        "audiodriver" if vtype == "STRING" => {
+            opts.sound_driver = match vstr {
+                "mixsdl" => AUDIO_DRIVER_MIXSDL,
+                "none" => AUDIO_DRIVER_NOSOUND,
+                _ => opts.sound_driver,
+            };
+        }
+        "audioquality" if vtype == "STRING" => {
+            opts.sound_quality = match vstr {
+                "low" => AUDIO_QUALITY_LOW,
+                "medium" => AUDIO_QUALITY_MEDIUM,
+                "high" => AUDIO_QUALITY_HIGH,
+                _ => opts.sound_quality,
+            };
+        }
+        "positionalsfx" if vtype == "BOOLEAN" => opts.stereo_sfx = vstr == "true",
+        "musicvol" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.music_volume_scale = v as f32 / 100.0;
+            }
+        }
+        "sfxvol" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.sfx_volume_scale = v as f32 / 100.0;
+            }
+        }
+        "speechvol" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.speech_volume_scale = v as f32 / 100.0;
+            }
+        }
+        "player1control" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.player1_control = Some(v);
+            }
+        }
+        "player2control" if vtype == "INT32" => {
+            if let Ok(v) = vstr.parse::<i32>() {
+                opts.player2_control = Some(v);
+            }
+        }
+        _ => {} // unknown key, skip
+    }
+}
+
+fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
     // macOS: Finder injects -psn_XXXXXX on double-click launch.
     if args.len() >= 2 && args[1].starts_with("-psn_") {
-        return opts;
+        return;
     }
 
     let cmd = build_command();
@@ -317,17 +461,17 @@ fn parse_args(args: &[String]) -> ParsedOptions {
         Ok(m) => m,
         Err(_) => {
             opts.parse_error = true;
-            return opts;
+            return;
         }
     };
 
     if matches.get_flag("help") {
         opts.run_mode = RunMode::Usage;
-        return opts;
+        return;
     }
     if matches.get_flag("version") {
         opts.run_mode = RunMode::Version;
-        return opts;
+        return;
     }
 
     // Resolution: WIDTHxHEIGHT
@@ -401,7 +545,7 @@ fn parse_args(args: &[String]) -> ParsedOptions {
             "none" | "no" => 0,
             _ => {
                 opts.parse_error = true;
-                return opts;
+                return;
             }
         };
     }
@@ -412,7 +556,7 @@ fn parse_args(args: &[String]) -> ParsedOptions {
             "bilinear" => 0,
             _ => {
                 opts.parse_error = true;
-                return opts;
+                return;
             }
         };
     }
@@ -423,7 +567,7 @@ fn parse_args(args: &[String]) -> ParsedOptions {
             "high" => AUDIO_QUALITY_HIGH,
             _ => {
                 opts.parse_error = true;
-                return opts;
+                return;
             }
         };
     }
@@ -433,29 +577,29 @@ fn parse_args(args: &[String]) -> ParsedOptions {
             "none" | "nosound" => AUDIO_DRIVER_NOSOUND,
             _ => {
                 opts.parse_error = true;
-                return opts;
+                return;
             }
         };
     }
 
     // 3do/pc choice options
     if let Some(v) = matches.get_one::<String>("intro") {
-        opts.which_intro = parse_choice(v, &mut opts);
+        opts.which_intro = parse_choice(v, opts);
     }
     if let Some(v) = matches.get_one::<String>("cscan") {
-        opts.which_coarse_scan = parse_choice(v, &mut opts);
+        opts.which_coarse_scan = parse_choice(v, opts);
     }
     if let Some(v) = matches.get_one::<String>("menu") {
-        opts.which_menu = parse_choice(v, &mut opts);
+        opts.which_menu = parse_choice(v, opts);
     }
     if let Some(v) = matches.get_one::<String>("font") {
-        opts.which_fonts = parse_choice(v, &mut opts);
+        opts.which_fonts = parse_choice(v, opts);
     }
     if let Some(v) = matches.get_one::<String>("shield") {
-        opts.which_shield = parse_choice(v, &mut opts);
+        opts.which_shield = parse_choice(v, opts);
     }
     if let Some(v) = matches.get_one::<String>("scroll") {
-        opts.smooth_scroll = parse_choice(v, &mut opts);
+        opts.smooth_scroll = parse_choice(v, opts);
     }
 
     // Volume options (0-100 → 0.0-1.0 scale)
@@ -485,8 +629,6 @@ fn parse_args(args: &[String]) -> ParsedOptions {
             1.0
         });
     }
-
-    opts
 }
 
 fn parse_resolution(s: &str) -> Option<(c_int, c_int)> {
@@ -692,6 +834,18 @@ int_getter!(rust_options_melee_scale, melee_scale);
 int_getter!(rust_options_resolution_width, resolution_width);
 int_getter!(rust_options_resolution_height, resolution_height);
 
+/// Player control overrides from config file. Returns -1 if not set.
+#[no_mangle]
+pub extern "C" fn rust_options_player1_control() -> c_int {
+    parsed().player1_control.unwrap_or(-1)
+}
+
+/// Player control overrides from config file. Returns -1 if not set.
+#[no_mangle]
+pub extern "C" fn rust_options_player2_control() -> c_int {
+    parsed().player2_control.unwrap_or(-1)
+}
+
 // --- Float getters ---
 
 macro_rules! float_getter {
@@ -718,7 +872,10 @@ mod tests {
 
     fn parse(args: &[&str]) -> ParsedOptions {
         let owned: Vec<String> = args.iter().map(|s| s.to_string()).collect();
-        parse_args(&owned)
+        // Bypass config file loading for unit tests
+        let mut opts = ParsedOptions::default();
+        parse_args_into(&owned, &mut opts);
+        opts
     }
 
     #[test]
@@ -874,10 +1031,11 @@ mod tests {
 
     #[test]
     fn test_macos_psn_filter() {
-        let opts = parse_args(&[
+        let mut opts = ParsedOptions::default();
+        parse_args_into(&[
             "uqm".to_string(),
             "-psn_0_123456".to_string(),
-        ]);
+        ], &mut opts);
         assert_eq!(opts.run_mode, RunMode::Normal);
         assert!(!opts.parse_error);
     }
@@ -909,5 +1067,41 @@ mod tests {
             assert!(std::path::Path::new(path).join("version").exists(),
                 "discovered content dir {path} should contain version file");
         }
+    }
+
+    #[test]
+    fn test_config_file_parsing() {
+        let mut opts = ParsedOptions::default();
+        // Verify config key parsing matches the real uqm.cfg format
+        apply_config_value(&mut opts, "reswidth", "INT32:1920");
+        assert_eq!(opts.resolution_width, 1920);
+        apply_config_value(&mut opts, "resheight", "INT32:1200");
+        assert_eq!(opts.resolution_height, 1200);
+        apply_config_value(&mut opts, "fullscreen", "BOOLEAN:true");
+        assert!(opts.fullscreen);
+        apply_config_value(&mut opts, "usegl", "BOOLEAN:true");
+        assert!(opts.opengl);
+        apply_config_value(&mut opts, "scaler", "STRING:xbrz4");
+        assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ4);
+        apply_config_value(&mut opts, "gamma", "INT32:1500");
+        assert!((opts.gamma - 1.5).abs() < 0.01);
+        apply_config_value(&mut opts, "musicvol", "INT32:50");
+        assert!((opts.music_volume_scale - 0.5).abs() < 0.01);
+        apply_config_value(&mut opts, "textmenu", "BOOLEAN:false");
+        assert_eq!(opts.which_menu, OPT_3DO);
+        apply_config_value(&mut opts, "smoothmelee", "BOOLEAN:true");
+        assert_eq!(opts.melee_scale, TFB_SCALE_TRILINEAR);
+    }
+
+    #[test]
+    fn test_config_file_priority() {
+        // Config values should NOT override CLI values when using parse_and_store.
+        // Simulate: config says xbrz4, CLI says hq → hq wins.
+        let mut opts = ParsedOptions::default();
+        apply_config_value(&mut opts, "scaler", "STRING:xbrz4");
+        assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ4);
+        // Now CLI override
+        parse_args_into(&["uqm".to_string(), "-c".to_string(), "hq".to_string()], &mut opts);
+        assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_HQXX);
     }
 }
