@@ -12,6 +12,7 @@ pub mod bridge_log;
 pub mod c_bindings;
 pub mod cli;
 pub mod comm;
+pub mod collections;
 pub mod config;
 pub mod game_init;
 pub mod graphics;
