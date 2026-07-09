@@ -307,3 +307,67 @@ mod tests {
         assert_eq!(square_root(10), 3);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Sine table + ARCTAN — replaces C trans.c
+// ---------------------------------------------------------------------------
+
+/// C: `SIZE sinetab[]` — 64-entry sine lookup table.
+/// Each entry is sin(angle) * 16384 (fixed-point, SIN_SHIFT=14).
+/// UQM angle system: 0=North(-Y), 16=East(+X), 32=South(+Y), 48=West(-X).
+/// Exported as `#[no_mangle]` so C macros `SINVAL`, `COSVAL`, `SINE`, `COSINE`
+/// in units.h can index into it directly.
+#[no_mangle]
+#[allow(non_upper_case_globals)]
+pub static sinetab: [i16; 64] = [
+    -16384, -16305, -16069, -15679, -15137, -14449, -13623, -12665, -11585,
+    -10394, -9102, -7723, -6270, -4756, -3197, -1608, 0, 1608, 3197, 4756, 6270,
+    7723, 9102, 10394, 11585, 12665, 13623, 14449, 15137, 15679, 16069, 16305,
+    16384, 16305, 16069, 15679, 15137, 14449, 13623, 12665, 11585, 10394, 9102,
+    7723, 6270, 4756, 3197, 1608, 0, -1608, -3197, -4756, -6270, -7723, -9102,
+    -10394, -11585, -12665, -13623, -14449, -15137, -15679, -16069, -16305,
+];
+
+const CIRCLE_SHIFT: u32 = 6;
+const FULL_CIRCLE: u16 = 1 << CIRCLE_SHIFT; // 64
+const HALF_CIRCLE: u16 = FULL_CIRCLE >> 1; // 32
+const QUADRANT: u16 = FULL_CIRCLE >> 2; // 16
+
+/// C: `COUNT ARCTAN(SIZE delta_x, SIZE delta_y)`
+///
+/// Integer arctangent returning angle in UQM's 64-position circle.
+/// Exact port of C trans.c algorithm.
+#[no_mangle]
+pub extern "C" fn ARCTAN(delta_x: i16, delta_y: i16) -> u16 {
+    const ATANTAB: [u16; 33] = [
+        0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
+        7, 7, 7, 7, 7, 7, 8, 8, 8,
+    ];
+
+    if delta_x == 0 && delta_y == 0 {
+        return FULL_CIRCLE;
+    }
+
+    let v1_abs = (delta_x as i32).unsigned_abs();
+    let v2_abs = (delta_y as i32).unsigned_abs();
+
+    let v1 = if v1_abs > v2_abs {
+        let ratio = ((v2_abs << (CIRCLE_SHIFT - 1)) + (v1_abs >> 1)) / v1_abs;
+        let idx = (ratio as usize).min(ATANTAB.len() - 1);
+        QUADRANT - ATANTAB[idx]
+    } else {
+        let ratio = ((v1_abs << (CIRCLE_SHIFT - 1)) + (v2_abs >> 1)) / v2_abs;
+        let idx = (ratio as usize).min(ATANTAB.len() - 1);
+        ATANTAB[idx]
+    };
+
+    let mut result = v1;
+    if delta_x < 0 {
+        result = FULL_CIRCLE - result;
+    }
+    if delta_y > 0 {
+        result = HALF_CIRCLE - result;
+    }
+
+    result & (FULL_CIRCLE - 1) // NORMALIZE_ANGLE
+}
