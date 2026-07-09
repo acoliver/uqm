@@ -32,6 +32,7 @@ pub mod ffi;
 pub mod game_loop;
 pub mod init_reference;
 pub mod init_sequence;
+pub mod init_wrappers;
 pub mod logging;
 pub mod options;
 pub mod restart_menu;

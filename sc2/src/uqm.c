@@ -229,6 +229,20 @@ static const char *scalerOptString (const struct int_option *option);
 static const char *boolOptString (const struct bool_option *option);
 static const char *boolNotOptString (const struct bool_option *option);
 
+#ifdef RUST_OWNS_MAIN
+extern int rust_tfb_preinit (void);
+extern void rust_log_init_threads (void);
+extern void rust_alarm_init (void);
+extern void rust_callback_init (void);
+extern void rust_alarm_uninit (void);
+extern void rust_callback_uninit (void);
+extern int rust_init_color_maps (void);
+extern int rust_tfb_init_graphics (int driver, int flags, const char *backend,
+		int width, int height);
+extern void rust_init_communication (void);
+extern void rust_tfb_init_input (int driver, int flags);
+#endif
+
 /*
  * uqm_c_do_init -- Extracted init sequence for Rust-owned main().
  *
@@ -491,10 +505,18 @@ uqm_c_do_init (int argc, char *argv[])
 		return optionsResult;
 	}
 
+#ifdef RUST_OWNS_MAIN
+	if (rust_tfb_preinit () != 0) exit (EXIT_FAILURE);
+#else
 	TFB_PreInit ();
+#endif
 	mem_init ();
 	InitThreadSystem ();
+#ifdef RUST_OWNS_MAIN
+	rust_log_init_threads ();
+#else
 	log_initThreads ();
+#endif
 	initIO ();
 #ifdef RUST_OWNS_MAIN
 	{	extern int rust_prepare_config_dir(const char *);
@@ -564,6 +586,8 @@ uqm_c_do_init (int argc, char *argv[])
 	InitTimeSystem ();
 	InitTaskSystem ();
 
+	/* Alarm/Callback init kept in C: game loop calls Callback_process,
+	 * Alarm_processOne etc. which depend on C-side globals. */
 	Alarm_init ();
 	Callback_init ();
 
@@ -581,6 +605,8 @@ uqm_c_do_init (int argc, char *argv[])
 		gfxFlags |= TFB_GFXFLAGS_SCANLINES;
 	if (options.showFps.value)
 		gfxFlags |= TFB_GFXFLAGS_SHOWFPS;
+	/* Graphics/ColorMaps/Comm/Input init kept in C: many C files call
+	 * FadeScreen, SetColorMap, etc. which depend on C-side globals. */
 	TFB_InitGraphics (gfxDriver, gfxFlags, options.graphicsBackend,
 			options.resolution.width, options.resolution.height);
 	if (options.gamma.set && setGammaCorrection (options.gamma.value))
