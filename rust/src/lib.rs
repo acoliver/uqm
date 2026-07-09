@@ -5,6 +5,7 @@
 // Phase 7: Alien Communication system
 
 pub mod battle;
+pub mod callback;
 
 pub mod supermelee;
 
