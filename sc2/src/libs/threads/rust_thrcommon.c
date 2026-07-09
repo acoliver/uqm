@@ -227,7 +227,16 @@ SleepThreadUntil (TimeCount wakeTime)
 
 		now = GetTimeCounter ();
 		if (wakeTime <= now)
+		{
+			/* Even when we don't need to sleep, we must still pump
+			 * events and flush the DCQ. In the 2-thread model the
+			 * render thread drains the DCQ continuously; here we
+			 * are the only thread, so skipping the flush leaves
+			 * committed commands unrendered (e.g. menu redraws that
+			 * don't appear until a later frame happens to sleep). */
+			RUST_PUMP_AND_FLUSH ();
 			return;
+		}
 
 		nextTimeMs = Async_timeBeforeNextMs ();
 		nextTime = (nextTimeMs / 1000) * ONE_SECOND +
