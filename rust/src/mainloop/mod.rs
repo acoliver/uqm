@@ -26,10 +26,17 @@
 //! @plan PLAN-20260707-MAINLOOP.P03
 
 pub mod c_extern;
+pub mod c_main_extern;
+pub mod dir_prep;
 pub mod ffi;
 pub mod game_loop;
 pub mod init_reference;
+pub mod init_sequence;
+pub mod logging;
+pub mod options;
+pub mod restart_menu;
 pub mod state_machine;
+pub mod teardown;
 pub mod types;
 
 pub use ffi::{

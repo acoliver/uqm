@@ -41,6 +41,11 @@
 #include "libs/graphics/gfx_common.h"
 #include "libs/inplib.h"
 
+#ifdef USE_RUST_RESTART
+#include "rust_bridge_restart.h"
+extern BOOLEAN rust_start_game (void);
+#endif
+
 
 enum
 {
@@ -52,7 +57,11 @@ enum
 };
 
 // Draw the full restart menu. Nothing is done with selections.
-static void
+// When USE_RUST_RESTART is defined, these are non-static so Rust can call them.
+#ifndef USE_RUST_RESTART
+static
+#endif
+void
 DrawRestartMenuGraphic (MENU_STATE *pMS)
 {
 	RECT r;
@@ -86,7 +95,10 @@ DrawRestartMenuGraphic (MENU_STATE *pMS)
 	UnbatchGraphics ();
 }
 
-static void
+#ifndef USE_RUST_RESTART
+static
+#endif
+void
 DrawRestartMenu (MENU_STATE *pMS, BYTE NewState, FRAME f)
 {
 	POINT origin;
@@ -373,6 +385,9 @@ TryStartGame (void)
 BOOLEAN
 StartGame (void)
 {
+#ifdef USE_RUST_RESTART
+	return rust_start_game ();
+#else
 	do
 	{
 		while (!TryStartGame ())
@@ -409,5 +424,6 @@ StartGame (void)
 	PlayerControl[1] = COMPUTER_CONTROL | AWESOME_RATING;
 
 	return (TRUE);
+#endif /* USE_RUST_RESTART */
 }
 

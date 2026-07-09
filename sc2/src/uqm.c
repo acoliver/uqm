@@ -216,7 +216,7 @@ static void saveError (const char *fmt, ...)
 
 static int parseOptions (int argc, char *argv[],
 		struct options_struct *options);
-static void getUserConfigOptions (struct options_struct *options);
+void getUserConfigOptions (struct options_struct *options);
 static void usage (FILE *out, const struct options_struct *defaultOptions);
 static int parseIntOption (const char *str, int *result,
 		const char *optName);
@@ -229,6 +229,377 @@ static const char *scalerOptString (const struct int_option *option);
 static const char *boolOptString (const struct bool_option *option);
 static const char *boolNotOptString (const struct bool_option *option);
 
+/*
+ * uqm_c_do_init -- Extracted init sequence for Rust-owned main().
+ *
+ * Does everything C main() does before StartThread:
+ *   option parsing, config loading, global setup, subsystem init.
+ *
+ * Returns EXIT_SUCCESS (0) on success, non-zero on failure.
+ * Special: returns -1 for version/usage modes (already printed).
+ *
+ * @plan PLAN-20260707-BINARY-INVERSION.P05
+ */
+int
+uqm_c_do_init (int argc, char *argv[])
+{
+	struct options_struct options = {
+		/* .logFile = */            NULL,
+		/* .runMode = */            runMode_normal,
+		/* .configDir = */          NULL,
+		/* .contentDir = */         NULL,
+		/* .addonDir = */           NULL,
+		/* .addons = */             NULL,
+		/* .numAddons = */          0,
+		/* .graphicsBackend = */     NULL,
+
+		INIT_CONFIG_OPTION(  opengl,            false ),
+		INIT_CONFIG_OPTION2( resolution,        1280, 960 ),
+		INIT_CONFIG_OPTION(  fullscreen,        false ),
+		INIT_CONFIG_OPTION(  scanlines,         false ),
+		INIT_CONFIG_OPTION(  scaler,            TFB_GFXFLAGS_SCALE_XBRZ3 ),
+		INIT_CONFIG_OPTION(  showFps,           false ),
+		INIT_CONFIG_OPTION(  keepAspectRatio,   true ),
+		INIT_CONFIG_OPTION(  gamma,             1.0f ),
+		INIT_CONFIG_OPTION(  soundDriver,       audio_DRIVER_MIXSDL ),
+		INIT_CONFIG_OPTION(  soundQuality,      audio_QUALITY_HIGH ),
+		INIT_CONFIG_OPTION(  use3doMusic,       true ),
+		INIT_CONFIG_OPTION(  useRemixMusic,     true ),
+		INIT_CONFIG_OPTION(  useSpeech,         true ),
+		INIT_CONFIG_OPTION(  whichCoarseScan,   OPT_3DO ),
+		INIT_CONFIG_OPTION(  whichMenu,         OPT_PC ),
+		INIT_CONFIG_OPTION(  whichFonts,        OPT_PC ),
+		INIT_CONFIG_OPTION(  whichIntro,        OPT_3DO ),
+		INIT_CONFIG_OPTION(  whichShield,       OPT_3DO ),
+		INIT_CONFIG_OPTION(  smoothScroll,      OPT_3DO ),
+		INIT_CONFIG_OPTION(  meleeScale,        TFB_SCALE_TRILINEAR ),
+		INIT_CONFIG_OPTION(  subtitles,         true ),
+		INIT_CONFIG_OPTION(  stereoSFX,         true ),
+		INIT_CONFIG_OPTION(  musicVolumeScale,  1.0f ),
+		INIT_CONFIG_OPTION(  sfxVolumeScale,    1.0f ),
+		INIT_CONFIG_OPTION(  speechVolumeScale, 1.0f ),
+		INIT_CONFIG_OPTION(  safeMode,          false ),
+	};
+	struct options_struct defaults = options;
+	int optionsResult;
+	int gfxDriver;
+	int gfxFlags;
+	int i;
+
+#ifdef RUST_OWNS_MAIN
+	/* Rust already parsed options via clap. Skip C parseOptions entirely. */
+	optionsResult = EXIT_SUCCESS;
+#else
+	optionsResult = parseOptions (argc, argv, &options);
+#endif
+
+	log_init (15);
+
+#ifdef USE_RUST_BRIDGE
+	rust_bridge_init();
+#endif
+
+#ifdef RUST_OWNS_MAIN
+	/* Rust already parsed options via clap. Override with Rust values. */
+	{
+		extern int rust_options_get_run_mode(void);
+		extern int rust_options_parse_error(void);
+		extern int rust_options_opengl(void);
+		extern int rust_options_fullscreen(void);
+		extern int rust_options_scanlines(void);
+		extern int rust_options_show_fps(void);
+		extern int rust_options_keep_aspect_ratio(void);
+		extern int rust_options_use_3do_music(void);
+		extern int rust_options_use_remix_music(void);
+		extern int rust_options_use_speech(void);
+		extern int rust_options_subtitles(void);
+		extern int rust_options_stereo_sfx(void);
+		extern int rust_options_safe_mode(void);
+		extern int rust_options_scaler(void);
+		extern int rust_options_sound_driver(void);
+		extern int rust_options_sound_quality(void);
+		extern int rust_options_which_coarse_scan(void);
+		extern int rust_options_which_menu(void);
+		extern int rust_options_which_fonts(void);
+		extern int rust_options_which_intro(void);
+		extern int rust_options_which_shield(void);
+		extern int rust_options_smooth_scroll(void);
+		extern int rust_options_melee_scale(void);
+		extern int rust_options_resolution_width(void);
+		extern int rust_options_resolution_height(void);
+		extern float rust_options_gamma(void);
+		extern float rust_options_music_volume_scale(void);
+		extern float rust_options_sfx_volume_scale(void);
+		extern float rust_options_speech_volume_scale(void);
+		extern char *rust_options_get_log_file(void);
+		extern char *rust_options_get_config_dir(void);
+		extern char *rust_options_get_content_dir(void);
+		extern char *rust_options_get_addon_dir(void);
+		extern char *rust_options_get_graphics_backend(void);
+		extern int rust_options_get_addon_count(void);
+		extern char *rust_options_get_addon(int index);
+		extern void rust_options_free_string(char *s);
+
+		options.opengl.value = rust_options_opengl();
+		options.opengl.set = true;
+		options.fullscreen.value = rust_options_fullscreen();
+		options.fullscreen.set = true;
+		options.scanlines.value = rust_options_scanlines();
+		options.scanlines.set = true;
+		options.showFps.value = rust_options_show_fps();
+		options.showFps.set = true;
+		options.keepAspectRatio.value = rust_options_keep_aspect_ratio();
+		options.keepAspectRatio.set = true;
+		options.use3doMusic.value = rust_options_use_3do_music();
+		options.use3doMusic.set = true;
+		options.useRemixMusic.value = rust_options_use_remix_music();
+		options.useRemixMusic.set = true;
+		options.useSpeech.value = rust_options_use_speech();
+		options.useSpeech.set = true;
+		options.subtitles.value = rust_options_subtitles();
+		options.subtitles.set = true;
+		options.stereoSFX.value = rust_options_stereo_sfx();
+		options.stereoSFX.set = true;
+		options.safeMode.value = rust_options_safe_mode();
+		options.safeMode.set = true;
+
+		options.scaler.value = rust_options_scaler();
+		options.scaler.set = true;
+		options.soundDriver.value = rust_options_sound_driver();
+		options.soundDriver.set = true;
+		options.soundQuality.value = rust_options_sound_quality();
+		options.soundQuality.set = true;
+		options.whichCoarseScan.value = rust_options_which_coarse_scan();
+		options.whichCoarseScan.set = true;
+		options.whichMenu.value = rust_options_which_menu();
+		options.whichMenu.set = true;
+		options.whichFonts.value = rust_options_which_fonts();
+		options.whichFonts.set = true;
+		options.whichIntro.value = rust_options_which_intro();
+		options.whichIntro.set = true;
+		options.whichShield.value = rust_options_which_shield();
+		options.whichShield.set = true;
+		options.smoothScroll.value = rust_options_smooth_scroll();
+		options.smoothScroll.set = true;
+		options.meleeScale.value = rust_options_melee_scale();
+		options.meleeScale.set = true;
+
+		options.gamma.value = rust_options_gamma();
+		options.gamma.set = true;
+		options.musicVolumeScale.value = rust_options_music_volume_scale();
+		options.musicVolumeScale.set = true;
+		options.sfxVolumeScale.value = rust_options_sfx_volume_scale();
+		options.sfxVolumeScale.set = true;
+		options.speechVolumeScale.value = rust_options_speech_volume_scale();
+		options.speechVolumeScale.set = true;
+
+		options.resolution.width = rust_options_resolution_width();
+		options.resolution.height = rust_options_resolution_height();
+		options.resolution.set = true;
+
+		/* String options (need to dup since Rust owns the memory) */
+		{
+			char *tmp;
+			tmp = rust_options_get_log_file();
+			if (tmp && *tmp) options.logFile = strdup(tmp);
+			rust_options_free_string(tmp);
+			tmp = rust_options_get_config_dir();
+			if (tmp && *tmp) options.configDir = strdup(tmp);
+			rust_options_free_string(tmp);
+			tmp = rust_options_get_content_dir();
+			if (tmp && *tmp) options.contentDir = strdup(tmp);
+			rust_options_free_string(tmp);
+			tmp = rust_options_get_addon_dir();
+			if (tmp && *tmp) options.addonDir = strdup(tmp);
+			rust_options_free_string(tmp);
+			tmp = rust_options_get_graphics_backend();
+			if (tmp && *tmp) options.graphicsBackend = strdup(tmp);
+			rust_options_free_string(tmp);
+		}
+
+		/* Addons */
+		{
+			int count = rust_options_get_addon_count();
+			int i;
+			options.numAddons = count;
+			options.addons = HMalloc((count + 1) * sizeof(const char *));
+			for (i = 0; i < count; i++)
+			{
+				char *tmp = rust_options_get_addon(i);
+				options.addons[i] = strdup(tmp ? tmp : "");
+				rust_options_free_string(tmp);
+			}
+			options.addons[count] = NULL;
+		}
+
+		optionsResult = EXIT_SUCCESS;
+	}
+#endif /* RUST_OWNS_MAIN */
+
+	if (options.logFile != NULL)
+	{
+		if (!freopen (options.logFile, "w", stderr))
+		{
+			printf ("Error %d calling freopen() on stderr\n", errno);
+			return EXIT_FAILURE;
+		}
+#ifdef UNBUFFERED_LOGFILE
+		setbuf (stderr, NULL);
+#endif
+		for (i = 0; i < argc; ++i)
+			log_add (log_User, "argv[%d] = [%s]", i, argv[i]);
+	}
+
+	if (options.runMode == runMode_version)
+	{
+ 		printf ("%d.%d.%d%s\n", UQM_MAJOR_VERSION, UQM_MINOR_VERSION,
+				UQM_PATCH_VERSION, UQM_EXTRA_VERSION);
+		log_showBox (false, false);
+		return -1;
+	}
+
+	log_add (log_User, "The Ur-Quan Masters v%d.%d.%d%s (compiled %s %s)\n"
+	        "This software comes with ABSOLUTELY NO WARRANTY;\n"
+			"for details see the included 'COPYING' file.\n",
+			UQM_MAJOR_VERSION, UQM_MINOR_VERSION,
+			UQM_PATCH_VERSION, UQM_EXTRA_VERSION,
+			__DATE__, __TIME__);
+#ifdef NETPLAY
+	log_add (log_User, "Netplay protocol version %d.%d. Netplay opponent "
+			"must have UQM %d.%d.%d or later.",
+			NETPLAY_PROTOCOL_VERSION_MAJOR, NETPLAY_PROTOCOL_VERSION_MINOR,
+			NETPLAY_MIN_UQM_VERSION_MAJOR, NETPLAY_MIN_UQM_VERSION_MINOR,
+			NETPLAY_MIN_UQM_VERSION_PATCH);
+#endif
+
+	if (errBuffer[0] != '\0')
+	{
+		log_add (log_Error, "%s", errBuffer);
+		errBuffer[0] = '\0';
+	}
+
+	if (options.runMode == runMode_usage)
+	{
+		usage (stdout, &defaults);
+		log_showBox (true, false);
+		return -1;
+	}
+
+	if (optionsResult != EXIT_SUCCESS)
+	{
+		log_add (log_Fatal, "Run with -h to see the allowed arguments.");
+		return optionsResult;
+	}
+
+	TFB_PreInit ();
+	mem_init ();
+	InitThreadSystem ();
+	log_initThreads ();
+	initIO ();
+#ifdef RUST_OWNS_MAIN
+	{	extern int rust_prepare_config_dir(const char *);
+		if (rust_prepare_config_dir(options.configDir) != 0)
+			exit (EXIT_FAILURE); }
+#else
+	prepareConfigDir (options.configDir);
+#endif
+
+	PlayerControls[0] = CONTROL_TEMPLATE_KB_1;
+	PlayerControls[1] = CONTROL_TEMPLATE_JOY_1;
+
+	if (!options.safeMode.value)
+	{
+		LoadResourceIndex (configDir, "uqm.cfg", "config.");
+		getUserConfigOptions (&options);
+	}
+
+	for (i = 0; i < 6; ++i)
+	{
+		char cfgkey[64];
+		snprintf(cfgkey, sizeof(cfgkey), "config.keys.%d.name", i + 1);
+		cfgkey[sizeof(cfgkey) - 1] = '\0';
+		res_Remove (cfgkey);
+	}
+
+	snddriver = options.soundDriver.value;
+	soundflags = options.soundQuality.value;
+
+	opt3doMusic = options.use3doMusic.value;
+	optRemixMusic = options.useRemixMusic.value;
+	optSpeech = options.useSpeech.value;
+	optWhichCoarseScan = options.whichCoarseScan.value;
+	optWhichMenu = options.whichMenu.value;
+	optWhichFonts = options.whichFonts.value;
+	optWhichIntro = options.whichIntro.value;
+	optWhichShield = options.whichShield.value;
+	optSmoothScroll = options.smoothScroll.value;
+	optMeleeScale = options.meleeScale.value;
+	optKeepAspectRatio = options.keepAspectRatio.value;
+	optSubtitles = options.subtitles.value;
+	optStereoSFX = options.stereoSFX.value;
+	musicVolumeScale = options.musicVolumeScale.value;
+	sfxVolumeScale = options.sfxVolumeScale.value;
+	speechVolumeScale = options.speechVolumeScale.value;
+	optAddons = options.addons;
+
+#ifdef RUST_OWNS_MAIN
+	{	extern int rust_prepare_content_dir(const char *, const char *, const char *);
+		extern int rust_prepare_melee_dir(void);
+		extern int rust_prepare_save_dir(void);
+		extern int rust_prepare_shadow_addons(const char *const *);
+		if (rust_prepare_content_dir(options.contentDir, options.addonDir, argv[0]) != 0)
+			exit (EXIT_FAILURE);
+		if (rust_prepare_melee_dir() != 0)
+			exit (EXIT_FAILURE);
+		if (rust_prepare_save_dir() != 0)
+			exit (EXIT_FAILURE);
+		rust_prepare_shadow_addons((const char *const *)options.addons); }
+#else
+	prepareContentDir (options.contentDir, options.addonDir, argv[0]);
+	prepareMeleeDir ();
+	prepareSaveDir ();
+	prepareShadowAddons (options.addons);
+#endif
+
+	InitTimeSystem ();
+	InitTaskSystem ();
+
+	Alarm_init ();
+	Callback_init ();
+
+#ifdef NETPLAY
+	Network_init ();
+	NetManager_init ();
+#endif
+
+	gfxDriver = options.opengl.value ?
+			TFB_GFXDRIVER_SDL_OPENGL : TFB_GFXDRIVER_SDL_PURE;
+	gfxFlags = options.scaler.value;
+	if (options.fullscreen.value)
+		gfxFlags |= TFB_GFXFLAGS_FULLSCREEN;
+	if (options.scanlines.value)
+		gfxFlags |= TFB_GFXFLAGS_SCANLINES;
+	if (options.showFps.value)
+		gfxFlags |= TFB_GFXFLAGS_SHOWFPS;
+	TFB_InitGraphics (gfxDriver, gfxFlags, options.graphicsBackend,
+			options.resolution.width, options.resolution.height);
+	if (options.gamma.set && setGammaCorrection (options.gamma.value))
+		optGamma = options.gamma.value;
+	else
+		optGamma = 1.0f;
+
+	InitColorMaps ();
+	init_communication ();
+
+	assert (sizeof (int [NUM_TEMPLATES * NUM_KEYS]) ==
+			sizeof (int [NUM_TEMPLATES][NUM_KEYS]));
+	TFB_SetInputVectors (ImmediateInputState.menu, NUM_MENU_KEYS,
+			(volatile int *)ImmediateInputState.key, NUM_TEMPLATES, NUM_KEYS);
+	TFB_InitInput (TFB_INPUTDRIVER_SDL, 0);
+
+	return EXIT_SUCCESS;
+}
+#ifndef RUST_OWNS_MAIN
 int
 main (int argc, char *argv[])
 {
@@ -508,6 +879,7 @@ main (int argc, char *argv[])
 	
 	return EXIT_SUCCESS;
 }
+#endif /* !RUST_OWNS_MAIN */
 
 static void
 saveErrorV (const char *fmt, va_list list)
@@ -619,7 +991,7 @@ getListConfigValue (struct int_option *option, const char *config_val,
 	return found;
 }
 
-static void
+void
 getUserConfigOptions (struct options_struct *options)
 {
 	// Most of the user config options are only applied if they

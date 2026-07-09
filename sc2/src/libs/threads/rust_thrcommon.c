@@ -18,6 +18,25 @@
 #include "thrcommon.h"
 #include "rust_threads.h"
 
+#ifdef RUST_OWNS_MAIN
+/* When Rust owns main(), there is no separate main thread pumping SDL
+ * events. We must pump events from every blocking point (SleepThread,
+ * TaskSwitch) to keep the window responsive during splash screens, fades,
+ * and other non-DoInput loops.
+ *
+ * IMPORTANT: TaskSwitch must NOT call TFB_FlushGraphics, because
+ * TFB_FlushGraphics itself calls TaskSwitch when the DCQ is empty,
+ * which would cause infinite recursion. TaskSwitch only pumps SDL
+ * events; SleepThread/HibernateThread pump both events and graphics. */
+extern void TFB_ProcessEvents(void);
+extern void TFB_FlushGraphics(void);
+#define RUST_PUMP_EVENTS_ONLY()  do { TFB_ProcessEvents(); } while (0)
+#define RUST_PUMP_AND_FLUSH()    do { TFB_ProcessEvents(); TFB_FlushGraphics(); } while (0)
+#else
+#define RUST_PUMP_EVENTS_ONLY()  do { } while (0)
+#define RUST_PUMP_AND_FLUSH()    do { } while (0)
+#endif
+
 #define LIFECYCLE_SIZE 8
 
 typedef struct _rust_thread {
@@ -191,6 +210,7 @@ void
 SleepThread (TimeCount sleepTime)
 {
 	uint32 msecs = (uint32)(sleepTime * 1000 / ONE_SECOND);
+	RUST_PUMP_AND_FLUSH();
 	rust_hibernate_thread(msecs);
 }
 
@@ -226,6 +246,7 @@ SleepThreadUntil (TimeCount wakeTime)
 void
 TaskSwitch (void)
 {
+	RUST_PUMP_EVENTS_ONLY();
 	rust_task_switch();
 }
 
@@ -448,6 +469,7 @@ void
 HibernateThread (TimePeriod timePeriod)
 {
 	uint32 msecs = (uint32)(timePeriod * 1000 / ONE_SECOND);
+	RUST_PUMP_AND_FLUSH();
 	rust_hibernate_thread(msecs);
 }
 

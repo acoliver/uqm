@@ -1,89 +1,93 @@
-mod c_bindings;
-mod cli;
-mod config;
-mod logging;
-mod memory;
+//! UQM (Ur-Quan Masters) -- Rust-owned main entry point.
+//!
+//! @plan PLAN-20260707-BINARY-INVERSION.P05
+//!
+//! When built with RUST_OWNS_MAIN, this binary is the process entry point.
+//! It calls the C init sequence, runs the game loop on the main thread
+//! (no separate game thread), and tears down subsystems on exit.
 
-use anyhow::Result;
-use clap::Parser;
-use cli::Cli;
-use std::env;
 use std::ffi::CString;
+use std::os::raw::c_int;
+use std::process::exit;
 
-fn main() -> Result<()> {
-    // Parse CLI arguments
-    let cli = Cli::parse();
+use uqm_rust::mainloop::init_sequence;
+use uqm_rust::mainloop::logging;
+use uqm_rust::mainloop::options;
 
-    // Initialize logging (early)
-    unsafe {
-        logging::log_init(15);
-    }
-    log_info!("Phase 0 Rust launcher starting...");
-
-    // Load configuration file (defaults to user config directory)
-    // For Phase 0, this returns default options
-    let options = config::load_config(&cli.configdir)?;
-
-    // Merge CLI options into config
-    let options = cli.merge_into_options(options)?;
-
-    // Handle special modes from the CLI
-    if let Some(log_file) = &options.log_file {
-        log_info!("Redirecting logs to: {}", log_file);
-    }
-
-    // Initialize memory management
-    if !unsafe { memory::rust_mem_init() } {
-        log_error!("Failed to initialize memory management");
-        std::process::exit(1);
-    }
-
-    // Prepare arguments for C code
-    let args: Vec<String> = env::args().collect();
-    log_info!("Command line arguments: {:?}", args);
-
-    // Convert arguments to C-compatible format
+fn main() {
+    // Collect args as C strings for the C init sequence
+    let args: Vec<String> = std::env::args().collect();
     let c_args: Vec<CString> = args
         .iter()
-        .map(|s| CString::new(s.as_str()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| anyhow::anyhow!("Failed to convert arguments: {}", e))?;
+        .map(|s| CString::new(s.as_str()).unwrap_or_default())
+        .collect();
+    let mut c_argv: Vec<*mut std::os::raw::c_char> = c_args
+        .iter()
+        .map(|cs| cs.as_ptr() as *mut std::os::raw::c_char)
+        .collect();
+    c_argv.push(std::ptr::null_mut());
 
-    let mut c_argv: Vec<*mut i8> = c_args.iter().map(|cs| cs.as_ptr() as *mut i8).collect();
-    c_argv.push(std::ptr::null_mut()); // Null-terminate
+    // Parse command-line options in Rust (replaces C parseOptions)
+    let parsed = options::parse_and_store(&args);
 
-    // Display configuration
-    log_info!("Configuration:");
-    if let Some(res) = &options.resolution {
-        log_info!("  Resolution: {}x{}", res.width, res.height);
-    }
-    if let Some(fullscreen) = options.fullscreen {
-        log_info!("  Fullscreen: {}", fullscreen);
-    }
-    if let Some(opengl) = options.opengl {
-        log_info!("  OpenGL: {}", opengl);
-    }
-    if let Some(log_file) = &options.log_file {
-        log_info!("  Log file: {}", log_file);
-    }
-    if let Some(content_dir) = &options.content_dir {
-        log_info!("  Content dir: {}", content_dir);
-    }
-    if let Some(config_dir) = &options.config_dir {
-        log_info!("  Config dir: {}", config_dir);
-    }
+    // Initialize tracing-based logging early
+    logging::init(&parsed.log_file);
 
-    log_info!("Calling C entry point...");
-    let exit_code = unsafe { c_bindings::c_entry_point(args.len() as i32, c_argv.as_mut_ptr()) };
-
-    // Cleanup
-    if !unsafe { memory::rust_mem_uninit() } {
-        log_warning!("Failed to deinitialize memory management");
+    // Handle early-exit modes (version/usage) that bypass the full init
+    match parsed.run_mode {
+        options::RunMode::Version => {
+            println!("0.8.0");
+            exit(0);
+        }
+        options::RunMode::Usage => {
+            print_usage();
+            exit(0);
+        }
+        options::RunMode::Normal => {}
     }
 
-    log_info!("C entry point returned: {}", exit_code);
-    if exit_code != 0 {
-        std::process::exit(exit_code);
+    if parsed.parse_error {
+        eprintln!("Invalid option. Run with -h to see the allowed arguments.");
+        exit(1);
     }
-    Ok(())
+
+    // Run the full UQM lifecycle: init -> game loop -> teardown
+    let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
+    exit(exit_code);
+}
+
+fn print_usage() {
+    println!("Options:");
+    println!("  -r, --res=WIDTHxHEIGHT (default 1280x960)");
+    println!("  -f, --fullscreen (default off)");
+    println!("  -w, --windowed (default on)");
+    println!("  -o, --opengl (default off)");
+    println!("  -x, --nogl (default on)");
+    println!("  -k, --keepaspectratio (default on)");
+    println!("  -c, --scale=MODE (hq, xbrz3, xbrz4, or none) (default xbrz3)");
+    println!("  -b, --meleezoom=MODE (step/pc or smooth/3do; default 3do)");
+    println!("  -s, --scanlines (default off)");
+    println!("  -p, --fps (default off)");
+    println!("  -g, --gamma=CORRECTIONVALUE (default 1.0)");
+    println!("  -C, --configdir=CONFIGDIR");
+    println!("  -n, --contentdir=CONTENTDIR");
+    println!("  -M, --musicvol=VOLUME (0-100, default 100)");
+    println!("  -S, --sfxvol=VOLUME (0-100, default 100)");
+    println!("  -T, --speechvol=VOLUME (0-100, default 100)");
+    println!("  -q, --audioquality=QUALITY (high, medium or low, default medium)");
+    println!("  -u, --nosubtitles");
+    println!("  -l, --logfile=FILE (sends console output to logfile FILE)");
+    println!("  --addon ADDON (may be specified multiple times)");
+    println!("  --addondir=ADDONDIR");
+    println!("  --renderer=name");
+    println!("  --sound=DRIVER (openal, mixsdl, none; default mixsdl)");
+    println!("  --stereosfx (positional sound effects)");
+    println!("  --safe (start in safe mode)");
+    println!("The following can take '3do' or 'pc':");
+    println!("  -i, --intro   : Intro/ending version (default 3do)");
+    println!("  --cscan       : coarse-scan display (default 3do)");
+    println!("  --menu        : menu type (default pc)");
+    println!("  --font        : font types and colors (default pc)");
+    println!("  --shield      : slave shield type (default 3do)");
+    println!("  --scroll      : comm scroll (default 3do)");
 }

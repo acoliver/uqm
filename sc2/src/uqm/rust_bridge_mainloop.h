@@ -92,6 +92,24 @@ void set_main_exited (BOOLEAN b);
 /* Calls initAudio (snddriver, soundflags). */
 void uqm_init_audio (void);
 
+/* --- Directory-prep global accessors (options.c globals) ---------------- */
+
+struct uio_Repository;
+struct uio_DirHandle;
+struct uio_MountHandle;
+
+struct uio_Repository *uqm_get_repository (void);
+struct uio_DirHandle *uqm_get_config_dir (void);
+struct uio_DirHandle *uqm_get_content_dir (void);
+struct uio_MountHandle *uqm_get_content_mount_handle (void);
+
+void uqm_set_content_dir (struct uio_DirHandle *d);
+void uqm_set_config_dir (struct uio_DirHandle *d);
+void uqm_set_save_dir (struct uio_DirHandle *d);
+void uqm_set_melee_dir (struct uio_DirHandle *d);
+void uqm_set_content_mount_handle (struct uio_MountHandle *h);
+void uqm_set_base_content_path (const char *path);
+
 #if defined(__cplusplus)
 }
 #endif

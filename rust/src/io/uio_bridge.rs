@@ -588,8 +588,8 @@ struct uio_DirListInternal {
 // C-compatible uio_DirList struct (must match C definition exactly)
 #[repr(C)]
 pub struct uio_DirList {
-    names: *mut *mut c_char,
-    numNames: c_int,
+    pub(crate) names: *mut *mut c_char,
+    pub(crate) numNames: c_int,
     buffer: *mut c_char,
 }
 

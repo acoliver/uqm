@@ -32,7 +32,13 @@
 #include "libs/inplib.h"
 #include "libs/timelib.h"
 #include "libs/threadlib.h"
+#include "libs/graphics/gfx_common.h"
 #include <stdio.h>
+
+#ifdef RUST_OWNS_MAIN
+/* Forward declarations for single-threaded event pump */
+extern void ProcessUtilityKeys (void);
+#endif
 
 
 #define ACCELERATION_INCREMENT (ONE_SECOND / 12)
@@ -367,6 +373,14 @@ DoInput (void *pInputState, BOOLEAN resetInput)
 	{
 		MENU_SOUND_FLAGS soundFlags;
 		Async_process ();
+#ifdef RUST_OWNS_MAIN
+		/* When Rust owns main(), there is no separate main thread to
+		 * pump SDL events or drain the DCQ. DoInput is the universal
+		 * per-frame function, so we pump here. */
+		TFB_ProcessEvents ();
+		ProcessUtilityKeys ();
+		TFB_FlushGraphics ();
+#endif
 		TaskSwitch ();
 
 		UpdateInputState ();

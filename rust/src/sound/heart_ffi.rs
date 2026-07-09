@@ -16,10 +16,35 @@
 use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr, CString};
 use std::path::Path;
+use std::panic::{self, AssertUnwindSafe};
 use std::ptr::{self, null_mut};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+
+/// Wrap a closure so panics don't cross the FFI boundary (which would call
+/// abort).  Logs the panic payload to stderr.
+///
+/// Returns `Ok(R)` on success or `Err(())` on panic.
+fn ffi_catch<F, R>(f: F) -> Result<R, ()>
+where
+    F: FnOnce() -> R,
+{
+    match panic::catch_unwind(AssertUnwindSafe(f)) {
+        Ok(v) => Ok(v),
+        Err(payload) => {
+            let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            eprintln!("[FFI PANIC] {msg}");
+            Err(())
+        }
+    }
+}
 
 use super::control;
 use super::decoder::{LimitedDecoder, SoundDecoder};
@@ -515,16 +540,20 @@ pub unsafe extern "C" fn PlayStream(
     scope: bool,
     rewind: bool,
 ) {
-    if sample_ptr.is_null() {
-        return;
-    }
-    let sample_arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
-    let _ = stream::play_stream(sample_arc, source as usize, looping, scope, rewind);
+    let _ = ffi_catch(|| {
+        if sample_ptr.is_null() {
+            return;
+        }
+        let sample_arc = arc_borrow(sample_ptr as *const Mutex<SoundSample>);
+        let _ = stream::play_stream(sample_arc, source as usize, looping, scope, rewind);
+    });
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn StopStream(source: u32) {
-    let _ = stream::stop_stream(source as usize);
+    let _ = ffi_catch(|| {
+        let _ = stream::stop_stream(source as usize);
+    });
 }
 
 #[no_mangle]
@@ -918,60 +947,55 @@ pub unsafe extern "C" fn PlayChannel(
     positional_object: *mut c_void,
     priority: c_uint,
 ) {
-    eprintln!(
-        "[PlayChannel] channel={} snd_ptr={:?} priority={}",
-        channel, snd_ptr, priority
-    );
-    if snd_ptr.is_null() {
-        eprintln!("[PlayChannel] snd_ptr is null, returning");
-        return;
-    }
-    // snd_ptr is a STRING_TABLE_ENTRY_DESC*. First field is `data` (a char*).
-    let entry = &*(snd_ptr as *const CStringTableEntry);
-    if entry.data.is_null() {
-        return;
-    }
-    // entry.data points to an HMalloc'd slot containing *mut SoundSample
-    let sample_ptr = *(entry.data as *const *const SoundSample);
-    if sample_ptr.is_null() {
-        return;
-    }
-    let sample = &*sample_ptr;
+    let _ = ffi_catch(|| {
+        if snd_ptr.is_null() {
+            return;
+        }
+        // snd_ptr is a STRING_TABLE_ENTRY_DESC*. First field is `data` (a char*).
+        let entry = &*(snd_ptr as *const CStringTableEntry);
+        if entry.data.is_null() {
+            return;
+        }
+        // entry.data points to an HMalloc'd slot containing *mut SoundSample
+        let sample_ptr = *(entry.data as *const *const SoundSample);
+        if sample_ptr.is_null() {
+            return;
+        }
+        let sample = &*sample_ptr;
 
-    let _ = sfx::play_sample(
-        channel as usize,
-        sample,
-        pos,
-        positional_object as usize,
-        priority as i32,
-    );
+        let _ = sfx::play_sample(
+            channel as usize,
+            sample,
+            pos,
+            positional_object as usize,
+            priority as i32,
+        );
+    });
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn StopChannel(channel: c_uint, priority: c_int) {
-    let _ = sfx::stop_channel(channel as usize, priority);
+    let _ = ffi_catch(|| sfx::stop_channel(channel as usize, priority));
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
-    if sfx::channel_playing(channel as usize) {
-        1
-    } else {
-        0
-    }
+    ffi_catch(|| if sfx::channel_playing(channel as usize) { 1 } else { 0 }).unwrap_or(0)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn SetChannelVolume(channel: c_uint, volume: c_int, priority: c_int) {
-    sfx::set_channel_volume(channel as usize, volume, priority);
+    let _ = ffi_catch(|| sfx::set_channel_volume(channel as usize, volume, priority));
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn UpdateSoundPosition(source_index: c_uint, pos_ptr: *const SoundPosition) {
-    if pos_ptr.is_null() {
-        return;
-    }
-    sfx::update_sound_position(source_index as usize, *pos_ptr);
+    let _ = ffi_catch(|| {
+        if pos_ptr.is_null() {
+            return;
+        }
+        sfx::update_sound_position(source_index as usize, *pos_ptr);
+    });
 }
 
 #[no_mangle]

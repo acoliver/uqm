@@ -200,6 +200,12 @@ TFB_DrawScreen_DeleteData (void *data)
 void
 TFB_DrawScreen_WaitForSignal (void)
 {
+#ifdef RUST_OWNS_MAIN
+	/* Single-threaded mode: no separate main thread to process the DCQ.
+	 * Flush inline instead of blocking on a semaphore (which would
+	 * self-deadlock since we ARE the thread that processes the DCQ). */
+	TFB_FlushGraphics ();
+#else
 	TFB_DrawCommand DrawCommand;
 	Semaphore s;
 	s = GetMyThreadLocal ()->flushSem;
@@ -209,7 +215,8 @@ TFB_DrawScreen_WaitForSignal (void)
 	TFB_BatchReset ();
 	TFB_EnqueueDrawCommand (&DrawCommand);
 	Unlock_DCQ();
-	SetSemaphore (s);	
+	SetSemaphore (s);
+#endif
 }
 
 void

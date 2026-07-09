@@ -156,3 +156,49 @@ uqm_init_audio (void)
 	extern int snddriver, soundflags;
 	initAudio (snddriver, soundflags);
 }
+
+// ---------------------------------------------------------------------------
+// Directory-prep global accessors (options.c globals)
+// ---------------------------------------------------------------------------
+
+extern uio_Repository *repository;
+extern uio_DirHandle *contentDir;
+extern uio_DirHandle *configDir;
+extern uio_DirHandle *saveDir;
+extern uio_DirHandle *meleeDir;
+extern uio_MountHandle *contentMountHandle;
+extern char baseContentPath[];
+
+uio_Repository *
+uqm_get_repository (void) { return repository; }
+
+uio_DirHandle *
+uqm_get_config_dir (void) { return configDir; }
+
+uio_DirHandle *
+uqm_get_content_dir (void) { return contentDir; }
+
+uio_MountHandle *
+uqm_get_content_mount_handle (void) { return contentMountHandle; }
+
+void
+uqm_set_content_dir (uio_DirHandle *d) { contentDir = d; }
+
+void
+uqm_set_config_dir (uio_DirHandle *d) { configDir = d; }
+
+void
+uqm_set_save_dir (uio_DirHandle *d) { saveDir = d; }
+
+void
+uqm_set_melee_dir (uio_DirHandle *d) { meleeDir = d; }
+
+void
+uqm_set_content_mount_handle (uio_MountHandle *h) { contentMountHandle = h; }
+
+void
+uqm_set_base_content_path (const char *path)
+{
+	strncpy (baseContentPath, path, PATH_MAX - 1);
+	baseContentPath[PATH_MAX - 1] = '\0';
+}
