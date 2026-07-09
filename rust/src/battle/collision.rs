@@ -556,3 +556,20 @@ mod tests {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// C FFI Export — replaces C collide.c
+// ---------------------------------------------------------------------------
+
+/// C: `void collide(ELEMENT *ElementPtr0, ELEMENT *ElementPtr1)`
+///
+/// Entry point for the C battle loop. Delegates to `elastic_collide`
+/// after dereferencing the raw pointers.
+#[no_mangle]
+pub extern "C" fn collide(e0: *mut Element, e1: *mut Element) {
+    if e0.is_null() || e1.is_null() {
+        return;
+    }
+    let (e0_ref, e1_ref) = unsafe { (&mut *e0, &mut *e1) };
+    elastic_collide(e0_ref, e1_ref);
+}
