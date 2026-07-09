@@ -9,6 +9,7 @@ pub mod collision;
 pub mod display_list;
 pub mod element;
 pub mod ffi;
+pub mod gendef;
 pub mod gravity;
 pub mod integration;
 mod integration_tests_p14;
