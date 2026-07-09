@@ -5,15 +5,6 @@ use std::path::{Path, PathBuf};
 fn main() {
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
 
-    cc::Build::new()
-        .include("../sc2/src")
-        .warnings(true)
-        .file("../sc2/src/mem_wrapper.c")
-        .cpp(false)
-        .compile("uqm_core");
-
-    println!("cargo:rerun-if-changed=../sc2/src/mem_wrapper.c");
-
     // Compile internal helper for uio_vfprintf (not an exported UIO symbol)
     cc::Build::new()
         .warnings(true)

@@ -17,6 +17,7 @@
 #include "gfx_common.h"
 #include "tfb_draw.h"
 #include "drawcmd.h"
+#include "libs/gfxlib.h"
 #include "libs/log.h"
 #include "libs/memlib.h"
 
@@ -203,8 +204,25 @@ TFB_DrawScreen_WaitForSignal (void)
 #ifdef RUST_OWNS_MAIN
 	/* Single-threaded mode: no separate main thread to process the DCQ.
 	 * Flush inline instead of blocking on a semaphore (which would
-	 * self-deadlock since we ARE the thread that processes the DCQ). */
-	TFB_FlushGraphics ();
+	 * self-deadlock since we ARE the thread that processes the DCQ).
+	 *
+	 * When called during batching (Batching > 0), we need the pending
+	 * commands (e.g. COPYTOIMAGE from Flash_grabOriginal) to execute
+	 * so screen content is captured, but we must NOT call SwapBuffers —
+	 * showing an intermediate frame causes the black-square flicker.
+	 * We use UnbatchGraphics (which calls Synchronize_DCQ to commit
+	 * pending commands) then FlushGraphicsEx(TRUE) (processes commands
+	 * without swapping), then re-batch with BatchGraphics. */
+	if (DrawCommandQueue.Batching > 0)
+	{
+		UnbatchGraphics ();   /* Batching-- → Synchronize_DCQ → Size > 0 */
+		TFB_FlushGraphicsEx (TRUE);  /* process, no swap */
+		BatchGraphics ();     /* Batching++ → restore */
+	}
+	else
+	{
+		TFB_FlushGraphics ();
+	}
 #else
 	TFB_DrawCommand DrawCommand;
 	Semaphore s;

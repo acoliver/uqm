@@ -322,6 +322,19 @@ computeFPS (void)
 void
 TFB_FlushGraphics (void)
 {
+	TFB_FlushGraphicsEx (FALSE);
+}
+
+// Process pending DCQ commands. When skip_swap is TRUE, commands are
+// executed (e.g. COPYTOIMAGE captures screen content) but TFB_SwapBuffers
+// is NOT called — no screen flip occurs. This is used in single-threaded
+// mode (RUST_OWNS_MAIN) when FlushGraphics is called during batching:
+// we need the COPYTOIMAGE to execute but must not show an intermediate
+// frame. In the 2-thread model, the same effect is achieved because
+// the render thread's SENDSIGNAL handler doesn't trigger a SwapBuffers.
+void
+TFB_FlushGraphicsEx (BOOLEAN skip_swap)
+{
 	int commands_handled;
 	BOOLEAN livelock_deterrence;
 
@@ -334,11 +347,12 @@ TFB_FlushGraphics (void)
 		int current_fade = GetFadeAmount ();
 		int current_transition = TransitionAmount;
 		
-		if ((current_fade != 255 && current_fade != last_fade) ||
+		if (!skip_swap &&
+			((current_fade != 255 && current_fade != last_fade) ||
 			(current_transition != 255 &&
 			current_transition != last_transition) ||
 			(current_fade == 255 && last_fade != 255) ||
-			(current_transition == 255 && last_transition != 255))
+			(current_transition == 255 && last_transition != 255)))
 		{
 			TFB_SwapBuffers (TFB_REDRAW_FADING);
 					// if fading, redraw every frame
@@ -618,7 +632,8 @@ TFB_FlushGraphics (void)
 	if (livelock_deterrence)
 		Unlock_DCQ ();
 
-	TFB_SwapBuffers (TFB_REDRAW_NO);
+	if (!skip_swap)
+		TFB_SwapBuffers (TFB_REDRAW_NO);
 	RenderedFrames++;
 	BroadcastCondVar (RenderingCond);
 }
