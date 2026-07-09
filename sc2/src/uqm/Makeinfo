@@ -1,5 +1,5 @@
 uqm_SUBDIRS="comm planets ships supermelee"
-uqm_CFILES="battle.c battlecontrols.c border.c build.c cleanup.c
+uqm_CFILES="battle.c border.c build.c cleanup.c
 		cnctdlg.c comm.c commanim.c commglue.c confirm.c credits.c
 		cyborg.c demo.c dummy.c encount.c flash.c fmv.c galaxy.c
 		gameev.c gameinp.c gameopt.c getchar.c globdata.c
