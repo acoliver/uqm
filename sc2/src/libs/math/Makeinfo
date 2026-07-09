@@ -1,2 +1,5 @@
-uqm_CFILES="random.c random2.c sqrt.c"
+# Math library ported to Rust (rust/src/math/mod.rs)
+# #[no_mangle] exports provide TFB_Random, TFB_SeedRandom,
+# RandomContext_*, and square_root with identical C ABI.
+uqm_CFILES=""
 uqm_HFILES="mthintrn.h random.h"

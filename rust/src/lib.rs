@@ -19,6 +19,7 @@ pub mod input;
 pub mod io;
 pub mod mainloop;
 pub mod logging;
+pub mod math;
 pub mod memory;
 pub mod resource;
 pub mod ships;
