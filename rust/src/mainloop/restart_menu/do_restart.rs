@@ -3,6 +3,7 @@
 //! @plan PLAN-20260707-RESTARTMENU.P06
 //! @requirement REQ-RM-006
 
+#[cfg(not(test))]
 use std::os::raw::c_int;
 
 use super::c_extern;
@@ -75,10 +76,7 @@ const SUPER_MELEE: u16 = 0;
 ///
 /// @plan PLAN-20260707-RESTARTMENU.P06
 /// @requirement REQ-RM-006
-pub fn do_restart_frame<O: RestartMenuOps + ?Sized>(
-    ops: &O,
-    state: &mut DoRestartState,
-) -> bool {
+pub fn do_restart_frame<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState) -> bool {
     let time_in = ops.get_time_counter();
 
     // Cancel any Pause key presses (restart.c:113)
@@ -135,10 +133,7 @@ pub fn do_restart_frame<O: RestartMenuOps + ?Sized>(
 /// draws the initial menu, and fades in.
 ///
 /// Matches restart.c:117-137.
-fn init_first_frame<O: RestartMenuOps + ?Sized>(
-    ops: &O,
-    state: &mut DoRestartState,
-) {
+fn init_first_frame<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState) {
     // Clean up existing music (restart.c:119-124)
     if state.music_handle != 0 {
         ops.stop_music();
@@ -184,7 +179,10 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(
     state.initialized = true;
 
     // Fade in (restart.c:138)
-    let fade_result = ops.fade_screen(c_extern::FADE_ALL_TO_COLOR, (c_extern::ONE_SECOND / 2) as i16);
+    let fade_result = ops.fade_screen(
+        c_extern::FADE_ALL_TO_COLOR,
+        (c_extern::ONE_SECOND / 2) as i16,
+    );
     ops.sleep_thread_until(fade_result);
 }
 
@@ -194,12 +192,8 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(
 /// `false` if it should exit.
 ///
 /// Matches restart.c:144-188.
-fn handle_select<O: RestartMenuOps + ?Sized>(
-    ops: &O,
-    state: &mut DoRestartState,
-) -> bool {
-    let cur_item = RestartMenuItem::from_u8(state.cur_state)
-        .unwrap_or(RestartMenuItem::NewGame);
+fn handle_select<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState) -> bool {
+    let cur_item = RestartMenuItem::from_u8(state.cur_state).unwrap_or(RestartMenuItem::NewGame);
 
     let result = menu_logic::apply_selection(cur_item);
 
@@ -264,8 +258,7 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
     state: &mut DoRestartState,
     input: MenuInputState,
 ) {
-    let cur_item = RestartMenuItem::from_u8(state.cur_state)
-        .unwrap_or(RestartMenuItem::NewGame);
+    let cur_item = RestartMenuItem::from_u8(state.cur_state).unwrap_or(RestartMenuItem::NewGame);
 
     let new_item = if input.up {
         menu_logic::navigate_up(cur_item)
@@ -278,7 +271,20 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
         ops.batch_graphics();
         ops.draw_restart_menu_state(new_item.as_u8());
         ops.unbatch_graphics();
+        // @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
+        // @requirement REQ-SEM-001
+        // Exact order: draw → assign cur_state → sync → observe.
         state.cur_state = new_item.as_u8();
+        ops.sync_cur_state(state.cur_state);
+
+        // Typed observer: returns Continue or Stop.
+        let _control = crate::automation::input::observe_main_menu_transition(
+            cur_item.as_u8(),
+            new_item.as_u8(),
+            None,
+        );
+        // In full integration, Stop would propagate through do_restart_frame
+        // and rust_do_restart_frame before sleep/later work.
     }
 
     state.last_input_time = ops.get_time_counter();
@@ -287,10 +293,7 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
 /// Handle mouse click popup ("mouse not supported").
 ///
 /// Matches restart.c:220-234.
-fn handle_mouse_popup<O: RestartMenuOps + ?Sized>(
-    ops: &O,
-    state: &mut DoRestartState,
-) {
+fn handle_mouse_popup<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartState) {
     let fc = state.flash_context;
     ops.flash_pause(fc);
 
@@ -341,6 +344,10 @@ fn handle_timeout<O: RestartMenuOps + ?Sized>(ops: &O) {
 /// @requirement REQ-RM-006
 #[cfg(not(test))]
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn rust_do_restart_frame(menu_state_ptr: *mut std::os::raw::c_void) -> c_int {
     if menu_state_ptr.is_null() {
         return 0;
@@ -353,9 +360,7 @@ pub extern "C" fn rust_do_restart_frame(menu_state_ptr: *mut std::os::raw::c_voi
     // Extract DoRestartState from MENU_STATE.privData.
     // SAFETY: privData was set by try_start_game_impl to point to a
     // DoRestartState that outlives the DoInput loop.
-    let priv_data = unsafe {
-        super::c_extern::uqm_get_menu_priv_data(menu_state_ptr)
-    };
+    let priv_data = unsafe { super::c_extern::uqm_get_menu_priv_data(menu_state_ptr) };
     if priv_data.is_null() {
         return 0;
     }
@@ -374,9 +379,9 @@ pub extern "C" fn rust_do_restart_frame(menu_state_ptr: *mut std::os::raw::c_voi
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::c_extern::Color;
     use super::super::restart_ops::RestartMenuOps;
-    use super::super::c_extern::{Color, Point};
+    use super::*;
     use std::cell::Cell;
     use std::os::raw::{c_int, c_short};
 
@@ -436,15 +441,32 @@ mod tests {
     }
 
     impl RestartMenuOps for MockOps {
-        fn get_current_activity(&self) -> u16 { self.current_activity.get() }
-        fn set_current_activity(&self, v: u16) { self.current_activity.set(v); self.set_activity_called.set(true); }
-        fn get_last_activity(&self) -> u16 { self.last_activity.get() }
-        fn set_last_activity(&self, v: u16) { self.last_activity.set(v); }
+        fn get_current_activity(&self) -> u16 {
+            self.current_activity.get()
+        }
+        fn set_current_activity(&self, v: u16) {
+            self.current_activity.set(v);
+            self.set_activity_called.set(true);
+        }
+        fn get_last_activity(&self) -> u16 {
+            self.last_activity.get()
+        }
+        fn set_last_activity(&self, v: u16) {
+            self.last_activity.set(v);
+        }
         fn set_next_activity(&self, _v: u16) {}
-        fn set_menu_state_ptr(&self, ptr: usize) { self.menu_state_ptr.set(ptr); }
-        fn get_menu_state_ptr(&self) -> usize { self.menu_state_ptr.get() }
-        fn get_menu_frame(&self) -> usize { 0 }
-        fn create_menu_state(&self) -> usize { 0 }
+        fn set_menu_state_ptr(&self, ptr: usize) {
+            self.menu_state_ptr.set(ptr);
+        }
+        fn get_menu_state_ptr(&self) -> usize {
+            self.menu_state_ptr.get()
+        }
+        fn get_menu_frame(&self) -> usize {
+            0
+        }
+        fn create_menu_state(&self) -> usize {
+            0
+        }
         fn set_menu_priv_data(&self, _ptr: usize, _data: usize) {}
         fn destroy_menu_state(&self, _ptr: usize) {}
         fn sync_flash_context(&self, _ctx: usize) {}
@@ -452,13 +474,25 @@ mod tests {
         fn sync_cur_state(&self, _state: u8) {}
         fn sync_cur_frame(&self, _frame: usize) {}
         fn sync_h_music(&self, _handle: usize) {}
-        fn get_menu_input(&self) -> MenuInputState { self.menu_input.get() }
-        fn get_time_counter(&self) -> u32 { self.time_counter.get() }
-        fn get_utwig_bomb_on_ship(&self) -> u8 { 0 }
+        fn get_menu_input(&self) -> MenuInputState {
+            self.menu_input.get()
+        }
+        fn get_time_counter(&self) -> u32 {
+            self.time_counter.get()
+        }
+        fn get_utwig_bomb_on_ship(&self) -> u8 {
+            0
+        }
         fn set_utwig_bomb_on_ship(&self, _v: u8) {}
-        fn get_utwig_bomb(&self) -> u8 { 0 }
-        fn get_crew_enlisted(&self) -> u16 { 0 }
-        fn set_game_paused(&self, val: bool) { self.game_paused.set(val); }
+        fn get_utwig_bomb(&self) -> u8 {
+            0
+        }
+        fn get_crew_enlisted(&self) -> u16 {
+            0
+        }
+        fn set_game_paused(&self, val: bool) {
+            self.game_paused.set(val);
+        }
         fn reinit_race_queues(&self) {}
         fn set_screen_context(&self) {}
         fn fade_screen(&self, fade_type: u32, _duration: c_short) -> u32 {
@@ -466,34 +500,66 @@ mod tests {
             self.fade_screen_type.set(fade_type);
             self.fade_result.get()
         }
-        fn sleep_thread_until(&self, _time: u32) { self.sleep_until_called.set(true); }
+        fn sleep_thread_until(&self, _time: u32) {
+            self.sleep_until_called.set(true);
+        }
         fn sleep_thread(&self, _duration: u32) {}
         fn batch_graphics(&self) {}
-        fn unbatch_graphics(&self) { self.nav_count.set(self.nav_count.get() + 1); }
+        fn unbatch_graphics(&self) {
+            self.nav_count.set(self.nav_count.get() + 1);
+        }
         fn clear_drawable(&self) {}
         fn flush_color_xforms(&self) {}
         fn screen_transition(&self, _a: c_int) {}
         fn set_bg_color(&self, _color: Color) {}
         fn seed_random(&self) {}
-        fn load_menu_graphic(&self) -> usize { 1 }
-        fn capture_drawable(&self, _load_result: usize) -> usize { 1 }
+        fn load_menu_graphic(&self) -> usize {
+            1
+        }
+        fn capture_drawable(&self, _load_result: usize) -> usize {
+            1
+        }
         fn destroy_drawable(&self, _handle: usize) {}
-        fn release_drawable(&self, _handle: usize) -> usize { 0 }
-        fn draw_restart_menu_graphic(&self) { self.draw_menu_called.set(true); }
-        fn draw_restart_menu_state(&self, _state: u8) { self.draw_menu_called.set(true); }
+        fn release_drawable(&self, _handle: usize) -> usize {
+            0
+        }
+        fn draw_restart_menu_graphic(&self) {
+            self.draw_menu_called.set(true);
+        }
+        fn draw_restart_menu_state(&self, _state: u8) {
+            self.draw_menu_called.set(true);
+        }
         fn set_menu_sounds(&self, _s0: u16, _s1: u16) {}
         fn set_default_menu_repeat_delay(&self) {}
         fn set_transition_source_null(&self) {}
         fn run_do_input(&self, _reset_input: bool) {}
-        fn load_menu_music(&self) -> usize { 1 }
-        fn play_music(&self, _handle: usize) { self.play_music_called.set(true); }
-        fn stop_music(&self) { self.stop_music_called.set(true); }
-        fn destroy_music(&self, _handle: usize) { self.destroy_music_called.set(true); }
-        fn fade_music(&self, _end_vol: u8, _time_interval: c_short) -> u32 { 200 }
-        fn create_flash_overlay(&self) -> usize { 1 }
-        fn flash_process(&self, _ctx: usize) { self.flash_process_called.set(true); }
-        fn flash_pause(&self, _ctx: usize) { self.flash_pause_called.set(true); }
-        fn flash_continue(&self, _ctx: usize) { self.flash_continue_called.set(true); }
+        fn load_menu_music(&self) -> usize {
+            1
+        }
+        fn play_music(&self, _handle: usize) {
+            self.play_music_called.set(true);
+        }
+        fn stop_music(&self) {
+            self.stop_music_called.set(true);
+        }
+        fn destroy_music(&self, _handle: usize) {
+            self.destroy_music_called.set(true);
+        }
+        fn fade_music(&self, _end_vol: u8, _time_interval: c_short) -> u32 {
+            200
+        }
+        fn create_flash_overlay(&self) -> usize {
+            1
+        }
+        fn flash_process(&self, _ctx: usize) {
+            self.flash_process_called.set(true);
+        }
+        fn flash_pause(&self, _ctx: usize) {
+            self.flash_pause_called.set(true);
+        }
+        fn flash_continue(&self, _ctx: usize) {
+            self.flash_continue_called.set(true);
+        }
         fn flash_start(&self, _ctx: usize) {}
         fn flash_terminate(&self, _ctx: usize) {}
         fn flash_set_merge_factors(&self, _ctx: usize, _a: c_int, _b: c_int, _c: c_int) {}
@@ -502,19 +568,30 @@ mod tests {
         fn flash_set_state_fade_in(&self, _ctx: usize, _duration: u32) {}
         fn flash_set_overlay(&self, _ctx: usize, _frame_idx: u32) {}
         fn melee(&self) {}
-        fn setup_menu(&self) { self.setup_menu_called.set(true); }
+        fn setup_menu(&self) {
+            self.setup_menu_called.set(true);
+        }
         fn free_game_data(&self) {}
         fn introduction(&self) {}
         fn credits(&self, _victory: bool) {}
         fn victory(&self) {}
         fn splash_screen(&self) {}
-        fn do_popup_window_msg(&self, _string_id: u16) { self.popup_called.set(true); }
+        fn do_popup_window_msg(&self, _string_id: u16) {
+            self.popup_called.set(true);
+        }
         fn set_player_control(&self, _player: u8, _control: u16) {}
         fn assign_global_arrays(&self) {}
         fn set_main_exited(&self, _val: bool) {}
     }
 
     // ---- Tests ------------------------------------------------------------
+
+    fn initialized_state() -> DoRestartState {
+        DoRestartState {
+            initialized: true,
+            ..Default::default()
+        }
+    }
 
     #[test]
     fn first_frame_initializes_and_returns_true() {
@@ -532,8 +609,7 @@ mod tests {
         let ops = MockOps::new();
         ops.current_activity.set(CHECK_ABORT);
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
 
         let result = do_restart_frame(&ops, &mut state);
         assert!(!result, "CHECK_ABORT should exit menu");
@@ -547,8 +623,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::NewGame.as_u8();
 
         let result = do_restart_frame(&ops, &mut state);
@@ -565,8 +640,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::LoadGame.as_u8();
 
         let result = do_restart_frame(&ops, &mut state);
@@ -583,8 +657,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::SuperMelee.as_u8();
 
         let result = do_restart_frame(&ops, &mut state);
@@ -600,8 +673,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::Quit.as_u8();
 
         let result = do_restart_frame(&ops, &mut state);
@@ -618,8 +690,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::Setup.as_u8();
 
         let result = do_restart_frame(&ops, &mut state);
@@ -634,8 +705,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::NewGame.as_u8();
 
         let _ = do_restart_frame(&ops, &mut state);
@@ -654,8 +724,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::LoadGame.as_u8();
 
         let _ = do_restart_frame(&ops, &mut state);
@@ -675,8 +744,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.last_input_time = 0;
 
         let _ = do_restart_frame(&ops, &mut state);
@@ -692,8 +760,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.last_input_time = 0;
 
         let _ = do_restart_frame(&ops, &mut state);
@@ -708,8 +775,7 @@ mod tests {
             ..Default::default()
         });
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
 
         let result = do_restart_frame(&ops, &mut state);
         assert!(result, "mouse popup should continue menu");
@@ -723,8 +789,7 @@ mod tests {
         // No input
         ops.menu_input.set(MenuInputState::default());
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.last_input_time = 0;
         state.inact_timeout = 100;
 
@@ -740,8 +805,7 @@ mod tests {
         ops.time_counter.set(50);
         ops.menu_input.set(MenuInputState::default());
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.last_input_time = 0;
         state.inact_timeout = 100;
 
@@ -754,8 +818,7 @@ mod tests {
         let ops = MockOps::new();
         ops.menu_input.set(MenuInputState::default());
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
 
         let _ = do_restart_frame(&ops, &mut state);
         assert!(!ops.game_paused.get(), "game paused should be cleared");
@@ -766,8 +829,7 @@ mod tests {
         let ops = MockOps::new();
         ops.time_counter.set(100);
 
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         ops.menu_input.set(MenuInputState::default());
         state.inact_timeout = 10000;
 
@@ -778,13 +840,15 @@ mod tests {
     #[test]
     fn flash_process_called_on_initialized_frame() {
         let ops = MockOps::new();
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.inact_timeout = 10000;
         ops.menu_input.set(MenuInputState::default());
 
         let _ = do_restart_frame(&ops, &mut state);
-        assert!(ops.flash_process_called.get(), "flash_process should be called on initialized frame");
+        assert!(
+            ops.flash_process_called.get(),
+            "flash_process should be called on initialized frame"
+        );
     }
 
     #[test]
@@ -794,12 +858,14 @@ mod tests {
             select: true,
             ..Default::default()
         });
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::Quit.as_u8();
 
         let _ = do_restart_frame(&ops, &mut state);
-        assert!(ops.flash_pause_called.get(), "Flash_pause should be called on quit");
+        assert!(
+            ops.flash_pause_called.get(),
+            "Flash_pause should be called on quit"
+        );
     }
 
     #[test]
@@ -809,12 +875,14 @@ mod tests {
             select: true,
             ..Default::default()
         });
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::NewGame.as_u8();
 
         let _ = do_restart_frame(&ops, &mut state);
-        assert!(ops.flash_pause_called.get(), "Flash_pause should be called on new game");
+        assert!(
+            ops.flash_pause_called.get(),
+            "Flash_pause should be called on new game"
+        );
     }
 
     #[test]
@@ -824,15 +892,17 @@ mod tests {
             select: true,
             ..Default::default()
         });
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::Setup.as_u8();
 
         let result = do_restart_frame(&ops, &mut state);
         assert!(result, "SETUP should stay in menu");
         assert!(ops.setup_menu_called.get(), "SetupMenu should be called");
         assert!(ops.flash_pause_called.get(), "Flash_pause should be called");
-        assert!(ops.flash_continue_called.get(), "Flash_continue should be called");
+        assert!(
+            ops.flash_continue_called.get(),
+            "Flash_continue should be called"
+        );
     }
 
     #[test]
@@ -842,22 +912,32 @@ mod tests {
             mouse_down: true,
             ..Default::default()
         });
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
 
         let _ = do_restart_frame(&ops, &mut state);
-        assert!(ops.flash_pause_called.get(), "Flash_pause should be called for mouse popup");
-        assert!(ops.flash_continue_called.get(), "Flash_continue should be called after mouse popup");
+        assert!(
+            ops.flash_pause_called.get(),
+            "Flash_pause should be called for mouse popup"
+        );
+        assert!(
+            ops.flash_continue_called.get(),
+            "Flash_continue should be called after mouse popup"
+        );
     }
 
     #[test]
     fn first_frame_cleans_up_existing_music() {
         let ops = MockOps::new();
-        let mut state = DoRestartState::default();
-        state.music_handle = 42; // Simulate pre-existing music
+        let mut state = DoRestartState {
+            music_handle: 42, // Simulate pre-existing music
+            ..Default::default()
+        };
 
         let _ = do_restart_frame(&ops, &mut state);
-        assert!(ops.destroy_music_called.get(), "existing music should be destroyed");
+        assert!(
+            ops.destroy_music_called.get(),
+            "existing music should be destroyed"
+        );
         assert_ne!(state.music_handle, 0, "new music handle should be stored");
     }
 
@@ -877,8 +957,7 @@ mod tests {
             up: true,
             ..Default::default()
         });
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::NewGame.as_u8();
 
         let _ = do_restart_frame(&ops, &mut state);
@@ -892,8 +971,7 @@ mod tests {
             down: true,
             ..Default::default()
         });
-        let mut state = DoRestartState::default();
-        state.initialized = true;
+        let mut state = initialized_state();
         state.cur_state = RestartMenuItem::Quit.as_u8();
 
         let _ = do_restart_frame(&ops, &mut state);

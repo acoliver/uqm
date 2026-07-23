@@ -38,6 +38,14 @@
 #ifdef RUST_OWNS_MAIN
 /* Forward declarations for single-threaded event pump */
 extern void ProcessUtilityKeys (void);
+/* @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
+ * @requirement REQ-INJECT-001, REQ-INJECT-005, REQ-INJECT-007
+ * Automation service/observation hooks. */
+extern int rust_automation_service_do_input (void);
+extern int rust_automation_after_input_update (void);
+extern void rust_automation_set_immediate_menu_key (int index, int value);
+extern int rust_automation_get_current_menu_key (int index);
+extern int rust_automation_get_pulsed_menu_key (int index);
 #endif
 
 
@@ -376,14 +384,48 @@ DoInput (void *pInputState, BOOLEAN resetInput)
 #ifdef RUST_OWNS_MAIN
 		/* When Rust owns main(), there is no separate main thread to
 		 * pump SDL events or drain the DCQ. DoInput is the universal
-		 * per-frame function, so we pump here. */
+		 * per-frame function, so we pump events here.
+		 * Note: we do NOT flush graphics here — that is handled by
+		 * FlushGraphics() calls in the game logic (BatchGraphics/
+		 * UnbatchGraphics pattern), and by SleepThread/TaskSwitch
+		 * which pump+flush when the game is idle. Flushing here
+		 * causes an intermediate frame between menu item erase and
+		 * redraw, producing a visible black-square flicker. */
 		TFB_ProcessEvents ();
 		ProcessUtilityKeys ();
-		TFB_FlushGraphics ();
 #endif
 		TaskSwitch ();
 
-		UpdateInputState ();
+		/* @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
+		 * @requirement REQ-INJECT-001, REQ-INJECT-006, REQ-INJECT-007
+		 * Service after both pumps (TFB_ProcessEvents + TaskSwitch)
+		 * and before sole UpdateInputState. Observation after update.
+		 * Combined stop checked before journal, sounds, inputCallback,
+		 * InputFunc. */
+		{
+			int svc_stop;
+			int obs_stop;
+			int combined_stop;
+
+			svc_stop = rust_automation_service_do_input ();
+			if (svc_stop)
+			{
+				/* Service returned stop: skip update and all
+				 * subsequent work for this iteration. */
+				break;
+			}
+
+			UpdateInputState ();
+
+			obs_stop = rust_automation_after_input_update ();
+			combined_stop = svc_stop | obs_stop;
+			if (combined_stop)
+			{
+				/* Observation failure: skip journal, sounds,
+				 * inputCallback, and InputFunc. */
+				break;
+			}
+		}
 
 #if DEMO_MODE || CREATE_JOURNAL
 		if (ArrowInput != DemoInput)

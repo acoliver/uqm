@@ -781,6 +781,8 @@ c_DoTalkSegue (C_TALKING_STATE *pTS)
 	BOOLEAN left = FALSE;
 	BOOLEAN right = FALSE;
 	COUNT curTrack;
+	fprintf (stderr, "[DBG] c_DoTalkSegue: enter seeking=%d ended=%d\n",
+		pTS->seeking, pTS->ended);
 
 	if (GLOBAL (CurrentActivity) & CHECK_ABORT)
 	{
@@ -805,6 +807,11 @@ c_DoTalkSegue (C_TALKING_STATE *pTS)
 		left = CurrentInputState.menu[KEY_MENU_LEFT] != 0;
 		right = CurrentInputState.menu[KEY_MENU_RIGHT] != 0;
 	}
+
+	fprintf (stderr, "[DBG] c_DoTalkSegue: opt=%d left=%d right=%d curL=%d curR=%d pulL=%d pulR=%d\n",
+		optSmoothScroll, left, right,
+		CurrentInputState.menu[KEY_MENU_LEFT], CurrentInputState.menu[KEY_MENU_RIGHT],
+		PulsedInputState.menu[KEY_MENU_LEFT], PulsedInputState.menu[KEY_MENU_RIGHT]);
 
 	if (right)
 	{
@@ -1413,6 +1420,12 @@ c_SetColorMap (void *colormap)
 }
 
 /* ---- Input bridges ------------------------------------------------------- */
+
+void
+c_UpdateInputState (void)
+{
+	UpdateInputState ();
+}
 
 int
 c_GetPulsedMenuKey (int key_index)

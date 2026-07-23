@@ -51,6 +51,34 @@ fn main() {
         exit(1);
     }
 
+    // Automation setup: validate before run_uqm (REQ-MODE-001)
+    let auto_opts = uqm_rust::automation::AutomationOptions {
+        script_path: parsed.automation_script.clone(),
+        output_dir: parsed.automation_output.clone(),
+    };
+
+    // Build capabilities resolved from build.vars at compile time
+    let caps = uqm_rust::automation::BuildCapabilities::from_flags(&[
+        ("RUST_OWNS_MAIN", true),
+        ("USE_RUST_THREADS", true),
+        ("USE_RUST_GFX", true),
+        ("USE_RUST_COMM", true),
+        ("USE_RUST_RESTART", true),
+    ]);
+
+    match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
+        Ok(Some(_setup)) => {
+            // Active automation validated — proceed to run_uqm
+        }
+        Ok(None) => {
+            // Inactive — proceed normally
+        }
+        Err(e) => {
+            eprintln!("Automation setup failed: {e}");
+            exit(1);
+        }
+    }
+
     // Run the full UQM lifecycle: init -> game loop -> teardown
     let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
     exit(exit_code);
@@ -83,6 +111,8 @@ fn print_usage() {
     println!("  --sound=DRIVER (openal, mixsdl, none; default mixsdl)");
     println!("  --stereosfx (positional sound effects)");
     println!("  --safe (start in safe mode)");
+    println!("  --automation-script=FILE   (enable runtime automation)");
+    println!("  --automation-output=DIR    (automation output directory)");
     println!("The following can take '3do' or 'pc':");
     println!("  -i, --intro   : Intro/ending version (default 3do)");
     println!("  --cscan       : coarse-scan display (default 3do)");

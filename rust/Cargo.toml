@@ -36,6 +36,9 @@ regex = "1" # @plan PLAN-20260314-FILE-IO.P07 @requirement REQ-FIO-DIRLIST-REGEX
 zip = "2" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
 crc32fast = "1.4" # @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
 bitflags = "2.4" # @plan PLAN-20260320-BATTLE.P04 @requirement REQ-BAT-006 Element state flags
+serde = { version = "1", features = ["derive"] } # @plan PLAN-20260723-RUNTIME-AUTOMATION.P01 @requirement REQ-DEP-002
+serde_json = "1" # @plan PLAN-20260723-RUNTIME-AUTOMATION.P01 @requirement REQ-DEP-002
+sha2 = "0.10" # @plan PLAN-20260723-RUNTIME-AUTOMATION.P03 @requirement REQ-IO-003
 
 mod_player = "0.1"
 fast_image_resize = "5.0"
@@ -43,6 +46,11 @@ fast_image_resize = "5.0"
 [features]
 default = []
 audio_heart = []
+debug-process = []
+
+[[bin]]
+name = "p00_probes"
+path = "probes/p00_probes.rs"
 
 [dev-dependencies]
 tempfile = "3"

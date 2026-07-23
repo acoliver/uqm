@@ -34,6 +34,12 @@ fn main() {
     //
     // @plan PLAN-20260707-BINARY-INVERSION.P06
     link_c_objects();
+
+    // ===========================================================
+    // P00: Compile harness C sources for linked-harness feasibility.
+    // ===========================================================
+    // @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §8
+    compile_p00_harness();
 }
 
 /// Create a static archive from C object files and link it into the binary.
@@ -41,29 +47,32 @@ fn main() {
 /// @plan PLAN-20260707-BINARY-INVERSION.P06
 fn link_c_objects() {
     // Use absolute path to be robust against CWD differences
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR")
-        .unwrap_or_else(|_| ".".to_string());
-    let obj_dir = Path::new(&manifest_dir)
-        .join("../sc2/obj/release");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+    let obj_dir = Path::new(&manifest_dir).join("../sc2/obj/release");
 
     // Collect all .o files from the C build
     let mut obj_files: Vec<PathBuf> = Vec::new();
     collect_object_files(&obj_dir, &mut obj_files);
+    obj_files.sort();
 
     if obj_files.is_empty() {
-        panic!("P06: No C object files found in {}. Run 'cd sc2 && ./build.sh uqm' first.", obj_dir.display());
+        panic!(
+            "P06: No C object files found in {}. Run 'cd sc2 && ./build.sh uqm' first.",
+            obj_dir.display()
+        );
     }
 
     // Read CFLAGS from build.vars to stay in sync with the C build.
     // We extract the uqm_CFLAGS value and supplement with RUST_OWNS_MAIN.
     let build_vars_path = Path::new(&manifest_dir).join("../sc2/build.vars");
-    let build_vars = fs::read_to_string(&build_vars_path)
-        .expect("failed to read sc2/build.vars for CFLAGS");
+    let build_vars =
+        fs::read_to_string(&build_vars_path).expect("failed to read sc2/build.vars for CFLAGS");
     let cflags_base = build_vars
         .lines()
         .find_map(|line| {
             let trimmed = line.trim();
-            trimmed.strip_prefix("uqm_CFLAGS='")
+            trimmed
+                .strip_prefix("uqm_CFLAGS='")
                 .and_then(|rest| rest.strip_suffix("'"))
         })
         .expect("uqm_CFLAGS not found in build.vars")
@@ -92,16 +101,8 @@ fn link_c_objects() {
     let uqm_obj = out_dir.join("uqm_rust_main.o");
     let gameinp_obj = out_dir.join("gameinp_rust_main.o");
 
-    compile_c_file(
-        &sc2_src.join("uqm.c"),
-        &uqm_obj,
-        &cflags_common,
-    );
-    compile_c_file(
-        &sc2_src.join("uqm/gameinp.c"),
-        &gameinp_obj,
-        &cflags_common,
-    );
+    compile_c_file(&sc2_src.join("uqm.c"), &uqm_obj, &cflags_common);
+    compile_c_file(&sc2_src.join("uqm/gameinp.c"), &gameinp_obj, &cflags_common);
 
     // Create a static archive from the object files
     // (excluding the original uqm.c.o and gameinp.c.o, which have
@@ -113,21 +114,48 @@ fn link_c_objects() {
 
     // Filter out the original uqm.c.o and gameinp.c.o — they're replaced
     // by the RUST_OWNS_MAIN versions compiled above
-    let filtered_files: Vec<&PathBuf> = obj_files
+    let mut archive_inputs: Vec<&PathBuf> = obj_files
         .iter()
         .filter(|p| {
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            name != "uqm.c.o" && name != "gameinp.c.o"
+            !matches!(
+                name,
+                "uqm.c.o"
+                    | "gameinp.c.o"
+                    | "alarm.c.o"
+                    | "async.c.o"
+                    | "callback.c.o"
+                    | "gravity.c.o"
+                    | "random.c.o"
+                    | "random2.c.o"
+                    | "sqrt.c.o"
+                    | "velocity.c.o"
+                    | "gendef.c.o"
+                    | "collide.c.o"
+                    | "trans.c.o"
+                    | "battlecontrols.c.o"
+            )
         })
         .collect();
+    archive_inputs.extend([&uqm_obj, &gameinp_obj]);
+    archive_inputs.sort_by_key(|path| path.display().to_string());
+
+    let object_manifest = archive_inputs
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(
+        out_dir.join("uqm-c-objects.manifest"),
+        format!("{object_manifest}\n"),
+    )
+    .expect("failed to write deterministic C object manifest");
 
     // Use ar to create the archive (includes RUST_OWNS_MAIN versions)
     let ar_status = std::process::Command::new("ar")
         .arg("rcs")
         .arg(&archive_path)
-        .args(&filtered_files)
-        .arg(&uqm_obj)
-        .arg(&gameinp_obj)
+        .args(&archive_inputs)
         .status();
 
     if !ar_status.map(|s| s.success()).unwrap_or(false) {
@@ -163,7 +191,12 @@ fn link_c_objects() {
     println!("cargo:rustc-link-search=native=/opt/homebrew/opt/libpng/lib");
     println!("cargo:rustc-link-search=native=/opt/homebrew/opt/SDL2/lib");
 
-    println!("cargo:rerun-if-changed=../sc2/obj/release");
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=../sc2/build.vars");
+    println!("cargo:rerun-if-changed=../sc2/config_unix.h");
+    for object in &obj_files {
+        println!("cargo:rerun-if-changed={}", object.display());
+    }
     println!("cargo:rerun-if-changed=../sc2/src/uqm.c");
     println!("cargo:rerun-if-changed=../sc2/src/uqm/gameinp.c");
 }
@@ -218,6 +251,127 @@ fn collect_object_files(dir: &Path, files: &mut Vec<PathBuf>) {
                 files.push(path);
             }
         }
+    }
+}
+
+/// Compile P00 harness C sources.
+///
+/// SDL surface accessors are auto-linked via cc::Build::compile so they're
+/// available to lib and test targets. The harness entry and menu binding
+/// accessor are compiled as object files only — they reference production
+/// symbols from libuqm_c.a and are linked by the probe script with the
+/// correct force-load ordering per §8.
+///
+/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §8
+fn compile_p00_harness() {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
+
+    // Read SDL2 include path from build.vars
+    let build_vars_path = Path::new(&manifest_dir).join("../sc2/build.vars");
+    let build_vars = fs::read_to_string(&build_vars_path).unwrap_or_default();
+
+    // Extract SDL2 include path from CFLAGS (e.g. -I/opt/homebrew/include/SDL2)
+    let sdl2_inc = build_vars
+        .lines()
+        .find_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.starts_with("uqm_CFLAGS=") {
+                let rest = trimmed
+                    .strip_prefix("uqm_CFLAGS='")
+                    .and_then(|r| r.strip_suffix("'"))?;
+                for token in rest.split_whitespace() {
+                    if token.starts_with("-I") && token.contains("SDL2") {
+                        return Some(token[2..].to_string());
+                    }
+                }
+            }
+            None
+        })
+        .unwrap_or_else(|| "/opt/homebrew/include/SDL2".to_string());
+
+    let sc2_dir = Path::new(&manifest_dir).join("../sc2");
+    let harness_dir = Path::new(&manifest_dir).join("harness");
+    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
+
+    // SDL surface accessors — auto-linked into all targets (no production symbol refs)
+    cc::Build::new()
+        .warnings(true)
+        .file("harness/sdl_surface_accessors.c")
+        .include(&harness_dir)
+        .include(&sc2_dir)
+        .include(&sdl2_inc)
+        .cpp(false)
+        .compile("p00_sdl_accessors");
+
+    // Harness entry — compiled as object only (references production symbols)
+    let harness_obj = out_dir.join("p00_harness.o");
+    compile_harness_c(
+        &harness_dir.join("p00_harness.c"),
+        &harness_obj,
+        &format!("-I{} -w -c", harness_dir.display()),
+    );
+
+    // Menu binding accessor — compiled as object only (references production symbols)
+    let menu_accessor_obj = out_dir.join("menu_binding_accessor.o");
+    compile_harness_c(
+        &harness_dir.join("menu_binding_accessor.c"),
+        &menu_accessor_obj,
+        &format!(
+            "-I{}/src -I{} -I{} -w -c",
+            sc2_dir.display(),
+            sc2_dir.display(),
+            sdl2_inc
+        ),
+    );
+
+    // Menu binding probe — compiled as a separate object only.
+    // It defines its own main() so it must NOT be in the shared harness
+    // archive (which the P00 link-map probe links with an inline main()).
+    // The probe script links this object directly.
+    let menu_probe_obj = out_dir.join("menu_binding_probe.o");
+    compile_harness_c(
+        &harness_dir.join("menu_binding_probe.c"),
+        &menu_probe_obj,
+        &format!("-I{} -w -c", harness_dir.display()),
+    );
+
+    // Archive harness + menu accessor (NOT the probe) for probe script use.
+    // The harness archive must not contain any main() symbol.
+    let harness_archive = out_dir.join("libp00_harness_shim.a");
+    let _ = fs::remove_file(&harness_archive);
+
+    let ar_status = std::process::Command::new("ar")
+        .arg("rcs")
+        .arg(&harness_archive)
+        .arg(&harness_obj)
+        .arg(&menu_accessor_obj)
+        .status();
+
+    if !ar_status.map(|s| s.success()).unwrap_or(false) {
+        panic!("P00: Failed to create harness archive");
+    }
+
+    // Rerun-if-changed for all harness sources
+    println!("cargo:rerun-if-changed=harness/sdl_surface_accessors.c");
+    println!("cargo:rerun-if-changed=harness/sdl_surface_accessors.h");
+    println!("cargo:rerun-if-changed=harness/menu_binding_accessor.c");
+    println!("cargo:rerun-if-changed=harness/menu_binding_accessor.h");
+    println!("cargo:rerun-if-changed=harness/menu_binding_probe.c");
+    println!("cargo:rerun-if-changed=harness/p00_harness.c");
+    println!("cargo:rerun-if-changed=harness/p00_harness.h");
+}
+
+/// Compile a single harness C source file to an object file.
+fn compile_harness_c(source: &Path, output: &Path, cflags: &str) {
+    let mut cmd = std::process::Command::new("cc");
+    for token in shell_tokenize(cflags) {
+        cmd.arg(&token);
+    }
+    cmd.arg("-o").arg(output).arg(source);
+
+    let status = cmd.status();
+    if !status.map(|s| s.success()).unwrap_or(false) {
+        panic!("P00: Failed to compile {}", source.display());
     }
 }
 

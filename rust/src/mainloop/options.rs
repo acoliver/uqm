@@ -29,7 +29,7 @@ const AUDIO_QUALITY_HIGH: c_int = 2;
 const TFB_SCALE_TRILINEAR: c_int = 2;
 const TFB_SCALE_STEP: c_int = 1;
 // OPT_PC / OPT_3DO (options.h)
-const OPT_PC: c_int = 0;
+const OPT_PC: c_int = 2;
 const OPT_3DO: c_int = 1;
 
 // ===========================================================================
@@ -97,6 +97,11 @@ pub struct ParsedOptions {
 
     /// Non-zero if parsing failed.
     pub parse_error: bool,
+
+    /// Automation options (--automation-script, --automation-output).
+    /// None when not supplied. When both are Some, automation is active.
+    pub automation_script: Option<String>,
+    pub automation_output: Option<String>,
 }
 
 impl Default for ParsedOptions {
@@ -139,6 +144,8 @@ impl Default for ParsedOptions {
             player1_control: None,
             player2_control: None,
             parse_error: false,
+            automation_script: None,
+            automation_output: None,
         }
     }
 }
@@ -169,126 +176,219 @@ fn build_command() -> Command {
         .disable_help_flag(true)
         .disable_version_flag(true)
         // Short options that mirror C's optString
-        .arg(Arg::new("res")
-            .short('r').long("res")
-            .value_name("WIDTHxHEIGHT")
-            .help("Resolution (default 1280x960)"))
-        .arg(Arg::new("fullscreen")
-            .short('f').long("fullscreen")
-            .action(ArgAction::SetTrue)
-            .help("Fullscreen mode"))
-        .arg(Arg::new("windowed")
-            .short('w').long("windowed")
-            .action(ArgAction::SetTrue)
-            .help("Windowed mode (default)"))
-        .arg(Arg::new("opengl")
-            .short('o').long("opengl")
-            .action(ArgAction::SetTrue)
-            .help("Use OpenGL renderer"))
-        .arg(Arg::new("nogl")
-            .short('x').long("nogl")
-            .action(ArgAction::SetTrue)
-            .help("Use pure SDL2 renderer (default)"))
-        .arg(Arg::new("scale")
-            .short('c').long("scale")
-            .value_name("MODE")
-            .help("Scaler: hq, xbrz3, xbrz4, or none (default xbrz3)"))
-        .arg(Arg::new("meleezoom")
-            .short('b').long("meleezoom")
-            .value_name("MODE")
-            .help("Melee zoom: step (pc) or smooth (3do)"))
-        .arg(Arg::new("scanlines")
-            .short('s').long("scanlines")
-            .action(ArgAction::SetTrue)
-            .help("Enable scanlines"))
-        .arg(Arg::new("fps")
-            .short('p').long("fps")
-            .action(ArgAction::SetTrue)
-            .help("Show FPS counter"))
-        .arg(Arg::new("configdir")
-            .short('C').long("configdir")
-            .value_name("DIR"))
-        .arg(Arg::new("contentdir")
-            .short('n').long("contentdir")
-            .value_name("DIR"))
-        .arg(Arg::new("musicvol")
-            .short('M').long("musicvol")
-            .value_name("0-100"))
-        .arg(Arg::new("sfxvol")
-            .short('S').long("sfxvol")
-            .value_name("0-100"))
-        .arg(Arg::new("speechvol")
-            .short('T').long("speechvol")
-            .value_name("0-100"))
-        .arg(Arg::new("audioquality")
-            .short('q').long("audioquality")
-            .value_name("QUALITY")
-            .help("high, medium, or low"))
-        .arg(Arg::new("nosubtitles")
-            .short('u').long("nosubtitles")
-            .action(ArgAction::SetTrue))
-        .arg(Arg::new("gamma")
-            .short('g').long("gamma")
-            .value_name("VALUE"))
-        .arg(Arg::new("logfile")
-            .short('l').long("logfile")
-            .value_name("FILE"))
-        .arg(Arg::new("intro")
-            .short('i').long("intro")
-            .value_name("VERSION")
-            .help("3do or pc"))
-        .arg(Arg::new("help")
-            .short('h').long("help")
-            .action(ArgAction::SetTrue))
-        .arg(Arg::new("version")
-            .short('v').long("version")
-            .action(ArgAction::SetTrue))
-        .arg(Arg::new("keepaspectratio")
-            .short('k').long("keepaspectratio")
-            .action(ArgAction::SetTrue)
-            .help("Keep aspect ratio (default on)"))
+        .arg(
+            Arg::new("res")
+                .short('r')
+                .long("res")
+                .value_name("WIDTHxHEIGHT")
+                .help("Resolution (default 1280x960)"),
+        )
+        .arg(
+            Arg::new("fullscreen")
+                .short('f')
+                .long("fullscreen")
+                .action(ArgAction::SetTrue)
+                .help("Fullscreen mode"),
+        )
+        .arg(
+            Arg::new("windowed")
+                .short('w')
+                .long("windowed")
+                .action(ArgAction::SetTrue)
+                .help("Windowed mode (default)"),
+        )
+        .arg(
+            Arg::new("opengl")
+                .short('o')
+                .long("opengl")
+                .action(ArgAction::SetTrue)
+                .help("Use OpenGL renderer"),
+        )
+        .arg(
+            Arg::new("nogl")
+                .short('x')
+                .long("nogl")
+                .action(ArgAction::SetTrue)
+                .help("Use pure SDL2 renderer (default)"),
+        )
+        .arg(
+            Arg::new("scale")
+                .short('c')
+                .long("scale")
+                .value_name("MODE")
+                .help("Scaler: hq, xbrz3, xbrz4, or none (default xbrz3)"),
+        )
+        .arg(
+            Arg::new("meleezoom")
+                .short('b')
+                .long("meleezoom")
+                .value_name("MODE")
+                .help("Melee zoom: step (pc) or smooth (3do)"),
+        )
+        .arg(
+            Arg::new("scanlines")
+                .short('s')
+                .long("scanlines")
+                .action(ArgAction::SetTrue)
+                .help("Enable scanlines"),
+        )
+        .arg(
+            Arg::new("fps")
+                .short('p')
+                .long("fps")
+                .action(ArgAction::SetTrue)
+                .help("Show FPS counter"),
+        )
+        .arg(
+            Arg::new("configdir")
+                .short('C')
+                .long("configdir")
+                .value_name("DIR"),
+        )
+        .arg(
+            Arg::new("contentdir")
+                .short('n')
+                .long("contentdir")
+                .value_name("DIR"),
+        )
+        .arg(
+            Arg::new("musicvol")
+                .short('M')
+                .long("musicvol")
+                .value_name("0-100"),
+        )
+        .arg(
+            Arg::new("sfxvol")
+                .short('S')
+                .long("sfxvol")
+                .value_name("0-100"),
+        )
+        .arg(
+            Arg::new("speechvol")
+                .short('T')
+                .long("speechvol")
+                .value_name("0-100"),
+        )
+        .arg(
+            Arg::new("audioquality")
+                .short('q')
+                .long("audioquality")
+                .value_name("QUALITY")
+                .help("high, medium, or low"),
+        )
+        .arg(
+            Arg::new("nosubtitles")
+                .short('u')
+                .long("nosubtitles")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("gamma")
+                .short('g')
+                .long("gamma")
+                .value_name("VALUE"),
+        )
+        .arg(
+            Arg::new("logfile")
+                .short('l')
+                .long("logfile")
+                .value_name("FILE"),
+        )
+        .arg(
+            Arg::new("intro")
+                .short('i')
+                .long("intro")
+                .value_name("VERSION")
+                .help("3do or pc"),
+        )
+        .arg(
+            Arg::new("help")
+                .short('h')
+                .long("help")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("version")
+                .short('v')
+                .long("version")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("keepaspectratio")
+                .short('k')
+                .long("keepaspectratio")
+                .action(ArgAction::SetTrue)
+                .help("Keep aspect ratio (default on)"),
+        )
         // Long-only options (no short equivalent in C)
-        .arg(Arg::new("cscan")
-            .long("cscan")
-            .value_name("VERSION")
-            .help("3do or pc"))
-        .arg(Arg::new("menu")
-            .long("menu")
-            .value_name("TYPE")
-            .help("3do or pc"))
-        .arg(Arg::new("font")
-            .long("font")
-            .value_name("TYPE")
-            .help("3do or pc"))
-        .arg(Arg::new("shield")
-            .long("shield")
-            .value_name("TYPE")
-            .help("3do or pc"))
-        .arg(Arg::new("scroll")
-            .long("scroll")
-            .value_name("TYPE")
-            .help("3do or pc"))
-        .arg(Arg::new("sound")
-            .long("sound")
-            .value_name("DRIVER")
-            .help("openal, mixsdl, or none"))
-        .arg(Arg::new("stereosfx")
-            .long("stereosfx")
-            .action(ArgAction::SetTrue))
-        .arg(Arg::new("addon")
-            .long("addon")
-            .value_name("ADDON")
-            .action(ArgAction::Append))
-        .arg(Arg::new("addondir")
-            .long("addondir")
-            .value_name("DIR"))
-        .arg(Arg::new("safe")
-            .long("safe")
-            .action(ArgAction::SetTrue)
-            .help("Start in safe mode"))
-        .arg(Arg::new("renderer")
-            .long("renderer")
-            .value_name("NAME"))
+        .arg(
+            Arg::new("cscan")
+                .long("cscan")
+                .value_name("VERSION")
+                .help("3do or pc"),
+        )
+        .arg(
+            Arg::new("menu")
+                .long("menu")
+                .value_name("TYPE")
+                .help("3do or pc"),
+        )
+        .arg(
+            Arg::new("font")
+                .long("font")
+                .value_name("TYPE")
+                .help("3do or pc"),
+        )
+        .arg(
+            Arg::new("shield")
+                .long("shield")
+                .value_name("TYPE")
+                .help("3do or pc"),
+        )
+        .arg(
+            Arg::new("scroll")
+                .long("scroll")
+                .value_name("TYPE")
+                .help("3do or pc"),
+        )
+        .arg(
+            Arg::new("sound")
+                .long("sound")
+                .value_name("DRIVER")
+                .help("openal, mixsdl, or none"),
+        )
+        .arg(
+            Arg::new("stereosfx")
+                .long("stereosfx")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("addon")
+                .long("addon")
+                .value_name("ADDON")
+                .action(ArgAction::Append),
+        )
+        .arg(Arg::new("addondir").long("addondir").value_name("DIR"))
+        .arg(
+            Arg::new("safe")
+                .long("safe")
+                .action(ArgAction::SetTrue)
+                .help("Start in safe mode"),
+        )
+        .arg(Arg::new("renderer").long("renderer").value_name("NAME"))
+        // Automation options
+        .arg(
+            Arg::new("automation-script")
+                .long("automation-script")
+                .value_name("FILE")
+                .help("Path to automation script JSON"),
+        )
+        .arg(
+            Arg::new("automation-output")
+                .long("automation-output")
+                .value_name("DIR")
+                .help("Path to automation output directory"),
+        )
 }
 
 // ===========================================================================
@@ -327,9 +427,7 @@ fn load_config_defaults() -> ParsedOptions {
 
     // Determine config dir (same logic as prepareConfigDir)
     let config_dir = std::env::var("UQM_CONFIG_DIR")
-        .or_else(|_| {
-            std::env::var("HOME").map(|h| format!("{}/.uqm", h.trim_end_matches('/')))
-        })
+        .or_else(|_| std::env::var("HOME").map(|h| format!("{}/.uqm", h.trim_end_matches('/'))))
         .unwrap_or_else(|_| "~/.uqm".to_string());
     let cfg_path = format!("{}/uqm.cfg", config_dir.trim_end_matches('/'));
 
@@ -395,16 +493,34 @@ fn apply_config_value(opts: &mut ParsedOptions, key: &str, raw_val: &str) {
             }
         }
         "subtitles" if vtype == "BOOLEAN" => opts.subtitles = vstr == "true",
-        "textmenu" if vtype == "BOOLEAN" => opts.which_menu = if vstr == "true" { OPT_PC } else { OPT_3DO },
-        "textgradients" if vtype == "BOOLEAN" => opts.which_fonts = if vstr == "true" { OPT_PC } else { OPT_3DO },
-        "iconicscan" if vtype == "BOOLEAN" => opts.which_coarse_scan = if vstr == "true" { OPT_3DO } else { OPT_PC },
-        "smoothscroll" if vtype == "BOOLEAN" => opts.smooth_scroll = if vstr == "true" { OPT_3DO } else { OPT_PC },
-        "pulseshield" if vtype == "BOOLEAN" => opts.which_shield = if vstr == "true" { OPT_3DO } else { OPT_PC },
-        "3domovies" if vtype == "BOOLEAN" => opts.which_intro = if vstr == "true" { OPT_3DO } else { OPT_PC },
+        "textmenu" if vtype == "BOOLEAN" => {
+            opts.which_menu = if vstr == "true" { OPT_PC } else { OPT_3DO }
+        }
+        "textgradients" if vtype == "BOOLEAN" => {
+            opts.which_fonts = if vstr == "true" { OPT_PC } else { OPT_3DO }
+        }
+        "iconicscan" if vtype == "BOOLEAN" => {
+            opts.which_coarse_scan = if vstr == "true" { OPT_3DO } else { OPT_PC }
+        }
+        "smoothscroll" if vtype == "BOOLEAN" => {
+            opts.smooth_scroll = if vstr == "true" { OPT_3DO } else { OPT_PC }
+        }
+        "pulseshield" if vtype == "BOOLEAN" => {
+            opts.which_shield = if vstr == "true" { OPT_3DO } else { OPT_PC }
+        }
+        "3domovies" if vtype == "BOOLEAN" => {
+            opts.which_intro = if vstr == "true" { OPT_3DO } else { OPT_PC }
+        }
         "3domusic" if vtype == "BOOLEAN" => opts.use_3do_music = vstr == "true",
         "remixmusic" if vtype == "BOOLEAN" => opts.use_remix_music = vstr == "true",
         "speech" if vtype == "BOOLEAN" => opts.use_speech = vstr == "true",
-        "smoothmelee" if vtype == "BOOLEAN" => opts.melee_scale = if vstr == "true" { TFB_SCALE_TRILINEAR } else { TFB_SCALE_STEP },
+        "smoothmelee" if vtype == "BOOLEAN" => {
+            opts.melee_scale = if vstr == "true" {
+                TFB_SCALE_TRILINEAR
+            } else {
+                TFB_SCALE_STEP
+            }
+        }
         "audiodriver" if vtype == "STRING" => {
             opts.sound_driver = match vstr {
                 "mixsdl" => AUDIO_DRIVER_MIXSDL,
@@ -529,6 +645,14 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
     }
     if let Some(v) = matches.get_one::<String>("renderer") {
         opts.graphics_backend = Some(v.clone());
+    }
+
+    // Automation options
+    if let Some(v) = matches.get_one::<String>("automation-script") {
+        opts.automation_script = Some(v.clone());
+    }
+    if let Some(v) = matches.get_one::<String>("automation-output") {
+        opts.automation_output = Some(v.clone());
     }
 
     // Addons (can be specified multiple times)
@@ -674,10 +798,7 @@ fn discover_content_dir() -> Option<String> {
     for c in &candidates {
         if std::path::Path::new(c).join("version").exists() {
             return Some(if c == "." {
-                std::env::current_dir()
-                    .ok()?
-                    .to_string_lossy()
-                    .to_string()
+                std::env::current_dir().ok()?.to_string_lossy().to_string()
             } else {
                 std::fs::canonicalize(c)
                     .unwrap_or_else(|_| std::path::PathBuf::from(c))
@@ -732,9 +853,7 @@ pub extern "C" fn rust_options_parse_error() -> c_int {
 /// Returns a heap-allocated C string. Caller MUST call `rust_options_free_string`.
 fn to_c_string(s: &Option<String>) -> *mut c_char {
     let val = s.as_deref().unwrap_or("");
-    CString::new(val)
-        .unwrap_or_default()
-        .into_raw()
+    CString::new(val).unwrap_or_default().into_raw()
 }
 
 #[no_mangle]
@@ -763,6 +882,10 @@ pub extern "C" fn rust_options_get_graphics_backend() -> *mut c_char {
 }
 
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn rust_options_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe {
@@ -793,7 +916,11 @@ macro_rules! bool_getter {
     ($name:ident, $field:ident) => {
         #[no_mangle]
         pub extern "C" fn $name() -> c_int {
-            if parsed().$field { 1 } else { 0 }
+            if parsed().$field {
+                1
+            } else {
+                0
+            }
         }
     };
 }
@@ -1032,10 +1159,7 @@ mod tests {
     #[test]
     fn test_macos_psn_filter() {
         let mut opts = ParsedOptions::default();
-        parse_args_into(&[
-            "uqm".to_string(),
-            "-psn_0_123456".to_string(),
-        ], &mut opts);
+        parse_args_into(&["uqm".to_string(), "-psn_0_123456".to_string()], &mut opts);
         assert_eq!(opts.run_mode, RunMode::Normal);
         assert!(!opts.parse_error);
     }
@@ -1064,8 +1188,10 @@ mod tests {
         let discovered = discover_content_dir();
         // In CI/dev this should find it; just verify it doesn't panic
         if let Some(ref path) = discovered {
-            assert!(std::path::Path::new(path).join("version").exists(),
-                "discovered content dir {path} should contain version file");
+            assert!(
+                std::path::Path::new(path).join("version").exists(),
+                "discovered content dir {path} should contain version file"
+            );
         }
     }
 
@@ -1101,7 +1227,10 @@ mod tests {
         apply_config_value(&mut opts, "scaler", "STRING:xbrz4");
         assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ4);
         // Now CLI override
-        parse_args_into(&["uqm".to_string(), "-c".to_string(), "hq".to_string()], &mut opts);
+        parse_args_into(
+            &["uqm".to_string(), "-c".to_string(), "hq".to_string()],
+            &mut opts,
+        );
         assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_HQXX);
     }
 }
