@@ -1,0 +1,19 @@
+{
+    "version": 1,
+    "name": "state-sync-v1",
+    "budgets": {
+        "max_input_ticks": 200,
+        "max_presentations": 200,
+        "max_wallclock_seconds": 30
+    },
+    "steps": [
+        {"action": "wait_input_ticks", "count": 10},
+        {"action": "assert_activity", "mask": 255, "equals": 0},
+        {"action": "capture", "label": "initial-state"},
+        {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 3},
+        {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 5},
+        {"action": "capture", "label": "after-select"},
+        {"action": "assert_main_menu_transition", "from": "NewGame", "to": "LoadGame"},
+        {"action": "finish"}
+    ]
+}

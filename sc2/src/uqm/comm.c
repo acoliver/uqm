@@ -45,6 +45,8 @@
 #include "libs/log.h"
 #ifdef USE_RUST_COMM
 #include "rust_comm.h"
+extern void rust_sync_comm_data (const void *locdata_ptr);
+extern void rust_clear_comm_data (void);
 #endif
 
 
@@ -1305,6 +1307,10 @@ HailAlien (void)
 	CommData.ConversationPhrasesRes = 0;
 	CommData.ConversationPhrases = 0;
 	pCurInputState = 0;
+#ifdef USE_RUST_COMM
+	/* P10: Clear Rust's CommData singleton — encounter is over. */
+	rust_clear_comm_data ();
+#endif
 }
 
 #else /* USE_RUST_COMM thin wrappers delegating to Rust FFI */
@@ -1433,6 +1439,12 @@ InitCommunication (CONVERSATION which_comm)
 	if (LocDataPtr)
 	{	// We make a copy here
 		CommData = *LocDataPtr;
+#ifdef USE_RUST_COMM
+		/* P10: Sync to Rust's CommData singleton so Rust code can read
+		 * from its own authoritative copy without going through C
+		 * accessors. */
+		rust_sync_comm_data ((const void *)LocDataPtr);
+#endif
 	}
 
 	if (GET_GAME_STATE (BATTLE_SEGUE) == 0)

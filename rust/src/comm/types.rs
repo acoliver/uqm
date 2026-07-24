@@ -185,7 +185,7 @@ impl From<u32> for CommIntroMode {
 ///
 /// `alien_number_speech` is a borrowed pointer into C-owned memory and must **not**
 /// be freed by Rust code.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommData {
     // -----------------------------------------------------------------------
     // Lifecycle callbacks (addresses of C function pointers, or None)

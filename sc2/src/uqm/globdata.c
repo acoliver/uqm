@@ -55,10 +55,22 @@ extern void rust_set_game_state32_in_bytes (BYTE *state, int startBit, DWORD val
 extern void rust_copy_game_state_bits_between_bytes (BYTE *dest, int target, const BYTE *src,
 		int begin, int end);
 
+/* P09: Rust-owned game state singleton — the single source of truth.
+ * C reads/writes through these instead of operating on its own byte array. */
+extern BYTE rust_get_game_state_bits (int startBit, int endBit);
+extern void rust_set_game_state_bits (int startBit, int endBit, BYTE val);
+extern DWORD rust_get_game_state_32 (int startBit);
+extern void rust_set_game_state_32 (int startBit, DWORD val);
+extern const BYTE *rust_get_game_state_bytes (void);
+extern void rust_restore_game_state_from_bytes (const BYTE *bytes, size_t size);
+extern void rust_init_game_state (void);
+extern void rust_reset_game_state (void);
+
 BYTE
 getGameState (BYTE *state, int startBit, int endBit)
 {
-	return rust_get_game_state_bits_from_bytes (state, startBit, endBit);
+	(void) state; /* P09: state array is now owned by Rust singleton */
+	return rust_get_game_state_bits (startBit, endBit);
 }
 
 void
@@ -68,7 +80,8 @@ setGameState (BYTE *state, int startBit, int endBit, BYTE val
 #endif
 )
 {
-	rust_set_game_state_bits_in_bytes (state, startBit, endBit, val);
+	(void) state; /* P09: state array is now owned by Rust singleton */
+	rust_set_game_state_bits (startBit, endBit, val);
 #ifdef STATE_DEBUG
 	log_add (log_Debug, "State '%s' set to %d.", name, (int)val);
 #endif
@@ -77,7 +90,8 @@ setGameState (BYTE *state, int startBit, int endBit, BYTE val
 DWORD
 getGameState32 (BYTE *state, int startBit)
 {
-	return rust_get_game_state32_from_bytes (state, startBit);
+	(void) state;
+	return rust_get_game_state_32 (startBit);
 }
 
 void
@@ -87,7 +101,8 @@ setGameState32 (BYTE *state, int startBit, DWORD val
 #endif
 )
 {
-	rust_set_game_state32_in_bytes (state, startBit, val);
+	(void) state;
+	rust_set_game_state_32 (startBit, val);
 #ifdef STATE_DEBUG
 	log_add (log_Debug, "State '%s' set to %u.", name, (unsigned)val);
 #endif
@@ -96,6 +111,9 @@ setGameState32 (BYTE *state, int startBit, DWORD val
 void
 copyGameState (BYTE *dest, DWORD target, BYTE *src, DWORD begin, DWORD end)
 {
+	/* P09: Both src and dest point into C's array which is now a shadow.
+	 * We still support byte-array copy for save/load compatibility,
+	 * but the authoritative copy lives in Rust. */
 	rust_copy_game_state_bits_between_bytes (dest, (int)target, src, (int)begin, (int)end);
 }
 #else
@@ -479,6 +497,10 @@ InitGlobData (void)
 	i = GLOBAL (glob_flags);
 	memset (&GlobData, 0, sizeof (GlobData));
 	GLOBAL (glob_flags) = (BYTE)i;
+
+	/* P09: Initialize/reset Rust's game-state singleton to match the
+	 * memset above. The C array is now a shadow; Rust is authoritative. */
+	rust_init_game_state ();
 
 	GLOBAL (DisplayArray) = DisplayArray;
 }

@@ -365,6 +365,20 @@ SaveGameState (const GAME_STATE *GSPtr, uio_Stream *fh)
 	/* The Game state bits. Vanilla UQM uses 155 bytes here at
 	 * present. Only the first 99 bytes are significant, though;
 	 * the rest will be overwritten by the BtGp chunks. */
+	/* P09: Sync from Rust's game-state singleton (the single source of
+	 * truth) into the C shadow array before writing to disk. */
+	{
+		extern const BYTE *rust_get_game_state_bytes (void);
+		extern size_t rust_get_game_state_size (void);
+		const BYTE *rust_bytes = rust_get_game_state_bytes ();
+		size_t rust_size = rust_get_game_state_size ();
+		if (rust_bytes && rust_size > 0)
+		{
+			size_t copy_len = rust_size < sizeof (GSPtr->GameState)
+				? rust_size : sizeof (GSPtr->GameState);
+			memcpy (GSPtr->GameState, rust_bytes, copy_len);
+		}
+	}
 	write_32  (fh, GAME_STATE_TAG);
 	write_32  (fh, sizeof (GSPtr->GameState));
 	write_a8  (fh, GSPtr->GameState, sizeof (GSPtr->GameState));

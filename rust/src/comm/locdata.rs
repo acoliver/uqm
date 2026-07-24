@@ -3,8 +3,42 @@
 // @requirement EC-REQ-003, DS-REQ-004, SC-REQ-003
 
 use std::ffi::c_void;
+use std::sync::Mutex;
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
+
+// ---------------------------------------------------------------------------
+// P10: Rust-owned CommData singleton — the single source of truth
+// ---------------------------------------------------------------------------
+
+/// Global CommData singleton. Populated by `sync_comm_data_from_locdata()`
+/// when C's InitCommunication copies LOCDATA to CommData.
+/// Rust code reads from this instead of going through C accessors.
+static GLOBAL_COMM_DATA: Mutex<Option<CommData>> = Mutex::new(None);
+
+/// Store a CommData into the global singleton.
+pub fn set_comm_data(data: CommData) {
+    let mut guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
+    *guard = Some(data);
+}
+
+/// Clear the global CommData singleton (e.g., when ending an encounter).
+pub fn clear_comm_data() {
+    let mut guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
+    *guard = None;
+}
+
+/// Get a clone of the global CommData, if populated.
+pub fn get_comm_data() -> Option<CommData> {
+    let guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
+    guard.clone()
+}
+
+/// Check whether the global CommData has been populated.
+pub fn has_comm_data() -> bool {
+    let guard = GLOBAL_COMM_DATA.lock().expect("GLOBAL_COMM_DATA poisoned");
+    guard.is_some()
+}
 
 // ---------------------------------------------------------------------------
 // C-side accessor declarations
@@ -135,6 +169,38 @@ pub unsafe fn read_locdata_from_c(locdata_ptr: *const c_void) -> CommData {
     }
 
     data
+}
+
+/// Sync C's LOCDATA into Rust's global CommData singleton.
+///
+/// Called from C's `InitCommunication` after `CommData = *LocDataPtr`.
+/// This makes Rust's CommData the authoritative copy for Rust-side reads.
+///
+/// # Safety
+/// `locdata_ptr` must be a valid, non-null pointer to a C `LOCDATA` struct,
+/// or null to clear the singleton.
+#[no_mangle]
+pub unsafe extern "C" fn rust_sync_comm_data(locdata_ptr: *const c_void) {
+    if locdata_ptr.is_null() {
+        clear_comm_data();
+        return;
+    }
+    let data = unsafe { read_locdata_from_c(locdata_ptr) };
+    set_comm_data(data);
+}
+
+/// Clear Rust's global CommData singleton.
+///
+/// Called from C when an encounter ends and CommData is no longer valid.
+///
+/// # Safety
+///
+/// This is an FFI function called from C. It accesses a global Mutex; the
+/// caller must ensure no other thread is simultaneously accessing the
+/// CommData singleton.
+#[no_mangle]
+pub unsafe extern "C" fn rust_clear_comm_data() {
+    clear_comm_data();
 }
 
 // ===========================================================================

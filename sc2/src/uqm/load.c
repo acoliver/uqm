@@ -356,6 +356,13 @@ LoadGameState (GAME_STATE *GSPtr, void *fh)
 	{
 		read_a8 (fh, GSPtr->GameState, magic);
 	}
+	/* P09: Sync loaded bytes into Rust's game-state singleton so that
+	 * subsequent GET_GAME_STATE calls read from Rust (the single source
+	 * of truth) rather than from this C shadow array. */
+	{
+		extern void rust_restore_game_state_from_bytes (const BYTE *bytes, size_t size);
+		rust_restore_game_state_from_bytes (GSPtr->GameState, sizeof (GSPtr->GameState));
+	}
 	return TRUE;
 }
 
