@@ -16,8 +16,7 @@
 pub fn init(log_file: &Option<String>) {
     use tracing_subscriber::EnvFilter;
 
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     match log_file {
         Some(path) => {
@@ -53,7 +52,6 @@ fn init_stderr(filter: &tracing_subscriber::EnvFilter) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_init_with_file() {

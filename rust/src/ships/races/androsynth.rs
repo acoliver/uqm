@@ -1,6 +1,7 @@
 // Androsynth Guardian - Tracking bubbles + blazer comet form
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,16 +22,22 @@ const SHIP_MASS: u8 = 6;
 
 const WEAPON_ENERGY_COST: u8 = 3;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const ANDROSYNTH_OFFSET: i16 = 14;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 3;
-const MISSILE_LIFE: u16 = 200;
 const MISSILE_HITS: i16 = 3;
+const MISSILE_LIFE: u16 = 200;
 const MISSILE_DAMAGE: i16 = 2;
 
 const SPECIAL_ENERGY_COST: u8 = 2;
 const SPECIAL_WAIT: u8 = 0;
+// C constants reserved for full blazer-form Rust port.
+#[expect(dead_code)]
 const BLAZER_THRUST: u16 = 60;
+#[expect(dead_code)]
 const BLAZER_TURN_WAIT: u8 = 1;
+#[expect(dead_code)]
 const BLAZER_DAMAGE: i16 = 3;
 
 /// Ship/blazer form tracking
@@ -64,7 +71,7 @@ impl ShipBehavior for AndrosynthShip {
                 ..ShipInfo::default()
             },
             fleet: FleetStuff {
-                strength: u16::MAX, // INFINITE_RADIUS
+                strength: u16::MAX,      // INFINITE_RADIUS
                 known_loc: (5000, 5000), // MAX_X_UNIVERSE>>1, MAX_Y_UNIVERSE>>1
             },
             characteristics: Characteristics {
@@ -92,11 +99,7 @@ impl ShipBehavior for AndrosynthShip {
     /// Ship→Blazer: swaps image farray, sets blazer collision.
     /// Blazer→Ship: energy depletion forces revert.
     /// Complex element manipulation — kept in C.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if self.form == Form::Ship && ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             #[cfg(not(test))]
             {
@@ -117,14 +120,14 @@ impl ShipBehavior for AndrosynthShip {
     /// C: androsynth_postprocess — blazer energy drain.
     fn postprocess(
         &mut self,
-        ship: &mut ShipState,
+        _ship: &mut ShipState,
         _ctx: &BattleContext,
     ) -> Result<(), ShipsError> {
         if self.form == Form::Blazer {
             #[cfg(test)]
             {
                 // Blazer drains energy; reverts when depleted
-                if ship.energy_level == 0 {
+                if _ship.energy_level == 0 {
                     self.form = Form::Ship;
                 }
             }
@@ -144,12 +147,11 @@ impl ShipBehavior for AndrosynthShip {
 
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(8) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(8) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: ANDROSYNTH_OFFSET,
                 speed: missile_speed,
@@ -163,7 +165,7 @@ impl ShipBehavior for AndrosynthShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -195,7 +197,10 @@ mod tests {
         assert_eq!(desc.ship_info.ship_cost, 15);
         assert_eq!(desc.ship_info.max_crew, 20);
         assert_eq!(desc.ship_info.max_energy, 24);
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SEEKING_WEAPON));
         assert_eq!(desc.characteristics.turn_wait, 4);
         assert_eq!(desc.characteristics.special_energy_cost, 2);
     }
@@ -225,9 +230,7 @@ mod tests {
 
     #[test]
     fn blazer_no_weapon() {
-        let mut ship = AndrosynthShip {
-            form: Form::Blazer,
-        };
+        let mut ship = AndrosynthShip { form: Form::Blazer };
         let state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -269,9 +272,7 @@ mod tests {
 
     #[test]
     fn blazer_reverts_on_depletion() {
-        let mut ship = AndrosynthShip {
-            form: Form::Blazer,
-        };
+        let mut ship = AndrosynthShip { form: Form::Blazer };
         let mut state = ShipState {
             crew_level: 20,
             max_crew: 20,

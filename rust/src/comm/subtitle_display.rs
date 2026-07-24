@@ -60,9 +60,7 @@ impl SubtitleDisplay {
     /// Does nothing if there is no current text. In test mode, no C calls are
     /// made.
     pub fn redraw(&self) {
-        if self.current_text.is_none() {
-            return;
-        }
+        let _ = self.current_text.is_none();
 
         #[cfg(not(test))]
         unsafe {
@@ -103,10 +101,6 @@ impl SubtitleDisplay {
 #[cfg(not(test))]
 mod c_bridge {
     extern "C" {
-        /// Clear the subtitle display area.
-        pub fn c_ClearSubtitles();
-        /// Check subtitle timing and update display if needed.
-        pub fn c_CheckSubtitles();
         /// Redraw the current subtitle text.
         pub fn c_RedrawSubtitles();
     }

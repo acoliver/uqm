@@ -83,6 +83,7 @@ impl std::error::Error for InitError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn cleanup() {
         // Reset battle state via lifecycle module
@@ -90,6 +91,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_init_space() {
         cleanup();
 
@@ -102,6 +104,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_init_ships() {
         cleanup();
 
@@ -112,6 +115,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_init_space_before_ships() {
         cleanup();
 

@@ -2,8 +2,6 @@
 // @requirement REQ-MUSIC-PLAY-01..08, REQ-MUSIC-SPEECH-01..02
 // @requirement REQ-MUSIC-LOAD-01..06, REQ-MUSIC-RELEASE-01..04
 // @requirement REQ-MUSIC-VOLUME-01
-#![allow(dead_code, unused_imports, unused_variables)]
-
 //! Music and speech playback — wraps the stream engine for MUSIC_SOURCE
 //! and SPEECH_SOURCE with volume control, fading, and resource management.
 
@@ -370,23 +368,19 @@ mod tests {
 
     #[test]
     fn test_music_state_new() {
-        unsafe {
-            let state = MusicState::new();
-            assert!(state.cur_music_ref.is_none());
-            assert!(state.cur_speech_ref.is_none());
-            assert_eq!(state.music_volume, MAX_VOLUME);
-            assert!((state.music_volume_scale - 1.0).abs() < f32::EPSILON);
-        }
+        let state = MusicState::new();
+        assert!(state.cur_music_ref.is_none());
+        assert!(state.cur_speech_ref.is_none());
+        assert_eq!(state.music_volume, MAX_VOLUME);
+        assert!((state.music_volume_scale - 1.0).abs() < f32::EPSILON);
     }
 
     #[test]
     fn test_music_ref_clone() {
-        unsafe {
-            let sample = stream::create_sound_sample(None, 4, None)
-                .expect("create_sound_sample should succeed");
-            let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
-            let cloned = music_ref.clone();
-            assert!(Arc::ptr_eq(&music_ref.0, &cloned.0));
-        }
+        let sample =
+            stream::create_sound_sample(None, 4, None).expect("create_sound_sample should succeed");
+        let music_ref = MusicRef(Arc::new(Mutex::new(sample)));
+        let cloned = music_ref.clone();
+        assert!(Arc::ptr_eq(&music_ref.0, &cloned.0));
     }
 }

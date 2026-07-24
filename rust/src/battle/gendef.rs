@@ -97,51 +97,42 @@ extern "C" {
 /// generateDefaultFunctions.
 #[no_mangle]
 pub extern "C" fn getGenerateFunctions(index: u8) -> *const GenerateFunctions {
-    let ptr = unsafe {
+    unsafe {
         match index {
-        SOL_DEFINED => &generateSolFunctions as *const _,
-        SHOFIXTI_DEFINED => &generateShofixtiFunctions as *const _,
-        START_COLONY_DEFINED => &generateColonyFunctions as *const _,
-        SPATHI_DEFINED => &generateSpathiFunctions as *const _,
-        MELNORME0_DEFINED
-        | MELNORME1_DEFINED
-        | MELNORME2_DEFINED
-        | MELNORME3_DEFINED
-        | MELNORME4_DEFINED
-        | MELNORME5_DEFINED
-        | MELNORME6_DEFINED
-        | MELNORME7_DEFINED
-        | MELNORME8_DEFINED => &generateMelnormeFunctions as *const _,
-        TALKING_PET_DEFINED => &generateTalkingPetFunctions as *const _,
-        CHMMR_DEFINED => &generateChmmrFunctions as *const _,
-        SYREEN_DEFINED => &generateSyreenFunctions as *const _,
-        MYCON_TRAP_DEFINED => &generateTrapFunctions as *const _,
-        BURVIXESE_DEFINED => &generateBurvixeseFunctions as *const _,
-        SLYLANDRO_DEFINED => &generateSlylandroFunctions as *const _,
-        DRUUGE_DEFINED => &generateDruugeFunctions as *const _,
-        BOMB_DEFINED | UTWIG_DEFINED => &generateUtwigFunctions as *const _,
-        AQUA_HELIX_DEFINED | THRADD_DEFINED => &generateThraddashFunctions as *const _,
-        SUN_DEVICE_DEFINED | MYCON_DEFINED | EGG_CASE0_DEFINED | EGG_CASE1_DEFINED
-        | EGG_CASE2_DEFINED => &generateMyconFunctions as *const _,
-        ANDROSYNTH_DEFINED => &generateAndrosynthFunctions as *const _,
-        TAALO_PROTECTOR_DEFINED | ORZ_DEFINED => &generateOrzFunctions as *const _,
-        SHIP_VAULT_DEFINED => &generateVaultFunctions as *const _,
-        URQUAN_WRECK_DEFINED => &generateWreckFunctions as *const _,
-        MAIDENS_DEFINED | VUX_BEAST_DEFINED | VUX_DEFINED => {
-            &generateVuxFunctions as *const _
+            SOL_DEFINED => &generateSolFunctions as *const _,
+            SHOFIXTI_DEFINED => &generateShofixtiFunctions as *const _,
+            START_COLONY_DEFINED => &generateColonyFunctions as *const _,
+            SPATHI_DEFINED => &generateSpathiFunctions as *const _,
+            MELNORME0_DEFINED | MELNORME1_DEFINED | MELNORME2_DEFINED | MELNORME3_DEFINED
+            | MELNORME4_DEFINED | MELNORME5_DEFINED | MELNORME6_DEFINED | MELNORME7_DEFINED
+            | MELNORME8_DEFINED => &generateMelnormeFunctions as *const _,
+            TALKING_PET_DEFINED => &generateTalkingPetFunctions as *const _,
+            CHMMR_DEFINED => &generateChmmrFunctions as *const _,
+            SYREEN_DEFINED => &generateSyreenFunctions as *const _,
+            MYCON_TRAP_DEFINED => &generateTrapFunctions as *const _,
+            BURVIXESE_DEFINED => &generateBurvixeseFunctions as *const _,
+            SLYLANDRO_DEFINED => &generateSlylandroFunctions as *const _,
+            DRUUGE_DEFINED => &generateDruugeFunctions as *const _,
+            BOMB_DEFINED | UTWIG_DEFINED => &generateUtwigFunctions as *const _,
+            AQUA_HELIX_DEFINED | THRADD_DEFINED => &generateThraddashFunctions as *const _,
+            SUN_DEVICE_DEFINED | MYCON_DEFINED | EGG_CASE0_DEFINED | EGG_CASE1_DEFINED
+            | EGG_CASE2_DEFINED => &generateMyconFunctions as *const _,
+            ANDROSYNTH_DEFINED => &generateAndrosynthFunctions as *const _,
+            TAALO_PROTECTOR_DEFINED | ORZ_DEFINED => &generateOrzFunctions as *const _,
+            SHIP_VAULT_DEFINED => &generateVaultFunctions as *const _,
+            URQUAN_WRECK_DEFINED => &generateWreckFunctions as *const _,
+            MAIDENS_DEFINED | VUX_BEAST_DEFINED | VUX_DEFINED => &generateVuxFunctions as *const _,
+            SAMATRA_DEFINED => &generateSaMatraFunctions as *const _,
+            ZOQFOT_DEFINED => &generateZoqFotPikFunctions as *const _,
+            ZOQ_SCOUT_DEFINED => &generateZoqFotPikScoutFunctions as *const _,
+            YEHAT_DEFINED => &generateYehatFunctions as *const _,
+            PKUNK_DEFINED => &generatePkunkFunctions as *const _,
+            SUPOX_DEFINED => &generateSupoxFunctions as *const _,
+            RAINBOW_DEFINED => &generateRainbowWorldFunctions as *const _,
+            ILWRATH_DEFINED => &generateIlwrathFunctions as *const _,
+            _ => &generateDefaultFunctions as *const _,
         }
-        SAMATRA_DEFINED => &generateSaMatraFunctions as *const _,
-        ZOQFOT_DEFINED => &generateZoqFotPikFunctions as *const _,
-        ZOQ_SCOUT_DEFINED => &generateZoqFotPikScoutFunctions as *const _,
-        YEHAT_DEFINED => &generateYehatFunctions as *const _,
-        PKUNK_DEFINED => &generatePkunkFunctions as *const _,
-        SUPOX_DEFINED => &generateSupoxFunctions as *const _,
-        RAINBOW_DEFINED => &generateRainbowWorldFunctions as *const _,
-        ILWRATH_DEFINED => &generateIlwrathFunctions as *const _,
-        _ => &generateDefaultFunctions as *const _,
-        }
-    };
-    ptr
+    }
 }
 
 #[cfg(all(test, not(feature = "audio_heart")))]
@@ -158,9 +149,15 @@ mod tests {
     fn test_enum_constants_distinct() {
         // Verify the enum values are distinct and match C
         let vals = [
-            SOL_DEFINED, SHOFIXTI_DEFINED, START_COLONY_DEFINED, SPATHI_DEFINED,
-            MELNORME0_DEFINED, MELNORME8_DEFINED, TALKING_PET_DEFINED,
-            CHMMR_DEFINED, MYCON_TRAP_DEFINED,
+            SOL_DEFINED,
+            SHOFIXTI_DEFINED,
+            START_COLONY_DEFINED,
+            SPATHI_DEFINED,
+            MELNORME0_DEFINED,
+            MELNORME8_DEFINED,
+            TALKING_PET_DEFINED,
+            CHMMR_DEFINED,
+            MYCON_TRAP_DEFINED,
         ];
         for i in 0..vals.len() {
             for j in (i + 1)..vals.len() {

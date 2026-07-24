@@ -223,8 +223,8 @@ pub fn mixer_buffer_data(
     // MIX_FORMAT_DUMMYID (0x00170000) | bytes_per_channel | (channels << 8)
     // For MIX_FORMAT_MONO16: 0x170102 = bpc=2, chans=1
     // For MIX_FORMAT_STEREO16: 0x170202 = bpc=2, chans=2
-    let src_bpc = (format & 0xFF);
-    let src_chans = ((format >> 8) & 0xFF);
+    let src_bpc = format & 0xFF;
+    let src_chans = (format >> 8) & 0xFF;
 
     // Validate the format - if either is 0, something is wrong
     if src_bpc == 0 || src_chans == 0 {
@@ -405,175 +405,140 @@ mod tests {
 
     #[test]
     fn test_gen_buffers() {
-        unsafe {
-            let handles = mixer_gen_buffers(3).unwrap();
-            assert_eq!(handles.len(), 3);
-            assert!(mixer_is_buffer(handles[0]));
-            assert!(mixer_is_buffer(handles[1]));
-            assert!(mixer_is_buffer(handles[2]));
-        }
+        let handles = mixer_gen_buffers(3).unwrap();
+        assert_eq!(handles.len(), 3);
+        assert!(mixer_is_buffer(handles[0]));
+        assert!(mixer_is_buffer(handles[1]));
+        assert!(mixer_is_buffer(handles[2]));
     }
 
     #[test]
     fn test_delete_buffers() {
-        unsafe {
-            let handles = mixer_gen_buffers(2).unwrap();
-            assert!(mixer_is_buffer(handles[0]));
-            assert!(mixer_is_buffer(handles[1]));
-
-            mixer_delete_buffers(&handles).unwrap();
-            assert!(!mixer_is_buffer(handles[0]));
-            assert!(!mixer_is_buffer(handles[1]));
-        }
+        let handles = mixer_gen_buffers(2).unwrap();
+        assert!(mixer_is_buffer(handles[0]));
+        assert!(mixer_is_buffer(handles[1]));
+        mixer_delete_buffers(&handles).unwrap();
+        assert!(!mixer_is_buffer(handles[0]));
+        assert!(!mixer_is_buffer(handles[1]));
     }
 
     #[test]
     fn test_is_buffer() {
-        unsafe {
-            let handles = mixer_gen_buffers(1).unwrap();
-            assert!(mixer_is_buffer(handles[0]));
-            assert!(!mixer_is_buffer(999));
-        }
+        let handles = mixer_gen_buffers(1).unwrap();
+        assert!(mixer_is_buffer(handles[0]));
+        assert!(!mixer_is_buffer(999));
     }
 
     #[test]
     fn test_buffer_data_mono8() {
-        unsafe {
-            let handles = mixer_gen_buffers(1).unwrap();
-            let data = vec![128u8; 100]; // Silent mono 8-bit
-
-            mixer_buffer_data(
-                handles[0],
-                MixerFormat::Mono8 as u32,
-                &data,
-                44100,
-                44100,
-                MixerFormat::Mono8,
-            )
-            .unwrap();
-
-            let buffer = mixer_get_buffer(handles[0]).unwrap();
-            let buf = buffer.lock();
-            assert_eq!(buf.state, BufferState::Filled as u32);
-            assert_eq!(buf.org_freq, 44100);
-            assert_eq!(buf.org_size, 100);
-        }
+        let handles = mixer_gen_buffers(1).unwrap();
+        let data = vec![128u8; 100]; // Silent mono 8-bit
+        mixer_buffer_data(
+            handles[0],
+            MixerFormat::Mono8 as u32,
+            &data,
+            44100,
+            44100,
+            MixerFormat::Mono8,
+        )
+        .unwrap();
+        let buffer = mixer_get_buffer(handles[0]).unwrap();
+        let buf = buffer.lock();
+        assert_eq!(buf.state, BufferState::Filled as u32);
+        assert_eq!(buf.org_freq, 44100);
+        assert_eq!(buf.org_size, 100);
     }
 
     #[test]
     fn test_buffer_data_stereo16() {
-        unsafe {
-            let handles = mixer_gen_buffers(1).unwrap();
-            let data = vec![0u8; 400]; // Silent stereo 16-bit (100 samples * 2 channels * 2 bytes)
-
-            mixer_buffer_data(
-                handles[0],
-                MixerFormat::Stereo16 as u32,
-                &data,
-                48000,
-                48000,
-                MixerFormat::Stereo16,
-            )
-            .unwrap();
-
-            let buffer = mixer_get_buffer(handles[0]).unwrap();
-            let buf = buffer.lock();
-            assert_eq!(buf.state, BufferState::Filled as u32);
-            assert_eq!(buf.org_freq, 48000);
-            assert_eq!(buf.org_size, 400);
-        }
+        let handles = mixer_gen_buffers(1).unwrap();
+        let data = vec![0u8; 400]; // Silent stereo 16-bit (100 samples * 2 channels * 2 bytes)
+        mixer_buffer_data(
+            handles[0],
+            MixerFormat::Stereo16 as u32,
+            &data,
+            48000,
+            48000,
+            MixerFormat::Stereo16,
+        )
+        .unwrap();
+        let buffer = mixer_get_buffer(handles[0]).unwrap();
+        let buf = buffer.lock();
+        assert_eq!(buf.state, BufferState::Filled as u32);
+        assert_eq!(buf.org_freq, 48000);
+        assert_eq!(buf.org_size, 400);
     }
 
     #[test]
     fn test_get_buffer_i() {
-        unsafe {
-            let handles = mixer_gen_buffers(1).unwrap();
-            let data = vec![0u8; 100];
-
-            mixer_buffer_data(
-                handles[0],
-                MixerFormat::Mono8 as u32,
-                &data,
-                22050,
-                22050,
-                MixerFormat::Mono8,
-            )
-            .unwrap();
-
-            let freq = mixer_get_buffer_i(handles[0], BufferProp::Frequency).unwrap();
-            assert_eq!(freq, 22050);
-
-            let size = mixer_get_buffer_i(handles[0], BufferProp::Size).unwrap();
-            assert_eq!(size, 100);
-
-            let channels = mixer_get_buffer_i(handles[0], BufferProp::Channels).unwrap();
-            assert_eq!(channels, 1);
-
-            let bits = mixer_get_buffer_i(handles[0], BufferProp::Bits).unwrap();
-            assert_eq!(bits, 8);
-        }
+        let handles = mixer_gen_buffers(1).unwrap();
+        let data = vec![0u8; 100];
+        mixer_buffer_data(
+            handles[0],
+            MixerFormat::Mono8 as u32,
+            &data,
+            22050,
+            22050,
+            MixerFormat::Mono8,
+        )
+        .unwrap();
+        let freq = mixer_get_buffer_i(handles[0], BufferProp::Frequency).unwrap();
+        assert_eq!(freq, 22050);
+        let size = mixer_get_buffer_i(handles[0], BufferProp::Size).unwrap();
+        assert_eq!(size, 100);
+        let channels = mixer_get_buffer_i(handles[0], BufferProp::Channels).unwrap();
+        assert_eq!(channels, 1);
+        let bits = mixer_get_buffer_i(handles[0], BufferProp::Bits).unwrap();
+        assert_eq!(bits, 8);
     }
 
     #[test]
     fn test_delete_invalid_buffer() {
-        unsafe {
-            let result = mixer_delete_buffers(&[999]);
-            assert_eq!(result, Err(MixerError::InvalidName));
-        }
+        let result = mixer_delete_buffers(&[999]);
+        assert_eq!(result, Err(MixerError::InvalidName));
     }
 
     #[test]
     fn test_buffer_data_empty() {
-        unsafe {
-            let handles = mixer_gen_buffers(1).unwrap();
-            let data = vec![];
-
-            let result = mixer_buffer_data(
-                handles[0],
-                MixerFormat::Mono8 as u32,
-                &data,
-                44100,
-                44100,
-                MixerFormat::Mono8,
-            );
-            assert_eq!(result, Err(MixerError::InvalidValue));
-        }
+        let handles = mixer_gen_buffers(1).unwrap();
+        let data = vec![];
+        let result = mixer_buffer_data(
+            handles[0],
+            MixerFormat::Mono8 as u32,
+            &data,
+            44100,
+            44100,
+            MixerFormat::Mono8,
+        );
+        assert_eq!(result, Err(MixerError::InvalidValue));
     }
 
     #[test]
     fn test_buffer_new() {
-        unsafe {
-            let buf = MixerBuffer::new();
-            assert_eq!(buf.magic, MIXER_BUF_MAGIC);
-            assert_eq!(buf.state, BufferState::Initial as u32);
-            assert!(!buf.locked);
-            assert!(buf.data.is_none());
-        }
+        let buf = MixerBuffer::new();
+        assert_eq!(buf.magic, MIXER_BUF_MAGIC);
+        assert_eq!(buf.state, BufferState::Initial as u32);
+        assert!(!buf.locked);
+        assert!(buf.data.is_none());
     }
 
     #[test]
     fn test_buffer_default() {
-        unsafe {
-            let buf = MixerBuffer::default();
-            assert_eq!(buf.magic, MIXER_BUF_MAGIC);
-            assert_eq!(buf.state, BufferState::Initial as u32);
-        }
+        let buf = MixerBuffer::default();
+        assert_eq!(buf.magic, MIXER_BUF_MAGIC);
+        assert_eq!(buf.state, BufferState::Initial as u32);
     }
 
     #[test]
     fn test_buffer_validation() {
-        unsafe {
-            let mut buf = MixerBuffer::new();
-            assert!(buf.is_valid());
-            assert!(buf.check_state().is_ok());
-
-            buf.magic = 0xDEADBEEF;
-            assert!(!buf.is_valid());
-            assert_eq!(buf.check_state(), Err(MixerError::InvalidName));
-
-            let mut buf2 = MixerBuffer::new();
-            buf2.locked = true;
-            assert_eq!(buf2.check_state(), Err(MixerError::InvalidOperation));
-        }
+        let mut buf = MixerBuffer::new();
+        assert!(buf.is_valid());
+        assert!(buf.check_state().is_ok());
+        buf.magic = 0xDEADBEEF;
+        assert!(!buf.is_valid());
+        assert_eq!(buf.check_state(), Err(MixerError::InvalidName));
+        let mut buf2 = MixerBuffer::new();
+        buf2.locked = true;
+        assert_eq!(buf2.check_state(), Err(MixerError::InvalidOperation));
     }
 }

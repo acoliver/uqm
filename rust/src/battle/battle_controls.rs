@@ -24,14 +24,11 @@ pub const NUM_PLAYERS: usize = 2;
 // ---------------------------------------------------------------------------
 
 /// C: `typedef BATTLE_INPUT_STATE (*BattleFrameInputFunction)(InputContext*, STARSHIP*)`
-pub type BattleFrameInputFn = Option<
-    unsafe extern "C" fn(*mut InputContext, *mut c_void) -> BattleInputState,
->;
+pub type BattleFrameInputFn =
+    Option<unsafe extern "C" fn(*mut InputContext, *mut c_void) -> BattleInputState>;
 
 /// C: `typedef BOOLEAN (*SelectShipFunction)(InputContext*, GETMELEE_STATE*)`
-pub type SelectShipFn = Option<
-    unsafe extern "C" fn(*mut InputContext, *mut c_void) -> Boolean,
->;
+pub type SelectShipFn = Option<unsafe extern "C" fn(*mut InputContext, *mut c_void) -> Boolean>;
 
 /// C: `typedef bool (*BattleEndReadyFunction)(InputContext*)`
 pub type BattleEndReadyFn = Option<unsafe extern "C" fn(*mut InputContext) -> bool>;
@@ -87,15 +84,9 @@ pub struct NetworkInputContext {
 // ---------------------------------------------------------------------------
 
 extern "C" {
-    fn computer_intelligence(
-        context: *mut c_void,
-        starship: *mut c_void,
-    ) -> BattleInputState;
+    fn computer_intelligence(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
 
-    fn frameInputHuman(
-        context: *mut c_void,
-        starship: *mut c_void,
-    ) -> BattleInputState;
+    fn frameInputHuman(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
 
     fn battleEndReadyComputer(context: *mut c_void) -> bool;
     fn battleEndReadyHuman(context: *mut c_void) -> bool;
@@ -126,6 +117,14 @@ pub static HumanInputHandlers: BattleInputHandlers = BattleInputHandlers {
     battle_end_ready: Some(unsafe_battle_end_ready_human),
     delete_context: Some(InputContext_delete),
 };
+/// C: `BattleInputHandlers NetworkInputHandlers`
+#[no_mangle]
+pub static NetworkInputHandlers: BattleInputHandlers = BattleInputHandlers {
+    frame_input: Some(unsafe_frame_input_network),
+    select_ship: Some(unsafe_select_ship_network),
+    battle_end_ready: Some(unsafe_battle_end_ready_network),
+    delete_context: Some(InputContext_delete),
+};
 
 // Trampoline functions to match the exact C function pointer signatures.
 // The extern "C" functions have different parameter types (e.g.
@@ -152,10 +151,7 @@ unsafe extern "C" fn unsafe_select_ship_computer(
     selectShipComputer(ctx as *mut c_void, gms)
 }
 
-unsafe extern "C" fn unsafe_select_ship_human(
-    ctx: *mut InputContext,
-    gms: *mut c_void,
-) -> Boolean {
+unsafe extern "C" fn unsafe_select_ship_human(ctx: *mut InputContext, gms: *mut c_void) -> Boolean {
     selectShipHuman(ctx as *mut c_void, gms)
 }
 
@@ -179,10 +175,17 @@ pub static mut PlayerInput: [*mut InputContext; NUM_PLAYERS] =
 extern "C" {
     fn rust_hmalloc(size: usize) -> *mut c_void;
     fn rust_hfree(ptr: *mut c_void);
+    fn networkBattleInput(context: *mut c_void, starship: *mut c_void) -> BattleInputState;
+    fn selectShipNetwork(context: *mut c_void, gms: *mut c_void) -> Boolean;
+    fn battleEndReadyNetwork(context: *mut c_void) -> bool;
 }
 
 /// C: `void InputContext_init(InputContext *context, BattleInputHandlers *handlers, COUNT playerNr)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn InputContext_init(
     context: *mut InputContext,
     handlers: *const BattleInputHandlers,
@@ -206,8 +209,8 @@ pub extern "C" fn InputContext_delete(context: *mut InputContext) {
 #[no_mangle]
 pub extern "C" fn ComputerInputContext_new(player_nr: Count) -> *mut ComputerInputContext {
     unsafe {
-        let result = rust_hmalloc(std::mem::size_of::<ComputerInputContext>())
-            as *mut ComputerInputContext;
+        let result =
+            rust_hmalloc(std::mem::size_of::<ComputerInputContext>()) as *mut ComputerInputContext;
         if !result.is_null() {
             InputContext_init(
                 &mut (*result).base as *mut InputContext,
@@ -223,8 +226,8 @@ pub extern "C" fn ComputerInputContext_new(player_nr: Count) -> *mut ComputerInp
 #[no_mangle]
 pub extern "C" fn HumanInputContext_new(player_nr: Count) -> *mut HumanInputContext {
     unsafe {
-        let result = rust_hmalloc(std::mem::size_of::<HumanInputContext>())
-            as *mut HumanInputContext;
+        let result =
+            rust_hmalloc(std::mem::size_of::<HumanInputContext>()) as *mut HumanInputContext;
         if !result.is_null() {
             InputContext_init(
                 &mut (*result).base as *mut InputContext,
@@ -234,6 +237,43 @@ pub extern "C" fn HumanInputContext_new(player_nr: Count) -> *mut HumanInputCont
         }
         result
     }
+}
+
+/// C: `NetworkInputContext *NetworkInputContext_new(COUNT playerNr)`
+#[no_mangle]
+pub extern "C" fn NetworkInputContext_new(player_nr: Count) -> *mut NetworkInputContext {
+    unsafe {
+        let result =
+            rust_hmalloc(std::mem::size_of::<NetworkInputContext>()) as *mut NetworkInputContext;
+        if result.is_null() {
+            return result;
+        }
+
+        InputContext_init(
+            &mut (*result).base as *mut InputContext,
+            &NetworkInputHandlers as *const _,
+            player_nr,
+        );
+        result
+    }
+}
+
+unsafe extern "C" fn unsafe_frame_input_network(
+    ctx: *mut InputContext,
+    ship: *mut c_void,
+) -> BattleInputState {
+    networkBattleInput(ctx as *mut c_void, ship)
+}
+
+unsafe extern "C" fn unsafe_select_ship_network(
+    ctx: *mut InputContext,
+    gms: *mut c_void,
+) -> Boolean {
+    selectShipNetwork(ctx as *mut c_void, gms)
+}
+
+unsafe extern "C" fn unsafe_battle_end_ready_network(ctx: *mut InputContext) -> bool {
+    battleEndReadyNetwork(ctx as *mut c_void)
 }
 
 // ---------------------------------------------------------------------------

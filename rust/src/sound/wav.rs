@@ -21,22 +21,11 @@ const DATA_ID: u32 = 0x61746164; // "data"
 // WAV format codes
 const WAVE_FORMAT_PCM: u16 = 1;
 
-/// WAV file header
-#[derive(Debug, Default)]
-struct WavFileHeader {
-    id: u32,     // "RIFF"
-    size: u32,   // File size - 8
-    format: u32, // "WAVE"
-}
-
 /// WAV format chunk
 #[derive(Debug, Default)]
 struct WavFormatHeader {
-    format: u16,          // 1 = PCM
     channels: u16,        // 1 = mono, 2 = stereo
     sample_rate: u32,     // Samples per second
-    byte_rate: u32,       // bytes per second
-    block_align: u16,     // bytes per sample frame
     bits_per_sample: u16, // 8 or 16
 }
 
@@ -107,9 +96,9 @@ impl WavDecoder {
     }
 
     /// Parse WAV file header
-    fn parse_file_header(cursor: &mut Cursor<&[u8]>) -> DecodeResult<WavFileHeader> {
+    fn parse_file_header(cursor: &mut Cursor<&[u8]>) -> DecodeResult<()> {
         let id = Self::read_le_u32(cursor)?;
-        let size = Self::read_le_u32(cursor)?;
+        let _size = Self::read_le_u32(cursor)?;
         let format = Self::read_le_u32(cursor)?;
 
         if id != RIFF_ID {
@@ -119,7 +108,7 @@ impl WavDecoder {
             return Err(DecodeError::InvalidData("Not a WAVE file".to_string()));
         }
 
-        Ok(WavFileHeader { id, size, format })
+        Ok(())
     }
 
     /// Parse chunk header
@@ -140,8 +129,8 @@ impl WavDecoder {
         let format = Self::read_le_u16(cursor)?;
         let channels = Self::read_le_u16(cursor)?;
         let sample_rate = Self::read_le_u32(cursor)?;
-        let byte_rate = Self::read_le_u32(cursor)?;
-        let block_align = Self::read_le_u16(cursor)?;
+        let _byte_rate = Self::read_le_u32(cursor)?;
+        let _block_align = Self::read_le_u16(cursor)?;
         let bits_per_sample = Self::read_le_u16(cursor)?;
 
         // Skip any extra format bytes
@@ -175,11 +164,8 @@ impl WavDecoder {
         }
 
         Ok(WavFormatHeader {
-            format,
             channels,
             sample_rate,
-            byte_rate,
-            block_align,
             bits_per_sample,
         })
     }
@@ -247,7 +233,7 @@ impl SoundDecoder for WavDecoder {
         let mut cursor = Cursor::new(data);
 
         // Parse file header
-        let _file_header = Self::parse_file_header(&mut cursor)?;
+        Self::parse_file_header(&mut cursor)?;
 
         // Find and parse chunks
         let mut fmt_found = false;
@@ -365,11 +351,7 @@ impl SoundDecoder for WavDecoder {
     fn get_frame(&self) -> u32 {
         let bytes_per_sample = self.fmt_header.bits_per_sample as usize / 8;
         let bytes_per_frame = bytes_per_sample * self.fmt_header.channels as usize;
-        if bytes_per_frame > 0 {
-            (self.data_pos / bytes_per_frame) as u32
-        } else {
-            0
-        }
+        self.data_pos.checked_div(bytes_per_frame).unwrap_or(0) as u32
     }
 
     fn frequency(&self) -> u32 {
@@ -434,10 +416,11 @@ mod tests {
 
     #[test]
     fn test_wav_audio_format_from_header() {
-        let mut header = WavFormatHeader::default();
-
-        header.channels = 1;
-        header.bits_per_sample = 8;
+        let mut header = WavFormatHeader {
+            channels: 1,
+            bits_per_sample: 8,
+            ..Default::default()
+        };
         assert_eq!(
             WavDecoder::audio_format_from_header(&header),
             AudioFormat::Mono8

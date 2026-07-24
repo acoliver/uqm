@@ -255,7 +255,6 @@ impl ZipIndex {
 pub struct ZipEntryReader {
     data: Vec<u8>,
     position: u64,
-    expected_crc: u32,
 }
 
 impl ZipEntryReader {
@@ -299,11 +298,7 @@ impl ZipEntryReader {
             ));
         }
 
-        Ok(ZipEntryReader {
-            data,
-            position: 0,
-            expected_crc,
-        })
+        Ok(ZipEntryReader { data, position: 0 })
     }
 
     pub fn size(&self) -> u64 {
@@ -529,7 +524,6 @@ mod tests {
 
     #[test]
     #[ignore] // zip v2 doesn't allow duplicate filenames
-
     fn test_zip_index_duplicate_handling() -> Result<(), std::io::Error> {
         // This test verifies that the last entry wins when there are duplicates
         let temp_dir = TempDir::new()?;

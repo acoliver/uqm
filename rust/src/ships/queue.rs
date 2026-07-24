@@ -954,9 +954,11 @@ mod tests {
 
         for _ in 0..5 {
             let name = name_captain(&starship_queue, SpeciesId::Earthling, &mut rng);
-            let mut ship = Starship::default();
-            ship.species_id = SpeciesId::Earthling;
-            ship.captains_name_index = name;
+            let ship = Starship {
+                species_id: SpeciesId::Earthling,
+                captains_name_index: name,
+                ..Starship::default()
+            };
             starship_queue.push(ship);
         }
 
@@ -976,15 +978,19 @@ mod tests {
         let mut rng = test_rng(42);
 
         let name1 = name_captain(&starship_queue, SpeciesId::Earthling, &mut rng);
-        let mut ship1 = Starship::default();
-        ship1.species_id = SpeciesId::Earthling;
-        ship1.captains_name_index = name1;
+        let ship1 = Starship {
+            species_id: SpeciesId::Earthling,
+            captains_name_index: name1,
+            ..Starship::default()
+        };
         starship_queue.push(ship1);
 
         let name2 = name_captain(&starship_queue, SpeciesId::Androsynth, &mut rng);
-        let mut ship2 = Starship::default();
-        ship2.species_id = SpeciesId::Androsynth;
-        ship2.captains_name_index = name2;
+        let ship2 = Starship {
+            species_id: SpeciesId::Androsynth,
+            captains_name_index: name2,
+            ..Starship::default()
+        };
         starship_queue.push(ship2);
 
         assert_eq!(starship_queue.len(), 2);

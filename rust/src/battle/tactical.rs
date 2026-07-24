@@ -353,316 +353,266 @@ mod tests {
 
     #[test]
     fn test_death_pipeline_phase_count() {
-        unsafe {
-            let phases = [
-                DeathPipelinePhase::ShipDeath,
-                DeathPipelinePhase::Explosion,
-                DeathPipelinePhase::Cleanup,
-                DeathPipelinePhase::NewShip,
-            ];
-            assert_eq!(phases.len(), 4);
-        }
+        let phases = [
+            DeathPipelinePhase::ShipDeath,
+            DeathPipelinePhase::Explosion,
+            DeathPipelinePhase::Cleanup,
+            DeathPipelinePhase::NewShip,
+        ];
+        assert_eq!(phases.len(), 4);
     }
 
     #[test]
     fn test_explosion_constants() {
-        unsafe {
-            assert_eq!(NUM_EXPLOSION_FRAMES, 12);
-            assert_eq!(EXPLOSION_LIFE, 36); // 12 * 3
-            assert_eq!(EXPLOSION_HIDE_PRIM_FRAME, 15);
-            assert_eq!(EXPLOSION_CLEAR_PREPROCESS_FRAME, 25);
-        }
+        assert_eq!(NUM_EXPLOSION_FRAMES, 12);
+        assert_eq!(EXPLOSION_LIFE, 36); // 12 * 3
+        assert_eq!(EXPLOSION_HIDE_PRIM_FRAME, 15);
+        assert_eq!(EXPLOSION_CLEAR_PREPROCESS_FRAME, 25);
     }
 
     #[test]
     fn test_min_ditty_frame_count() {
-        unsafe {
-            assert_eq!(MIN_DITTY_FRAME_COUNT, 72); // (24 * 3)
-        }
+        assert_eq!(MIN_DITTY_FRAME_COUNT, 72); // (24 * 3)
     }
 
     #[test]
     fn test_hyperjump_life() {
-        unsafe {
-            assert_eq!(HYPERJUMP_LIFE, 15);
-        }
+        assert_eq!(HYPERJUMP_LIFE, 15);
     }
 
     #[test]
     fn test_ion_trail_colors_length() {
-        unsafe {
-            assert_eq!(ION_TRAIL_COLORS.len(), 12);
-        }
+        assert_eq!(ION_TRAIL_COLORS.len(), 12);
     }
 
     #[test]
     fn test_flee_pulse_colors_length() {
-        unsafe {
-            assert_eq!(FLEE_PULSE_COLORS.len(), 20);
-        }
+        assert_eq!(FLEE_PULSE_COLORS.len(), 20);
     }
 
     #[test]
     fn test_flee_mass_constant() {
-        unsafe {
-            assert_eq!(FLEE_MASS, 100); // 10 * 10
-        }
+        assert_eq!(FLEE_MASS, 100); // 10 * 10
     }
 
     #[test]
     fn test_pkunk_reincarnation_mass() {
-        unsafe {
-            assert_eq!(PKUNK_REINCARNATION_MASS, 11); // MAX_SHIP_MASS + 1
-        }
+        assert_eq!(PKUNK_REINCARNATION_MASS, 11); // MAX_SHIP_MASS + 1
     }
 
     #[test]
     fn test_winner_determination_variants() {
-        unsafe {
-            assert_eq!(WinnerDeterminationType::DisplayListOrder as u8, 0);
-            assert_eq!(WinnerDeterminationType::PlayerShipFlag as u8, 1);
-            assert_eq!(WinnerDeterminationType::BreakFirst as u8, 2);
-        }
+        assert_eq!(WinnerDeterminationType::DisplayListOrder as u8, 0);
+        assert_eq!(WinnerDeterminationType::PlayerShipFlag as u8, 1);
+        assert_eq!(WinnerDeterminationType::BreakFirst as u8, 2);
     }
 
     #[test]
     fn test_opponent_alive_result_variants() {
-        unsafe {
-            assert_eq!(OpponentAliveResult::Alive as u8, 0);
-            assert_eq!(OpponentAliveResult::Dead as u8, 1);
-            assert_eq!(OpponentAliveResult::NoOpponent as u8, 2);
-        }
+        assert_eq!(OpponentAliveResult::Alive as u8, 0);
+        assert_eq!(OpponentAliveResult::Dead as u8, 1);
+        assert_eq!(OpponentAliveResult::NoOpponent as u8, 2);
     }
 
     #[test]
     fn test_explosion_debris_rates() {
-        unsafe {
-            assert_eq!(ExplosionDebrisRate::One as u8, 1);
-            assert_eq!(ExplosionDebrisRate::Two as u8, 2);
-            assert_eq!(ExplosionDebrisRate::Three as u8, 3);
-        }
+        assert_eq!(ExplosionDebrisRate::One as u8, 1);
+        assert_eq!(ExplosionDebrisRate::Two as u8, 2);
+        assert_eq!(ExplosionDebrisRate::Three as u8, 3);
     }
 
     // ---- P09: Death + Explosion tests ----
 
     #[test]
     fn test_explosion_fragment_schedule() {
-        unsafe {
-            // Tick 0,1,2: 1 fragment
-            assert_eq!(explosion_fragment_count(0), (1, false, false));
-            assert_eq!(explosion_fragment_count(1), (1, false, false));
-            assert_eq!(explosion_fragment_count(2), (1, false, false));
-            // Tick 3,4,5: 2 fragments
-            assert_eq!(explosion_fragment_count(3), (2, false, false));
-            assert_eq!(explosion_fragment_count(5), (2, false, false));
-            // Tick 15: 3 fragments + hide prim
-            assert_eq!(explosion_fragment_count(15), (3, true, false));
-            // Tick 18,19: 2 fragments
-            assert_eq!(explosion_fragment_count(18), (2, false, false));
-            // Tick 20-24: 1 fragment
-            assert_eq!(explosion_fragment_count(20), (1, false, false));
-            assert_eq!(explosion_fragment_count(24), (1, false, false));
-            // Tick 25: 1 fragment + clear preprocess
-            assert_eq!(explosion_fragment_count(25), (1, false, true));
-            // Default (e.g., tick 10): 3 fragments
-            assert_eq!(explosion_fragment_count(10), (3, false, false));
-        }
+        // Tick 0,1,2: 1 fragment
+        assert_eq!(explosion_fragment_count(0), (1, false, false));
+        assert_eq!(explosion_fragment_count(1), (1, false, false));
+        assert_eq!(explosion_fragment_count(2), (1, false, false));
+        // Tick 3,4,5: 2 fragments
+        assert_eq!(explosion_fragment_count(3), (2, false, false));
+        assert_eq!(explosion_fragment_count(5), (2, false, false));
+        // Tick 15: 3 fragments + hide prim
+        assert_eq!(explosion_fragment_count(15), (3, true, false));
+        // Tick 18,19: 2 fragments
+        assert_eq!(explosion_fragment_count(18), (2, false, false));
+        // Tick 20-24: 1 fragment
+        assert_eq!(explosion_fragment_count(20), (1, false, false));
+        assert_eq!(explosion_fragment_count(24), (1, false, false));
+        // Tick 25: 1 fragment + clear preprocess
+        assert_eq!(explosion_fragment_count(25), (1, false, true));
+        // Default (e.g., tick 10): 3 fragments
+        assert_eq!(explosion_fragment_count(10), (3, false, false));
     }
 
     #[test]
     fn test_cleanup_life_span_no_music_not_winner() {
-        unsafe {
-            // No music, not winner: 1 + 1 = 2
-            assert_eq!(compute_cleanup_life_span(false, false), 2);
-        }
+        // No music, not winner: 1 + 1 = 2
+        assert_eq!(compute_cleanup_life_span(false, false), 2);
     }
 
     #[test]
     fn test_cleanup_life_span_music_not_winner() {
-        unsafe {
-            // Music started, not winner: MIN_DITTY_FRAME_COUNT + 1
-            assert_eq!(
-                compute_cleanup_life_span(true, false),
-                MIN_DITTY_FRAME_COUNT + 1
-            );
-        }
+        // Music started, not winner: MIN_DITTY_FRAME_COUNT + 1
+        assert_eq!(
+            compute_cleanup_life_span(true, false),
+            MIN_DITTY_FRAME_COUNT + 1
+        );
     }
 
     #[test]
     fn test_cleanup_life_span_winner() {
-        unsafe {
-            // Winner (regardless of music): MIN_DITTY_FRAME_COUNT + 1 + 1
-            assert_eq!(
-                compute_cleanup_life_span(true, true),
-                MIN_DITTY_FRAME_COUNT + 2
-            );
-            assert_eq!(
-                compute_cleanup_life_span(false, true),
-                MIN_DITTY_FRAME_COUNT + 2
-            );
-        }
+        // Winner (regardless of music): MIN_DITTY_FRAME_COUNT + 1 + 1
+        assert_eq!(
+            compute_cleanup_life_span(true, true),
+            MIN_DITTY_FRAME_COUNT + 2
+        );
+        assert_eq!(
+            compute_cleanup_life_span(false, true),
+            MIN_DITTY_FRAME_COUNT + 2
+        );
     }
 
     #[test]
     fn test_start_ship_explosion_state() {
-        unsafe {
-            let mut elem = Element::default();
-            elem.state_flags = ElementFlags::DISAPPEARING | ElementFlags::PLAYER_SHIP;
-            start_ship_explosion_state(&mut elem);
-            assert_eq!(elem.life_span, EXPLOSION_LIFE as u16);
-            assert!(!elem.state_flags.contains(ElementFlags::DISAPPEARING));
-            assert!(elem.state_flags.contains(ElementFlags::FINITE_LIFE));
-            assert!(elem.state_flags.contains(ElementFlags::NONSOLID));
-            assert!(elem.state_flags.contains(ElementFlags::PLAYER_SHIP)); // preserved
-        }
+        let mut elem = Element {
+            state_flags: ElementFlags::DISAPPEARING | ElementFlags::PLAYER_SHIP,
+            ..Element::default()
+        };
+        start_ship_explosion_state(&mut elem);
+        assert_eq!(elem.life_span, EXPLOSION_LIFE as u16);
+        assert!(!elem.state_flags.contains(ElementFlags::DISAPPEARING));
+        assert!(elem.state_flags.contains(ElementFlags::FINITE_LIFE));
+        assert!(elem.state_flags.contains(ElementFlags::NONSOLID));
+        assert!(elem.state_flags.contains(ElementFlags::PLAYER_SHIP)); // preserved
     }
 
     #[test]
     fn test_should_decrement_battle_counter() {
-        unsafe {
-            assert!(should_decrement_battle_counter(5)); // normal ship
-            assert!(should_decrement_battle_counter(10)); // MAX_SHIP_MASS
-            assert!(!should_decrement_battle_counter(11)); // fleeing
-            assert!(!should_decrement_battle_counter(100)); // FLEE_MASS
-        }
+        assert!(should_decrement_battle_counter(5)); // normal ship
+        assert!(should_decrement_battle_counter(10)); // MAX_SHIP_MASS
+        assert!(!should_decrement_battle_counter(11)); // fleeing
+        assert!(!should_decrement_battle_counter(100)); // FLEE_MASS
     }
 
     #[test]
     fn test_set_min_life_span() {
-        unsafe {
-            let mut elem = Element::default();
-            elem.state_flags = ElementFlags::FINITE_LIFE;
-            elem.life_span = 5;
-            set_min_life_span(&mut elem, 10);
-            assert_eq!(elem.life_span, 10);
-            // Already above minimum — no change
-            set_min_life_span(&mut elem, 3);
-            assert_eq!(elem.life_span, 10);
-        }
+        let mut elem = Element {
+            state_flags: ElementFlags::FINITE_LIFE,
+            life_span: 5,
+            ..Element::default()
+        };
+        set_min_life_span(&mut elem, 10);
+        assert_eq!(elem.life_span, 10);
+        // Already above minimum — no change
+        set_min_life_span(&mut elem, 3);
+        assert_eq!(elem.life_span, 10);
     }
 
     #[test]
     fn test_set_min_life_span_disappearing_noop() {
-        unsafe {
-            let mut elem = Element::default();
-            elem.state_flags = ElementFlags::FINITE_LIFE | ElementFlags::DISAPPEARING;
-            elem.life_span = 1;
-            set_min_life_span(&mut elem, 10);
-            assert_eq!(elem.life_span, 1, "DISAPPEARING elements not adjusted");
-        }
+        let mut elem = Element {
+            state_flags: ElementFlags::FINITE_LIFE | ElementFlags::DISAPPEARING,
+            life_span: 1,
+            ..Element::default()
+        };
+        set_min_life_span(&mut elem, 10);
+        assert_eq!(elem.life_span, 1, "DISAPPEARING elements not adjusted");
     }
 
     #[test]
     fn test_mark_element_for_deletion() {
-        unsafe {
-            let mut elem = Element::default();
-            elem.life_span = 50;
-            elem.state_flags = ElementFlags::PLAYER_SHIP;
-            mark_element_for_deletion(&mut elem);
-            assert_eq!(elem.life_span, 0);
-            assert!(elem.state_flags.contains(ElementFlags::NONSOLID));
-            assert!(elem.state_flags.contains(ElementFlags::DISAPPEARING));
-            assert!(elem.state_flags.contains(ElementFlags::FINITE_LIFE));
-            assert!(!elem.state_flags.contains(ElementFlags::PLAYER_SHIP));
-            assert!(elem.preprocess_func.is_none());
-            assert!(elem.postprocess_func.is_none());
-            assert!(elem.death_func.is_none());
-            assert!(elem.collision_func.is_none());
-        }
+        let mut elem = Element {
+            life_span: 50,
+            state_flags: ElementFlags::PLAYER_SHIP,
+            ..Element::default()
+        };
+        mark_element_for_deletion(&mut elem);
+        assert_eq!(elem.life_span, 0);
+        assert!(elem.state_flags.contains(ElementFlags::NONSOLID));
+        assert!(elem.state_flags.contains(ElementFlags::DISAPPEARING));
+        assert!(elem.state_flags.contains(ElementFlags::FINITE_LIFE));
+        assert!(!elem.state_flags.contains(ElementFlags::PLAYER_SHIP));
+        assert!(elem.preprocess_func.is_none());
+        assert!(elem.postprocess_func.is_none());
+        assert!(elem.death_func.is_none());
+        assert!(elem.collision_func.is_none());
     }
 
     #[test]
     fn test_ion_trail_advance() {
-        unsafe {
-            assert_eq!(advance_ion_trail(0), Some(1));
-            assert_eq!(advance_ion_trail(10), Some(11));
-            assert_eq!(advance_ion_trail(11), None); // 12 colors, index 11 is last
-        }
+        assert_eq!(advance_ion_trail(0), Some(1));
+        assert_eq!(advance_ion_trail(10), Some(11));
+        assert_eq!(advance_ion_trail(11), None); // 12 colors, index 11 is last
     }
 
     #[test]
     fn test_ion_trail_color_table_length() {
-        unsafe {
-            assert_eq!(ION_TRAIL_COLOR_TABLE.len(), 12);
-            assert_eq!(ION_TRAIL_LIFE, 12);
-        }
+        assert_eq!(ION_TRAIL_COLOR_TABLE.len(), 12);
+        assert_eq!(ION_TRAIL_LIFE, 12);
     }
 
     // ---- P10: Flee + Warp + Winner tests ----
 
     #[test]
     fn test_winner_state_default() {
-        unsafe {
-            let ws = WinnerState::new();
-            assert!(ws.winner().is_none());
-            assert!(!ws.play_victory_ditty);
-        }
+        let ws = WinnerState::new();
+        assert!(ws.winner().is_none());
+        assert!(!ws.play_victory_ditty);
     }
 
     #[test]
     fn test_winner_state_set_once() {
-        unsafe {
-            let mut ws = WinnerState::new();
-            ws.set_winner(0);
-            assert_eq!(ws.winner(), Some(0));
-            assert!(ws.play_victory_ditty);
-        }
+        let mut ws = WinnerState::new();
+        ws.set_winner(0);
+        assert_eq!(ws.winner(), Some(0));
+        assert!(ws.play_victory_ditty);
     }
 
     #[test]
     fn test_winner_state_first_wins() {
-        unsafe {
-            let mut ws = WinnerState::new();
-            ws.set_winner(0);
-            ws.set_winner(1); // no-op
-            assert_eq!(ws.winner(), Some(0), "First winner preserved");
-        }
+        let mut ws = WinnerState::new();
+        ws.set_winner(0);
+        ws.set_winner(1); // no-op
+        assert_eq!(ws.winner(), Some(0), "First winner preserved");
     }
 
     #[test]
     fn test_winner_state_reset() {
-        unsafe {
-            let mut ws = WinnerState::new();
-            ws.set_winner(1);
-            ws.reset();
-            assert!(ws.winner().is_none());
-            assert!(!ws.play_victory_ditty);
-        }
+        let mut ws = WinnerState::new();
+        ws.set_winner(1);
+        ws.reset();
+        assert!(ws.winner().is_none());
+        assert!(!ws.play_victory_ditty);
     }
 
     #[test]
     fn test_run_away_allowed() {
-        unsafe {
-            // IN_ENCOUNTER (2) + starbase + not bomb
-            assert!(run_away_allowed(2, true, false));
-            // IN_LAST_BATTLE (3) + starbase + not bomb
-            assert!(run_away_allowed(3, true, false));
-            // SUPER_MELEE (1) — not allowed
-            assert!(!run_away_allowed(1, true, false));
-            // IN_ENCOUNTER but no starbase
-            assert!(!run_away_allowed(2, false, false));
-            // IN_ENCOUNTER but bomb carrier
-            assert!(!run_away_allowed(2, true, true));
-        }
+        // IN_ENCOUNTER (2) + starbase + not bomb
+        assert!(run_away_allowed(2, true, false));
+        // IN_LAST_BATTLE (3) + starbase + not bomb
+        assert!(run_away_allowed(3, true, false));
+        // SUPER_MELEE (1) — not allowed
+        assert!(!run_away_allowed(1, true, false));
+        // IN_ENCOUNTER but no starbase
+        assert!(!run_away_allowed(2, false, false));
+        // IN_ENCOUNTER but bomb carrier
+        assert!(!run_away_allowed(2, true, true));
     }
 
     #[test]
     fn test_flee_pulse_advance() {
-        unsafe {
-            assert_eq!(flee_pulse_advance(0), Some(1));
-            assert_eq!(flee_pulse_advance(18), Some(19));
-            assert_eq!(flee_pulse_advance(19), None); // 20 colors, complete
-        }
+        assert_eq!(flee_pulse_advance(0), Some(1));
+        assert_eq!(flee_pulse_advance(18), Some(19));
+        assert_eq!(flee_pulse_advance(19), None); // 20 colors, complete
     }
 
     #[test]
     fn test_init_flee_state() {
-        unsafe {
-            let mut elem = Element::default();
-            init_flee_state(&mut elem);
-            assert_eq!(elem.mass_points, FLEE_MASS);
-            assert_eq!(elem.life_span, HYPERJUMP_LIFE as u16);
-            assert_eq!(elem.color_cycle_index, 0);
-        }
+        let mut elem = Element::default();
+        init_flee_state(&mut elem);
+        assert_eq!(elem.mass_points, FLEE_MASS);
+        assert_eq!(elem.life_span, HYPERJUMP_LIFE as u16);
+        assert_eq!(elem.color_cycle_index, 0);
     }
 }

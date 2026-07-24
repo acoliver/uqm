@@ -7,8 +7,6 @@
 //! @plan PLAN-20260314-COMM.P07
 //! @requirement AO-REQ-001 through AO-REQ-010, AO-REQ-016
 
-use std::time::Duration;
-
 use super::types::AnimationDescData;
 
 // ============================================================================
@@ -19,6 +17,10 @@ use super::types::AnimationDescData;
 pub const MAX_ANIMATIONS: usize = 20;
 
 /// Animation flag constants matching C AnimFlags.
+#[allow(
+    non_snake_case,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub mod AnimFlags {
     pub const CIRCULAR_ANIM: u8 = 1 << 0;
     pub const RANDOM_ANIM: u8 = 1 << 1;
@@ -34,6 +36,10 @@ pub mod AnimFlags {
 }
 
 /// Transition sub-flags stored in the TransitionDesc AnimFlags.
+#[allow(
+    non_snake_case,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub mod TransitFlags {
     pub const TALK_INTRO: u8 = 1 << 0;
     pub const TALK_DONE: u8 = 1 << 1;
@@ -260,7 +266,7 @@ impl CommAnimState {
 
         // Transit sequence (index 0)
         let mut transit_seq = AnimSequence::default();
-        let mut td = transit_desc.clone();
+        let mut td = *transit_desc;
         td.anim_flags |= AnimFlags::ANIM_DISABLED;
         transit_seq.desc = td;
         transit_seq.anim_type = AnimType::Picture;
@@ -268,7 +274,7 @@ impl CommAnimState {
 
         // Talk sequence (index 1)
         let mut talk_seq = AnimSequence::default();
-        let mut tkd = talk_desc.clone();
+        let mut tkd = *talk_desc;
         tkd.anim_flags |= AnimFlags::ANIM_DISABLED;
         talk_seq.desc = tkd;
         talk_seq.anim_type = AnimType::Picture;
@@ -278,10 +284,11 @@ impl CommAnimState {
         self.transit_anim_flags = transit_desc.anim_flags;
 
         // Ambient sequences (indices 2..2+num_ambient)
-        for i in 0..num_ambient {
-            let ad = &ambient_anims[i];
-            let mut seq = AnimSequence::default();
-            seq.desc = ad.clone();
+        for ad in ambient_anims.iter().take(num_ambient) {
+            let mut seq = AnimSequence {
+                desc: *ad,
+                ..Default::default()
+            };
 
             if ad.anim_flags & AnimFlags::COLORXFORM_ANIM != 0 {
                 seq.anim_type = AnimType::Color;
@@ -338,7 +345,7 @@ impl CommAnimState {
                 self.sequences[seq_idx].alarm -= elapsed_ticks;
             } else if self.active_mask & self.sequences[seq_idx].desc.block_mask != 0 {
                 // Blocked — reschedule
-                let desc = self.sequences[seq_idx].desc.clone();
+                let desc = self.sequences[seq_idx].desc;
                 self.sequences[seq_idx].alarm = random_restart_rate(&mut self.rng, &desc) + 1;
                 continue;
             } else {
@@ -427,7 +434,7 @@ impl CommAnimState {
     /// Advance an ambient animation sequence. Returns true if active.
     fn advance_ambient(&mut self, seq_idx: usize) -> bool {
         let seq = &mut self.sequences[seq_idx];
-        let desc = seq.desc.clone();
+        let desc = seq.desc;
 
         seq.frames_left -= 1;
 
@@ -491,7 +498,7 @@ impl CommAnimState {
             return;
         }
 
-        let desc = talk.desc.clone();
+        let desc = talk.desc;
         talk.alarm = random_frame_rate(&mut self.rng, &desc);
         talk.change = true;
 
@@ -545,7 +552,7 @@ impl CommAnimState {
             transit.direction = Direction::None;
             return transit.desc.anim_flags & AnimFlags::ANIM_DISABLED != 0;
         } else {
-            let desc = transit.desc.clone();
+            let desc = transit.desc;
             transit.alarm = random_frame_rate(&mut self.rng, &desc);
             let dir = match transit.direction {
                 Direction::Up => 1,
@@ -872,7 +879,11 @@ mod tests {
 
         for _ in 0..100 {
             let rate = random_frame_rate(&mut rng, &desc);
-            assert!(rate >= 10 && rate <= 15, "Frame rate {} out of range", rate);
+            assert!(
+                (10..=15).contains(&rate),
+                "Frame rate {} out of range",
+                rate
+            );
         }
     }
 
@@ -884,7 +895,7 @@ mod tests {
         for _ in 0..100 {
             let rate = random_restart_rate(&mut rng, &desc);
             assert!(
-                rate >= 20 && rate <= 30,
+                (20..=30).contains(&rate),
                 "Restart rate {} out of range",
                 rate
             );

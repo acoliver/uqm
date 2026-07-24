@@ -7,15 +7,12 @@
 //! Rust-implemented), and C-side globals are set via bridge accessors.
 
 use std::ffi::CString;
-use std::os::unix::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::ptr;
 
 use libc::{c_char, c_int};
 
-use crate::io::uio_bridge::{
-    uio_DirHandle, uio_DirList, uio_MountHandle, uio_Repository,
-};
+use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
 
 // ---------------------------------------------------------------------------
 // Constants matching C headers
@@ -106,11 +103,15 @@ fn expand_dollar_vars(input: &str) -> String {
                     i = i + 2 + end + 1;
                     continue;
                 }
-            } else if i + 1 < bytes.len() && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'_') {
+            } else if i + 1 < bytes.len()
+                && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'_')
+            {
                 // $VAR (no braces)
                 let start = i + 1;
                 let mut end = start;
-                while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                while end < bytes.len()
+                    && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_')
+                {
                     end += 1;
                 }
                 let var_name = &input[start..end];
@@ -134,12 +135,36 @@ fn expand_dollar_vars(input: &str) -> String {
 
 extern "C" {
     fn uqm_get_repository() -> *mut uio_Repository;
+    #[allow(
+        improper_ctypes,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uqm_get_config_dir() -> *mut uio_DirHandle;
+    #[allow(
+        improper_ctypes,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uqm_get_content_dir() -> *mut uio_DirHandle;
     fn uqm_get_content_mount_handle() -> *mut uio_MountHandle;
+    #[allow(
+        improper_ctypes,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uqm_set_config_dir(d: *mut uio_DirHandle);
+    #[allow(
+        improper_ctypes,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uqm_set_content_dir(d: *mut uio_DirHandle);
+    #[allow(
+        improper_ctypes,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uqm_set_save_dir(d: *mut uio_DirHandle);
+    #[allow(
+        improper_ctypes,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uqm_set_melee_dir(d: *mut uio_DirHandle);
     fn uqm_set_content_mount_handle(h: *mut uio_MountHandle);
     fn uqm_set_base_content_path(path: *const c_char);
@@ -147,8 +172,8 @@ extern "C" {
 
 // uio_* are Rust-implemented (USE_RUST_UIO) — same crate, call directly
 use crate::io::uio_bridge::{
-    uio_closeDir, uio_getDirList, uio_DirList_free, uio_mountDir, uio_openDir,
-    uio_openDirRelative, uio_transplantDir,
+    uio_DirList_free, uio_closeDir, uio_getDirList, uio_mountDir, uio_openDir, uio_openDirRelative,
+    uio_transplantDir,
 };
 
 // ---------------------------------------------------------------------------
@@ -236,8 +261,8 @@ pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> 
 /// Resolves `$UQM_SAVE_DIR` (default `${UQM_CONFIG_DIR}/save`), creates
 /// it, and opens `save` relative to the config dir.
 pub fn prepare_save_dir() -> Result<(), DirPrepError> {
-    let raw = std::env::var("UQM_SAVE_DIR")
-        .unwrap_or_else(|_| "${UQM_CONFIG_DIR}/save".to_string());
+    let raw =
+        std::env::var("UQM_SAVE_DIR").unwrap_or_else(|_| "${UQM_CONFIG_DIR}/save".to_string());
     let path = expand_path(&raw)?;
     let path_str = path.to_string_lossy().to_string();
 
@@ -268,8 +293,8 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
 /// Resolves `$UQM_MELEE_DIR` (default `${UQM_CONFIG_DIR}/teams`), creates
 /// it, and opens `teams` relative to the config dir.
 pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
-    let raw = std::env::var("UQM_MELEE_DIR")
-        .unwrap_or_else(|_| "${UQM_CONFIG_DIR}/teams".to_string());
+    let raw =
+        std::env::var("UQM_MELEE_DIR").unwrap_or_else(|_| "${UQM_CONFIG_DIR}/teams".to_string());
     let path = expand_path(&raw)?;
     let path_str = path.to_string_lossy().to_string();
 
@@ -396,7 +421,7 @@ fn find_content_dir() -> Result<Option<PathBuf>, DirPrepError> {
 }
 
 /// Mount zip files from /packages directory below content root.
-unsafe fn mount_packages_zips(repo: *mut uio_Repository, content_dir: *mut uio_DirHandle) {
+unsafe fn mount_packages_zips(repo: *mut uio_Repository, _content_dir: *mut uio_DirHandle) {
     let packages = CString::new("/packages").unwrap();
     let pkg_dir = uio_openDir(repo, packages.as_ptr(), 0);
     if pkg_dir.is_null() {
@@ -470,7 +495,11 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
             if count == 0 {
                 tracing::info!("0 available addon packs.");
             } else {
-                tracing::info!("{} available addon pack{}.", count, if count == 1 { "" } else { "s" });
+                tracing::info!(
+                    "{} available addon pack{}.",
+                    count,
+                    if count == 1 { "" } else { "s" }
+                );
             }
         }
 
@@ -483,11 +512,7 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
 }
 
 /// Mount all `.zip` / `.uqm` files found in `dir_handle` at `mount_point`.
-unsafe fn mount_dir_zips(
-    dir_handle: *mut uio_DirHandle,
-    mount_point: &str,
-    relative_flags: c_int,
-) {
+unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, relative_flags: c_int) {
     let empty = CString::new("").unwrap();
     let pattern = CString::new("\\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
     let content_mount = uqm_get_content_mount_handle();
@@ -517,7 +542,7 @@ unsafe fn mount_dir_zips(
             UIO_FSTYPE_ZIP,
             dir_handle,
             *name_ptr,
-            b"/\0".as_ptr() as *const c_char,
+            c"/".as_ptr() as *const c_char,
             ptr::null_mut(),
             relative_flags | UIO_MOUNT_RDONLY,
             content_mount,
@@ -604,7 +629,11 @@ pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c
     let dir = if config_dir.is_null() {
         None
     } else {
-        Some(std::ffi::CStr::from_ptr(config_dir).to_string_lossy().to_string())
+        Some(
+            std::ffi::CStr::from_ptr(config_dir)
+                .to_string_lossy()
+                .to_string(),
+        )
     };
     match prepare_config_dir(dir.as_deref()) {
         Ok(()) => 0,
@@ -626,12 +655,20 @@ pub unsafe extern "C" fn rust_prepare_content_dir(
     let cdir = if content_dir.is_null() {
         None
     } else {
-        Some(std::ffi::CStr::from_ptr(content_dir).to_string_lossy().to_string())
+        Some(
+            std::ffi::CStr::from_ptr(content_dir)
+                .to_string_lossy()
+                .to_string(),
+        )
     };
     let adir = if addon_dir.is_null() {
         None
     } else {
-        Some(std::ffi::CStr::from_ptr(addon_dir).to_string_lossy().to_string())
+        Some(
+            std::ffi::CStr::from_ptr(addon_dir)
+                .to_string_lossy()
+                .to_string(),
+        )
     };
     match prepare_content_dir(cdir.as_deref(), adir.as_deref()) {
         Ok(()) => 0,
@@ -771,8 +808,11 @@ mod tests {
         // Should either find content or return None — never panic
         let result = find_content_dir().unwrap();
         if let Some(ref path) = result {
-            assert!(path.join("version").exists(),
-                "found content dir {} should have version file", path.display());
+            assert!(
+                path.join("version").exists(),
+                "found content dir {} should have version file",
+                path.display()
+            );
         }
     }
 }

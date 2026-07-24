@@ -164,8 +164,6 @@ mod c_bridge {
         pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
         /// Render player feedback text in the SIS comms window.
         pub fn c_FeedbackPlayerPhrase(text: *const c_char);
-        /// Redraw the SIS comms window background.
-        pub fn c_DrawSISComWindow();
     }
 }
 

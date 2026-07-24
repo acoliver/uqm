@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc df76cfdd85ff6bfe3fd4b31c2d19bf65ea67b509553a08e19351c034e5c33290 # shrinks to actions = [TapMenuKey(TapMenuKeyStep { key: Down, value: 1, hold: 1, settle: 1 }), Finish]
+cc c82123d993e0c3587db60c4c5c5ad6905ef3c37c8c15cb7942991ea6b87a30b5 # shrinks to actions = [TapMenuKey(TapMenuKeyStep { key: Down, value: 1, hold: 1, settle: 1 }), Finish]
+cc c0a755eb791690dbde86552f6c8df0eded36974acfd2398802ca932ae0e2f32b # shrinks to actions = [TapMenuKey(TapMenuKeyStep { key: Down, value: 1, hold: 1, settle: 1 }), Finish]

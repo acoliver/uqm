@@ -1,6 +1,7 @@
 // Supox Blade - Gob launcher + lateral/reverse thrust
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,7 +22,9 @@ const SHIP_MASS: u8 = 4;
 
 const WEAPON_ENERGY_COST: u8 = 1;
 const WEAPON_WAIT: u8 = 2;
+#[cfg(not(test))]
 const SUPOX_OFFSET: i16 = 23;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 2;
 const MISSILE_LIFE: u16 = 10;
 const MISSILE_HITS: i16 = 1;
@@ -72,17 +75,13 @@ impl ShipBehavior for SupoxShip {
 
     /// C: supox_preprocess — lateral/reverse thrust when SPECIAL held.
     /// Allows strafing (left/right) and reverse thrust while holding special.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             return Ok(());
         }
 
         // C: supox_preprocess — compute add_facing from status flags
-        use crate::ships::runtime::{HALF_CIRCLE, OCTANT, QUADRANT, angle_to_facing};
+        use crate::ships::runtime::{angle_to_facing, HALF_CIRCLE, OCTANT, QUADRANT};
 
         let mut add_facing: i32 = 0;
 
@@ -135,7 +134,7 @@ impl ShipBehavior for SupoxShip {
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: SUPOX_OFFSET,
                 speed: missile_speed,
@@ -149,7 +148,7 @@ impl ShipBehavior for SupoxShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -177,7 +176,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = SupoxShip::default();
+        let ship = SupoxShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 16);
@@ -196,7 +195,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = SupoxShip::default();
+        let mut ship = SupoxShip;
         let state = ShipState {
             crew_level: 12,
             max_crew: 12,
@@ -221,7 +220,7 @@ mod tests {
 
     #[test]
     fn special_reverse_thrust() {
-        let mut ship = SupoxShip::default();
+        let mut ship = SupoxShip;
         let mut state = ShipState {
             crew_level: 12,
             max_crew: 12,
@@ -245,7 +244,7 @@ mod tests {
 
     #[test]
     fn special_lateral_left() {
-        let mut ship = SupoxShip::default();
+        let mut ship = SupoxShip;
         let mut state = ShipState {
             crew_level: 12,
             max_crew: 12,
@@ -269,7 +268,7 @@ mod tests {
 
     #[test]
     fn no_effect_without_special() {
-        let mut ship = SupoxShip::default();
+        let mut ship = SupoxShip;
         let mut state = ShipState {
             crew_level: 12,
             max_crew: 12,
@@ -295,7 +294,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = SupoxShip::default();
+        let mut ship = SupoxShip;
         let state = ShipState {
             crew_level: 12,
             max_crew: 12,

@@ -694,4 +694,18 @@ mod tests {
 
         reset_catalog();
     }
+
+    #[test]
+    #[serial]
+    fn catalog_lifecycle_isolated_from_other_catalog_tests() {
+        for _ in 0..64 {
+            reset_catalog();
+            load_master_ship_list().unwrap();
+            assert_eq!(
+                with_master_ship_by_index(0, |entry| entry.species_id),
+                Some(SpeciesId::Androsynth)
+            );
+            reset_catalog();
+        }
+    }
 }

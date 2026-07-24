@@ -302,12 +302,17 @@ impl Default for SharedGameClock {
 }
 
 // FFI wrappers
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_game_clock_tick() {
     // In a real implementation, this would tick the global clock
     // For now, this is a placeholder
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_set_clock_rate(seconds_per_day: i32) {
     // In a real implementation, this would set the global clock rate
@@ -369,11 +374,11 @@ mod tests {
         assert!(GameDate::new(2024, 1, 15).is_valid());
         assert!(GameDate::new(2024, 2, 29).is_valid()); // Leap year
 
-        // Create invalid dates using Default then modify
-        let mut date = GameDate::default();
-        date.year = 2023;
-        date.month = 2;
-        date.day = 29;
+        let mut date = GameDate {
+            year: 2023,
+            month: 2,
+            day: 29,
+        };
         assert!(!date.is_valid()); // Not leap year
 
         date.month = 0;

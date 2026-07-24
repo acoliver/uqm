@@ -256,6 +256,9 @@ pub unsafe fn ship_collision(
 }
 
 /// Ship collision handler matching the ElementCollisionFunc signature.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// This is the C-ABI-compatible entry point for use as a collision_func.
 pub unsafe extern "C" fn ship_collision_func(
@@ -410,9 +413,11 @@ mod tests {
 
     #[test]
     fn test_animation_preprocess_decrement() {
-        let mut elem = Element::default();
-        elem.turn_wait = 3;
-        elem.thrust_or_blast = 5; // C union: next_turn
+        let mut elem = Element {
+            turn_wait: 3,
+            thrust_or_blast: 5, // C union: next_turn
+            ..Element::default()
+        };
         animation_preprocess(&mut elem);
         assert_eq!(elem.turn_wait, 2);
         assert!(!elem.state_flags.contains(ElementFlags::CHANGING));
@@ -420,9 +425,11 @@ mod tests {
 
     #[test]
     fn test_animation_preprocess_advance_frame() {
-        let mut elem = Element::default();
-        elem.turn_wait = 0;
-        elem.thrust_or_blast = 4; // C union: next_turn
+        let mut elem = Element {
+            turn_wait: 0,
+            thrust_or_blast: 4, // C union: next_turn
+            ..Element::default()
+        };
         animation_preprocess(&mut elem);
         assert!(elem.state_flags.contains(ElementFlags::CHANGING));
         assert_eq!(elem.turn_wait, 4);
@@ -482,10 +489,14 @@ mod tests {
 
     #[test]
     fn test_ship_collision_finite_life_noop() {
-        let mut elem = Element::default();
-        elem.crew_or_hp = 10;
-        let mut other = Element::default();
-        other.state_flags = ElementFlags::FINITE_LIFE;
+        let mut elem = Element {
+            crew_or_hp: 10,
+            ..Element::default()
+        };
+        let mut other = Element {
+            state_flags: ElementFlags::FINITE_LIFE,
+            ..Element::default()
+        };
 
         unsafe {
             ship_collision(
@@ -501,11 +512,15 @@ mod tests {
 
     #[test]
     fn test_ship_collision_sets_collision_flag() {
-        let mut elem = Element::default();
-        elem.crew_or_hp = 10;
-        let mut other = Element::default();
-        other.state_flags = ElementFlags::empty();
-        other.mass_points = 50; // non-gravity, non-finite-life
+        let mut elem = Element {
+            crew_or_hp: 10,
+            ..Element::default()
+        };
+        let mut other = Element {
+            state_flags: ElementFlags::empty(),
+            mass_points: 50, // non-gravity, non-finite-life
+            ..Element::default()
+        };
 
         unsafe {
             ship_collision(
@@ -520,11 +535,15 @@ mod tests {
 
     #[test]
     fn test_ship_collision_gravity_mass() {
-        let mut elem = Element::default();
-        elem.crew_or_hp = 20;
-        let mut other = Element::default();
-        other.state_flags = ElementFlags::empty();
-        other.mass_points = 200; // gravity mass (>127)
+        let mut elem = Element {
+            crew_or_hp: 20,
+            ..Element::default()
+        };
+        let mut other = Element {
+            state_flags: ElementFlags::empty(),
+            mass_points: 200, // gravity mass (>127)
+            ..Element::default()
+        };
 
         unsafe {
             ship_collision(

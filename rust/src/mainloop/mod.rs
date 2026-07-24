@@ -47,12 +47,11 @@ pub use ffi::{
     set_flash_rect_null, set_last_activity, set_main_exited, set_next_activity,
     set_player_input_all_or_explode, splash_with_bg_init_kernel, zero_global_velocity,
 };
-pub use types::{activity_flags, ActivityKind, ActivityValue, CBoolean};
 pub use state_machine::{
-    ActivityDecision, BreakAction, GameStateInfo, check_break, evaluate,
-    post_encounter_clear, pre_dispatch_mutate, resolve_load_activity,
-    should_continue, should_zero_velocity,
+    check_break, evaluate, post_encounter_clear, pre_dispatch_mutate, resolve_load_activity,
+    should_continue, should_zero_velocity, ActivityDecision, BreakAction, GameStateInfo,
 };
+pub use types::{activity_flags, ActivityKind, ActivityValue, CBoolean};
 
 /// Errors that can occur in the main loop FFI bridge.
 ///

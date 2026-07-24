@@ -14,7 +14,7 @@ mod driver_tests {
         let driver = SdlDriver::new();
         assert!(!driver.is_initialized());
         assert_eq!(driver.get_gamma(), 1.0);
-        assert_eq!(driver.supports_hardware_scaling(), true);
+        assert!(driver.supports_hardware_scaling());
     }
 
     #[test]
@@ -90,7 +90,7 @@ mod driver_tests {
         let driver = OpenGlDriver::new();
         assert!(!driver.is_initialized());
         assert_eq!(driver.get_gamma(), 1.0);
-        assert_eq!(driver.supports_hardware_scaling(), true);
+        assert!(driver.supports_hardware_scaling());
     }
 
     #[test]

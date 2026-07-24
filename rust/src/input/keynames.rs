@@ -3,9 +3,7 @@
 //! Maps SDL keycodes to human-readable names and vice versa.
 //! Based on the C keynames.c implementation for compatibility.
 
-use std::collections::HashMap;
 use std::ffi::{c_char, c_int, CStr};
-use std::sync::LazyLock;
 
 /// SDL2 keycode constants (for mapping SDL_Keycode values)
 /// These match the SDL2 keysym definitions
@@ -623,24 +621,6 @@ static KEYNAMES: &[KeyName] = &[
     },
 ];
 
-/// SDL keycode to name mapping (lazy initialized from KEYNAMES)
-static KEY_NAMES: LazyLock<HashMap<i32, &'static str>> = LazyLock::new(|| {
-    KEYNAMES
-        .iter()
-        .filter(|k| k.code != 0)
-        .map(|k| (k.code, k.name))
-        .collect()
-});
-
-/// Name to SDL keycode mapping (reverse lookup)
-static NAME_TO_KEY: LazyLock<HashMap<&'static str, i32>> = LazyLock::new(|| {
-    KEYNAMES
-        .iter()
-        .filter(|k| k.code != 0)
-        .map(|k| (k.name, k.code))
-        .collect()
-});
-
 /// Get the human-readable name for a keycode
 /// This matches the C VControl_code2name behavior
 pub fn key_name(keycode: i32) -> &'static str {
@@ -669,6 +649,9 @@ pub fn key_from_name(name: &str) -> Option<i32> {
 }
 
 /// C-compatible wrapper for key_from_name
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 if not found (matches C behavior)
 #[no_mangle]
 pub unsafe extern "C" fn rust_VControl_name2code(name: *const c_char) -> c_int {

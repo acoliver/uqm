@@ -335,10 +335,10 @@ mod tests {
         );
         let flags = map_battle_input(input);
         use super::super::ship_runtime::{LEFT, RIGHT, THRUST, WEAPON};
-        assert!(flags & (LEFT as u32) != 0);
-        assert!(flags & (THRUST as u32) != 0);
-        assert!(flags & (WEAPON as u32) != 0);
-        assert!(flags & (RIGHT as u32) == 0);
+        assert!(flags & LEFT != 0);
+        assert!(flags & THRUST != 0);
+        assert!(flags & WEAPON != 0);
+        assert!(flags & RIGHT == 0);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 // Mycon Podship - Tracking plasmoid + regeneration
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,12 +22,16 @@ const SHIP_MASS: u8 = 7;
 
 const WEAPON_ENERGY_COST: u8 = 20;
 const WEAPON_WAIT: u8 = 5;
+#[cfg(not(test))]
 const MYCON_OFFSET: i16 = 24;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 0;
 const NUM_PLASMAS: u16 = 11;
 const PLASMA_DURATION: u16 = 13;
 const MISSILE_LIFE: u16 = NUM_PLASMAS * PLASMA_DURATION;
 const MISSILE_DAMAGE: i16 = 10;
+// C constant reserved for full homing-plasma Rust port.
+#[expect(dead_code)]
 const TRACK_WAIT: u8 = 1;
 
 const SPECIAL_ENERGY_COST: u8 = 40; // MAX_ENERGY
@@ -98,8 +103,7 @@ impl ShipBehavior for MyconShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
 
                 let mut add_crew = REGENERATION_AMOUNT as i16;
@@ -140,8 +144,7 @@ impl ShipBehavior for MyconShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(8) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(8) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
@@ -159,7 +162,7 @@ impl ShipBehavior for MyconShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -187,14 +190,17 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = MyconShip::default();
+        let ship = MyconShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 21);
         assert_eq!(desc.ship_info.max_crew, 20);
         assert_eq!(desc.ship_info.max_energy, 40);
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::FIRES_FORE));
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SEEKING_WEAPON));
         assert_eq!(desc.characteristics.weapon_energy_cost, 20);
         assert_eq!(desc.characteristics.special_energy_cost, 40);
         assert_eq!(desc.fleet.known_loc, (6392, 2200));
@@ -202,7 +208,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = MyconShip::default();
+        let mut ship = MyconShip;
         let state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -227,7 +233,7 @@ mod tests {
 
     #[test]
     fn regeneration_adds_crew() {
-        let mut ship = MyconShip::default();
+        let mut ship = MyconShip;
         let mut state = ShipState {
             crew_level: 16,
             max_crew: 20,
@@ -250,7 +256,7 @@ mod tests {
 
     #[test]
     fn regeneration_caps_at_max() {
-        let mut ship = MyconShip::default();
+        let mut ship = MyconShip;
         let mut state = ShipState {
             crew_level: 18,
             max_crew: 20,
@@ -272,7 +278,7 @@ mod tests {
 
     #[test]
     fn regeneration_denied_at_max_crew() {
-        let mut ship = MyconShip::default();
+        let mut ship = MyconShip;
         let mut state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -295,7 +301,7 @@ mod tests {
 
     #[test]
     fn regeneration_denied_low_energy() {
-        let mut ship = MyconShip::default();
+        let mut ship = MyconShip;
         let mut state = ShipState {
             crew_level: 10,
             max_crew: 20,
@@ -318,7 +324,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = MyconShip::default();
+        let mut ship = MyconShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

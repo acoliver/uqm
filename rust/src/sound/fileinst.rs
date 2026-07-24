@@ -1,7 +1,5 @@
 // @plan PLAN-20260225-AUDIO-HEART.P15
 // @requirement REQ-FILEINST-LOAD-01..07
-#![allow(dead_code, unused_imports, unused_variables)]
-
 //! File instance loading — resource loading with concurrent-load guards.
 //!
 //! Wraps `music::get_music_data` and `sfx::get_sound_bank_data` with

@@ -202,131 +202,107 @@ mod tests {
 
     #[test]
     fn melee_entry_initializes_runtime_state() {
-        unsafe {
-            let dir = tempfile::tempdir().unwrap();
-            let mut state = MeleeState::new();
-            state.init(dir.path()).unwrap();
-            assert!(state.initialized);
-            assert_eq!(state.side, 0);
-            assert_eq!(state.current_ship, MeleeShip::MeleeNone);
-        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = MeleeState::new();
+        state.init(dir.path()).unwrap();
+        assert!(state.initialized);
+        assert_eq!(state.side, 0);
+        assert_eq!(state.current_ship, MeleeShip::MeleeNone);
     }
 
     #[test]
     fn invalid_or_missing_config_uses_builtin_fallback() {
-        unsafe {
-            let dir = tempfile::tempdir().unwrap();
-            let mut state = MeleeState::new();
-            state.init(dir.path()).unwrap(); // no melee.cfg → fallback
-
-            // Should have teams from built-in catalog
-            assert!(state.setup.is_playable(0));
-            assert!(state.setup.is_playable(1));
-            // Side 0 should be HUMAN, side 1 COMPUTER
-            assert!(state.setup.player_control[0].contains(PlayerControl::HUMAN_CONTROL));
-            assert!(state.setup.player_control[1].contains(PlayerControl::COMPUTER_CONTROL));
-        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = MeleeState::new();
+        state.init(dir.path()).unwrap(); // no melee.cfg → fallback
+                                         // Should have teams from built-in catalog
+        assert!(state.setup.is_playable(0));
+        assert!(state.setup.is_playable(1));
+        // Side 0 should be HUMAN, side 1 COMPUTER
+        assert!(state.setup.player_control[0].contains(PlayerControl::HUMAN_CONTROL));
+        assert!(state.setup.player_control[1].contains(PlayerControl::COMPUTER_CONTROL));
     }
 
     #[test]
     fn valid_config_restores_state() {
-        unsafe {
-            let dir = tempfile::tempdir().unwrap();
-
-            // Save a config
-            let mut setup = MeleeSetup::new();
-            setup.set_ship(0, 0, MeleeShip::Urquan).unwrap();
-            setup.set_ship(1, 0, MeleeShip::Pkunk).unwrap();
-            setup.set_team_name(0, "Saved A").unwrap();
-            save_melee_config(dir.path(), &setup).unwrap();
-
-            // Init should restore it
-            let mut state = MeleeState::new();
-            state.init(dir.path()).unwrap();
-            assert_eq!(state.setup.teams[0].ships[0], MeleeShip::Urquan);
-            assert_eq!(state.setup.teams[1].ships[0], MeleeShip::Pkunk);
-            assert_eq!(state.setup.teams[0].name_str(), "Saved A");
-        }
+        let dir = tempfile::tempdir().unwrap();
+        // Save a config
+        let mut setup = MeleeSetup::new();
+        setup.set_ship(0, 0, MeleeShip::Urquan).unwrap();
+        setup.set_ship(1, 0, MeleeShip::Pkunk).unwrap();
+        setup.set_team_name(0, "Saved A").unwrap();
+        save_melee_config(dir.path(), &setup).unwrap();
+        // Init should restore it
+        let mut state = MeleeState::new();
+        state.init(dir.path()).unwrap();
+        assert_eq!(state.setup.teams[0].ships[0], MeleeShip::Urquan);
+        assert_eq!(state.setup.teams[1].ships[0], MeleeShip::Pkunk);
+        assert_eq!(state.setup.teams[0].name_str(), "Saved A");
     }
 
     #[test]
     fn match_start_blocked_when_either_side_unplayable() {
-        unsafe {
-            let mut state = MeleeState::new();
-            state.initialized = true;
-            // Both sides empty
-            assert!(!state.can_start_battle());
-            assert!(state.start_battle().is_err());
-        }
+        let mut state = MeleeState::new();
+        state.initialized = true;
+        // Both sides empty
+        assert!(!state.can_start_battle());
+        assert!(state.start_battle().is_err());
     }
 
     #[test]
     fn match_start_allowed_when_both_sides_playable() {
-        unsafe {
-            let mut state = MeleeState::new();
-            state.initialized = true;
-            state.setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
-            state.setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
-            assert!(state.can_start_battle());
-            assert!(state.start_battle().is_ok());
-            assert!(state.melee_started);
-        }
+        let mut state = MeleeState::new();
+        state.initialized = true;
+        state.setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
+        state.setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
+        assert!(state.can_start_battle());
+        assert!(state.start_battle().is_ok());
+        assert!(state.melee_started);
     }
 
     #[test]
     fn battle_return_restores_valid_post_battle_state() {
-        unsafe {
-            let mut state = MeleeState::new();
-            state.initialized = true;
-            state.setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
-            state.setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
-            state.start_battle().unwrap();
-
-            state.restore_after_battle();
-            assert_eq!(state.option, MeleeOption::EditFleet);
-            assert_eq!(state.current_ship, MeleeShip::MeleeNone);
-            // Teams should still be present
-            assert_eq!(state.setup.teams[0].ships[0], MeleeShip::Chmmr);
-        }
+        let mut state = MeleeState::new();
+        state.initialized = true;
+        state.setup.set_ship(0, 0, MeleeShip::Chmmr).unwrap();
+        state.setup.set_ship(1, 0, MeleeShip::Shofixti).unwrap();
+        state.start_battle().unwrap();
+        state.restore_after_battle();
+        assert_eq!(state.option, MeleeOption::EditFleet);
+        assert_eq!(state.current_ship, MeleeShip::MeleeNone);
+        // Teams should still be present
+        assert_eq!(state.setup.teams[0].ships[0], MeleeShip::Chmmr);
     }
 
     #[test]
     fn exit_path_persists_state() {
-        unsafe {
-            let dir = tempfile::tempdir().unwrap();
-            let mut state = MeleeState::new();
-            state.init(dir.path()).unwrap();
-            state.setup.set_ship(0, 0, MeleeShip::Vux).unwrap();
-            state.teardown(dir.path()).unwrap();
-
-            // Reload and verify
-            let mut state2 = MeleeState::new();
-            state2.init(dir.path()).unwrap();
-            assert_eq!(state2.setup.teams[0].ships[0], MeleeShip::Vux);
-        }
+        let dir = tempfile::tempdir().unwrap();
+        let mut state = MeleeState::new();
+        state.init(dir.path()).unwrap();
+        state.setup.set_ship(0, 0, MeleeShip::Vux).unwrap();
+        state.teardown(dir.path()).unwrap();
+        // Reload and verify
+        let mut state2 = MeleeState::new();
+        state2.init(dir.path()).unwrap();
+        assert_eq!(state2.setup.teams[0].ships[0], MeleeShip::Vux);
     }
 
     #[test]
     fn picker_confirm_applies_to_slot() {
-        unsafe {
-            let mut state = MeleeState::new();
-            state.initialized = true;
-            let result = PickResult::Confirmed(MeleeShip::Orz);
-            state.apply_pick(0, 3, &result).unwrap();
-            assert_eq!(state.setup.teams[0].ships[3], MeleeShip::Orz);
-        }
+        let mut state = MeleeState::new();
+        state.initialized = true;
+        let result = PickResult::Confirmed(MeleeShip::Orz);
+        state.apply_pick(0, 3, &result).unwrap();
+        assert_eq!(state.setup.teams[0].ships[3], MeleeShip::Orz);
     }
 
     #[test]
     fn picker_cancel_leaves_state_unchanged() {
-        unsafe {
-            let mut state = MeleeState::new();
-            state.initialized = true;
-            state.setup.set_ship(0, 3, MeleeShip::Druuge).unwrap();
-
-            let result = PickResult::Cancelled;
-            state.apply_pick(0, 3, &result).unwrap();
-            assert_eq!(state.setup.teams[0].ships[3], MeleeShip::Druuge);
-        }
+        let mut state = MeleeState::new();
+        state.initialized = true;
+        state.setup.set_ship(0, 3, MeleeShip::Druuge).unwrap();
+        let result = PickResult::Cancelled;
+        state.apply_pick(0, 3, &result).unwrap();
+        assert_eq!(state.setup.teams[0].ships[3], MeleeShip::Druuge);
     }
 }

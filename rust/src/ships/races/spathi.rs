@@ -1,6 +1,7 @@
 // Spathi Eluder - Forward torpedo + rear-seeking BUTT missile
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -22,19 +23,26 @@ const SHIP_MASS: u8 = 5;
 // Forward gun
 const WEAPON_ENERGY_COST: u8 = 2;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const SPATHI_FORWARD_OFFSET: i16 = 16;
 const MISSILE_LIFE: u16 = 10;
 const MISSILE_HITS: i16 = 1;
 const MISSILE_DAMAGE: i16 = 1;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 1;
 
 // B.U.T.T. missile
 const SPECIAL_ENERGY_COST: u8 = 3;
 const SPECIAL_WAIT: u8 = 7;
+#[cfg(not(test))]
 const SPATHI_REAR_OFFSET: i16 = 20;
+#[cfg(not(test))]
 const DISCRIMINATOR_LIFE: u16 = 30;
+#[cfg(not(test))]
 const DISCRIMINATOR_HITS: i16 = 1;
+#[cfg(not(test))]
 const DISCRIMINATOR_DAMAGE: i16 = 2;
+#[cfg(not(test))]
 const DISCRIMINATOR_OFFSET: i16 = 4;
 
 #[derive(Debug, Default)]
@@ -110,8 +118,7 @@ impl ShipBehavior for SpathiShip {
                             crate::ships::runtime::HALF_CIRCLE,
                         ),
                 );
-                let disc_speed =
-                    battle_bridge::bridge::display_to_world(8) as i16;
+                let disc_speed = battle_bridge::bridge::display_to_world(8) as i16;
                 let block = MissileBlock {
                     cx: ship.position.0 as i16,
                     cy: ship.position.1 as i16,
@@ -131,8 +138,7 @@ impl ShipBehavior for SpathiShip {
 
                 if let Some(h) = battle_bridge::bridge::create_missile(&block) {
                     let ptr = battle_bridge::bridge::lock_element(h);
-                    let sound =
-                        battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                    let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                     battle_bridge::bridge::process_sound(sound, ptr);
                     battle_bridge::bridge::unlock_element(h);
                     battle_bridge::bridge::put_element(h);
@@ -165,7 +171,7 @@ impl ShipBehavior for SpathiShip {
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: SPATHI_FORWARD_OFFSET,
                 speed: missile_speed,
@@ -179,7 +185,7 @@ impl ShipBehavior for SpathiShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -207,7 +213,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = SpathiShip::default();
+        let ship = SpathiShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 18);
@@ -215,7 +221,10 @@ mod tests {
         assert_eq!(desc.ship_info.max_energy, 10);
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::FIRES_FORE));
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::FIRES_AFT));
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_SPECIAL));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SEEKING_SPECIAL));
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::DONT_CHASE));
         assert_eq!(desc.characteristics.max_thrust, 48);
         assert_eq!(desc.characteristics.thrust_increment, 12);
@@ -228,7 +237,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = SpathiShip::default();
+        let mut ship = SpathiShip;
         let state = ShipState {
             crew_level: 30,
             max_crew: 30,
@@ -253,7 +262,7 @@ mod tests {
 
     #[test]
     fn butt_missile_drains_energy() {
-        let mut ship = SpathiShip::default();
+        let mut ship = SpathiShip;
         let mut state = ShipState {
             crew_level: 30,
             max_crew: 30,
@@ -276,7 +285,7 @@ mod tests {
 
     #[test]
     fn butt_denied_low_energy() {
-        let mut ship = SpathiShip::default();
+        let mut ship = SpathiShip;
         let mut state = ShipState {
             crew_level: 30,
             max_crew: 30,
@@ -299,7 +308,7 @@ mod tests {
 
     #[test]
     fn butt_denied_during_cooldown() {
-        let mut ship = SpathiShip::default();
+        let mut ship = SpathiShip;
         let mut state = ShipState {
             crew_level: 30,
             max_crew: 30,
@@ -322,7 +331,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = SpathiShip::default();
+        let mut ship = SpathiShip;
         let state = ShipState {
             crew_level: 30,
             max_crew: 30,

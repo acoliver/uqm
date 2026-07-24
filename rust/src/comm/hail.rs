@@ -28,12 +28,7 @@ mod c_bridge {
         pub fn c_CaptureColorMap(handle: usize) -> usize;
         pub fn c_CaptureStringTable(handle: usize) -> usize;
 
-        // Release (converts ref-counted handle back to raw; must precede Destroy)
-        pub fn c_ReleaseDrawable(handle: usize) -> usize;
-        pub fn c_ReleaseColorMap(handle: usize) -> usize;
-        pub fn c_ReleaseStringTable(handle: usize) -> usize;
-
-        // Resource destruction (use raw handles returned by Release)
+        // Resource destruction
         pub fn c_DestroyDrawable(handle: usize);
         pub fn c_DestroyFont(handle: usize);
         pub fn c_DestroyColorMap(handle: usize);
@@ -85,6 +80,10 @@ mod c_bridge {
         pub fn c_StopMusic();
         pub fn c_StopSound();
         pub fn c_StopTrack();
+        #[allow(
+            clashing_extern_declarations,
+            reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+        )]
         pub fn c_FadeMusic(vol: c_int, duration: c_int) -> c_uint;
         pub fn c_SleepThreadUntil(time: c_uint);
         pub fn c_FlushColorXForms();
@@ -148,6 +147,7 @@ mod c_bridge {
 // ============================================================================
 
 /// LDASF_USE_ALTERNATE: try AlienAltSongRes before AlienSongRes.
+#[cfg(not(test))]
 const LDASF_USE_ALTERNATE: u32 = 0x0001;
 
 // ============================================================================
@@ -155,11 +155,13 @@ const LDASF_USE_ALTERNATE: u32 = 0x0001;
 // ============================================================================
 
 /// Game string base index for starbase strings (from gamestr.h).
+#[cfg(not(test))]
 const STARBASE_STRING_BASE: i32 = 0x0200;
 
 // ============================================================================
 // NORMAL_VOLUME — matches libs/sndlib.h
 // ============================================================================
+#[cfg(not(test))]
 const NORMAL_VOLUME: i32 = 128;
 
 // ============================================================================
@@ -191,7 +193,10 @@ pub unsafe fn hail_alien() {
         super::state::COMM_STATE.write().clear();
         {
             let s = super::state::COMM_STATE.read();
-            eprintln!("[DBG] hail_alien: after clear, talking_finished={}", s.is_talking_finished());
+            eprintln!(
+                "[DBG] hail_alien: after clear, talking_finished={}",
+                s.is_talking_finished()
+            );
         }
         c_SetTalkingFinished(0);
 
@@ -242,12 +247,14 @@ pub unsafe fn hail_alien() {
         // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
         // resolve conversation phrases without calling back into C.
         {
-            let mut comm_data = super::types::CommData::default();
-            comm_data.conversation_phrases = phrases as *mut std::ffi::c_void;
-            comm_data.alien_frame = alien_frame as *mut std::ffi::c_void;
-            comm_data.alien_font = alien_font as *mut std::ffi::c_void;
-            comm_data.alien_color_map = alien_cmap as *mut std::ffi::c_void;
-            comm_data.alien_song = alien_song as *mut std::ffi::c_void;
+            let comm_data = super::types::CommData {
+                conversation_phrases: phrases as *mut std::ffi::c_void,
+                alien_frame: alien_frame as *mut std::ffi::c_void,
+                alien_font: alien_font as *mut std::ffi::c_void,
+                alien_color_map: alien_cmap as *mut std::ffi::c_void,
+                alien_song: alien_song as *mut std::ffi::c_void,
+                ..Default::default()
+            };
             super::state::COMM_STATE.write().set_comm_data(comm_data);
         }
 
@@ -259,7 +266,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 5: TextCacheContext setup
         // ----------------------------------------------------------------
-        let text_cache_ctx_name = b"TextCacheContext\0".as_ptr() as *const _;
+        let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
         let text_cache_ctx = c_CreateContext(text_cache_ctx_name);
 
         let sis_w = c_GetSISScreenWidth();
@@ -296,7 +303,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 8: Create AnimContext and configure
         // ----------------------------------------------------------------
-        let anim_ctx_name = b"AnimContext\0".as_ptr() as *const _;
+        let anim_ctx_name = c"AnimContext".as_ptr() as *const _;
         let anim_ctx = c_CreateContext(anim_ctx_name);
         c_SetAnimContext(anim_ctx);
         c_SetContext(anim_ctx);

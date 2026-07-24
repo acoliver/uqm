@@ -407,7 +407,6 @@ impl Element {
     }
 
     /// Flag transition helpers
-
     pub fn set_appearing(&mut self) {
         self.state_flags.insert(ElementFlags::APPEARING);
     }
@@ -461,7 +460,6 @@ impl Element {
     }
 
     /// Lifecycle helpers
-
     /// Decrements life_span, returns true if still alive
     /// Returns false if life_span reaches 0
     pub fn decrement_life(&mut self) -> bool {

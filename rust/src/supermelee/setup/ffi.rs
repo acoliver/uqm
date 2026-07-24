@@ -18,6 +18,9 @@ use std::os::raw::c_int;
 // ---------------------------------------------------------------------------
 
 /// Serialize a MeleeTeam to a buffer.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 on success, -1 on failure.
 /// Buffer must be at least MELEE_TEAM_SERIAL_SIZE bytes.
 #[no_mangle]
@@ -58,6 +61,9 @@ pub unsafe extern "C" fn rust_supermelee_team_serialize(
 }
 
 /// Deserialize a MeleeTeam from a buffer.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 on success, -1 on failure.
 #[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_team_deserialize(
@@ -95,6 +101,9 @@ pub unsafe extern "C" fn rust_supermelee_team_deserialize(
 // ---------------------------------------------------------------------------
 
 /// Returns the fleet-point cost of a ship by its raw ID.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns 0 for invalid/sentinel values.
 #[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
@@ -109,6 +118,9 @@ pub unsafe extern "C" fn rust_supermelee_ship_cost(ship_id: u8) -> u16 {
 // ---------------------------------------------------------------------------
 
 /// Computes fleet value for 14 ship slots.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// `ships` must point to MELEE_FLEET_SIZE bytes.
 #[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
@@ -127,6 +139,9 @@ pub unsafe extern "C" fn rust_supermelee_fleet_value(ships: *const u8) -> u16 {
 // ---------------------------------------------------------------------------
 
 /// Returns the serial size of a MeleeTeam (for C callers that need it).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_supermelee_team_serial_size() -> usize {
     MELEE_TEAM_SERIAL_SIZE

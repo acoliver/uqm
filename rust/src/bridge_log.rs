@@ -16,6 +16,9 @@ static LOG_FILE: Mutex<Option<File>> = Mutex::new(None);
 const LOG_PATH: &str = "rust-bridge.log";
 
 /// Initialize the Rust bridge logging system.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// This function creates or truncates the log file and writes the Phase 0 marker.
 /// Returns 0 on success, -1 on failure.

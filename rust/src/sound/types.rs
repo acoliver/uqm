@@ -1,7 +1,5 @@
 // @plan PLAN-20260225-AUDIO-HEART.P03
 // @requirement REQ-CROSS-CONST-01..08, REQ-CROSS-ERROR-01..03, REQ-CROSS-GENERAL-01,04,05,07,08
-#![allow(dead_code, unused_imports)]
-
 //! Shared types for the Audio Heart streaming pipeline.
 //!
 //! Defines error types, constants, core structs, and callback traits
@@ -190,6 +188,12 @@ pub struct SoundSample {
     pub callbacks: Option<Box<dyn StreamCallbacks + Send>>,
 }
 
+impl Default for SoundSample {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SoundSample {
     /// Create a new empty sound sample.
     pub fn new() -> Self {
@@ -272,6 +276,12 @@ pub struct SoundSource {
     pub end_chunk_failed: bool,
 }
 
+impl Default for SoundSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SoundSource {
     /// Create a new inactive sound source.
     pub fn new() -> Self {
@@ -304,6 +314,12 @@ pub struct FadeState {
     pub start_volume: i32,
     /// Volume delta (end_volume - start_volume).
     pub delta: i32,
+}
+
+impl Default for FadeState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FadeState {
@@ -380,6 +396,12 @@ pub struct SoundBank {
     pub samples: Vec<SoundSample>,
     /// Resource file name this bank was loaded from.
     pub source_file: Option<String>,
+}
+
+impl Default for SoundBank {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SoundBank {
@@ -692,7 +714,6 @@ mod tests {
     fn test_send_sync_bounds() {
         // REQ-CROSS-GENERAL-04
         fn assert_send<T: Send>() {}
-        fn assert_sync<T: Sync>() {}
         fn assert_send_sync<T: Send + Sync>() {}
 
         assert_send_sync::<AudioError>();

@@ -105,8 +105,7 @@ pub struct GameStateInfo {
 /// @requirement REQ-ML-004
 #[must_use]
 pub fn should_zero_velocity(current: ActivityValue, next: ActivityValue) -> bool {
-    !current.has_flag(activity_flags::CHECK_LOAD)
-        && !next.has_flag(activity_flags::CHECK_LOAD)
+    !current.has_flag(activity_flags::CHECK_LOAD) && !next.has_flag(activity_flags::CHECK_LOAD)
 }
 
 /// When `current` carries `CHECK_LOAD`, the C code replaces it with
@@ -119,10 +118,7 @@ pub fn should_zero_velocity(current: ActivityValue, next: ActivityValue) -> bool
 /// @plan PLAN-20260707-MAINLOOP.P05
 /// @requirement REQ-ML-004
 #[must_use]
-pub fn resolve_load_activity(
-    current: ActivityValue,
-    next: ActivityValue,
-) -> ActivityValue {
+pub fn resolve_load_activity(current: ActivityValue, next: ActivityValue) -> ActivityValue {
     if current.has_flag(activity_flags::CHECK_LOAD) {
         next
     } else {
@@ -198,10 +194,7 @@ pub fn evaluate(activity: ActivityValue, state: &GameStateInfo) -> ActivityDecis
 /// @plan PLAN-20260707-MAINLOOP.P05
 /// @requirement REQ-ML-004
 #[must_use]
-pub fn pre_dispatch_mutate(
-    activity: ActivityValue,
-    decision: ActivityDecision,
-) -> ActivityValue {
+pub fn pre_dispatch_mutate(activity: ActivityValue, decision: ActivityDecision) -> ActivityValue {
     match decision {
         ActivityDecision::VisitStarBase | ActivityDecision::RaceCommunication => {
             activity.set_flag(activity_flags::START_ENCOUNTER)
@@ -413,10 +406,7 @@ mod tests {
             ..gs()
         };
         let activity = act(ActivityKind::InHyperspace, 0);
-        assert_eq!(
-            evaluate(activity, &state),
-            ActivityDecision::VisitStarBase
-        );
+        assert_eq!(evaluate(activity, &state), ActivityDecision::VisitStarBase);
     }
 
     /// @plan PLAN-20260707-MAINLOOP.P05
@@ -428,10 +418,7 @@ mod tests {
             ..gs()
         };
         let activity = act(ActivityKind::InHyperspace, activity_flags::START_ENCOUNTER);
-        assert_eq!(
-            evaluate(activity, &state),
-            ActivityDecision::VisitStarBase
-        );
+        assert_eq!(evaluate(activity, &state), ActivityDecision::VisitStarBase);
     }
 
     /// @plan PLAN-20260707-MAINLOOP.P05
@@ -449,7 +436,10 @@ mod tests {
     /// @requirement REQ-ML-004
     #[test]
     fn test_evaluate_interplanetary() {
-        let activity = act(ActivityKind::InHyperspace, activity_flags::START_INTERPLANETARY);
+        let activity = act(
+            ActivityKind::InHyperspace,
+            activity_flags::START_INTERPLANETARY,
+        );
         assert_eq!(
             evaluate(activity, &gs()),
             ActivityDecision::ExploreSolarSystem
@@ -518,7 +508,10 @@ mod tests {
     /// @requirement REQ-ML-004
     #[test]
     fn test_pre_dispatch_sets_hyperspace_kind_for_battle() {
-        let activity = act(ActivityKind::InInterplanetary, activity_flags::START_INTERPLANETARY);
+        let activity = act(
+            ActivityKind::InInterplanetary,
+            activity_flags::START_INTERPLANETARY,
+        );
         let mutated = pre_dispatch_mutate(activity, ActivityDecision::Battle);
         assert_eq!(mutated.kind(), ActivityKind::InHyperspace);
         assert_eq!(mutated.flags(), 0);
@@ -543,7 +536,10 @@ mod tests {
     fn test_post_clear_sets_interplanetary_flag_when_kind_matches() {
         // After clearing START_ENCOUNTER, if kind is IN_INTERPLANETARY,
         // START_INTERPLANETARY must be set.
-        let activity = act(ActivityKind::InInterplanetary, activity_flags::START_ENCOUNTER);
+        let activity = act(
+            ActivityKind::InInterplanetary,
+            activity_flags::START_ENCOUNTER,
+        );
         let result = post_encounter_clear(activity);
         assert!(!result.has_flag(activity_flags::START_ENCOUNTER));
         assert!(result.has_flag(activity_flags::START_INTERPLANETARY));

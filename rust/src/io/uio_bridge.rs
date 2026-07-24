@@ -39,7 +39,6 @@ const UIO_STREAM_STATUS_ERROR: c_int = 2;
 
 const UIO_STREAM_OPERATION_NONE: c_int = 0;
 const UIO_STREAM_OPERATION_READ: c_int = 1;
-const UIO_STREAM_OPERATION_WRITE: c_int = 2;
 
 // Helper function to set errno across FFI boundary
 fn set_errno(code: c_int) {
@@ -139,6 +138,10 @@ pub struct uio_MountHandle {
 
 /// @plan PLAN-20260314-FILE-IO.P06a
 /// @requirement REQ-FIO-MUTATION (G14)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_rename(
     old_dir: *mut uio_DirHandle,
@@ -213,6 +216,10 @@ pub unsafe extern "C" fn uio_rename(
 
 /// @plan PLAN-20260314-FILE-IO.P06
 /// @requirement REQ-FIO-ACCESS-MODE
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_access(
     dir: *mut uio_DirHandle,
@@ -367,6 +374,10 @@ pub unsafe extern "C" fn uio_access(
 /// @requirement REQ-FIO-ERRNO
 /// @plan PLAN-20260314-FILE-IO.P09
 /// @requirement REQ-FIO-ARCHIVE-MOUNT
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_stat(
     dir: *mut uio_DirHandle,
@@ -451,6 +462,10 @@ pub unsafe extern "C" fn uio_stat(
 
 /// @plan PLAN-20260314-FILE-IO.P06a
 /// @requirement REQ-FIO-MUTATION (G14)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_mkdir(
     dir: *mut uio_DirHandle,
@@ -503,6 +518,10 @@ pub unsafe extern "C" fn uio_mkdir(
 
 /// @plan PLAN-20260314-FILE-IO.P06a
 /// @requirement REQ-FIO-MUTATION (G14)
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
     ffi_guard!(-1, {
@@ -549,6 +568,10 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
     })
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whence: c_int) -> c_int {
     log_marker("uio_lseek called");
@@ -575,17 +598,11 @@ pub unsafe extern "C" fn uio_lseek(handle: *mut uio_Handle, offset: off_t, whenc
     }
 }
 
-// Internal structure to track allocation metadata for uio_DirList
-// This mirrors the C uio_DirList struct but with additional tracking
-struct uio_DirListInternal {
-    names_ptr: *mut *mut c_char,
-    num_names: c_int,
-    buffer_ptr: *mut c_char,
-    names_capacity: usize,  // Capacity of names array for proper deallocation
-    buffer_capacity: usize, // Size of buffer for proper deallocation
-}
-
 // C-compatible uio_DirList struct (must match C definition exactly)
+#[allow(
+    non_snake_case,
+    reason = "field names mirror the legacy C UIO layout API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 #[repr(C)]
 pub struct uio_DirList {
     pub(crate) names: *mut *mut c_char,
@@ -596,6 +613,10 @@ pub struct uio_DirList {
 // @plan PLAN-20260314-FILE-IO.P09
 // @requirement REQ-FIO-ARCHIVE-MOUNT
 // uio_Handle wraps either a regular file or a ZIP entry reader
+#[allow(
+    non_camel_case_types,
+    reason = "legacy UIO handle type name is part of the transitional C-compatible API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub enum uio_HandleInner {
     File(std::fs::File),
     ZipEntry(crate::io::zip_reader::ZipEntryReader),
@@ -647,6 +668,11 @@ impl uio_HandleInner {
         }
     }
 
+    /// Return whether the file contains no bytes.
+    pub fn is_empty(&self) -> std::io::Result<bool> {
+        self.len().map(|len| len == 0)
+    }
+
     /// Get metadata (only works for File handles)
     pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
         match self {
@@ -659,6 +685,10 @@ impl uio_HandleInner {
     }
 }
 
+#[allow(
+    non_camel_case_types,
+    reason = "legacy UIO handle type name is part of the transitional C-compatible API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub type uio_Handle = Mutex<uio_HandleInner>;
 
 #[repr(C)]
@@ -844,7 +874,7 @@ fn register_mount(
     handle_ptr
 }
 
-fn sort_mount_registry(registry: &mut Vec<MountInfo>) {
+fn sort_mount_registry(registry: &mut [MountInfo]) {
     // Position-based ordering: lower position = higher priority
     registry.sort_by(|a, b| {
         // Active mounts first
@@ -901,27 +931,6 @@ fn resolve_mount_for_path<'a>(
                 None
             }
         })
-}
-
-/// @plan PLAN-20260314-FILE-IO.P06a
-/// @requirement REQ-FIO-MUTATION (G14)
-/// Check if a path component exists as a non-directory in any upper mount layer,
-/// which would shadow (and make inaccessible) any directories in lower layers.
-/// Returns true if shadowed by a non-directory file.
-fn is_parent_shadowed_by_file(
-    registry: &[MountInfo],
-    virtual_path: &Path,
-    component: &Path,
-) -> bool {
-    let check_path = virtual_path.join(component);
-
-    if let Some(resolution) = resolve_mount_for_path(registry, &check_path) {
-        if resolution.host_path.exists() && !resolution.host_path.is_dir() {
-            return true;
-        }
-    }
-
-    false
 }
 
 fn remove_mount_entry(handle: *mut uio_MountHandle) -> Option<MountInfo> {
@@ -1064,23 +1073,27 @@ fn set_stream_operation(stream: *mut uio_Stream, operation: c_int) {
 // =============================================================================
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-ERRNO
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_getFileLocation(
     dir: *mut uio_DirHandle,
-    inPath: *const c_char,
+    in_path: *const c_char,
     _flags: c_int,
-    mountHandle: *mut *mut uio_MountHandle,
-    outPath: *mut *mut c_char,
+    mount_handle: *mut *mut uio_MountHandle,
+    out_path: *mut *mut c_char,
 ) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_getFileLocation called");
 
-        let Some((handle_ptr, resolved_path)) = resolve_file_location(dir, inPath) else {
-            if !mountHandle.is_null() {
-                *mountHandle = ptr::null_mut();
+        let Some((handle_ptr, resolved_path)) = resolve_file_location(dir, in_path) else {
+            if !mount_handle.is_null() {
+                *mount_handle = ptr::null_mut();
             }
-            if !outPath.is_null() {
-                *outPath = ptr::null_mut();
+            if !out_path.is_null() {
+                *out_path = ptr::null_mut();
             }
             set_errno(libc::ENOENT);
             return -1;
@@ -1092,32 +1105,40 @@ pub unsafe extern "C" fn uio_getFileLocation(
             return -1;
         }
 
-        if !mountHandle.is_null() {
-            *mountHandle = handle_ptr as *mut uio_MountHandle;
+        if !mount_handle.is_null() {
+            *mount_handle = handle_ptr as *mut uio_MountHandle;
         }
-        if !outPath.is_null() {
-            *outPath = duplicated;
+        if !out_path.is_null() {
+            *out_path = duplicated;
         }
         0
     })
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_unmountDir(mountHandle: *mut uio_MountHandle) -> c_int {
+pub unsafe extern "C" fn uio_unmountDir(mount_handle: *mut uio_MountHandle) -> c_int {
     log_marker("uio_unmountDir called");
 
-    if mountHandle.is_null() {
+    if mount_handle.is_null() {
         return -1;
     }
 
-    if remove_mount_entry(mountHandle).is_none() {
+    if remove_mount_entry(mount_handle).is_none() {
         return -1;
     }
 
-    let _ = Box::from_raw(mountHandle);
+    let _ = Box::from_raw(mount_handle);
     0
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_unmountAllDirs(repository: *mut uio_Repository) -> c_int {
     log_marker("uio_unmountAllDirs called");
@@ -1129,26 +1150,34 @@ pub unsafe extern "C" fn uio_unmountAllDirs(repository: *mut uio_Repository) -> 
     0
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_getMountFileSystemType(mountHandle: *mut uio_MountHandle) -> c_int {
+pub unsafe extern "C" fn uio_getMountFileSystemType(mount_handle: *mut uio_MountHandle) -> c_int {
     log_marker("uio_getMountFileSystemType called");
-    if mountHandle.is_null() {
+    if mount_handle.is_null() {
         return 0;
     }
 
-    (*mountHandle).fs_type
+    (*mount_handle).fs_type
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_transplantDir(
-    mountPoint: *const c_char,
-    sourceDir: *mut uio_DirHandle,
+    mount_point: *const c_char,
+    source_dir: *mut uio_DirHandle,
     flags: c_int,
     relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
     log_marker("uio_transplantDir called");
 
-    if sourceDir.is_null() {
+    if source_dir.is_null() {
         return ptr::null_mut();
     }
 
@@ -1156,7 +1185,7 @@ pub unsafe extern "C" fn uio_transplantDir(
         return ptr::null_mut();
     }
 
-    let mount_point = match cstr_to_pathbuf(mountPoint) {
+    let mount_point = match cstr_to_pathbuf(mount_point) {
         Some(path) => path,
         None => return ptr::null_mut(),
     };
@@ -1168,9 +1197,9 @@ pub unsafe extern "C" fn uio_transplantDir(
     }
 
     register_mount(
-        (*sourceDir).repository,
+        (*source_dir).repository,
         &mount_point,
-        (*sourceDir).path.clone(),
+        (*source_dir).path.clone(),
         UIO_FSTYPE_STDIO,
         flags,
         relative,
@@ -1183,6 +1212,10 @@ pub unsafe extern "C" fn uio_transplantDir(
 // uio_fflush / uio_feof / uio_ferror / uio_clearerr / uio_streamHandle
 // =============================================================================
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fgets(
     buf: *mut c_char,
@@ -1262,6 +1295,10 @@ unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream
     buf
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
     rust_bridge_log_msg("RUST_UIO: uio_fgetc entry");
@@ -1295,6 +1332,10 @@ pub unsafe extern "C" fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
     rust_bridge_log_msg("RUST_UIO: uio_ungetc entry");
@@ -1322,6 +1363,10 @@ extern "C" {
 
 /// @plan PLAN-20260314-FILE-IO.P04
 /// @requirement REQ-FIO-STREAM-WRITE
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_vfprintf(
     stream: *mut uio_Stream,
@@ -1361,6 +1406,10 @@ pub unsafe extern "C" fn uio_vfprintf(
     len as c_int
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
@@ -1385,6 +1434,10 @@ pub unsafe extern "C" fn uio_fputc(c: c_int, stream: *mut uio_Stream) -> c_int {
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) -> c_int {
     if stream.is_null() || s.is_null() {
@@ -1410,6 +1463,10 @@ pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) ->
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
@@ -1434,6 +1491,10 @@ pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
 
 /// @plan PLAN-20260314-FILE-IO.P03
 /// @requirement REQ-FIO-STREAM-STATUS
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_feof(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
@@ -1450,6 +1511,10 @@ pub unsafe extern "C" fn uio_feof(stream: *mut uio_Stream) -> c_int {
 
 /// @plan PLAN-20260314-FILE-IO.P03
 /// @requirement REQ-FIO-STREAM-STATUS
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_ferror(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
@@ -1464,6 +1529,10 @@ pub unsafe extern "C" fn uio_ferror(stream: *mut uio_Stream) -> c_int {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fwrite(
     ptr: *const libc::c_void,
@@ -1507,6 +1576,10 @@ pub unsafe extern "C" fn uio_fwrite(
 
 /// @plan PLAN-20260314-FILE-IO.P03
 /// @requirement REQ-FIO-STREAM-STATUS
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_clearerr(stream: *mut uio_Stream) {
     if stream.is_null() {
@@ -1549,6 +1622,10 @@ pub struct uio_FileBlock {
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Create a file block covering the entire file
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_FileBlock {
     ffi_guard!(ptr::null_mut(), {
@@ -1590,6 +1667,10 @@ pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Create a file block covering a specific region
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openFileBlock2(
     handle: *mut uio_Handle,
@@ -1649,6 +1730,10 @@ pub unsafe extern "C" fn uio_openFileBlock2(
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Access bytes from a file block, caching them internally
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_accessFileBlock(
     block: *mut uio_FileBlock,
@@ -1744,6 +1829,10 @@ pub unsafe extern "C" fn uio_accessFileBlock(
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Copy bytes from file block into caller-provided buffer
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_copyFileBlock(
     block: *mut uio_FileBlock,
@@ -1830,6 +1919,10 @@ pub unsafe extern "C" fn uio_copyFileBlock(
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Clear internal cache buffers without invalidating the block
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_clearFileBlockBuffers(block: *mut uio_FileBlock) {
     ffi_guard!((), {
@@ -1848,6 +1941,10 @@ pub unsafe extern "C" fn uio_clearFileBlockBuffers(block: *mut uio_FileBlock) {
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Close file block and free resources (does NOT close underlying handle)
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_closeFileBlock(block: *mut uio_FileBlock) -> c_int {
     ffi_guard!(-1, {
@@ -1866,6 +1963,10 @@ pub unsafe extern "C" fn uio_closeFileBlock(block: *mut uio_FileBlock) -> c_int 
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
 /// Set usage hints for file block (no-op for now, documented as acceptable)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_setFileBlockUsageHint(
     _block: *mut uio_FileBlock,
@@ -1887,6 +1988,10 @@ pub struct uio_FileSystemHandler {
     _private: [u8; 0],
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_getFileSystemHandler(_id: c_int) -> *mut uio_FileSystemHandler {
     log_marker("uio_getFileSystemHandler called - stub");
@@ -1895,15 +2000,23 @@ pub unsafe extern "C" fn uio_getFileSystemHandler(_id: c_int) -> *mut uio_FileSy
     Box::leak(handler) as *mut uio_FileSystemHandler
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_gPFileFlagsFromPRootFlags(_flags: c_int) -> c_int {
     log_marker("uio_gPFileFlagsFromPRootFlags called - stub");
     _flags // Pass through unchanged
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_walkGPPath(
-    _startGPDir: *mut uio_GPDir,
+    _start_gpdir: *mut uio_GPDir,
     _path: *const c_char,
     _flags: c_int,
     _result: *mut uio_GPDir,
@@ -1968,14 +2081,22 @@ pub struct uio_GPRoot {
     _private: [u8; 0],
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_DirHandle_print(
-    _dirHandle: *const uio_DirHandle,
-    _outStream: *mut libc::FILE,
+    _dir_handle: *const uio_DirHandle,
+    _out_stream: *mut libc::FILE,
 ) {
     log_marker("uio_DirHandle_print called - stub");
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPDirHandle_delete(_handle: *mut uio_PDirHandle) {
     log_marker("uio_GPDirHandle_delete called - stub");
@@ -1984,39 +2105,59 @@ pub unsafe extern "C" fn uio_GPDirHandle_delete(_handle: *mut uio_PDirHandle) {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPDir_addFile(
-    _gPDir: *mut uio_GPDir,
-    _fileName: *const c_char,
+    _g_pdir: *mut uio_GPDir,
+    _file_name: *const c_char,
     _file: *mut uio_GPFile,
 ) {
     log_marker("uio_GPDir_addFile called - stub");
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_closeEntries(_gPDir: *mut uio_GPDir) {
+pub unsafe extern "C" fn uio_GPDir_closeEntries(_g_pdir: *mut uio_GPDir) {
     log_marker("uio_GPDir_closeEntries called - stub");
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPDir_commitSubDir(
-    _gPDir: *mut uio_GPDir,
-    _dirName: *const c_char,
-    _subDir: *mut uio_GPDir,
+    _g_pdir: *mut uio_GPDir,
+    _dir_name: *const c_char,
+    _sub_dir: *mut uio_GPDir,
     _flags: c_int,
 ) {
     log_marker("uio_GPDir_commitSubDir called - stub");
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPDir_getGPDirEntry(
-    _gPDir: *mut uio_GPDir,
+    _g_pdir: *mut uio_GPDir,
     _name: *const c_char,
 ) -> *mut uio_GPDirEntry {
     log_marker("uio_GPDir_getGPDirEntry called - stub");
     ptr::null_mut()
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPDir_getPDirEntryHandle(
     _entry: *mut uio_GPDirEntry,
@@ -2025,43 +2166,67 @@ pub unsafe extern "C" fn uio_GPDir_getPDirEntryHandle(
     ptr::null_mut()
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_openEntries(_gPDir: *mut uio_GPDir) -> c_int {
+pub unsafe extern "C" fn uio_GPDir_openEntries(_g_pdir: *mut uio_GPDir) -> c_int {
     log_marker("uio_GPDir_openEntries called - stub");
     -1
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPDir_prepareSubDir(
-    _gPDir: *mut uio_GPDir,
-    _dirName: *const c_char,
+    _g_pdir: *mut uio_GPDir,
+    _dir_name: *const c_char,
 ) -> *mut uio_GPDir {
     log_marker("uio_GPDir_prepareSubDir called - stub");
     ptr::null_mut()
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPDir_readEntries(_gPDir: *mut uio_GPDir) -> c_int {
+pub unsafe extern "C" fn uio_GPDir_readEntries(_g_pdir: *mut uio_GPDir) -> c_int {
     log_marker("uio_GPDir_readEntries called - stub");
     -1
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPFileHandle_delete(_handle: *mut uio_Handle) {
     log_marker("uio_GPFileHandle_delete called - stub");
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPFile_delete(_gPFile: *mut uio_GPFile) {
+pub unsafe extern "C" fn uio_GPFile_delete(_g_pfile: *mut uio_GPFile) {
     log_marker("uio_GPFile_delete called - stub");
-    if !_gPFile.is_null() {
-        let _ = Box::from_raw(_gPFile);
+    if !_g_pfile.is_null() {
+        let _ = Box::from_raw(_g_pfile);
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_GPFile_new(
-    _pRoot: *mut uio_PRoot,
+    _p_root: *mut uio_PRoot,
     _extra: *mut libc::c_void,
     _flags: c_int,
 ) -> *mut uio_GPFile {
@@ -2070,39 +2235,61 @@ pub unsafe extern "C" fn uio_GPFile_new(
     Box::leak(file) as *mut uio_GPFile
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPRoot_delete(_gPRoot: *mut uio_GPRoot) {
+pub unsafe extern "C" fn uio_GPRoot_delete(_g_proot: *mut uio_GPRoot) {
     log_marker("uio_GPRoot_delete called - stub");
-    if !_gPRoot.is_null() {
-        let _ = Box::from_raw(_gPRoot);
+    if !_g_proot.is_null() {
+        let _ = Box::from_raw(_g_proot);
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPRoot_makePRoot(_gPRoot: *mut uio_GPRoot) -> *mut uio_PRoot {
+pub unsafe extern "C" fn uio_GPRoot_makePRoot(_g_proot: *mut uio_GPRoot) -> *mut uio_PRoot {
     log_marker("uio_GPRoot_makePRoot called - stub");
     // For simplicity, just cast (assuming compatible layout)
-    _gPRoot as *mut uio_PRoot
+    _g_proot as *mut uio_PRoot
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_GPRoot_umount(_pRoot: *mut uio_PRoot) -> c_int {
+pub unsafe extern "C" fn uio_GPRoot_umount(_p_root: *mut uio_PRoot) -> c_int {
     log_marker("uio_GPRoot_umount called - stub");
     0
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_Handle_new(
     _root: *mut uio_PRoot,
     _native: *mut libc::c_void,
-    _openFlags: c_int,
+    _open_flags: c_int,
 ) -> *mut uio_Handle {
     log_marker("uio_Handle_new called - stub");
     ptr::null_mut()
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
-pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(_pRoot: *mut uio_PRoot) -> *mut uio_PDirHandle {
+pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(
+    _p_root: *mut uio_PRoot,
+) -> *mut uio_PDirHandle {
     log_marker("uio_PRoot_getRootDirHandle called - stub");
     let handle = Box::new(uio_PDirHandle { _private: [] });
     Box::leak(handle) as *mut uio_PDirHandle
@@ -2112,6 +2299,10 @@ pub unsafe extern "C" fn uio_PRoot_getRootDirHandle(_pRoot: *mut uio_PRoot) -> *
 /// @requirement REQ-FIO-STDIO-ACCESS
 /// Get the path from a StdioAccess handle.
 /// Returns a stable C string pointer that remains valid until the handle is released.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_StdioAccessHandle_getPath(
     handle: *mut uio_StdioAccessHandle,
@@ -2135,6 +2326,10 @@ pub unsafe extern "C" fn uio_StdioAccessHandle_getPath(
 /// If the file is on a stdio mount, returns a direct path.
 /// If the file is on a ZIP mount, extracts it to tempDir and returns a temp path.
 /// The tempDir parameter is required for ZIP-backed files.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_getStdioAccess(
     dir: *mut uio_DirHandle,
@@ -2313,7 +2508,10 @@ pub unsafe extern "C" fn uio_getStdioAccess(
 /// For direct paths, only frees the handle (never deletes the underlying file).
 /// Safe to call even if the mount this handle came from was unmounted.
 /// The handle owns its resources independently of mount state.
-
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_releaseStdioAccess(handle: *mut uio_StdioAccessHandle) {
     ffi_guard!((), {
@@ -2353,6 +2551,10 @@ pub unsafe extern "C" fn uio_releaseStdioAccess(handle: *mut uio_StdioAccessHand
 /// Copy a file from one virtual location to another.
 /// Resolves both paths through the mount system.
 /// Returns 0 on success, -1 on error (with errno set).
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_copyFile(
     src_dir: *mut uio_DirHandle,
@@ -2447,14 +2649,22 @@ pub unsafe extern "C" fn uio_copyFile(
     })
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_printMounts(
-    _outStream: *mut libc::FILE,
+    _out_stream: *mut libc::FILE,
     _repository: *const uio_Repository,
 ) {
     log_marker("uio_printMounts called - stub");
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_streamHandle(stream: *mut uio_Stream) -> *mut uio_Handle {
     log_marker("uio_streamHandle called");
@@ -2464,6 +2674,10 @@ pub unsafe extern "C" fn uio_streamHandle(stream: *mut uio_Stream) -> *mut uio_H
     (*stream).handle
 }
 
+#[allow(
+    non_camel_case_types,
+    reason = "legacy UIO stat alias mirrors the C API; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub type stat = libc::stat;
 
 // Constants
@@ -2682,6 +2896,10 @@ fn matches_pattern(name: &str, pattern: &str, match_type: c_int) -> bool {
 /// Sets the initialization flag and clears mount registry to known state.
 /// Safe to call multiple times (idempotent).
 /// Returns without error.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_init() {
     ffi_guard!((), {
@@ -2715,6 +2933,10 @@ pub unsafe extern "C" fn uio_init() {
 /// Clears all mounts, resets initialization flag, and leaves subsystem ready for clean re-init.
 /// Safe to call even if init wasn't called.
 /// Caller must ensure all operations are quiesced before calling this.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_unInit() {
     ffi_guard!((), {
@@ -2747,6 +2969,10 @@ pub unsafe extern "C" fn uio_unInit() {
     })
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openRepository(flags: c_int) -> *mut uio_Repository {
     log_marker("uio_openRepository called");
@@ -2760,6 +2986,10 @@ pub unsafe extern "C" fn uio_openRepository(flags: c_int) -> *mut uio_Repository
 /// Close a repository and unmount all associated mounts.
 /// This removes all mounts from the registry and frees the repository structure.
 /// Open handles remain valid and closeable after this call (see REQ-FIO-POST-UNMOUNT-CLEANUP).
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
     log_marker("uio_closeRepository called");
@@ -2802,6 +3032,10 @@ fn resolve_mount_path(path: &Path) -> PathBuf {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDir(
     _repository: *mut uio_Repository,
@@ -2846,6 +3080,10 @@ pub unsafe extern "C" fn uio_openDir(
 /// Decrements refcount and frees the handle when refcount reaches zero.
 /// Safe to call even if the mount this handle came from was unmounted.
 /// The handle owns its resources independently of mount state.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_closeDir(dir: *mut uio_DirHandle) -> c_int {
     log_marker("uio_closeDir called");
@@ -2862,56 +3100,60 @@ pub unsafe extern "C" fn uio_closeDir(dir: *mut uio_DirHandle) -> c_int {
     0 // Success
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_mountDir(
-    _destRep: *mut uio_Repository,
-    mountPoint: *const c_char,
-    _fsType: c_int,
-    sourceDir: *mut uio_DirHandle,
-    sourcePath: *const c_char,
+    _dest_rep: *mut uio_Repository,
+    mount_point: *const c_char,
+    _fs_type: c_int,
+    source_dir: *mut uio_DirHandle,
+    source_path: *const c_char,
 
-    inPath: *const c_char,
-    _autoMount: *mut *mut (),
+    in_path: *const c_char,
+    _auto_mount: *mut *mut (),
     flags: c_int,
     relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
-    let mount_point = match cstr_to_pathbuf(mountPoint) {
+    let mount_point = match cstr_to_pathbuf(mount_point) {
         Some(p) => p,
         None => {
-            eprintln!("RUST_UIO: uio_mountDir: null mountPoint");
+            eprintln!("RUST_UIO: uio_mountDir: null mount_point");
             return ptr::null_mut();
         }
     };
 
-    let source_path_str = if sourcePath.is_null() {
+    let source_path_str = if source_path.is_null() {
         "(null)".to_string()
     } else {
-        std::ffi::CStr::from_ptr(sourcePath)
+        std::ffi::CStr::from_ptr(source_path)
             .to_string_lossy()
             .into_owned()
     };
-    let in_path_str = if inPath.is_null() {
+    let in_path_str = if in_path.is_null() {
         "(null)".to_string()
     } else {
-        std::ffi::CStr::from_ptr(inPath)
+        std::ffi::CStr::from_ptr(in_path)
             .to_string_lossy()
             .into_owned()
     };
     eprintln!(
-        "RUST_UIO: uio_mountDir: mountPoint={:?}, sourcePath='{}', inPath='{}', sourceDir={:?}, flags={}, relative={:?}",
-        mount_point, source_path_str, in_path_str, sourceDir, flags, relative
+        "RUST_UIO: uio_mountDir: mount_point={:?}, source_path='{}', in_path='{}', source_dir={:?}, flags={}, relative={:?}",
+        mount_point, source_path_str, in_path_str, source_dir, flags, relative
     );
 
-    if !sourceDir.is_null() {
-        let base_path = (*sourceDir).path.clone();
-        let rel_path = cstr_to_pathbuf(sourcePath).unwrap_or_default();
+    if !source_dir.is_null() {
+        let base_path = (*source_dir).path.clone();
+        let rel_path = cstr_to_pathbuf(source_path).unwrap_or_default();
         let mounted_root = if rel_path.as_os_str().is_empty() || rel_path == Path::new("/") {
             base_path.clone()
         } else {
             resolve_path(&base_path, &rel_path)
         };
         rust_bridge_log_msg(&format!(
-            "RUST_UIO: uio_mountDir: sourceDir set, sourcePath {:?} -> {:?}",
+            "RUST_UIO: uio_mountDir: source_dir set, source_path {:?} -> {:?}",
             rel_path, mounted_root
         ));
 
@@ -2920,34 +3162,34 @@ pub unsafe extern "C" fn uio_mountDir(
         // ZIP mounts are now fully active in the registry
         let active_in_registry = true;
         return register_mount(
-            _destRep,
+            _dest_rep,
             &mount_point,
             mounted_root,
-            _fsType,
+            _fs_type,
             flags,
             relative,
             active_in_registry,
         );
     }
 
-    let mounted_root = if !inPath.is_null() {
-        match cstr_to_pathbuf(inPath) {
+    let mounted_root = if !in_path.is_null() {
+        match cstr_to_pathbuf(in_path) {
             Some(path) => {
                 rust_bridge_log_msg(&format!(
-                    "RUST_UIO: uio_mountDir: using inPath {:?} as source",
+                    "RUST_UIO: uio_mountDir: using in_path {:?} as source",
                     path
                 ));
                 path
             }
             None => {
                 rust_bridge_log_msg(
-                    "RUST_UIO: uio_mountDir: inPath conversion failed, using empty path",
+                    "RUST_UIO: uio_mountDir: in_path conversion failed, using empty path",
                 );
                 PathBuf::new()
             }
         }
     } else {
-        rust_bridge_log_msg("RUST_UIO: uio_mountDir: inPath is NULL, using empty path");
+        rust_bridge_log_msg("RUST_UIO: uio_mountDir: in_path is NULL, using empty path");
         PathBuf::new()
     };
 
@@ -2957,16 +3199,20 @@ pub unsafe extern "C" fn uio_mountDir(
     ));
 
     register_mount(
-        _destRep,
+        _dest_rep,
         &mount_point,
         mounted_root,
-        _fsType,
+        _fs_type,
         flags,
         relative,
         true,
     )
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDirRelative(
     base: *mut uio_DirHandle,
@@ -3033,6 +3279,10 @@ pub unsafe extern "C" fn uio_openDirRelative(
 
 /// @plan PLAN-20260314-FILE-IO.P06a
 /// @requirement REQ-FIO-MUTATION (G14)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_open(
     dir: *mut uio_DirHandle,
@@ -3203,6 +3453,10 @@ pub unsafe extern "C" fn uio_open(
 /// Close a file handle and free its resources.
 /// Safe to call even if the mount this handle came from was unmounted.
 /// The handle owns its resources independently of mount state.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
     log_marker("uio_close called");
@@ -3212,6 +3466,10 @@ pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
     0 // Success
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: size_t) -> isize {
     if handle.is_null() || buf.is_null() || count == 0 {
@@ -3230,6 +3488,10 @@ pub unsafe extern "C" fn uio_read(handle: *mut uio_Handle, buf: *mut u8, count: 
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_write(
     handle: *mut uio_Handle,
@@ -3252,6 +3514,10 @@ pub unsafe extern "C" fn uio_write(
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat) -> c_int {
     if handle.is_null() || stat_buf.is_null() {
@@ -3275,6 +3541,10 @@ pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat)
 
 /// @plan PLAN-20260314-FILE-IO.P06a
 /// @requirement REQ-FIO-MUTATION (G14)
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int {
     ffi_guard!(-1, {
@@ -3327,6 +3597,10 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
 
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-ERRNO
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fopen(
     dir: *mut uio_DirHandle,
@@ -3529,6 +3803,10 @@ pub unsafe extern "C" fn uio_fopen(
 /// Close a stream and free its resources (buffer and underlying handle).
 /// Safe to call even if the mount this stream came from was unmounted.
 /// The stream owns its resources independently of mount state.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fclose(stream: *mut uio_Stream) -> c_int {
     log_marker("uio_fclose called");
@@ -3555,6 +3833,10 @@ pub unsafe extern "C" fn uio_fclose(stream: *mut uio_Stream) -> c_int {
 
 /// @plan PLAN-20260314-FILE-IO.P04
 /// @requirement REQ-FIO-BUILD-BOUNDARY
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fread(
     buf: *mut libc::c_void,
@@ -3648,6 +3930,10 @@ pub unsafe extern "C" fn uio_fread(
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_fseek(
     stream: *mut uio_Stream,
@@ -3684,6 +3970,10 @@ pub unsafe extern "C" fn uio_fseek(
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_ftell(stream: *mut uio_Stream) -> c_long {
     if stream.is_null() {
@@ -3713,12 +4003,16 @@ pub unsafe extern "C" fn uio_ftell(stream: *mut uio_Stream) -> c_long {
 /// List directory contents across all mounts covering the target virtual path.
 /// Returns a union of all entries from all mounts, with precedence-based deduplication.
 /// Empty match returns non-null uio_DirList with numNames=0 (NULL is for errors only).
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn uio_getDirList(
     dir: *mut uio_DirHandle,
     path: *const c_char,
     _pattern: *const c_char,
-    _matchType: c_int,
+    _match_type: c_int,
 ) -> *mut uio_DirList {
     ffi_guard!(ptr::null_mut(), {
         log_marker(&format!(
@@ -3763,7 +4057,7 @@ pub unsafe extern "C" fn uio_getDirList(
         };
         log_marker(&format!(
             "uio_getDirList: virtual_path={:?} pattern='{}' matchType={}",
-            virtual_path, pattern_str, _matchType
+            virtual_path, pattern_str, _match_type
         ));
 
         // Acquire mount registry lock for consistent topology view
@@ -3812,7 +4106,7 @@ pub unsafe extern "C" fn uio_getDirList(
                         }
 
                         // Apply pattern matching
-                        if matches_pattern(&name, pattern_str, _matchType) {
+                        if matches_pattern(&name, pattern_str, _match_type) {
                             seen_names.insert(name.clone());
                             name_strings.push(name);
                         }
@@ -3839,7 +4133,7 @@ pub unsafe extern "C" fn uio_getDirList(
             }
 
             let entries = match fs::read_dir(&host_path) {
-                Ok(e) => e,
+                Ok(entries) => entries,
                 Err(err) => {
                     log_marker(&format!(
                         "uio_getDirList: read_dir failed for {:?}: {}, skipping mount",
@@ -3850,19 +4144,17 @@ pub unsafe extern "C" fn uio_getDirList(
             };
 
             // Collect matching entries from this mount
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    if let Some(name_osstr) = entry.file_name().to_str() {
-                        // Deduplicate: first-seen wins (higher precedence)
-                        if seen_names.contains(name_osstr) {
-                            continue;
-                        }
+            for entry in entries.flatten() {
+                if let Some(name_osstr) = entry.file_name().to_str() {
+                    // Deduplicate: first-seen wins (higher precedence)
+                    if seen_names.contains(name_osstr) {
+                        continue;
+                    }
 
-                        // Apply pattern matching
-                        if matches_pattern(name_osstr, pattern_str, _matchType) {
-                            seen_names.insert(name_osstr.to_string());
-                            name_strings.push(name_osstr.to_string());
-                        }
+                    // Apply pattern matching
+                    if matches_pattern(name_osstr, pattern_str, _match_type) {
+                        seen_names.insert(name_osstr.to_string());
+                        name_strings.push(name_osstr.to_string());
                     }
                 }
             }
@@ -3949,6 +4241,10 @@ pub unsafe extern "C" fn uio_getDirList(
 /// Safe to call with NULL pointer (no-op).
 /// Safe to call on empty lists.
 /// Safe to call even if the mount this list came from was unmounted.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
     log_marker("uio_DirList_free called");
@@ -4145,7 +4441,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_registry_basic() {
-        unsafe {
+        {
             clear_mount_registry();
 
             add_test_mount("/content", "/tmp/content");
@@ -4168,7 +4464,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_resolve_mount_path_with_mount() {
-        unsafe {
+        {
             clear_mount_registry();
 
             add_test_mount("/", "/Users/test/game");
@@ -4185,7 +4481,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_resolve_mount_path_no_mount() {
-        unsafe {
+        {
             clear_mount_registry();
 
             let path = PathBuf::from("/some/random/path");
@@ -4200,7 +4496,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_resolve_mount_path_absolute_fs_path() {
-        unsafe {
+        {
             clear_mount_registry();
 
             add_test_mount("/", "/Users/test/game");
@@ -4217,7 +4513,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_cstr_to_pathbuf_valid() {
-        unsafe {
+        {
             let test_path = CString::new("/test/path").unwrap();
             let result = unsafe { cstr_to_pathbuf(test_path.as_ptr()) };
 
@@ -4229,7 +4525,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_cstr_to_pathbuf_null() {
-        unsafe {
+        {
             let result = unsafe { cstr_to_pathbuf(std::ptr::null()) };
             assert!(result.is_none());
         }
@@ -4238,7 +4534,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_resolve_path_relative() {
-        unsafe {
+        {
             let base = PathBuf::from("/home/user");
             let rel = PathBuf::from("documents/file.txt");
 
@@ -4250,7 +4546,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_resolve_path_absolute() {
-        unsafe {
+        {
             let base = PathBuf::from("/home/user");
             let abs = PathBuf::from("/etc/config");
 
@@ -4263,7 +4559,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_literal() {
-        unsafe {
+        {
             assert!(matches_pattern("test.txt", "test.txt", MATCH_LITERAL));
             assert!(!matches_pattern("test.txt", "other.txt", MATCH_LITERAL));
             assert!(!matches_pattern("test.txt", "TEST.TXT", MATCH_LITERAL)); // Case-sensitive
@@ -4273,7 +4569,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_prefix() {
-        unsafe {
+        {
             assert!(matches_pattern("test.txt", "test", MATCH_PREFIX));
             assert!(!matches_pattern("test.txt", "txt", MATCH_PREFIX));
         }
@@ -4282,7 +4578,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_suffix() {
-        unsafe {
+        {
             assert!(matches_pattern("test.txt", ".txt", MATCH_SUFFIX));
             assert!(!matches_pattern("test.txt", ".doc", MATCH_SUFFIX));
         }
@@ -4291,7 +4587,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_substring() {
-        unsafe {
+        {
             assert!(matches_pattern("mytest.txt", "test", MATCH_SUBSTRING));
             assert!(!matches_pattern("mytest.txt", "foo", MATCH_SUBSTRING));
         }
@@ -4300,7 +4596,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_regex_rmp() {
-        unsafe {
+        {
             // Test the .rmp regex pattern
             assert!(matches_pattern("file.rmp", r"\.[rR][mM][pP]$", MATCH_REGEX));
             assert!(matches_pattern("file.RMP", r"\.[rR][mM][pP]$", MATCH_REGEX));
@@ -4315,7 +4611,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_regex_zip_uqm() {
-        unsafe {
+        {
             // Test the .zip/.uqm regex pattern
             assert!(matches_pattern(
                 "file.zip",
@@ -4343,7 +4639,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_matches_pattern_empty_pattern() {
-        unsafe {
+        {
             // Empty pattern should match everything
             assert!(matches_pattern("anything.txt", "", MATCH_LITERAL));
             assert!(matches_pattern("anything.txt", "", MATCH_REGEX));
@@ -4353,7 +4649,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_buffer_size_registry() {
-        unsafe {
+        {
             let test_ptr = 0x12345678 as *mut c_char;
 
             // Register a size
@@ -4375,7 +4671,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_buffer_size_registry_null() {
-        unsafe {
+        {
             let result = get_buffer_size(std::ptr::null_mut());
             assert_eq!(result, None);
         }
@@ -4384,7 +4680,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_seek_constants() {
-        unsafe {
+        {
             // Verify our seek constants match expected values
             assert_eq!(SEEK_SET, 0);
             assert_eq!(SEEK_CUR, 1);
@@ -4395,7 +4691,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_open_flags_constants() {
-        unsafe {
+        {
             // Verify file open flags
             assert_eq!(O_RDONLY, 0);
             assert_eq!(O_WRONLY, 1);
@@ -4412,7 +4708,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_stream_status_constants() {
-        unsafe {
+        {
             assert_eq!(UIO_STREAM_STATUS_OK, 0);
             assert_eq!(UIO_STREAM_STATUS_EOF, 1);
             assert_eq!(UIO_STREAM_STATUS_ERROR, 2);
@@ -4422,7 +4718,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_feof_returns_zero_when_not_eof() {
-        unsafe {
+        {
             let mut stream = uio_Stream {
                 buf: ptr::null_mut(),
                 data_start: ptr::null_mut(),
@@ -4442,7 +4738,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_feof_returns_nonzero_when_eof() {
-        unsafe {
+        {
             let mut stream = uio_Stream {
                 buf: ptr::null_mut(),
                 data_start: ptr::null_mut(),
@@ -4462,7 +4758,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_feof_null_stream() {
-        unsafe {
+        {
             let result = unsafe { uio_feof(ptr::null_mut()) };
             assert_eq!(result, 0);
         }
@@ -4471,7 +4767,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_ferror_returns_zero_when_no_error() {
-        unsafe {
+        {
             let mut stream = uio_Stream {
                 buf: ptr::null_mut(),
                 data_start: ptr::null_mut(),
@@ -4491,7 +4787,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_ferror_returns_nonzero_when_error() {
-        unsafe {
+        {
             let mut stream = uio_Stream {
                 buf: ptr::null_mut(),
                 data_start: ptr::null_mut(),
@@ -4511,7 +4807,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_ferror_null_stream() {
-        unsafe {
+        {
             let result = unsafe { uio_ferror(ptr::null_mut()) };
             assert_eq!(result, 0);
         }
@@ -4520,7 +4816,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_clearerr_clears_eof() {
-        unsafe {
+        {
             let mut stream = uio_Stream {
                 buf: ptr::null_mut(),
                 data_start: ptr::null_mut(),
@@ -4543,7 +4839,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_clearerr_clears_error() {
-        unsafe {
+        {
             let mut stream = uio_Stream {
                 buf: ptr::null_mut(),
                 data_start: ptr::null_mut(),
@@ -4566,7 +4862,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_clearerr_null_stream() {
-        unsafe {
+        {
             // Should not crash
             unsafe {
                 uio_clearerr(ptr::null_mut());
@@ -4577,7 +4873,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_fopen_initializes_status_to_ok() {
-        unsafe {
+        {
             use std::fs;
             use tempfile::TempDir;
 
@@ -4612,7 +4908,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_read_eof_sets_eof_status() {
-        unsafe {
+        {
             use std::fs;
             use tempfile::TempDir;
 
@@ -4661,7 +4957,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_clearerr_after_eof() {
-        unsafe {
+        {
             use std::fs;
             use tempfile::TempDir;
 
@@ -4706,7 +5002,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_fseek_clears_eof() {
-        unsafe {
+        {
             use std::fs;
             use tempfile::TempDir;
 
@@ -4757,7 +5053,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_write_error_sets_error_status() {
-        unsafe {
+        {
             use std::fs;
             use tempfile::TempDir;
 
@@ -4798,7 +5094,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_fgetc_sets_eof() {
-        unsafe {
+        {
             use std::fs;
             use tempfile::TempDir;
 
@@ -4847,7 +5143,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_removes_dot_components() {
-        unsafe {
+        {
             let base = PathBuf::from("/base");
             let input = PathBuf::from("./foo/./bar");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4858,7 +5154,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_resolves_dotdot() {
-        unsafe {
+        {
             let base = PathBuf::from("/base");
             let input = PathBuf::from("foo/../bar");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4869,7 +5165,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_clamps_at_root() {
-        unsafe {
+        {
             let base = PathBuf::from("/base");
             let input = PathBuf::from("../../above_root");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4880,7 +5176,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_collapses_repeated_slashes() {
-        unsafe {
+        {
             let base = PathBuf::from("/");
             let input = PathBuf::from("//foo///bar//");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4891,7 +5187,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_empty_returns_base() {
-        unsafe {
+        {
             let base = PathBuf::from("/content/addons");
             let input = PathBuf::from("");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4902,7 +5198,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_absolute_ignores_base() {
-        unsafe {
+        {
             let base = PathBuf::from("/base");
             let input = PathBuf::from("/absolute/path");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4913,7 +5209,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_normalize_path_complex_case() {
-        unsafe {
+        {
             let base = PathBuf::from("/");
             let input = PathBuf::from("/foo/./bar/../baz");
             let result = normalize_virtual_path_full(&base, &input);
@@ -4924,7 +5220,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_map_virtual_to_host_confined() {
-        unsafe {
+        {
             let mount_root = PathBuf::from("/host/mount/point");
             let relative = PathBuf::from("subdir/file.txt");
             let result = map_virtual_to_host_confined(&mount_root, &relative);
@@ -4935,7 +5231,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_map_virtual_to_host_confined_prevents_escape() {
-        unsafe {
+        {
             let mount_root = PathBuf::from("/host/mount/point");
             let relative = PathBuf::from("../../above/mount");
             let result = map_virtual_to_host_confined(&mount_root, &relative);
@@ -4947,7 +5243,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_map_virtual_to_host_confined_single_dotdot() {
-        unsafe {
+        {
             let mount_root = PathBuf::from("/host/mount/point");
             let relative = PathBuf::from("foo/../bar");
             let result = map_virtual_to_host_confined(&mount_root, &relative);
@@ -4962,7 +5258,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_access_sets_enoent_on_missing_file() {
-        unsafe {
+        {
             use tempfile::TempDir;
 
             let temp_dir = TempDir::new().unwrap();
@@ -4994,7 +5290,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_mkdir_sets_eexist_on_existing_dir() {
-        unsafe {
+        {
             use tempfile::TempDir;
 
             let temp_dir = TempDir::new().unwrap();
@@ -5030,7 +5326,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_fopen_sets_einval_on_invalid_mode() {
-        unsafe {
+        {
             use tempfile::TempDir;
 
             let temp_dir = TempDir::new().unwrap();
@@ -5063,7 +5359,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_open_sets_enoent_on_missing_file() {
-        unsafe {
+        {
             use tempfile::TempDir;
 
             let temp_dir = TempDir::new().unwrap();
@@ -5099,13 +5395,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_top_gives_highest_priority() {
-        unsafe {
+        {
             clear_mount_registry();
 
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
             // Add first mount at BOTTOM
-            let mount1 = unsafe {
+            let mount1 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5119,7 +5415,7 @@ mod tests {
             assert!(!mount1.is_null());
 
             // Add second mount at TOP
-            let mount2 = unsafe {
+            let mount2 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5160,13 +5456,13 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_above_below_placement() {
-        unsafe {
+        {
             clear_mount_registry();
 
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
             // Add base mount
-            let mount1 = unsafe {
+            let mount1 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5179,7 +5475,7 @@ mod tests {
             };
 
             // Add mount ABOVE mount1
-            let mount2 = unsafe {
+            let mount2 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5192,7 +5488,7 @@ mod tests {
             };
 
             // Add mount BELOW mount1
-            let mount3 = unsafe {
+            let mount3 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5241,7 +5537,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_top_requires_null_relative() {
-        unsafe {
+        {
             clear_mount_registry();
 
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
@@ -5279,7 +5575,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_above_requires_nonnull_relative() {
-        unsafe {
+        {
             clear_mount_registry();
 
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
@@ -5315,7 +5611,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_access_w_ok_fails_on_readonly_mount() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -5326,7 +5622,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
             // Create a read-only mount
-            let mount = unsafe {
+            let mount = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5367,7 +5663,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_access_r_ok_succeeds_on_readonly_mount() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -5377,7 +5673,7 @@ mod tests {
 
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
-            let mount = unsafe {
+            let mount = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5415,7 +5711,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_access_x_ok_on_directory() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -5425,7 +5721,7 @@ mod tests {
 
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
-            let mount = unsafe {
+            let mount = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5463,7 +5759,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_access_topmost_visible_object() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -5481,7 +5777,7 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
             // Add lower mount
-            let mount1 = unsafe {
+            let mount1 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5494,7 +5790,7 @@ mod tests {
             };
 
             // Add upper mount (higher priority)
-            let mount2 = unsafe {
+            let mount2 = {
                 register_mount(
                     repo,
                     Path::new("/content"),
@@ -5549,9 +5845,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_open_write_fails_on_readonly_top_mount() {
-        unsafe {
+        {
             use std::fs;
-            use std::io::Write;
 
             clear_mount_registry();
 
@@ -5610,7 +5905,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_rename_cross_mount_fails_with_exdev() {
-        unsafe {
+        {
             use std::fs;
 
             clear_mount_registry();
@@ -5674,7 +5969,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_unlink_fails_on_readonly_mount() {
-        unsafe {
+        {
             use std::fs;
 
             clear_mount_registry();
@@ -5722,7 +6017,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_mkdir_fails_on_readonly_mount() {
-        unsafe {
+        {
             use std::fs;
 
             clear_mount_registry();
@@ -5767,7 +6062,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_uio_rmdir_fails_on_readonly_mount() {
-        unsafe {
+        {
             use std::fs;
 
             clear_mount_registry();
@@ -5815,7 +6110,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_mount_position_no_underflow() {
-        unsafe {
+        {
             clear_mount_registry();
 
             // Add a mount with TOP - should not underflow
@@ -5858,7 +6153,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_regex_pattern_rmp_files() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -5909,7 +6204,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_regex_pattern_zip_uqm_files() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -5959,7 +6254,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_invalid_regex_returns_empty() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -6004,7 +6299,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_cross_mount_directory_listing_union() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -6071,7 +6366,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_cross_mount_listing_deduplication() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -6121,7 +6416,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_empty_directory_returns_nonnull() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -6173,7 +6468,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_regex_with_cross_mount_listing() {
-        unsafe {
+        {
             use tempfile::tempdir;
 
             clear_mount_registry();
@@ -6243,7 +6538,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_open_whole_file() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6272,7 +6567,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_open_with_range() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6302,7 +6597,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_open2_invalid_range() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6328,7 +6623,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_basic() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6362,7 +6657,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_with_offset() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6396,7 +6691,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_short_at_eof() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6432,7 +6727,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_past_eof() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6464,7 +6759,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_access_ranged_block() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6500,7 +6795,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_copy_basic() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6531,7 +6826,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_clear_buffers() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6575,7 +6870,7 @@ mod tests {
     /// @requirement REQ-FIO-FILEBLOCK
     #[test]
     fn test_fileblock_multiple_access_stable_pointer() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::NamedTempFile;
 
@@ -6594,7 +6889,7 @@ mod tests {
                 let mut buffer1: *mut c_char = ptr::null_mut();
                 let bytes_read1 = uio_accessFileBlock(block, 0, 5, &mut buffer1);
                 assert_eq!(bytes_read1, 5);
-                let first_ptr = buffer1;
+                let _first_ptr = buffer1;
 
                 // Second access invalidates first pointer
                 let mut buffer2: *mut c_char = ptr::null_mut();
@@ -6642,7 +6937,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_direct_path_on_stdio_mount() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -6697,7 +6992,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_temp_copy_on_zip_mount() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::TempDir;
             clear_mount_registry();
@@ -6790,7 +7085,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_rejects_directory_with_eisdir() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -6830,7 +7125,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_missing_file_returns_enoent() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -6868,7 +7163,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_stdio_access_zip_without_tempdir_fails() {
-        unsafe {
+        {
             use std::io::Write;
             use tempfile::TempDir;
             clear_mount_registry();
@@ -6954,7 +7249,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_basic() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -7001,7 +7296,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_to_existing_dest_fails() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -7049,7 +7344,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_missing_source() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -7092,7 +7387,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_copy_file_large() {
-        unsafe {
+        {
             use tempfile::TempDir;
             clear_mount_registry();
 
@@ -7188,9 +7483,9 @@ mod tests {
 
             // Add a test mount
             let repo = uio_openRepository(0);
-            let mount_point = CString::new("/testmount").unwrap();
+            let _mount_point = CString::new("/testmount").unwrap();
             let test_dir = std::env::temp_dir();
-            let test_dir_cstr = CString::new(test_dir.to_str().unwrap()).unwrap();
+            let _test_dir_cstr = CString::new(test_dir.to_str().unwrap()).unwrap();
 
             let mount_handle = register_mount(
                 repo,
@@ -7246,7 +7541,7 @@ mod tests {
 
             let repo = uio_openRepository(0);
             let mount_point = CString::new("/testmount").unwrap();
-            let temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
 
             let mount_handle = register_mount(
                 repo,
@@ -7304,7 +7599,7 @@ mod tests {
 
             let repo = uio_openRepository(0);
             let mount_point = CString::new("/testmount").unwrap();
-            let temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
 
             let mount_handle = register_mount(
                 repo,
@@ -7355,7 +7650,7 @@ mod tests {
 
             let repo = uio_openRepository(0);
             let mount_point = CString::new("/testmount").unwrap();
-            let temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
 
             let mount_handle = register_mount(
                 repo,
@@ -7419,7 +7714,7 @@ mod tests {
 
             let repo = uio_openRepository(0);
             let mount_point = CString::new("/testmount").unwrap();
-            let temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
 
             let mount_handle = register_mount(
                 repo,
@@ -7469,7 +7764,7 @@ mod tests {
 
             let repo = uio_openRepository(0);
             let mount_point = CString::new("/testmount").unwrap();
-            let temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
+            let _temp_dir_cstr = CString::new(temp_dir.to_str().unwrap()).unwrap();
 
             let mount_handle = register_mount(
                 repo,
@@ -7532,7 +7827,7 @@ mod tests {
             let repo = uio_openRepository(0);
 
             // Add multiple mounts
-            let mount1 = register_mount(
+            let _mount1 = register_mount(
                 repo,
                 Path::new("/mount1"),
                 temp_dir.clone(),
@@ -7542,7 +7837,7 @@ mod tests {
                 true,
             );
 
-            let mount2 = register_mount(
+            let _mount2 = register_mount(
                 repo,
                 Path::new("/mount2"),
                 temp_dir.clone(),

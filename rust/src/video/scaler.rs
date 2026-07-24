@@ -114,8 +114,8 @@ impl VideoScaler {
 
         // Pre-allocate destination buffer
         let dst_image = Image::new(
-            dst_width.try_into().unwrap_or(1),
-            dst_height.try_into().unwrap_or(1),
+            dst_width,
+            dst_height,
             PixelType::U8x4, // RGBA
         );
 
@@ -164,13 +164,8 @@ impl VideoScaler {
             .collect();
 
         // Create source image reference
-        let src_image = ImageRef::new(
-            self.src_width.try_into().ok()?,
-            self.src_height.try_into().ok()?,
-            &src_bytes,
-            PixelType::U8x4,
-        )
-        .ok()?;
+        let src_image =
+            ImageRef::new(self.src_width, self.src_height, &src_bytes, PixelType::U8x4).ok()?;
 
         // Perform the resize with Lanczos3
         self.resizer

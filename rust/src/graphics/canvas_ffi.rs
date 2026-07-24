@@ -83,6 +83,10 @@ pub struct SurfaceCanvas {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-010
 // PANIC-FREE: catch_unwind + null checks. No .unwrap() or .expect().
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_from_surface(surface: *mut SDL_Surface) -> *mut SurfaceCanvas {
     let result = catch_unwind(|| {
@@ -137,6 +141,10 @@ pub unsafe extern "C" fn rust_canvas_from_surface(surface: *mut SDL_Surface) -> 
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-010
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_destroy(canvas: *mut SurfaceCanvas) {
     let _ = catch_unwind(|| {
@@ -166,6 +174,10 @@ pub unsafe extern "C" fn rust_canvas_destroy(canvas: *mut SurfaceCanvas) {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-020
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_line(
     canvas: *mut SurfaceCanvas,
@@ -204,6 +216,10 @@ pub unsafe extern "C" fn rust_canvas_draw_line(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-030
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_rect(
     canvas: *mut SurfaceCanvas,
@@ -252,6 +268,10 @@ pub unsafe extern "C" fn rust_canvas_draw_rect(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-030
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_fill_rect(
     canvas: *mut SurfaceCanvas,
@@ -293,6 +313,10 @@ pub unsafe extern "C" fn rust_canvas_fill_rect(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-070
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_copy(
     dst: *mut SurfaceCanvas,
@@ -350,6 +374,10 @@ pub unsafe extern "C" fn rust_canvas_copy(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-040
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_image(
     canvas: *mut SurfaceCanvas,
@@ -403,6 +431,10 @@ pub unsafe extern "C" fn rust_canvas_draw_image(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-050
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_draw_fontchar(
     canvas: *mut SurfaceCanvas,
@@ -522,6 +554,10 @@ pub unsafe extern "C" fn rust_canvas_draw_fontchar(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-060
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_set_scissor(
     canvas: *mut SurfaceCanvas,
@@ -554,6 +590,10 @@ pub unsafe extern "C" fn rust_canvas_set_scissor(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-060
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_clear_scissor(canvas: *mut SurfaceCanvas) -> c_int {
     catch_unwind(|| {
@@ -581,6 +621,10 @@ pub unsafe extern "C" fn rust_canvas_clear_scissor(canvas: *mut SurfaceCanvas) -
 /// @plan PLAN-20260223-GFX-FULL-PORT.P17
 /// @requirement REQ-CANVAS-010
 // PANIC-FREE: catch_unwind + null checks. Writes cached dimensions.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_canvas_get_extent(
     canvas: *mut SurfaceCanvas,

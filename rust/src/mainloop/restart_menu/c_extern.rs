@@ -54,7 +54,12 @@ impl Color {
     /// background used after the Utwig bomb self-destruct fade.
     /// RGB15(0x1F, 0x1F, 0x1F) = (255, 255, 255) with ramp 0x0F.
     pub const fn white_gray() -> Self {
-        Self { r: 255, g: 255, b: 255, a: 0x0F }
+        Self {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 0x0F,
+        }
     }
 }
 
@@ -130,6 +135,10 @@ extern "C" {
     pub fn UnbatchGraphics();
     pub fn ClearDrawable();
     pub fn FlushColorXForms();
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn ScreenTransition(a: c_int, b: *mut c_void);
     /// `Color SetContextBackGroundColor(Color)` — Color is a 4-byte struct.
     pub fn SetContextBackGroundColor(color: Color) -> Color;
@@ -143,44 +152,59 @@ extern "C" {
     pub fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
     pub fn CaptureDrawable(load_result: *mut c_void) -> *mut c_void;
     /// `BOOLEAN DestroyDrawable(DRAWABLE)` — returns c_int.
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn DestroyDrawable(handle: *mut c_void) -> c_int;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn ReleaseDrawable(handle: *mut c_void) -> *mut c_void;
     /// `FRAME SetAbsFrameIndex(FRAME, COUNT)` — COUNT = u16.
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
 
     // --- Menu ---
     pub fn SetMenuSounds(s0: u16, s1: u16);
     pub fn SetDefaultMenuRepeatDelay();
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn DoInput(p_input_state: *mut c_void, reset_input: c_int);
     pub fn SetTransitionSource(src: *mut c_void);
 
     // --- Music ---
     pub fn StopMusic();
     /// `BOOLEAN DestroyMusic(MUSIC_REF)` — returns c_int.
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn DestroyMusic(handle: *mut c_void) -> c_int;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn PlayMusic(handle: *mut c_void, do_loop: c_int, volume: u8);
     /// `DWORD FadeMusic(BYTE end_vol, SIZE TimeInterval)` — returns a TimeCount.
     pub fn FadeMusic(end_vol: u8, time_interval: c_short) -> u32;
 
     // --- Flash ---
-    pub fn Flash_createOverlay(
-        context: *mut c_void,
-        a: *mut c_void,
-        b: *mut c_void,
-    ) -> *mut c_void;
+    pub fn Flash_createOverlay(context: *mut c_void, a: *mut c_void, b: *mut c_void)
+        -> *mut c_void;
     pub fn Flash_process(ctx: *mut c_void);
     pub fn Flash_pause(ctx: *mut c_void);
     pub fn Flash_continue(ctx: *mut c_void);
     pub fn Flash_start(ctx: *mut c_void);
     pub fn Flash_terminate(ctx: *mut c_void);
     pub fn Flash_setMergeFactors(ctx: *mut c_void, a: c_int, b: c_int, c: c_int);
-    pub fn Flash_setSpeed(
-        ctx: *mut c_void,
-        a: u32,
-        b: u32,
-        c: u32,
-        d: u32,
-    );
+    pub fn Flash_setSpeed(ctx: *mut c_void, a: u32, b: u32, c: u32, d: u32);
     pub fn Flash_setFrameTime(ctx: *mut c_void, t: u32);
     pub fn Flash_setState(ctx: *mut c_void, state: u32, t: u32);
     /// `void Flash_setOverlay(FlashContext*, const POINT*, FRAME)` — POINT must be valid.

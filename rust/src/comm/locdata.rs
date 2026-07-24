@@ -12,6 +12,10 @@ use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMA
 
 extern "C" {
     // Race dispatch: returns static LOCDATA* for a conversation ID
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn c_init_race(comm_id: i32) -> *const c_void;
 
     // Lifecycle callbacks

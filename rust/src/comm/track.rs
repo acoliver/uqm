@@ -9,20 +9,14 @@
 //! @plan PLAN-20260314-COMM.P06
 //! @requirement TP-REQ-001, TP-REQ-003, TP-REQ-007, TP-REQ-008, TP-REQ-009
 
+#[cfg(not(test))]
 use std::ffi::{c_char, c_int, c_void, CStr};
 
-/// FFI declarations for the authoritative C trackplayer.
-/// These map to the c_* wrappers in rust_comm.c which delegate
-/// to trackplayer.c.
+// FFI declarations for the authoritative C trackplayer.
+// These map to the c_* wrappers in rust_comm.c which delegate
+// to trackplayer.c.
 #[cfg(not(test))]
 extern "C" {
-    fn c_SpliceTrack(
-        filespec: *mut c_char,
-        textspec: *mut c_char,
-        timestamp: *mut c_char,
-        cb: Option<unsafe extern "C" fn(*mut c_void)>,
-    );
-    fn c_SpliceMultiTrack(track_names: *const *mut c_char, track_text: *mut c_char);
     fn c_PlayTrack();
     fn c_StopTrack();
     fn c_JumpTrack();

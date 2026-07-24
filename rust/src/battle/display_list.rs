@@ -103,8 +103,8 @@ impl DisplayList {
 
         // Build the free list (all nodes initially)
         let free_head = if capacity > 0 { Some(0) } else { None };
-        for i in 0..capacity {
-            pool[i].next = if i + 1 < capacity { Some(i + 1) } else { None };
+        for (i, node) in pool.iter_mut().enumerate().take(capacity) {
+            node.next = if i + 1 < capacity { Some(i + 1) } else { None };
         }
 
         DisplayList {
@@ -496,18 +496,11 @@ impl CallbackRegistry {
     }
 
     /// Gets a reference to the callback entry for an element (if valid)
+    #[cfg(test)]
     fn get_entry(&self, handle: ElementHandle) -> Option<&CallbackEntry> {
         self.entries
             .get(handle.index)?
             .as_ref()
-            .filter(|entry| entry.generation == handle.generation)
-    }
-
-    /// Gets a mutable reference to the callback entry for an element (if valid)
-    fn get_entry_mut(&mut self, handle: ElementHandle) -> Option<&mut CallbackEntry> {
-        self.entries
-            .get_mut(handle.index)?
-            .as_mut()
             .filter(|entry| entry.generation == handle.generation)
     }
 }

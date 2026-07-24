@@ -1,7 +1,8 @@
 // Druuge Mauler - Mass driver cannon + crew furnace
 // @plan PLAN-20260314-SHIPS.P11
 
-use crate::ships::battle_bridge::{self, HElement, MissileBlock};
+#[cfg(not(test))]
+use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
     Characteristics, FleetStuff, IntelStuff, RaceDescTemplate, ShipData, ShipFlags, ShipInfo,
@@ -21,7 +22,9 @@ const SHIP_MASS: u8 = 5;
 
 const WEAPON_ENERGY_COST: u8 = 4;
 const WEAPON_WAIT: u8 = 10;
+#[cfg(not(test))]
 const DRUUGE_OFFSET: i16 = 24;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 6;
 const MISSILE_LIFE: u16 = 20;
 const MISSILE_HITS: i16 = 4;
@@ -71,19 +74,13 @@ impl ShipBehavior for DruugeShip {
     }
 
     /// C: druuge_preprocess — handles furnace (sacrifice crew for energy).
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             return Ok(());
         }
 
         // Conditions to cancel special (C: druuge.c lines 290-294)
-        if ship.special_counter > 0
-            || ship.crew_level <= 1
-            || ship.energy_level >= ship.max_energy as u16
+        if ship.special_counter > 0 || ship.crew_level <= 1 || ship.energy_level >= ship.max_energy
         {
             ship.cur_status_flags &= !StatusFlags::SPECIAL;
             return Ok(());
@@ -94,15 +91,11 @@ impl ShipBehavior for DruugeShip {
         if !ship.element_ptr.is_null() {
             unsafe {
                 // ProcessSound(SetAbsSoundIndex(ship_sounds, 1), element)
-                let burn_sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let burn_sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(burn_sound, ship.element_ptr);
 
                 battle_bridge::bridge::delta_crew(ship.element_ptr, -1);
-                battle_bridge::bridge::delta_energy(
-                    ship.element_ptr,
-                    SPECIAL_ENERGY_COST as i16,
-                );
+                battle_bridge::bridge::delta_energy(ship.element_ptr, SPECIAL_ENERGY_COST as i16);
             }
         }
 
@@ -113,7 +106,7 @@ impl ShipBehavior for DruugeShip {
                 ship.crew_level -= 1;
             }
             ship.energy_level =
-                (ship.energy_level + SPECIAL_ENERGY_COST as u16).min(ship.max_energy as u16);
+                (ship.energy_level + SPECIAL_ENERGY_COST as u16).min(ship.max_energy);
         }
 
         ship.special_counter = SPECIAL_WAIT;
@@ -140,16 +133,15 @@ impl ShipBehavior for DruugeShip {
         // In production, manipulate velocity via C bridge
         #[cfg(not(test))]
         if !ship.element_ptr.is_null() {
-            use crate::ships::runtime::{HALF_CIRCLE, facing_to_angle};
+            use crate::ships::runtime::{facing_to_angle, HALF_CIRCLE};
             let angle = facing_to_angle(ship.ship_facing as u16) + HALF_CIRCLE;
             let recoil_vel = battle_bridge::bridge::display_to_world(6);
-            let recoil_velocity =
-                crate::ships::runtime::world_to_velocity(recoil_vel);
+            let recoil_velocity = crate::ships::runtime::world_to_velocity(recoil_vel);
             let max_recoil = recoil_velocity * 4;
 
             // DeltaVelocityComponents + cap at MAX_RECOIL_VELOCITY
             // Done through C element's velocity struct
-            unsafe {
+            {
                 // Read current velocity, add recoil, cap
                 // This requires accessing the C ELEMENT's velocity field directly.
                 // For now, delegate to the C postprocess via the bridge.
@@ -181,7 +173,7 @@ impl ShipBehavior for DruugeShip {
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: DRUUGE_OFFSET,
                 speed: missile_speed,
@@ -198,7 +190,7 @@ impl ShipBehavior for DruugeShip {
                 // C: cannon_collision set on the element — handled separately
                 // via collision_func override in the element setup
             }
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         // Test mode: return weapon descriptors
@@ -228,7 +220,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = DruugeShip::default();
+        let ship = DruugeShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 17);
@@ -253,7 +245,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let state = ShipState {
             crew_level: 14,
             max_crew: 14,
@@ -279,7 +271,7 @@ mod tests {
 
     #[test]
     fn furnace_kills_crew_adds_energy() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let mut state = ShipState {
             crew_level: 14,
             max_crew: 14,
@@ -303,7 +295,7 @@ mod tests {
 
     #[test]
     fn furnace_denied_when_one_crew() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let mut state = ShipState {
             crew_level: 1,
             max_crew: 14,
@@ -327,7 +319,7 @@ mod tests {
 
     #[test]
     fn furnace_denied_at_max_energy() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let mut state = ShipState {
             crew_level: 14,
             max_crew: 14,
@@ -350,7 +342,7 @@ mod tests {
 
     #[test]
     fn furnace_denied_during_cooldown() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let mut state = ShipState {
             crew_level: 14,
             max_crew: 14,
@@ -374,7 +366,7 @@ mod tests {
 
     #[test]
     fn recoil_triggered_on_weapon_fire() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let mut state = ShipState {
             crew_level: 14,
             max_crew: 14,
@@ -401,7 +393,7 @@ mod tests {
 
     #[test]
     fn no_recoil_when_not_just_fired() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let mut state = ShipState {
             crew_level: 14,
             max_crew: 14,
@@ -427,7 +419,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = DruugeShip::default();
+        let mut ship = DruugeShip;
         let state = ShipState {
             crew_level: 14,
             max_crew: 14,

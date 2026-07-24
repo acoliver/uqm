@@ -1,6 +1,7 @@
 // Slylandro Probe - Lightning weapon + space junk harvester
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, LaserBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -84,9 +85,7 @@ impl ShipBehavior for SlylandroShip {
     ) -> Result<(), ShipsError> {
         // C: spawns continuation lightning bolts and harvests space junk.
         // Both require element list walking — kept in C.
-        if ship.cur_status_flags.contains(StatusFlags::SPECIAL)
-            && ship.special_counter == 0
-        {
+        if ship.cur_status_flags.contains(StatusFlags::SPECIAL) && ship.special_counter == 0 {
             // harvest_space_junk handled by C
             #[cfg(test)]
             {
@@ -112,7 +111,7 @@ impl ShipBehavior for SlylandroShip {
                 ey: 0,
                 face: 0,
                 sender: ship.player_nr,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 pixoffs: 0,
                 color: battle_bridge::Color {
                     r: 0xFF,
@@ -122,7 +121,7 @@ impl ShipBehavior for SlylandroShip {
                 },
             };
             let _ = battle_bridge::bridge::create_laser(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -148,7 +147,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = SlylandroShip::default();
+        let ship = SlylandroShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 17);
@@ -163,7 +162,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = SlylandroShip::default();
+        let mut ship = SlylandroShip;
         let state = ShipState {
             crew_level: 12,
             max_crew: 12,
@@ -183,7 +182,7 @@ mod tests {
 
     #[test]
     fn harvest_sets_cooldown() {
-        let mut ship = SlylandroShip::default();
+        let mut ship = SlylandroShip;
         let mut state = ShipState {
             crew_level: 12,
             max_crew: 12,
@@ -205,7 +204,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = SlylandroShip::default();
+        let mut ship = SlylandroShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

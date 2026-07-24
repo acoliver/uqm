@@ -166,10 +166,7 @@ mod tests {
     /// @requirement REQ-RM-001
     #[test]
     fn apply_selection_new_game_starts_new_game() {
-        assert_eq!(
-            apply_selection(M::NewGame),
-            R::StartGame { new_game: true }
-        );
+        assert_eq!(apply_selection(M::NewGame), R::StartGame { new_game: true });
     }
 
     /// @plan PLAN-20260707-RESTARTMENU.P03
@@ -259,13 +256,7 @@ mod tests {
     /// @requirement REQ-RM-001
     #[test]
     fn navigate_up_then_down_is_identity() {
-        for item in [
-            M::NewGame,
-            M::LoadGame,
-            M::SuperMelee,
-            M::Setup,
-            M::Quit,
-        ] {
+        for item in [M::NewGame, M::LoadGame, M::SuperMelee, M::Setup, M::Quit] {
             assert_eq!(navigate_down(navigate_up(item)), item);
             assert_eq!(navigate_up(navigate_down(item)), item);
         }

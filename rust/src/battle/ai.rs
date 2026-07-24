@@ -310,11 +310,11 @@ mod tests {
         };
         let flags = input.to_status_flags();
         use super::super::ship_runtime::{LEFT, RIGHT, SPECIAL, THRUST, WEAPON};
-        assert!(flags & (LEFT as u32) != 0);
-        assert!(flags & (THRUST as u32) != 0);
-        assert!(flags & (WEAPON as u32) != 0);
-        assert!(flags & (RIGHT as u32) == 0);
-        assert!(flags & (SPECIAL as u32) == 0);
+        assert!(flags & LEFT != 0);
+        assert!(flags & THRUST != 0);
+        assert!(flags & WEAPON != 0);
+        assert!(flags & RIGHT == 0);
+        assert!(flags & SPECIAL == 0);
     }
 
     #[test]

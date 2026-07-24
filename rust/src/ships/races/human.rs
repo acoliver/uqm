@@ -1,6 +1,7 @@
 // Human Cruiser - Tracking nuke + point-defense laser
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,7 +22,9 @@ const SHIP_MASS: u8 = 6;
 
 const WEAPON_ENERGY_COST: u8 = 9;
 const WEAPON_WAIT: u8 = 10;
+#[cfg(not(test))]
 const HUMAN_OFFSET: i16 = 42;
+#[cfg(not(test))]
 const NUKE_OFFSET: i16 = 8;
 const MISSILE_LIFE: u16 = 60;
 const MISSILE_HITS: i16 = 1;
@@ -139,7 +142,7 @@ impl ShipBehavior for HumanShip {
                 blast_offs: NUKE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -167,14 +170,17 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = HumanShip::default();
+        let ship = HumanShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 11);
         assert_eq!(desc.ship_info.max_crew, 18);
         assert_eq!(desc.ship_info.max_energy, 18);
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::FIRES_FORE));
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SEEKING_WEAPON));
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::POINT_DEFENSE));
         assert_eq!(desc.characteristics.max_thrust, 24);
         assert_eq!(desc.characteristics.thrust_increment, 3);
@@ -186,7 +192,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = HumanShip::default();
+        let mut ship = HumanShip;
         let state = ShipState {
             crew_level: 18,
             max_crew: 18,
@@ -211,7 +217,7 @@ mod tests {
 
     #[test]
     fn point_defense_drains_energy() {
-        let mut ship = HumanShip::default();
+        let mut ship = HumanShip;
         let mut state = ShipState {
             crew_level: 18,
             max_crew: 18,
@@ -234,7 +240,7 @@ mod tests {
 
     #[test]
     fn point_defense_denied_low_energy() {
-        let mut ship = HumanShip::default();
+        let mut ship = HumanShip;
         let mut state = ShipState {
             crew_level: 18,
             max_crew: 18,
@@ -257,7 +263,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = HumanShip::default();
+        let mut ship = HumanShip;
         let state = ShipState {
             crew_level: 18,
             max_crew: 18,

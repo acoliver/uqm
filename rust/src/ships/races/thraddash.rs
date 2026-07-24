@@ -1,6 +1,7 @@
 // Thraddash Torch - Ion blasters + afterburner trail
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,7 +22,9 @@ const SHIP_MASS: u8 = 7;
 
 const WEAPON_ENERGY_COST: u8 = 2;
 const WEAPON_WAIT: u8 = 12;
+#[cfg(not(test))]
 const THRADDASH_OFFSET: i16 = 9;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 3;
 const MISSILE_LIFE: u16 = 15;
 const MISSILE_HITS: i16 = 2;
@@ -29,6 +32,8 @@ const MISSILE_DAMAGE: i16 = 1;
 
 const SPECIAL_ENERGY_COST: u8 = 1;
 const SPECIAL_WAIT: u8 = 0;
+// C constant reserved for full afterburner Rust port.
+#[expect(dead_code)]
 const SPECIAL_MAX_THRUST: u16 = 72;
 
 #[derive(Debug, Default)]
@@ -74,11 +79,7 @@ impl ShipBehavior for ThraddashShip {
     /// C: thraddash_preprocess — afterburner special.
     /// Boosts thrust and drops napalm trail. Complex element manipulation
     /// (creates trail elements, modifies thrust characteristics) — kept in C.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             // Not pressing special — but if just released, mark beyond max
             if ship.old_status_flags.contains(StatusFlags::SPECIAL)
@@ -124,12 +125,11 @@ impl ShipBehavior for ThraddashShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(30) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(30) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: THRADDASH_OFFSET,
                 speed: missile_speed,
@@ -143,7 +143,7 @@ impl ShipBehavior for ThraddashShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = ThraddashShip::default();
+        let ship = ThraddashShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 10);
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = ThraddashShip::default();
+        let mut ship = ThraddashShip;
         let state = ShipState {
             crew_level: 8,
             max_crew: 8,
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn afterburner_drains_energy() {
-        let mut ship = ThraddashShip::default();
+        let mut ship = ThraddashShip;
         let mut state = ShipState {
             crew_level: 8,
             max_crew: 8,
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn afterburner_denied_no_energy() {
-        let mut ship = ThraddashShip::default();
+        let mut ship = ThraddashShip;
         let mut state = ShipState {
             crew_level: 8,
             max_crew: 8,
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = ThraddashShip::default();
+        let mut ship = ThraddashShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

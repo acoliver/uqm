@@ -1,8 +1,6 @@
 // @plan PLAN-20260225-AUDIO-HEART.P15
 // @requirement REQ-VOLUME-INIT-01..05, REQ-VOLUME-CONTROL-01..05
 // @requirement REQ-VOLUME-SOURCE-01..04, REQ-VOLUME-QUERY-01..03
-#![allow(dead_code, unused_imports, unused_variables)]
-
 //! Audio control — initialization, volume management, source lifecycle,
 //! and global playback queries.
 //!

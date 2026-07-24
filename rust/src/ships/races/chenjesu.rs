@@ -1,6 +1,7 @@
 // Chenjesu Broodhome - Photon crystal shard + D.O.G.I. (de-energizer)
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -22,7 +23,9 @@ const SHIP_MASS: u8 = 10;
 // Photon Shard
 const WEAPON_ENERGY_COST: u8 = 5;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const CHENJESU_OFFSET: i16 = 16;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 0;
 const MISSILE_LIFE: u16 = 90;
 const MISSILE_HITS: i16 = 10;
@@ -77,18 +80,10 @@ impl ShipBehavior for ChenjesuShip {
 
     /// C: chenjesu_preprocess — hold weapon key to keep crystal alive;
     /// manages DOGI count via special_counter.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         // Hold-to-extend crystal: if weapon held across frames, increment weapon_counter
-        if ship
-            .cur_status_flags
-            .contains(StatusFlags::WEAPON)
-            && ship
-                .old_status_flags
-                .contains(StatusFlags::WEAPON)
+        if ship.cur_status_flags.contains(StatusFlags::WEAPON)
+            && ship.old_status_flags.contains(StatusFlags::WEAPON)
         {
             ship.weapon_counter += 1;
         }
@@ -145,12 +140,11 @@ impl ShipBehavior for ChenjesuShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(16) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(16) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: CHENJESU_OFFSET,
                 speed: missile_speed,
@@ -164,7 +158,7 @@ impl ShipBehavior for ChenjesuShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -190,7 +184,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = ChenjesuShip::default();
+        let ship = ChenjesuShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 28);
@@ -207,13 +201,17 @@ mod tests {
 
     #[test]
     fn weapon_fires_crystal() {
-        let mut ship = ChenjesuShip::default();
+        let mut ship = ChenjesuShip;
         let state = ShipState {
             energy_level: 30,
             max_energy: 30,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
@@ -223,7 +221,7 @@ mod tests {
 
     #[test]
     fn dogi_drains_all_energy() {
-        let mut ship = ChenjesuShip::default();
+        let mut ship = ChenjesuShip;
         let mut state = ShipState {
             crew_level: 36,
             energy_level: 30,
@@ -232,7 +230,11 @@ mod tests {
             special_counter: 0,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 0);
@@ -241,7 +243,7 @@ mod tests {
 
     #[test]
     fn dogi_denied_low_energy() {
-        let mut ship = ChenjesuShip::default();
+        let mut ship = ChenjesuShip;
         let mut state = ShipState {
             crew_level: 36,
             energy_level: 10,
@@ -250,7 +252,11 @@ mod tests {
             special_counter: 0,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 10);
@@ -259,7 +265,7 @@ mod tests {
 
     #[test]
     fn dogi_denied_at_max() {
-        let mut ship = ChenjesuShip::default();
+        let mut ship = ChenjesuShip;
         let mut state = ShipState {
             crew_level: 36,
             energy_level: 30,
@@ -268,7 +274,11 @@ mod tests {
             special_counter: 4, // MAX_DOGGIES
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 30); // not drained
@@ -277,14 +287,18 @@ mod tests {
 
     #[test]
     fn preprocess_holds_weapon() {
-        let mut ship = ChenjesuShip::default();
+        let mut ship = ChenjesuShip;
         let mut state = ShipState {
             cur_status_flags: StatusFlags::WEAPON,
             old_status_flags: StatusFlags::WEAPON,
             weapon_counter: 0,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.preprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.weapon_counter, 1);
@@ -292,9 +306,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = ChenjesuShip::default();
+        let mut ship = ChenjesuShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

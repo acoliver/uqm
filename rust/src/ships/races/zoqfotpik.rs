@@ -1,6 +1,7 @@
 // ZoqFotPik Stinger - Spit + tongue attack
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,7 +22,9 @@ const SHIP_MASS: u8 = 5;
 
 const WEAPON_ENERGY_COST: u8 = 1;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const ZOQFOTPIK_OFFSET: i16 = 13;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 0;
 const MISSILE_LIFE: u16 = 10;
 const MISSILE_DAMAGE: i16 = 1;
@@ -29,8 +32,12 @@ const MISSILE_HITS: i16 = 1;
 
 const SPECIAL_ENERGY_COST: u8 = 7; // MAX_ENERGY * 3 / 4
 const SPECIAL_WAIT: u8 = 6;
+// C constants reserved for full tongue-lash Rust port.
+#[expect(dead_code)]
 const TONGUE_OFFSET: i16 = 4;
+#[expect(dead_code)]
 const TONGUE_DAMAGE: i16 = 12;
+#[expect(dead_code)]
 const TONGUE_HITS: i16 = 1;
 
 #[derive(Debug, Default)]
@@ -98,8 +105,7 @@ impl ShipBehavior for ZoqfotpikShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
             }
             // spawn_tongue handled by C postprocess_func
@@ -128,12 +134,11 @@ impl ShipBehavior for ZoqfotpikShip {
         {
             // C: speed = DISPLAY_TO_WORLD(GetFrameCount(weapon[0])) << 1
             // We use a fixed value here since we can't query frame count
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(10) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(10) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: ZOQFOTPIK_OFFSET,
                 speed: missile_speed,
@@ -147,7 +152,7 @@ impl ShipBehavior for ZoqfotpikShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -175,7 +180,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = ZoqfotpikShip::default();
+        let ship = ZoqfotpikShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 6);
@@ -190,7 +195,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = ZoqfotpikShip::default();
+        let mut ship = ZoqfotpikShip;
         let state = ShipState {
             crew_level: 10,
             max_crew: 10,
@@ -214,7 +219,7 @@ mod tests {
 
     #[test]
     fn tongue_drains_energy() {
-        let mut ship = ZoqfotpikShip::default();
+        let mut ship = ZoqfotpikShip;
         let mut state = ShipState {
             crew_level: 10,
             max_crew: 10,
@@ -237,7 +242,7 @@ mod tests {
 
     #[test]
     fn tongue_denied_low_energy() {
-        let mut ship = ZoqfotpikShip::default();
+        let mut ship = ZoqfotpikShip;
         let mut state = ShipState {
             crew_level: 10,
             max_crew: 10,
@@ -260,7 +265,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = ZoqfotpikShip::default();
+        let mut ship = ZoqfotpikShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

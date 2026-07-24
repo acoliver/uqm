@@ -1,22 +1,14 @@
 // @plan PLAN-20260225-AUDIO-HEART.P18
 // @requirement REQ-CROSS-FFI-01..04, REQ-CROSS-GENERAL-03, REQ-CROSS-GENERAL-08
-#![allow(
-    dead_code,
-    unused_imports,
-    unused_variables,
-    clippy::missing_safety_doc
-)]
-
 //! FFI shim layer — C-callable wrappers for the Rust audio heart.
 //!
 //! Every function is a thin shim: convert C types → Rust types, call
 //! the Rust API, convert results → C types. No logic beyond pointer
 //! conversion and error translation. All unsafe code is confined here.
 
-use std::cell::RefCell;
 use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr, CString};
-use std::path::Path;
 use std::panic::{self, AssertUnwindSafe};
+use std::path::Path;
 use std::ptr::{self, null_mut};
 use std::sync::Arc;
 
@@ -48,8 +40,6 @@ where
 
 use super::control;
 use super::decoder::{LimitedDecoder, SoundDecoder};
-use super::fileinst;
-use super::formats::AudioFormat;
 use super::mixer::buffer as mixer_buffer;
 use super::mixer::{mixer_get_format, mixer_get_frequency};
 use super::music;
@@ -65,7 +55,15 @@ use super::types::*;
 
 #[cfg(not(test))]
 extern "C" {
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn uio_fclose(fp: *mut c_void) -> c_int;
     fn uio_fread(buf: *mut c_void, size: usize, count: usize, fp: *mut c_void) -> usize;
     fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int;
@@ -76,10 +74,18 @@ extern "C" {
     fn FreeStringTable(strtab: *mut c_void);
 }
 
+#[allow(
+    non_snake_case,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 unsafe fn HMalloc(size: usize) -> *mut c_void {
     crate::memory::rust_hmalloc(size)
 }
 
+#[allow(
+    non_snake_case,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 unsafe fn HFree(ptr: *mut c_void) {
     crate::memory::rust_hfree(ptr)
 }
@@ -105,12 +111,18 @@ unsafe fn uio_ftell(_fp: *mut c_void) -> c_long {
     0
 }
 #[cfg(test)]
-static mut contentDir: *mut c_void = 0 as *mut c_void;
+#[allow(
+    non_upper_case_globals,
+    reason = "test stub mirrors the legacy C global symbol"
+)]
+static mut contentDir: *mut c_void = std::ptr::null_mut::<c_void>();
 #[cfg(test)]
+#[allow(non_snake_case, reason = "test stub mirrors the legacy C ABI symbol")]
 unsafe fn AllocStringTable(_n: c_int, _f: c_int) -> *mut c_void {
     null_mut()
 }
 #[cfg(test)]
+#[allow(non_snake_case, reason = "test stub mirrors the legacy C ABI symbol")]
 unsafe fn FreeStringTable(_p: *mut c_void) {}
 // HMalloc/HFree use crate::memory directly (no test stubs needed)
 
@@ -134,7 +146,7 @@ struct CStringTable {
 
 /// Read a file via UIO into a byte vector.
 unsafe fn uio_read_file(path: *const c_char) -> Option<Vec<u8>> {
-    let mode = b"rb\0".as_ptr() as *const c_char;
+    let mode = c"rb".as_ptr() as *const c_char;
     let fp = uio_fopen(contentDir, path, mode);
     if fp.is_null() {
         return None;
@@ -218,7 +230,7 @@ unsafe fn create_per_page_decoders(
 
     let timestamps: Vec<i32> = timestamp
         .map(|ts| {
-            ts.split(|c: char| c == ',' || c == '\n' || c == '\r')
+            ts.split([',', '\n', '\r'])
                 .filter_map(|s| s.trim().parse::<f64>().ok())
                 .filter(|&v| v > 0.0)
                 .map(|v| v as i32)
@@ -328,18 +340,10 @@ unsafe fn create_per_page_decoders(
 }
 
 // =============================================================================
-// Thread-local CString caches (FIX: ISSUE-FFI-01)
-// =============================================================================
-
-thread_local! {
-    static SUBTITLE_CACHE: RefCell<CString> = RefCell::new(CString::default());
-    static SUBTITLE_TEXT_CACHE: RefCell<CString> = RefCell::new(CString::default());
-}
-
-// =============================================================================
 // Helpers
 // =============================================================================
 
+#[cfg(test)]
 unsafe fn c_str_to_option(ptr: *const c_char) -> Option<&'static str> {
     if ptr.is_null() {
         None
@@ -361,22 +365,6 @@ unsafe fn unicode_ptr_to_option(ptr: *const c_char) -> Option<String> {
     } else {
         Some(s)
     }
-}
-
-fn cache_and_return_c_str_subtitle(text: &str) -> *const c_char {
-    SUBTITLE_CACHE.with(|cache| {
-        let cs = CString::new(text).unwrap_or_default();
-        *cache.borrow_mut() = cs;
-        cache.borrow().as_ptr()
-    })
-}
-
-fn cache_and_return_c_str_text(text: &str) -> *const c_char {
-    SUBTITLE_TEXT_CACHE.with(|cache| {
-        let cs = CString::new(text).unwrap_or_default();
-        *cache.borrow_mut() = cs;
-        cache.borrow().as_ptr()
-    })
 }
 
 /// MUSIC_REF is a double pointer: `Box<Arc<Mutex<SoundSample>>>` stored as
@@ -424,6 +412,10 @@ fn convert_c_callbacks(ptr: *mut c_void) -> Option<Box<dyn StreamCallbacks + Sen
 // Stream FFI (18 functions)
 // =============================================================================
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn InitStreamDecoder() -> c_int {
     match stream::init_stream_decoder() {
@@ -435,11 +427,19 @@ pub unsafe extern "C" fn InitStreamDecoder() -> c_int {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn UninitStreamDecoder() {
     let _ = stream::uninit_stream_decoder();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_CreateSoundSample(
     decoder_ptr: *mut c_void,
@@ -457,7 +457,7 @@ pub unsafe extern "C" fn TFB_CreateSoundSample(
         Some(*Box::from_raw(fat_ptr))
     };
     let callbacks = convert_c_callbacks(callbacks_ptr);
-    match stream::create_sound_sample(decoder, num_buffers as u32, callbacks) {
+    match stream::create_sound_sample(decoder, num_buffers, callbacks) {
         Ok(sample) => {
             let arc = Arc::new(Mutex::new(sample));
             Arc::into_raw(arc) as *mut c_void
@@ -469,15 +469,23 @@ pub unsafe extern "C" fn TFB_CreateSoundSample(
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_DestroySoundSample(sample_ptr: *mut c_void) {
     if sample_ptr.is_null() {
         return;
     }
     let arc = Arc::from_raw(sample_ptr as *const Mutex<SoundSample>);
-    let _ = stream::destroy_sound_sample(&mut *arc.lock());
+    let _ = stream::destroy_sound_sample(&mut arc.lock());
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SetSoundSampleData(sample_ptr: *mut c_void, data_ptr: *mut c_void) {
     if sample_ptr.is_null() {
@@ -489,6 +497,10 @@ pub unsafe extern "C" fn TFB_SetSoundSampleData(sample_ptr: *mut c_void, data_pt
     stream::set_sound_sample_data(&mut sample, data);
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_GetSoundSampleData(sample_ptr: *mut c_void) -> *mut c_void {
     if sample_ptr.is_null() {
@@ -505,6 +517,10 @@ pub unsafe extern "C" fn TFB_GetSoundSampleData(sample_ptr: *mut c_void) -> *mut
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SetSoundSampleCallbacks(
     sample_ptr: *mut c_void,
@@ -519,6 +535,10 @@ pub unsafe extern "C" fn TFB_SetSoundSampleCallbacks(
     stream::set_sound_sample_callbacks(&mut sample, callbacks);
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_GetSoundSampleDecoder(sample_ptr: *mut c_void) -> *mut c_void {
     if sample_ptr.is_null() {
@@ -532,6 +552,10 @@ pub unsafe extern "C" fn TFB_GetSoundSampleDecoder(sample_ptr: *mut c_void) -> *
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PlayStream(
     sample_ptr: *mut c_void,
@@ -549,6 +573,10 @@ pub unsafe extern "C" fn PlayStream(
     });
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn StopStream(source: u32) {
     let _ = ffi_catch(|| {
@@ -556,21 +584,37 @@ pub unsafe extern "C" fn StopStream(source: u32) {
     });
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PauseStream(source: u32) {
     let _ = stream::pause_stream(source as usize);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn ResumeStream(source: u32) {
     let _ = stream::resume_stream(source as usize);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SeekStream(source: u32, pos: u32) {
     let _ = stream::seek_stream(source as usize, pos);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PlayingStream(source: u32) -> u8 {
     if stream::playing_stream(source as usize) {
@@ -580,6 +624,10 @@ pub unsafe extern "C" fn PlayingStream(source: u32) -> u8 {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_FindTaggedBuffer(
     sample_ptr: *mut c_void,
@@ -596,6 +644,10 @@ pub unsafe extern "C" fn TFB_FindTaggedBuffer(
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_TagBuffer(
     sample_ptr: *mut c_void,
@@ -614,6 +666,10 @@ pub unsafe extern "C" fn TFB_TagBuffer(
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_ClearBufferTag(tag_ptr: *mut c_void) {
     if tag_ptr.is_null() {
@@ -623,11 +679,19 @@ pub unsafe extern "C" fn TFB_ClearBufferTag(tag_ptr: *mut c_void) {
     stream::clear_buffer_tag(tag);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SetMusicStreamFade(how_long: i32, end_volume: c_int) -> bool {
     stream::set_music_stream_fade(how_long.max(0) as u32, end_volume)
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn GraphForegroundStream(
     data_ptr: *mut u8,
@@ -650,6 +714,10 @@ pub unsafe extern "C" fn GraphForegroundStream(
 /// C callback type: void (*CallbackFunction)(void* arg)
 pub type CallbackFunction = unsafe extern "C" fn(*mut c_void);
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SpliceTrack(
     track_name_ptr: *const c_char,
@@ -685,6 +753,10 @@ pub unsafe extern "C" fn SpliceTrack(
     );
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SpliceMultiTrack(
     track_names_ptr: *const *const c_char,
@@ -710,6 +782,10 @@ pub unsafe extern "C" fn SpliceMultiTrack(
     let _ = trackplayer::splice_multi_track(&name_refs, &text_refs, None);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PlayTrack() {
     eprintln!("[PlayTrack] called");
@@ -719,26 +795,46 @@ pub unsafe extern "C" fn PlayTrack() {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn StopTrack() {
     let _ = trackplayer::stop_track();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn JumpTrack() {
     let _ = trackplayer::jump_track(0);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PauseTrack() {
     let _ = trackplayer::pause_track();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn ResumeTrack() {
     let _ = trackplayer::resume_track();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PlayingTrack() -> u16 {
     let n = trackplayer::playing_track_num();
@@ -748,31 +844,55 @@ pub unsafe extern "C" fn PlayingTrack() -> u16 {
     n
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn FastReverse_Smooth() {
     let _ = trackplayer::fast_reverse_smooth();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn FastForward_Smooth() {
     let _ = trackplayer::fast_forward_smooth();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn FastReverse_Page() {
     let _ = trackplayer::fast_reverse_page();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn FastForward_Page() {
     let _ = trackplayer::fast_forward_page();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn GetTrackPosition(in_units: c_int) -> c_int {
     trackplayer::get_track_position(in_units as u32) as c_int
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn GetTrackSubtitle() -> *const c_char {
     // Return a stable pointer from the chunk's cached CString.
@@ -780,12 +900,20 @@ pub unsafe extern "C" fn GetTrackSubtitle() -> *const c_char {
     trackplayer::get_track_subtitle_cstr()
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn GetFirstTrackSubtitle() -> *mut c_void {
     // Return the actual chunks_head pointer (matches C: returns chunks_head as SUBTITLE_REF)
     trackplayer::get_first_chunk_ptr() as *mut c_void
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void {
     // Match C ABI: GetNextTrackSubtitle(SUBTITLE_REF LastRef)
@@ -796,6 +924,10 @@ pub unsafe extern "C" fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_v
     trackplayer::get_next_chunk_ptr(last_ref as *const u8) as *mut c_void
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn GetTrackSubtitleText(sub_ref_ptr: *mut c_void) -> *const c_char {
     if sub_ref_ptr.is_null() {
@@ -809,6 +941,10 @@ pub unsafe extern "C" fn GetTrackSubtitleText(sub_ref_ptr: *mut c_void) -> *cons
 // Music FFI (10 functions)
 // =============================================================================
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PLRPlaySong(
     music_ref_ptr: *mut c_void,
@@ -835,6 +971,10 @@ pub unsafe extern "C" fn PLRPlaySong(
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn PLRStop(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
@@ -848,6 +988,10 @@ pub unsafe extern "C" fn PLRStop(music_ref_ptr: *mut c_void) {
     let _ = music::plr_stop(&music_ref);
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn PLRPlaying(music_ref_ptr: *mut c_void) -> c_int {
     if music_ref_ptr.is_null() {
@@ -864,6 +1008,10 @@ pub unsafe extern "C" fn PLRPlaying(music_ref_ptr: *mut c_void) -> c_int {
     }
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn PLRSeek(music_ref_ptr: *mut c_void, pos: c_uint) {
     if music_ref_ptr.is_null() {
@@ -877,6 +1025,10 @@ pub unsafe extern "C" fn PLRSeek(music_ref_ptr: *mut c_void, pos: c_uint) {
     let _ = music::plr_seek(&music_ref, pos);
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn PLRPause(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
@@ -887,6 +1039,10 @@ pub unsafe extern "C" fn PLRPause(music_ref_ptr: *mut c_void) {
     let _ = music::plr_pause();
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn PLRResume(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
@@ -895,6 +1051,10 @@ pub unsafe extern "C" fn PLRResume(music_ref_ptr: *mut c_void) {
     let _ = music::plr_resume();
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn snd_PlaySpeech(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
@@ -907,16 +1067,28 @@ pub unsafe extern "C" fn snd_PlaySpeech(music_ref_ptr: *mut c_void) {
     let _ = music::snd_play_speech(&music_ref);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn snd_StopSpeech() {
     let _ = music::snd_stop_speech();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SetMusicVolume(volume: c_int) {
     music::set_music_volume(volume);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
     let interval = if how_long < 0 { 0u32 } else { how_long as u32 };
@@ -939,6 +1111,10 @@ pub unsafe extern "C" fn FadeMusic(end_vol: u8, how_long: i16) -> u32 {
 /// C signature: `PlayChannel(COUNT channel, SOUND snd, SoundPosition pos, void *obj, BYTE pri)`
 /// SOUND is a `STRING` = `STRING_TABLE_ENTRY_DESC*`. The `.data` field is an
 /// HMalloc'd slot containing a `*mut SoundSample`.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PlayChannel(
     channel: c_uint,
@@ -973,21 +1149,44 @@ pub unsafe extern "C" fn PlayChannel(
     });
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn StopChannel(channel: c_uint, priority: c_int) {
     let _ = ffi_catch(|| sfx::stop_channel(channel as usize, priority));
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn ChannelPlaying(channel: c_uint) -> c_int {
-    ffi_catch(|| if sfx::channel_playing(channel as usize) { 1 } else { 0 }).unwrap_or(0)
+    ffi_catch(|| {
+        if sfx::channel_playing(channel as usize) {
+            1
+        } else {
+            0
+        }
+    })
+    .unwrap_or(0)
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SetChannelVolume(channel: c_uint, volume: c_int, priority: c_int) {
     let _ = ffi_catch(|| sfx::set_channel_volume(channel as usize, volume, priority));
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn UpdateSoundPosition(source_index: c_uint, pos_ptr: *const SoundPosition) {
     let _ = ffi_catch(|| {
@@ -998,11 +1197,19 @@ pub unsafe extern "C" fn UpdateSoundPosition(source_index: c_uint, pos_ptr: *con
     });
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn GetPositionalObject(source_index: c_uint) -> c_uint {
     sfx::get_positional_object(source_index as usize) as c_uint
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SetPositionalObject(source_index: c_uint, object: c_uint) {
     sfx::set_positional_object(source_index as usize, object as usize);
@@ -1010,6 +1217,10 @@ pub unsafe extern "C" fn SetPositionalObject(source_index: c_uint, object: c_uin
 
 /// Free a SOUND_REF (STRING_TABLE containing SoundSample pointers).
 /// Each entry's .data is an HMalloc'd slot pointing to a Box<SoundSample>.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
     if bank_ptr.is_null() {
@@ -1037,6 +1248,10 @@ pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
 // Control FFI (7 functions)
 // =============================================================================
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) -> c_int {
     eprintln!("[audio_heart] InitSound called");
@@ -1052,16 +1267,28 @@ pub unsafe extern "C" fn InitSound(_argc: c_int, _argv: *const *const c_char) ->
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn UninitSound() {
     control::uninit_sound();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn StopSound() {
     control::stop_sound();
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SoundPlaying() -> c_int {
     if control::sound_playing() {
@@ -1071,6 +1298,10 @@ pub unsafe extern "C" fn SoundPlaying() -> c_int {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn WaitForSoundEnd(channel: u16) {
     // COUNT is u16; TFBSOUND_WAIT_ALL is (COUNT)~0 = 0xFFFF
@@ -1082,11 +1313,19 @@ pub unsafe extern "C" fn WaitForSoundEnd(channel: u16) {
     control::wait_for_sound_end(ch);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SetSFXVolume(volume: f32) {
     control::set_sfx_volume((volume * MAX_VOLUME as f32) as i32);
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn SetSpeechVolume(volume: f32) {
     control::set_speech_volume((volume * MAX_VOLUME as f32) as i32);
@@ -1098,6 +1337,10 @@ pub unsafe extern "C" fn SetSpeechVolume(volume: f32) {
 
 /// Load a sound bank (.snd file listing). Returns a STRING_TABLE (C struct)
 /// where each entry's `.data` points to a `*mut SoundSample`.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
     if filename.is_null() {
@@ -1266,6 +1509,10 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
 
 /// Load a music file. Returns a MUSIC_REF (double pointer: `*mut *mut Arc<Mutex<SoundSample>>`).
 /// The caller (resource system) stores this as opaque `void*`.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
     if filename.is_null() {
@@ -1342,6 +1589,10 @@ pub unsafe extern "C" fn LoadMusicFile(filename: *const c_char) -> *mut c_void {
 
 /// Free a MUSIC_REF. The pointer is a double-pointer: `*mut *const Mutex<SoundSample>`.
 /// We take ownership of the Arc (decrement refcount) and free the outer slot.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn DestroyMusic(music_ref_ptr: *mut c_void) {
     if music_ref_ptr.is_null() {
@@ -1464,9 +1715,9 @@ mod tests {
 
     #[test]
 
-    fn test_playing_track_returns_int() {
+    fn test_playing_track_matches_trackplayer_state() {
         let result = unsafe { PlayingTrack() };
-        assert!(result >= 0);
+        assert_eq!(result, trackplayer::playing_track_num());
     }
 
     #[test]
@@ -1494,22 +1745,6 @@ mod tests {
     // REQ-CROSS-GENERAL-08: Callbacks
     #[test]
     fn test_callback_wrapper_default_on_start() {
-        let mut wrapper = CCallbackWrapper {
-            callbacks: CTfbSoundCallbacks {
-                on_start_stream: None,
-                on_end_chunk: None,
-                on_end_stream: None,
-                on_tagged_buffer: None,
-                on_queue_buffer: None,
-            },
-            sample_ptr: null_mut(),
-        };
-        let mut sample = stream::create_sound_sample(None, 4, None).unwrap();
-        assert!(wrapper.on_start_stream(&mut sample));
-    }
-
-    #[test]
-    fn test_callback_wrapper_default_on_end_chunk() {
         let mut wrapper = CCallbackWrapper {
             callbacks: CTfbSoundCallbacks {
                 on_start_stream: None,

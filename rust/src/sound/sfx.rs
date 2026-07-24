@@ -2,8 +2,6 @@
 // @requirement REQ-SFX-PLAY-01..09, REQ-SFX-POSITION-01..05
 // @requirement REQ-SFX-VOLUME-01, REQ-SFX-LOAD-01..07
 // @requirement REQ-SFX-RELEASE-01..04
-#![allow(dead_code, unused_imports, unused_variables)]
-
 //! Sound effects — channel-based SFX playback with positional audio,
 //! volume control, and sound bank resource management.
 //!
@@ -13,8 +11,6 @@
 //! Instead, `update_sound_position` uses three separate `mixer_source_f`
 //! calls to set X, Y, Z position components individually via the
 //! PositionX/Y/Z source properties added in P02b.
-
-use std::sync::Arc;
 
 use parking_lot::Mutex;
 
@@ -458,9 +454,11 @@ mod tests {
 
     #[test]
     fn test_constants() {
-        assert!(ATTENUATION > 0.0);
-        assert!(MIN_DISTANCE > 0.0);
-        assert_eq!(MAX_FX, NUM_SFX_CHANNELS);
+        const {
+            assert!(ATTENUATION > 0.0);
+            assert!(MIN_DISTANCE > 0.0);
+            assert!(MAX_FX == NUM_SFX_CHANNELS);
+        }
     }
 
     #[test]

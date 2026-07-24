@@ -7,7 +7,9 @@
 //! The C wrapper functions live in `sc2/src/uqm/rust_bridge_ships.c` and
 //! expose macros as real function symbols Rust can link against.
 
-use std::os::raw::{c_int, c_void};
+#[cfg(not(test))]
+use std::os::raw::c_int;
+use std::os::raw::c_void;
 
 // ---------------------------------------------------------------------------
 // Opaque C handle types
@@ -134,11 +136,7 @@ extern "C" {
     fn rust_bridge_initialize_laser(block: *const LaserBlock) -> HElement;
 
     // AI
-    fn rust_bridge_ship_intelligence(
-        ship: ElementPtr,
-        objects: *mut EvaluateDesc,
-        count: u16,
-    );
+    fn rust_bridge_ship_intelligence(ship: ElementPtr, objects: *mut EvaluateDesc, count: u16);
 
     // Sound
     fn rust_bridge_ProcessSound(sound: usize, source: ElementPtr);
@@ -170,6 +168,10 @@ extern "C" {
     // Misc ship helpers
     fn rust_bridge_TrackShip(e: ElementPtr, pfacing: *mut u16) -> i16;
     fn rust_bridge_Untarget(e: ElementPtr);
+    #[expect(
+        dead_code,
+        reason = "transitional FFI binding not yet wired into Rust weapon-collision path"
+    )]
     fn rust_bridge_weapon_collision(
         e0: ElementPtr,
         p0: *mut c_void,
@@ -186,12 +188,7 @@ extern "C" {
     fn GetFrameCount(frame: Frame) -> c_int;
 
     // Velocity
-    fn SetVelocityVector(
-        vel: *mut c_void,
-        magnitude: c_int,
-        facing: c_int,
-        direction: c_int,
-    );
+    fn SetVelocityVector(vel: *mut c_void, magnitude: c_int, facing: c_int, direction: c_int);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,14 +250,22 @@ pub mod bridge {
         }
     }
 
+    #[allow(
+        clippy::missing_safety_doc,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub unsafe fn get_pred_element(e: ElementPtr) -> HElement {
         rust_bridge_GetPredElement(e)
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_succ_element(e: ElementPtr) -> HElement {
         rust_bridge_GetSuccElement(e)
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_frame_index(f: Frame) -> u16 {
         rust_bridge_GetFrameIndex(f)
     }
@@ -282,7 +287,9 @@ pub mod bridge {
             Some(h)
         }
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn call_ship_intelligence(
         ship: ElementPtr,
         objects: &mut [EvaluateDesc; NUM_EVALUATE_DESCS],
@@ -290,11 +297,15 @@ pub mod bridge {
     ) {
         rust_bridge_ship_intelligence(ship, objects.as_mut_ptr(), count);
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn process_sound(sound: usize, source: ElementPtr) {
         rust_bridge_ProcessSound(sound, source);
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_abs_sound_index(sounds: usize, index: u16) -> usize {
         rust_bridge_SetAbsSoundIndex(sounds, index)
     }
@@ -334,37 +345,53 @@ pub mod bridge {
     pub fn wrap_y(y: i32) -> i32 {
         unsafe { rust_bridge_WRAP_Y(y) }
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn colliding_element(e: ElementPtr) -> bool {
         rust_bridge_CollidingElement(e) != 0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn object_cloaked(e: ElementPtr) -> bool {
         rust_bridge_OBJECT_CLOAKED(e) != 0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn delta_energy(e: ElementPtr, delta: i16) -> bool {
         rust_bridge_DeltaEnergy(e, delta) != 0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn delta_crew(e: ElementPtr, delta: i16) -> bool {
         rust_bridge_DeltaCrew(e, delta) != 0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_element_starship(e: ElementPtr) -> StarShipPtr {
         let mut ss: StarShipPtr = std::ptr::null_mut();
         rust_bridge_GetElementStarShip(e, &mut ss);
         ss
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_element_starship(e: ElementPtr, ss: StarShipPtr) {
         rust_bridge_SetElementStarShip(e, ss);
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn track_ship(e: ElementPtr, facing: &mut u16) -> i16 {
         rust_bridge_TrackShip(e, facing as *mut u16)
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn untarget(e: ElementPtr) {
         rust_bridge_Untarget(e);
     }
@@ -372,19 +399,27 @@ pub mod bridge {
     pub fn random() -> u32 {
         unsafe { TFB_Random() }
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_abs_frame_index(frame: Frame, index: i32) -> Frame {
         SetAbsFrameIndex(frame, index as c_int)
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn inc_frame_index(frame: Frame) -> Frame {
         IncFrameIndex(frame)
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_frame_count(frame: Frame) -> i32 {
         GetFrameCount(frame) as i32
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_velocity_vector(
         vel: *mut c_void,
         magnitude: i32,
@@ -427,21 +462,29 @@ pub mod bridge {
     pub fn get_tail_element() -> HElement {
         0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn lock_element(_h: HElement) -> ElementPtr {
         std::ptr::null_mut()
     }
 
     pub fn unlock_element(_h: HElement) {}
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_pred_element(_e: ElementPtr) -> HElement {
         0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_succ_element(_e: ElementPtr) -> HElement {
         0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_frame_index(_f: Frame) -> u16 {
         0
     }
@@ -453,16 +496,22 @@ pub mod bridge {
     pub fn create_laser(_block: &LaserBlock) -> Option<HElement> {
         Some(mock_handle())
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn call_ship_intelligence(
         _ship: ElementPtr,
         _objects: &mut [EvaluateDesc; NUM_EVALUATE_DESCS],
         _count: u16,
     ) {
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn process_sound(_sound: usize, _source: ElementPtr) {}
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_abs_sound_index(sounds: usize, _index: u16) -> usize {
         sounds
     }
@@ -502,51 +551,75 @@ pub mod bridge {
     pub fn wrap_y(y: i32) -> i32 {
         y
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn colliding_element(_e: ElementPtr) -> bool {
         false
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn object_cloaked(_e: ElementPtr) -> bool {
         false
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn delta_energy(_e: ElementPtr, _delta: i16) -> bool {
         true
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn delta_crew(_e: ElementPtr, _delta: i16) -> bool {
         true
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_element_starship(_e: ElementPtr) -> StarShipPtr {
         std::ptr::null_mut()
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_element_starship(_e: ElementPtr, _ss: StarShipPtr) {}
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn track_ship(_e: ElementPtr, _facing: &mut u16) -> i16 {
         0
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn untarget(_e: ElementPtr) {}
 
     pub fn random() -> u32 {
         42
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_abs_frame_index(_frame: Frame, _index: i32) -> Frame {
         std::ptr::null_mut()
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn inc_frame_index(_frame: Frame) -> Frame {
         std::ptr::null_mut()
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_frame_count(_frame: Frame) -> i32 {
         1
     }
-
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_velocity_vector(
         _vel: *mut c_void,
         _magnitude: i32,

@@ -641,6 +641,11 @@ impl GraphicsDriver for SdlDriver {
     }
 }
 
+// SAFETY: We only access the driver from the main thread per SDL2 requirements.
+unsafe impl Send for SdlDriver {}
+// SAFETY: We only access the driver from the main thread per SDL2 requirements.
+unsafe impl Sync for SdlDriver {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -770,8 +775,3 @@ mod tests {
         assert_eq!(dims.actual_height, 240);
     }
 }
-
-// SAFETY: We only access the driver from the main thread per SDL2 requirements.
-unsafe impl Send for SdlDriver {}
-// SAFETY: We only access the driver from the main thread per SDL2 requirements.
-unsafe impl Sync for SdlDriver {}

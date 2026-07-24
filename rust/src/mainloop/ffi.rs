@@ -328,9 +328,9 @@ pub unsafe fn load_kernel(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::activity_flags;
     use super::super::types::ActivityKind;
+    use super::*;
     use serial_test::serial;
 
     /// @plan PLAN-20260707-MAINLOOP.P03
@@ -340,7 +340,7 @@ mod tests {
     fn test_current_activity_round_trip_rust_to_c() {
         // GIVEN: set activity from Rust
         set_current_activity(ActivityValue(0x0403)); // IN_ENCOUNTER | START_ENCOUNTER
-        // THEN: C shim reads the same value
+                                                     // THEN: C shim reads the same value
         let from_c = unsafe { prod::test_get_activity() };
         assert_eq!(from_c, 0x0403);
     }

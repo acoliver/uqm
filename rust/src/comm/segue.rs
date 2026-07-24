@@ -5,9 +5,10 @@
 /// Segue determines what happens when a communication encounter ends.
 ///
 /// Maps to C `BATTLE_SEGUE` and related global state bits.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Segue {
     /// Peaceful departure — no battle (BATTLE_SEGUE = 0)
+    #[default]
     Peace,
     /// Hostile departure — enters combat (BATTLE_SEGUE = 1)
     Hostile,
@@ -15,12 +16,6 @@ pub enum Segue {
     Victory,
     /// Defeat — game over / restart trigger (crew sentinel set)
     Defeat,
-}
-
-impl Default for Segue {
-    fn default() -> Self {
-        Segue::Peace
-    }
 }
 
 impl Segue {

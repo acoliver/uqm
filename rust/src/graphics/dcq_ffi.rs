@@ -98,6 +98,10 @@ fn color_from_u32(c: u32) -> Color {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-010
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_init() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -133,6 +137,10 @@ pub unsafe extern "C" fn rust_dcq_init() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-010
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_uninit() {
     let _ = catch_unwind(AssertUnwindSafe(|| {
@@ -155,6 +163,10 @@ pub unsafe extern "C" fn rust_dcq_uninit() {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_drawline(
     x1: c_int,
@@ -196,6 +208,10 @@ pub unsafe extern "C" fn rust_dcq_push_drawline(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_drawrect(
     x: c_int,
@@ -240,6 +256,10 @@ pub unsafe extern "C" fn rust_dcq_push_drawrect(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_fillrect(
     x: c_int,
@@ -282,6 +302,10 @@ pub unsafe extern "C" fn rust_dcq_push_fillrect(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_drawimage(image_id: u32, x: c_int, y: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -325,6 +349,10 @@ pub unsafe extern "C" fn rust_dcq_push_drawimage(image_id: u32, x: c_int, y: c_i
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_copy(
     src_rect: *const SDL_Rect,
@@ -375,6 +403,10 @@ pub unsafe extern "C" fn rust_dcq_push_copy(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_copytoimage(
     image_id: u32,
@@ -417,6 +449,10 @@ pub unsafe extern "C" fn rust_dcq_push_copytoimage(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -443,6 +479,10 @@ pub unsafe extern "C" fn rust_dcq_push_deleteimage(image_id: u32) -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_waitsignal() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -468,6 +508,10 @@ pub unsafe extern "C" fn rust_dcq_push_waitsignal() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_reinitvideo(
     driver: c_int,
@@ -501,6 +545,10 @@ pub unsafe extern "C" fn rust_dcq_push_reinitvideo(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -532,6 +580,10 @@ pub unsafe extern "C" fn rust_dcq_push_setpalette(colormap_id: u32) -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_scissor_enable(
     x: c_int,
@@ -562,6 +614,10 @@ pub unsafe extern "C" fn rust_dcq_push_scissor_enable(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -592,6 +648,10 @@ pub unsafe extern "C" fn rust_dcq_push_scissor_disable() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-030
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_flush() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -617,6 +677,10 @@ pub unsafe extern "C" fn rust_dcq_flush() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-050
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_batch() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -641,6 +705,10 @@ pub unsafe extern "C" fn rust_dcq_batch() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-050
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_unbatch() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -662,6 +730,10 @@ pub unsafe extern "C" fn rust_dcq_unbatch() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-040
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -685,6 +757,10 @@ pub unsafe extern "C" fn rust_dcq_set_screen(index: c_int) -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-040
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_get_screen() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -704,6 +780,10 @@ pub unsafe extern "C" fn rust_dcq_get_screen() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P20
 /// @requirement REQ-DCQ-010
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_dcq_len() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -743,7 +823,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_dcq_init_success() {
-        unsafe {
+        {
             let rc = init_dcq();
             assert_eq!(rc, 0);
             reset_dcq();
@@ -903,7 +983,7 @@ mod tests {
     fn test_dcq_push_copy_null_rect() {
         unsafe {
             assert_eq!(init_dcq(), 0);
-            let rc = unsafe { rust_dcq_push_copy(std::ptr::null(), 0, 10, 20) };
+            let rc = { rust_dcq_push_copy(std::ptr::null(), 0, 10, 20) };
             assert_eq!(rc, 0);
             assert_eq!(rust_dcq_len(), 1);
             reset_dcq();
@@ -922,7 +1002,7 @@ mod tests {
                 w: 50,
                 h: 50,
             };
-            let rc = unsafe { rust_dcq_push_copy(&rect as *const SDL_Rect, 0, 100, 100) };
+            let rc = { rust_dcq_push_copy(&rect as *const SDL_Rect, 0, 100, 100) };
             assert_eq!(rc, 0);
             assert_eq!(rust_dcq_len(), 1);
             reset_dcq();
@@ -941,7 +1021,7 @@ mod tests {
                 w: 32,
                 h: 32,
             };
-            let rc = unsafe { rust_dcq_push_copytoimage(99, &rect as *const SDL_Rect) };
+            let rc = { rust_dcq_push_copytoimage(99, &rect as *const SDL_Rect) };
             assert_eq!(rc, 0);
             assert_eq!(rust_dcq_len(), 1);
             reset_dcq();
@@ -1170,7 +1250,7 @@ mod tests {
             assert_eq!(rust_dcq_push_drawimage(1, 0, 0), -1);
             assert_eq!(rust_dcq_push_deleteimage(1), -1);
             assert_eq!(rust_dcq_push_waitsignal(), -1);
-            assert_eq!(unsafe { rust_dcq_push_copy(std::ptr::null(), 0, 0, 0) }, -1);
+            assert_eq!({ rust_dcq_push_copy(std::ptr::null(), 0, 0, 0) }, -1);
         }
     }
 
@@ -1209,7 +1289,7 @@ mod tests {
 
     #[test]
     fn test_color_from_u32() {
-        unsafe {
+        {
             let c = color_from_u32(0xFF8040C0);
             assert_eq!(c.r, 0xFF);
             assert_eq!(c.g, 0x80);
@@ -1220,7 +1300,7 @@ mod tests {
 
     #[test]
     fn test_color_from_u32_black() {
-        unsafe {
+        {
             let c = color_from_u32(0x00000000);
             assert_eq!(c.r, 0);
             assert_eq!(c.g, 0);
@@ -1231,7 +1311,7 @@ mod tests {
 
     #[test]
     fn test_color_from_u32_white() {
-        unsafe {
+        {
             let c = color_from_u32(0xFFFFFFFF);
             assert_eq!(c.r, 0xFF);
             assert_eq!(c.g, 0xFF);
@@ -1244,7 +1324,7 @@ mod tests {
 
     #[test]
     fn test_screen_from_index() {
-        unsafe {
+        {
             assert_eq!(screen_from_index(0), Some(Screen::Main));
             assert_eq!(screen_from_index(1), Some(Screen::Extra));
             assert_eq!(screen_from_index(2), Some(Screen::Transition));

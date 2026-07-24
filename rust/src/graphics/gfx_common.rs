@@ -743,6 +743,14 @@ pub fn init_global_state() -> &'static Mutex<GraphicsState> {
 pub fn global_state() -> &'static Mutex<GraphicsState> {
     GLOBAL_STATE.get().expect("graphics state not initialized")
 }
+// SAFETY: GraphicsState contains a GraphicsDriver trait object that we only access
+// from the main thread per SDL2 requirements. The actual drivers implement Send/Sync
+// via unsafe impls. This is safe because:
+// 1. All graphics operations happen on the main thread
+// 2. SDL2 requires main-thread-only usage
+// 3. The Mutex ensures only one thread accesses the state at a time
+unsafe impl Send for GraphicsState {}
+unsafe impl Sync for GraphicsState {}
 
 #[cfg(test)]
 mod tests {
@@ -1045,11 +1053,3 @@ mod tests {
         assert!(!guard.is_initialized());
     }
 }
-// SAFETY: GraphicsState contains a GraphicsDriver trait object that we only access
-// from the main thread per SDL2 requirements. The actual drivers implement Send/Sync
-// via unsafe impls. This is safe because:
-// 1. All graphics operations happen on the main thread
-// 2. SDL2 requires main-thread-only usage
-// 3. The Mutex ensures only one thread accesses the state at a time
-unsafe impl Send for GraphicsState {}
-unsafe impl Sync for GraphicsState {}

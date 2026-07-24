@@ -937,7 +937,9 @@ fn spawn_c_thread(
         unsafe { func(data) }
     })
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_thread_spawn(
     name: *const c_char,
@@ -957,6 +959,9 @@ pub unsafe extern "C" fn rust_thread_spawn(
 }
 
 /// Spawn a thread with no caller-visible join handle.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Dropping the `JoinHandle` intentionally detaches the Rust thread.
 /// This helper contains spawn failure within the subsystem boundary,
@@ -1051,6 +1056,14 @@ pub unsafe extern "C" fn rust_hibernate_thread(msecs: u32) {
 }
 
 #[no_mangle]
+#[allow(
+    clippy::missing_safety_doc,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 pub unsafe extern "C" fn rust_thread_local_create() -> *mut c_void {
     let existing = current_ffi_thread_local();
     if !existing.is_null() {
@@ -1061,7 +1074,9 @@ pub unsafe extern "C" fn rust_thread_local_create() -> *mut c_void {
     ensure_ffi_thread_local();
     current_ffi_thread_local() as *mut c_void
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_thread_local_destroy(thread_local: *mut c_void) {
     if thread_local.is_null() {
@@ -1076,7 +1091,9 @@ pub unsafe extern "C" fn rust_thread_local_destroy(thread_local: *mut c_void) {
     destroy_ffi_thread_local(thread_local);
     clear_rust_thread_local();
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_my_thread_local() -> *mut c_void {
     current_ffi_thread_local() as *mut c_void
@@ -1176,6 +1193,14 @@ pub unsafe extern "C" fn rust_mutex_unlock(mutex: *mut RustMutex) {
 }
 
 #[no_mangle]
+#[allow(
+    clippy::missing_safety_doc,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 pub unsafe extern "C" fn rust_mutex_depth(mutex: *mut RustMutex) -> c_int {
     if mutex.is_null() {
         return 0;

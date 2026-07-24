@@ -140,18 +140,10 @@ impl Default for PixelFormat {
 }
 
 impl PixelFormat {
-    /// Creates a new pixel format with the specified parameters
-    pub fn new(
-        bytes_per_pixel: u8,
-        r_shift: u8,
-        g_shift: u8,
-        b_shift: u8,
-        a_shift: u8,
-        r_loss: u8,
-        g_loss: u8,
-        b_loss: u8,
-        a_loss: u8,
-    ) -> Self {
+    /// Creates a new pixel format from RGBA shift and loss values.
+    pub fn new(bytes_per_pixel: u8, shifts: [u8; 4], losses: [u8; 4]) -> Self {
+        let [r_shift, g_shift, b_shift, a_shift] = shifts;
+        let [r_loss, g_loss, b_loss, a_loss] = losses;
         Self {
             bytes_per_pixel,
             r_shift,
@@ -286,16 +278,16 @@ impl DukVideoHeader {
 
         // Parse lumas (8 x i16 = 16 bytes, starting at offset 16)
         let mut lumas = [0i16; 8];
-        for i in 0..8 {
+        for (i, luma) in lumas.iter_mut().enumerate() {
             let offset = 16 + i * 2;
-            lumas[i] = i16::from_be_bytes([data[offset], data[offset + 1]]);
+            *luma = i16::from_be_bytes([data[offset], data[offset + 1]]);
         }
 
         // Parse chromas (8 x i16 = 16 bytes, starting at offset 32)
         let mut chromas = [0i16; 8];
-        for i in 0..8 {
+        for (i, chroma) in chromas.iter_mut().enumerate() {
             let offset = 32 + i * 2;
-            chromas[i] = i16::from_be_bytes([data[offset], data[offset + 1]]);
+            *chroma = i16::from_be_bytes([data[offset], data[offset + 1]]);
         }
 
         Ok(Self {
@@ -589,6 +581,12 @@ mod tests {
         assert_eq!(fmt.g_loss, 0);
         assert_eq!(fmt.b_loss, 0);
         assert_eq!(fmt.a_loss, 0);
+    }
+
+    #[test]
+    fn test_pixel_format_new_maps_rgba_channels() {
+        let fmt = PixelFormat::new(2, [11, 5, 0, 0], [3, 2, 3, 8]);
+        assert_eq!(fmt, PixelFormat::rgb565());
     }
 
     #[test]

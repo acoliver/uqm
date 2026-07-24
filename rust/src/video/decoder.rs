@@ -517,7 +517,7 @@ impl DukVideoDecoder {
                 }
 
                 // Line 0 (4 pixels)
-                for i in 0..4 {
+                for (i, pixel) in pix.iter_mut().enumerate() {
                     // Bounds check for iseq
                     if iseq + 1 >= NUM_VEC_ITEMS {
                         break;
@@ -529,8 +529,8 @@ impl DukVideoDecoder {
 
                     accum0 = accum0.wrapping_add(delta >> 1);
                     corr0 ^= corr;
-                    pix[i] = pix[i].wrapping_add(accum0);
-                    pix[i] ^= corr0;
+                    *pixel = pixel.wrapping_add(accum0);
+                    *pixel ^= corr0;
 
                     if (delta & DUCK_END_OF_SEQUENCE) != 0 {
                         if src_idx < payload_end {
@@ -540,11 +540,11 @@ impl DukVideoDecoder {
                         iseq = 0;
                     }
 
-                    self.decode_buffer[d_p0_base + x * 4 + i] = pix[i] as u32;
+                    self.decode_buffer[d_p0_base + x * 4 + i] = *pixel as u32;
                 }
 
                 // Line 1 (4 pixels)
-                for i in 0..4 {
+                for (i, pixel) in pix.iter_mut().enumerate() {
                     // Bounds check for iseq
                     if iseq + 1 >= NUM_VEC_ITEMS {
                         break;
@@ -556,8 +556,8 @@ impl DukVideoDecoder {
 
                     accum1 = accum1.wrapping_add(delta >> 1);
                     corr1 ^= corr;
-                    pix[i] = pix[i].wrapping_add(accum1);
-                    pix[i] ^= corr1;
+                    *pixel = pixel.wrapping_add(accum1);
+                    *pixel ^= corr1;
 
                     if (delta & DUCK_END_OF_SEQUENCE) != 0 {
                         if src_idx < payload_end {
@@ -567,7 +567,7 @@ impl DukVideoDecoder {
                         iseq = 0;
                     }
 
-                    self.decode_buffer[d_p1_base + x * 4 + i] = pix[i] as u32;
+                    self.decode_buffer[d_p1_base + x * 4 + i] = *pixel as u32;
                 }
             }
         }
@@ -717,9 +717,7 @@ mod tests {
             duk_data.extend_from_slice(&0x20u32.to_be_bytes()); // vsize
                                                                 // Frame data (version + padding + payload)
             duk_data.extend_from_slice(&0x0300u16.to_be_bytes()); // V3 version
-            for _ in 0..0x1E {
-                duk_data.push(0);
-            }
+            duk_data.extend(std::iter::repeat_n(0, 0x1E));
         }
         std::fs::write(dir.join(format!("{}.duk", basename)), &duk_data).unwrap();
     }
@@ -734,7 +732,7 @@ mod tests {
         assert!(matches!(result.unwrap_err(), VideoError::IoError(_)));
 
         // Create only .frm file
-        std::fs::write(temp_dir.path().join("partial.frm"), &[0u8; 4]).unwrap();
+        std::fs::write(temp_dir.path().join("partial.frm"), [0u8; 4]).unwrap();
         let result = DukVideoDecoder::open(temp_dir.path(), "partial");
         assert!(result.is_err());
     }
@@ -841,7 +839,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         // Create .frm file with invalid size (not multiple of 4)
-        std::fs::write(temp_dir.path().join("bad.frm"), &[0u8, 1, 2]).unwrap();
+        std::fs::write(temp_dir.path().join("bad.frm"), [0u8, 1, 2]).unwrap();
 
         let result = DukVideoDecoder::read_frame_offsets(&temp_dir.path().join("bad.frm"));
         assert!(matches!(result, Err(VideoError::BadFile(_))));
@@ -882,6 +880,8 @@ mod tests {
         let decoder = DukVideoDecoder::open(temp_dir.path(), "test").unwrap();
         let header = decoder.header();
 
+        assert_eq!(header.block_dimensions, (10, 8));
+        assert_eq!(header.width(), 40);
         assert_eq!(header.block_dimensions, (10, 8));
         assert_eq!(header.width(), 40);
         assert_eq!(header.height(), 32);

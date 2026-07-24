@@ -3,8 +3,8 @@
 // WRAP_DELTA macros. Element iteration via #[repr(C)] field access.
 
 use super::battle_types::{cosine, sine};
-use crate::math::ARCTAN;
 use super::element::{Element, ElementFlags, HElement};
+use crate::math::ARCTAN;
 
 use std::os::raw::{c_int, c_void};
 
@@ -18,11 +18,15 @@ extern "C" {
     fn uqm_wrap_delta_y(dy: i16) -> i16;
 
     // Graphics intersection — real C functions
-    fn DrawablesIntersect(
-        control0: *mut c_void,
-        control1: *mut c_void,
-        max_time: u16,
-    ) -> u16;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
+    fn DrawablesIntersect(control0: *mut c_void, control1: *mut c_void, max_time: u16) -> u16;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn SetEquFrameIndex(dst_frame: *const c_void, src_frame: *const c_void) -> *const c_void;
 }
 
@@ -51,11 +55,8 @@ const PLAYER_SHIP: u16 = 1 << 2;
 /// C: TIME_SHIFT=8, MAX_TIME_VALUE = (1<<8)+1 = 257
 const MAX_TIME_VALUE: u16 = 257;
 
-/// C: SHIP_AT_MAX_SPEED (1 << 7) — from races.h
-const SHIP_AT_MAX_SPEED: u16 = 1 << 7;
-
-/// C: SHIP_IN_GRAVITY_WELL (1 << 8) — from races.h
-const SHIP_IN_GRAVITY_WELL: u16 = 1 << 8;
+// C: SHIP_AT_MAX_SPEED (1 << 7) — from races.h
+// C: SHIP_IN_GRAVITY_WELL (1 << 8) — from races.h
 
 /// C: GRAVITY_MASS(m) = (m > MAX_SHIP_MASS * 10) = (m > 100)
 fn gravity_mass(mass: u8) -> bool {
@@ -78,6 +79,12 @@ fn colliding_element(elem: &Element) -> bool {
 /// cast, UnlockElement is a no-op (see displist.h macros).
 pub struct ElementQueueIter {
     next: HElement,
+}
+
+impl Default for ElementQueueIter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ElementQueueIter {
@@ -113,14 +120,17 @@ impl Iterator for ElementQueueIter {
 /// a non-gravity body near a gravity body, applies gravitational velocity
 /// delta. Returns TRUE if a gravity body is found nearby.
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
     if element.is_null() {
         return 0;
     }
 
     let elem = unsafe { &*element };
-    let has_gravity = colliding_element(elem)
-        && gravity_mass(elem.mass_points.wrapping_add(1));
+    let has_gravity = colliding_element(elem) && gravity_mass(elem.mass_points.wrapping_add(1));
 
     let mut retval = false;
 
@@ -189,13 +199,11 @@ pub extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
             if (test_elem.state_flags.bits() & PLAYER_SHIP) != 0 {
                 let starship_ptr = test_elem.p_parent as *mut u16;
                 if !starship_ptr.is_null() {
-                    unsafe {
-                        // StarShipPtr->cur_status_flags is at a fixed offset;
-                        // We access it as a raw u16 (StatusFlags is u16).
-                        // TODO: Use proper #[repr(C)] StarShip once layout verified.
-                        // For now, the C caller still manages these flags via the
-                        // process loop's ship update path.
-                    }
+                    // StarShipPtr->cur_status_flags is at a fixed offset;
+                    // We access it as a raw u16 (StatusFlags is u16).
+                    // TODO: Use proper #[repr(C)] StarShip once layout verified.
+                    // For now, the C caller still manages these flags via the
+                    // process loop's ship update path.
                 }
             }
         }
@@ -213,6 +221,10 @@ pub extern "C" fn CalculateGravity(element: *mut Element) -> c_int {
 /// Checks if the element overlaps any colliding element or player ship.
 /// Uses DrawablesIntersect for bounding-box collision detection.
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
     if element.is_null() {
         return 0;
@@ -220,34 +232,43 @@ pub extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
 
     let elem = unsafe { &*element };
 
-    // Build INTERSECT_CONTROL for the test element
-    // INTERSECT_CONTROL = { STAMP IntersectStamp; POINT EndPoint; }
-    // STAMP = { POINT origin; FRAME frame; }
-    // POINT = { SIZE x; SIZE y; } = two i16s
-    // FRAME = pointer (8 bytes on 64-bit)
-    // Total INTERSECT_CONTROL: origin(4) + frame(8) + endpoint(4) = 16 bytes
-    // But FRAME alignment pushes it to: origin(4)+pad(4)+frame(8)+endpoint(4)+pad(4) = 24
-    // Actually, let's use a generous buffer and pass it to C.
+    // C INTERSECT_CONTROL layout (from gfxlib.h):
+    //   TIME_VALUE last_time_val;   // u16 (2 bytes)
+    //   POINT EndPoint;             // COORD x, y = i16, i16 (4 bytes)
+    //   STAMP IntersectStamp;       // POINT origin (4 bytes) + FRAME frame (8 bytes)
+    // Total: 2 + 4 + 4 + 8 = 18 bytes, padded to 24 (FRAME is 8-byte aligned)
     #[repr(C)]
     struct IntersectControl {
-        origin_x: i16,
-        origin_y: i16,
-        frame: *const c_void,
-        end_x: i16,
-        end_y: i16,
+        last_time_val: u16,
+        end_point: Point,
+        intersect_stamp: Stamp,
     }
 
-    let mut control = IntersectControl {
-        origin_x: (elem.current.location.x >> ONE_SHIFT) as i16, // WORLD_TO_DISPLAY
-        origin_y: (elem.current.location.y >> ONE_SHIFT) as i16,
-        frame: unsafe {
-            SetEquFrameIndex(
-                *elem.current.farray,
-                elem.current.frame,
-            )
+    #[repr(C)]
+    struct Point {
+        x: i16,
+        y: i16,
+    }
+
+    #[repr(C)]
+    struct Stamp {
+        origin: Point,
+        frame: *const c_void,
+    }
+
+    let elem_control = IntersectControl {
+        last_time_val: 0,
+        end_point: Point {
+            x: (elem.current.location.x >> ONE_SHIFT),
+            y: (elem.current.location.y >> ONE_SHIFT),
         },
-        end_x: (elem.current.location.x >> ONE_SHIFT) as i16,
-        end_y: (elem.current.location.y >> ONE_SHIFT) as i16,
+        intersect_stamp: Stamp {
+            origin: Point {
+                x: (elem.current.location.x >> ONE_SHIFT),
+                y: (elem.current.location.y >> ONE_SHIFT),
+            },
+            frame: unsafe { SetEquFrameIndex(*elem.current.farray, elem.current.frame) },
+        },
     };
 
     for test_elem_ptr in ElementQueueIter::new() {
@@ -261,23 +282,27 @@ pub extern "C" fn TimeSpaceMatterConflict(element: *mut Element) -> c_int {
             continue;
         }
 
-        let mut test_control = IntersectControl {
-            origin_x: (test_elem.current.location.x >> ONE_SHIFT) as i16,
-            origin_y: (test_elem.current.location.y >> ONE_SHIFT) as i16,
-            frame: unsafe {
-                SetEquFrameIndex(
-                    *test_elem.current.farray,
-                    test_elem.current.frame,
-                )
+        let test_control = IntersectControl {
+            last_time_val: 0,
+            end_point: Point {
+                x: (test_elem.current.location.x >> ONE_SHIFT),
+                y: (test_elem.current.location.y >> ONE_SHIFT),
             },
-            end_x: (test_elem.current.location.x >> ONE_SHIFT) as i16,
-            end_y: (test_elem.current.location.y >> ONE_SHIFT) as i16,
+            intersect_stamp: Stamp {
+                origin: Point {
+                    x: (test_elem.current.location.x >> ONE_SHIFT),
+                    y: (test_elem.current.location.y >> ONE_SHIFT),
+                },
+                frame: unsafe {
+                    SetEquFrameIndex(*test_elem.current.farray, test_elem.current.frame)
+                },
+            },
         };
 
         let hit = unsafe {
             DrawablesIntersect(
-                &mut control as *mut _ as *mut c_void,
-                &mut test_control as *mut _ as *mut c_void,
+                &elem_control as *const _ as *mut c_void,
+                &test_control as *const _ as *mut c_void,
                 MAX_TIME_VALUE,
             )
         };

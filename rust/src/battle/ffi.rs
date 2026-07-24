@@ -8,7 +8,9 @@ use super::element::{Element, Point};
 use super::netplay::CrcState;
 use super::velocity::VelocityDesc;
 use super::weapon::{compute_blast_direction, compute_track_facing, weapon_collision};
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_get_current_components(
     vel: *const VelocityDesc,
@@ -29,7 +31,9 @@ pub unsafe extern "C" fn rust_velocity_get_current_components(
 
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_get_next_components(
     vel: *mut VelocityDesc,
@@ -50,7 +54,9 @@ pub unsafe extern "C" fn rust_velocity_get_next_components(
 
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_set_vector(
     vel: *mut VelocityDesc,
@@ -67,7 +73,9 @@ pub unsafe extern "C" fn rust_velocity_set_vector(
     vel.set_vector(magnitude, facing);
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_set_components(
     vel: *mut VelocityDesc,
@@ -82,7 +90,9 @@ pub unsafe extern "C" fn rust_velocity_set_components(
     vel.set_components(dx, dy);
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_delta_components(
     vel: *mut VelocityDesc,
@@ -97,7 +107,9 @@ pub unsafe extern "C" fn rust_velocity_delta_components(
     vel.delta_components(dx, dy);
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_zero(vel: *mut VelocityDesc) -> i32 {
     if vel.is_null() {
@@ -108,7 +120,9 @@ pub unsafe extern "C" fn rust_velocity_zero(vel: *mut VelocityDesc) -> i32 {
     vel.zero();
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_velocity_is_zero(vel: *const VelocityDesc) -> i32 {
     if vel.is_null() {
@@ -122,7 +136,9 @@ pub unsafe extern "C" fn rust_velocity_is_zero(vel: *const VelocityDesc) -> i32 
         0
     }
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_collide(elem0: *mut Element, elem1: *mut Element) -> i32 {
     if elem0.is_null() || elem1.is_null() {
@@ -134,7 +150,9 @@ pub unsafe extern "C" fn rust_battle_collide(elem0: *mut Element, elem1: *mut El
     elastic_collide(elem0, elem1);
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_weapon_collision(
     weapon: *mut Element,
@@ -152,12 +170,16 @@ pub unsafe extern "C" fn rust_battle_weapon_collision(
     weapon_collision(weapon, &weapon_point, target, &target_point);
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_compute_blast_direction(target_facing: i32) -> i32 {
     compute_blast_direction(target_facing as u8) as i32
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_track_facing(
     src_x: i32,
@@ -189,7 +211,9 @@ pub unsafe extern "C" fn rust_battle_track_facing(
         current_facing as u16,
     ) as i32
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_crc_init(state: *mut CrcState) -> i32 {
     if state.is_null() {
@@ -200,7 +224,9 @@ pub unsafe extern "C" fn rust_battle_crc_init(state: *mut CrcState) -> i32 {
     state.init();
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_crc_process_element(
     state: *mut CrcState,
@@ -215,7 +241,9 @@ pub unsafe extern "C" fn rust_battle_crc_process_element(
     state.process_element(element);
     0
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_crc_finish(state: *const CrcState) -> u32 {
     if state.is_null() {
@@ -225,17 +253,23 @@ pub unsafe extern "C" fn rust_battle_crc_finish(state: *const CrcState) -> u32 {
     let state = unsafe { &*state };
     state.finish()
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_sine(angle: i32, magnitude: i32) -> i32 {
     sine(angle as u16, magnitude)
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_cosine(angle: i32, magnitude: i32) -> i32 {
     cosine(angle as u16, magnitude)
 }
-
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_arctan(dx: i32, dy: i32) -> i32 {
     arctan(dx, dy) as i32
@@ -252,6 +286,9 @@ pub unsafe extern "C" fn rust_battle_arctan(dx: i32, dy: i32) -> i32 {
 // ---------------------------------------------------------------------------
 
 /// Battle entry point — delegates to lifecycle::battle()
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C wrapper: Battle() in rust_battle_wrappers.c
 /// Returns: 1 if hyperspace exit, 0 otherwise
@@ -266,6 +303,9 @@ pub unsafe extern "C" fn rust_battle_entry() -> i32 {
 }
 
 /// Per-frame battle logic — replaces DoBattle body
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C wrapper: DoBattle thin shell in battle.c
 /// Returns: TRUE to continue, FALSE to end battle
@@ -278,6 +318,9 @@ pub unsafe extern "C" fn rust_battle_frame() -> i32 {
 }
 
 /// Initialize ships — delegates to lifecycle::init_ships()
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C wrapper: InitShips() in rust_battle_wrappers.c
 /// Returns: number of ships initialized
@@ -290,6 +333,9 @@ pub unsafe extern "C" fn rust_battle_init_ships() -> i32 {
 }
 
 /// Deinitialize ships — delegates to lifecycle::uninit_ships()
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_uninit_ships() {
     let _ = std::panic::catch_unwind(|| {
@@ -298,6 +344,9 @@ pub unsafe extern "C" fn rust_battle_uninit_ships() {
 }
 
 /// Initialize shared battle space assets
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_init_space() {
     let _ = std::panic::catch_unwind(|| {
@@ -306,6 +355,9 @@ pub unsafe extern "C" fn rust_battle_init_space() {
 }
 
 /// Release shared battle space assets
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_battle_uninit_space() {
     let _ = std::panic::catch_unwind(|| {
@@ -314,6 +366,9 @@ pub unsafe extern "C" fn rust_battle_uninit_space() {
 }
 
 /// AI dispatch — delegates to ai::computer_intelligence()
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C wrapper: computer_intelligence() in rust_battle_wrappers.c
 /// Returns: AI-computed input flags for the ship
@@ -329,6 +384,9 @@ pub unsafe extern "C" fn rust_computer_intelligence(
 }
 
 /// Load/play battle music
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C wrapper: BattleSong() in rust_battle_wrappers.c
 #[no_mangle]
@@ -340,6 +398,9 @@ pub unsafe extern "C" fn rust_battle_song(do_play: i32) {
 }
 
 /// Free battle music resources
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_free_battle_song() {
     let _ = std::panic::catch_unwind(|| {
@@ -348,6 +409,9 @@ pub unsafe extern "C" fn rust_free_battle_song() {
 }
 
 /// Get player input processing order
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Returns: player index (0 or 1) for first processor
 #[no_mangle]
@@ -545,15 +609,19 @@ mod tests {
     #[test]
     fn battle_weapon_collision_ffi_round_trip() {
         unsafe {
-            let mut ffi_weapon = Element::default();
-            ffi_weapon.mass_points = 4;
-            ffi_weapon.crew_or_hp = 1;
-            ffi_weapon.life_span = NORMAL_LIFE;
+            let mut ffi_weapon = Element {
+                mass_points: 4,
+                crew_or_hp: 1,
+                life_span: NORMAL_LIFE,
+                ..Element::default()
+            };
 
-            let mut ffi_target = Element::default();
-            ffi_target.crew_or_hp = 9;
-            ffi_target.life_span = NORMAL_LIFE;
-            ffi_target.state_flags = ElementFlags::FINITE_LIFE;
+            let mut ffi_target = Element {
+                crew_or_hp: 9,
+                life_span: NORMAL_LIFE,
+                state_flags: ElementFlags::FINITE_LIFE,
+                ..Element::default()
+            };
 
             let mut direct_weapon = ffi_weapon;
             let mut direct_target = ffi_target;
@@ -623,13 +691,15 @@ mod tests {
     #[test]
     fn crc_ffi_round_trip() {
         unsafe {
-            let mut elem = Element::default();
-            elem.state_flags = ElementFlags::FINITE_LIFE;
-            elem.life_span = NORMAL_LIFE;
-            elem.crew_or_hp = 7;
-            elem.mass_points = 3;
-            elem.turn_wait = 2;
-            elem.thrust_or_blast = 1;
+            let mut elem = Element {
+                state_flags: ElementFlags::FINITE_LIFE,
+                life_span: NORMAL_LIFE,
+                crew_or_hp: 7,
+                mass_points: 3,
+                turn_wait: 2,
+                thrust_or_blast: 1,
+                ..Element::default()
+            };
             elem.velocity.set_components(9, -6);
             elem.current.location = Point::new(4, 5);
             elem.next.location = Point::new(6, 7);

@@ -11,6 +11,10 @@ use super::events::Event;
 static GLOBAL_GAME_CLOCK: Mutex<Option<GameClock>> = Mutex::new(None);
 
 /// Initialize the global game clock
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_init_game_clock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -20,6 +24,10 @@ pub unsafe extern "C" fn rust_init_game_clock() {
 }
 
 /// Set the game clock rate (ticks per day)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_set_clock_rate(ticks_per_day: usize) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -30,6 +38,10 @@ pub unsafe extern "C" fn rust_set_clock_rate(ticks_per_day: usize) {
 
 /// Tick the clock forward one tick
 /// Returns 1 if day changed, 0 otherwise
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_tick() -> i32 {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -41,6 +53,10 @@ pub unsafe extern "C" fn rust_clock_tick() -> i32 {
 }
 
 /// Advance the clock by a specific number of ticks
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_advance_ticks(ticks: usize) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -50,6 +66,10 @@ pub unsafe extern "C" fn rust_clock_advance_ticks(ticks: usize) {
 }
 
 /// Advance the clock by a specific number of days
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_advance_days(days: u32) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -59,6 +79,10 @@ pub unsafe extern "C" fn rust_clock_advance_days(days: u32) {
 }
 
 /// Get the current day
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_clock_day() -> u8 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -66,6 +90,10 @@ pub unsafe extern "C" fn rust_get_clock_day() -> u8 {
 }
 
 /// Get the current month
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_clock_month() -> u8 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -73,6 +101,10 @@ pub unsafe extern "C" fn rust_get_clock_month() -> u8 {
 }
 
 /// Get the current year
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_clock_year() -> u32 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -80,6 +112,10 @@ pub unsafe extern "C" fn rust_get_clock_year() -> u32 {
 }
 
 /// Get day fraction (0.0 to 1.0)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_day_fraction() -> f64 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -87,6 +123,10 @@ pub unsafe extern "C" fn rust_get_day_fraction() -> f64 {
 }
 
 /// Add an absolute event
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_add_event_absolute(
     year: u32,
@@ -111,6 +151,10 @@ pub unsafe extern "C" fn rust_add_event_absolute(
 }
 
 /// Add a relative event (days from now)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_add_event_relative(
     days_offset: u32,
@@ -132,6 +176,10 @@ pub unsafe extern "C" fn rust_add_event_relative(
 }
 
 /// Remove an event by ID
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_remove_event(event_id: u32) -> i32 {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -146,6 +194,10 @@ pub unsafe extern "C" fn rust_remove_event(event_id: u32) -> i32 {
 }
 
 /// Clear all events
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clear_events() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -155,6 +207,10 @@ pub unsafe extern "C" fn rust_clear_events() {
 }
 
 /// Check if the clock is running
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_is_running() -> i32 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -162,6 +218,10 @@ pub unsafe extern "C" fn rust_clock_is_running() -> i32 {
 }
 
 /// Lock the clock (for debugging)
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_lock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -171,6 +231,10 @@ pub unsafe extern "C" fn rust_clock_lock() {
 }
 
 /// Unlock the clock
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_unlock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -180,6 +244,10 @@ pub unsafe extern "C" fn rust_clock_unlock() {
 }
 
 /// Check if the clock is locked
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_is_locked() -> i32 {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -187,6 +255,10 @@ pub unsafe extern "C" fn rust_clock_is_locked() -> i32 {
 }
 
 /// Get number of ticks per day
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_ticks_per_day() -> usize {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -194,6 +266,10 @@ pub unsafe extern "C" fn rust_get_ticks_per_day() -> usize {
 }
 
 /// Get current tick count
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_tick_count() -> usize {
     let clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -201,18 +277,30 @@ pub unsafe extern "C" fn rust_get_tick_count() -> usize {
 }
 
 /// Check if a year is a leap year
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_is_leap_year(year: u32) -> i32 {
     if GameDate::is_leap_year(year) { 1 } else { 0 }
 }
 
 /// Get days in month for a given year
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_days_in_month(month: u8, year: u32) -> u8 {
     GameDate::days_in_month(month, year)
 }
 
 /// Reset the clock to initial state
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_reset_clock() {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();
@@ -222,6 +310,10 @@ pub unsafe extern "C" fn rust_reset_clock() {
 }
 
 /// Set a specific date
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_set_clock_date(day: u8, month: u8, year: u32) {
     let mut clock = GLOBAL_GAME_CLOCK.lock().unwrap();

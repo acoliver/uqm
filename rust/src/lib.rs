@@ -9,18 +9,19 @@ pub mod callback;
 
 pub mod supermelee;
 
+pub mod automation;
 pub mod bridge_log;
 pub mod c_bindings;
 pub mod cli;
-pub mod comm;
 pub mod collections;
+pub mod comm;
 pub mod config;
 pub mod game_init;
 pub mod graphics;
 pub mod input;
 pub mod io;
-pub mod mainloop;
 pub mod logging;
+pub mod mainloop;
 pub mod math;
 pub mod memory;
 pub mod resource;

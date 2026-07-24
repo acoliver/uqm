@@ -1,7 +1,6 @@
 // SIS Flagship - Modular ship: configurable blasters + point defense
 // @plan PLAN-20260314-SHIPS.P13
 
-use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
     Characteristics, FleetStuff, IntelStuff, RaceDescTemplate, ShipData, ShipFlags, ShipInfo,
@@ -21,7 +20,9 @@ const SHIP_MASS: u8 = 10; // MAX_SHIP_MASS
 
 const WEAPON_ENERGY_COST: u8 = 1; // modified by weapon modules
 const WEAPON_WAIT: u8 = 6;
+#[cfg(test)]
 const BLASTER_DAMAGE: u16 = 2;
+#[cfg(test)]
 const BLASTER_LIFE: u16 = 12;
 
 const SPECIAL_ENERGY_COST: u8 = 0; // increased by antimissile defense modules
@@ -68,11 +69,7 @@ impl ShipBehavior for SisShip {
     }
 
     /// C: sis_battle_preprocess — disables weapon/special if no modules installed.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         // If no point defense installed, disable special
         if ship.special_counter == 0 {
             // Energy cost 0 means no antimissile modules
@@ -113,7 +110,7 @@ impl ShipBehavior for SisShip {
     /// C: initialize_blasters — fires configurable blasters based on module loadout.
     fn init_weapon(
         &mut self,
-        ship: &ShipState,
+        _ship: &ShipState,
         _ctx: &BattleContext,
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
@@ -122,13 +119,13 @@ impl ShipBehavior for SisShip {
             // InitWeaponSlots configures MissileBlocks from GLOBAL_SIS(ModuleSlots)
             // The C init_weapon_func handles all blaster creation via SIS_DATA
             // We don't replicate this in Rust — it stays in C
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
         Ok(vec![WeaponElement {
             offset: (0, 0),
-            facing: ship.ship_facing,
+            facing: _ship.ship_facing,
             velocity: (96, 0), // DISPLAY_TO_WORLD(24)
             life_span: BLASTER_LIFE,
             hit_points: 2,
@@ -148,7 +145,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = SisShip::default();
+        let ship = SisShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 16);
@@ -161,13 +158,17 @@ mod tests {
 
     #[test]
     fn weapon_fires_blaster() {
-        let mut ship = SisShip::default();
+        let mut ship = SisShip;
         let state = ShipState {
             energy_level: 42,
             max_energy: 42,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
@@ -176,7 +177,7 @@ mod tests {
 
     #[test]
     fn point_defense_sets_counter() {
-        let mut ship = SisShip::default();
+        let mut ship = SisShip;
         let mut state = ShipState {
             crew_level: 42,
             energy_level: 42,
@@ -184,7 +185,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.special_counter, SPECIAL_WAIT);
@@ -192,9 +197,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = SisShip::default();
+        let mut ship = SisShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

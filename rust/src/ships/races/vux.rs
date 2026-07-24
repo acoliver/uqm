@@ -1,6 +1,7 @@
 // VUX Intruder - Laser + limpet + aggressive warp-in
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, LaserBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,15 +22,23 @@ const SHIP_MASS: u8 = 6;
 
 const WEAPON_ENERGY_COST: u8 = 1;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const VUX_OFFSET: i16 = 12;
+#[cfg(not(test))]
 const LASER_BASE: i32 = 150;
 
 const SPECIAL_ENERGY_COST: u8 = 2;
 const SPECIAL_WAIT: u8 = 7;
+// C constants reserved for full limpet Rust port.
+#[expect(dead_code)]
 const LIMPET_LIFE: u16 = 80;
+#[expect(dead_code)]
 const LIMPET_HITS: i16 = 1;
+#[expect(dead_code)]
 const LIMPET_DAMAGE: i16 = 0;
+#[expect(dead_code)]
 const LIMPET_SPEED: i16 = 25;
+#[expect(dead_code)]
 const LIMPET_OFFSET: i16 = 8;
 
 #[derive(Debug, Default)]
@@ -107,8 +116,7 @@ impl ShipBehavior for VuxShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
                 // spawn_limpets handled by C postprocess_func
             }
@@ -135,7 +143,7 @@ impl ShipBehavior for VuxShip {
         #[cfg(not(test))]
         {
             let laser_range =
-                battle_bridge::bridge::display_to_world((LASER_BASE + VUX_OFFSET as i32) as i32);
+                battle_bridge::bridge::display_to_world(LASER_BASE + VUX_OFFSET as i32);
             let angle = battle_bridge::bridge::facing_to_angle(ship.ship_facing as u16);
 
             let block = LaserBlock {
@@ -145,7 +153,7 @@ impl ShipBehavior for VuxShip {
                 ey: battle_bridge::bridge::sine(angle, laser_range as i16) as i16,
                 face: ship.ship_facing as u16,
                 sender: ship.player_nr,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 pixoffs: VUX_OFFSET,
                 color: battle_bridge::Color {
                     r: 0x55,
@@ -155,7 +163,7 @@ impl ShipBehavior for VuxShip {
                 },
             };
             let _ = battle_bridge::bridge::create_laser(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -182,14 +190,20 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = VuxShip::default();
+        let ship = VuxShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 12);
         assert_eq!(desc.ship_info.max_crew, 20);
         assert_eq!(desc.ship_info.max_energy, 40);
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::IMMEDIATE_WEAPON));
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_SPECIAL));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::IMMEDIATE_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SEEKING_SPECIAL));
         assert_eq!(desc.characteristics.turn_wait, 6);
         assert_eq!(desc.characteristics.special_energy_cost, 2);
         assert_eq!(desc.fleet.known_loc, (4412, 1558));
@@ -197,7 +211,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = VuxShip::default();
+        let mut ship = VuxShip;
         let state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -218,7 +232,7 @@ mod tests {
 
     #[test]
     fn limpet_drains_energy() {
-        let mut ship = VuxShip::default();
+        let mut ship = VuxShip;
         let mut state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -241,7 +255,7 @@ mod tests {
 
     #[test]
     fn limpet_denied_low_energy() {
-        let mut ship = VuxShip::default();
+        let mut ship = VuxShip;
         let mut state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -264,7 +278,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = VuxShip::default();
+        let mut ship = VuxShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

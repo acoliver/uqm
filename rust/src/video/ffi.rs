@@ -42,10 +42,6 @@ extern "C" {
     // Provided by C SDL backend.
     static SDL_Screen: *mut SDL_Surface;
 
-    // Logical screen dimensions from gfx_common.h (internal 320x240)
-    static ScreenWidth: c_int;
-    static ScreenHeight: c_int;
-
     // Actual window dimensions for direct presentation
     static ScreenWidthActual: c_int;
     static ScreenHeightActual: c_int;
@@ -54,6 +50,10 @@ extern "C" {
 // Minimal SDL types needed for direct pixel writes.
 #[allow(non_camel_case_types)]
 #[repr(C)]
+#[allow(
+    non_snake_case,
+    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub struct SDL_PixelFormat {
     pub format: u32,
     pub palette: *mut c_void,
@@ -80,11 +80,19 @@ pub struct SDL_PixelFormat {
 // UIO helpers
 
 // Re-export minimal canvas lock/unlock for internal modules.
+/// Lock a legacy C canvas for direct access.
+///
+/// # Safety
+/// `canvas` must point to a valid canvas that can be locked by the current thread.
 #[inline]
 pub unsafe fn tfb_drawcanvas_lock(canvas: *mut c_void) {
     TFB_DrawCanvas_Lock(canvas);
 }
 
+/// Unlock a legacy C canvas after direct access.
+///
+/// # Safety
+/// `canvas` must be the valid canvas pointer previously locked by this thread.
 #[inline]
 pub unsafe fn tfb_drawcanvas_unlock(canvas: *mut c_void) {
     TFB_DrawCanvas_Unlock(canvas);
@@ -160,6 +168,10 @@ fn calculate_video_scale(_src_w: u32, _src_h: u32) -> u32 {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
+#[allow(
+    non_snake_case,
+    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub struct TFB_PixelFormat {
     pub BitsPerPixel: u32,
     pub BytesPerPixel: u32,
@@ -178,6 +190,10 @@ pub struct TFB_PixelFormat {
 }
 
 #[repr(C)]
+#[allow(
+    non_snake_case,
+    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub struct TFB_VideoCallbacks {
     pub BeginFrame: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder)>,
     pub EndFrame: Option<unsafe extern "C" fn(*mut TFB_VideoDecoder)>,
@@ -207,6 +223,10 @@ pub struct TFB_VideoDecoder {
 }
 
 #[repr(C)]
+#[allow(
+    non_snake_case,
+    reason = "field names mirror the legacy C video ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub struct TFB_VideoDecoderFuncs {
     pub GetName: extern "C" fn() -> *const c_char,
     pub InitModule: extern "C" fn(flags: c_int) -> bool,
@@ -235,24 +255,44 @@ pub struct TFB_RustDukVideoDecoder {
 static RUST_DUKV_FORMAT: Mutex<Option<TFB_PixelFormat>> = Mutex::new(None);
 static RUST_DUKV_NAME: &[u8] = b"Rust DukVid\0";
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_GetName() -> *const c_char {
     RUST_DUKV_NAME.as_ptr() as *const c_char
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_InitModule(_flags: c_int) -> bool {
     true
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_TermModule() {
     if let Ok(mut guard) = RUST_DUKV_FORMAT.lock() {
         *guard = None;
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_GetStructSize() -> u32 {
     std::mem::size_of::<TFB_RustDukVideoDecoder>() as u32
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_GetError(decoder: *mut TFB_VideoDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
@@ -263,7 +303,7 @@ extern "C" fn rust_dukv_GetError(decoder: *mut TFB_VideoDecoder) -> c_int {
     }
 }
 
-extern "C" fn rust_dukv_Init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_PixelFormat) -> bool {
+extern "C" fn rust_dukv_init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_PixelFormat) -> bool {
     if decoder.is_null() {
         return false;
     }
@@ -285,6 +325,10 @@ extern "C" fn rust_dukv_Init(decoder: *mut TFB_VideoDecoder, fmt: *mut TFB_Pixel
     true
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI"
+)]
 extern "C" fn rust_dukv_Term(decoder: *mut TFB_VideoDecoder) {
     if decoder.is_null() {
         return;
@@ -303,6 +347,10 @@ extern "C" fn rust_dukv_Term(decoder: *mut TFB_VideoDecoder) {
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_Open(
     decoder: *mut TFB_VideoDecoder,
     dir: *mut uio_DirHandle,
@@ -405,6 +453,10 @@ extern "C" fn rust_dukv_Open(
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_Close(decoder: *mut TFB_VideoDecoder) {
     rust_dukv_Term(decoder);
 }
@@ -427,9 +479,9 @@ unsafe fn render_frame_to_canvas(
                 }
                 for x in 0..w {
                     let pixel = frame.data[y * w + x];
-                    let r = (pixel & 0xFF);
-                    let g = ((pixel >> 8) & 0xFF);
-                    let b = ((pixel >> 16) & 0xFF);
+                    let r = pixel & 0xFF;
+                    let g = (pixel >> 8) & 0xFF;
+                    let b = (pixel >> 16) & 0xFF;
                     let out = ((r >> fmt.Rloss) << fmt.Rshift)
                         | ((g >> fmt.Gloss) << fmt.Gshift)
                         | ((b >> fmt.Bloss) << fmt.Bshift);
@@ -445,10 +497,10 @@ unsafe fn render_frame_to_canvas(
                 }
                 for x in 0..w {
                     let pixel = frame.data[y * w + x];
-                    let r = (pixel & 0xFF);
-                    let g = ((pixel >> 8) & 0xFF);
-                    let b = ((pixel >> 16) & 0xFF);
-                    let a = ((pixel >> 24) & 0xFF);
+                    let r = pixel & 0xFF;
+                    let g = (pixel >> 8) & 0xFF;
+                    let b = (pixel >> 16) & 0xFF;
+                    let a = (pixel >> 24) & 0xFF;
                     let out = ((r >> fmt.Rloss) << fmt.Rshift)
                         | ((g >> fmt.Gloss) << fmt.Gshift)
                         | ((b >> fmt.Bloss) << fmt.Bshift)
@@ -461,6 +513,10 @@ unsafe fn render_frame_to_canvas(
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
     if decoder.is_null() {
         return -1;
@@ -532,6 +588,10 @@ extern "C" fn rust_dukv_DecodeNext(decoder: *mut TFB_VideoDecoder) -> c_int {
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_SeekFrame(decoder: *mut TFB_VideoDecoder, frame: u32) -> u32 {
     if decoder.is_null() {
         return 0;
@@ -549,17 +609,25 @@ extern "C" fn rust_dukv_SeekFrame(decoder: *mut TFB_VideoDecoder, frame: u32) ->
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_SeekTime(decoder: *mut TFB_VideoDecoder, time: f32) -> f32 {
     if decoder.is_null() {
         return 0.0;
     }
-    unsafe {
+    {
         let target_frame = (time * DUCK_FPS) as u32;
         let actual_frame = rust_dukv_SeekFrame(decoder, target_frame);
         actual_frame as f32 / DUCK_FPS
     }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
     if decoder.is_null() {
         return 0;
@@ -567,6 +635,10 @@ extern "C" fn rust_dukv_GetFrame(decoder: *mut TFB_VideoDecoder) -> u32 {
     unsafe { (*decoder).cur_frame }
 }
 
+#[allow(
+    non_snake_case,
+    reason = "function name matches the legacy C decoder vtable ABI; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 extern "C" fn rust_dukv_GetTime(decoder: *mut TFB_VideoDecoder) -> f32 {
     if decoder.is_null() {
         return 0.0;
@@ -581,7 +653,7 @@ pub static rust_dukv_DecoderVtbl: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs 
     TermModule: rust_dukv_TermModule,
     GetStructSize: rust_dukv_GetStructSize,
     GetError: rust_dukv_GetError,
-    Init: rust_dukv_Init,
+    Init: rust_dukv_init,
     Term: rust_dukv_Term,
     Open: rust_dukv_Open,
     Close: rust_dukv_Close,
@@ -598,6 +670,10 @@ pub static rust_dukv_DecoderVtbl: TFB_VideoDecoderFuncs = TFB_VideoDecoderFuncs 
 
 static PLAYER: Mutex<Option<VideoPlayer>> = Mutex::new(None);
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_play_video(
     dir: *mut uio_DirHandle,
@@ -680,6 +756,10 @@ pub unsafe extern "C" fn rust_play_video(
     true
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_stop_video() {
     if let Ok(mut guard) = PLAYER.lock() {
@@ -687,6 +767,10 @@ pub unsafe extern "C" fn rust_stop_video() {
     }
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_video_playing() -> bool {
     if let Ok(guard) = PLAYER.lock() {
@@ -697,6 +781,10 @@ pub unsafe extern "C" fn rust_video_playing() -> bool {
     false
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_process_video_frame() -> bool {
     let screen = SDL_Screen;
@@ -730,6 +818,10 @@ pub unsafe extern "C" fn rust_process_video_frame() -> bool {
 /// Present a video frame directly to the window, bypassing the 320x240 SDL_Screen.
 /// The frame data should be RGBA format where frame.data[0] is the R component.
 /// Returns true on success, false on failure.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_present_video_to_window(
     frame_data: *const u8,
@@ -871,6 +963,10 @@ pub unsafe extern "C" fn rust_present_video_to_window(
     true
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_get_video_position() -> u32 {
     if let Ok(guard) = PLAYER.lock() {
@@ -886,6 +982,10 @@ pub unsafe extern "C" fn rust_get_video_position() -> u32 {
 /// This function creates a VideoPlayer that scales with Lanczos to the actual
 /// window size and presents directly to the window, bypassing the 320x240 surface
 /// and completely avoiding xBRZ/hq2x scaling which would corrupt the video.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_play_video_direct_window(
     dir: *mut uio_DirHandle,
@@ -1046,16 +1146,28 @@ const VID_NO_LOOP: u32 = 0xFFFF_FFFF;
 // TFB_* video player API — replaces rust_video.c
 // ============================================================================
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_InitVideoPlayer() -> bool {
     true
 }
 
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_UninitVideoPlayer() {
     rust_stop_video();
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_PlayVideo(vid: *mut TFB_VideoClip, _x: u32, _y: u32) -> bool {
     if vid.is_null() {
@@ -1162,6 +1274,10 @@ pub unsafe extern "C" fn TFB_PlayVideo(vid: *mut TFB_VideoClip, _x: u32, _y: u32
     true
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_StopVideo(_vid: *mut TFB_VideoClip) {
     // Stop video audio played via rodio
@@ -1180,11 +1296,19 @@ pub unsafe extern "C" fn TFB_StopVideo(_vid: *mut TFB_VideoClip) {
     rust_stop_video();
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_VideoPlaying(_vid: *mut TFB_VideoClip) -> bool {
     rust_video_playing()
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_ProcessVideoFrame(_vid: *mut TFB_VideoClip) -> bool {
     let ok = rust_process_video_frame();
@@ -1195,11 +1319,19 @@ pub unsafe extern "C" fn TFB_ProcessVideoFrame(_vid: *mut TFB_VideoClip) -> bool
     ok
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_GetVideoPosition(_vid: *mut TFB_VideoClip) -> u32 {
     rust_get_video_position()
 }
 
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn TFB_SeekVideo(_vid: *mut TFB_VideoClip, _pos: u32) -> bool {
     false

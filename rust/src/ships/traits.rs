@@ -34,7 +34,6 @@ pub struct ShipState {
     pub velocity: (i32, i32),
 
     // --- Fields needed for C FFI calls from ship behaviors ---
-
     /// Opaque C ELEMENT pointer. Ship behaviors pass this to battle_bridge
     /// functions (DeltaCrew, ProcessSound, etc.). Null in tests.
     pub element_ptr: *mut std::os::raw::c_void,

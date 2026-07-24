@@ -147,6 +147,7 @@ impl std::error::Error for SetupError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_game_kernel_initialize() {
@@ -171,6 +172,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_init_game_kernel() {
         // Ensure clean state
         uninit_game_kernel().ok();
@@ -187,6 +189,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_uninit_game_kernel() {
         // Ensure clean state
         uninit_game_kernel().ok();
@@ -200,6 +203,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_kernel() {
         // Ensure clean state
         uninit_game_kernel().ok();
@@ -219,6 +223,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_kernel_not_initialized() {
         // Ensure clean state
         uninit_game_kernel().ok();
@@ -228,6 +233,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_kernel_mut() {
         // Ensure clean state
         uninit_game_kernel().ok();
@@ -235,7 +241,9 @@ mod tests {
         init_game_kernel().unwrap();
 
         get_kernel_mut(|k| {
-            k.game_state.as_mut().map(|s| s.reset());
+            if let Some(s) = k.game_state.as_mut() {
+                s.reset()
+            }
         });
 
         let state_count = get_kernel(|k| {

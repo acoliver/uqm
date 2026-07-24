@@ -513,6 +513,14 @@ pub fn draw_text(_font: &Font, _text: &[UniChar], _x: i16, _y: i16) -> FontMetri
 mod tests {
     use super::*;
 
+    fn test_char(disp: Extent, hotspot: Point) -> TFChar {
+        TFChar {
+            disp,
+            hotspot,
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn test_extent_new() {
         let extent = Extent::new(10, 20);
@@ -692,9 +700,7 @@ mod tests {
         let mut page = FontPage::new(0x0000, 0x0041, 26); // 'A' through 'Z'
 
         // Add character 'A'
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 12);
-        tf_char.hotspot = Point::new(0, -10);
+        let tf_char = test_char(Extent::new(8, 12), Point::new(0, -10));
         page.set_char('A' as UniChar, tf_char).unwrap();
 
         font.add_page(page);
@@ -782,9 +788,7 @@ mod tests {
         let mut font = Font::new(16, 10);
         let mut page = FontPage::new(0x0000, 0x0041, 1);
 
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 12);
-        tf_char.hotspot = Point::new(0, -10);
+        let tf_char = test_char(Extent::new(8, 12), Point::new(0, -10));
         page.set_char('A' as UniChar, tf_char).unwrap();
 
         font.add_page(page);
@@ -804,15 +808,11 @@ mod tests {
         let mut page = FontPage::new(0x0000, 0x0041, 2);
 
         // Add 'A'
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 12);
-        tf_char.hotspot = Point::new(0, -10);
+        let tf_char = test_char(Extent::new(8, 12), Point::new(0, -10));
         page.set_char('A' as UniChar, tf_char).unwrap();
 
         // Add 'B'
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(10, 12);
-        tf_char.hotspot = Point::new(0, -10);
+        let tf_char = test_char(Extent::new(10, 12), Point::new(0, -10));
         page.set_char('B' as UniChar, tf_char).unwrap();
 
         font.add_page(page);
@@ -832,14 +832,10 @@ mod tests {
         let mut page = FontPage::new(0x0000, 0x0041, 2);
 
         // Add character with different vertical extents
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 10);
-        tf_char.hotspot = Point::new(0, -8);
+        let tf_char = test_char(Extent::new(8, 10), Point::new(0, -8));
         page.set_char('A' as UniChar, tf_char).unwrap();
 
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 15);
-        tf_char.hotspot = Point::new(0, -12);
+        let tf_char = test_char(Extent::new(8, 15), Point::new(0, -12));
         page.set_char('B' as UniChar, tf_char).unwrap();
 
         font.add_page(page);
@@ -859,9 +855,7 @@ mod tests {
         let mut page = FontPage::new(0x0000, 0x0041, 1);
 
         // Only add 'A'
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 12);
-        tf_char.hotspot = Point::new(0, -10);
+        let tf_char = test_char(Extent::new(8, 12), Point::new(0, -10));
         page.set_char('A' as UniChar, tf_char).unwrap();
 
         font.add_page(page);
@@ -880,15 +874,19 @@ mod tests {
 
         // First page at 0x0000, first_char=0x0020, 32 chars (0x0020-0x003F)
         let mut page1 = FontPage::new(0x0000, 0x0020, 32);
-        let mut tf_char = TFChar::default();
-        tf_char.disp = Extent::new(8, 12);
+        let tf_char = TFChar {
+            disp: Extent::new(8, 12),
+            ..Default::default()
+        };
         page1.set_char(0x0025, tf_char).unwrap(); // '%' character
         font.add_page(page1);
 
         // Second page at 0x2000, first_char=0x2000, 32 chars (0x2000-0x201F)
         let mut page2 = FontPage::new(0x2000, 0x2000, 32);
-        tf_char = TFChar::default();
-        tf_char.disp = Extent::new(10, 14);
+        let tf_char = TFChar {
+            disp: Extent::new(10, 14),
+            ..Default::default()
+        };
         page2.set_char(0x2005, tf_char).unwrap();
         font.add_page(page2);
 

@@ -190,7 +190,7 @@ impl SummaryView {
         self.total_pages = if entry_count == 0 {
             0
         } else {
-            (entry_count + self.lines_per_page - 1) / self.lines_per_page
+            entry_count.div_ceil(self.lines_per_page)
         };
         self.current_page = 0;
         self.initialized = true;

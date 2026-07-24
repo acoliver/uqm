@@ -1,6 +1,7 @@
 // Pkunk Fury - Triple minigun + taunt/insult energy restore + phoenix resurrection
 // @plan PLAN-20260314-SHIPS.P13
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,13 +22,16 @@ const SHIP_MASS: u8 = 1;
 
 const WEAPON_ENERGY_COST: u8 = 1;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const PKUNK_OFFSET: i16 = 15;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 1;
 const MISSILE_LIFE: u16 = 5;
 const MISSILE_HITS: i16 = 1;
 const MISSILE_DAMAGE: i16 = 1;
 
 const SPECIAL_ENERGY_COST: u8 = 2;
+#[cfg(test)]
 const SPECIAL_WAIT: u8 = 16;
 
 #[derive(Debug, Default)]
@@ -37,9 +41,7 @@ impl ShipBehavior for PkunkShip {
     fn descriptor_template(&self) -> RaceDescTemplate {
         RaceDescTemplate {
             ship_info: ShipInfo {
-                ship_flags: ShipFlags::FIRES_FORE
-                    | ShipFlags::FIRES_LEFT
-                    | ShipFlags::FIRES_RIGHT,
+                ship_flags: ShipFlags::FIRES_FORE | ShipFlags::FIRES_LEFT | ShipFlags::FIRES_RIGHT,
                 ship_cost: 20,
                 crew_level: MAX_CREW,
                 max_crew: MAX_CREW,
@@ -91,22 +93,17 @@ impl ShipBehavior for PkunkShip {
         if !ship.element_ptr.is_null() {
             unsafe {
                 // DeltaEnergy adds energy (insult restores SPECIAL_ENERGY_COST)
-                battle_bridge::bridge::delta_energy(
-                    ship.element_ptr,
-                    SPECIAL_ENERGY_COST as i16,
-                );
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 2);
+                battle_bridge::bridge::delta_energy(ship.element_ptr, SPECIAL_ENERGY_COST as i16);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 2);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
             }
         }
 
         #[cfg(test)]
         {
-            let max = ship.max_energy as u16;
+            let max = ship.max_energy;
             if ship.energy_level < max {
-                ship.energy_level =
-                    (ship.energy_level + SPECIAL_ENERGY_COST as u16).min(max);
+                ship.energy_level = (ship.energy_level + SPECIAL_ENERGY_COST as u16).min(max);
                 ship.special_counter = SPECIAL_WAIT;
             }
         }
@@ -122,8 +119,7 @@ impl ShipBehavior for PkunkShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(24) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(24) as i16;
 
             // Fire 3 missiles: fore, left, right
             for i in 0u16..3 {
@@ -136,7 +132,7 @@ impl ShipBehavior for PkunkShip {
                 let block = MissileBlock {
                     cx: ship.position.0 as i16,
                     cy: ship.position.1 as i16,
-                    flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                    flags: crate::ships::runtime::IGNORE_SIMILAR,
                     sender: ship.player_nr,
                     pixoffs: PKUNK_OFFSET,
                     speed: missile_speed,
@@ -151,7 +147,7 @@ impl ShipBehavior for PkunkShip {
                 };
                 let _ = battle_bridge::bridge::create_missile(&block);
             }
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -188,7 +184,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = PkunkShip::default();
+        let ship = PkunkShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 20);
@@ -203,13 +199,17 @@ mod tests {
 
     #[test]
     fn weapon_fires_triple() {
-        let mut ship = PkunkShip::default();
+        let mut ship = PkunkShip;
         let state = ShipState {
             energy_level: 12,
             max_energy: 12,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 3);
@@ -218,7 +218,7 @@ mod tests {
 
     #[test]
     fn taunt_restores_energy() {
-        let mut ship = PkunkShip::default();
+        let mut ship = PkunkShip;
         let mut state = ShipState {
             crew_level: 8,
             energy_level: 5,
@@ -226,7 +226,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 7); // 5 + 2
@@ -235,7 +239,7 @@ mod tests {
 
     #[test]
     fn taunt_caps_at_max() {
-        let mut ship = PkunkShip::default();
+        let mut ship = PkunkShip;
         let mut state = ShipState {
             crew_level: 8,
             energy_level: 11,
@@ -243,7 +247,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 12);
@@ -251,7 +259,7 @@ mod tests {
 
     #[test]
     fn taunt_noop_at_full() {
-        let mut ship = PkunkShip::default();
+        let mut ship = PkunkShip;
         let mut state = ShipState {
             crew_level: 8,
             energy_level: 12,
@@ -259,7 +267,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         // Energy stays at max, no special_counter set
@@ -268,9 +280,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = PkunkShip::default();
+        let mut ship = PkunkShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

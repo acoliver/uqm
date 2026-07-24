@@ -1,6 +1,7 @@
 // Arilou Skiff - Auto-aiming laser + quasi-space teleport
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, LaserBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,10 +22,13 @@ const SHIP_MASS: u8 = 1;
 
 const WEAPON_ENERGY_COST: u8 = 2;
 const WEAPON_WAIT: u8 = 1;
+#[cfg(not(test))]
 const ARILOU_OFFSET: i16 = 9;
 
 const SPECIAL_ENERGY_COST: u8 = 3;
 const SPECIAL_WAIT: u8 = 2;
+// C constant reserved for full hyper-space Rust port.
+#[expect(dead_code)]
 const HYPER_LIFE: u16 = 5;
 
 #[derive(Debug, Default)]
@@ -70,11 +74,7 @@ impl ShipBehavior for ArilouShip {
     /// C: arilou_preprocess — handles teleport (special).
     /// When SPECIAL pressed with enough energy: ship becomes NONSOLID,
     /// plays teleport animation, then reappears at random location.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         // C: arilou_preprocess handles two states:
         // 1. Normal (not NONSOLID): zero velocity each frame, handle special activation
         // 2. Teleporting (NONSOLID): animate warp, reappear at random location
@@ -105,8 +105,7 @@ impl ShipBehavior for ArilouShip {
                 ) {
                     return Ok(());
                 }
-                let jump_sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let jump_sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(jump_sound, ship.element_ptr);
             }
         }
@@ -119,9 +118,11 @@ impl ShipBehavior for ArilouShip {
             ship.energy_level -= SPECIAL_ENERGY_COST as u16;
         }
 
-        ship.cur_status_flags &=
-            !(StatusFlags::SHIP_AT_MAX_SPEED | StatusFlags::LEFT | StatusFlags::RIGHT
-                | StatusFlags::THRUST | StatusFlags::WEAPON);
+        ship.cur_status_flags &= !(StatusFlags::SHIP_AT_MAX_SPEED
+            | StatusFlags::LEFT
+            | StatusFlags::RIGHT
+            | StatusFlags::THRUST
+            | StatusFlags::WEAPON);
         ship.special_counter = SPECIAL_WAIT;
 
         Ok(())
@@ -159,12 +160,17 @@ impl ShipBehavior for ArilouShip {
                 ey: battle_bridge::bridge::sine(angle, laser_range as i16) as i16,
                 face,
                 sender: ship.player_nr,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 pixoffs: ARILOU_OFFSET,
-                color: battle_bridge::Color { r: 0xFC, g: 0xFC, b: 0x54, a: 0xFF },
+                color: battle_bridge::Color {
+                    r: 0xFC,
+                    g: 0xFC,
+                    b: 0x54,
+                    a: 0xFF,
+                },
             };
             let _ = battle_bridge::bridge::create_laser(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -192,13 +198,16 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = ArilouShip::default();
+        let ship = ArilouShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 16);
         assert_eq!(desc.ship_info.max_crew, 6);
         assert_eq!(desc.ship_info.max_energy, 20);
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::IMMEDIATE_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::IMMEDIATE_WEAPON));
         assert_eq!(desc.characteristics.max_thrust, 40);
         assert_eq!(desc.characteristics.thrust_increment, 40);
         assert_eq!(desc.characteristics.weapon_energy_cost, 2);
@@ -211,7 +220,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = ArilouShip::default();
+        let mut ship = ArilouShip;
         let state = ShipState {
             crew_level: 6,
             max_crew: 6,
@@ -235,7 +244,7 @@ mod tests {
 
     #[test]
     fn teleport_drains_energy() {
-        let mut ship = ArilouShip::default();
+        let mut ship = ArilouShip;
         let mut state = ShipState {
             crew_level: 6,
             max_crew: 6,
@@ -261,7 +270,7 @@ mod tests {
 
     #[test]
     fn teleport_denied_low_energy() {
-        let mut ship = ArilouShip::default();
+        let mut ship = ArilouShip;
         let mut state = ShipState {
             crew_level: 6,
             max_crew: 6,
@@ -284,7 +293,7 @@ mod tests {
 
     #[test]
     fn teleport_denied_during_cooldown() {
-        let mut ship = ArilouShip::default();
+        let mut ship = ArilouShip;
         let mut state = ShipState {
             crew_level: 6,
             max_crew: 6,
@@ -307,7 +316,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = ArilouShip::default();
+        let mut ship = ArilouShip;
         let state = ShipState {
             crew_level: 6,
             max_crew: 6,

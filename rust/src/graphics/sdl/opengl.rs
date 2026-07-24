@@ -714,6 +714,11 @@ impl GraphicsDriver for OpenGlDriver {
     }
 }
 
+// SAFETY: We only access the driver from the main thread per SDL2 requirements.
+unsafe impl Send for OpenGlDriver {}
+// SAFETY: We only access the driver from the main thread per SDL2 requirements.
+unsafe impl Sync for OpenGlDriver {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -742,8 +747,3 @@ mod tests {
         assert!(driver.keep_aspect_ratio);
     }
 }
-
-// SAFETY: We only access the driver from the main thread per SDL2 requirements.
-unsafe impl Send for OpenGlDriver {}
-// SAFETY: We only access the driver from the main thread per SDL2 requirements.
-unsafe impl Sync for OpenGlDriver {}

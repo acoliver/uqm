@@ -38,11 +38,20 @@ pub extern "C" fn rust_tfb_preinit() -> c_int {
         return -1;
     }
 
-    let mut ver = SdlVersion { major: 0, minor: 0, patch: 0 };
+    let mut ver = SdlVersion {
+        major: 0,
+        minor: 0,
+        patch: 0,
+    };
     unsafe { SDL_GetVersion(&mut ver) };
     tracing::info!(
         "Using SDL version {}.{}.{} (compiled with {}.{}.{})",
-        ver.major, ver.minor, ver.patch, ver.major, ver.minor, ver.patch,
+        ver.major,
+        ver.minor,
+        ver.patch,
+        ver.major,
+        ver.minor,
+        ver.patch,
     );
 
     0
@@ -100,6 +109,9 @@ extern "C" {
 }
 
 /// Initialize the graphics subsystem.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Currently delegates to C `TFB_InitGraphics()` which configures the SDL
 /// driver. The Rust graphics driver is selected via build config.
@@ -137,6 +149,10 @@ pub extern "C" fn rust_init_communication() {
 // ===========================================================================
 
 extern "C" {
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn TFB_InitInput(driver: c_int, flags: c_int);
 }
 
@@ -146,7 +162,11 @@ extern "C" {
 #[no_mangle]
 pub extern "C" fn rust_tfb_init_input(driver: c_int, flags: c_int) {
     unsafe { TFB_InitInput(driver, flags) };
-    tracing::debug!("Input system initialized (driver={}, flags={})", driver, flags);
+    tracing::debug!(
+        "Input system initialized (driver={}, flags={})",
+        driver,
+        flags
+    );
 }
 
 // ===========================================================================

@@ -1,6 +1,7 @@
 // Umgah Drone - Antimatter cone + retropropulsion zip
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -69,11 +70,7 @@ impl ShipBehavior for UmgahShip {
     }
 
     /// C: umgah_preprocess — zip backwards (retropropulsion).
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             return Ok(());
         }
@@ -90,8 +87,7 @@ impl ShipBehavior for UmgahShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
                 // DeltaVelocity backwards handled by C preprocess_func
             }
@@ -130,7 +126,7 @@ impl ShipBehavior for UmgahShip {
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: 0,
                 speed: 0, // CONE_SPEED
@@ -144,7 +140,7 @@ impl ShipBehavior for UmgahShip {
                 blast_offs: 0,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -170,13 +166,16 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = UmgahShip::default();
+        let ship = UmgahShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 7);
         assert_eq!(desc.ship_info.max_crew, 10);
         assert_eq!(desc.ship_info.max_energy, 30);
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::IMMEDIATE_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::IMMEDIATE_WEAPON));
         assert_eq!(desc.characteristics.energy_regeneration, 30);
         assert_eq!(desc.characteristics.energy_wait, 150);
         assert_eq!(desc.fleet.known_loc, (1798, 6000));
@@ -184,7 +183,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = UmgahShip::default();
+        let mut ship = UmgahShip;
         let state = ShipState {
             crew_level: 10,
             max_crew: 10,
@@ -206,7 +205,7 @@ mod tests {
 
     #[test]
     fn zip_drains_energy() {
-        let mut ship = UmgahShip::default();
+        let mut ship = UmgahShip;
         let mut state = ShipState {
             crew_level: 10,
             max_crew: 10,
@@ -229,7 +228,7 @@ mod tests {
 
     #[test]
     fn zip_denied_no_energy() {
-        let mut ship = UmgahShip::default();
+        let mut ship = UmgahShip;
         let mut state = ShipState {
             crew_level: 10,
             max_crew: 10,
@@ -251,7 +250,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = UmgahShip::default();
+        let mut ship = UmgahShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

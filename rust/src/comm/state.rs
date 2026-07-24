@@ -62,9 +62,6 @@ pub struct CommState {
     /// Whether input is paused
     input_paused: bool,
 
-    /// Last input time (for timeout)
-    last_input_time: u64,
-
     /// Phrase enable/disable state (encounter-local)
     phrase_state: PhraseState,
 
@@ -134,7 +131,6 @@ impl CommState {
             intro_mode: CommIntroMode::Default,
             fade_time: 0,
             input_paused: false,
-            last_input_time: 0,
             phrase_state: PhraseState::new(),
             segue: Segue::default(),
             summary: ConversationSummary::new(10),
@@ -362,10 +358,15 @@ impl CommState {
     /// Set talking finished
     pub fn set_talking_finished(&mut self, finished: bool) {
         if finished != self.talking_finished {
-            eprintln!("[DBG] set_talking_finished: {}->{}",
-                self.talking_finished, finished);
+            eprintln!(
+                "[DBG] set_talking_finished: {}->{}",
+                self.talking_finished, finished
+            );
             if finished {
-                eprintln!("  backtrace: {:?}", std::backtrace::Backtrace::force_capture());
+                eprintln!(
+                    "  backtrace: {:?}",
+                    std::backtrace::Backtrace::force_capture()
+                );
             }
         }
         self.talking_finished = finished;

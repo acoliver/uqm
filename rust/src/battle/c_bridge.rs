@@ -254,6 +254,10 @@ pub unsafe fn drawables_intersect(
 }
 
 /// Safe wrapper: initialize intersection start point.
+#[allow(
+    clippy::missing_safety_doc,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub unsafe fn init_intersect_start(element: *mut Element) {
     if !element.is_null() {
         InitIntersectStartPoint(element);
@@ -261,6 +265,9 @@ pub unsafe fn init_intersect_start(element: *mut Element) {
 }
 
 /// Safe wrapper: initialize intersection end point.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn init_intersect_end(element: *mut Element) {
     if !element.is_null() {
         InitIntersectEndPoint(element);
@@ -268,6 +275,9 @@ pub unsafe fn init_intersect_end(element: *mut Element) {
 }
 
 /// Safe wrapper: apply damage to an element.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn apply_damage(element: *mut Element, damage: u16) {
     if !element.is_null() {
         do_damage(element, damage);
@@ -275,6 +285,9 @@ pub unsafe fn apply_damage(element: *mut Element, damage: u16) {
 }
 
 /// Safe wrapper: elastic collision.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn elastic_collide_c(a: *mut Element, b: *mut Element) {
     if !a.is_null() && !b.is_null() {
         collide(a, b);
@@ -282,16 +295,25 @@ pub unsafe fn elastic_collide_c(a: *mut Element, b: *mut Element) {
 }
 
 /// Safe wrapper: process and flush sounds.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn flush_all_sounds() {
     FlushSounds();
 }
 
 /// Safe wrapper: update stereo sound positions.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn update_sound_positions() {
     UpdateSoundPositions();
 }
 
 /// Safe wrapper: remove sounds for an element being destroyed.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn remove_sounds_for(element: *mut Element) {
     if !element.is_null() {
         RemoveSoundsForObject(element);
@@ -299,16 +321,25 @@ pub unsafe fn remove_sounds_for(element: *mut Element) {
 }
 
 /// Safe wrapper: set graphics scale.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn set_graphic_scale(scale: i32) {
     SetGraphicScale(scale as c_int);
 }
 
 /// Safe wrapper: clear current drawable.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn clear_drawable() {
     ClearDrawable();
 }
 
 /// Safe wrapper: get starship from element.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Returns null if element is null.
 pub unsafe fn get_element_starship(element: *const Element) -> StarShipPtr {
@@ -321,31 +352,49 @@ pub unsafe fn get_element_starship(element: *const Element) -> StarShipPtr {
 }
 
 /// Safe wrapper: check if in HyperSpace/QuasiSpace.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn is_hq_space() -> bool {
     inHQSpace() != 0
 }
 
 /// Safe wrapper: get current activity flags.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn current_activity() -> u16 {
     get_current_activity()
 }
 
 /// Safe wrapper: get a random number.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn random() -> u32 {
     TFB_Random()
 }
 
 /// Safe wrapper: get current time counter.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn time_counter() -> u32 {
     GetTimeCounter()
 }
 
 /// Safe wrapper: task switch / yield.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn task_switch() {
     TaskSwitch();
 }
 
 /// Safe wrapper: sleep thread for ticks.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn sleep_thread(ticks: i32) {
     SleepThread(ticks as c_int);
 }
@@ -375,8 +424,8 @@ mod tests {
 
     #[test]
     fn test_num_prims_value() {
-        assert!(NUM_PRIMS > 0);
-        assert!(NUM_PRIMS <= 8);
+        const { assert!(NUM_PRIMS > 0) };
+        const { assert!(NUM_PRIMS <= 8) };
     }
 
     #[test]

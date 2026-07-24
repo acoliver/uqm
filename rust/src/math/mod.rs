@@ -22,7 +22,9 @@ const R: u32 = 2836; // M % A
 static SEED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(12345);
 
 fn park_miller(seed: u32) -> u32 {
-    let mut s = A.wrapping_mul(seed % Q).wrapping_sub(R.wrapping_mul(seed / Q));
+    let mut s = A
+        .wrapping_mul(seed % Q)
+        .wrapping_sub(R.wrapping_mul(seed / Q));
     if s > M {
         s -= M;
     } else if s == 0 {
@@ -93,6 +95,10 @@ pub extern "C" fn RandomContext_Delete(context: *mut RandomContext) {
 
 /// C: `RandomContext *RandomContext_Copy(const RandomContext *source)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn RandomContext_Copy(source: *const RandomContext) -> *mut RandomContext {
     unsafe {
         let ptr = rust_hmalloc(std::mem::size_of::<RandomContext>()) as *mut RandomContext;
@@ -105,6 +111,10 @@ pub extern "C" fn RandomContext_Copy(source: *const RandomContext) -> *mut Rando
 
 /// C: `DWORD RandomContext_Random(RandomContext *context)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn RandomContext_Random(context: *mut RandomContext) -> u32 {
     unsafe {
         (*context).seed = park_miller((*context).seed);
@@ -114,6 +124,10 @@ pub extern "C" fn RandomContext_Random(context: *mut RandomContext) -> u32 {
 
 /// C: `DWORD RandomContext_SeedRandom(RandomContext *context, DWORD new_seed)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn RandomContext_SeedRandom(context: *mut RandomContext, new_seed: u32) -> u32 {
     unsafe {
         let mut s = new_seed;
@@ -130,6 +144,10 @@ pub extern "C" fn RandomContext_SeedRandom(context: *mut RandomContext, new_seed
 
 /// C: `DWORD RandomContext_GetSeed(RandomContext *context)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn RandomContext_GetSeed(context: *mut RandomContext) -> u32 {
     unsafe { (*context).seed }
 }
@@ -221,6 +239,69 @@ pub extern "C" fn square_root(value: u32) -> u16 {
 }
 
 // ---------------------------------------------------------------------------
+// Sine table + ARCTAN — replaces C trans.c
+// ---------------------------------------------------------------------------
+
+/// C: `SIZE sinetab[]` — 64-entry sine lookup table.
+/// Each entry is sin(angle) * 16384 (fixed-point, SIN_SHIFT=14).
+/// UQM angle system: 0=North(-Y), 16=East(+X), 32=South(+Y), 48=West(-X).
+/// Exported as `#[no_mangle]` so C macros `SINVAL`, `COSVAL`, `SINE`, `COSINE`
+/// in units.h can index into it directly.
+#[no_mangle]
+#[allow(non_upper_case_globals)]
+pub static sinetab: [i16; 64] = [
+    -16384, -16305, -16069, -15679, -15137, -14449, -13623, -12665, -11585, -10394, -9102, -7723,
+    -6270, -4756, -3197, -1608, 0, 1608, 3197, 4756, 6270, 7723, 9102, 10394, 11585, 12665, 13623,
+    14449, 15137, 15679, 16069, 16305, 16384, 16305, 16069, 15679, 15137, 14449, 13623, 12665,
+    11585, 10394, 9102, 7723, 6270, 4756, 3197, 1608, 0, -1608, -3197, -4756, -6270, -7723, -9102,
+    -10394, -11585, -12665, -13623, -14449, -15137, -15679, -16069, -16305,
+];
+
+const CIRCLE_SHIFT: u32 = 6;
+const FULL_CIRCLE: u16 = 1 << CIRCLE_SHIFT; // 64
+const HALF_CIRCLE: u16 = FULL_CIRCLE >> 1; // 32
+const QUADRANT: u16 = FULL_CIRCLE >> 2; // 16
+
+/// C: `COUNT ARCTAN(SIZE delta_x, SIZE delta_y)`
+///
+/// Integer arctangent returning angle in UQM's 64-position circle.
+/// Exact port of C trans.c algorithm.
+#[no_mangle]
+pub extern "C" fn ARCTAN(delta_x: i16, delta_y: i16) -> u16 {
+    const ATANTAB: [u16; 33] = [
+        0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7,
+        8, 8, 8,
+    ];
+
+    if delta_x == 0 && delta_y == 0 {
+        return FULL_CIRCLE;
+    }
+
+    let v1_abs = (delta_x as i32).unsigned_abs();
+    let v2_abs = (delta_y as i32).unsigned_abs();
+
+    let v1 = if v1_abs > v2_abs {
+        let ratio = ((v2_abs << (CIRCLE_SHIFT - 1)) + (v1_abs >> 1)) / v1_abs;
+        let idx = (ratio as usize).min(ATANTAB.len() - 1);
+        QUADRANT - ATANTAB[idx]
+    } else {
+        let ratio = ((v1_abs << (CIRCLE_SHIFT - 1)) + (v2_abs >> 1)) / v2_abs;
+        let idx = (ratio as usize).min(ATANTAB.len() - 1);
+        ATANTAB[idx]
+    };
+
+    let mut result = v1;
+    if delta_x < 0 {
+        result = FULL_CIRCLE.wrapping_sub(result);
+    }
+    if delta_y > 0 {
+        result = HALF_CIRCLE.wrapping_sub(result);
+    }
+
+    result & (FULL_CIRCLE - 1) // NORMALIZE_ANGLE
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -233,7 +314,7 @@ mod tests {
         let mut seed = 12345u32;
         for _ in 0..1000 {
             seed = park_miller(seed);
-            assert!(seed >= 1 && seed <= M, "seed {seed} out of range [1, M]");
+            assert!((1..=M).contains(&seed), "seed {seed} out of range [1, M]");
         }
         // Determinism: same seed → same next value
         let s1 = park_miller(12345);
@@ -306,68 +387,4 @@ mod tests {
         // floor(sqrt(10)) = 3
         assert_eq!(square_root(10), 3);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Sine table + ARCTAN — replaces C trans.c
-// ---------------------------------------------------------------------------
-
-/// C: `SIZE sinetab[]` — 64-entry sine lookup table.
-/// Each entry is sin(angle) * 16384 (fixed-point, SIN_SHIFT=14).
-/// UQM angle system: 0=North(-Y), 16=East(+X), 32=South(+Y), 48=West(-X).
-/// Exported as `#[no_mangle]` so C macros `SINVAL`, `COSVAL`, `SINE`, `COSINE`
-/// in units.h can index into it directly.
-#[no_mangle]
-#[allow(non_upper_case_globals)]
-pub static sinetab: [i16; 64] = [
-    -16384, -16305, -16069, -15679, -15137, -14449, -13623, -12665, -11585,
-    -10394, -9102, -7723, -6270, -4756, -3197, -1608, 0, 1608, 3197, 4756, 6270,
-    7723, 9102, 10394, 11585, 12665, 13623, 14449, 15137, 15679, 16069, 16305,
-    16384, 16305, 16069, 15679, 15137, 14449, 13623, 12665, 11585, 10394, 9102,
-    7723, 6270, 4756, 3197, 1608, 0, -1608, -3197, -4756, -6270, -7723, -9102,
-    -10394, -11585, -12665, -13623, -14449, -15137, -15679, -16069, -16305,
-];
-
-const CIRCLE_SHIFT: u32 = 6;
-const FULL_CIRCLE: u16 = 1 << CIRCLE_SHIFT; // 64
-const HALF_CIRCLE: u16 = FULL_CIRCLE >> 1; // 32
-const QUADRANT: u16 = FULL_CIRCLE >> 2; // 16
-
-/// C: `COUNT ARCTAN(SIZE delta_x, SIZE delta_y)`
-///
-/// Integer arctangent returning angle in UQM's 64-position circle.
-/// Exact port of C trans.c algorithm.
-#[no_mangle]
-pub extern "C" fn ARCTAN(delta_x: i16, delta_y: i16) -> u16 {
-    const ATANTAB: [u16; 33] = [
-        0, 0, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
-        7, 7, 7, 7, 7, 7, 8, 8, 8,
-    ];
-
-    if delta_x == 0 && delta_y == 0 {
-        return FULL_CIRCLE;
-    }
-
-    let v1_abs = (delta_x as i32).unsigned_abs();
-    let v2_abs = (delta_y as i32).unsigned_abs();
-
-    let v1 = if v1_abs > v2_abs {
-        let ratio = ((v2_abs << (CIRCLE_SHIFT - 1)) + (v1_abs >> 1)) / v1_abs;
-        let idx = (ratio as usize).min(ATANTAB.len() - 1);
-        QUADRANT - ATANTAB[idx]
-    } else {
-        let ratio = ((v1_abs << (CIRCLE_SHIFT - 1)) + (v2_abs >> 1)) / v2_abs;
-        let idx = (ratio as usize).min(ATANTAB.len() - 1);
-        ATANTAB[idx]
-    };
-
-    let mut result = v1;
-    if delta_x < 0 {
-        result = FULL_CIRCLE - result;
-    }
-    if delta_y > 0 {
-        result = HALF_CIRCLE - result;
-    }
-
-    result & (FULL_CIRCLE - 1) // NORMALIZE_ANGLE
 }

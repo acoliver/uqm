@@ -26,20 +26,6 @@ unsafe fn cstr_to_string(c_str: *const c_char) -> Option<String> {
     CStr::from_ptr(c_str).to_str().ok().map(String::from)
 }
 
-/// Write a log marker to the rust-bridge.log file
-fn log_marker(marker: &str) {
-    use std::fs::OpenOptions;
-    use std::io::Write;
-
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("rust-bridge.log")
-    {
-        let _ = writeln!(file, "{}", marker);
-    }
-}
-
 // Opaque representation of uio_DirHandle from C
 // We only use it as a pointer, never dereference it
 #[repr(C)]
@@ -116,7 +102,6 @@ extern "C" {
 // Constants for uio_open flags
 const O_RDONLY: c_int = 0;
 const O_WRONLY: c_int = 1;
-const O_RDWR: c_int = 2;
 const O_CREAT: c_int = 0o100;
 const O_EXCL: c_int = 0o200;
 const O_BINARY: c_int = 0;
@@ -149,14 +134,8 @@ pub unsafe extern "C" fn fileExists(name: *const c_char) -> c_int {
     }
 
     match cstr_to_path(name) {
-        Some(p) => {
-            if file_exists(&p) {
-                1
-            } else {
-                0
-            }
-        }
-        None => 0,
+        Some(p) if file_exists(&p) => 1,
+        Some(_) | None => 0,
     }
 }
 
@@ -186,7 +165,7 @@ pub unsafe extern "C" fn fileExists2(dir: *mut uio_DirHandle, file_name: *const 
     }
 
     // Use C's uio_fopen to check if file exists (matches files.c behavior)
-    let stream = uio_fopen(dir, file_name, b"rb\0".as_ptr() as *const c_char);
+    let stream = uio_fopen(dir, file_name, c"rb".as_ptr() as *const c_char);
     if stream.is_null() {
         return 0;
     }
@@ -311,14 +290,8 @@ pub unsafe extern "C" fn copyFile(
 #[no_mangle]
 pub unsafe extern "C" fn rust_file_exists(path: *const c_char) -> c_int {
     match cstr_to_path(path) {
-        Some(p) => {
-            if file_exists(&p) {
-                1
-            } else {
-                0
-            }
-        }
-        None => 0,
+        Some(p) if file_exists(&p) => 1,
+        Some(_) | None => 0,
     }
 }
 
@@ -345,7 +318,7 @@ mod tests {
     use std::ffi::CString;
     use std::fs;
     use std::path::Path;
-    use std::ptr;
+
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -369,51 +342,39 @@ mod tests {
 
     #[test]
     fn test_rust_file_exists() {
+        let test_dir = get_test_dir();
+        fs::create_dir_all(&test_dir).unwrap();
+        let test_file = test_dir.join("test_ffi_file.txt");
+        // Should not exist initially
+        let c_path = CString::new(test_file.to_str().unwrap()).unwrap();
         unsafe {
-            let test_dir = get_test_dir();
-            fs::create_dir_all(&test_dir).unwrap();
-            let test_file = test_dir.join("test_ffi_file.txt");
-
-            // Should not exist initially
-            let c_path = CString::new(test_file.to_str().unwrap()).unwrap();
-            unsafe {
-                assert_eq!(rust_file_exists(c_path.as_ptr()), 0);
-
-                // Create file
-                fs::write(&test_file, "test").unwrap();
-
-                // Should exist now
-                assert_eq!(rust_file_exists(c_path.as_ptr()), 1);
-            }
-
-            // Cleanup
-            cleanup_test_dir(&test_dir);
+            assert_eq!(rust_file_exists(c_path.as_ptr()), 0);
+            // Create file
+            fs::write(&test_file, "test").unwrap();
+            // Should exist now
+            assert_eq!(rust_file_exists(c_path.as_ptr()), 1);
         }
+        // Cleanup
+        cleanup_test_dir(&test_dir);
     }
 
     #[test]
     fn test_rust_copy_file() {
+        let test_dir = get_test_dir();
+        fs::create_dir_all(&test_dir).unwrap();
+        let base_dir = &test_dir;
+        let src = base_dir.join("ffi_src.txt");
+        let dst = base_dir.join("ffi_dst.txt");
+        // Create source file
+        fs::write(&src, "test content").unwrap();
+        let c_src = CString::new(src.to_str().unwrap()).unwrap();
+        let c_dst = CString::new(dst.to_str().unwrap()).unwrap();
+        // Copy file
         unsafe {
-            let test_dir = get_test_dir();
-            fs::create_dir_all(&test_dir).unwrap();
-            let base_dir = &test_dir;
-            let src = base_dir.join("ffi_src.txt");
-            let dst = base_dir.join("ffi_dst.txt");
-
-            // Create source file
-            fs::write(&src, "test content").unwrap();
-
-            let c_src = CString::new(src.to_str().unwrap()).unwrap();
-            let c_dst = CString::new(dst.to_str().unwrap()).unwrap();
-
-            // Copy file
-            unsafe {
-                assert_eq!(rust_copy_file(c_src.as_ptr(), c_dst.as_ptr()), 1);
-            }
-            assert!(dst.exists());
-
-            // Cleanup
-            cleanup_test_dir(&test_dir);
+            assert_eq!(rust_copy_file(c_src.as_ptr(), c_dst.as_ptr()), 1);
         }
+        assert!(dst.exists());
+        // Cleanup
+        cleanup_test_dir(&test_dir);
     }
 }

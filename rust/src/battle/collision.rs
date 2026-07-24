@@ -251,6 +251,27 @@ fn isqrt(value: u32) -> u16 {
 }
 
 // ---------------------------------------------------------------------------
+// C FFI Export — replaces C collide.c
+// ---------------------------------------------------------------------------
+
+/// C: `void collide(ELEMENT *ElementPtr0, ELEMENT *ElementPtr1)`
+///
+/// Entry point for the C battle loop. Delegates to `elastic_collide`
+/// after dereferencing the raw pointers.
+#[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+pub extern "C" fn collide(e0: *mut Element, e1: *mut Element) {
+    if e0.is_null() || e1.is_null() {
+        return;
+    }
+    let (e0_ref, e1_ref) = unsafe { (&mut *e0, &mut *e1) };
+    elastic_collide(e0_ref, e1_ref);
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -511,7 +532,6 @@ mod tests {
 
         // Collision should resolve (no assertion failure)
         // Just verify function completes without panic
-        assert!(true);
     }
 
     #[test]
@@ -555,21 +575,4 @@ mod tests {
             speed1,
         );
     }
-}
-
-// ---------------------------------------------------------------------------
-// C FFI Export — replaces C collide.c
-// ---------------------------------------------------------------------------
-
-/// C: `void collide(ELEMENT *ElementPtr0, ELEMENT *ElementPtr1)`
-///
-/// Entry point for the C battle loop. Delegates to `elastic_collide`
-/// after dereferencing the raw pointers.
-#[no_mangle]
-pub extern "C" fn collide(e0: *mut Element, e1: *mut Element) {
-    if e0.is_null() || e1.is_null() {
-        return;
-    }
-    let (e0_ref, e1_ref) = unsafe { (&mut *e0, &mut *e1) };
-    elastic_collide(e0_ref, e1_ref);
 }

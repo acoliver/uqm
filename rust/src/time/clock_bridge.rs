@@ -30,30 +30,11 @@ extern "C" {
     fn get_game_clock() -> *mut ClockState;
 }
 
-// Functions from clock_rust.c that we need to call
-extern "C" {
-    fn ValidateEvent(
-        type_: c_int,
-        pmonth_index: *mut c_int,
-        pday_index: *mut c_int,
-        pyear_index: *mut c_int,
-    ) -> c_int;
-    fn AddEvent(
-        type_: c_int,
-        month_index: c_int,
-        day_index: c_int,
-        year_index: c_int,
-        func_index: u8,
-    ) -> usize;
-}
-
 // Constants from clock.h
 const CLOCK_BASE_FRAMERATE: usize = 24;
 const START_YEAR: u16 = 2155;
 
 // Event type constants
-const ABSOLUTE_EVENT: c_int = 0;
-const RELATIVE_EVENT: c_int = 1;
 
 // Helper: Log a message to the bridge log (uses central logger)
 fn log_clock_bridge(message: &str) {
@@ -108,6 +89,9 @@ where
 }
 
 // Initialize the game clock
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_init() -> c_int {
     log_clock_bridge("RUST_CLOCK_INIT");
@@ -126,6 +110,9 @@ pub unsafe extern "C" fn rust_clock_init() -> c_int {
 }
 
 // Uninitialize the game clock
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
     log_clock_bridge("RUST_CLOCK_UNINIT");
@@ -140,6 +127,9 @@ pub unsafe extern "C" fn rust_clock_uninit() -> c_int {
 }
 
 // Set game clock rate (seconds per day)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
     log_clock_bridge("RUST_CLOCK_RATE");
@@ -168,6 +158,9 @@ pub unsafe extern "C" fn rust_clock_set_rate(seconds_per_day: c_int) {
 }
 
 // Tick the game clock forward one tick
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_tick() {
     // Don't log every tick - too noisy
@@ -188,6 +181,9 @@ pub unsafe extern "C" fn rust_clock_tick() {
 }
 
 // Move game clock forward by specific number of days
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
     log_clock_bridge(&format!("RUST_CLOCK_MOVE: {} days", days));
@@ -202,6 +198,9 @@ pub unsafe extern "C" fn rust_clock_advance_days(days: c_int) {
 }
 
 // Lock the game clock (for debugging)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_lock() {
     log_clock_bridge("RUST_CLOCK_LOCK");
@@ -209,6 +208,9 @@ pub unsafe extern "C" fn rust_clock_lock() {
 }
 
 // Unlock the game clock (for debugging)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_unlock() {
     log_clock_bridge("RUST_CLOCK_UNLOCK");
@@ -216,6 +218,9 @@ pub unsafe extern "C" fn rust_clock_unlock() {
 }
 
 // Check if game clock is running
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_clock_is_running() -> c_int {
     log_clock_bridge("RUST_CLOCK_RUNNING");

@@ -642,7 +642,7 @@ mod tests {
     #[test]
     fn test_colormap_manager_set_wrong_size() {
         let mut mgr = ColorMapManager::new();
-        assert!(mgr.set_colors(0, 0, &vec![0u8; 100]).is_err());
+        assert!(mgr.set_colors(0, 0, &[0u8; 100]).is_err());
     }
 
     #[test]

@@ -23,6 +23,8 @@ const WEAPON_WAIT: u8 = 240; // (ONE_SECOND / BATTLE_FRAME_RATE) * 10
 const SPECIAL_ENERGY_COST: u8 = 3;
 const SPECIAL_WAIT: u8 = 72; // (ONE_SECOND / BATTLE_FRAME_RATE) * 3
 
+// C constant reserved for full Sa-Matra generator Rust port.
+#[expect(dead_code)]
 const MAX_GENERATORS: u8 = 8;
 
 #[derive(Debug, Default)]
@@ -99,7 +101,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = SamatraShip::default();
+        let ship = SamatraShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 16);
@@ -116,9 +118,13 @@ mod tests {
 
     #[test]
     fn no_standard_weapon() {
-        let mut ship = SamatraShip::default();
+        let mut ship = SamatraShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert!(weapons.is_empty());
@@ -126,9 +132,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = SamatraShip::default();
+        let mut ship = SamatraShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

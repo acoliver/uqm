@@ -353,10 +353,18 @@ extern "C" {
 extern "C" {
     /// Get the STARSHIP* associated with an ELEMENT.
     /// C: void GetElementStarShip(ELEMENT *e, STARSHIP **ss);
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn GetElementStarShip(element: *const CElement, starship: *mut *mut CStarship);
 
     /// Allocate an element in the display list.
     /// C: HELEMENT AllocElement(void);
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn AllocElement() -> HElement;
 
     /// Insert an element into the display list.
@@ -381,6 +389,10 @@ extern "C" {
 
     /// Play a sound effect.
     /// C: void ProcessSound(SOUND sound, ELEMENT *e);
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     pub fn ProcessSound(sound: CSound, element: *mut CElement);
 
     /// Initializes the battle arena (display list, galaxy, asteroids/planet, hyperspace).

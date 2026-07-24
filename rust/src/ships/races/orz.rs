@@ -1,6 +1,7 @@
 // Orz Nemesis - Rotating howitzer turret + space marine boarding
 // @plan PLAN-20260314-SHIPS.P13
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -22,17 +23,24 @@ const SHIP_MASS: u8 = 4;
 // Howitzer
 const WEAPON_ENERGY_COST: u8 = 6; // MAX_ENERGY / 3 (rounded)
 const WEAPON_WAIT: u8 = 4;
+#[cfg(not(test))]
 const TURRET_OFFSET: i16 = 14;
+// C constant reserved for full howitzer Rust port.
+#[expect(dead_code)]
 const MISSILE_SPEED_DTW: u16 = 30; // DISPLAY_TO_WORLD(30)
 const MISSILE_LIFE: u16 = 12;
 const MISSILE_HITS: i16 = 2;
 const MISSILE_DAMAGE: i16 = 3;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 1;
 
 // Marines
 const SPECIAL_ENERGY_COST: u8 = 0;
 const SPECIAL_WAIT: u8 = 12;
+// C constants reserved for full marine-boarding Rust port.
+#[expect(dead_code)]
 const MAX_MARINES: u8 = 8;
+#[expect(dead_code)]
 const MARINE_HIT_POINTS: u8 = 3;
 
 #[derive(Debug, Default)]
@@ -78,17 +86,11 @@ impl ShipBehavior for OrzShip {
     /// C: orz_preprocess — manages turret rotation and marine launch gating.
     /// When SPECIAL+WEAPON held together, weapon_counter incremented to block fire
     /// (marine launch instead). Turret spawned on APPEARING.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         // If SPECIAL+direction held, lock turn (turret rotation in C)
         if (ship.cur_status_flags.contains(StatusFlags::SPECIAL)
             || ship.old_status_flags.contains(StatusFlags::SPECIAL))
-            && (ship
-                .cur_status_flags
-                .contains(StatusFlags::LEFT)
+            && (ship.cur_status_flags.contains(StatusFlags::LEFT)
                 || ship.cur_status_flags.contains(StatusFlags::RIGHT))
             && ship.turn_wait == 0
         {
@@ -114,12 +116,11 @@ impl ShipBehavior for OrzShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(30) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(30) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: TURRET_OFFSET,
                 speed: missile_speed,
@@ -133,7 +134,7 @@ impl ShipBehavior for OrzShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -159,7 +160,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = OrzShip::default();
+        let ship = OrzShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 23);
@@ -176,13 +177,17 @@ mod tests {
 
     #[test]
     fn weapon_fires_howitzer() {
-        let mut ship = OrzShip::default();
+        let mut ship = OrzShip;
         let state = ShipState {
             energy_level: 20,
             max_energy: 20,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
@@ -192,7 +197,7 @@ mod tests {
 
     #[test]
     fn preprocess_blocks_weapon_for_marine() {
-        let mut ship = OrzShip::default();
+        let mut ship = OrzShip;
         let mut state = ShipState {
             crew_level: 16,
             energy_level: 20,
@@ -200,7 +205,11 @@ mod tests {
             weapon_counter: 0,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.preprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.weapon_counter, 1); // blocked weapon for marine launch
@@ -208,13 +217,17 @@ mod tests {
 
     #[test]
     fn preprocess_turret_lock() {
-        let mut ship = OrzShip::default();
+        let mut ship = OrzShip;
         let mut state = ShipState {
             cur_status_flags: StatusFlags::SPECIAL | StatusFlags::RIGHT,
             turn_wait: 0,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.preprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.turn_wait, 1);
@@ -222,9 +235,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = OrzShip::default();
+        let mut ship = OrzShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

@@ -1,6 +1,7 @@
 // Chmmr Avatar - Megawatt laser + tractor beam + ZapSat point defense
 // @plan PLAN-20260314-SHIPS.P13
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, LaserBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -26,9 +27,12 @@ const WEAPON_WAIT: u8 = 0;
 // Tractor beam
 const SPECIAL_ENERGY_COST: u8 = 1;
 const SPECIAL_WAIT: u8 = 0;
+// C constants reserved for full satellite/tractor Rust port.
+#[expect(dead_code)]
 const NUM_SATELLITES: u8 = 3;
 
 // Color cycle for laser
+#[expect(dead_code)]
 const NUM_CYCLES: u8 = 4;
 
 #[derive(Debug, Default)]
@@ -90,8 +94,7 @@ impl ShipBehavior for ChmmrShip {
                         ship.element_ptr,
                         -(SPECIAL_ENERGY_COST as i16),
                     );
-                    let sound =
-                        battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                    let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                     battle_bridge::bridge::process_sound(sound, ship.element_ptr);
                     // Tractor beam pull handled by C postprocess_func
                 }
@@ -119,8 +122,7 @@ impl ShipBehavior for ChmmrShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let laser_range =
-                battle_bridge::bridge::display_to_world(150) as i32;
+            let laser_range = battle_bridge::bridge::display_to_world(150);
             let angle = battle_bridge::bridge::facing_to_angle(ship.ship_facing as u16);
             let ex = battle_bridge::bridge::cosine(angle, laser_range as i16) as i16;
             let ey = battle_bridge::bridge::sine(angle, laser_range as i16) as i16;
@@ -132,12 +134,17 @@ impl ShipBehavior for ChmmrShip {
                 ex,
                 ey,
                 sender: ship.player_nr,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 pixoffs: 0,
-                color: battle_bridge::Color { r: 0xBF, g: 0x00, b: 0x00, a: 0xFF },
+                color: battle_bridge::Color {
+                    r: 0xBF,
+                    g: 0x00,
+                    b: 0x00,
+                    a: 0xFF,
+                },
             };
             let _ = battle_bridge::bridge::create_laser(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -145,7 +152,7 @@ impl ShipBehavior for ChmmrShip {
             offset: (0, 0),
             facing: ship.ship_facing,
             velocity: (0, 0), // laser, not projectile
-            life_span: 1, // continuous beam
+            life_span: 1,     // continuous beam
             hit_points: 1,
             damage: 2, // mass_points = 2 in C
             mass: 0,
@@ -163,7 +170,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = ChmmrShip::default();
+        let ship = ChmmrShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 30);
@@ -180,13 +187,17 @@ mod tests {
 
     #[test]
     fn weapon_fires_laser() {
-        let mut ship = ChmmrShip::default();
+        let mut ship = ChmmrShip;
         let state = ShipState {
             energy_level: 42,
             max_energy: 42,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
@@ -195,7 +206,7 @@ mod tests {
 
     #[test]
     fn tractor_drains_energy() {
-        let mut ship = ChmmrShip::default();
+        let mut ship = ChmmrShip;
         let mut state = ShipState {
             crew_level: 42,
             energy_level: 42,
@@ -203,7 +214,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 41); // 42 - 1
@@ -212,7 +227,7 @@ mod tests {
 
     #[test]
     fn tractor_denied_no_energy() {
-        let mut ship = ChmmrShip::default();
+        let mut ship = ChmmrShip;
         let mut state = ShipState {
             crew_level: 42,
             energy_level: 0,
@@ -220,7 +235,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 0);
@@ -228,9 +247,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = ChmmrShip::default();
+        let mut ship = ChmmrShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

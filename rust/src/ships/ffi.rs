@@ -14,10 +14,14 @@
 
 use super::catalog::{free_master_ship_list, get_ship_cost_from_index, load_master_ship_list};
 use super::ffi_contract::*;
-use super::lifecycle::{init_ships, spawn_ship as lifecycle_spawn};
+use super::lifecycle::spawn_ship as lifecycle_spawn;
 use super::loader::{free_ship as loader_free_ship, load_ship, LoadTier};
-use super::types::{Characteristics, RaceDesc, ShipData, ShipInfo, SpeciesId, Starship};
+#[cfg(not(test))]
+use super::types::{Characteristics, ShipData, ShipInfo};
+use super::types::{RaceDesc, SpeciesId, Starship};
+#[cfg(not(test))]
 use crate::battle::element::{Element, FrameHandle};
+#[cfg(not(test))]
 use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
 use std::panic::catch_unwind;
@@ -29,6 +33,10 @@ use std::ptr;
 
 /// Whether the RaceDesc/RACE_DESC layout check has been performed.
 /// Set to `true` after the first call to `verify_race_desc_layout()`.
+// Transitional: layout verification runs but the accessor-mode dispatch path
+// is not yet wired into all field-access sites. Retained so the FFI shape is
+// stable while the accessors are rolled out.
+#[cfg(not(test))]
 static mut LAYOUT_ACCESSOR_MODE: bool = false;
 
 /// Returns `true` if accessor functions must be used instead of direct
@@ -39,6 +47,10 @@ static mut LAYOUT_ACCESSOR_MODE: bool = false;
 /// contains `Box<dyn ShipBehavior>` instead of C function pointers.
 #[inline]
 #[cfg(not(test))]
+#[expect(
+    dead_code,
+    reason = "transitional layout-accessor dispatch check, not yet wired into all field-access sites"
+)]
 fn is_accessor_mode() -> bool {
     // SAFETY: read-only, written once during init before any concurrent access.
     unsafe { LAYOUT_ACCESSOR_MODE }
@@ -150,8 +162,10 @@ fn verify_race_desc_layout() {
 \
                  Accessor functions will be used for all cross-language \
                  RaceDesc field access.",
-                mismatches.join("
-  ")
+                mismatches.join(
+                    "
+  "
+                )
             );
         }
     }
@@ -182,6 +196,9 @@ extern "C" {
 // ===========================================================================
 
 /// Loads the master ship catalog.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `BOOLEAN rust_ships_load_catalog(void);`
 ///
@@ -196,6 +213,9 @@ pub unsafe extern "C" fn rust_ships_load_catalog() -> CBoolean {
 }
 
 /// Frees the master ship catalog.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `void rust_ships_free_catalog(void);`
 #[no_mangle]
@@ -204,6 +224,9 @@ pub unsafe extern "C" fn rust_ships_free_catalog() {
 }
 
 /// Gets the ship cost by catalog index.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `COUNT rust_ships_get_cost_by_index(COUNT index);`
 ///
@@ -219,6 +242,9 @@ pub unsafe extern "C" fn rust_ships_get_cost_by_index(index: CCount) -> CCount {
 // ===========================================================================
 
 /// Loads a ship descriptor at the specified tier.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `RACE_DESC *rust_ships_load(SPECIES_ID species, BOOLEAN battle_ready);`
 ///
@@ -281,6 +307,9 @@ pub unsafe extern "C" fn rust_ships_free(
 // ===========================================================================
 
 /// Builds a new ship in a C-owned queue.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `HSTARSHIP rust_ships_build(QUEUE *queue, SPECIES_ID species);`
 ///
@@ -294,7 +323,7 @@ pub unsafe extern "C" fn rust_ships_build(
     #[cfg(test)]
     {
         let _ = (queue, species);
-        return ptr::null_mut();
+        ptr::null_mut()
     }
 
     #[cfg(not(test))]
@@ -450,18 +479,18 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
                     };
                     starship_c.race_desc_ptr = race_desc_ptr;
 
-                    // Get ship mass from descriptor for element creation.
-                    // Safe: race_desc_ptr is a valid *mut RaceDesc from Box::into_raw.
-                    let ship_mass = (*(race_desc_ptr as *const RaceDesc))
-                        .characteristics
-                        .ship_mass;
-
                     // Call C helper to create the ELEMENT.
                     // C helper reads starship_c.hShip to decide fresh alloc vs reuse.
                     // We do NOT modify hShip before this call.
                     #[cfg(not(test))]
                     {
                         use crate::ships::ffi_contract::rust_bridge_spawn_element;
+
+                        // Get ship mass from descriptor for element creation.
+                        // Safe: race_desc_ptr is a valid *mut RaceDesc from Box::into_raw.
+                        let ship_mass = (*(race_desc_ptr as *const RaceDesc))
+                            .characteristics
+                            .ship_mass;
 
                         let element_ok = rust_bridge_spawn_element(
                             starship as *mut CStarship,
@@ -501,9 +530,9 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
 
                     1
                 }
-                Err(e) => {
+                Err(_error) => {
                     #[cfg(debug_assertions)]
-                    eprintln!("LIFECYCLE: rust_ships_spawn FAILED: {:?}", e);
+                    eprintln!("LIFECYCLE: rust_ships_spawn FAILED: {:?}", _error);
                     0
                 }
             }
@@ -513,6 +542,9 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
 }
 
 /// Initializes the battle subsystem.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `COUNT rust_ships_init(void);`
 ///
@@ -526,11 +558,12 @@ pub unsafe extern "C" fn rust_ships_init() -> CCount {
     let result = catch_unwind(|| {
         #[cfg(test)]
         {
+            use crate::ships::lifecycle::init_ships;
             let activity = 2u8;
-            return match init_ships(activity) {
+            match init_ships(activity) {
                 Ok(num_players) => num_players as CCount,
                 Err(_) => 0,
-            };
+            }
         }
 
         #[cfg(not(test))]
@@ -551,7 +584,10 @@ pub unsafe extern "C" fn rust_ships_init() -> CCount {
             let num_ships = rust_bridge_init_battle_arena();
             if num_ships <= 0 {
                 #[cfg(debug_assertions)]
-                eprintln!("LIFECYCLE: rust_ships_init FAILED (arena returned {})", num_ships);
+                eprintln!(
+                    "LIFECYCLE: rust_ships_init FAILED (arena returned {})",
+                    num_ships
+                );
                 return 0;
             }
 
@@ -574,6 +610,9 @@ pub unsafe extern "C" fn rust_ships_init() -> CCount {
 }
 
 /// Uninitializes the battle subsystem.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `void rust_ships_uninit(void);`
 ///
@@ -599,7 +638,6 @@ pub unsafe extern "C" fn rust_ships_uninit() {
             // Test mode: defensive catalog cleanup (no C arena to tear down)
             free_master_ship_list();
             super::lifecycle::mark_ships_uninitialized();
-            return;
         }
 
         #[cfg(not(test))]
@@ -690,6 +728,9 @@ pub unsafe extern "C" fn rust_ships_uninit() {
 // C calls these via declarations in rust_bridge_ships.h.
 
 /// C calls this to get `ship_data.ship` frame array pointer.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Returns a pointer to the first element of the `ship` array,
 /// which C treats as `FRAME *` (i.e., `FRAME_DESC **`).
@@ -705,6 +746,9 @@ pub unsafe extern "C" fn rust_race_desc_get_ship_frames(rd: *const c_void) -> *m
 }
 
 /// C calls this to get `characteristics.ship_mass`.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `BYTE rust_race_desc_get_ship_mass(const void *rd);`
 #[no_mangle]
@@ -717,6 +761,9 @@ pub unsafe extern "C" fn rust_race_desc_get_ship_mass(rd: *const c_void) -> CByt
 }
 
 /// C calls this to get `ship_info.crew_level`.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `COUNT rust_race_desc_get_crew_level(const void *rd);`
 #[no_mangle]
@@ -729,6 +776,9 @@ pub unsafe extern "C" fn rust_race_desc_get_crew_level(rd: *const c_void) -> CCo
 }
 
 /// C calls this to set `ship_info.crew_level` (for crew writeback during uninit).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `void rust_race_desc_set_crew_level(void *rd, COUNT crew);`
 #[no_mangle]
@@ -741,6 +791,9 @@ pub unsafe extern "C" fn rust_race_desc_set_crew_level(rd: *mut c_void, crew: CC
 }
 
 /// C calls this to get `ship_info.max_crew`.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// C: `COUNT rust_race_desc_get_max_crew(const void *rd);`
 #[no_mangle]
@@ -895,9 +948,7 @@ pub unsafe extern "C" fn rust_ships_preprocess(element: *mut c_void) {
         }
 
         #[cfg(test)]
-        {
-            return;
-        }
+        {}
 
         #[cfg(not(test))]
         unsafe {
@@ -959,9 +1010,7 @@ pub unsafe extern "C" fn rust_ships_postprocess(element: *mut c_void) {
         }
 
         #[cfg(test)]
-        {
-            return;
-        }
+        {}
 
         #[cfg(not(test))]
         unsafe {
@@ -1012,9 +1061,7 @@ pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
         }
 
         #[cfg(test)]
-        {
-            return;
-        }
+        {}
 
         #[cfg(not(test))]
         unsafe {
@@ -1062,8 +1109,10 @@ pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_catalog_load_free() {
         unsafe {
             // Ensure clean state
@@ -1077,8 +1126,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_cost_by_index() {
         unsafe {
+            rust_ships_free_catalog();
             rust_ships_load_catalog();
 
             // Index 0 should be valid (first melee ship after sorting)
@@ -1126,6 +1177,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_init_uninit_ships() {
         unsafe {
             let result = rust_ships_init();
@@ -1154,6 +1206,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn full_lifecycle_roundtrip() {
         unsafe {
             // Ensure clean starting state
@@ -1162,7 +1215,11 @@ mod tests {
 
             // Init
             let result = rust_ships_init();
-            assert!(result > 0, "init should return positive ship count, got {}", result);
+            assert!(
+                result > 0,
+                "init should return positive ship count, got {}",
+                result
+            );
             assert!(super::super::lifecycle::is_ships_initialized());
 
             // Uninit
@@ -1171,7 +1228,11 @@ mod tests {
 
             // Re-init (multi-battle scenario)
             let result2 = rust_ships_init();
-            assert!(result2 > 0, "re-init should return positive ship count, got {}", result2);
+            assert!(
+                result2 > 0,
+                "re-init should return positive ship count, got {}",
+                result2
+            );
             assert!(super::super::lifecycle::is_ships_initialized());
 
             // Final uninit
@@ -1181,6 +1242,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_without_init_is_safe() {
         unsafe {
             // Ensure ships are not initialized
@@ -1194,6 +1256,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn double_uninit_is_idempotent() {
         unsafe {
             // Ensure clean starting state

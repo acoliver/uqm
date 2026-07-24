@@ -5,63 +5,32 @@
 //! works as expected.
 
 use std::ffi::CString;
-use std::ptr;
 
-// Link to the Rust FFI functions
-#[allow(non_camel_case_types)]
-type c_int = i32;
-#[allow(non_camel_case_types)]
-type c_char = std::os::raw::c_char;
-#[allow(non_camel_case_types)]
-type c_uchar = u8;
+use serial_test::serial;
 
-// FFI declarations (these should match what's in ffi.rs)
-#[link(name = "uqm_rust", kind = "static")]
-extern "C" {
-    fn rust_VControl_Init() -> c_int;
-    fn rust_VControl_Uninit();
-    fn rust_VControl_ResetInput();
-    fn rust_VControl_BeginFrame();
-    fn rust_VControl_AddKeyBinding(symbol: c_int, target: *mut c_int) -> c_int;
-    fn rust_VControl_RemoveKeyBinding(symbol: c_int, target: *mut c_int) -> c_int;
-    fn rust_VControl_ClearKeyBindings();
-    fn rust_VControl_ProcessKeyDown(symbol: c_int);
-    fn rust_VControl_ProcessKeyUp(symbol: c_int);
-    fn rust_VControl_InitJoystick(
-        index: c_int,
-        name: *const c_char,
-        num_axes: c_int,
-        num_buttons: c_int,
-        num_hats: c_int,
-    ) -> c_int;
-    fn rust_VControl_UninitJoystick(index: c_int) -> c_int;
-    fn rust_VControl_GetNumJoysticks() -> c_int;
-    fn rust_VControl_AddJoyButtonBinding(port: c_int, button: c_int, target: *mut c_int) -> c_int;
-    fn rust_VControl_AddJoyAxisBinding(
-        port: c_int,
-        axis: c_int,
-        polarity: c_int,
-        target: *mut c_int,
-    ) -> c_int;
-    fn rust_VControl_ProcessJoyButtonDown(port: c_int, button: c_int);
-    fn rust_VControl_ProcessJoyButtonUp(port: c_int, button: c_int);
-    fn rust_VControl_ProcessJoyAxis(port: c_int, axis: c_int, value: c_int);
-    fn rust_VControl_SetJoyThreshold(port: c_int, threshold: c_int) -> c_int;
-    fn rust_VControl_ClearGesture();
-    fn rust_VControl_GetLastGestureType() -> c_int;
-}
+use uqm_rust::input::ffi::{
+    rust_VControl_AddJoyAxisBinding, rust_VControl_AddJoyButtonBinding,
+    rust_VControl_AddKeyBinding, rust_VControl_BeginFrame, rust_VControl_ClearGesture,
+    rust_VControl_ClearKeyBindings, rust_VControl_GetLastGestureType,
+    rust_VControl_GetNumJoysticks, rust_VControl_Init, rust_VControl_InitJoystick,
+    rust_VControl_ProcessJoyAxis, rust_VControl_ProcessJoyButtonDown,
+    rust_VControl_ProcessJoyButtonUp, rust_VControl_ProcessKeyDown, rust_VControl_ProcessKeyUp,
+    rust_VControl_ResetInput, rust_VControl_SetJoyThreshold, rust_VControl_Uninit,
+    rust_VControl_UninitJoystick,
+};
 
 #[test]
-#[ignore] // Requires SDL context which we don't have in unit tests
+#[serial]
 fn test_ffi_init_uninit() {
     unsafe {
         assert_eq!(rust_VControl_Init(), 0);
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_key_binding() {
     unsafe {
         rust_VControl_Init();
@@ -73,18 +42,20 @@ fn test_ffi_key_binding() {
 
         // Simulate key down
         rust_VControl_ProcessKeyDown(keycode);
-        assert_eq!(target, 1);
+        assert_ne!(target, 0);
 
-        // Simulate key up
+        // Key up sets the release bit for this frame; BeginFrame clears it.
         rust_VControl_ProcessKeyUp(keycode);
+        rust_VControl_BeginFrame();
         assert_eq!(target, 0);
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_key_binding_persistence() {
     unsafe {
         rust_VControl_Init();
@@ -100,12 +71,13 @@ fn test_ffi_key_binding_persistence() {
         rust_VControl_BeginFrame(); // Should still be 1 (key held)
         assert_eq!(target, 1);
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_joystick() {
     unsafe {
         rust_VControl_Init();
@@ -129,12 +101,13 @@ fn test_ffi_joystick() {
         rust_VControl_UninitJoystick(0);
         assert_eq!(rust_VControl_GetNumJoysticks(), 0);
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_joystick_axis() {
     unsafe {
         rust_VControl_Init();
@@ -166,12 +139,13 @@ fn test_ffi_joystick_axis() {
         assert_eq!(neg_target, 0);
         assert_eq!(pos_target, 1);
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_reset_states() {
     unsafe {
         rust_VControl_Init();
@@ -182,12 +156,13 @@ fn test_ffi_reset_states() {
         rust_VControl_ResetInput();
         assert_eq!(target, 0);
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_clear_bindings() {
     unsafe {
         rust_VControl_Init();
@@ -201,27 +176,29 @@ fn test_ffi_clear_bindings() {
         // Press keys
         rust_VControl_ProcessKeyDown(32);
         rust_VControl_ProcessKeyDown(65);
-        assert_eq!(target1, 1);
-        assert_eq!(target2, 1);
+        assert_ne!(target1, 0);
+        assert_ne!(target2, 0);
 
-        // Clear bindings
+        // Clear bindings and reset the borrowed targets explicitly.
         rust_VControl_ClearKeyBindings();
+        target1 = 0;
+        target2 = 0;
 
-        // Keys should no longer affect targets
+        // Events for former bindings must leave both targets unchanged.
         rust_VControl_ProcessKeyUp(32);
         rust_VControl_ProcessKeyUp(65);
-
-        // Reset and try again - should not trigger
-        rust_VControl_ResetInput();
         rust_VControl_ProcessKeyDown(32);
+        rust_VControl_ProcessKeyDown(65);
         assert_eq!(target1, 0);
+        assert_eq!(target2, 0);
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_gesture_tracking() {
     unsafe {
         rust_VControl_Init();
@@ -234,12 +211,13 @@ fn test_ffi_gesture_tracking() {
         // For this test we just verify the FFI is callable
         rust_VControl_ClearGesture();
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }
 
 #[test]
-#[ignore]
+#[serial]
 fn test_ffi_begin_frame() {
     unsafe {
         rust_VControl_Init();
@@ -247,14 +225,15 @@ fn test_ffi_begin_frame() {
         let mut target: i32 = 0;
         rust_VControl_AddKeyBinding(32, &mut target);
 
-        // Key down
+        // Key down includes both the held and newly-pressed bits.
         rust_VControl_ProcessKeyDown(32);
-        assert_eq!(target, 1);
+        assert_ne!(target, 0);
 
         // Begin frame clears start bit but key is still held
         // (In real usage, the key state would be tracked by SDL)
         rust_VControl_BeginFrame();
 
+        rust_VControl_ClearKeyBindings();
         rust_VControl_Uninit();
     }
 }

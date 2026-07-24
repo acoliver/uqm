@@ -767,7 +767,7 @@ mod tests {
     fn test_ship_interface_trait() {
         let mut ship = MockShipInterface;
 
-        assert_eq!(ship.get_race_preprocess(0), None);
+        assert!(ship.get_race_preprocess(0).is_none());
         assert_eq!(ship.load_ship_descriptor(0), Some(1));
         assert_eq!(ship.get_ship_queue(0), Some(1));
         ship.modify_ship_energy(0, 10);

@@ -18,6 +18,7 @@ pub mod canvas_ffi;
 pub mod cmap_ffi;
 pub mod dcq_ffi;
 pub mod sdl;
+pub mod sdl_capture;
 
 // Re-export public items from dcqueue module
 pub use dcqueue::{

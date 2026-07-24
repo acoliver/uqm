@@ -2168,7 +2168,7 @@ mod tests {
         base.set_frame_index(1);
         draw_image(&mut dst, &base, 5, 0, 0).unwrap();
         let pixels = dst.pixels();
-        let offset = (0 * dst.width() + 5) as usize * 4;
+        let offset = 5_usize * 4;
         assert_eq!(pixels[offset + 2], 255);
     }
 
@@ -2565,7 +2565,7 @@ mod tests {
 
         // Verify pixels outside the copied area are black
         // Check top-left area
-        let offset = (0 * dst_width + 0) as usize * 4;
+        let offset = 0;
         assert_eq!(dst_pixels[offset], 0); // R
     }
 
@@ -2651,7 +2651,7 @@ mod tests {
         }
 
         // Verify uncopied area is black
-        let offset = (0 * dst_width + 0) as usize * 4;
+        let offset = 0;
         assert_eq!(dst_pixels[offset], 0); // R
     }
 
@@ -2822,7 +2822,7 @@ mod tests {
         for y in 0..20 {
             for x in 0..20 {
                 let offset = (y * width + x) as usize * 4;
-                if x < 5 || x >= 15 || y < 5 || y >= 15 {
+                if !(5..15).contains(&x) || !(5..15).contains(&y) {
                     assert_eq!(
                         pixels[offset], 0,
                         "Pixel outside scissor at ({}, {}) should be black",

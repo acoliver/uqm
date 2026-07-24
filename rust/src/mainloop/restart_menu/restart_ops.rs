@@ -3,10 +3,15 @@
 //! @plan PLAN-20260707-RESTARTMENU.P05
 //! @requirement REQ-RM-005
 
+#[cfg(not(test))]
 use std::ffi::CString;
-use std::os::raw::{c_int, c_short, c_void};
+#[cfg(not(test))]
+use std::os::raw::c_void;
+use std::os::raw::{c_int, c_short};
 
-use super::c_extern::{self, Color, Point};
+use super::c_extern::Color;
+#[cfg(not(test))]
+use super::c_extern::{self, Point};
 use super::types::MenuInputState;
 
 // ===========================================================================
@@ -207,9 +212,7 @@ impl RestartMenuOps for CffiOps {
         }
         // SAFETY: pms was set by set_menu_state_ptr to a valid MENU_STATE*.
         // CurFrame is accessed through the MENU_STATE struct.
-        unsafe {
-            super::c_extern::uqm_get_menu_cur_frame(pms as *mut std::os::raw::c_void)
-        }
+        unsafe { super::c_extern::uqm_get_menu_cur_frame(pms as *mut std::os::raw::c_void) }
     }
     fn create_menu_state(&self) -> usize {
         // SAFETY: Allocates a zeroed MENU_STATE and sets InputFunc.
@@ -227,9 +230,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn destroy_menu_state(&self, ptr: usize) {
         // SAFETY: Frees the MENU_STATE allocated by create_menu_state.
-        unsafe {
-            super::c_extern::uqm_destroy_menu_state(ptr as *mut std::os::raw::c_void)
-        }
+        unsafe { super::c_extern::uqm_destroy_menu_state(ptr as *mut std::os::raw::c_void) }
     }
 
     fn sync_flash_context(&self, ctx: usize) {
@@ -237,8 +238,7 @@ impl RestartMenuOps for CffiOps {
         if pms != 0 {
             // SAFETY: pms is a valid MENU_STATE* set by set_menu_state_ptr.
             unsafe {
-                super::c_extern::uqm_set_menu_flash_context(
-                    pms as *mut std::os::raw::c_void, ctx)
+                super::c_extern::uqm_set_menu_flash_context(pms as *mut std::os::raw::c_void, ctx)
             }
         }
     }
@@ -247,7 +247,9 @@ impl RestartMenuOps for CffiOps {
         if pms != 0 {
             unsafe {
                 super::c_extern::uqm_set_menu_initialized(
-                    pms as *mut std::os::raw::c_void, if val { 1 } else { 0 })
+                    pms as *mut std::os::raw::c_void,
+                    if val { 1 } else { 0 },
+                )
             }
         }
     }
@@ -255,8 +257,7 @@ impl RestartMenuOps for CffiOps {
         let pms = self.get_menu_state_ptr();
         if pms != 0 {
             unsafe {
-                super::c_extern::uqm_set_menu_cur_state(
-                    pms as *mut std::os::raw::c_void, state)
+                super::c_extern::uqm_set_menu_cur_state(pms as *mut std::os::raw::c_void, state)
             }
         }
     }
@@ -264,8 +265,7 @@ impl RestartMenuOps for CffiOps {
         let pms = self.get_menu_state_ptr();
         if pms != 0 {
             unsafe {
-                super::c_extern::uqm_set_menu_cur_frame(
-                    pms as *mut std::os::raw::c_void, frame)
+                super::c_extern::uqm_set_menu_cur_frame(pms as *mut std::os::raw::c_void, frame)
             }
         }
     }
@@ -273,8 +273,7 @@ impl RestartMenuOps for CffiOps {
         let pms = self.get_menu_state_ptr();
         if pms != 0 {
             unsafe {
-                super::c_extern::uqm_set_menu_h_music(
-                    pms as *mut std::os::raw::c_void, handle)
+                super::c_extern::uqm_set_menu_h_music(pms as *mut std::os::raw::c_void, handle)
             }
         }
     }
@@ -330,7 +329,9 @@ impl RestartMenuOps for CffiOps {
             static ScreenContext: *mut c_void;
         }
         // SAFETY: ScreenContext is a global initialized during game startup.
-        unsafe { let _ = c_extern::SetContext(ScreenContext); }
+        unsafe {
+            let _ = c_extern::SetContext(ScreenContext);
+        }
     }
 
     fn fade_screen(&self, fade_type: u32, duration: c_short) -> u32 {
@@ -373,7 +374,9 @@ impl RestartMenuOps for CffiOps {
     }
     fn seed_random(&self) {
         // SAFETY: SeedRandomNumbers is safe to call any time.
-        unsafe { let _ = c_extern::SeedRandomNumbers(); }
+        unsafe {
+            let _ = c_extern::SeedRandomNumbers();
+        }
     }
 
     fn load_menu_graphic(&self) -> usize {
@@ -408,9 +411,7 @@ impl RestartMenuOps for CffiOps {
         // SAFETY: pMS must be set by the caller. Frame comes from pMS->CurFrame.
         let pms = self.get_menu_state_ptr();
         let frame = self.get_menu_frame();
-        unsafe {
-            c_extern::DrawRestartMenu(pms as *mut c_void, state, frame as *mut c_void)
-        }
+        unsafe { c_extern::DrawRestartMenu(pms as *mut c_void, state, frame as *mut c_void) }
     }
     fn set_menu_sounds(&self, s0: u16, s1: u16) {
         // SAFETY: SetMenuSounds configures menu sound effects.
@@ -427,9 +428,7 @@ impl RestartMenuOps for CffiOps {
     fn run_do_input(&self, reset_input: bool) {
         // SAFETY: pMS must be set by the caller. DoInput processes menu input.
         let pms = self.get_menu_state_ptr();
-        unsafe {
-            c_extern::DoInput(pms as *mut c_void, if reset_input { 1 } else { 0 })
-        }
+        unsafe { c_extern::DoInput(pms as *mut c_void, if reset_input { 1 } else { 0 }) }
     }
 
     fn load_menu_music(&self) -> usize {
@@ -504,11 +503,7 @@ impl RestartMenuOps for CffiOps {
     fn flash_set_state_fade_in(&self, ctx: usize, duration: u32) {
         // SAFETY: ctx was obtained from create_flash_overlay.
         unsafe {
-            c_extern::Flash_setState(
-                ctx as *mut c_void,
-                c_extern::FLASH_STATE_FADE_IN,
-                duration,
-            )
+            c_extern::Flash_setState(ctx as *mut c_void, c_extern::FLASH_STATE_FADE_IN, duration)
         }
     }
     fn flash_set_overlay(&self, ctx: usize, frame_idx: u32) {
@@ -526,15 +521,8 @@ impl RestartMenuOps for CffiOps {
         // frame index for the flash overlay.
         unsafe {
             let cur_frame = self.get_menu_frame();
-            let new_frame = c_extern::SetAbsFrameIndex(
-                cur_frame as *mut c_void,
-                idx,
-            );
-            c_extern::Flash_setOverlay(
-                ctx as *mut c_void,
-                &origin,
-                new_frame,
-            )
+            let new_frame = c_extern::SetAbsFrameIndex(cur_frame as *mut c_void, idx);
+            c_extern::Flash_setOverlay(ctx as *mut c_void, &origin, new_frame)
         }
     }
 

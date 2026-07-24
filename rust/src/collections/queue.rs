@@ -80,6 +80,10 @@ unsafe fn get_link_addr(pq: *const Queue, i: u16) -> HLink {
 
 /// C: `BOOLEAN InitQueue(QUEUE *pq, COUNT num_elements, OBJ_SIZE size)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) -> bool {
     unsafe {
         (*pq).head = std::ptr::null_mut();
@@ -109,6 +113,10 @@ pub extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) ->
 
 /// C: `BOOLEAN UninitQueue(QUEUE *pq)`
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn UninitQueue(pq: *mut Queue) -> bool {
     unsafe {
         (*pq).head = std::ptr::null_mut();
@@ -126,6 +134,10 @@ pub extern "C" fn UninitQueue(pq: *mut Queue) -> bool {
 
 /// C: `void ReinitQueue(QUEUE *pq)` — empty the queue, rebuild free list
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn ReinitQueue(pq: *mut Queue) {
     unsafe {
         (*pq).head = std::ptr::null_mut();
@@ -143,6 +155,10 @@ pub extern "C" fn ReinitQueue(pq: *mut Queue) {
 
 /// C: `HLINK AllocLink(QUEUE *pq)` — allocate from free list
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
     unsafe {
         let h = (*pq).free_list;
@@ -156,6 +172,10 @@ pub extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
 
 /// C: `void FreeLink(QUEUE *pq, HLINK hLink)` — return to free list
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
     unsafe {
         let lp = lock_link(pq, h_link);
@@ -166,6 +186,10 @@ pub extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
 
 /// C: `void PutQueue(QUEUE *pq, HLINK hLink)` — append to tail
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
     unsafe {
         if (*pq).head.is_null() {
@@ -186,6 +210,10 @@ pub extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
 
 /// C: `void InsertQueue(QUEUE *pq, HLINK hLink, HLINK hRefLink)` — insert before ref
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) {
     if h_ref_link.is_null() {
         PutQueue(pq, h_link);
@@ -214,6 +242,10 @@ pub extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) 
 
 /// C: `void RemoveQueue(QUEUE *pq, HLINK hLink)` — unlink from queue
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
     unsafe {
         let lp = lock_link(pq, h_link);
@@ -238,6 +270,10 @@ pub extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
 
 /// C: `COUNT CountLinks(QUEUE *pq)` — count elements
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn CountLinks(pq: *const Queue) -> u16 {
     unsafe {
         let mut count: u16 = 0;
@@ -254,6 +290,10 @@ pub extern "C" fn CountLinks(pq: *const Queue) -> u16 {
 pub type LinkCallback = extern "C" fn(*mut Link, *mut c_void);
 
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn ForAllLinks(pq: *mut Queue, callback: LinkCallback, arg: *mut c_void) {
     unsafe {
         let mut h = (*pq).head;
@@ -329,23 +369,22 @@ mod tests {
     #[test]
     fn test_alloc_exhaustion() {
         let (pq, _) = setup_queue(3);
-        unsafe {
-            // Pool of 3 exhausted
-            let h = AllocLink(pq);
-            assert!(h.is_null(), "AllocLink should return NULL when pool exhausted");
-        }
+        // Pool of 3 exhausted
+        let h = AllocLink(pq);
+        assert!(
+            h.is_null(),
+            "AllocLink should return NULL when pool exhausted"
+        );
         teardown_queue(pq);
     }
 
     #[test]
     fn test_free_realloc() {
         let (pq, elems) = setup_queue(2);
-        unsafe {
-            // Free one, then alloc should succeed again
-            FreeLink(pq, elems[0] as HLink);
-            let h = AllocLink(pq);
-            assert!(!h.is_null(), "AllocLink should succeed after FreeLink");
-        }
+        // Free one, then alloc should succeed again
+        FreeLink(pq, elems[0] as HLink);
+        let h = AllocLink(pq);
+        assert!(!h.is_null(), "AllocLink should succeed after FreeLink");
         teardown_queue(pq);
     }
 
@@ -373,22 +412,18 @@ mod tests {
     #[test]
     fn test_reinit() {
         let (pq, elems) = setup_queue(3);
-        unsafe {
-            PutQueue(pq, elems[0] as HLink);
-            PutQueue(pq, elems[1] as HLink);
-            assert_eq!(CountLinks(pq), 2);
-
-            ReinitQueue(pq);
-            assert_eq!(CountLinks(pq), 0);
-
-            // After reinit, pool should be fully available again
-            let h = AllocLink(pq);
-            assert!(!h.is_null());
-            let h2 = AllocLink(pq);
-            assert!(!h2.is_null());
-            let h3 = AllocLink(pq);
-            assert!(!h3.is_null());
-        }
+        PutQueue(pq, elems[0] as HLink);
+        PutQueue(pq, elems[1] as HLink);
+        assert_eq!(CountLinks(pq), 2);
+        ReinitQueue(pq);
+        assert_eq!(CountLinks(pq), 0);
+        // After reinit, pool should be fully available again
+        let h = AllocLink(pq);
+        assert!(!h.is_null());
+        let h2 = AllocLink(pq);
+        assert!(!h2.is_null());
+        let h3 = AllocLink(pq);
+        assert!(!h3.is_null());
         teardown_queue(pq);
     }
 
@@ -447,20 +482,17 @@ mod tests {
         extern "C" fn count_cb(_lp: *mut Link, arg: *mut c_void) {
             unsafe {
                 let counter = arg as *mut u16;
-            *counter += 1;
+                *counter += 1;
             }
         }
 
         let (pq, elems) = setup_queue(4);
-        unsafe {
-            PutQueue(pq, elems[0] as HLink);
-            PutQueue(pq, elems[1] as HLink);
-            PutQueue(pq, elems[2] as HLink);
-
-            let mut counter: u16 = 0;
-            ForAllLinks(pq, count_cb, &mut counter as *mut u16 as *mut c_void);
-            assert_eq!(counter, 3);
-        }
+        PutQueue(pq, elems[0] as HLink);
+        PutQueue(pq, elems[1] as HLink);
+        PutQueue(pq, elems[2] as HLink);
+        let mut counter: u16 = 0;
+        ForAllLinks(pq, count_cb, &mut counter as *mut u16 as *mut c_void);
+        assert_eq!(counter, 3);
         teardown_queue(pq);
     }
 }

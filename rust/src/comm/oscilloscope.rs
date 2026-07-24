@@ -177,169 +177,124 @@ mod tests {
 
     #[test]
     fn test_oscilloscope_new() {
-        unsafe {
-            let osc = Oscilloscope::new();
-            assert!(!osc.is_active());
-            assert_eq!(osc.peak(), 1);
-        }
+        let osc = Oscilloscope::new();
+        assert!(!osc.is_active());
+        assert_eq!(osc.peak(), 1);
     }
 
     #[test]
     fn test_activate_deactivate() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-
-            osc.activate();
-            assert!(osc.is_active());
-
-            osc.deactivate();
-            assert!(!osc.is_active());
-        }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        assert!(osc.is_active());
+        osc.deactivate();
+        assert!(!osc.is_active());
     }
 
     #[test]
     fn test_add_samples_inactive() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.add_samples(&[100, 200, 300]);
-
-            // Should not affect peak when inactive
-            assert_eq!(osc.peak(), 1);
-        }
+        let mut osc = Oscilloscope::new();
+        osc.add_samples(&[100, 200, 300]);
+        // Should not affect peak when inactive
+        assert_eq!(osc.peak(), 1);
     }
 
     #[test]
     fn test_add_samples_active() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.activate();
-            osc.add_samples(&[100, -200, 300]);
-
-            assert_eq!(osc.peak(), 300);
-        }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        osc.add_samples(&[100, -200, 300]);
+        assert_eq!(osc.peak(), 300);
     }
 
     #[test]
     fn test_update_display() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.activate();
-
-            // Add some samples
-            let samples: Vec<i16> = (0..512).map(|i| (i * 100) as i16).collect();
-            osc.add_samples(&samples);
-
-            osc.update();
-
-            // Display should have been updated
-            let display = osc.display();
-            assert_eq!(display.len(), OSCILLOSCOPE_WIDTH);
-        }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        // Add some samples
+        let samples: Vec<i16> = (0..512).map(|i| (i * 100) as i16).collect();
+        osc.add_samples(&samples);
+        osc.update();
+        // Display should have been updated
+        let display = osc.display();
+        assert_eq!(display.len(), OSCILLOSCOPE_WIDTH);
     }
 
     #[test]
     fn test_get_y() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-
-            // Default should be center
-            assert_eq!(osc.get_y(0), 128);
-            assert_eq!(osc.get_y(64), 128);
-
-            // Out of range should return center
-            assert_eq!(osc.get_y(1000), 128);
-        }
+        let osc = Oscilloscope::new();
+        // Default should be center
+        assert_eq!(osc.get_y(0), 128);
+        assert_eq!(osc.get_y(64), 128);
+        // Out of range should return center
+        assert_eq!(osc.get_y(1000), 128);
     }
 
     #[test]
     fn test_clear() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.activate();
-            osc.add_samples(&[1000, 2000, 3000]);
-
-            osc.clear();
-
-            assert_eq!(osc.peak(), 1);
-            // All display values should be center
-            for &val in osc.display() {
-                assert_eq!(val, 128);
-            }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        osc.add_samples(&[1000, 2000, 3000]);
+        osc.clear();
+        assert_eq!(osc.peak(), 1);
+        // All display values should be center
+        for &val in osc.display() {
+            assert_eq!(val, 128);
         }
     }
 
     #[test]
     fn test_peak_decay() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.activate();
-            osc.add_samples(&[10000]);
-
-            let initial_peak = osc.peak();
-
-            // Update should decay peak
-            osc.update();
-            assert!(osc.peak() < initial_peak);
-        }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        osc.add_samples(&[10000]);
+        let initial_peak = osc.peak();
+        // Update should decay peak
+        osc.update();
+        assert!(osc.peak() < initial_peak);
     }
 
     #[test]
     fn test_set_peak_decay() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-
-            osc.set_peak_decay(0.5);
-            assert!((osc.peak_decay - 0.5).abs() < 0.001);
-
-            // Should clamp to 0-1
-            osc.set_peak_decay(1.5);
-            assert!((osc.peak_decay - 1.0).abs() < 0.001);
-
-            osc.set_peak_decay(-0.5);
-            assert!(osc.peak_decay >= 0.0);
-        }
+        let mut osc = Oscilloscope::new();
+        osc.set_peak_decay(0.5);
+        assert!((osc.peak_decay - 0.5).abs() < 0.001);
+        // Should clamp to 0-1
+        osc.set_peak_decay(1.5);
+        assert!((osc.peak_decay - 1.0).abs() < 0.001);
+        osc.set_peak_decay(-0.5);
+        assert!(osc.peak_decay >= 0.0);
     }
 
     #[test]
     fn test_calculate_waveform() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.activate();
-
-            let samples: Vec<i16> = (0..512).map(|i| ((i % 100) * 100) as i16).collect();
-            osc.add_samples(&samples);
-
-            let waveform = osc.calculate_waveform(64, 32);
-            assert_eq!(waveform.len(), 64);
-
-            // All values should be within height range
-            for &y in &waveform {
-                assert!(y < 32);
-            }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        let samples: Vec<i16> = (0..512).map(|i| ((i % 100) * 100) as i16).collect();
+        osc.add_samples(&samples);
+        let waveform = osc.calculate_waveform(64, 32);
+        assert_eq!(waveform.len(), 64);
+        // All values should be within height range
+        for &y in &waveform {
+            assert!(y < 32);
         }
     }
 
     #[test]
     fn test_calculate_waveform_inactive() {
-        unsafe {
-            let osc = Oscilloscope::new();
-            let waveform = osc.calculate_waveform(64, 32);
-
-            // Should return center values
-            for &y in &waveform {
-                assert_eq!(y, 16);
-            }
+        let osc = Oscilloscope::new();
+        let waveform = osc.calculate_waveform(64, 32);
+        // Should return center values
+        for &y in &waveform {
+            assert_eq!(y, 16);
         }
     }
 
     #[test]
     fn test_negative_samples() {
-        unsafe {
-            let mut osc = Oscilloscope::new();
-            osc.activate();
-            osc.add_samples(&[-5000, -10000, -15000]);
-
-            assert_eq!(osc.peak(), 15000);
-        }
+        let mut osc = Oscilloscope::new();
+        osc.activate();
+        osc.add_samples(&[-5000, -10000, -15000]);
+        assert_eq!(osc.peak(), 15000);
     }
 }

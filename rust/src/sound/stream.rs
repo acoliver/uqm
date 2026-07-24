@@ -2,8 +2,6 @@
 // @requirement REQ-STREAM-INIT-01..07, REQ-STREAM-PLAY-01..20, REQ-STREAM-SAMPLE-01..05
 // @requirement REQ-STREAM-TAG-01..03, REQ-STREAM-SCOPE-01..11, REQ-STREAM-FADE-01..05
 // @requirement REQ-STREAM-THREAD-01..08, REQ-STREAM-PROCESS-01..16
-#![allow(dead_code, unused_imports, unused_variables)]
-
 //! Streaming audio engine.
 //!
 //! Manages the decoder thread that feeds audio data to the mixer,
@@ -23,7 +21,7 @@ use super::formats::AudioFormat;
 use super::mixer::buffer as mixer_buffer;
 use super::mixer::mix as mixer_mix;
 use super::mixer::source as mixer_source;
-use super::mixer::types::{MixerError, MixerFormat, SourceProp, SourceState};
+use super::mixer::types::{SourceProp, SourceState};
 use super::music;
 use super::types::*;
 
@@ -252,7 +250,7 @@ pub fn play_stream_with_offset_override(
 
     let buf_handles: Vec<usize> = sample.buffers[..num_buffers.min(sample.buffers.len())].to_vec();
 
-    for (i, &buf_handle) in buf_handles.iter().enumerate() {
+    for &buf_handle in buf_handles.iter() {
         let decode_result = {
             let decoder = sample.decoder.as_mut().ok_or(AudioError::InvalidDecoder)?;
             let mut buf = vec![0u8; BUFFER_SIZE];
@@ -579,7 +577,7 @@ pub fn graph_foreground_stream(
     let mut energy: i64 = 0;
     let count = width.min(data.len());
 
-    for x in 0..count {
+    for point in data.iter_mut().take(count) {
         // Read and sum channels (matching C: s += readSoundSample for each channel)
         let mut s: i32 = read_scope_sample(sbuf, read_pos, sbuf_size, sample_size) as i32;
         if channels > 1 {
@@ -595,7 +593,7 @@ pub fn graph_foreground_stream(
         // Scale and center (matching C: s = (s / scale) + (height >> 1))
         let y = (s / scale) + (height as i32 >> 1);
         let y = y.clamp(0, height as i32 - 1);
-        data[x] = y as u8;
+        *point = y as u8;
 
         read_pos = (read_pos + step) % sbuf_size;
     }
@@ -671,9 +669,6 @@ pub fn set_music_stream_fade(how_long: u32, end_volume: i32) -> bool {
 // Lifecycle (spec §3.1.3)
 // =============================================================================
 
-/// Initialize the streaming decoder subsystem.
-///
-/// Spawns the background decoder thread. **Must be called after
 // =============================================================================
 // Source accessors (for SFX / Music modules)
 // =============================================================================
@@ -749,6 +744,7 @@ static MIXER_PUMP_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 static MIXER_PUMP_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 /// Start a background thread that continuously mixes audio and sends it to rodio.
+#[cfg(not(test))]
 fn start_mixer_pump() {
     MIXER_PUMP_SHUTDOWN.store(false, Ordering::Release);
 
@@ -864,6 +860,7 @@ fn start_mixer_pump() {
 ///
 /// rodio calls `next()` repeatedly to get individual samples. We mix in
 /// chunks for efficiency and yield one sample at a time.
+#[cfg(not(test))]
 struct MixerPumpSource {
     /// Pre-mixed buffer (interleaved i16 samples, little-endian).
     buf: Vec<i16>,
@@ -871,6 +868,7 @@ struct MixerPumpSource {
     pos: usize,
 }
 
+#[cfg(not(test))]
 impl MixerPumpSource {
     fn new() -> Self {
         MixerPumpSource {
@@ -924,6 +922,7 @@ impl MixerPumpSource {
     }
 }
 
+#[cfg(not(test))]
 impl Iterator for MixerPumpSource {
     type Item = i16;
 
@@ -1358,26 +1357,6 @@ fn remove_scope_data(source: &mut SoundSource, amount: usize) {
     source.sbuf_lasttime = get_time_counter();
 }
 
-/// Read and decode audio data from a sample's decoder into a buffer.
-fn read_sound_sample(sample: &mut SoundSample, buf: &mut [u8]) -> AudioResult<usize> {
-    let decoder = sample.decoder.as_mut().ok_or(AudioError::InvalidDecoder)?;
-    match decoder.decode(buf) {
-        Ok(n) => Ok(n),
-        Err(DecodeError::EndOfFile) => {
-            if sample.looping {
-                let _ = decoder.seek(0);
-                match decoder.decode(buf) {
-                    Ok(n) => Ok(n),
-                    Err(e) => Err(e.into()),
-                }
-            } else {
-                Err(AudioError::EndOfStream)
-            }
-        }
-        Err(e) => Err(e.into()),
-    }
-}
-
 // =============================================================================
 // Source Access Helpers
 // =============================================================================
@@ -1452,7 +1431,7 @@ mod tests {
 
     #[test]
     fn test_callback_panic_recovery_pattern() {
-        let mut output = vec![1.0_f32; 8];
+        let mut output = [1.0_f32; 8];
         let result = catch_unwind(AssertUnwindSafe(|| {
             panic!("simulated callback panic");
         }));

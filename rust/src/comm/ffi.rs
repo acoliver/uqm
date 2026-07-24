@@ -19,6 +19,9 @@ thread_local! {
 // ============================================================================
 
 /// Initialize the communication system
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_InitCommunication() -> c_int {
     match COMM_STATE.write().init() {
@@ -28,12 +31,18 @@ pub unsafe extern "C" fn rust_InitCommunication() -> c_int {
 }
 
 /// Uninitialize the communication system
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_UninitCommunication() {
     COMM_STATE.write().uninit();
 }
 
 /// Check if communication is initialized
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_IsCommInitialized() -> c_int {
     if COMM_STATE.read().is_initialized() {
@@ -44,6 +53,9 @@ pub unsafe extern "C" fn rust_IsCommInitialized() -> c_int {
 }
 
 /// Clear communication state
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ClearCommunication() {
     COMM_STATE.write().clear();
@@ -54,6 +66,9 @@ pub unsafe extern "C" fn rust_ClearCommunication() {
 // ============================================================================
 
 /// Start the speech track
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_StartTrack() -> c_int {
     match COMM_STATE.write().start_track() {
@@ -63,18 +78,27 @@ pub unsafe extern "C" fn rust_StartTrack() -> c_int {
 }
 
 /// Stop the speech track
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_StopTrack() {
     COMM_STATE.write().stop_track();
 }
 
 /// Rewind the track to the beginning
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_RewindTrack() {
     COMM_STATE.write().track_mut().rewind();
 }
 
 /// Jump to end of current phrase (skip current speech).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// No offset parameter — JumpTrack advances to end of current phrase only (TP-REQ-005).
 #[no_mangle]
 pub unsafe extern "C" fn rust_JumpTrack() {
@@ -82,18 +106,27 @@ pub unsafe extern "C" fn rust_JumpTrack() {
 }
 
 /// Seek to absolute position in track
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SeekTrack(position: f32) {
     COMM_STATE.write().track_mut().seek(position);
 }
 
 /// Commit track position (for save/restore)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_CommitTrack() -> f32 {
     COMM_STATE.write().track_mut().commit()
 }
 
 /// Wait for track to finish (returns 1 when done)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_WaitTrack() -> c_int {
     if COMM_STATE.read().wait_track() {
@@ -104,18 +137,27 @@ pub unsafe extern "C" fn rust_WaitTrack() -> c_int {
 }
 
 /// Get track position
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetTrackPosition() -> f32 {
     COMM_STATE.read().track().position()
 }
 
 /// Get track length
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetTrackLength() -> f32 {
     COMM_STATE.read().track().length()
 }
 
 /// Add a speech chunk to the track
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SpliceTrack(
     audio_handle: c_uint,
@@ -136,6 +178,9 @@ pub unsafe extern "C" fn rust_SpliceTrack(
 }
 
 /// Add text-only subtitle to the track
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SpliceTrackText(text: *const c_char, start_time: f32, duration: f32) {
     if text.is_null() {
@@ -156,12 +201,18 @@ pub unsafe extern "C" fn rust_SpliceTrackText(text: *const c_char, start_time: f
 }
 
 /// Clear the track
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ClearTrack() {
     COMM_STATE.write().track_mut().clear();
 }
 
 /// Check if a track is currently playing.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_PlayingTrack() -> c_uint {
     if COMM_STATE.read().track().is_playing() {
@@ -172,24 +223,36 @@ pub unsafe extern "C" fn rust_PlayingTrack() -> c_uint {
 }
 
 /// Fast-forward by one page (subtitle page skip).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_FastForward_Page() {
     COMM_STATE.write().track_mut().fast_forward_page();
 }
 
 /// Smooth fast-forward (increase playback rate).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_FastForward_Smooth() {
     COMM_STATE.write().track_mut().fast_forward_smooth();
 }
 
 /// Reverse by one page.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_FastReverse_Page() {
     COMM_STATE.write().track_mut().fast_reverse_page();
 }
 
 /// Smooth reverse (decrease playback rate / rewind).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_FastReverse_Smooth() {
     COMM_STATE.write().track_mut().fast_reverse_smooth();
@@ -200,6 +263,9 @@ pub unsafe extern "C" fn rust_FastReverse_Smooth() {
 // ============================================================================
 
 /// Get current subtitle (returns null if none).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// Returns a stable C string via thread-local buffer (OL-REQ-009, OL-REQ-010).
 /// Pointer is valid until the next call to rust_GetSubtitle on the same thread.
 #[no_mangle]
@@ -218,12 +284,18 @@ pub unsafe extern "C" fn rust_GetSubtitle() -> *const c_char {
 }
 
 /// Enable/disable subtitles
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetSubtitlesEnabled(enabled: c_int) {
     COMM_STATE.write().subtitles_mut().set_enabled(enabled != 0);
 }
 
 /// Check if subtitles are enabled
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_AreSubtitlesEnabled() -> c_int {
     if COMM_STATE.read().subtitles().is_enabled() {
@@ -238,6 +310,9 @@ pub unsafe extern "C" fn rust_AreSubtitlesEnabled() -> c_int {
 // ============================================================================
 
 /// Add a response option.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// `func` receives `response_ref` as its argument when selected (RS-REQ-011).
 #[no_mangle]
 pub unsafe extern "C" fn rust_DoResponsePhrase(
@@ -245,7 +320,12 @@ pub unsafe extern "C" fn rust_DoResponsePhrase(
     text: *const c_char,
     func: Option<extern "C" fn(u32)>,
 ) -> c_int {
-    eprintln!("[DBG] rust_DoResponsePhrase: ref={} text_null={} func={}", response_ref, text.is_null(), func.is_some());
+    eprintln!(
+        "[DBG] rust_DoResponsePhrase: ref={} text_null={} func={}",
+        response_ref,
+        text.is_null(),
+        func.is_some()
+    );
     if text.is_null() {
         return 0;
     }
@@ -260,23 +340,40 @@ pub unsafe extern "C" fn rust_DoResponsePhrase(
     let ok = COMM_STATE
         .write()
         .add_response(response_ref, text_str, func);
-    eprintln!("[DBG] rust_DoResponsePhrase: added={}, count={}", ok, COMM_STATE.read().responses().count());
-    if ok { 1 } else { 0 }
+    eprintln!(
+        "[DBG] rust_DoResponsePhrase: added={}, count={}",
+        ok,
+        COMM_STATE.read().responses().count()
+    );
+    if ok {
+        1
+    } else {
+        0
+    }
 }
 
 /// Display response choices
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_DisplayResponses() {
     COMM_STATE.write().display_responses();
 }
 
 /// Clear all responses
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ClearResponses() {
     COMM_STATE.write().clear_responses();
 }
 
 /// Select next response
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SelectNextResponse() -> c_int {
     if COMM_STATE.write().select_next_response() {
@@ -287,6 +384,9 @@ pub unsafe extern "C" fn rust_SelectNextResponse() -> c_int {
 }
 
 /// Select previous response
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SelectPrevResponse() -> c_int {
     if COMM_STATE.write().select_prev_response() {
@@ -297,18 +397,27 @@ pub unsafe extern "C" fn rust_SelectPrevResponse() -> c_int {
 }
 
 /// Get selected response index
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetSelectedResponse() -> c_int {
     COMM_STATE.read().selected_response()
 }
 
 /// Get number of responses
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetResponseCount() -> c_int {
     COMM_STATE.read().responses().count() as c_int
 }
 
 /// Copy response text at `index` into `buf` (max `buf_len` bytes, including NUL).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Returns 1 if the text was written, 0 if index is out of range or buf is NULL.
 /// The buffer is always NUL-terminated when returning 1.
@@ -346,6 +455,9 @@ pub unsafe extern "C" fn rust_GetResponseText(
 }
 
 /// Execute selected response callback — passes response_ref as argument (RS-REQ-011).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
     let state = COMM_STATE.read();
@@ -375,6 +487,9 @@ pub unsafe extern "C" fn rust_ExecuteResponse() -> c_uint {
 // ============================================================================
 
 /// Initialize communication animations from current CommData.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// @plan PLAN-20260314-COMM.P07
 #[no_mangle]
 pub unsafe extern "C" fn rust_InitCommAnimations() {
@@ -384,6 +499,9 @@ pub unsafe extern "C" fn rust_InitCommAnimations() {
 }
 
 /// Process communication animations for one frame.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 /// @plan PLAN-20260314-COMM.P07
 #[no_mangle]
 pub unsafe extern "C" fn rust_ProcessCommAnimations(delta_ticks: c_uint) -> c_int {
@@ -392,6 +510,9 @@ pub unsafe extern "C" fn rust_ProcessCommAnimations(delta_ticks: c_uint) -> c_in
 }
 
 /// Process communication animations — C bridge signature matching commanim.c.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// `clear` (BOOLEAN): full-redraw flag (passes FullRedraw to animation engine).
 /// `paused` (BOOLEAN): if non-zero, drive colormap transforms only, no frame advance.
@@ -414,48 +535,72 @@ pub unsafe extern "C" fn rust_ProcessCommAnimations_cb(clear: c_int, paused: c_i
 }
 
 /// Check if talking animation is wanted (defined with frames).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_WantTalkingAnim() -> c_int {
     COMM_STATE.read().animations().want_talking_anim() as c_int
 }
 
 /// Check if talking animation is currently active.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_HaveTalkingAnim() -> c_int {
     COMM_STATE.read().animations().have_talking_anim() as c_int
 }
 
 /// Start the talking animation.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetRunTalkingAnim(_run: c_int) {
     COMM_STATE.write().animations_mut().start_talking_anim();
 }
 
 /// Signal to stop the talking animation.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetStopTalkingAnim() {
     COMM_STATE.write().animations_mut().stop_talking_anim();
 }
 
 /// Set intro animation running state.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetRunIntroAnim(run: c_int) {
     COMM_STATE.write().animations_mut().set_intro_anim(run != 0);
 }
 
 /// Check if intro animation is running.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_RunningIntroAnim() -> c_int {
     COMM_STATE.read().animations().is_intro_anim_running() as c_int
 }
 
 /// Check if talking animation is running.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_RunningTalkingAnim() -> c_int {
     COMM_STATE.read().animations().is_talking_anim_running() as c_int
 }
 
 /// Get current frame for an animation sequence.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetCommAnimationFrame(index: c_uint) -> c_uint {
     COMM_STATE
@@ -471,6 +616,9 @@ pub unsafe extern "C" fn rust_GetCommAnimationFrame(index: c_uint) -> c_uint {
 // ============================================================================
 
 /// Begin an encounter (marks active, records init callback).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_BeginEncounter() -> c_int {
     match super::encounter::begin_encounter() {
@@ -480,6 +628,9 @@ pub unsafe extern "C" fn rust_BeginEncounter() -> c_int {
 }
 
 /// End encounter normally (post + uninit callbacks, resource teardown).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_EndEncounterNormal() -> c_int {
     match super::encounter::end_encounter_normal() {
@@ -489,6 +640,9 @@ pub unsafe extern "C" fn rust_EndEncounterNormal() -> c_int {
 }
 
 /// End encounter on abort/load (uninit only, skip post).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_EndEncounterAbort() -> c_int {
     match super::encounter::end_encounter_abort() {
@@ -498,6 +652,9 @@ pub unsafe extern "C" fn rust_EndEncounterAbort() -> c_int {
 }
 
 /// End encounter for attack-without-hail (post + uninit, no init).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_EndEncounterAttack() -> c_int {
     match super::encounter::end_encounter_attack() {
@@ -507,6 +664,9 @@ pub unsafe extern "C" fn rust_EndEncounterAttack() -> c_int {
 }
 
 /// Check if encounter is active.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_IsEncounterActive() -> c_int {
     super::encounter::is_encounter_active() as c_int
@@ -517,6 +677,9 @@ pub unsafe extern "C" fn rust_IsEncounterActive() -> c_int {
 // ============================================================================
 
 /// Add samples to the oscilloscope
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_AddOscilloscopeSamples(samples: *const i16, count: c_uint) {
     if samples.is_null() || count == 0 {
@@ -528,18 +691,27 @@ pub unsafe extern "C" fn rust_AddOscilloscopeSamples(samples: *const i16, count:
 }
 
 /// Update the oscilloscope display
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_UpdateOscilloscope() {
     COMM_STATE.write().oscilloscope_mut().update();
 }
 
 /// Get oscilloscope Y value at position
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetOscilloscopeY(x: c_uint) -> u8 {
     COMM_STATE.read().oscilloscope().get_y(x as usize)
 }
 
 /// Clear the oscilloscope
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ClearOscilloscope() {
     COMM_STATE.write().oscilloscope_mut().clear();
@@ -550,6 +722,9 @@ pub unsafe extern "C" fn rust_ClearOscilloscope() {
 // ============================================================================
 
 /// Check if alien is talking
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_IsTalking() -> c_int {
     if COMM_STATE.read().is_talking() {
@@ -560,6 +735,9 @@ pub unsafe extern "C" fn rust_IsTalking() -> c_int {
 }
 
 /// Check if talking has finished
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_IsTalkingFinished() -> c_int {
     if COMM_STATE.read().is_talking_finished() {
@@ -570,36 +748,54 @@ pub unsafe extern "C" fn rust_IsTalkingFinished() -> c_int {
 }
 
 /// Set talking finished flag
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetTalkingFinished(finished: c_int) {
     COMM_STATE.write().set_talking_finished(finished != 0);
 }
 
 /// Get intro mode
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetCommIntroMode() -> c_uint {
     COMM_STATE.read().intro_mode() as c_uint
 }
 
 /// Set intro mode
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetCommIntroMode(mode: c_uint) {
     COMM_STATE.write().set_intro_mode(CommIntroMode::from(mode));
 }
 
 /// Get fade time
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetCommFadeTime() -> c_uint {
     COMM_STATE.read().fade_time()
 }
 
 /// Set fade time
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetCommFadeTime(time: c_uint) {
     COMM_STATE.write().set_fade_time(time);
 }
 
 /// Check if input is paused
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_IsCommInputPaused() -> c_int {
     if COMM_STATE.read().is_input_paused() {
@@ -610,12 +806,18 @@ pub unsafe extern "C" fn rust_IsCommInputPaused() -> c_int {
 }
 
 /// Set input paused
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetCommInputPaused(paused: c_int) {
     COMM_STATE.write().set_input_paused(paused != 0);
 }
 
 /// Update communication state
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_UpdateCommunication(delta_time: f32) {
     COMM_STATE.write().update(delta_time);
@@ -627,6 +829,9 @@ pub unsafe extern "C" fn rust_UpdateCommunication(delta_time: f32) {
 // ============================================================================
 
 /// Check if a phrase is enabled (not disabled this encounter).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_PhraseEnabled(index: c_int) -> c_int {
     if COMM_STATE.read().phrase_enabled(index) {
@@ -637,6 +842,9 @@ pub unsafe extern "C" fn rust_PhraseEnabled(index: c_int) -> c_int {
 }
 
 /// Disable a phrase for the remainder of this encounter.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_DisablePhrase(index: c_int) {
     COMM_STATE.write().disable_phrase(index);
@@ -648,18 +856,27 @@ pub unsafe extern "C" fn rust_DisablePhrase(index: c_int) {
 // ============================================================================
 
 /// Set segue state (0=Peace, 1=Hostile, 2=Victory, 3=Defeat).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_SetSegue(segue: c_uint) {
     COMM_STATE.write().set_segue(Segue::from(segue));
 }
 
 /// Get segue state (0=Peace, 1=Hostile, 2=Victory, 3=Defeat).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetSegue() -> c_uint {
     u32::from(COMM_STATE.read().get_segue())
 }
 
 /// Get BATTLE_SEGUE value for current segue (0=peace, 1=combat).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_GetBattleSegue() -> c_uint {
     COMM_STATE.read().get_segue().to_battle_segue()
@@ -671,6 +888,9 @@ pub unsafe extern "C" fn rust_GetBattleSegue() -> c_uint {
 // ============================================================================
 
 /// Run one iteration of the alien talk segue for the given wait-track.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `AlienTalkSegue(wait_track)`.
 /// Returns 1 if talking finished (reached end), 0 otherwise.
@@ -687,6 +907,9 @@ pub unsafe extern "C" fn rust_AlienTalkSegue(wait: c_uint) -> c_int {
 }
 
 /// Run the full talk segue loop for the given wait-track.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `TalkSegue(wait_track)`.
 /// Returns 1 if playback ended naturally, 0 if aborted.
@@ -702,6 +925,9 @@ pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
 }
 
 /// Run one iteration of the top-level communication state machine.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `DoCommunication(pES)`.
 /// Returns 1 to keep iterating, 0 when conversation is done.
@@ -715,9 +941,7 @@ pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
 /// @pseudocode 003-do-communication-rewrite lines 41-81
 #[no_mangle]
 pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
-    use super::talk_segue::{
-        do_communication_responses, CommunicationResult, WAIT_TRACK_ALL,
-    };
+    use super::talk_segue::WAIT_TRACK_ALL;
 
     eprintln!("[DBG] rust_DoCommunication: entry");
 
@@ -728,7 +952,10 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
     // yields to threads that call back into Rust FFI (which also lock).
     {
         let is_finished = COMM_STATE.read().is_talking_finished();
-        eprintln!("[DBG] rust_DoCommunication: is_talking_finished={}", is_finished);
+        eprintln!(
+            "[DBG] rust_DoCommunication: is_talking_finished={}",
+            is_finished
+        );
         if !is_finished {
             // First-call initialization (only once per encounter)
             {
@@ -746,9 +973,15 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
             extern "C" {
                 fn c_RunTalkSegue(wait_track: std::ffi::c_uint) -> std::ffi::c_int;
             }
-            eprintln!("[DBG] rust_DoCommunication: calling c_RunTalkSegue({})", WAIT_TRACK_ALL);
+            eprintln!(
+                "[DBG] rust_DoCommunication: calling c_RunTalkSegue({})",
+                WAIT_TRACK_ALL
+            );
             let ended = c_RunTalkSegue(WAIT_TRACK_ALL as std::ffi::c_uint) != 0;
-            eprintln!("[DBG] rust_DoCommunication: c_RunTalkSegue returned ended={}", ended);
+            eprintln!(
+                "[DBG] rust_DoCommunication: c_RunTalkSegue returned ended={}",
+                ended
+            );
 
             // Update state with result
             {
@@ -772,7 +1005,10 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
     // Step 2a: Quick state check (short lock)
     let response_count = {
         let state = COMM_STATE.read();
-        eprintln!("[DBG] rust_DoCommunication: response phase, num_responses={}", state.responses().count());
+        eprintln!(
+            "[DBG] rust_DoCommunication: response phase, num_responses={}",
+            state.responses().count()
+        );
         if super::talk_segue::check_abort_external() {
             return 0;
         }
@@ -783,10 +1019,13 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
         // No responses — run last-replay then done.
         // run_last_replay calls C bridges, so no lock.
         extern "C" {
-            fn c_FadeMusic(target_vol: std::ffi::c_int, duration: std::ffi::c_int) -> std::ffi::c_int;
+            fn c_FadeMusic(
+                target_vol: std::ffi::c_int,
+                duration: std::ffi::c_int,
+            ) -> std::ffi::c_uint;
         }
-        let timeout = c_FadeMusic(0, super::talk_segue::c_bridge::ONE_SECOND_TICKS as i32 * 3);
-        super::talk_segue::run_last_replay_bridge(timeout);
+        let timeout = c_FadeMusic(0, super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3);
+        super::talk_segue::run_last_replay_bridge(timeout as i32);
         return 0;
     }
 
@@ -798,7 +1037,11 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
             // Drop lock, then render (C→Rust callback)
             let (top, count, cur) = {
                 let s = COMM_STATE.read();
-                (0u8, s.responses().count() as u8, s.responses().selected().max(0) as u8)
+                (
+                    0u8,
+                    s.responses().count() as u8,
+                    s.responses().selected().max(0) as u8,
+                )
             };
             super::talk_segue::c_bridge::call_refresh_responses(top, count, cur);
         }
@@ -817,16 +1060,28 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
         let selection = {
             let mut state = COMM_STATE.write();
             let sel = super::talk_segue::select_response(&mut state);
-            eprintln!("[DBG] rust_DoCommunication: select_response returned {:?}", sel.is_some());
-            eprintln!("[DBG] rust_DoCommunication: after select, talking_finished={}", state.is_talking_finished());
+            eprintln!(
+                "[DBG] rust_DoCommunication: select_response returned {:?}",
+                sel.is_some()
+            );
+            eprintln!(
+                "[DBG] rust_DoCommunication: after select, talking_finished={}",
+                state.is_talking_finished()
+            );
             sel
         };
         match selection {
             Some((func, rref)) => {
-                eprintln!("[DBG] rust_DoCommunication: calling response callback rref={}", rref);
+                eprintln!(
+                    "[DBG] rust_DoCommunication: calling response callback rref={}",
+                    rref
+                );
                 // Lock is dropped — safe to call alien script callback
                 func(rref);
-                eprintln!("[DBG] rust_DoCommunication: callback returned, talking_finished={}", COMM_STATE.read().is_talking_finished());
+                eprintln!(
+                    "[DBG] rust_DoCommunication: callback returned, talking_finished={}",
+                    COMM_STATE.read().is_talking_finished()
+                );
                 return 1;
             }
             None => return 1,
@@ -881,7 +1136,11 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
         let count = state.responses().count();
         let cur = state.responses().selected().max(0) as usize;
         let next = if up {
-            if cur == 0 { count - 1 } else { cur - 1 }
+            if cur == 0 {
+                count - 1
+            } else {
+                cur - 1
+            }
         } else {
             (cur + 1) % count
         };
@@ -906,6 +1165,9 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
 // ============================================================================
 
 /// Initialize speech graphics (oscilloscope + slider) for this encounter.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `InitSpeechGraphics`.
 #[no_mangle]
@@ -914,6 +1176,9 @@ pub unsafe extern "C" fn rust_InitSpeechGraphics() {
 }
 
 /// Rate-limited update of speech graphics display.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `UpdateSpeechGraphics`. Uses current system time for rate
 /// limiting. In test mode, operates on state fields only.
@@ -941,6 +1206,9 @@ pub unsafe extern "C" fn rust_UpdateSpeechGraphics() {
 // ============================================================================
 
 /// Refresh the response list display.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `RefreshResponses`. Delegates rendering to C bridge; Rust
 /// updates scroll state.
@@ -968,6 +1236,9 @@ pub unsafe extern "C" fn rust_RefreshResponses() {
 // ============================================================================
 
 /// Clear the subtitle display area.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `ClearSubtitles`.
 #[no_mangle]
@@ -976,6 +1247,9 @@ pub unsafe extern "C" fn rust_ClearSubtitles() {
 }
 
 /// Check subtitle timing and update display if the text has changed.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `CheckSubtitles`.
 #[no_mangle]
@@ -988,6 +1262,9 @@ pub unsafe extern "C" fn rust_CheckSubtitles() {
 }
 
 /// Redraw the current subtitle text.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Matches C `RedrawSubtitles`.
 #[no_mangle]
@@ -1001,6 +1278,9 @@ pub unsafe extern "C" fn rust_RedrawSubtitles() {
 // ============================================================================
 
 /// Show the conversation summary overlay.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Production path: delegates directly to C `SelectConversationSummary` so
 /// the full C input loop drives the summary display.
@@ -1017,6 +1297,9 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
 }
 
 /// Show the conversation summary overlay (test path).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Uses the Rust SummaryView directly so tests can exercise summary logic
 /// without a C runtime.
@@ -1062,6 +1345,9 @@ pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
 // ============================================================================
 
 /// Entry point for the alien hail sequence from C InitCommunication.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 ///
 /// Under USE_RUST_COMM, InitCommunication calls this instead of the C HailAlien().
 /// Delegates to `hail::hail_alien()` which implements the full encounter loop:
@@ -1079,11 +1365,15 @@ pub unsafe extern "C" fn rust_HailAlien() {
 // ============================================================================
 
 // Special phrase-index constants matching commglue.h enum values.
+#[cfg(not(test))]
 const GLOBAL_PLAYER_NAME: c_int = -1_000_000;
+#[cfg(not(test))]
 const GLOBAL_SHIP_NAME: c_int = -999_999;
+#[cfg(not(test))]
 const GLOBAL_ALLIANCE_NAME: c_int = -999_998;
 
 // Size of the per-call alliance-name working buffer (matches C NPCPhrase_cb buf[400]).
+#[cfg(not(test))]
 const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 
 // C bridge declarations used only by NPCPhrase (not test-compiled).
@@ -1144,7 +1434,11 @@ extern "C" {
 /// @requirement REQ-NP-001, REQ-NP-002, REQ-NP-003, REQ-NP-004
 #[no_mangle]
 pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe extern "C" fn()>) {
-    eprintln!("[DBG] rust_NPCPhrase_cb: index={} cb={}", index, cb.is_some());
+    eprintln!(
+        "[DBG] rust_NPCPhrase_cb: index={} cb={}",
+        index,
+        cb.is_some()
+    );
     // Branch 1: no-op
     if index == 0 {
         eprintln!("[DBG] rust_NPCPhrase_cb: index=0, returning");
@@ -1194,7 +1488,9 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             };
 
             if phrases.is_null() {
-                eprintln!("[DBG] rust_NPCPhrase_cb: phrases is NULL (comm_data not set?), returning");
+                eprintln!(
+                    "[DBG] rust_NPCPhrase_cb: phrases is NULL (comm_data not set?), returning"
+                );
                 return;
             }
 
@@ -1379,9 +1675,8 @@ mod tests {
             rust_AddOscilloscopeSamples(samples.as_ptr(), 4);
             rust_UpdateOscilloscope();
 
-            // Should return a value in range
-            let y = rust_GetOscilloscopeY(0);
-            assert!(y <= 255);
+            // Should return a value without panicking.
+            let _ = rust_GetOscilloscopeY(0);
 
             rust_ClearOscilloscope();
 

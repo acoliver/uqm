@@ -1,6 +1,7 @@
 // Utwig Jugger - Six-lance volley + absorption shield
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -24,6 +25,7 @@ const WEAPON_WAIT: u8 = 7;
 const MISSILE_LIFE: u16 = 10;
 const MISSILE_HITS: i16 = 1;
 const MISSILE_DAMAGE: i16 = 1;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 1;
 
 const SPECIAL_ENERGY_COST: u8 = 1;
@@ -74,11 +76,7 @@ impl ShipBehavior for UtwigShip {
     /// C: utwig_preprocess — absorption shield.
     /// Gains energy from absorbed projectiles (life_span tracking).
     /// Complex element manipulation — kept in C.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             return Ok(());
         }
@@ -112,13 +110,12 @@ impl ShipBehavior for UtwigShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(30) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(30) as i16;
 
             let mut block = MissileBlock {
                 cx: 0,
                 cy: 0,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: 0,
                 speed: missile_speed,
@@ -140,7 +137,7 @@ impl ShipBehavior for UtwigShip {
                 let _ = battle_bridge::bridge::create_missile(&block);
             }
 
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -173,14 +170,17 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = UtwigShip::default();
+        let ship = UtwigShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 22);
         assert_eq!(desc.ship_info.max_crew, 20);
         assert_eq!(desc.ship_info.max_energy, 20);
         assert_eq!(desc.ship_info.energy_level, 10); // starts at half
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SHIELD_DEFENSE));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SHIELD_DEFENSE));
         assert!(desc.ship_info.ship_flags.contains(ShipFlags::POINT_DEFENSE));
         assert_eq!(desc.characteristics.energy_regeneration, 0);
         assert_eq!(desc.characteristics.energy_wait, 255);
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn weapon_fires_six_lances() {
-        let mut ship = UtwigShip::default();
+        let mut ship = UtwigShip;
         let state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn shield_activates() {
-        let mut ship = UtwigShip::default();
+        let mut ship = UtwigShip;
         let mut state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -233,7 +233,7 @@ mod tests {
 
     #[test]
     fn shield_denied_no_energy() {
-        let mut ship = UtwigShip::default();
+        let mut ship = UtwigShip;
         let mut state = ShipState {
             crew_level: 20,
             max_crew: 20,
@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = UtwigShip::default();
+        let mut ship = UtwigShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

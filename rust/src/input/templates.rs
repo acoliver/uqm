@@ -289,7 +289,7 @@ mod tests {
         writeln!(file, "[keyboard]").unwrap();
         writeln!(file, "# Another comment").unwrap();
         writeln!(file, "Space=fire").unwrap();
-        writeln!(file, "").unwrap();
+        writeln!(file).unwrap();
         writeln!(file, "Up=thrust").unwrap();
         file.flush().unwrap();
 

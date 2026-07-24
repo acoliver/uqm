@@ -26,29 +26,6 @@ pub const ATTACK: u32 = 1;
 
 #[cfg(not(test))]
 extern "C" {
-    // Game state queries
-    fn c_GetCurrentActivity() -> u32;
-    fn c_SetBattleSegue(val: i32);
-    fn c_GetBattleSegue() -> i32;
-
-    // Encounter flow
-    fn c_init_race(which_comm: u32) -> *const std::ffi::c_void;
-    fn c_BuildBattle(player_num: i32);
-    fn c_EncounterBattle() -> i32;
-    fn c_InitEncounter() -> i32;
-    fn c_UninitEncounter();
-    fn c_StartSphereTracking(race_ship: i32);
-
-    // SIS/display update
-    fn c_UpdateSISForLoadedGame(which_comm: u32);
-
-    // Resource loading (C returns uintptr_t; use usize on Rust side)
-    fn c_LoadGraphic(res: *const std::ffi::c_char) -> usize;
-    fn c_LoadFont(res: *const std::ffi::c_char) -> usize;
-    fn c_LoadColorMap(res: *const std::ffi::c_char) -> usize;
-    fn c_LoadMusic(res: *const std::ffi::c_char) -> usize;
-    fn c_LoadStringTable(res: *const std::ffi::c_char) -> usize;
-
     // Resource destruction
     fn c_DestroyDrawable(handle: usize);
     fn c_DestroyFont(handle: usize);
@@ -232,10 +209,6 @@ impl EncounterState {
 // ============================================================================
 // Public lifecycle functions
 // ============================================================================
-
-/// Check abort/load flags (matches C CHECK_ABORT | CHECK_LOAD).
-const CHECK_ABORT: u32 = 0x0001_0000;
-const CHECK_LOAD: u32 = 0x0002_0000;
 
 /// Begin encounter lifecycle — called after HailAlien resources loaded.
 ///

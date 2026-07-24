@@ -2,8 +2,6 @@
 // @requirement REQ-TRACK-ASSEMBLE-01..19, REQ-TRACK-PLAY-01..10
 // @requirement REQ-TRACK-SEEK-01..13, REQ-TRACK-CALLBACK-01..09
 // @requirement REQ-TRACK-SUBTITLE-01..04, REQ-TRACK-POSITION-01..02
-#![allow(dead_code, unused_imports, unused_variables)]
-
 //! Track player — manages multi-chunk audio sequences with subtitle
 //! synchronization, seeking, and callback dispatching.
 //!
@@ -19,8 +17,6 @@ use parking_lot::Mutex;
 use super::decoder::SoundDecoder;
 use super::stream;
 use super::types::*;
-
-use log::warn;
 
 // =============================================================================
 // Constants
@@ -484,8 +480,8 @@ pub fn splice_multi_track(
     }
 
     // Build chunks for each track (decoder loading deferred to FFI)
-    for i in 0..num_tracks {
-        if tracks[i].is_none() {
+    for track in tracks.iter().take(num_tracks) {
+        if track.is_none() {
             continue;
         }
 
@@ -532,8 +528,11 @@ pub fn play_track(scope: bool) -> AudioResult<()> {
             eprintln!("[DBG] play_track: sound_sample is None, returning early");
             return Ok(());
         }
-        eprintln!("[DBG] play_track: sound_sample present, track_count={}, chunks_head={}", 
-            state.track_count, state.chunks_head.is_some());
+        eprintln!(
+            "[DBG] play_track: sound_sample present, track_count={}, chunks_head={}",
+            state.track_count,
+            state.chunks_head.is_some()
+        );
 
         let end_time = tracks_end_time_inner(&state);
         state.tracks_length.store(end_time, Ordering::Release);
@@ -627,7 +626,10 @@ pub fn playing_track_num() -> u16 {
         .map(|c| (unsafe { c.as_ref() }.track_num + 1) as u16)
         .unwrap_or(0);
     if result == 0 {
-        eprintln!("[DBG] playing_track_num: 0 (cur_chunk={})", state.cur_chunk.is_some());
+        eprintln!(
+            "[DBG] playing_track_num: 0 (cur_chunk={})",
+            state.cur_chunk.is_some()
+        );
     }
     result
 }
@@ -1262,109 +1264,97 @@ mod tests {
 
     #[test]
     fn test_sound_chunk_creation() {
-        unsafe {
-            let chunk = SoundChunk {
+        let chunk = SoundChunk {
+            decoder: None,
+            start_time: 0.0,
+            run_time: 0,
+            tag_me: false,
+            track_num: 0,
+            text: None,
+            text_cstr: None,
+            callback: None,
+            next: None,
+        };
+        assert!(chunk.decoder.is_none());
+        assert_eq!(chunk.track_num, 0);
+    }
+
+    #[test]
+    fn test_sound_chunk_linked_list() {
+        let chunk2 = Box::new(SoundChunk {
+            decoder: None,
+            start_time: 1000.0,
+            run_time: 500,
+            tag_me: true,
+            track_num: 1,
+            text: Some("Page 2".into()),
+            text_cstr: None,
+            callback: None,
+            next: None,
+        });
+        let chunk1 = SoundChunk {
+            decoder: None,
+            start_time: 0.0,
+            run_time: 1000,
+            tag_me: true,
+            track_num: 0,
+            text: Some("Page 1".into()),
+            text_cstr: None,
+            callback: None,
+            next: Some(chunk2),
+        };
+        assert!(chunk1.next.is_some());
+        assert_eq!(chunk1.next.as_ref().unwrap().track_num, 1);
+    }
+
+    #[test]
+    fn test_sound_chunk_iterative_drop() {
+        // Build a long chain — should not stack overflow
+        let mut head: Option<Box<SoundChunk>> = None;
+        for i in (0..1000).rev() {
+            head = Some(Box::new(SoundChunk {
                 decoder: None,
-                start_time: 0.0,
+                start_time: i as f64,
                 run_time: 0,
                 tag_me: false,
                 track_num: 0,
                 text: None,
                 text_cstr: None,
                 callback: None,
-                next: None,
-            };
-            assert!(chunk.decoder.is_none());
-            assert_eq!(chunk.track_num, 0);
+                next: head,
+            }));
         }
-    }
-
-    #[test]
-    fn test_sound_chunk_linked_list() {
-        unsafe {
-            let chunk2 = Box::new(SoundChunk {
-                decoder: None,
-                start_time: 1000.0,
-                run_time: 500,
-                tag_me: true,
-                track_num: 1,
-                text: Some("Page 2".into()),
-                text_cstr: None,
-                callback: None,
-                next: None,
-            });
-            let chunk1 = SoundChunk {
-                decoder: None,
-                start_time: 0.0,
-                run_time: 1000,
-                tag_me: true,
-                track_num: 0,
-                text: Some("Page 1".into()),
-                text_cstr: None,
-                callback: None,
-                next: Some(chunk2),
-            };
-            assert!(chunk1.next.is_some());
-            assert_eq!(chunk1.next.as_ref().unwrap().track_num, 1);
-        }
-    }
-
-    #[test]
-    fn test_sound_chunk_iterative_drop() {
-        unsafe {
-            // Build a long chain — should not stack overflow
-            let mut head: Option<Box<SoundChunk>> = None;
-            for i in (0..1000).rev() {
-                head = Some(Box::new(SoundChunk {
-                    decoder: None,
-                    start_time: i as f64,
-                    run_time: 0,
-                    tag_me: false,
-                    track_num: 0,
-                    text: None,
-                    text_cstr: None,
-                    callback: None,
-                    next: head,
-                }));
-            }
-            drop(head); // should not overflow
-        }
+        drop(head); // should not overflow
     }
 
     #[test]
     fn test_track_player_state_new() {
-        unsafe {
-            let state = TrackPlayerState::new();
-            assert!(state.chunks_head.is_none());
-            assert!(state.chunks_tail.is_null());
-            assert!(state.cur_chunk.is_none());
-            assert_eq!(state.track_count, 0);
-            assert_eq!(state.tracks_length.load(Ordering::Relaxed), 0);
-        }
+        let state = TrackPlayerState::new();
+        assert!(state.chunks_head.is_none());
+        assert!(state.chunks_tail.is_null());
+        assert!(state.cur_chunk.is_none());
+        assert_eq!(state.track_count, 0);
+        assert_eq!(state.tracks_length.load(Ordering::Relaxed), 0);
     }
 
     #[test]
     fn test_subtitle_ref() {
-        unsafe {
-            let sub = SubtitleRef {
-                text: "Hello world".into(),
-                track_num: 0,
-            };
-            assert_eq!(sub.text, "Hello world");
-        }
+        let sub = SubtitleRef {
+            text: "Hello world".into(),
+            track_num: 0,
+        };
+        assert_eq!(sub.text, "Hello world");
     }
 
     #[test]
     fn test_track_callbacks_is_stream_callbacks() {
-        unsafe {
-            // Verify TrackCallbacks can be boxed as StreamCallbacks
-            let _: Box<dyn StreamCallbacks + Send> = Box::new(TrackCallbacks);
-        }
+        // Verify TrackCallbacks can be boxed as StreamCallbacks
+        let _: Box<dyn StreamCallbacks + Send> = Box::new(TrackCallbacks);
     }
 
     #[test]
     fn test_constants() {
-        unsafe {
+        const {
             assert!(TEXT_SPEED > 0.0);
             assert!(ACCEL_SCROLL_SPEED > 0.0);
             assert!(MAX_MULTI_TRACKS > 0);
@@ -1376,262 +1366,210 @@ mod tests {
     // REQ-TRACK-ASSEMBLE-01..03: Subtitle splitting
     #[test]
     fn test_split_sub_pages_single() {
-        unsafe {
-            let pages = split_sub_pages("Hello world");
-            assert_eq!(pages.len(), 1);
-            assert_eq!(pages[0].text, "Hello world");
-        }
+        let pages = split_sub_pages("Hello world");
+        assert_eq!(pages.len(), 1);
+        assert_eq!(pages[0].text, "Hello world");
     }
 
     #[test]
     fn test_split_sub_pages_multiple() {
-        unsafe {
-            let pages = split_sub_pages("Page one\r\nPage two");
-            assert_eq!(pages.len(), 2);
-            // First page gets "..." suffix (continuation mark)
-            assert_eq!(pages[0].text, "Page one...");
-            // Second page gets ".." prefix (continuation mark)
-            assert_eq!(pages[1].text, "..Page two");
-        }
+        let pages = split_sub_pages("Page one\r\nPage two");
+        assert_eq!(pages.len(), 2);
+        // First page gets "..." suffix (continuation mark)
+        assert_eq!(pages[0].text, "Page one...");
+        // Second page gets ".." prefix (continuation mark)
+        assert_eq!(pages[1].text, "..Page two");
     }
 
     #[test]
     fn test_split_sub_pages_continuation_marks() {
-        unsafe {
-            let pages = split_sub_pages("First page...\r\n..Second page");
-            assert!(pages.len() >= 2);
-            // Continuation text should have ellipsis handled
-        }
+        let pages = split_sub_pages("First page...\r\n..Second page");
+        assert!(pages.len() >= 2);
+        // Continuation text should have ellipsis handled
     }
 
     #[test]
     fn test_split_sub_pages_timing() {
-        unsafe {
-            let pages = split_sub_pages("Short");
-            assert!(pages[0].timestamp >= 0.0);
-            // Timing should be at least TEXT_SPEED * char_count
-        }
+        let pages = split_sub_pages("Short");
+        assert!(pages[0].timestamp >= 0.0);
+        // Timing should be at least TEXT_SPEED * char_count
     }
 
     // REQ-TRACK-ASSEMBLE-14: Timestamp parsing
     #[test]
     fn test_get_time_stamps_basic() {
-        unsafe {
-            let ts = get_time_stamps("100,200,300");
-            assert_eq!(ts.len(), 3);
-            assert!((ts[0] - 100.0).abs() < 0.01);
-            assert!((ts[1] - 200.0).abs() < 0.01);
-            assert!((ts[2] - 300.0).abs() < 0.01);
-        }
+        let ts = get_time_stamps("100,200,300");
+        assert_eq!(ts.len(), 3);
+        assert!((ts[0] - 100.0).abs() < 0.01);
+        assert!((ts[1] - 200.0).abs() < 0.01);
+        assert!((ts[2] - 300.0).abs() < 0.01);
     }
 
     #[test]
     fn test_get_time_stamps_skip_zeros() {
-        unsafe {
-            let ts = get_time_stamps("0,100,0");
-            // Non-zero values should be preserved
-            assert!(ts.iter().all(|&t| t == 0.0 || t >= 100.0));
-        }
+        let ts = get_time_stamps("0,100,0");
+        // Non-zero values should be preserved
+        assert!(ts.iter().all(|&t| t == 0.0 || t >= 100.0));
     }
 
     #[test]
     fn test_get_time_stamps_mixed_separators() {
-        unsafe {
-            let ts = get_time_stamps("100\n200\r300");
-            assert_eq!(ts.len(), 3);
-        }
+        let ts = get_time_stamps("100\n200\r300");
+        assert_eq!(ts.len(), 3);
     }
 
     // REQ-TRACK-ASSEMBLE-04..13: Assembly
     #[test]
     fn test_splice_track_no_text_returns_ok() {
-        unsafe {
-            let result = splice_track(Some("track"), None, None, None, Vec::new());
-            assert!(result.is_ok());
-        }
+        let result = splice_track(Some("track"), None, None, None, Vec::new());
+        assert!(result.is_ok());
     }
 
     #[test]
     fn test_splice_track_no_name_no_tracks_warns() {
-        unsafe {
-            // When no tracks exist and no name is given, should return Ok
-            let result = splice_track(None, Some("text"), None, None, Vec::new());
-            assert!(result.is_ok());
-        }
+        // When no tracks exist and no name is given, should return Ok
+        let result = splice_track(None, Some("text"), None, None, Vec::new());
+        assert!(result.is_ok());
     }
 
     #[test]
     fn test_splice_track_creates_first_sample() {
-        unsafe {
-            let state = TRACK_STATE.lock();
-            let had_sample = state.sound_sample.is_some();
-            drop(state);
-            // After first splice_track with a name, state should have a sample
-            // (can't easily test without a real decoder; this verifies the path)
-            assert!(!had_sample); // initially no sample
-        }
+        let state = TRACK_STATE.lock();
+        let had_sample = state.sound_sample.is_some();
+        drop(state);
+        // After first splice_track with a name, state should have a sample
+        // (can't easily test without a real decoder; this verifies the path)
+        assert!(!had_sample); // initially no sample
     }
 
     #[test]
     fn test_splice_track_chunk_construction() {
-        unsafe {
-            // Test that SoundChunk can be constructed with all fields
-            let chunk = SoundChunk {
-                decoder: None,
-                start_time: 500.0,
-                run_time: ms_to_ticks(1000) as i32,
-                tag_me: true,
-                track_num: 2,
-                text: Some("Subtitle text".into()),
-                text_cstr: None,
-                callback: Some(Box::new(|_| {})),
-                next: None,
-            };
-            assert_eq!(chunk.start_time, 500.0);
-            assert_eq!(chunk.run_time, ms_to_ticks(1000) as i32);
-            assert!(chunk.tag_me);
-            assert_eq!(chunk.track_num, 2);
-            assert!(chunk.callback.is_some());
-        }
+        // Test that SoundChunk can be constructed with all fields
+        let chunk = SoundChunk {
+            decoder: None,
+            start_time: 500.0,
+            run_time: ms_to_ticks(1000) as i32,
+            tag_me: true,
+            track_num: 2,
+            text: Some("Subtitle text".into()),
+            text_cstr: None,
+            callback: Some(Box::new(|_| {})),
+            next: None,
+        };
+        assert_eq!(chunk.start_time, 500.0);
+        assert_eq!(chunk.run_time, ms_to_ticks(1000) as i32);
+        assert!(chunk.tag_me);
+        assert_eq!(chunk.track_num, 2);
+        assert!(chunk.callback.is_some());
     }
 
     // REQ-TRACK-ASSEMBLE-15..17: Multi-track
     #[test]
     fn test_splice_multi_track_precondition() {
-        unsafe {
-            let result = splice_multi_track(&[Some("t1"), Some("t2")], &[None, None], None);
-            // Should not panic
-            assert!(result.is_ok() || result.is_err());
-        }
+        let result = splice_multi_track(&[Some("t1"), Some("t2")], &[None, None], None);
+        // Should not panic
+        assert!(result.is_ok() || result.is_err());
     }
 
     #[test]
     fn test_splice_multi_track_appends() {
-        unsafe {
-            let result = splice_multi_track(&[Some("t1")], &[Some("text")], None);
-            assert!(result.is_ok() || result.is_err());
-        }
+        let result = splice_multi_track(&[Some("t1")], &[Some("text")], None);
+        assert!(result.is_ok() || result.is_err());
     }
 
     // REQ-TRACK-PLAY-01..10: Playback
 
     #[test]
     fn test_ms_ticks_roundtrip_close() {
-        unsafe {
-            let ms = 1000u32;
-            let ticks = ms_to_ticks(ms);
-            let back_ms = ticks_to_ms(ticks);
-            assert!((back_ms as i32 - ms as i32).abs() <= 2);
-        }
+        let ms = 1000u32;
+        let ticks = ms_to_ticks(ms);
+        let back_ms = ticks_to_ms(ticks);
+        assert!((back_ms as i32 - ms as i32).abs() <= 2);
     }
 
     #[test]
     #[ignore = "P11: play_track stub"]
     fn test_play_track_no_sample_ok() {
-        unsafe {
-            // When no sample exists, should handle gracefully
-            let result = play_track(false);
-            assert!(result.is_ok() || result.is_err());
-        }
+        // When no sample exists, should handle gracefully
+        let result = play_track(false);
+        assert!(result.is_ok() || result.is_err());
     }
 
     #[test]
     fn test_stop_track_clears_all() {
-        unsafe {
-            let result = stop_track();
-            assert!(result.is_ok());
-            let state = TRACK_STATE.lock();
-            assert_eq!(state.track_count, 0);
-            assert!(state.chunks_head.is_none());
-            assert!(state.chunks_tail.is_null());
-        }
+        let result = stop_track();
+        assert!(result.is_ok());
+        let state = TRACK_STATE.lock();
+        assert_eq!(state.track_count, 0);
+        assert!(state.chunks_head.is_none());
+        assert!(state.chunks_tail.is_null());
     }
 
     #[test]
     fn test_playing_track_zero_when_empty() {
-        unsafe {
-            assert!(!playing_track());
-        }
+        assert!(!playing_track());
     }
 
     // REQ-TRACK-SEEK-01..06: Seeking
     #[test]
     fn test_seek_clamps_offset_concept() {
-        unsafe {
-            // Verify the clamping concept: offset should be in [0, length+1]
-            let length = 1000u32;
-            let offset: i32 = -500;
-            let clamped = offset.max(0).min(length as i32 + 1);
-            assert_eq!(clamped, 0);
-
-            let offset: i32 = 5000;
-            let clamped = offset.max(0).min(length as i32 + 1);
-            assert_eq!(clamped, 1001);
-        }
+        // Verify the clamping concept: offset should be in [0, length+1]
+        let length = 1000u32;
+        let offset: i32 = -500;
+        let clamped = offset.max(0).min(length as i32 + 1);
+        assert_eq!(clamped, 0);
+        let offset: i32 = 5000;
+        let clamped = offset.max(0).min(length as i32 + 1);
+        assert_eq!(clamped, 1001);
     }
 
     #[test]
     fn test_get_current_track_pos_concept() {
-        unsafe {
-            // Position should be clamped to [0, tracks_length]
-            let tracks_length = 840u32;
-            let raw_pos: i32 = 500;
-            let clamped = raw_pos.max(0).min(tracks_length as i32) as u32;
-            assert_eq!(clamped, 500);
-
-            let raw_pos: i32 = 2000;
-            let clamped = raw_pos.max(0).min(tracks_length as i32) as u32;
-            assert_eq!(clamped, 840);
-        }
+        // Position should be clamped to [0, tracks_length]
+        let tracks_length = 840u32;
+        let raw_pos: i32 = 500;
+        let clamped = raw_pos.max(0).min(tracks_length as i32) as u32;
+        assert_eq!(clamped, 500);
+        let raw_pos: i32 = 2000;
+        let clamped = raw_pos.max(0).min(tracks_length as i32) as u32;
+        assert_eq!(clamped, 840);
     }
 
     // REQ-TRACK-POSITION-01..02: Position
     #[test]
     fn test_get_track_position_no_sample() {
-        unsafe {
-            assert_eq!(get_track_position(0), 0);
-        }
+        assert_eq!(get_track_position(0), 0);
     }
 
     #[test]
     fn test_get_track_position_scaling_concept() {
-        unsafe {
-            // in_units == 0 → return raw ticks; in_units != 0 → percentage
-            let tracks_length = 840u32;
-            let pos = 420u32;
-            let percentage = pos * 100 / tracks_length.max(1);
-            assert_eq!(percentage, 50);
-        }
+        // in_units == 0 → return raw ticks; in_units != 0 → percentage
+        let tracks_length = 840u32;
+        let pos = 420u32;
+        let percentage = pos * 100 / tracks_length.max(1);
+        assert_eq!(percentage, 50);
     }
 
     // REQ-TRACK-SUBTITLE-01..04: Subtitles
     #[test]
     fn test_get_track_subtitle_none_when_empty() {
-        unsafe {
-            assert!(get_track_subtitle().is_none());
-        }
+        assert!(get_track_subtitle().is_none());
     }
 
     #[test]
     fn test_get_first_track_subtitle_none() {
-        unsafe {
-            assert!(get_first_track_subtitle().is_none());
-        }
+        assert!(get_first_track_subtitle().is_none());
     }
 
     // REQ-TRACK-SEEK-11..12: Navigation
     #[test]
     fn test_find_next_page_none() {
-        unsafe {
-            assert!(find_next_page_inner(None).is_none());
-        }
+        assert!(find_next_page_inner(None).is_none());
     }
 
     #[test]
     fn test_find_prev_page_defaults_to_head() {
-        unsafe {
-            let head: Option<Box<SoundChunk>> = None;
-            assert!(find_prev_page_inner(&head, None).is_none());
-        }
+        let head: Option<Box<SoundChunk>> = None;
+        assert!(find_prev_page_inner(&head, None).is_none());
     }
 }

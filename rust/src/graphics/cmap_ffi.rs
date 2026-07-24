@@ -96,6 +96,10 @@ fn fade_type_from_direction(direction: c_int) -> Option<FadeType> {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_init() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -127,6 +131,10 @@ pub unsafe extern "C" fn rust_cmap_init() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_uninit() {
     let _ = catch_unwind(AssertUnwindSafe(|| {
@@ -160,6 +168,10 @@ pub unsafe extern "C" fn rust_cmap_uninit() {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_set(index: c_int, data: *const u8, len: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -216,6 +228,10 @@ pub unsafe extern "C" fn rust_cmap_set(index: c_int, data: *const u8, len: c_int
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind + null checks.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
     /// Static buffer for returning colormap data to C. Valid until next call.
@@ -269,6 +285,10 @@ pub unsafe extern "C" fn rust_cmap_get(index: c_int) -> *const u8 {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-010
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -303,6 +323,10 @@ pub unsafe extern "C" fn rust_cmap_from_index(index: c_int) -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -337,6 +361,10 @@ pub unsafe extern "C" fn rust_cmap_fade_screen(direction: c_int, steps: c_int) -
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_get_fade_amount() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -361,6 +389,10 @@ pub unsafe extern "C" fn rust_cmap_get_fade_amount() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_xform_step() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -385,6 +417,10 @@ pub unsafe extern "C" fn rust_cmap_xform_step() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-020
 // PANIC-FREE: catch_unwind wraps entire body.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_flush_xforms() -> c_int {
     catch_unwind(AssertUnwindSafe(|| {
@@ -416,6 +452,10 @@ pub unsafe extern "C" fn rust_cmap_flush_xforms() -> c_int {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P21
 /// @requirement REQ-CMAP-030
 // PANIC-FREE: catch_unwind + null check.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_cmap_set_palette(
     palette_data: *const u8,
@@ -483,7 +523,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_init_success() {
-        unsafe {
+        {
             let rc = init_cmap();
             assert_eq!(rc, 0);
             reset_cmap();
@@ -530,7 +570,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_basic() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
             let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
@@ -543,7 +583,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_multiple_maps() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let map_size = NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE;
             let data = vec![0u8; map_size * 3];
@@ -557,7 +597,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_null_data() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let rc = unsafe { rust_cmap_set(0, ptr::null(), 768) };
             assert_eq!(rc, -1);
@@ -569,7 +609,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_zero_len() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let data = [0u8; 1];
             let rc = unsafe { rust_cmap_set(0, data.as_ptr(), 0) };
@@ -582,7 +622,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_not_initialized() {
-        unsafe {
+        {
             reset_cmap();
             let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
             let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
@@ -602,12 +642,12 @@ mod tests {
             data[0] = 0xAA;
             data[1] = 0xBB;
             data[2] = 0xCC;
-            let rc = unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+            let rc = { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
             assert_eq!(rc, 0);
 
             let result = rust_cmap_get(0);
             assert!(!result.is_null());
-            unsafe {
+            {
                 assert_eq!(*result, 0xAA);
                 assert_eq!(*result.add(1), 0xBB);
                 assert_eq!(*result.add(2), 0xCC);
@@ -660,7 +700,7 @@ mod tests {
         unsafe {
             assert_eq!(init_cmap(), 0);
             let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
-            unsafe { rust_cmap_set(3, data.as_ptr(), data.len() as c_int) };
+            rust_cmap_set(3, data.as_ptr(), data.len() as c_int);
 
             let idx = rust_cmap_from_index(3);
             assert_eq!(idx, 3);
@@ -840,15 +880,13 @@ mod tests {
             palette_data[0] = 0xFF;
             palette_data[1] = 0x00;
             palette_data[2] = 0x80;
-            let rc = unsafe {
-                rust_cmap_set_palette(palette_data.as_ptr(), NUMBER_OF_PLUTVALS as c_int)
-            };
+            let rc = { rust_cmap_set_palette(palette_data.as_ptr(), NUMBER_OF_PLUTVALS as c_int) };
             assert_eq!(rc, 0);
 
             // Verify via get
             let result = rust_cmap_get(0);
             assert!(!result.is_null());
-            unsafe {
+            {
                 assert_eq!(*result, 0xFF);
                 assert_eq!(*result.add(1), 0x00);
                 assert_eq!(*result.add(2), 0x80);
@@ -861,7 +899,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_palette_partial() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let palette_data = [0xAAu8, 0xBB, 0xCC]; // Just one color
             let rc = unsafe { rust_cmap_set_palette(palette_data.as_ptr(), 1) };
@@ -874,7 +912,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_palette_null_data() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let rc = unsafe { rust_cmap_set_palette(ptr::null(), 256) };
             assert_eq!(rc, -1);
@@ -886,7 +924,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_palette_zero_count() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let data = [0u8; 3];
             let rc = unsafe { rust_cmap_set_palette(data.as_ptr(), 0) };
@@ -899,7 +937,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_palette_not_initialized() {
-        unsafe {
+        {
             reset_cmap();
             let data = vec![0u8; 768];
             let rc = unsafe { rust_cmap_set_palette(data.as_ptr(), 256) };
@@ -913,7 +951,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_too_small_data() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let data = [0u8; 10];
             let rc = unsafe { rust_cmap_set(0, data.as_ptr(), 10) };
@@ -926,7 +964,7 @@ mod tests {
     #[serial]
     #[test]
     fn test_cmap_set_out_of_range_index() {
-        unsafe {
+        {
             assert_eq!(init_cmap(), 0);
             let data = vec![0u8; NUMBER_OF_PLUTVALS * PLUTVAL_BYTE_SIZE];
             let rc = unsafe {
@@ -949,12 +987,12 @@ mod tests {
             data[0] = 255;
             data[1] = 128;
             data[2] = 64;
-            unsafe { rust_cmap_set(0, data.as_ptr(), data.len() as c_int) };
+            rust_cmap_set(0, data.as_ptr(), data.len() as c_int);
 
             // Read it back
             let result = rust_cmap_get(0);
             assert!(!result.is_null());
-            unsafe {
+            {
                 assert_eq!(*result, 255);
                 assert_eq!(*result.add(1), 128);
                 assert_eq!(*result.add(2), 64);

@@ -45,19 +45,6 @@ pub enum ScrollMode {
 pub(super) mod c_bridge {
     pub const ONE_SECOND_TICKS: i32 = 840;
 
-    pub mod slider {
-        pub const FAST_FORWARD: i32 = 3;
-        pub const FAST_REVERSE: i32 = 4;
-        pub const PLAY: i32 = 2;
-        pub const STOP: i32 = 8;
-    }
-
-    pub mod music_volume {
-        pub const BACKGROUND: i32 = 64;
-        pub const FOREGROUND: i32 = 255;
-        pub const NORMAL: i32 = 255;
-    }
-
     pub fn call_refresh_responses(_top: u8, _count: u8, _cur: u8) {}
     pub fn call_select_conversation_summary() {}
     pub fn call_update_comm_graphics() {}
@@ -83,7 +70,7 @@ pub(super) mod c_bridge {
         pub fn c_InitSpeechGraphics();
         pub fn c_FeedbackPlayerPhrase(text: *const c_char);
         pub fn c_FadeMusic(volume: c_int, duration: c_int) -> c_uint;
-        pub fn c_SetSliderImage(frame_index: c_int);
+        pub fn c_SetSliderImage(frame_index: c_uint);
         pub fn c_UpdateAnimations(seeking: c_int);
         pub fn c_CheckAbort() -> c_int;
         pub fn c_WonLastBattle() -> c_int;
@@ -106,33 +93,22 @@ pub(super) mod c_bridge {
         pub fn c_SetRunTalkingAnim();
         pub fn c_SetStopTalkingAnim();
         pub fn c_SetRunIntroAnim();
-        pub fn c_SetMenuSounds(up_down: c_int, select: c_int);
         pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
         pub fn c_SelectConversationSummary();
         pub fn c_GetOptSmoothScroll() -> c_int;
-        pub fn c_GetLastActivityAbortFlag() -> c_int;
-        pub fn c_FadeOutMusicForReplay() -> c_uint;
         pub fn c_ClearLastActivityLoadFlag();
         // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-007
         pub fn c_GetPulsedMenuKey(key_index: c_int) -> c_int;
+        pub fn c_GetCurrentMenuKey(key_index: c_int) -> c_int;
+        pub fn c_UpdateInputState();
         // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
         pub fn c_HasTransitionAnim() -> c_int;
-        pub fn c_GetTimeCounter() -> c_uint;
         pub fn c_SleepThread(duration: c_uint);
-    }
-
-    /// Slider image indices matching C ActivityFrame indices.
-    pub mod slider {
-        pub const FAST_FORWARD: i32 = 3;
-        pub const FAST_REVERSE: i32 = 4;
-        pub const PLAY: i32 = 2;
-        pub const STOP: i32 = 8;
     }
 
     pub mod music_volume {
         pub const BACKGROUND: i32 = 64; // BACKGROUND_VOL
         pub const FOREGROUND: i32 = 255; // FOREGROUND_VOL
-        pub const NORMAL: i32 = 255; // NORMAL_VOLUME
     }
 
     /// ONE_SECOND = 840 ticks (from timelib.h)
@@ -217,7 +193,7 @@ pub enum PlayerInputResult {
 /// @plan PLAN-20260325-COMMPT3.P09
 /// @requirement REQ-DC-001, REQ-RL-001
 /// @pseudocode 003-do-communication-rewrite lines 01-64
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub enum CommunicationResult {
     /// Alien is still talking — keep iterating.
     Talking,
@@ -228,6 +204,22 @@ pub enum CommunicationResult {
     /// Conversation is complete — caller should tear down.
     Done,
 }
+
+impl PartialEq for CommunicationResult {
+    fn eq(&self, other: &Self) -> bool {
+        match (*self, *other) {
+            (Self::Talking, Self::Talking)
+            | (Self::ResponseContinue, Self::ResponseContinue)
+            | (Self::Done, Self::Done) => true,
+            (Self::Selected(left_fn, left_ref), Self::Selected(right_fn, right_ref)) => {
+                std::ptr::fn_addr_eq(left_fn, right_fn) && left_ref == right_ref
+            }
+            _ => false,
+        }
+    }
+}
+
+impl Eq for CommunicationResult {}
 
 // ============================================================================
 // do_talk_segue — one frame / iteration of the playback loop
@@ -245,6 +237,15 @@ pub fn do_talk_segue(state: &mut CommState, ts: &mut TalkingState) -> bool {
     if check_abort(state) {
         ts.ended = true;
         return false;
+    }
+
+    // C parity: DoInput calls UpdateInputState() every frame before the
+    // InputFunc callback. The Rust talk-segue loop does not go through
+    // DoInput, so we must call it ourselves to refresh CurrentInputState
+    // and PulsedInputState from ImmediateInputState.
+    #[cfg(not(test))]
+    unsafe {
+        c_bridge::c_UpdateInputState();
     }
 
     // ---- cancel (skip to end of current phrase) ----------------------------
@@ -530,15 +531,22 @@ pub unsafe fn alien_talk_first_call_init() {
     }
 }
 
+#[cfg(not(test))]
 extern "C" {
     fn rust_UpdateSpeechGraphics();
 }
 
 /// Fade music to foreground volume after talk segue finishes (no lock needed).
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn fade_music_to_foreground_bridge() {
     #[cfg(not(test))]
     {
-        c_bridge::c_FadeMusic(c_bridge::music_volume::FOREGROUND, c_bridge::ONE_SECOND_TICKS);
+        c_bridge::c_FadeMusic(
+            c_bridge::music_volume::FOREGROUND,
+            c_bridge::ONE_SECOND_TICKS,
+        );
     }
 }
 
@@ -628,6 +636,7 @@ enum SliderImage {
 fn check_abort(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_CheckAbort() != 0
     }
     #[cfg(test)]
@@ -671,10 +680,14 @@ fn check_select_input(state: &CommState) -> bool {
 
 fn check_left_input(state: &CommState) -> bool {
     // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-005
+    // C parity: optSmoothScroll==OPT_PC uses PulsedInputState, OPT_3DO uses CurrentInputState
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_GetPulsedMenuKey(KEY_MENU_LEFT) != 0
+        match get_scroll_mode() {
+            ScrollMode::Page => c_bridge::c_GetPulsedMenuKey(KEY_MENU_LEFT) != 0,
+            ScrollMode::Smooth => c_bridge::c_GetCurrentMenuKey(KEY_MENU_LEFT) != 0,
+        }
     }
     #[cfg(test)]
     {
@@ -685,10 +698,14 @@ fn check_left_input(state: &CommState) -> bool {
 
 fn check_right_input(state: &CommState) -> bool {
     // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-006
+    // C parity: optSmoothScroll==OPT_PC uses PulsedInputState, OPT_3DO uses CurrentInputState
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_GetPulsedMenuKey(KEY_MENU_RIGHT) != 0
+        match get_scroll_mode() {
+            ScrollMode::Page => c_bridge::c_GetPulsedMenuKey(KEY_MENU_RIGHT) != 0,
+            ScrollMode::Smooth => c_bridge::c_GetCurrentMenuKey(KEY_MENU_RIGHT) != 0,
+        }
     }
     #[cfg(test)]
     {
@@ -728,6 +745,7 @@ fn check_down_input(state: &CommState) -> bool {
 fn won_last_battle(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_WonLastBattle() != 0
     }
     #[cfg(test)]
@@ -795,25 +813,37 @@ pub fn fade_music_to_background_bridge() {
 
 // Test stubs for lock-free external functions (prod versions are cfg(not(test)))
 #[cfg(test)]
-pub fn check_abort_external() -> bool { false }
+pub fn check_abort_external() -> bool {
+    false
+}
 #[cfg(test)]
-pub fn check_select_external() -> bool { false }
+pub fn check_select_external() -> bool {
+    false
+}
 #[cfg(test)]
-pub fn check_cancel_external() -> bool { false }
+pub fn check_cancel_external() -> bool {
+    false
+}
 #[cfg(test)]
-pub fn check_up_external() -> bool { false }
+pub fn check_up_external() -> bool {
+    false
+}
 #[cfg(test)]
-pub fn check_down_external() -> bool { false }
+pub fn check_down_external() -> bool {
+    false
+}
 #[cfg(test)]
-pub fn check_left_external() -> bool { false }
+pub fn check_left_external() -> bool {
+    false
+}
 #[cfg(test)]
-pub fn won_last_battle_external() -> bool { false }
+pub fn won_last_battle_external() -> bool {
+    false
+}
 #[cfg(test)]
 pub fn run_last_replay_bridge(_timeout: i32) {}
 #[cfg(test)]
 pub fn fade_music_to_background_bridge() {}
-
-
 
 // ---------- track operations -----------------------------------------------
 
@@ -821,6 +851,7 @@ pub fn fade_music_to_background_bridge() {}
 fn playing_track(state: &CommState) -> u32 {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_PlayingTrack() as u32
     }
     #[cfg(test)]
@@ -837,6 +868,7 @@ fn playing_track(state: &CommState) -> u32 {
 fn jump_track(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_JumpTrack();
     }
     #[cfg(test)]
@@ -848,6 +880,7 @@ fn jump_track(state: &mut CommState) {
 fn play_track(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_PlayTrack();
     }
     #[cfg(test)]
@@ -859,6 +892,7 @@ fn play_track(state: &mut CommState) {
 fn stop_track(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_StopTrack();
     }
     #[cfg(test)]
@@ -870,6 +904,7 @@ fn stop_track(state: &mut CommState) {
 fn fast_forward(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         match get_scroll_mode() {
             ScrollMode::Page => c_bridge::c_FastForward_Page(),
             ScrollMode::Smooth => c_bridge::c_FastForward_Smooth(),
@@ -884,6 +919,7 @@ fn fast_forward(state: &mut CommState) {
 fn fast_reverse(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         match get_scroll_mode() {
             ScrollMode::Page => c_bridge::c_FastReverse_Page(),
             ScrollMode::Smooth => c_bridge::c_FastReverse_Smooth(),
@@ -962,7 +998,7 @@ fn set_slider_image(state: &mut CommState, img: SliderImage) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_SetSliderImage(img as i32);
+        c_bridge::c_SetSliderImage(img as u32);
     }
     #[cfg(test)]
     {
@@ -1043,6 +1079,7 @@ fn select_conversation_summary(state: &mut CommState) {
 fn want_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_WantTalkingAnim() != 0
     }
     #[cfg(test)]
@@ -1054,6 +1091,7 @@ fn want_talking_anim(state: &CommState) -> bool {
 fn have_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_HaveTalkingAnim() != 0
     }
     #[cfg(test)]
@@ -1114,6 +1152,7 @@ fn set_stop_talking_anim(state: &mut CommState) {
 fn running_intro_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_RunningIntroAnim() != 0
     }
     #[cfg(test)]
@@ -1125,6 +1164,7 @@ fn running_intro_anim(state: &CommState) -> bool {
 fn running_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
+        let _ = state;
         c_bridge::c_RunningTalkingAnim() != 0
     }
     #[cfg(test)]
@@ -2326,9 +2366,7 @@ mod tests {
                     match ch {
                         '{' => depth += 1,
                         '}' => {
-                            if depth > 0 {
-                                depth -= 1;
-                            }
+                            depth = depth.saturating_sub(1);
                             if depth == 0 {
                                 in_test = false;
                                 break;

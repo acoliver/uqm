@@ -7,12 +7,10 @@ use uqm_rust::graphics::{
     FadeType, RenderContext, Screen, ScreenType, FADE_FULL_INTENSITY, FADE_NO_INTENSITY,
 };
 
-fn setup_queue_with_screens() -> (
-    DrawCommandQueue,
-    Arc<RwLock<Canvas>>,
-    Arc<RwLock<Canvas>>,
-    Arc<RwLock<Canvas>>,
-) {
+type SharedCanvas = Arc<RwLock<Canvas>>;
+type QueueWithScreens = (DrawCommandQueue, SharedCanvas, SharedCanvas, SharedCanvas);
+
+fn setup_queue_with_screens() -> QueueWithScreens {
     let render_context = Arc::new(RwLock::new(RenderContext::new()));
     let main = Arc::new(RwLock::new(Canvas::new_rgba(8, 8)));
     let extra = Arc::new(RwLock::new(Canvas::new_rgba(8, 8)));

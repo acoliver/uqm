@@ -169,6 +169,9 @@ impl VideoPlayer {
     }
 
     /// Advances playback and (if due) renders the next frame into `dst_surface`.
+    /// # Safety
+    ///
+    /// This is an FFI function called from C. The caller must ensure pointers are valid.
     ///
     /// Returns `true` while still playing, `false` when finished/stopped.
     pub unsafe fn process_frame(&mut self, dst_surface: *mut SDL_Surface) -> bool {
@@ -390,9 +393,9 @@ unsafe fn blit_frame_to_sdl_surface(
             let p = frame.data[(y as usize * frame.width as usize) + x as usize];
             // Frame pixels are RGBA in memory. The Rust graphics screen surface
             // uses RGBX8888 with masks R=0xFF000000, G=0x00FF0000, B=0x0000FF00.
-            let r = (p & 0xFF);
-            let g = ((p >> 8) & 0xFF);
-            let b = ((p >> 16) & 0xFF);
+            let r = p & 0xFF;
+            let g = (p >> 8) & 0xFF;
+            let b = (p >> 16) & 0xFF;
 
             let out = (r << 24) | (g << 16) | (b << 8);
 

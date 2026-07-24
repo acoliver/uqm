@@ -1,6 +1,7 @@
 // Shofixti Scout - Dart gun + glory device
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -22,7 +23,9 @@ const SPECIAL_WAIT: u8 = 0;
 const SHIP_MASS: u8 = 1;
 
 const WEAPON_ENERGY_COST: u8 = 1;
+#[cfg(not(test))]
 const SHOFIXTI_OFFSET: i16 = 15;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 1;
 const MISSILE_LIFE: u16 = 10;
 const MISSILE_HITS: i16 = 1;
@@ -92,12 +95,11 @@ impl ShipBehavior for ShofixtiShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(24) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(24) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: SHOFIXTI_OFFSET,
                 speed: missile_speed,
@@ -111,7 +113,7 @@ impl ShipBehavior for ShofixtiShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -138,7 +140,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = ShofixtiShip::default();
+        let ship = ShofixtiShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 5);
@@ -151,7 +153,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = ShofixtiShip::default();
+        let mut ship = ShofixtiShip;
         let state = ShipState {
             crew_level: 6,
             max_crew: 6,
@@ -173,7 +175,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = ShofixtiShip::default();
+        let mut ship = ShofixtiShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

@@ -270,54 +270,44 @@ mod tests {
 
     #[test]
     fn test_mod_decoder_new() {
-        unsafe {
-            let decoder = ModDecoder::new();
-            assert_eq!(decoder.name(), "Rust MOD");
-            assert_eq!(decoder.frequency(), 44100);
-            assert_eq!(decoder.format(), AudioFormat::Stereo16);
-            assert!(!decoder.is_null());
-            assert!(!decoder.needs_swap());
-        }
+        let decoder = ModDecoder::new();
+        assert_eq!(decoder.name(), "Rust MOD");
+        assert_eq!(decoder.frequency(), 44100);
+        assert_eq!(decoder.format(), AudioFormat::Stereo16);
+        assert!(!decoder.is_null());
+        assert!(!decoder.needs_swap());
     }
 
     #[test]
     fn test_mod_decoder_init_term() {
-        unsafe {
-            let mut decoder = ModDecoder::new();
-            assert!(decoder.init());
-            assert!(decoder.initialized);
-            decoder.term();
-            assert!(!decoder.initialized);
-        }
+        let mut decoder = ModDecoder::new();
+        assert!(decoder.init());
+        assert!(decoder.initialized);
+        decoder.term();
+        assert!(!decoder.initialized);
     }
 
     #[test]
     fn test_mod_decoder_init_module() {
-        unsafe {
-            let mut decoder = ModDecoder::new();
-            let formats = DecoderFormats::default();
-            assert!(decoder.init_module(0, &formats));
-            assert!(decoder.formats.is_some());
-            decoder.term_module();
-            assert!(decoder.formats.is_none());
-        }
+        let mut decoder = ModDecoder::new();
+        let formats = DecoderFormats::default();
+        assert!(decoder.init_module(0, &formats));
+        assert!(decoder.formats.is_some());
+        decoder.term_module();
+        assert!(decoder.formats.is_none());
     }
 
     #[test]
     fn test_mod_decoder_decode_not_initialized() {
-        unsafe {
-            let mut decoder = ModDecoder::new();
-            let mut buf = [0u8; 1024];
-            let result = decoder.decode(&mut buf);
-            assert!(matches!(result, Err(DecodeError::NotInitialized)));
-        }
+        let mut decoder = ModDecoder::new();
+        let mut buf = [0u8; 1024];
+        let result = decoder.decode(&mut buf);
+        assert!(matches!(result, Err(DecodeError::NotInitialized)));
     }
 
     #[test]
     fn test_mod_decoder_is_send() {
-        unsafe {
-            fn assert_send<T: Send>() {}
-            assert_send::<ModDecoder>();
-        }
+        fn assert_send<T: Send>() {}
+        assert_send::<ModDecoder>();
     }
 }

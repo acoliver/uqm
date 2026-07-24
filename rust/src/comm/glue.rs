@@ -18,6 +18,7 @@ pub const GLOBAL_SHIP_NAME: i32 = -2;
 ///
 /// # Safety
 /// `ptr` must be a valid null-terminated C string, or null.
+#[cfg(not(test))]
 unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
     if ptr.is_null() {
         return None;
@@ -38,7 +39,15 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
     extern "C" {
         fn c_get_conversation_phrase(phrases: *const c_void, index: i32) -> *const u8;
+        #[allow(
+            clashing_extern_declarations,
+            reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+        )]
         fn c_get_commander_name() -> *const u8;
+        #[allow(
+            clashing_extern_declarations,
+            reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+        )]
         fn c_get_ship_name() -> *const u8;
         fn c_get_alliance_name(index: i32) -> *const u8;
     }
@@ -65,6 +74,9 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
 }
 
 /// Test-mode resolve_phrase: returns placeholder strings without calling C.
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[cfg(test)]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
     if index == PHRASE_NOOP {

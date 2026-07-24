@@ -3,6 +3,10 @@
 //! Handles joystick button, axis, and hat bindings.
 
 /// Hat direction constants (matching SDL)
+#[allow(
+    non_snake_case,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub mod HatDirection {
     pub const CENTERED: u8 = 0;
     pub const UP: u8 = 1;
@@ -377,7 +381,7 @@ impl Joystick {
 
     /// Set axis threshold
     pub fn set_threshold(&mut self, threshold: i32) {
-        self.threshold = threshold.max(0).min(32767);
+        self.threshold = threshold.clamp(0, 32767);
     }
 
     /// Handle button press/release

@@ -194,6 +194,12 @@ pub struct DukAudDecoder {
     opened: bool,
 }
 
+impl Default for DukAudDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DukAudDecoder {
     /// Create a new (unopened) DukAud decoder.
     pub fn new() -> Self {
@@ -521,9 +527,7 @@ mod tests {
         let mut predictors = [0i32; 2];
         let indices = [80u16, 80]; // high step index
         decode_nibbles(&mut samples, 2, &mut predictors, &indices);
-        for &s in &samples {
-            assert!(s >= -32768 && s <= 32767);
-        }
+        assert_ne!(samples, vec![7i16; 200]);
     }
 
     #[test]

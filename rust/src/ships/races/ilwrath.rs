@@ -1,6 +1,7 @@
 // Ilwrath Avenger - Hellfire spout + cloaking device
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,11 +22,14 @@ const SHIP_MASS: u8 = 7;
 
 const WEAPON_ENERGY_COST: u8 = 1;
 const WEAPON_WAIT: u8 = 0;
+#[cfg(not(test))]
 const ILWRATH_OFFSET: i16 = 29;
 const MISSILE_LIFE: u16 = 8;
+#[cfg(not(test))]
 const MISSILE_SPEED: i16 = 25; // MAX_THRUST
 const MISSILE_HITS: i16 = 1;
 const MISSILE_DAMAGE: i16 = 1;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 0;
 
 const SPECIAL_ENERGY_COST: u8 = 3;
@@ -74,11 +78,7 @@ impl ShipBehavior for IlwrathShip {
     /// C: ilwrath_preprocess — cloaking device with color fade animation.
     /// Complex STAMPFILL_PRIM / color cycling + auto-aiming while cloaked.
     /// Kept in C.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             return Ok(());
         }
@@ -95,8 +95,7 @@ impl ShipBehavior for IlwrathShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
             }
             // Color cycling + STAMPFILL handled by C preprocess_func
@@ -126,7 +125,7 @@ impl ShipBehavior for IlwrathShip {
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: ILWRATH_OFFSET,
                 speed: MISSILE_SPEED,
@@ -140,7 +139,7 @@ impl ShipBehavior for IlwrathShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -167,7 +166,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = IlwrathShip::default();
+        let ship = IlwrathShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 10);
@@ -181,7 +180,7 @@ mod tests {
 
     #[test]
     fn weapon_basic() {
-        let mut ship = IlwrathShip::default();
+        let mut ship = IlwrathShip;
         let state = ShipState {
             crew_level: 22,
             max_crew: 22,
@@ -204,7 +203,7 @@ mod tests {
 
     #[test]
     fn cloak_activates() {
-        let mut ship = IlwrathShip::default();
+        let mut ship = IlwrathShip;
         let mut state = ShipState {
             crew_level: 22,
             max_crew: 22,
@@ -227,7 +226,7 @@ mod tests {
 
     #[test]
     fn cloak_denied_low_energy() {
-        let mut ship = IlwrathShip::default();
+        let mut ship = IlwrathShip;
         let mut state = ShipState {
             crew_level: 22,
             max_crew: 22,
@@ -250,7 +249,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = IlwrathShip::default();
+        let mut ship = IlwrathShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

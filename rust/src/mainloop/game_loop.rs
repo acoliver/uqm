@@ -3,6 +3,7 @@
 //! @plan PLAN-20260707-MAINLOOP.P06
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
+#[cfg(not(test))]
 use std::os::raw::c_int;
 
 use super::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
@@ -14,6 +15,7 @@ use super::MainLoopError;
 // ===========================================================================
 
 /// `SMM_DEFAULT = SMM_DATE = 1` (sis.h:203)
+#[cfg(not(test))]
 const SMM_DEFAULT: c_int = 1;
 /// `HYPERSPACE_CLOCK_RATE = 5` (clock.h:79)
 const HYPERSPACE_CLOCK_RATE: u16 = 5;

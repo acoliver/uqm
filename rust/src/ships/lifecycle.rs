@@ -359,27 +359,22 @@ pub fn get_initial_starships(
 // ---------------------------------------------------------------------------
 
 /// Mark battle ships as initialized (called after successful arena setup).
+#[cfg_attr(test, expect(dead_code, reason = "only called from non-test FFI path"))]
 pub(crate) fn mark_ships_initialized() {
-    let mut state = BATTLE_STATE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
     state.ships_initialized = true;
 }
 
 /// Mark battle ships as uninitialized (called after teardown).
 pub(crate) fn mark_ships_uninitialized() {
-    let mut state = BATTLE_STATE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let mut state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
     state.ships_initialized = false;
 }
 
 /// Query whether ships are currently initialized.
 /// Used by uninit idempotence guard (P03) — not test-only.
 pub(crate) fn is_ships_initialized_for_uninit() -> bool {
-    let state = BATTLE_STATE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let state = BATTLE_STATE.lock().unwrap_or_else(|e| e.into_inner());
     state.ships_initialized
 }
 
@@ -408,6 +403,7 @@ mod tests {
     use super::super::types::SpeciesId;
     use super::super::writeback::ShipFragment;
     use super::*;
+    use serial_test::serial;
 
     fn cleanup() {
         reset_battle_state();
@@ -426,6 +422,7 @@ mod tests {
     // -- spawn_ship tests ---------------------------------------------------
 
     #[test]
+    #[serial]
     fn spawn_ship_successful_spawn() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::Earthling, 20, RPG_PLAYER_NUM);
@@ -442,6 +439,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_idempotent() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::Spathi, 30, NPC_PLAYER_NUM);
@@ -452,6 +450,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_crew_patching_in_encounter() {
         cleanup();
         // Create starship with crew_level different from species default
@@ -477,6 +476,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_crew_patching_in_last_battle() {
         cleanup();
         // Test with Spathi (30 default crew)
@@ -492,6 +492,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_crew_not_patched_in_super_melee() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::Utwig, 5, RPG_PLAYER_NUM);
@@ -514,6 +515,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_crew_clamped_to_max() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::Chmmr, 10000, RPG_PLAYER_NUM);
@@ -526,6 +528,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_no_id_fails() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::NoId, 20, RPG_PLAYER_NUM);
@@ -535,6 +538,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn spawn_ship_descriptor_loaded_with_mass() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::Orz, 20, RPG_PLAYER_NUM);
@@ -549,6 +553,7 @@ mod tests {
     // -- init_space / uninit_space tests ------------------------------------
 
     #[test]
+    #[serial]
     fn init_space_ref_counting() {
         cleanup();
         init_space().unwrap();
@@ -574,6 +579,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_space_safe_when_zero() {
         cleanup();
         uninit_space().unwrap();
@@ -584,6 +590,7 @@ mod tests {
     // -- init_ships / uninit_ships tests ------------------------------------
 
     #[test]
+    #[serial]
     fn init_ships_returns_num_sides_for_encounter() {
         cleanup();
         let result = init_ships(IN_ENCOUNTER).unwrap();
@@ -593,6 +600,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn init_ships_returns_num_sides_for_super_melee() {
         cleanup();
         let result = init_ships(SUPER_MELEE).unwrap();
@@ -600,6 +608,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn init_ships_returns_one_for_hyperspace() {
         cleanup();
         let result = init_ships(0).unwrap(); // activity=0 is not SUPER_MELEE/IN_ENCOUNTER/IN_LAST_BATTLE
@@ -607,6 +616,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_ships_round_trip() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -628,6 +638,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_ships_writes_back_crew() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -647,6 +658,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_ships_crew_retrieved_count() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -666,6 +678,7 @@ mod tests {
     // -- get_next_starship tests --------------------------------------------
 
     #[test]
+    #[serial]
     fn get_next_starship_finds_first_unspawned_alive() {
         cleanup();
         let mut queue = vec![
@@ -691,6 +704,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_next_starship_skips_dead_ships() {
         cleanup();
         let queue = vec![
@@ -702,6 +716,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_next_starship_returns_none_for_all_dead() {
         cleanup();
         let queue = vec![
@@ -713,6 +728,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_next_starship_empty_queue() {
         cleanup();
         let queue: Vec<Starship> = Vec::new();
@@ -722,6 +738,7 @@ mod tests {
     // -- get_initial_starships tests ----------------------------------------
 
     #[test]
+    #[serial]
     fn get_initial_starships_spawns_one_per_side() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -734,6 +751,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_initial_starships_super_melee_order() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -747,6 +765,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_initial_starships_encounter_reverse_order() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -760,6 +779,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_initial_starships_empty_queue_side() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -772,6 +792,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn get_initial_starships_all_dead() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -787,6 +808,7 @@ mod tests {
     // -- Edge cases ---------------------------------------------------------
 
     #[test]
+    #[serial]
     fn spawn_ship_failure_no_partial_race_desc() {
         cleanup();
         let mut starship = make_test_starship(SpeciesId::NoId, 20, RPG_PLAYER_NUM);
@@ -796,6 +818,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn init_uninit_idempotency() {
         cleanup();
         init_ships(IN_ENCOUNTER).unwrap();
@@ -814,6 +837,7 @@ mod tests {
     // -- SIS zero-crew special case -----------------------------------------
 
     #[test]
+    #[serial]
     fn spawn_ship_sis_zero_crew_uses_descriptor_default() {
         cleanup();
         // SIS ships enter with crew_level=0 — crew is set by sis_ship.c
@@ -829,6 +853,7 @@ mod tests {
     // -- Floating crew retrieval tests --------------------------------------
 
     #[test]
+    #[serial]
     fn uninit_ships_floating_crew_added_to_survivor() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -851,6 +876,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_ships_floating_crew_clamped_to_max() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -869,6 +895,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_ships_no_survivor_no_crew_added() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];
@@ -889,6 +916,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn uninit_ships_zero_crew_ship_not_survivor() {
         cleanup();
         let mut queues: [Vec<Starship>; NUM_PLAYERS] = [Vec::new(), Vec::new()];

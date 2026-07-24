@@ -207,154 +207,122 @@ mod tests {
 
     #[test]
     fn local_mode_requires_no_network_state() {
-        unsafe {
-            assert!(is_local_mode(&None));
-            assert!(!is_local_mode(&Some(NetplayBoundaryState::new())));
-        }
+        assert!(is_local_mode(&None));
+        assert!(!is_local_mode(&Some(NetplayBoundaryState::new())));
     }
 
     #[test]
     fn ship_slot_change_emits_sync_event() {
-        unsafe {
-            let evt = emit_ship_slot_changed(0, 3, MeleeShip::Orz);
-            assert_eq!(
-                evt,
-                SetupSyncEvent::ShipSlotChanged {
-                    side: 0,
-                    slot: 3,
-                    ship: MeleeShip::Orz,
-                }
-            );
-        }
+        let evt = emit_ship_slot_changed(0, 3, MeleeShip::Orz);
+        assert_eq!(
+            evt,
+            SetupSyncEvent::ShipSlotChanged {
+                side: 0,
+                slot: 3,
+                ship: MeleeShip::Orz,
+            }
+        );
     }
 
     #[test]
     fn team_name_change_emits_sync_event() {
-        unsafe {
-            let evt = emit_team_name_changed(1, "New Name");
-            assert_eq!(
-                evt,
-                SetupSyncEvent::TeamNameChanged {
-                    side: 1,
-                    name: "New Name".to_string(),
-                }
-            );
-        }
+        let evt = emit_team_name_changed(1, "New Name");
+        assert_eq!(
+            evt,
+            SetupSyncEvent::TeamNameChanged {
+                side: 1,
+                name: "New Name".to_string(),
+            }
+        );
     }
 
     #[test]
     fn whole_team_sync_emits_event() {
-        unsafe {
-            let evt = emit_whole_team_sync(0);
-            assert_eq!(evt, SetupSyncEvent::WholeTeamSync { side: 0 });
-        }
+        let evt = emit_whole_team_sync(0);
+        assert_eq!(evt, SetupSyncEvent::WholeTeamSync { side: 0 });
     }
 
     #[test]
     fn start_blocked_without_connection() {
-        unsafe {
-            let state = NetplayBoundaryState::new();
-            assert!(!can_start_netplay_match(&state));
-        }
+        let state = NetplayBoundaryState::new();
+        assert!(!can_start_netplay_match(&state));
     }
 
     #[test]
     fn start_blocked_without_readiness() {
-        unsafe {
-            let mut state = NetplayBoundaryState::new();
-            state.connected = true;
-            assert!(!can_start_netplay_match(&state));
-        }
+        let mut state = NetplayBoundaryState::new();
+        state.connected = true;
+        assert!(!can_start_netplay_match(&state));
     }
 
     #[test]
     fn start_blocked_without_confirmation() {
-        unsafe {
-            let mut state = NetplayBoundaryState::new();
-            state.connected = true;
-            state.side_ready = [true; NUM_SIDES];
-            assert!(!can_start_netplay_match(&state));
-        }
+        let mut state = NetplayBoundaryState::new();
+        state.connected = true;
+        state.side_ready = [true; NUM_SIDES];
+        assert!(!can_start_netplay_match(&state));
     }
 
     #[test]
     fn start_allowed_when_all_conditions_met() {
-        unsafe {
-            let mut state = NetplayBoundaryState::new();
-            state.connected = true;
-            state.side_ready = [true; NUM_SIDES];
-            state.start_confirmed = true;
-            assert!(can_start_netplay_match(&state));
-        }
+        let mut state = NetplayBoundaryState::new();
+        state.connected = true;
+        state.side_ready = [true; NUM_SIDES];
+        state.start_confirmed = true;
+        assert!(can_start_netplay_match(&state));
     }
 
     #[test]
     fn local_selection_outcome_exposed_to_boundary() {
-        unsafe {
-            let evt = emit_combatant_selected(0, 2, MeleeShip::Vux);
-            assert_eq!(
-                evt,
-                SetupSyncEvent::CombatantSelected {
-                    side: 0,
-                    slot: 2,
-                    ship: MeleeShip::Vux,
-                }
-            );
-        }
+        let evt = emit_combatant_selected(0, 2, MeleeShip::Vux);
+        assert_eq!(
+            evt,
+            SetupSyncEvent::CombatantSelected {
+                side: 0,
+                slot: 2,
+                ship: MeleeShip::Vux,
+            }
+        );
     }
 
     #[test]
     fn valid_remote_selection_accepted_and_committed() {
-        unsafe {
-            let setup = setup_with_ships();
-            let mut sel_state = MatchSelectionState::new();
-
-            let result = validate_remote_selection(&setup, &mut sel_state, 1, 0, MeleeShip::Urquan);
-            assert!(result.is_ok());
-            assert_eq!(sel_state.sides[1].current_slot(), Some(0));
-        }
+        let setup = setup_with_ships();
+        let mut sel_state = MatchSelectionState::new();
+        let result = validate_remote_selection(&setup, &mut sel_state, 1, 0, MeleeShip::Urquan);
+        assert!(result.is_ok());
+        assert_eq!(sel_state.sides[1].current_slot(), Some(0));
     }
 
     #[test]
     fn invalid_remote_selection_rejected_fleet_mismatch() {
-        unsafe {
-            let setup = setup_with_ships();
-            let mut sel_state = MatchSelectionState::new();
-
-            // Claim slot 0 has Pkunk, but it actually has Urquan
-            let result = validate_remote_selection(&setup, &mut sel_state, 1, 0, MeleeShip::Pkunk);
-            assert!(result.is_err());
-        }
+        let setup = setup_with_ships();
+        let mut sel_state = MatchSelectionState::new();
+        // Claim slot 0 has Pkunk, but it actually has Urquan
+        let result = validate_remote_selection(&setup, &mut sel_state, 1, 0, MeleeShip::Pkunk);
+        assert!(result.is_err());
     }
 
     #[test]
     fn remote_selection_for_consumed_ship_rejected() {
-        unsafe {
-            let setup = setup_with_ships();
-            let mut sel_state = MatchSelectionState::new();
-
-            commit_ship_death(&mut sel_state, 1, 0).unwrap();
-
-            let result = validate_remote_selection(&setup, &mut sel_state, 1, 0, MeleeShip::Urquan);
-            assert!(result.is_err());
-        }
+        let setup = setup_with_ships();
+        let mut sel_state = MatchSelectionState::new();
+        commit_ship_death(&mut sel_state, 1, 0).unwrap();
+        let result = validate_remote_selection(&setup, &mut sel_state, 1, 0, MeleeShip::Urquan);
+        assert!(result.is_err());
     }
 
     #[test]
     fn accepted_remote_selection_not_rejected_after_commit() {
-        unsafe {
-            let setup = setup_with_ships();
-            let mut sel_state = MatchSelectionState::new();
-
-            let combatant =
-                validate_remote_selection(&setup, &mut sel_state, 0, 0, MeleeShip::Chmmr).unwrap();
-            // The combatant was committed — verify state is consistent
-            assert_eq!(sel_state.sides[0].current_slot(), Some(0));
-            // A second valid selection on a different slot should also work
-            let _combatant2 =
-                validate_remote_selection(&setup, &mut sel_state, 0, 1, MeleeShip::Shofixti)
-                    .unwrap();
-            assert_eq!(sel_state.sides[0].current_slot(), Some(1));
-        }
+        let setup = setup_with_ships();
+        let mut sel_state = MatchSelectionState::new();
+        let _combatant =
+            validate_remote_selection(&setup, &mut sel_state, 0, 0, MeleeShip::Chmmr).unwrap();
+        // The combatant was committed — verify state is consistent
+        assert_eq!(sel_state.sides[0].current_slot(), Some(0));
+        // A second valid selection on a different slot should also work
+        let _combatant2 =
+            validate_remote_selection(&setup, &mut sel_state, 0, 1, MeleeShip::Shofixti).unwrap();
+        assert_eq!(sel_state.sides[0].current_slot(), Some(1));
     }
 }

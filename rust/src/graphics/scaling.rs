@@ -2635,7 +2635,7 @@ mod tests {
 
     #[test]
     fn test_biadaptive_default_trait() {
-        let scaler = BiadaptiveScaler::default();
+        let scaler = BiadaptiveScaler;
         assert!(scaler.supports(ScaleMode::Biadaptive));
     }
 
@@ -3070,7 +3070,7 @@ mod tests {
 
     #[test]
     fn test_triscan_default_trait() {
-        let scaler = TriscanScaler::default();
+        let scaler = TriscanScaler;
         assert!(scaler.supports(ScaleMode::Triscan));
     }
 

@@ -275,6 +275,83 @@ pub const fn world_to_velocity(l: i32) -> i32 {
 }
 
 // ---------------------------------------------------------------------------
+// C FFI Exports — #[no_mangle] functions matching C velocity.c signatures
+// These replace velocity.c when velocity.c is removed from Makeinfo.
+// ---------------------------------------------------------------------------
+
+/// C: void GetCurrentVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *)
+#[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+pub extern "C" fn GetCurrentVelocityComponents(
+    velocityptr: *mut VelocityDesc,
+    pdx: *mut i16,
+    pdy: *mut i16,
+) {
+    let vel = unsafe { &*velocityptr };
+    let (dx, dy) = vel.get_current_components();
+    unsafe {
+        *pdx = dx as i16;
+        *pdy = dy as i16;
+    }
+}
+
+/// C: void GetNextVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *, COUNT)
+#[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+pub extern "C" fn GetNextVelocityComponents(
+    velocityptr: *mut VelocityDesc,
+    pdx: *mut i16,
+    pdy: *mut i16,
+    num_frames: u16,
+) {
+    let vel = unsafe { &mut *velocityptr };
+    let (dx, dy) = vel.get_next_components(num_frames);
+    unsafe {
+        *pdx = dx as i16;
+        *pdy = dy as i16;
+    }
+}
+
+/// C: void SetVelocityVector(VELOCITY_DESC *, SIZE magnitude, COUNT facing)
+#[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+pub extern "C" fn SetVelocityVector(velocityptr: *mut VelocityDesc, magnitude: i16, facing: u16) {
+    let vel = unsafe { &mut *velocityptr };
+    vel.set_vector(magnitude as i32, facing);
+}
+
+/// C: void SetVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
+#[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+pub extern "C" fn SetVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
+    let vel = unsafe { &mut *velocityptr };
+    vel.set_components(dx as i32, dy as i32);
+}
+
+/// C: void DeltaVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
+#[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
+pub extern "C" fn DeltaVelocityComponents(velocityptr: *mut VelocityDesc, dx: i16, dy: i16) {
+    let vel = unsafe { &mut *velocityptr };
+    vel.delta_components(dx as i32, dy as i32);
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -572,7 +649,7 @@ mod tests {
         // Frame 8: e = 8+4 = 12..32, crossing threshold
         for i in 3..=8 {
             let expected_e = 4 * i;
-            let expected_dx = 3 + 1 * (expected_e >> 5);
+            let expected_dx = 3 + (expected_e >> 5);
             let (dx, _) = v.get_next_components(1);
             assert_eq!(dx, expected_dx, "frame {}", i);
             assert_eq!(v.error.width, (expected_e & 31) as i16, "frame {}", i);
@@ -679,73 +756,4 @@ mod tests {
         // dy = -1*1 + (-1)*(18>>5) = -1 + 0 = -1
         assert_eq!(dy, -1);
     }
-}
-
-// ---------------------------------------------------------------------------
-// C FFI Exports — #[no_mangle] functions matching C velocity.c signatures
-// These replace velocity.c when velocity.c is removed from Makeinfo.
-// ---------------------------------------------------------------------------
-
-/// C: void GetCurrentVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *)
-#[no_mangle]
-pub extern "C" fn GetCurrentVelocityComponents(
-    velocityptr: *mut VelocityDesc,
-    pdx: *mut i16,
-    pdy: *mut i16,
-) {
-    let vel = unsafe { &*velocityptr };
-    let (dx, dy) = vel.get_current_components();
-    unsafe {
-        *pdx = dx as i16;
-        *pdy = dy as i16;
-    }
-}
-
-/// C: void GetNextVelocityComponents(VELOCITY_DESC *, SIZE *, SIZE *, COUNT)
-#[no_mangle]
-pub extern "C" fn GetNextVelocityComponents(
-    velocityptr: *mut VelocityDesc,
-    pdx: *mut i16,
-    pdy: *mut i16,
-    num_frames: u16,
-) {
-    let vel = unsafe { &mut *velocityptr };
-    let (dx, dy) = vel.get_next_components(num_frames);
-    unsafe {
-        *pdx = dx as i16;
-        *pdy = dy as i16;
-    }
-}
-
-/// C: void SetVelocityVector(VELOCITY_DESC *, SIZE magnitude, COUNT facing)
-#[no_mangle]
-pub extern "C" fn SetVelocityVector(
-    velocityptr: *mut VelocityDesc,
-    magnitude: i16,
-    facing: u16,
-) {
-    let vel = unsafe { &mut *velocityptr };
-    vel.set_vector(magnitude as i32, facing);
-}
-
-/// C: void SetVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
-#[no_mangle]
-pub extern "C" fn SetVelocityComponents(
-    velocityptr: *mut VelocityDesc,
-    dx: i16,
-    dy: i16,
-) {
-    let vel = unsafe { &mut *velocityptr };
-    vel.set_components(dx as i32, dy as i32);
-}
-
-/// C: void DeltaVelocityComponents(VELOCITY_DESC *, SIZE dx, SIZE dy)
-#[no_mangle]
-pub extern "C" fn DeltaVelocityComponents(
-    velocityptr: *mut VelocityDesc,
-    dx: i16,
-    dy: i16,
-) {
-    let vel = unsafe { &mut *velocityptr };
-    vel.delta_components(dx as i32, dy as i32);
 }

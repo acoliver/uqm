@@ -67,10 +67,7 @@ pub extern "C" fn Callback_uninit() {
 }
 
 #[no_mangle]
-pub extern "C" fn Callback_add(
-    func: extern "C" fn(*mut c_void),
-    arg: *mut c_void,
-) -> *mut c_void {
+pub extern "C" fn Callback_add(func: extern "C" fn(*mut c_void), arg: *mut c_void) -> *mut c_void {
     let state = match CALLBACKS.get() {
         Some(s) => s,
         None => return std::ptr::null_mut(),
@@ -95,7 +92,7 @@ pub extern "C" fn Callback_remove(id: *mut c_void) -> bool {
     let mut s = state.lock();
     // Find and mark as cancelled (lazy deletion — preserves indices).
     for entry in s.queue.iter_mut() {
-        if &**entry as *const CallbackLink == target {
+        if std::ptr::eq(&**entry, target) {
             entry.cancelled = true;
             return true;
         }
@@ -176,7 +173,7 @@ impl Eq for AlarmEntry {}
 impl PartialOrd for AlarmEntry {
     // Reverse ordering → BinaryHeap acts as min-heap by deadline.
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(other.deadline_ms.cmp(&self.deadline_ms))
+        Some(self.cmp(other))
     }
 }
 impl Ord for AlarmEntry {
@@ -211,7 +208,11 @@ pub extern "C" fn Alarm_uninit() {
     }
 }
 
-fn alarm_add(deadline_ms: u32, callback: extern "C" fn(*mut c_void), arg: *mut c_void) -> *mut AlarmHandle {
+fn alarm_add(
+    deadline_ms: u32,
+    callback: extern "C" fn(*mut c_void),
+    arg: *mut c_void,
+) -> *mut AlarmHandle {
     let heap = match ALARM_HEAP.get() {
         Some(h) => h,
         None => return std::ptr::null_mut(),
@@ -256,6 +257,10 @@ pub extern "C" fn Alarm_addRelativeMs(
 }
 
 #[no_mangle]
+#[allow(
+    clippy::not_unsafe_ptr_arg_deref,
+    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+)]
 pub extern "C" fn Alarm_remove(alarm: *mut AlarmHandle) {
     if alarm.is_null() {
         return;
@@ -264,7 +269,9 @@ pub extern "C" fn Alarm_remove(alarm: *mut AlarmHandle) {
     let id = handle.id;
 
     // Free the handle.
-    unsafe { drop(Box::from_raw(alarm)); }
+    unsafe {
+        drop(Box::from_raw(alarm));
+    }
 
     // Mark the alarm as cancelled (lazy deletion — BinaryHeap doesn't
     // support arbitrary removal, so we skip cancelled entries on pop).
@@ -288,7 +295,10 @@ pub extern "C" fn Alarm_processOne() -> bool {
         match guard.peek() {
             None => return false,
             Some(top) => {
-                if cancelled.map(|c| c.lock().contains(&top.id)).unwrap_or(false) {
+                if cancelled
+                    .map(|c| c.lock().contains(&top.id))
+                    .unwrap_or(false)
+                {
                     guard.pop();
                     continue;
                 }
@@ -319,14 +329,13 @@ pub extern "C" fn Alarm_timeBeforeNextMs() -> u32 {
 
     // Find the earliest non-cancelled alarm.
     for entry in guard.iter() {
-        if cancelled.map(|c| c.lock().contains(&entry.id)).unwrap_or(false) {
+        if cancelled
+            .map(|c| c.lock().contains(&entry.id))
+            .unwrap_or(false)
+        {
             continue;
         }
-        return if now >= entry.deadline_ms {
-            0
-        } else {
-            entry.deadline_ms - now
-        };
+        return entry.deadline_ms.saturating_sub(now);
     }
     u32::MAX
 }
@@ -365,6 +374,7 @@ pub extern "C" fn Async_timeBeforeNextMs() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static CALL_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -374,13 +384,16 @@ mod tests {
     }
 
     fn ensure_callbacks() -> &'static Mutex<CallbackState> {
-        CALLBACKS.get_or_init(|| Mutex::new(CallbackState {
-            queue: std::collections::VecDeque::new(),
-            process_end: 0,
-        }))
+        CALLBACKS.get_or_init(|| {
+            Mutex::new(CallbackState {
+                queue: std::collections::VecDeque::new(),
+                process_end: 0,
+            })
+        })
     }
 
     #[test]
+    #[serial]
     fn callback_add_process_remove() {
         let state = ensure_callbacks();
         state.lock().queue.clear();
@@ -388,7 +401,7 @@ mod tests {
 
         CALL_COUNT.store(0, Ordering::SeqCst);
 
-        let id1 = Callback_add(test_callback, std::ptr::null_mut());
+        let _id1 = Callback_add(test_callback, std::ptr::null_mut());
         let id2 = Callback_add(test_callback, std::ptr::null_mut());
 
         assert!(Callback_haveMore());
@@ -403,6 +416,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn callback_process_snapshot() {
         let state = ensure_callbacks();
         state.lock().queue.clear();

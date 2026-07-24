@@ -13,8 +13,6 @@
 
 // Stub phase: constants, types, and helpers are defined but not yet used.
 // These warnings will resolve as implementation phases consume them.
-#![allow(dead_code, unused_imports)]
-
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 
@@ -61,7 +59,6 @@ struct CommonChunk {
 #[derive(Debug, Default)]
 struct SoundDataHeader {
     offset: u32,
-    block_size: u32,
 }
 
 /// Generic chunk header
@@ -109,6 +106,12 @@ pub struct AiffDecoder {
     prev_val: [i32; MAX_CHANNELS],
 }
 
+impl Default for AiffDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AiffDecoder {
     /// Create a new AIFF decoder with default state
     pub fn new() -> Self {
@@ -152,14 +155,6 @@ fn read_be_u32(cursor: &mut Cursor<&[u8]>) -> DecodeResult<u32> {
         .read_exact(&mut buf)
         .map_err(|_| DecodeError::InvalidData("read u32".into()))?;
     Ok(u32::from_be_bytes(buf))
-}
-
-fn read_be_i16(cursor: &mut Cursor<&[u8]>) -> DecodeResult<i16> {
-    let mut buf = [0u8; 2];
-    cursor
-        .read_exact(&mut buf)
-        .map_err(|_| DecodeError::InvalidData("read i16".into()))?;
-    Ok(i16::from_be_bytes(buf))
 }
 
 /// Parse IEEE 754 80-bit extended precision float to i32.
@@ -235,11 +230,13 @@ impl AiffDecoder {
             return Err(DecodeError::InvalidData("COMM chunk too small".into()));
         }
         let start_pos = cursor.position();
-        let mut common = CommonChunk::default();
-        common.channels = read_be_u16(cursor)?;
-        common.sample_frames = read_be_u32(cursor)?;
-        common.sample_size = read_be_u16(cursor)?;
-        common.sample_rate = read_be_f80(cursor)?;
+        let mut common = CommonChunk {
+            channels: read_be_u16(cursor)?,
+            sample_frames: read_be_u32(cursor)?,
+            sample_size: read_be_u16(cursor)?,
+            sample_rate: read_be_f80(cursor)?,
+            ..Default::default()
+        };
         if chunk_size >= AIFF_EXT_COMM_SIZE {
             common.ext_type_id = read_be_u32(cursor)?;
         }
@@ -258,8 +255,8 @@ impl AiffDecoder {
         cursor: &mut Cursor<&[u8]>,
     ) -> DecodeResult<SoundDataHeader> {
         let offset = read_be_u32(cursor)?;
-        let block_size = read_be_u32(cursor)?;
-        Ok(SoundDataHeader { offset, block_size })
+        let _block_size = read_be_u32(cursor)?;
+        Ok(SoundDataHeader { offset })
     }
 
     // @plan PLAN-20260225-AIFF-DECODER.P08

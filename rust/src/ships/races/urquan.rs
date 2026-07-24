@@ -1,6 +1,7 @@
 // Ur-Quan Dreadnought - Fusion blast + autonomous fighters
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -21,7 +22,9 @@ const SHIP_MASS: u8 = 10;
 
 const WEAPON_ENERGY_COST: u8 = 6;
 const WEAPON_WAIT: u8 = 6;
+#[cfg(not(test))]
 const URQUAN_OFFSET: i16 = 32;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 8;
 const MISSILE_LIFE: u16 = 20;
 const MISSILE_HITS: i16 = 10;
@@ -96,8 +99,7 @@ impl ShipBehavior for UrquanShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
                 // spawn_fighters handled by C postprocess_func
             }
@@ -126,12 +128,11 @@ impl ShipBehavior for UrquanShip {
     ) -> Result<Vec<WeaponElement>, ShipsError> {
         #[cfg(not(test))]
         {
-            let missile_speed =
-                battle_bridge::bridge::display_to_world(20) as i16;
+            let missile_speed = battle_bridge::bridge::display_to_world(20) as i16;
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: URQUAN_OFFSET,
                 speed: missile_speed,
@@ -145,7 +146,7 @@ impl ShipBehavior for UrquanShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -171,20 +172,23 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = UrquanShip::default();
+        let ship = UrquanShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 30);
         assert_eq!(desc.ship_info.max_crew, 42);
         assert_eq!(desc.ship_info.max_energy, 42);
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::SEEKING_SPECIAL));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::SEEKING_SPECIAL));
         assert_eq!(desc.characteristics.special_energy_cost, 8);
         assert_eq!(desc.fleet.known_loc, (5750, 6000));
     }
 
     #[test]
     fn weapon_fires_fusion() {
-        let mut ship = UrquanShip::default();
+        let mut ship = UrquanShip;
         let state = ShipState {
             crew_level: 42,
             max_crew: 42,
@@ -205,7 +209,7 @@ mod tests {
 
     #[test]
     fn fighters_drain_crew_and_energy() {
-        let mut ship = UrquanShip::default();
+        let mut ship = UrquanShip;
         let mut state = ShipState {
             crew_level: 42,
             max_crew: 42,
@@ -229,7 +233,7 @@ mod tests {
 
     #[test]
     fn fighters_denied_low_crew() {
-        let mut ship = UrquanShip::default();
+        let mut ship = UrquanShip;
         let mut state = ShipState {
             crew_level: 1,
             max_crew: 42,
@@ -252,7 +256,7 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = UrquanShip::default();
+        let mut ship = UrquanShip;
         let state = ShipState::default();
         let ctx = BattleContext {
             hyperspace: false,

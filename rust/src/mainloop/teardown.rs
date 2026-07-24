@@ -10,8 +10,6 @@
 //! maps, which must be torn down before the task system (which runs the
 //! graphics consumer thread in two-thread mode).
 
-use std::os::raw::c_int;
-
 use super::c_main_extern;
 
 /// Teardown the full UQM subsystem stack.

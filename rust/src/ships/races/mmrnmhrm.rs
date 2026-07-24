@@ -1,6 +1,7 @@
 // Mmrnmhrm X-Form - Twin laser/twin missile + transform
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, LaserBlock, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -24,6 +25,7 @@ const WEAPON_WAIT: u8 = 0;
 const MISSILE_LIFE: u16 = 40;
 const MISSILE_HITS: i16 = 1;
 const MISSILE_DAMAGE: i16 = 1;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 0;
 
 const SPECIAL_ENERGY_COST: u8 = 10; // MAX_ENERGY
@@ -33,6 +35,7 @@ const SPECIAL_WAIT: u8 = 0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Form {
     XWing,
+    #[cfg(test)]
     YWing,
 }
 
@@ -85,11 +88,7 @@ impl ShipBehavior for MmrnmhrmShip {
     }
 
     /// C: mmrnmhrm_preprocess — transform between X-Wing and Y-Wing.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         if !ship.cur_status_flags.contains(StatusFlags::SPECIAL) {
             return Ok(());
         }
@@ -154,12 +153,11 @@ impl ShipBehavior for MmrnmhrmShip {
                 let _ = battle_bridge::bridge::create_laser(&block);
                 let _ = battle_bridge::bridge::create_laser(&block);
             } else {
-                let missile_speed =
-                    battle_bridge::bridge::display_to_world(20) as i16;
+                let missile_speed = battle_bridge::bridge::display_to_world(20) as i16;
                 let block = MissileBlock {
                     cx: ship.position.0 as i16,
                     cy: ship.position.1 as i16,
-                    flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                    flags: crate::ships::runtime::IGNORE_SIMILAR,
                     sender: ship.player_nr,
                     pixoffs: 0,
                     speed: missile_speed,
@@ -175,7 +173,7 @@ impl ShipBehavior for MmrnmhrmShip {
                 let _ = battle_bridge::bridge::create_missile(&block);
                 let _ = battle_bridge::bridge::create_missile(&block);
             }
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -222,7 +220,10 @@ mod tests {
         assert_eq!(desc.ship_info.ship_cost, 19);
         assert_eq!(desc.ship_info.max_crew, 20);
         assert_eq!(desc.ship_info.max_energy, 10);
-        assert!(desc.ship_info.ship_flags.contains(ShipFlags::IMMEDIATE_WEAPON));
+        assert!(desc
+            .ship_info
+            .ship_flags
+            .contains(ShipFlags::IMMEDIATE_WEAPON));
         assert_eq!(desc.characteristics.energy_regeneration, 2);
         assert_eq!(desc.characteristics.special_energy_cost, 10);
     }

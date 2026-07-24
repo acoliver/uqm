@@ -1,6 +1,7 @@
 // Kohr-Ah Marauder - Spinning buzzsaw + F.R.I.E.D. gas cloud
 // @plan PLAN-20260314-SHIPS.P11
 
+#[cfg(not(test))]
 use crate::ships::battle_bridge::{self, MissileBlock};
 use crate::ships::traits::{BattleContext, ShipBehavior, ShipState, WeaponElement};
 use crate::ships::types::{
@@ -22,7 +23,9 @@ const SHIP_MASS: u8 = 10;
 // Buzzsaw
 const WEAPON_ENERGY_COST: u8 = 6;
 const WEAPON_WAIT: u8 = 6;
+#[cfg(not(test))]
 const KOHR_AH_OFFSET: i16 = 28;
+#[cfg(not(test))]
 const MISSILE_OFFSET: i16 = 9;
 const MISSILE_SPEED: i16 = 64;
 const MISSILE_LIFE: u16 = 64;
@@ -32,6 +35,8 @@ const MISSILE_DAMAGE: i16 = 4;
 // F.R.I.E.D.
 const SPECIAL_ENERGY_COST: u8 = 21; // MAX_ENERGY_SIZE / 2
 const SPECIAL_WAIT: u8 = 9;
+// C constant reserved for full F.R.I.E.D. Rust port.
+#[expect(dead_code)]
 const GAS_DAMAGE: u16 = 3;
 
 #[derive(Debug, Default)]
@@ -76,11 +81,7 @@ impl ShipBehavior for BlackUrquanShip {
 
     /// C: black_urquan_preprocess — resets special_wait counter (tracks active saws);
     /// holds weapon key to keep buzzsaw alive.
-    fn preprocess(
-        &mut self,
-        ship: &mut ShipState,
-        _ctx: &BattleContext,
-    ) -> Result<(), ShipsError> {
+    fn preprocess(&mut self, ship: &mut ShipState, _ctx: &BattleContext) -> Result<(), ShipsError> {
         // Track active buzzsaws via special_wait reset
         #[cfg(not(test))]
         if !ship.element_ptr.is_null() {
@@ -90,12 +91,8 @@ impl ShipBehavior for BlackUrquanShip {
 
         // Hold-to-extend behavior: if weapon key held, increment weapon_counter
         // to prevent re-fire (saw stays alive while key is held)
-        if ship
-            .cur_status_flags
-            .contains(StatusFlags::WEAPON)
-            && ship
-                .old_status_flags
-                .contains(StatusFlags::WEAPON)
+        if ship.cur_status_flags.contains(StatusFlags::WEAPON)
+            && ship.old_status_flags.contains(StatusFlags::WEAPON)
             && ship.weapon_counter == 0
         {
             ship.weapon_counter += 1;
@@ -126,8 +123,7 @@ impl ShipBehavior for BlackUrquanShip {
                 ) {
                     return Ok(());
                 }
-                let sound =
-                    battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
+                let sound = battle_bridge::bridge::set_abs_sound_index(ship.ship_sounds, 1);
                 battle_bridge::bridge::process_sound(sound, ship.element_ptr);
                 // spawn_gas_cloud handled by C postprocess_func
             }
@@ -156,7 +152,7 @@ impl ShipBehavior for BlackUrquanShip {
             let block = MissileBlock {
                 cx: ship.position.0 as i16,
                 cy: ship.position.1 as i16,
-                flags: crate::ships::runtime::IGNORE_SIMILAR as u16,
+                flags: crate::ships::runtime::IGNORE_SIMILAR,
                 sender: ship.player_nr,
                 pixoffs: KOHR_AH_OFFSET,
                 speed: MISSILE_SPEED,
@@ -170,7 +166,7 @@ impl ShipBehavior for BlackUrquanShip {
                 blast_offs: MISSILE_OFFSET,
             };
             let _ = battle_bridge::bridge::create_missile(&block);
-            return Ok(vec![]);
+            Ok(vec![])
         }
 
         #[cfg(test)]
@@ -196,7 +192,7 @@ mod tests {
 
     #[test]
     fn descriptor_template_matches_c() {
-        let ship = BlackUrquanShip::default();
+        let ship = BlackUrquanShip;
         let desc = ship.descriptor_template();
 
         assert_eq!(desc.ship_info.ship_cost, 30);
@@ -210,13 +206,17 @@ mod tests {
 
     #[test]
     fn weapon_fires_buzzsaw() {
-        let mut ship = BlackUrquanShip::default();
+        let mut ship = BlackUrquanShip;
         let state = ShipState {
             energy_level: 42,
             max_energy: 42,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let weapons = ship.init_weapon(&state, &ctx).unwrap();
         assert_eq!(weapons.len(), 1);
@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn fried_drains_energy() {
-        let mut ship = BlackUrquanShip::default();
+        let mut ship = BlackUrquanShip;
         let mut state = ShipState {
             crew_level: 42,
             max_crew: 42,
@@ -235,7 +235,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 42 - 21);
@@ -244,7 +248,7 @@ mod tests {
 
     #[test]
     fn fried_denied_low_energy() {
-        let mut ship = BlackUrquanShip::default();
+        let mut ship = BlackUrquanShip;
         let mut state = ShipState {
             crew_level: 42,
             energy_level: 10,
@@ -252,7 +256,11 @@ mod tests {
             cur_status_flags: StatusFlags::SPECIAL,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.postprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.energy_level, 10);
@@ -260,14 +268,18 @@ mod tests {
 
     #[test]
     fn preprocess_holds_weapon() {
-        let mut ship = BlackUrquanShip::default();
+        let mut ship = BlackUrquanShip;
         let mut state = ShipState {
             cur_status_flags: StatusFlags::WEAPON,
             old_status_flags: StatusFlags::WEAPON,
             weapon_counter: 0,
             ..ShipState::default()
         };
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         ship.preprocess(&mut state, &ctx).unwrap();
         assert_eq!(state.weapon_counter, 1);
@@ -275,9 +287,13 @@ mod tests {
 
     #[test]
     fn ai_basic() {
-        let mut ship = BlackUrquanShip::default();
+        let mut ship = BlackUrquanShip;
         let state = ShipState::default();
-        let ctx = BattleContext { hyperspace: false, frame_count: 0, gravity_center: None };
+        let ctx = BattleContext {
+            hyperspace: false,
+            frame_count: 0,
+            gravity_center: None,
+        };
 
         let flags = ship.intelligence(&state, &ctx);
         assert!(flags.contains(StatusFlags::THRUST));

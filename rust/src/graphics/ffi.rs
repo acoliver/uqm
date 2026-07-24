@@ -149,6 +149,10 @@ fn set_gfx_state(state: Option<RustGraphicsState>) {
 // PANIC-FREE: All fallible operations use match/if-let with early return -1.
 // No .unwrap(), .expect(), or panicking indexing. format!() is the only
 // theoretical panic source (OOM), which is non-recoverable regardless.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_init(
     _driver: c_int,
@@ -286,9 +290,9 @@ pub unsafe extern "C" fn rust_gfx_init(
         if surface.is_null() {
             rust_bridge_log_msg(&format!("RUST_GFX_INIT: Failed to create surface {}", i));
             // Clean up already created surfaces
-            for j in 0..i {
-                if !surfaces[j].is_null() {
-                    unsafe { SDL_FreeSurface(surfaces[j]) };
+            for &surface in surfaces.iter().take(i) {
+                if !surface.is_null() {
+                    unsafe { SDL_FreeSurface(surface) };
                 }
             }
             return -1;
@@ -307,9 +311,9 @@ pub unsafe extern "C" fn rust_gfx_init(
 
     if format_conv_surf.is_null() {
         rust_bridge_log_msg("RUST_GFX_INIT: Failed to create format_conv_surf");
-        for i in 0..TFB_GFX_NUMSCREENS {
-            if !surfaces[i].is_null() {
-                unsafe { SDL_FreeSurface(surfaces[i]) };
+        for &surface in &surfaces {
+            if !surface.is_null() {
+                unsafe { SDL_FreeSurface(surface) };
             }
         }
         return -1;
@@ -359,6 +363,10 @@ pub unsafe extern "C" fn rust_gfx_init(
 /// Uninitialize graphics
 // PANIC-FREE: Uses if-let guard, null checks, and explicit drops only.
 // Safe to call when never initialized (REQ-ERR-050, REQ-UNINIT-030).
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_uninit() {
     rust_bridge_log_msg("RUST_GFX_UNINIT");
@@ -399,6 +407,10 @@ pub unsafe extern "C" fn rust_gfx_uninit() {
 
 /// Get SDL_Screen pointer for C code (main screen = 0)
 // PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_sdl_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(0)
@@ -406,6 +418,10 @@ pub unsafe extern "C" fn rust_gfx_get_sdl_screen() -> *mut SDL_Surface {
 
 /// Get TransitionScreen pointer for C code (screen = 2)
 // PANIC-FREE: Delegates to rust_gfx_get_screen_surface which is panic-free.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_transition_screen() -> *mut SDL_Surface {
     rust_gfx_get_screen_surface(2)
@@ -413,6 +429,10 @@ pub unsafe extern "C" fn rust_gfx_get_transition_screen() -> *mut SDL_Surface {
 
 /// Get SDL_Screens[i] pointer for C code
 // PANIC-FREE: Range check before indexing, if-let guard for uninitialized state.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_Surface {
     if screen < 0 || screen >= TFB_GFX_NUMSCREENS as c_int {
@@ -427,6 +447,10 @@ pub unsafe extern "C" fn rust_gfx_get_screen_surface(screen: c_int) -> *mut SDL_
 
 /// Get format_conv_surf for C code
 // PANIC-FREE: if-let guard returns null when uninitialized, no indexing.
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
     if let Some(state) = get_gfx_state() {
@@ -445,6 +469,10 @@ pub unsafe extern "C" fn rust_gfx_get_format_conv_surf() -> *mut SDL_Surface {
 /// @requirement REQ-PRE-010, REQ-PRE-020, REQ-PRE-040
 // PANIC-FREE: if-let guard for uninitialized state. SDL2 set_blend_mode,
 // set_draw_color, and clear do not panic.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_preprocess(
     _force_redraw: c_int,
@@ -474,6 +502,10 @@ pub unsafe extern "C" fn rust_gfx_preprocess(
 /// @plan remove upload/scaling block in P08 once ScreenLayer composites.
 // PANIC-FREE: if-let guard for uninitialized state. All SDL operations use
 // if-let/let-discard patterns. NonZeroU32 and Pixmap use match with early return.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
@@ -607,6 +639,10 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
 /// @plan PLAN-20260223-GFX-FULL-PORT.P13
 /// @requirement REQ-UTS-010
 // PANIC-FREE: Empty function body, no operations.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_upload_transition_screen() {
     // Intentional no-op: see doc comment above.
@@ -626,6 +662,10 @@ pub unsafe extern "C" fn rust_gfx_upload_transition_screen() {
 ///              REQ-FMT-020, REQ-ERR-065, REQ-NP-025
 // PANIC-FREE: match/if-let guards throughout. Range check before array indexing.
 // All SDL operations use is_err()/let-discard. No .unwrap() or .expect().
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const SDL_Rect) {
     // REQ-SCR-140: uninitialized guard
@@ -820,6 +860,10 @@ pub unsafe extern "C" fn rust_gfx_screen(screen: c_int, alpha: u8, rect: *const 
 ///              REQ-CLR-055, REQ-CLR-060
 // PANIC-FREE: match guard for uninitialized state. Null check on rect pointer.
 // SDL fill_rect result discarded. No .unwrap() or .expect().
+///
+/// # Safety
+///
+/// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const SDL_Rect) {
     // REQ-CLR-060: uninitialized guard
@@ -862,6 +906,10 @@ pub unsafe extern "C" fn rust_gfx_color(r: u8, g: u8, b: u8, a: u8, rect: *const
 /// Process SDL events, returns 1 if quit requested
 // PANIC-FREE: if-let guard for uninitialized state. poll_iter and match
 // on event variants do not panic.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_process_events() -> c_int {
     if let Some(state) = get_gfx_state() {
@@ -978,6 +1026,10 @@ fn convert_c_rect(rect: *const SDL_Rect) -> Option<sdl2::rect::Rect> {
 /// Toggle fullscreen
 // PANIC-FREE: if-let guard for uninitialized state. Bool flip and conditional
 // return value, no fallible operations.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
@@ -989,6 +1041,10 @@ pub unsafe extern "C" fn rust_gfx_toggle_fullscreen() -> c_int {
 
 /// Check if fullscreen
 // PANIC-FREE: if-let guard for uninitialized state. Bool read only.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_is_fullscreen() -> c_int {
     if let Some(state) = get_gfx_state() {
@@ -999,6 +1055,10 @@ pub unsafe extern "C" fn rust_gfx_is_fullscreen() -> c_int {
 
 /// Set gamma (not supported in software mode)
 // PANIC-FREE: Returns constant -1, no operations.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
     -1 // Not supported
@@ -1006,6 +1066,10 @@ pub unsafe extern "C" fn rust_gfx_set_gamma(_gamma: f32) -> c_int {
 
 /// Get screen width
 // PANIC-FREE: Returns constant, no operations.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_width() -> c_int {
     SCREEN_WIDTH as c_int
@@ -1013,6 +1077,10 @@ pub unsafe extern "C" fn rust_gfx_get_width() -> c_int {
 
 /// Get screen height
 // PANIC-FREE: Returns constant, no operations.
+///
+/// # Safety
+///
+/// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_get_height() -> c_int {
     SCREEN_HEIGHT as c_int
@@ -1024,7 +1092,7 @@ mod tests {
 
     #[test]
     fn test_sdl_rect_size() {
-        unsafe {
+        {
             assert_eq!(std::mem::size_of::<SDL_Rect>(), 16);
         }
     }
@@ -1072,7 +1140,7 @@ mod tests {
     /// This is important because C code depends on zero-initialized rects.
     #[test]
     fn test_sdl_rect_default() {
-        unsafe {
+        {
             let rect = SDL_Rect::default();
             assert_eq!(rect.x, 0);
             assert_eq!(rect.y, 0);
@@ -1223,7 +1291,7 @@ mod tests {
     /// REQ-SCR-160: convert_c_rect null → None.
     #[test]
     fn test_convert_c_rect_null_returns_none() {
-        unsafe {
+        {
             assert!(convert_c_rect(std::ptr::null()).is_none());
         }
     }
@@ -1231,7 +1299,7 @@ mod tests {
     /// REQ-SCR-160: convert_c_rect non-null → Some with correct values.
     #[test]
     fn test_convert_c_rect_valid_rect() {
-        unsafe {
+        {
             let c_rect = SDL_Rect {
                 x: 10,
                 y: 20,
@@ -1253,7 +1321,7 @@ mod tests {
     /// that the clamped-to-0 value becomes 1 after sdl2's own clamp.
     #[test]
     fn test_convert_c_rect_negative_dimensions_clamped() {
-        unsafe {
+        {
             let c_rect = SDL_Rect {
                 x: 5,
                 y: 5,
@@ -1275,7 +1343,7 @@ mod tests {
     /// sdl2::rect::Rect clamps minimum dimension to 1.
     #[test]
     fn test_convert_c_rect_zero_size() {
-        unsafe {
+        {
             let c_rect = SDL_Rect {
                 x: 0,
                 y: 0,
@@ -1353,7 +1421,7 @@ mod tests {
     /// RGBX8888 `[X, B, G, R]` → RGBA `[R, G, B, 0xFF]`.
     #[test]
     fn test_convert_rgbx_to_rgba_basic() {
-        unsafe {
+        {
             // Two pixels, tightly packed (pitch == width * 4)
             let src: [u8; 8] = [
                 0xFF, 0x00, 0x80, 0xC0, // pixel 0: X=0xFF, B=0x00, G=0x80, R=0xC0
@@ -1375,7 +1443,7 @@ mod tests {
     /// REQ-SCALE-060: convert_rgbx_to_rgba with pitch > width*4.
     #[test]
     fn test_convert_rgbx_to_rgba_with_pitch() {
-        unsafe {
+        {
             // 1 pixel wide, pitch=8 (4 bytes padding per row)
             let src: [u8; 16] = [
                 0xAA, 0x11, 0x22, 0x33, 0xDE, 0xAD, 0xBE, 0xEF, // row 0 + padding
@@ -1399,7 +1467,7 @@ mod tests {
     /// RGBA `[R, G, B, A]` → RGBX8888 `[0xFF, B, G, R]`.
     #[test]
     fn test_convert_rgba_to_rgbx_basic() {
-        unsafe {
+        {
             let src: [u8; 8] = [
                 0xC0, 0x80, 0x00, 0xFF, // pixel 0: R=0xC0, G=0x80, B=0x00, A=0xFF
                 0x99, 0x66, 0x33, 0xAA, // pixel 1: R=0x99, G=0x66, B=0x33, A=0xAA
@@ -1424,7 +1492,7 @@ mod tests {
     /// because screen surfaces have no meaningful alpha.
     #[test]
     fn test_convert_rgbx_rgba_roundtrip() {
-        unsafe {
+        {
             // 2×2 image, tightly packed
             let original: [u8; 16] = [
                 0x00, 0x11, 0x22, 0x33, // pixel (0,0)
@@ -1469,7 +1537,7 @@ mod tests {
     /// Bit 7 = HQ2x (factor 2), bit 8 = xBRZ3 (factor 3), bit 9 = xBRZ4 (factor 4).
     #[test]
     fn test_scale_factor_from_flags() {
-        unsafe {
+        {
             // No scaling flags → None
             assert_eq!(scale_factor_from_flags(0), None);
 
@@ -1493,7 +1561,7 @@ mod tests {
     /// scaler bits (7/8/9), the unscaled path should be used.
     #[test]
     fn test_bilinear_only_no_software_scale() {
-        unsafe {
+        {
             // Bilinear only (bit 3) → None (no software scaling)
             assert_eq!(scale_factor_from_flags(1 << 3), None);
 

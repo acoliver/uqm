@@ -33,10 +33,26 @@ pub const NULL_RESOURCE: u32 = 0;
 extern "C" {
     fn LoadGraphic(res_id: *const c_void) -> *mut c_void;
     fn CaptureDrawable(drawable: *mut c_void) -> *mut c_void;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn ReleaseDrawable(drawable: *mut c_void) -> *mut c_void;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn DestroyDrawable(drawable: *mut c_void) -> i32;
 
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn LoadMusic(res_id: *const c_void) -> *mut c_void;
+    #[allow(
+        clashing_extern_declarations,
+        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
+    )]
     fn DestroyMusic(music: *mut c_void) -> i32;
 
     fn LoadSound(res_id: *const c_void) -> *mut c_void;
@@ -253,7 +269,7 @@ thread_local! {
     static ALLOCATED_HANDLES: std::cell::RefCell<std::collections::HashSet<usize>> =
         std::cell::RefCell::new(std::collections::HashSet::new());
     static FREED_HANDLES: std::cell::RefCell<Vec<usize>> =
-        std::cell::RefCell::new(Vec::new());
+        const { std::cell::RefCell::new(Vec::new()) };
     /// Resource ID that should trigger a load failure (0 = no failure).
     static FAIL_ON_RES_ID: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }

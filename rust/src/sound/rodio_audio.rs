@@ -148,17 +148,15 @@ fn audio_thread_main(rx: Receiver<AudioCommand>) {
                     looping,
                     response,
                 ) => {
-                    let handle = play_raw(
-                        &stream_handle,
-                        &data,
+                    let input = RawPlayback {
+                        data: &data,
                         sample_rate,
                         channels,
                         bits,
                         category,
                         looping,
-                        &volumes,
-                        &mut sinks,
-                    );
+                    };
+                    let handle = play_raw(&stream_handle, &input, &volumes, &mut sinks);
                     let _ = response.send(handle);
                 }
                 AudioCommand::Stop(handle) => {
@@ -262,30 +260,43 @@ fn play_decoded(
     handle
 }
 
-fn play_raw(
-    stream_handle: &OutputStreamHandle,
-    data: &[u8],
+struct RawPlayback<'a> {
+    data: &'a [u8],
     sample_rate: u32,
     channels: u16,
     bits: u16,
     category: SoundCategory,
     looping: bool,
+}
+
+fn play_raw(
+    stream_handle: &OutputStreamHandle,
+    input: &RawPlayback<'_>,
     volumes: &VolumeState,
     sinks: &mut HashMap<u32, (Sink, SoundCategory)>,
 ) -> u32 {
     // Convert bytes to i16 samples
-    let samples: Vec<i16> = if bits == 16 {
-        data.chunks_exact(2)
+    let samples: Vec<i16> = if input.bits == 16 {
+        input
+            .data
+            .chunks_exact(2)
             .map(|chunk| i16::from_le_bytes([chunk[0], chunk[1]]))
             .collect()
-    } else if bits == 8 {
-        data.iter().map(|&b| ((b as i16) - 128) * 256).collect()
+    } else if input.bits == 8 {
+        input
+            .data
+            .iter()
+            .map(|&b| ((b as i16) - 128) * 256)
+            .collect()
     } else {
-        rust_bridge_log_msg(&format!("RUST_AUDIO_PLAY_RAW: unsupported bits={}", bits));
+        rust_bridge_log_msg(&format!(
+            "RUST_AUDIO_PLAY_RAW: unsupported bits={}",
+            input.bits
+        ));
         return 0;
     };
 
-    let source = rodio::buffer::SamplesBuffer::new(channels, sample_rate, samples);
+    let source = rodio::buffer::SamplesBuffer::new(input.channels, input.sample_rate, samples);
 
     let sink = match Sink::try_new(stream_handle) {
         Ok(s) => s,
@@ -295,20 +306,20 @@ fn play_raw(
         }
     };
 
-    sink.set_volume(volumes.get_volume(category));
+    sink.set_volume(volumes.get_volume(input.category));
 
-    if looping {
+    if input.looping {
         sink.append(source.repeat_infinite());
     } else {
         sink.append(source);
     }
 
     let handle = NEXT_HANDLE.fetch_add(1, Ordering::Relaxed);
-    sinks.insert(handle, (sink, category));
+    sinks.insert(handle, (sink, input.category));
 
     rust_bridge_log_msg(&format!(
         "RUST_AUDIO_PLAY_RAW: handle={} rate={} ch={} bits={} cat={:?}",
-        handle, sample_rate, channels, bits, category
+        handle, input.sample_rate, input.channels, input.bits, input.category
     ));
 
     handle
@@ -328,6 +339,9 @@ fn send_command(cmd: AudioCommand) -> bool {
 }
 
 /// Initialize the audio system
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_init() -> i32 {
     rust_bridge_log_msg("RUST_AUDIO_INIT: starting rodio audio system");
@@ -369,6 +383,9 @@ pub unsafe extern "C" fn rust_audio_init() -> i32 {
 }
 
 /// Shutdown the audio system
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_uninit() {
     rust_bridge_log_msg("RUST_AUDIO_UNINIT");
@@ -392,6 +409,9 @@ pub unsafe extern "C" fn rust_audio_uninit() {
 }
 
 /// Play a WAV sound from raw bytes
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_play_wav(
     data: *const u8,
@@ -419,6 +439,9 @@ pub unsafe extern "C" fn rust_audio_play_wav(
 }
 
 /// Play an OGG sound from raw bytes
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_play_ogg(
     data: *const u8,
@@ -446,6 +469,9 @@ pub unsafe extern "C" fn rust_audio_play_ogg(
 }
 
 /// Play raw PCM audio data
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_play_raw(
     data: *const u8,
@@ -519,54 +545,81 @@ pub fn stop_sound(handle: u32) {
 }
 
 /// Stop a playing sound
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_stop(handle: u32) {
     send_command(AudioCommand::Stop(handle));
 }
 
 /// Pause a playing sound
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_pause(handle: u32) {
     send_command(AudioCommand::Pause(handle));
 }
 
 /// Resume a paused sound
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_resume(handle: u32) {
     send_command(AudioCommand::Resume(handle));
 }
 
 /// Set volume for a specific sound (0.0 - 1.0)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_volume(handle: u32, volume: f32) {
     send_command(AudioCommand::SetVolume(handle, volume));
 }
 
 /// Set master volume (0.0 - 1.0)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_master_volume(volume: f32) {
     send_command(AudioCommand::SetMasterVolume(volume));
 }
 
 /// Set music volume (0.0 - 1.0)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_music_volume(volume: f32) {
     send_command(AudioCommand::SetMusicVolume(volume));
 }
 
 /// Set SFX volume (0.0 - 1.0)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_sfx_volume(volume: f32) {
     send_command(AudioCommand::SetSfxVolume(volume));
 }
 
 /// Set speech volume (0.0 - 1.0)
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_set_speech_volume(volume: f32) {
     send_command(AudioCommand::SetSpeechVolume(volume));
 }
 
 /// Check if a sound is still playing
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
     let (tx, rx) = mpsc::channel();
@@ -582,12 +635,18 @@ pub unsafe extern "C" fn rust_audio_is_playing(handle: u32) -> i32 {
 }
 
 /// Stop all sounds
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_stop_all() {
     send_command(AudioCommand::StopAll);
 }
 
 /// Cleanup finished sounds
+/// # Safety
+///
+/// This is an FFI function called from C. The caller must ensure pointers are valid.
 #[no_mangle]
 pub unsafe extern "C" fn rust_audio_cleanup() {
     send_command(AudioCommand::Cleanup);
