@@ -55,6 +55,9 @@ struct CoordInner {
     /// was not in WaitingSemantic. Replayed when the scheduler enters
     /// WaitingSemantic.
     pending_transitions: Vec<u8>,
+    /// The label of the currently armed capture step, if any.
+    /// Used when the capture completes to write a PNG artifact.
+    armed_capture_label: Option<String>,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -118,6 +121,7 @@ impl Coordinator {
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
+                armed_capture_label: None,
             }),
         };
 
@@ -531,7 +535,8 @@ impl Coordinator {
     }
 
     /// Apply planned effects from the scheduler reducer.
-    fn apply_effects(&self, _inner: &mut CoordInner, effects: &EffectPlan) {
+    fn apply_effects(&self, inner: &mut CoordInner, effects: &EffectPlan) {
+        // Note: `inner` is `&mut` so callers can pass it as mutable.
         if let Some((key, value)) = effects.write_key {
             let index = crate::automation::input::menu_key_to_index(key);
             crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
@@ -548,9 +553,21 @@ impl Coordinator {
         }
         if let Some(gen) = effects.arm_capture {
             self.runtime.mirror.set_capture_generation(gen.0);
+            // Store the capture label from the current action so we can
+            // write the PNG when the capture completes.
+            if let Some(Action::Capture(step)) = self.actions.get(inner.sched_state.step_index) {
+                inner.armed_capture_label = Some(step.label.clone());
+            }
         }
-        if let Some(_gen) = effects.complete_capture {
+        if let Some(gen) = effects.complete_capture {
             self.runtime.mirror.clear_capture_generation();
+            // Capture generation matched — read the SDL surface and write
+            // a PNG artifact.
+            let label = inner
+                .armed_capture_label
+                .take()
+                .unwrap_or_else(|| format!("capture_gen{}", gen.0));
+            self.capture_surface(inner, &label, gen);
         }
     }
 
@@ -576,6 +593,174 @@ impl Coordinator {
         if let Ok(jsonl) = record.to_jsonl() {
             let res = self.runtime.commit.reserve_sequence(seq);
             res.commit_record(jsonl);
+        }
+    }
+
+    /// Capture the logical main SDL surface (screen 0) and write a PNG
+    /// artifact via the durable file helper.
+    ///
+    /// This is called when the scheduler reports `complete_capture` —
+    /// the present callback has fired with the correct generation,
+    /// meaning the surface is in a consistent state for reading.
+    ///
+    /// The capture uses the ABI-authoritative SDL surface accessors
+    /// (REQ-SHOT-002), the shared lock-copy-unlock helper (REQ-SHOT-003),
+    /// and writes a durable PNG file (REQ-SHOT-004/005).
+    fn capture_surface(&self, inner: &mut CoordInner, label: &str, gen: CaptureGeneration) {
+        // Write a capture trace record.
+        let capture_rec = crate::automation::capture::capture_trace_record(
+            inner.trace_seq,
+            self.started_at.elapsed().as_millis() as u64,
+            gen,
+            label,
+        );
+        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        if let Ok(jsonl) = capture_rec.to_jsonl() {
+            let res = self.runtime.commit.reserve_sequence(capture_rec.sequence);
+            res.commit_record(jsonl);
+        }
+
+        // Get the logical main surface (screen 0) via the graphics FFI.
+        #[cfg(feature = "linked_c_archive")]
+        {
+            use crate::automation::capture::{validate_surface, SurfaceMetadata};
+            use std::ffi::c_void;
+
+            // Get the SDL surface pointer from the Rust graphics subsystem.
+            let surface: *mut c_void =
+                unsafe { crate::graphics::ffi::rust_gfx_get_sdl_screen() as *mut c_void };
+            if surface.is_null() {
+                eprintln!("[automation] capture: surface is null, skipping PNG");
+                return;
+            }
+
+            // Query surface metadata via ABI-authoritative accessors.
+            let info = unsafe { crate::graphics::sdl_capture::query_surface_info(surface) };
+
+            let meta = SurfaceMetadata {
+                width: info.width,
+                height: info.height,
+                pitch: info.pitch,
+                bpp: info.bpp,
+                bytes_per_pixel: info.bytes_per_pixel,
+                r_mask: info.rmask,
+                g_mask: info.gmask,
+                b_mask: info.bmask,
+                a_mask: info.amask,
+            };
+
+            if let Err(e) = validate_surface(&meta) {
+                eprintln!("[automation] capture: surface validation failed: {e:?}");
+                return;
+            }
+
+            // Compute safe copy length per row.
+            let row_copy = match crate::automation::capture::safe_row_copy(
+                info.width,
+                info.pitch,
+                info.bytes_per_pixel,
+            ) {
+                Some(r) => r,
+                None => {
+                    eprintln!("[automation] capture: safe_row_copy failed");
+                    return;
+                }
+            };
+
+            let height_u = match u64::try_from(info.height) {
+                Ok(h) => h,
+                Err(_) => {
+                    eprintln!("[automation] capture: height overflow");
+                    return;
+                }
+            };
+
+            let buf_size = match u64::from(row_copy).checked_mul(height_u) {
+                Some(s) => s,
+                None => {
+                    eprintln!("[automation] capture: buffer size overflow");
+                    return;
+                }
+            };
+
+            let buf_size_usize = match usize::try_from(buf_size) {
+                Ok(s) => s,
+                Err(_) => {
+                    eprintln!("[automation] capture: buffer size too large");
+                    return;
+                }
+            };
+
+            // Allocate pixel buffer and copy via shared lock-copy-unlock.
+            let mut pixel_buf = vec![0u8; buf_size_usize];
+            let copy_result = unsafe {
+                crate::graphics::sdl_capture::lock_copy_unlock(
+                    surface,
+                    pixel_buf.as_mut_ptr(),
+                    buf_size_usize,
+                )
+            };
+
+            match copy_result {
+                Ok(()) => {}
+                Err(e) => {
+                    eprintln!("[automation] capture: lock_copy_unlock failed: {e}");
+                    return;
+                }
+            }
+
+            // Encode PNG using the `image` crate.
+            let width_u32 = match u32::try_from(info.width) {
+                Ok(w) => w,
+                Err(_) => return,
+            };
+            let height_u32 = match u32::try_from(info.height) {
+                Ok(h) => h,
+                Err(_) => return,
+            };
+
+            let rgba_image = match image::RgbaImage::from_raw(width_u32, height_u32, pixel_buf) {
+                Some(img) => img,
+                None => {
+                    eprintln!("[automation] capture: RgbaImage::from_raw failed");
+                    return;
+                }
+            };
+
+            let mut png_data = Vec::new();
+            let encoder = image::codecs::png::PngEncoder::new(&mut png_data);
+            if let Err(e) = image::ImageEncoder::write_image(
+                encoder,
+                rgba_image.as_raw(),
+                width_u32,
+                height_u32,
+                image::ExtendedColorType::Rgba8,
+            ) {
+                eprintln!("[automation] capture: PNG encode failed: {e}");
+                return;
+            }
+
+            // Write the PNG via the durable file helper.
+            let capture_dir = self.output_root.join("captures");
+            match crate::automation::artifact::write_durable(&capture_dir, label, "png", &png_data)
+            {
+                Ok(result) => {
+                    eprintln!(
+                        "[automation] capture: wrote {} ({} bytes)",
+                        result.final_path.display(),
+                        png_data.len()
+                    );
+                }
+                Err(e) => {
+                    eprintln!("[automation] capture: write_durable failed: {e}");
+                }
+            }
+        }
+
+        #[cfg(not(feature = "linked_c_archive"))]
+        {
+            let _ = (inner, label, gen);
+            eprintln!("[automation] capture: linked_c_archive feature not enabled, skipping PNG");
         }
     }
 }
