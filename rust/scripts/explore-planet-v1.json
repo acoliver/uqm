@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "explore-planet-v1",
+  "budgets": {
+    "max_input_ticks": 300,
+    "max_presentations": 300,
+    "max_wallclock_seconds": 30
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 3},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "hyperspace-initial"},
+    {"action": "assert_activity", "mask": 255, "equals": 3},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 20, "settle": 5},
+    {"action": "capture", "label": "hyperspace-after-navigation"},
+    {"action": "wait_input_ticks", "count": 20},
+    {"action": "capture", "label": "hyperspace-final"},
+    {"action": "finish"}
+  ]
+}

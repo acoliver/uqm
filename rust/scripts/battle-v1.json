@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "name": "battle-v1",
+  "budgets": {
+    "max_input_ticks": 400,
+    "max_presentations": 400,
+    "max_wallclock_seconds": 30
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 3},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "wait_input_ticks", "count": 40},
+    {"action": "capture", "label": "hyperspace-start"},
+    {"action": "assert_activity", "mask": 255, "equals": 3},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 30, "settle": 5},
+    {"action": "tap_menu_key", "key": "right", "value": 1, "hold": 30, "settle": 5},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "after-navigation"},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 50, "settle": 10},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "battle-final"},
+    {"action": "finish"}
+  ]
+}
