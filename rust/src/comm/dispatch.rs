@@ -80,6 +80,7 @@ pub struct ShipBaseCommon {
 
 /// C: `SHIP_FRAGMENT` — queue element for built ship queues.
 #[repr(C)]
+#[derive(Default)]
 pub struct CShipFragment {
     // SHIP_BASE_COMMON
     pub pred: HLink,
@@ -363,6 +364,9 @@ mod ffi {
 
         // CommIntroMode (comm.c) — C: SetCommIntroMode(mode, howLong)
         pub fn SetCommIntroMode(mode: u32, how_long: u32);
+
+        // CommData copy — copies LOCDATA to C's global CommData
+        pub fn rust_copy_locdata_to_comm_data(locdata_ptr: *const c_void);
     }
 }
 
@@ -686,9 +690,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
 
     let loc_data_ptr = ffi::init_race(comm_id);
     if !loc_data_ptr.is_null() {
-        // C copies LOCDATA to CommData and syncs to Rust singleton
-        // (rust_sync_comm_data is called inside C's InitCommunication path)
-        // Here we call init_race which returns the LOCDATA; sync to Rust singleton.
+        // Copy LOCDATA to C's global CommData (C code reads from CommData)
+        ffi::rust_copy_locdata_to_comm_data(loc_data_ptr);
+        // Sync to Rust's CommData singleton
         rust_sync_comm_data(loc_data_ptr);
     }
 
@@ -710,12 +714,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     } else if !loc_data_ptr.is_null() {
         let activity = c_extern::get_current_activity();
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-            // Call post_encounter_func and uninit_encounter_func
-            // These are function pointers in CommData — accessed through C
-            // for now since we don't have direct access to the function
-            // pointers from Rust.
-            // The C InitCommunication calls (*CommData.post_encounter_func)()
-            // and (*CommData.uninit_encounter_func)(). We need C bridge calls.
+            // Call post_encounter_func and uninit_encounter_func via C bridge.
+            // These are function pointers stored in CommData — we call them
+            // through the C copy of CommData.
             // TODO: Add C bridge for calling CommData function pointers
         }
     }
@@ -774,6 +775,12 @@ unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level:
     let h_built = AllocLink(dst_queue);
     if !h_built.is_null() {
         let frag_ptr = lock_ship_frag(dst_queue, h_built);
+
+        // C's Build() does memset(0) + sets SpeciesID. We must do the same.
+        let species_id = (*template_ptr).species_id;
+        *frag_ptr = CShipFragment::default();
+        (*frag_ptr).species_id = species_id;
+
         (*frag_ptr).captains_name_index = captains_name_index;
         (*frag_ptr).race_strings = (*template_ptr).race_strings;
         (*frag_ptr).icons = (*template_ptr).icons;

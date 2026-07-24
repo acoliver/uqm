@@ -129,3 +129,6 @@ void rust_cleanup_after_starbase (void);
 void rust_do_time_passage (void);
 void rust_set_cur_star_desc_ptr_null (void);
 void rust_do_starbase_menu_input (void);
+
+// CommData copy bridge (P11)
+void rust_copy_locdata_to_comm_data (const void *locdata_ptr);

@@ -290,3 +290,19 @@ rust_do_starbase_menu_input (void)
 	SetStatusMessageMode (prevMsgMode);
 	CleanupAfterStarBase ();
 }
+
+// CommData copy bridge — copies a LOCDATA struct to C's global CommData
+// This is needed because Rust's init_communication calls init_race() and
+// syncs to Rust's CommData singleton, but C code (HailAlien, encounter
+// functions) reads from C's global CommData variable.
+#include "uqm/globdata.h"
+
+extern LOCDATA CommData;
+
+void
+rust_copy_locdata_to_comm_data (const void *locdata_ptr)
+{
+	if (locdata_ptr == NULL)
+		return;
+	CommData = *(const LOCDATA *)locdata_ptr;
+}
