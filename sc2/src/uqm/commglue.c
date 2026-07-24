@@ -366,6 +366,19 @@ getSegue (void)
 LOCDATA*
 init_race (CONVERSATION comm_id)
 {
+#ifdef USE_RUST_COMM
+	/* P12: Check if this race has a Rust dialogue implementation */
+	if (rust_init_race_dialogue ((int)comm_id))
+	{
+		/* Rust dialogue initialized successfully.
+		 * Return the C LOCDATA which was synced to Rust CommData
+		 * by InitCommunication. The C LOCDATA is still needed for
+		 * animation/resource loading until those are fully ported. */
+	}
+	else
+	{
+		/* Fall through to C implementation */
+#endif
 	switch (comm_id)
 	{
 		case ARILOU_CONVERSATION:
@@ -427,4 +440,15 @@ init_race (CONVERSATION comm_id)
 		default:
 			return init_chmmr_comm ();
 	}
+#ifdef USE_RUST_COMM
+	}
+#endif
+	/* If Rust dialogue init succeeded, still fall through to C init
+	 * for LOCDATA (resource keys, animation descriptors). The C
+	 * LOCDATA is needed for animation loading. The Rust dialogue
+	 * functions (intro, callbacks) are used instead of C ones. */
+	/* This point is only reached if rust_init_race_dialogue returned 1
+	 * and we fell through. In that case, we still need a LOCDATA,
+	 * so use the C switch above. */
+	return init_arilou_comm (); /* fallback for Arilou */
 }

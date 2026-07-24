@@ -322,6 +322,8 @@ CONTEXT c_GetAnimContext(void);
 BOOLEAN c_GetClearSubtitles(void);
 void c_ResetClearSubtitles(void);
 
+/* Race dialogue dispatch (P12) */
+int rust_init_race_dialogue(int comm_id);
 
 #ifdef __cplusplus
 }

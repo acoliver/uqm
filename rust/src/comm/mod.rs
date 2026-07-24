@@ -25,6 +25,7 @@ pub mod hail;
 pub mod locdata;
 pub mod oscilloscope;
 pub mod phrase_state;
+pub mod races;
 pub mod response;
 pub mod response_ui;
 pub mod segue;

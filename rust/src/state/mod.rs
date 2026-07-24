@@ -3,6 +3,7 @@
 
 pub mod ffi;
 pub mod game_state;
+pub mod game_state_keys;
 pub mod planet_info;
 pub mod state_file;
 
