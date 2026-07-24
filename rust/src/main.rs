@@ -67,8 +67,9 @@ fn main() {
     ]);
 
     match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
-        Ok(Some(_setup)) => {
-            // Active automation validated — proceed to run_uqm
+        Ok(Some(setup)) => {
+            // Active automation validated — initialize the coordinator.
+            uqm_rust::automation::Coordinator::init(setup.script, setup.output_root);
         }
         Ok(None) => {
             // Inactive — proceed normally
@@ -81,6 +82,10 @@ fn main() {
 
     // Run the full UQM lifecycle: init -> game loop -> teardown
     let exit_code = init_sequence::run_uqm(args.len() as c_int, c_argv.as_mut_ptr());
+
+    // Finalize automation if active (write traces, receipts, teardown).
+    uqm_rust::automation::Coordinator::finalize();
+
     exit(exit_code);
 }
 

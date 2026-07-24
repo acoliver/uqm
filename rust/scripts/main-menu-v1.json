@@ -1,0 +1,18 @@
+{
+    "version": 1,
+    "name": "main-menu-v1",
+    "budgets": {
+        "max_input_ticks": 200,
+        "max_presentations": 200,
+        "max_wallclock_seconds": 30
+    },
+    "steps": [
+        {"action": "wait_input_ticks", "count": 10},
+        {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 3},
+        {"action": "capture", "label": "menu-after-down"},
+        {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 5},
+        {"action": "capture", "label": "menu-after-select"},
+        {"action": "assert_main_menu_transition", "from": "NewGame", "to": "LoadGame"},
+        {"action": "finish"}
+    ]
+}

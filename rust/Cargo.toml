@@ -47,6 +47,7 @@ fast_image_resize = "5.0"
 default = []
 audio_heart = []
 debug-process = []
+linked_c_archive = []
 
 [[bin]]
 name = "p00_probes"

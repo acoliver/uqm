@@ -163,11 +163,21 @@ fn link_c_objects() {
     }
 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
-    // Only link the C archive into the binary, NOT the staticlib.
-    // cargo:rustc-link-arg-bin only applies to the named binary target.
-    // This prevents the staticlib from bundling C objects (which would
-    // duplicate when the C binary also links the same .o files).
-    println!("cargo:rustc-link-arg-bin=uqm=-luqm_c");
+    // Force-load the C archive into the binary target so that all C object
+    // files are included, resolving internal C-to-C reference chains (e.g.
+    // Starcon2Main → audio functions) that normal archive extraction would
+    // miss because no Rust code directly references the intermediate symbols.
+    // cargo:rustc-link-arg-bin only applies to the named binary target,
+    // so the staticlib is not affected.
+    println!(
+        "cargo:rustc-link-arg-bin=uqm=-Wl,-force_load,{}",
+        archive_path.display()
+    );
+    // Allow unresolved transitional symbols (e.g. graphics_backend,
+    // format_conv_surf from pure.c which is compiled out by USE_RUST_GFX).
+    // These symbols are never called at runtime when the Rust graphics
+    // driver is active.
+    println!("cargo:rustc-link-arg-bin=uqm=-Wl,-undefined,dynamic_lookup");
 
     // Link external C libraries (from build.vars LDFLAGS)
     println!("cargo:rustc-link-arg=-lpng16");

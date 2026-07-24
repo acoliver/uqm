@@ -32,7 +32,7 @@ use crate::automation::trace::{RecordKind, TraceRecord};
 pub const MENU_KEY_INDICES: [u8; 6] = [5, 6, 7, 8, 9, 10];
 
 /// Total number of menu keys (from `NUM_MENU_KEYS` in controls.h).
-pub const NUM_MENU_KEYS: u8 = 28;
+pub const NUM_MENU_KEYS: u8 = 24;
 
 /// Convert a `MenuKey` to its C index.
 #[must_use]
@@ -317,9 +317,8 @@ mod tests {
 
     #[test]
     fn num_menu_keys_matches_c() {
-        // controls.h enum has 28 entries (KEY_PAUSE through KEY_MENU_ANY + NUM_MENU_KEYS)
-        // The enum starts at 0, so NUM_MENU_KEYS = last_value + 1
-        assert_eq!(NUM_MENU_KEYS, 28);
+        // controls.h enum has 24 entries (KEY_PAUSE through KEY_MENU_ANY + NUM_MENU_KEYS)
+        assert_eq!(NUM_MENU_KEYS, 24);
     }
 
     // --- Bounds-checked setter (REQ-INJECT-003) ---
@@ -344,11 +343,11 @@ mod tests {
 
     #[test]
     fn setter_max_valid_index() {
-        let result = setter_set_menu_key(27, 1);
+        let result = setter_set_menu_key(23, 1);
         assert_eq!(
             result,
             SetterResult::Set {
-                index: 27,
+                index: 23,
                 value: 1
             }
         );
@@ -454,11 +453,11 @@ mod tests {
 
     #[test]
     fn setter_sentinel_last_valid() {
-        let result = setter_set_menu_key(27, 1);
+        let result = setter_set_menu_key(23, 1);
         assert_eq!(
             result,
             SetterResult::Set {
-                index: 27,
+                index: 23,
                 value: 1
             }
         );

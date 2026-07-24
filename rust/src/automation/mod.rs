@@ -23,6 +23,7 @@
 pub mod artifact;
 pub mod capture;
 pub mod child_session;
+pub mod coordinator;
 pub mod error;
 pub mod identity;
 pub mod input;
@@ -48,6 +49,7 @@ pub use child_session::{
     ChildSessionModel, HangClassification, ProcessIdentity, ProofResult, ProofType, SessionResult,
     SessionState,
 };
+pub use coordinator::Coordinator;
 pub use error::AutomationError;
 pub use input::{
     combine_stops, menu_key_to_index, observe_main_menu_transition, observe_menu_key,

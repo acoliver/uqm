@@ -17,8 +17,29 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
-use crate::automation::input::{setter_set_menu_key, SetterResult};
+use crate::automation::coordinator::Coordinator;
+use crate::automation::input::setter_set_menu_key;
 use crate::automation::runtime::RuntimeModel;
+
+// ===========================================================================
+//  C global input state — FFI access to ImmediateInputState.menu[]
+// ===========================================================================
+
+/// The C `CONTROLLER_INPUT_STATE` struct, used only when linking against
+/// the real C archive.
+#[cfg(feature = "linked_c_archive")]
+#[repr(C)]
+struct ControllerInputState {
+    key: [[i32; 7]; 6],
+    menu: [i32; 24],
+}
+
+#[cfg(feature = "linked_c_archive")]
+extern "C" {
+    static mut ImmediateInputState: ControllerInputState;
+    static CurrentInputState: ControllerInputState;
+    static PulsedInputState: ControllerInputState;
+}
 
 /// The global runtime model for automation.
 ///
@@ -42,6 +63,11 @@ fn is_automation_active() -> bool {
 
 /// Get the runtime model if it exists.
 fn with_runtime() -> Option<&'static RuntimeModel> {
+    AUTOMATION_RT.get()
+}
+
+/// Get the runtime model if it exists (public for coordinator).
+pub fn get_runtime() -> Option<&'static RuntimeModel> {
     AUTOMATION_RT.get()
 }
 
@@ -74,31 +100,34 @@ pub extern "C" fn rust_automation_service_do_input() -> i32 {
         return 0; // Inactive fast path: no stop.
     }
 
-    // Step 3-5: Active gate, depth, terminal check via shell_enter.
+    // Step 2b: Check terminal — if already terminal, return stop to
+    // break the DoInput loop. This is the key mechanism that makes
+    // DoInput break out when the scheduler finishes.
     let rt = match with_runtime() {
         Some(rt) => rt,
         None => return 0,
     };
 
-    rt.record_active_gate_entry();
-
     if rt.mirror.is_terminal() {
-        return 1; // Conservative: stop.
+        // Re-assert CHECK_ABORT every frame. Game logic (handle_select)
+        // can overwrite CurrentActivity, clearing our CHECK_ABORT. By
+        // re-asserting on every DoInput call, we ensure the activity
+        // state machine's should_continue() check sees CHECK_ABORT and
+        // exits the inner loop.
+        #[cfg(feature = "linked_c_archive")]
+        unsafe {
+            crate::mainloop::c_extern::set_current_activity(
+                crate::mainloop::c_extern::get_current_activity() | 0x4000,
+            );
+        }
+        return 1; // Terminal: stop the DoInput loop.
     }
 
-    // Step 6: Pure transition (reserve).
-    // In full integration this would run the scheduler reducer.
-    // For now we just check the terminal state.
-    let result = rt.shell_enter();
-    if result.terminal_fallback {
-        return 1;
-    }
-    if result.inactive_fast_path {
-        return 0;
+    // Step 4: Feed the input callback to the coordinator (scheduler+watchdog).
+    if Coordinator::is_active() && Coordinator::process_input() {
+        return 1; // Stop requested by scheduler or watchdog.
     }
 
-    // Active: no stop for now (scheduler will determine).
-    rt.shell_exit();
     0
 }
 
@@ -132,22 +161,12 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
         None => return 0,
     };
 
-    rt.record_active_gate_entry();
-
+    // Step 2b: Check terminal — if terminal, return stop to break DoInput.
     if rt.mirror.is_terminal() {
-        return 1; // Conservative: stop.
+        return 1; // Terminal: stop the DoInput loop.
     }
 
-    let result = rt.shell_enter();
-    if result.terminal_fallback {
-        return 1;
-    }
-    if result.inactive_fast_path {
-        return 0;
-    }
-
-    // Active: no stop for now (scheduler will determine).
-    rt.shell_exit();
+    // Step 3: Observation only — no additional scheduler processing.
     0
 }
 
@@ -157,23 +176,82 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
 
 /// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`.
 ///
-/// Validates the index against NUM_MENU_KEYS (28), normalizes nonzero
-/// values to 1, and leaves all state unchanged on invalid indices.
-///
+/// Writes directly to the C global volatile `ImmediateInputState.menu[index]`.
 /// Returns 0 on success, -1 on invalid index.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-003
 #[no_mangle]
+#[cfg(feature = "linked_c_archive")]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
     }
-    let result = setter_set_menu_key(index as u8, value as u8);
-    match result {
-        SetterResult::Set { .. } | SetterResult::Cleared { .. } => 0,
-        SetterResult::InvalidIndex { .. } => -1,
+    let _result = setter_set_menu_key(index as u8, value as u8);
+    unsafe {
+        ImmediateInputState.menu[index as usize] = if value != 0 { 1 } else { 0 };
     }
+    0
+}
+
+/// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`
+/// (stub for non-linked builds — lib tests).
+///
+/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
+/// @requirement REQ-INJECT-003
+#[no_mangle]
+#[cfg(not(feature = "linked_c_archive"))]
+pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
+    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
+        return -1;
+    }
+    let _result = setter_set_menu_key(index as u8, value as u8);
+    let _ = value;
+    0
+}
+
+// ===========================================================================
+//  Present hook: called from TFB_SwapBuffers
+// ===========================================================================
+
+/// C-callable automation present callback hook.
+///
+/// Called from `TFB_SwapBuffers` after a frame is presented. Feeds the
+/// committed present event (with the current armed capture generation)
+/// to the coordinator's scheduler.
+///
+/// Returns 1 if the game loop should stop, 0 otherwise.
+///
+/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P07
+/// @requirement REQ-FFI-004
+#[no_mangle]
+pub extern "C" fn rust_automation_present_callback() -> i32 {
+    if !Coordinator::is_active() {
+        return 0;
+    }
+
+    // Check terminal — if terminal, return stop.
+    if let Some(rt) = with_runtime() {
+        if rt.mirror.is_terminal() {
+            return 1;
+        }
+    }
+
+    // Read the armed capture generation from the runtime mirror.
+    let gen = if let Some(rt) = with_runtime() {
+        rt.mirror.capture_generation()
+    } else {
+        0
+    };
+
+    if gen > 0 {
+        eprintln!("[automation] present_callback gen={gen}");
+    }
+
+    if Coordinator::process_present(gen) {
+        return 1;
+    }
+    0
 }
 
 // ===========================================================================
@@ -187,12 +265,21 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-006
 #[no_mangle]
+#[cfg(feature = "linked_c_archive")]
 pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
     }
-    // In production this would read from the C global. The linked harness
-    // tests this against real production state.
+    unsafe { CurrentInputState.menu[index as usize] }
+}
+
+/// C-callable getter for `CurrentInputState.menu[index]` (stub for tests).
+#[no_mangle]
+#[cfg(not(feature = "linked_c_archive"))]
+pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
+    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
+        return -1;
+    }
     0
 }
 
@@ -203,6 +290,17 @@ pub extern "C" fn rust_automation_get_current_menu_key(index: i32) -> i32 {
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 /// @requirement REQ-INJECT-006
 #[no_mangle]
+#[cfg(feature = "linked_c_archive")]
+pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
+    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
+        return -1;
+    }
+    unsafe { PulsedInputState.menu[index as usize] }
+}
+
+/// C-callable getter for `PulsedInputState.menu[index]` (stub for tests).
+#[no_mangle]
+#[cfg(not(feature = "linked_c_archive"))]
 pub extern "C" fn rust_automation_get_pulsed_menu_key(index: i32) -> i32 {
     if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
         return -1;
@@ -225,7 +323,7 @@ mod tests {
 
     #[test]
     fn setter_invalid_index_returns_negative() {
-        assert_eq!(rust_automation_set_immediate_menu_key(28, 1), -1);
+        assert_eq!(rust_automation_set_immediate_menu_key(24, 1), -1);
         assert_eq!(rust_automation_set_immediate_menu_key(-1, 1), -1);
     }
 
@@ -236,9 +334,9 @@ mod tests {
 
     #[test]
     fn getter_invalid_index_returns_negative() {
-        assert_eq!(rust_automation_get_current_menu_key(28), -1);
+        assert_eq!(rust_automation_get_current_menu_key(24), -1);
         assert_eq!(rust_automation_get_current_menu_key(-1), -1);
-        assert_eq!(rust_automation_get_pulsed_menu_key(28), -1);
+        assert_eq!(rust_automation_get_pulsed_menu_key(24), -1);
         assert_eq!(rust_automation_get_pulsed_menu_key(-1), -1);
     }
 

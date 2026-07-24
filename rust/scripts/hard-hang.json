@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "name": "hard-hang",
+    "budgets": {
+        "max_input_ticks": 100,
+        "max_presentations": 100,
+        "max_wallclock_seconds": 10
+    },
+    "steps": [
+        {"action": "wait_input_ticks", "count": 5},
+        {"action": "finish"}
+    ]
+}

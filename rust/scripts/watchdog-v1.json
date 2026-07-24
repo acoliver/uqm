@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "name": "watchdog-v1",
+    "budgets": {
+        "max_input_ticks": 5,
+        "max_presentations": 5,
+        "max_wallclock_seconds": 30
+    },
+    "steps": [
+        {"action": "wait_input_ticks", "count": 3},
+        {"action": "finish"}
+    ]
+}

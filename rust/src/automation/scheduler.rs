@@ -298,7 +298,7 @@ pub fn scheduler_reduce(
     match event {
         SchedulerEvent::AdmittedInput => reduce_admitted_input(state, config, current_action, sv),
         SchedulerEvent::CommittedPresent { generation } => {
-            reduce_committed_present(state, generation, current_action, sv)
+            reduce_committed_present(state, config, generation, current_action, sv)
         }
         SchedulerEvent::MenuTransition { to } => reduce_menu_transition(state, config, to, sv),
     }
@@ -307,20 +307,20 @@ pub fn scheduler_reduce(
 /// Process an admitted input callback.
 fn reduce_admitted_input(
     state: &SchedulerState,
-    _config: &SchedulerConfig<'_>,
+    config: &SchedulerConfig<'_>,
     action: &Action,
     sv: u64,
 ) -> SchedulerTransition {
     match (action, state.phase) {
         // Ready wait_input_ticks(0): advance immediately (zero-wait chaining).
         (Action::WaitInputTicks(w), ActionPhase::WaitingForInput) if w.count == 0 => {
-            advance_to_next(state, sv, EffectPlan::none())
+            advance_to_next(state, config, sv, EffectPlan::none())
         }
 
         // Ready wait_input_ticks(n>0): enter WaitCounting(n-1), consuming this callback.
         (Action::WaitInputTicks(w), ActionPhase::WaitingForInput) => {
             if w.count <= 1 {
-                advance_to_next(state, sv, EffectPlan::none())
+                advance_to_next(state, config, sv, EffectPlan::none())
             } else {
                 SchedulerTransition {
                     new_state: SchedulerState {
@@ -349,7 +349,7 @@ fn reduce_admitted_input(
 
         // WaitCounting(1): consume last, advance.
         (Action::WaitInputTicks(_w), ActionPhase::WaitCounting { remaining: 1 }) => {
-            advance_to_next(state, sv, EffectPlan::none())
+            advance_to_next(state, config, sv, EffectPlan::none())
         }
 
         // set_menu_key: plan one owned-key write, advance on commit.
@@ -358,7 +358,7 @@ fn reduce_admitted_input(
                 write_key: Some((s.key, if s.value != 0 { 1 } else { 0 })),
                 ..EffectPlan::none()
             };
-            advance_to_next(state, sv, effects)
+            advance_to_next(state, config, sv, effects)
         }
 
         // tap Hold(n>1): plan held value for this update; commit to Hold(n-1).
@@ -437,7 +437,7 @@ fn reduce_admitted_input(
                 ..EffectPlan::none()
             };
             if t.settle == 0 {
-                advance_to_next(state, sv, effects)
+                advance_to_next(state, config, sv, effects)
             } else {
                 SchedulerTransition {
                     new_state: SchedulerState {
@@ -454,7 +454,7 @@ fn reduce_admitted_input(
 
         // Settle(1): consume last, advance.
         (Action::TapMenuKey(_t), ActionPhase::TapSettling { remaining: 1 }) => {
-            advance_to_next(state, sv, EffectPlan::none())
+            advance_to_next(state, config, sv, EffectPlan::none())
         }
         // Settle(n>1): consume one, decrement.
         (Action::TapMenuKey(_t), ActionPhase::TapSettling { remaining }) => SchedulerTransition {
@@ -519,13 +519,37 @@ fn reduce_admitted_input(
             }
         }
 
-        // AssertActivity: immediate advance (no callback needed).
-        (Action::AssertActivity(_), ActionPhase::WaitingForInput) => {
-            advance_to_next(state, sv, EffectPlan::none())
+        // AssertMainMenuTransition: enter WaitingSemantic on first input callback.
+        (Action::AssertMainMenuTransition(_), ActionPhase::WaitingForInput) => {
+            // Consume this input callback to enter WaitingSemantic.
+            // Do NOT advance step_index — we wait for a MenuTransition event.
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingSemantic,
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
         }
 
-        // Finish: terminal success.
+        // AssertActivity: immediate advance (no callback needed).
+        (Action::AssertActivity(_), ActionPhase::WaitingForInput) => {
+            advance_to_next(state, config, sv, EffectPlan::none())
+        }
+
+        // Finish: terminal success. Consumes the input callback.
         (Action::Finish, ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                terminal: Some(TerminalOutcome::FinishComplete),
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+
+        // Finish in any other phase: also terminal (safety net).
+        (Action::Finish, _) => SchedulerTransition {
             new_state: SchedulerState {
                 terminal: Some(TerminalOutcome::FinishComplete),
                 state_version: sv,
@@ -548,6 +572,7 @@ fn reduce_admitted_input(
 /// Process a committed-present callback.
 fn reduce_committed_present(
     state: &SchedulerState,
+    config: &SchedulerConfig<'_>,
     generation: CaptureGeneration,
     action: &Action,
     sv: u64,
@@ -565,7 +590,7 @@ fn reduce_committed_present(
                         ..EffectPlan::none()
                     };
                     // Advance to next action.
-                    advance_to_next(state, sv, effects)
+                    advance_to_next(state, config, sv, effects)
                 }
                 CaptureValidation::Zero
                 | CaptureValidation::Stale
@@ -637,7 +662,7 @@ fn reduce_menu_transition(
 
     if let Some(expected) = config.transitions.get(transition_idx) {
         if expected.to.as_u8() == to {
-            advance_to_next(state, sv, EffectPlan::none())
+            advance_to_next(state, config, sv, EffectPlan::none())
         } else {
             SchedulerTransition {
                 new_state: SchedulerState {
@@ -663,19 +688,42 @@ fn reduce_menu_transition(
 /// Advance to the next action in the script, handling zero-callback chaining.
 fn advance_to_next(
     state: &SchedulerState,
+    config: &SchedulerConfig<'_>,
     sv: u64,
     initial_effects: EffectPlan,
 ) -> SchedulerTransition {
     let next_index = state.step_index + 1;
 
-    // If there's a next action that requires zero callbacks, chain through it.
-    // This is handled by the caller sending another AdmittedInput event;
-    // for the pure model, we advance step_index and set WaitingForInput.
-    // Zero-callback chaining (wait_input_ticks(0), assert_activity) is handled
-    // by the next admitted-input callback.
-    // For wait_input_ticks(0), we can chain immediately since no callback is needed.
-    // However, the pure reducer processes one event at a time, so chaining of
-    // zero-callback actions happens when the next AdmittedInput arrives.
+    // Zero-callback chaining: if the next action requires no input callbacks
+    // (wait_input_ticks(0) or AssertActivity), chain through it immediately.
+    // AssertMainMenuTransition is handled by the AdmittedInput match arm
+    // (enters WaitingSemantic on first input callback), NOT chained here.
+    if let Some(next_action) = config.actions.get(next_index) {
+        match next_action {
+            Action::WaitInputTicks(w) if w.count == 0 => {
+                // Chain: emit initial_effects, advance past this step too.
+                let combined = initial_effects;
+                let chained_state = SchedulerState {
+                    step_index: next_index,
+                    phase: ActionPhase::WaitingForInput,
+                    state_version: sv,
+                    ..*state
+                };
+                return advance_to_next(&chained_state, config, sv, combined);
+            }
+            Action::AssertActivity(_) => {
+                // AssertActivity is immediate — no callback needed.
+                let chained_state = SchedulerState {
+                    step_index: next_index,
+                    phase: ActionPhase::WaitingForInput,
+                    state_version: sv,
+                    ..*state
+                };
+                return advance_to_next(&chained_state, config, sv, initial_effects);
+            }
+            _ => {}
+        }
+    }
 
     SchedulerTransition {
         new_state: SchedulerState {

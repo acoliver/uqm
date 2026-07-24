@@ -283,6 +283,15 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
             new_item.as_u8(),
             None,
         );
+
+        // Feed the menu transition to the automation coordinator if active.
+        // This drives the scheduler's WaitingSemantic state and semantic
+        // assertion matching.
+        if crate::automation::coordinator::Coordinator::is_active() {
+            let _stop = crate::automation::coordinator::Coordinator::process_menu_transition(
+                new_item.as_u8(),
+            );
+        }
         // In full integration, Stop would propagate through do_restart_frame
         // and rust_do_restart_frame before sleep/later work.
     }

@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "name": "inactive-smoke",
+    "budgets": {
+        "max_input_ticks": 50,
+        "max_presentations": 50,
+        "max_wallclock_seconds": 15
+    },
+    "steps": [
+        {"action": "wait_input_ticks", "count": 5},
+        {"action": "finish"}
+    ]
+}
