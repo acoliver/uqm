@@ -467,3 +467,47 @@ pub fn bit_range(name: &str) -> Option<(u32, u32)> {
         .find(|(n, _, _)| *n == name)
         .map(|(_, s, nb)| (*s, *s + nb - 1))
 }
+
+/// Get a game state value by key name. Returns 0 if key not found or state
+/// not initialized.
+///
+/// This is the safe Rust-internal equivalent of C's `GET_GAME_STATE(name)`.
+/// It goes through the FFI to access the global singleton.
+#[must_use]
+pub fn get_game_state(name: &str) -> u32 {
+    use std::ffi::CString;
+    use std::os::raw::c_char;
+
+    let Ok(c_key) = CString::new(name) else {
+        return 0;
+    };
+
+    extern "C" {
+        fn rust_get_game_state(key: *const c_char) -> u8;
+    }
+
+    // SAFETY: rust_get_game_state reads from a global Mutex<Option<GameState>>
+    // and handles uninitialized state gracefully (returns 0).
+    unsafe { rust_get_game_state(c_key.as_ptr()) as u32 }
+}
+
+/// Set a game state value by key name.
+///
+/// This is the safe Rust-internal equivalent of C's `SET_GAME_STATE(name, val)`.
+/// It goes through the FFI to access the global singleton.
+pub fn set_game_state(name: &str, value: u32) {
+    use std::ffi::CString;
+    use std::os::raw::c_char;
+
+    let Ok(c_key) = CString::new(name) else {
+        return;
+    };
+
+    extern "C" {
+        fn rust_set_game_state(key: *const c_char, value: u8);
+    }
+
+    // SAFETY: rust_set_game_state writes to a global Mutex<Option<GameState>>
+    // and handles uninitialized state gracefully (no-op).
+    unsafe { rust_set_game_state(c_key.as_ptr(), value as u8) };
+}

@@ -355,11 +355,14 @@ mod cffi {
         }
 
         fn visit_starbase(&self) {
-            unsafe { c_extern::VisitStarBase() }
+            // P16: Ported to Rust — dispatch logic in comm::dispatch
+            unsafe { crate::comm::dispatch::rust_visit_starbase() }
         }
 
         fn race_communication(&self) {
-            unsafe { c_extern::RaceCommunication() }
+            // P11: Ported to Rust — operates on C-owned queues through
+            // the Rust queue API, reads game state from Rust singleton.
+            unsafe { crate::comm::dispatch::rust_race_communication() }
         }
 
         fn explore_solar_sys(&self) {

@@ -202,3 +202,91 @@ uqm_set_base_content_path (const char *path)
 	strncpy (baseContentPath, path, PATH_MAX - 1);
 	baseContentPath[PATH_MAX - 1] = '\0';
 }
+
+// Queue pointer accessors for Rust dispatch (P11)
+// These are trivial getters that return pointers to C-owned queue globals.
+// They do NOT add logic — just expose the queue addresses so Rust can
+// operate on them through the existing Rust queue API.
+
+QUEUE *
+rust_get_avail_race_queue (void)
+{
+	return &GLOBAL (avail_race_q);
+}
+
+QUEUE *
+rust_get_npc_built_ship_queue (void)
+{
+	return &GLOBAL (npc_built_ship_q);
+}
+
+QUEUE *
+rust_get_encounter_queue (void)
+{
+	return &GLOBAL (encounter_q);
+}
+
+QUEUE *
+rust_get_built_ship_queue (void)
+{
+	return &GLOBAL (built_ship_q);
+}
+
+QUEUE *
+rust_get_ip_group_queue (void)
+{
+	return &GLOBAL (ip_group_q);
+}
+
+// Starbase dispatch bridges for Rust (P16)
+void c_CleanupAfterStarBase (void);
+void c_DoTimePassage (void);
+void c_DoStarBaseInput (void);
+
+void
+rust_visit_starbase_bridge (void)
+{
+	VisitStarBase ();
+}
+
+void
+rust_cleanup_after_starbase (void)
+{
+	CleanupAfterStarBase ();
+}
+
+void
+rust_do_time_passage (void)
+{
+	DoTimePassage ();
+}
+
+// CurStarDescPtr accessor
+void
+rust_set_cur_star_desc_ptr_null (void)
+{
+	CurStarDescPtr = NULL;
+}
+
+// DoInput with DoStarBase callback
+extern void DoStarBase (MENU_STATE *pMS);
+
+void
+rust_do_starbase_menu_input (void)
+{
+	MENU_STATE MenuState;
+	CONTEXT OldContext;
+	StatMsgMode prevMsgMode;
+
+	prevMsgMode = SetStatusMessageMode (SMM_RES_UNITS);
+
+	memset (&MenuState, 0, sizeof (MenuState));
+	MenuState.InputFunc = DoStarBase;
+
+	OldContext = SetContext (ScreenContext);
+	DoInput (&MenuState, TRUE);
+	SetContext (OldContext);
+
+	SetStatusMessageMode (prevMsgMode);
+	CleanupAfterStarBase ();
+}

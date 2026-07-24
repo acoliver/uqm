@@ -115,3 +115,17 @@ void uqm_set_base_content_path (const char *path);
 #endif
 
 #endif  /* UQM_RUST_BRIDGE_MAINLOOP_H_ */
+
+// Queue pointer accessors for Rust dispatch (P11)
+QUEUE *rust_get_avail_race_queue (void);
+QUEUE *rust_get_npc_built_ship_queue (void);
+QUEUE *rust_get_encounter_queue (void);
+QUEUE *rust_get_built_ship_queue (void);
+QUEUE *rust_get_ip_group_queue (void);
+
+// Starbase dispatch bridges (P16)
+void rust_visit_starbase_bridge (void);
+void rust_cleanup_after_starbase (void);
+void rust_do_time_passage (void);
+void rust_set_cur_star_desc_ptr_null (void);
+void rust_do_starbase_menu_input (void);
