@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "name": "comm-encounter-v1",
+  "budgets": {
+    "max_input_ticks": 120,
+    "max_presentations": 120,
+    "max_wallclock_seconds": 25
+  },
+  "steps": [
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "wait_input_ticks", "count": 20},
+    {"action": "capture", "label": "in-game-initial"},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "in-game-after-wait"},
+    {"action": "finish"}
+  ]
+}
