@@ -1,31 +1,30 @@
-# P14-P17: Port remaining game-loop dispatch targets to Rust
+# P16-P19: Port remaining game-loop dispatch targets to Rust
 
 ## Worker scope
 
 Port the 4 remaining C dispatch targets that `game_loop.rs` calls through FFI.
+Now that Rust owns the game state (P09), these can read from Rust state natively.
 
-## P14: ExploreSolarSys (planets.c, 483 lines)
+## P16: ExploreSolarSys (planets.c, 483 lines)
 
 ### What it does
-- Dispatches to interplanetary exploration: orbiting planets, scanning surfaces,
-  landing, collecting resources/biological data
+- Interplanetary exploration: orbiting planets, scanning surfaces, landing,
+  collecting resources/biological data
 - Called when activity = IN_INTERPLANETARY
 
 ### Approach
 - Create `rust/src/mainloop/explore_solar_sys.rs`
-- Port the C dispatch logic
-- May need to port parts of `planets/` subsystem (scan, surface, orbit)
+- Port the C dispatch logic, reading from Rust-owned game state
 - Wire `CffiOps::explore_solar_sys()` to call Rust implementation
 
 ### Test plan
 **Unit tests**: Mock `GameLoopOps`, verify dispatch logic
 **Automation proof** (`scripts/explore-planet-v1.json`):
-- Start new game, wait for hyperspace
-- Navigate to a planet (may need additional menu key actions)
+- Start new game, wait for hyperspace, navigate to planet
 - Assert IN_INTERPLANETARY activity
 - Capture, finish
 
-## P15: VisitStarBase (starbase.c, 602 lines)
+## P17: VisitStarBase (starbase.c, 602 lines)
 
 ### What it does
 - Starbase visit: outfit ship, build modules, talk to commander
@@ -33,7 +32,7 @@ Port the 4 remaining C dispatch targets that `game_loop.rs` calls through FFI.
 
 ### Approach
 - Create `rust/src/mainloop/visit_starbase.rs`
-- Port the C starbase dispatch
+- Port the C starbase dispatch, reading from Rust-owned game state
 - Wire `CffiOps::visit_starbase()` to call Rust implementation
 
 ### Test plan
@@ -43,7 +42,7 @@ Port the 4 remaining C dispatch targets that `game_loop.rs` calls through FFI.
 - Assert IN_STARBASE activity
 - Capture, finish
 
-## P16: InstallBombAtEarth + hyperspace (hyper.c, 1747 lines)
+## P18: InstallBombAtEarth + hyperspace (hyper.c, 1747 lines)
 
 ### What it does
 - Hyperspace navigation: moving in hyperspace, encountering aliens
@@ -54,7 +53,7 @@ Port the 4 remaining C dispatch targets that `game_loop.rs` calls through FFI.
 - Create `rust/src/mainloop/hyperspace.rs`
 - Port the C hyperspace dispatch
 - This is the largest single dispatch target
-- May need to port parts of `hyper.c` navigation logic
+- May need to port parts of navigation logic
 
 ### Test plan
 **Unit tests**: Mock dispatch, verify navigation state
@@ -63,7 +62,7 @@ Port the 4 remaining C dispatch targets that `game_loop.rs` calls through FFI.
 - Assert IN_HYPERSPACE activity
 - Capture, finish
 
-## P17: Battle dispatch (battle.c, 517 lines)
+## P19: Battle dispatch (battle.c, 517 lines)
 
 ### What it does
 - Combat dispatch: initializes battle, runs frame loop, cleanup
@@ -77,12 +76,10 @@ Port the 4 remaining C dispatch targets that `game_loop.rs` calls through FFI.
 ### Test plan
 **Unit tests**: Mock battle dispatch, verify state transitions
 **Automation proof** (`scripts/battle-v1.json`):
-- Start new game, encounter hostile alien
-- Choose attack
+- Start new game, encounter hostile alien, choose attack
 - Assert IN_BATTLE activity
 - Capture, finish
 
-## Dependencies
-- P09 (comm dispatch must be ported first for encounter flow)
-- Existing Rust `battle/` module (for P17)
-- Existing Rust `mainloop/` infrastructure
+### Dependencies
+- P11 (comm dispatch must be ported first for encounter flow)
+- P09 (game state ownership — all dispatch reads from Rust state)

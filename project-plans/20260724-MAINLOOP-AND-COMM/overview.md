@@ -1,90 +1,76 @@
-# PLAN-20260724-MAINLOOP-AND-COMM
+# PLAN-20260724-MAINLOOP-AND-COMM (Revised)
 
-## Goal
+## Core Problem: Dual Data Ownership
 
-Port the remaining C game-loop dispatch targets and the per-race dialogue
-state machines to Rust, with test coverage and real-binary automation proofs
-that exercise both paths against the live UQM binary.
+The bridge surface is **712 Rust→C exports, 542 C→Rust imports, 4,537 lines of C bridge files**. But the real risk isn't the function count — it's that **C and Rust each own copies of the same data**, and the bridge manually synchronizes them.
 
-## Two workstreams
+### The three dual-ownership problems
 
-### A. Game-Loop Activity Dispatch (starcon.c → Rust)
+**1. GlobData (767+767 fields)**
+- C owns `GLOBDATA GlobData` with `Game_state` (767 fields) and `SIS_state` (15 fields)
+- `GLOBAL(f)` = `GlobData.Game_state.f` — reads directly from C memory
+- `GLOBAL_SIS(f)` = `GlobData.SIS_state.f` — reads directly from C memory
+- Rust has a separate `GameState` (155 bytes, just bit-packed flags) — NOT synced to C's copy
+- C's `getGameState()` calls Rust's `rust_get_game_state_bits_from_bytes()` for bit extraction, but the byte array is in C memory
+- Rust accesses `CurrentActivity` etc. through 6 FFI functions in `c_extern.rs`
 
-The Rust `game_loop.rs` already owns the two-level loop (outer: new/load
-game, inner: activity state machine). What remains is porting the 5 C
-dispatch targets it calls through FFI:
+**2. CommData (LOCDATA)**
+- C owns `LOCDATA CommData` (global in comm.c:72)
+- Rust has its own `CommData` struct in `comm/types.rs` (25+ fields)
+- `rust_comm.c` (2156 lines, 189 functions) has 32 LOCDATA field accessors that marshal between them
+- Two structs, manually synchronized, high desync risk
 
-| C function | C file | LoC | What it does |
+**3. Activity flags**
+- C owns `CurrentActivity`/`LastActivity`/`NextActivity` as fields of `GlobData.Game_state`
+- Rust accesses through FFI getters/setters in `c_extern.rs`
+- Rust has `ActivityValue`/`activity_flags` types but they're shadows of C state
+
+### The correct approach: consolidate ownership first, then port logic
+
+Instead of porting C logic to Rust while still reading C globals through FFI (which just adds more bridge surface), we:
+
+1. **Make Rust the single owner of game state** — C reads through Rust FFI
+2. **Make Rust the single owner of CommData** — eliminate LOCDATA dual copy
+3. **Port dispatch logic natively** — now it reads from Rust-owned state, no FFI for data
+4. **Port per-race dialogue state machines** — populate Rust CommData directly
+5. **Port remaining dispatch targets** — same pattern
+
+## Phase structure
+
+| Phase | Worker | Verifier | Scope |
 |---|---|---|---|
-| `RaceCommunication()` | comm.c:1503 | ~100 | Picks which alien to talk to, calls `InitCommunication` |
-| `InitCommunication(conv)` | comm.c:1359 | ~100 | Maps conversation→ship, calls `init_race`, starts encounter |
-| `ExploreSolarSys()` | planets.c | 483 | Interplanetary exploration dispatch |
-| `VisitStarBase()` | starbase.c:431 | 602 | Starbase visit (outfit, build, talk) |
-| `InstallBombAtEarth()` | hyper.c | 1747 | Hyperspace navigation + bomb installation |
-| `Battle(&callback)` | battle.c:397 | 517 | Combat dispatch (Rust `battle/` module already exists) |
-
-**Strategy**: Port in order of dependency and testability:
-1. `RaceCommunication` + `InitCommunication` — depends on comm infrastructure
-   (already 11K lines of Rust) and `init_race` dispatch table
-2. `ExploreSolarSys` — depends on planets module (not yet ported)
-3. `VisitStarBase` — depends on starbase UI
-4. `InstallBombAtEarth` — hyperspace navigation (largest, most complex)
-5. `Battle` — Rust `battle/` module already exists, just needs wiring
-
-### B. Per-Race Dialogue State Machines (comm/*/Xc.c → Rust)
-
-18 race dialogue files (~14,437 lines total C) contain:
-- A `LOCDATA` struct (animation config, colors, fonts, music — all resource
-  keys, NOT embedded text)
-- An `init_X_comm()` function (sets function pointers + segue mode)
-- Dialogue state machine functions (branching logic using `NPCPhrase(index)`
-  to speak text loaded from resource files)
-- Response handling (player picks response → next state machine function)
-
-**Text is already externalized**: All dialogue text lives in `.rmp`/`.pkg`
-content files, loaded by string index at runtime. The C files contain only
-the branching logic and resource key references.
-
-**Strategy**: Port race-by-race using a table-driven approach:
-1. Define a Rust `RaceDialogue` trait with `init()`, `intro()`, `respond()`
-2. Port `init_race()` dispatch table to Rust
-3. Port one race (Arilou) as the reference implementation
-4. Port remaining races in batches
-5. Each race: translate the C state machine to Rust match arms, keeping the
-   same string indices and resource keys
+| P09 | Consolidate game state ownership to Rust | P09a | Move GlobData to Rust, make C read through FFI |
+| P10 | Consolidate CommData ownership to Rust | P10a | Make Rust CommData the single source, eliminate LOCDATA accessors |
+| P11 | Port RaceCommunication + InitCommunication to Rust | P11a | Native dispatch, no FFI for data access |
+| P12 | Port Arilou dialogue state machine to Rust | P12a | Reference race port, populates Rust CommData directly |
+| P13 | Port remaining race dialogues (batch 1: 6 races) | P13a | |
+| P14 | Port remaining race dialogues (batch 2: 6 races) | P14a | |
+| P15 | Port remaining race dialogues (batch 3: remaining) | P15a | |
+| P16 | Port ExploreSolarSys to Rust | P16a | Planet exploration dispatch |
+| P17 | Port VisitStarBase to Rust | P17a | Starbase dispatch |
+| P18 | Port InstallBombAtEarth + hyperspace to Rust | P18a | Hyperspace dispatch |
+| P19 | Wire Battle dispatch to Rust battle module | P19a | Combat dispatch |
+| P20 | Automation proof scripts for all dispatch targets | P20a | Real-binary proofs |
+| P21 | Final verification: all proofs pass, all gates green | P21a | Acceptance |
 
 ## Testing strategy
 
 ### Unit tests
-- Each ported dispatch target gets unit tests with mock `GameLoopOps`
-- Each race dialogue gets unit tests for state transitions
-- `assert_activity` automation action tests activity flags
+- Game state: round-trip tests (C writes → Rust reads → C reads → same value)
+- CommData: field-by-field equivalence after consolidation
+- Dispatch logic: mock-based tests for each dispatch target
+- Race dialogue: state transition tests for each race
 
 ### Automation proof scripts (real binary)
-We already have the automation system working (main-menu-v1, watchdog-v1,
-inactive-smoke, hard-hang proofs all pass). We'll add:
+Each proof runs against the real binary with `SDL_VIDEODRIVER=dummy`:
+1. **state-sync-v1.json**: Start game, assert activity flags read correctly, verify state sync
+2. **comm-encounter-v1.json**: Reach encounter, assert IN_ENCOUNTER, capture
+3. **explore-planet-v1.json**: Navigate to planet, assert IN_INTERPLANETARY, capture
+4. **starbase-visit-v1.json**: Navigate to starbase, assert IN_STARBASE, capture
+5. **battle-v1.json**: Encounter hostile, choose attack, assert IN_BATTLE, capture
 
-1. **comm-encounter-v1.json**: Start new game, wait for hyperspace, navigate
-   to an encounter, assert `IN_ENCOUNTER` activity, capture the comm screen,
-   tap through dialogue responses, finish. This exercises the comm dispatch
-   path end-to-end.
-
-2. **explore-planet-v1.json**: Start new game, wait for hyperspace, navigate
-   to a planet, assert `IN_INTERPLANETARY` activity, capture, finish. This
-   exercises the ExploreSolarSys dispatch.
-
-3. **starbase-visit-v1.json**: Start new game, navigate to starbase, assert
-   `IN_STARBASE` activity, capture, finish.
-
-4. **battle-v1.json**: Start new game, encounter hostile alien, choose
-   attack, assert `IN_BATTLE` activity, capture, finish.
-
-Each proof:
-- Runs against the real binary with `SDL_VIDEODRIVER=dummy`
-- Uses `assert_activity` with activity flag masks to verify game state
-- Captures PNG screenshots at key transitions
-- Writes trace.jsonl + teardown-complete.json
-- Must exit 0 with correct terminal class
+Each proof uses `assert_activity` with activity flag masks, captures PNG screenshots,
+writes trace.jsonl + teardown receipts, and must exit 0.
 
 ### Activity flag reference (from globdata.h)
 ```
@@ -108,23 +94,7 @@ CHECK_RESTART = 0x2000
 CHECK_ABORT = 0x4000
 ```
 
-## Phase structure
-
-| Phase | Worker | Verifier | Scope |
-|---|---|---|---|
-| P09 | Port `RaceCommunication` + `InitCommunication` to Rust | P09a | comm dispatch, init_race table |
-| P10 | Port Arilou dialogue state machine | P10a | Reference race port |
-| P11 | Port remaining race dialogues (batch 1: 6 races) | P11a | Batch porting |
-| P12 | Port remaining race dialogues (batch 2: 6 races) | P12a | Batch porting |
-| P13 | Port remaining race dialogues (batch 3: 5 races) | P13a | Batch porting |
-| P14 | Port `ExploreSolarSys` to Rust | P14a | Planet exploration dispatch |
-| P15 | Port `VisitStarBase` to Rust | P15a | Starbase dispatch |
-| P16 | Port `InstallBombAtEarth` + hyperspace to Rust | P16a | Hyperspace dispatch |
-| P17 | Wire `Battle` dispatch to Rust battle module | P17a | Combat dispatch |
-| P18 | Automation proof scripts for all dispatch targets | P18a | Real-binary proofs |
-| P19 | Final verification: all proofs pass, all gates green | P19a | Acceptance |
-
-## Verification gates (each phase)
+### Verification gates (each phase)
 - `cargo fmt --all --check`
 - `cargo clippy --workspace --all-targets --features audio_heart -- -D warnings`
 - `cargo test --lib --features audio_heart -- --test-threads=1`

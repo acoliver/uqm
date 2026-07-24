@@ -1,13 +1,13 @@
-# P11-P13: Port remaining race dialogues to Rust
+# P13-P15: Port remaining race dialogues to Rust
 
 ## Worker scope
 
 Port the remaining 17 race dialogue files from C to Rust, following the
-Arilou reference pattern established in P10.
+Arilou reference pattern established in P12.
 
-## Race list (by complexity/LoC)
+## Race list (by batch)
 
-### P11 — Batch 1 (6 races, ~4,800 lines C)
+### P13 — Batch 1 (6 races)
 | Race | C file | LoC | Conversation ID |
 |---|---|---|---|
 | Starbase/Commander | comm/starbas/starbas.c | ~1,200 | COMMANDER_CONVERSATION |
@@ -17,7 +17,7 @@ Arilou reference pattern established in P10.
 | Ilwrath | comm/ilwrath/ilwrathc.c | ~600 | ILWRATH_CONVERSATION |
 | Chmmr | comm/chmmr/chmmrc.c | ~600 | CHMMR_CONVERSATION |
 
-### P12 — Batch 2 (6 races, ~4,500 lines C)
+### P14 — Batch 2 (6 races)
 | Race | C file | LoC | Conversation ID |
 |---|---|---|---|
 | Melnorme | comm/melnorm/melnorm.c | ~900 | MELNORME_CONVERSATION |
@@ -27,7 +27,7 @@ Arilou reference pattern established in P10.
 | Syreen | comm/syreen/syreenc.c | ~600 | SYREEN_CONVERSATION |
 | Utwig | comm/utwig/utwigc.c | ~500 | UTWIG_CONVERSATION |
 
-### P13 — Batch 3 (5 races, ~4,100 lines C)
+### P15 — Batch 3 (remaining races)
 | Race | C file | LoC | Conversation ID |
 |---|---|---|---|
 | Ur-Quan | comm/urquan/urquanc.c | ~900 | URQUAN_CONVERSATION |
@@ -44,9 +44,9 @@ Arilou reference pattern established in P10.
 | Zoq-Fot-Pik | comm/zoqfot/zoqfotc.c | ~400 | ZOQFOTPIK_CONVERSATION |
 | Talking Pet | comm/talkpet/talkpet.c | ~300 | TALKING_PET_CONVERSATION |
 
-### Approach
+### Approach (per race)
 
-Each race follows the P10 pattern:
+Each race follows the P12 pattern:
 1. Create `rust/src/comm/races/<race>.rs`
 2. Implement `RaceDialogue` trait
 3. Translate C state machine to Rust match arms
@@ -61,10 +61,5 @@ Each race follows the P10 pattern:
 - State transitions match C behavior
 - Resource keys match `resinst.h` values
 
-**Automation proof** (per batch):
-- Extend `comm-encounter-v1.json` or create race-specific scripts
-- Each script reaches a different race encounter and captures the dialogue
-
 ### Dependencies
-- P10 (Arilou reference implementation)
-- Existing `comm/` infrastructure module
+- P12 (Arilou reference implementation)
