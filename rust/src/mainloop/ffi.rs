@@ -38,6 +38,12 @@ mod c_globals {
         #[link_name = "MainExited"]
         pub static mut MAIN_EXITED: CBoolean;
     }
+    pub mod globdata_ffi {
+        extern "C" {
+            #[link_name = "GlobData"]
+            pub static mut GlobData: crate::comm::locdata::CGlobData;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -233,14 +239,19 @@ pub fn get_kohr_ah_killed_all() -> u8 {
 
 /// Read `GLOBAL_SIS(CrewEnlisted)` as a `COUNT` (`u16`).
 ///
-/// Used for death detection.
+/// Used for death detection. Accesses the C GlobData global directly.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 #[inline]
 #[must_use]
 pub fn get_crew_enlisted() -> u16 {
-    // SAFETY: reads a SIS field via a named C wrapper.
-    unsafe { prod::uqm_get_crew_enlisted() }
+    #[cfg(not(test))]
+    {
+        // SAFETY: reads a u16 field from the C GlobData global.
+        unsafe { c_globals::globdata_ffi::GlobData.sis_state.crew_enlisted }
+    }
+    #[cfg(test)]
+    0
 }
 
 // ---------------------------------------------------------------------------

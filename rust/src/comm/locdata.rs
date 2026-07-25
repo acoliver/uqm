@@ -49,27 +49,80 @@ pub struct CRect {
     pub height: i16,
 }
 
-/// C `SIS_STATE` struct (sis.h) — only the fields we need.
-/// CommanderName/ShipName/PlanetName are `UNICODE[SIS_NAME_SIZE]` = `char[16]`.
+/// C `SIS_STATE` struct (sis.h) — full repr(C) mirror.
+/// Layout verified via offsetof: total size 124 bytes.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct CSisState {
-    pub star_name: [u8; 16],
+    pub log_x: i32,
+    pub log_y: i32,
+    pub res_units: u32,
+    pub fuel_on_board: u32,
+    pub crew_enlisted: u16,
+    pub total_element_mass: u16,
+    pub total_bio_mass: u16,
+    pub module_slots: [u8; 20], // NUM_MODULES=20
+    pub drive_slots: [u8; 11],  // NUM_DRIVE_SLOTS=11
+    pub jet_slots: [u8; 8],     // NUM_JET_SLOTS=8
+    pub num_landers: u8,
+    pub element_amounts: [u16; 8], // NUM_ELEMENT_CATEGORIES=8
     pub ship_name: [u8; 16],
     pub commander_name: [u8; 16],
     pub planet_name: [u8; 16],
 }
 
-/// Minimal C `GLOBDATA` — only the fields we access from Rust.
-/// SIS_state is at offset 0 in the C struct, Game_state follows.
-/// This is a partial mirror; we only need SIS_state and Game_state.GameState.
+/// C `QUEUE` struct (displist.h) — repr(C) mirror.
+/// Total size 40 bytes on 64-bit (QUEUE_TABLE variant).
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct CQueue {
+    pub head: *mut c_void,
+    pub tail: *mut c_void,
+    pub pq_tab: *mut u8,
+    pub free_list: *mut c_void,
+    pub object_size: u16,
+    pub num_objects: u8,
+}
+
+/// C `GLOBDATA` struct (globdata.h) — repr(C) mirror with the fields we access.
+/// Layout verified via offsetof: SIS_STATE at 0 (124 bytes), GAME_STATE at 128 (512 bytes).
+/// Total size 640 bytes.
 #[repr(C)]
 pub struct CGlobData {
-    pub sis_state: CSisState,
-    // Game_state follows — we access GameState via the getGameState FFI
-    // using the pointer to the GameState array within Game_state.
-    // The exact layout after SIS_state is complex; we only need
-    // the SIS_state fields directly.
+    pub sis_state: CSisState,        // offset 0, size 124
+    _pad_sis_to_game_state: [u8; 4], // pad to offset 128
+    pub game_state: CGameState,      // offset 128, size 512
+}
+
+/// C `GAME_STATE` struct (globdata.h) — partial repr(C) mirror.
+/// Only the fields accessed from Rust are named; padding matches C layout.
+/// Layout verified via C offsetof. Total size 512 bytes.
+#[repr(C)]
+pub struct CGameState {
+    pub glob_flags: u8,              // offset 0
+    pub crew_cost: u8,               // offset 1
+    pub fuel_cost: u8,               // offset 2
+    pub module_cost: [u8; 20],       // offset 3, NUM_MODULES=20
+    pub element_worth: [u8; 8],      // offset 23, NUM_ELEMENT_CATEGORIES=8
+    _display_array: [u8; 8],         // offset 31, PRIMITIVE* (8 bytes)
+    pub current_activity: u16,       // offset 40 (verified)
+    _clock_state: [u8; 48],          // offset 42, CLOCK_STATE (48 bytes)
+    _autopilot: [u8; 4],             // offset 90, POINT (4 bytes)
+    _ip_location: [u8; 4],           // offset 94, POINT (4 bytes)
+    _ship_stamp: [u8; 16],           // offset 98, STAMP (16 bytes)
+    _ship_facing: u16,               // offset 114, UWORD
+    _ip_planet: u8,                  // offset 116, BYTE
+    _in_orbit: u8,                   // offset 117, BYTE
+    _velocity: [u8; 18],             // offset 118, VELOCITY_DESC (18 bytes)
+    _velocity_pad: [u8; 6],          // pad to offset 142 (align to u32 for BattleGroupRef)
+    _battle_group_ref: u32,          // offset 144, DWORD
+    pub avail_race_q: CQueue,        // offset 152 (verified)
+    pub npc_built_ship_q: CQueue,    // offset 192 (verified)
+    pub ip_group_q: CQueue,          // offset 232 (verified)
+    pub encounter_q: CQueue,         // offset 272 (verified)
+    pub built_ship_q: CQueue,        // offset 312 (verified)
+    pub game_state_bytes: [u8; 155], // offset 352, GameState array (155 bytes)
+    _final_pad: [u8; 5],             // pad to 512 total
 }
 
 /// C `ANIMATION_DESC` struct (commanim.h).

@@ -371,6 +371,10 @@ mod ffi {
         // CommData global for direct encounter function pointer calls
         pub static mut CommData: crate::comm::locdata::CLocData;
 
+        // GlobData global for direct queue/activity access
+        #[link_name = "GlobData"]
+        pub static mut GLOB_DATA: crate::comm::locdata::CGlobData;
+
         // Race-specific init_*_comm functions (C, from comm/*/racec.c)
         // These return LOCDATA* and are called directly to bypass
         // the broken C init_race dispatch in commglue.c.
@@ -448,6 +452,47 @@ unsafe fn get_head_link(pq: *const Queue) -> HLink {
     (*pq).head
 }
 
+/// Direct GlobData queue accessors — replace C bridge FFI calls.
+/// These return *mut Queue by taking the address of the queue field
+/// inside the C GlobData global, avoiding a C function call entirely.
+#[inline]
+fn avail_race_queue() -> *mut Queue {
+    #[cfg(not(test))]
+    unsafe {
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.avail_race_q) as *mut Queue
+    }
+    #[cfg(test)]
+    std::ptr::null_mut()
+}
+#[inline]
+fn npc_built_ship_queue() -> *mut Queue {
+    #[cfg(not(test))]
+    unsafe {
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.npc_built_ship_q) as *mut Queue
+    }
+    #[cfg(test)]
+    std::ptr::null_mut()
+}
+#[inline]
+fn encounter_queue() -> *mut Queue {
+    #[cfg(not(test))]
+    unsafe {
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.encounter_q) as *mut Queue
+    }
+    #[cfg(test)]
+    std::ptr::null_mut()
+}
+#[inline]
+#[allow(dead_code)]
+fn built_ship_queue() -> *mut Queue {
+    #[cfg(not(test))]
+    unsafe {
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.built_ship_q) as *mut Queue
+    }
+    #[cfg(test)]
+    std::ptr::null_mut()
+}
+
 /// C: `_GetSuccLink(lp)` — returns the succ field of a link.
 #[inline]
 unsafe fn get_succ_link(lp: *const ShipBaseCommon) -> HLink {
@@ -486,7 +531,7 @@ unsafe fn lock_fleet_info(_pq: *const Queue, h: HLink) -> *mut CFleetInfo {
 /// C: `GetHeadEncounter()` = `GetHeadLink(&GLOBAL(encounter_q))`
 #[inline]
 unsafe fn get_head_encounter() -> HLink {
-    let enc_q = ffi::rust_get_encounter_queue();
+    let enc_q = encounter_queue();
     get_head_link(enc_q)
 }
 
@@ -523,7 +568,7 @@ pub unsafe extern "C" fn rust_race_communication() {
 
     if lobyte(current_activity) == IN_LAST_BATTLE {
         // Going into talking pet conversation
-        let npc_q = ffi::rust_get_npc_built_ship_queue();
+        let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
         clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0);
         init_communication(conv::TALKING_PET);
@@ -570,7 +615,7 @@ pub unsafe extern "C" fn rust_race_communication() {
     let mut h_encounter: HLink = std::ptr::null_mut();
 
     if in_hq_space() {
-        let npc_q = ffi::rust_get_npc_built_ship_queue();
+        let npc_q = npc_built_ship_queue();
         ReinitQueue(npc_q);
 
         if get_game_state("ARILOU_SPACE_SIDE") >= 2 {
@@ -592,7 +637,7 @@ pub unsafe extern "C" fn rust_race_communication() {
     }
 
     // First ship in the npc queue defines which alien race the player talks to
-    let npc_q = ffi::rust_get_npc_built_ship_queue();
+    let npc_q = npc_built_ship_queue();
     let h_star_ship = get_head_link(npc_q);
     if h_star_ship.is_null() {
         return;
@@ -794,13 +839,13 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
         let glob_flags = crate::mainloop::ffi::get_global_flags_and_data();
         if lobyte(activity) == IN_LAST_BATTLE && (glob_flags & CYBORG_ENABLED) != 0 {
-            let npc_q = ffi::rust_get_npc_built_ship_queue();
+            let npc_q = npc_built_ship_queue();
             ReinitQueue(npc_q);
         }
 
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0);
 
-        let npc_q = ffi::rust_get_npc_built_ship_queue();
+        let npc_q = npc_built_ship_queue();
         let has_ships = !get_head_link(npc_q).is_null();
         let battle_segue = get_game_state("BATTLE_SEGUE");
 
@@ -816,7 +861,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     // C returns status = (GET_GAME_STATE(BATTLE_SEGUE) && GetHeadLink(npc_q))
     // after the above block which may have cleared BATTLE_SEGUE.
     let final_status: u16 = if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-        let npc_q = ffi::rust_get_npc_built_ship_queue();
+        let npc_q = npc_built_ship_queue();
         let has_ships = !get_head_link(npc_q).is_null();
         let battle_segue = get_game_state("BATTLE_SEGUE");
         if battle_segue != 0 && has_ships {
@@ -839,7 +884,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
 /// Creates a SHIP_FRAGMENT in the destination queue by copying template
 /// data from the fleet queue (avail_race_q).
 unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level: u16) -> HLink {
-    let avail_q = ffi::rust_get_avail_race_queue();
+    let avail_q = avail_race_queue();
     let h_fleet = get_star_ship_from_index(avail_q, ship_index);
     if h_fleet.is_null() {
         return std::ptr::null_mut();
@@ -893,8 +938,8 @@ unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level:
 /// Game structures and both fleet queues must already be initialized.
 #[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
 pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static str> {
-    let npc_q = ffi::rust_get_npc_built_ship_queue();
-    let avail_q = ffi::rust_get_avail_race_queue();
+    let npc_q = npc_built_ship_queue();
+    let avail_q = avail_race_queue();
     if npc_q.is_null() || avail_q.is_null() {
         return Err("ship queue accessor returned null");
     }
@@ -1017,7 +1062,7 @@ pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
 ///
 /// Returns `race` if tracking started, 0 if race is extinct or not found.
 unsafe fn start_sphere_tracking(race: u8) -> u16 {
-    let avail_q = ffi::rust_get_avail_race_queue();
+    let avail_q = avail_race_queue();
     let h_fleet = get_star_ship_from_index(avail_q, race);
     if h_fleet.is_null() {
         return 0;
@@ -1093,7 +1138,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         }
 
         // Create an Ilwrath ship responding to the Ur-Quan probe's broadcast
-        let npc_q = ffi::rust_get_npc_built_ship_queue();
+        let npc_q = npc_built_ship_queue();
         let h_star_ship = clone_ship_fragment(ship::ILWRATH_SHIP, npc_q, 7);
         if !h_star_ship.is_null() {
             let frag_ptr = lock_ship_frag(npc_q, h_star_ship);
