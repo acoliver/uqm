@@ -219,18 +219,6 @@ c_SpliceTrack (UNICODE *filespec, UNICODE *textspec,
  * in this file but called by the rendering bridge functions above it. */
 void c_DrawSISComWindow (void);
 
-/* ---- Oscilloscope / Slider ----------------------------------------------- */
-
-
-void
-c_InitSlider (int x, int y, int w, unsigned int bg_frame,
-		unsigned int cursor_frame)
-{
-	InitSlider (x, y, w,
-			SetAbsFrameIndex (ActivityFrame, (COUNT)bg_frame),
-			SetAbsFrameIndex (ActivityFrame, (COUNT)cursor_frame));
-}
-
 
 /* ---- Subtitle state bridges -----------------------------------------------
  * @plan PLAN-20260325-COMMPT3.P06
@@ -250,7 +238,9 @@ void
 c_InitSpeechGraphics (void)
 {
 	c_InitOscilloscope (9);
-	c_InitSlider (0, SLIDER_Y, SIS_SCREEN_WIDTH, 5, 2);
+	InitSlider (0, SLIDER_Y, SIS_SCREEN_WIDTH,
+			SetAbsFrameIndex (ActivityFrame, (COUNT)5),
+			SetAbsFrameIndex (ActivityFrame, (COUNT)2));
 }
 
 /* ---- UpdateSpeechGraphics -------------------------------------------------
@@ -988,290 +978,21 @@ c_DrawSISComWindow (void)
 #include "units.h"         /* SIS_ORG_X/Y, SIS_SCREEN_WIDTH/HEIGHT */
 #include "controls.h"      /* DoInput */
 
-/* ---- Resource load bridges ----------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-002 */
-
-uintptr_t
-c_LoadGraphic (const char *res)
-{
-	return (uintptr_t)LoadGraphic ((RESOURCE)res);
-}
-
-uintptr_t
-c_LoadFont (const char *res)
-{
-	return (uintptr_t)LoadFont ((RESOURCE)res);
-}
-
-uintptr_t
-c_LoadColorMap (const char *res)
-{
-	return (uintptr_t)LoadColorMap ((RESOURCE)res);
-}
-
-uintptr_t
-c_LoadMusic (const char *res)
-{
-	return (uintptr_t)LoadMusic ((RESOURCE)res);
-}
-
-uintptr_t
-c_LoadStringTable (const char *res)
-{
-	return (uintptr_t)LoadStringTable ((RESOURCE)res);
-}
-
-/* ---- Capture/Release bridges --------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-002 */
-
-uintptr_t
-c_CaptureDrawable (uintptr_t handle)
-{
-	FRAME f = CaptureDrawable ((DRAWABLE)handle);
-	fprintf (stderr, "[DBG] c_CaptureDrawable: DRAWABLE=%p -> FRAME=%p\n", (void *)handle, (void *)f);
-	return (uintptr_t)f;
-}
-
-
-uintptr_t
-c_CaptureColorMap (uintptr_t handle)
-{
-	return (uintptr_t)CaptureColorMap ((COLORMAP_REF)handle);
-}
-
-uintptr_t
-c_CaptureStringTable (uintptr_t handle)
-{
-	return (uintptr_t)CaptureStringTable ((STRING_TABLE)handle);
-}
-
-uintptr_t
-c_ReleaseDrawable (uintptr_t handle)
-{
-	return (uintptr_t)ReleaseDrawable ((FRAME)handle);
-}
-
-uintptr_t
-c_ReleaseColorMap (uintptr_t handle)
-{
-	return (uintptr_t)ReleaseColorMap ((COLORMAP)handle);
-}
-
-uintptr_t
-c_ReleaseStringTable (uintptr_t handle)
-{
-	return (uintptr_t)ReleaseStringTable ((STRING)handle);
-}
-
-/* ---- Context management bridges ------------------------------------------ */
-/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-003 */
-
-uintptr_t
-c_CreateContext (const char *name)
-{
-	return (uintptr_t)CreateContext (name);
-}
-
-
-uintptr_t
-c_SetContext (uintptr_t ctx)
-{
-	return (uintptr_t)SetContext ((CONTEXT)ctx);
-}
-
-
-void
-c_SetContextClipRect (int x, int y, int w, int h)
-{
-	RECT r;
-	r.corner.x = (COORD)x;
-	r.corner.y = (COORD)y;
-	r.extent.width = (SIZE)w;
-	r.extent.height = (SIZE)h;
-	SetContextClipRect (&r);
-}
-
-void
-c_ClearContextClipRect (void)
-{
-	SetContextClipRect (NULL);
-}
-
-void
-c_SetContextBackGroundColor (int r, int g, int b)
-{
-	SetContextBackGroundColor (
-			BUILD_COLOR (MAKE_RGB15 ((BYTE)r, (BYTE)g, (BYTE)b), 0x00));
-}
-
-uintptr_t
-c_SetContextFont (uintptr_t font)
-{
-	return (uintptr_t)SetContextFont ((FONT)font);
-}
-
-/* ---- Drawable management bridges ----------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-003 */
-
-uintptr_t
-c_CreateDrawable (unsigned int type, int w, int h, int num_frames)
-{
-	return (uintptr_t)CreateDrawable (
-			(CREATE_FLAGS)type, (SIZE)w, (SIZE)h, (COUNT)num_frames);
-}
-
-void
-c_SetFrameTransparentColor (uintptr_t frame, int r, int g, int b)
-{
-	SetFrameTransparentColor ((FRAME)frame,
-			BUILD_COLOR (MAKE_RGB15 ((BYTE)r, (BYTE)g, (BYTE)b), 0x00));
-}
-
-
-void
-c_GetFrameRect (uintptr_t frame, int *x, int *y, int *w, int *h)
-{
-	RECT r;
-	GetFrameRect ((FRAME)frame, &r);
-	if (x) *x = (int)r.corner.x;
-	if (y) *y = (int)r.corner.y;
-	if (w) *w = (int)r.extent.width;
-	if (h) *h = (int)r.extent.height;
-}
-
-/* ---- Graphics batching bridges ------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 */
-
-
-/* ---- Transition bridges -------------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 */
-
-void
-c_SetTransitionSource (uintptr_t rect_ptr)
-{
-	/* rect_ptr is a Rust *const RECT passed as uintptr_t; 0 means NULL. */
-	SetTransitionSource ((const RECT *)(uintptr_t)rect_ptr);
-}
-
-
-/* ---- SIS Drawing bridges ------------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-007 */
-
-
-/* ---- DoInput bridge ------------------------------------------------------ */
-/* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-DI-001 */
-
-
-/* ---- Screen/context accessor bridges ------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 */
-
-uintptr_t
-c_GetScreen (void)
-{
-	return (uintptr_t)Screen;
-}
-
-uintptr_t
-c_GetSpaceContext (void)
-{
-	return (uintptr_t)SpaceContext;
-}
-
-/* c_SetLastActivityCheckLoad — PORTED to Rust (direct LastActivity access) */
-
-/* ---- CommData accessor bridges ------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 */
-
-const char *
-c_GetCommDataAlienFrameRes (void)
-{
-	return CommData.AlienFrameRes;
-}
-
-const char *
-c_GetCommDataAlienFontRes (void)
-{
-	return CommData.AlienFontRes;
-}
-
-const char *
-c_GetCommDataAlienColorMapRes (void)
-{
-	return CommData.AlienColorMapRes;
-}
-
-const char *
-c_GetCommDataAlienSongRes (void)
-{
-	return CommData.AlienSongRes;
-}
-
-const char *
-c_GetCommDataAlienAltSongRes (void)
-{
-	return CommData.AlienAltSongRes;
-}
-
-unsigned int
-c_GetCommDataAlienSongFlags (void)
-{
-	return (unsigned int)CommData.AlienSongFlags;
-}
-
-const char *
-c_GetCommDataConversationPhrasesRes (void)
-{
-	return CommData.ConversationPhrasesRes;
-}
-
-void
-c_SetCommDataAlienFrame (uintptr_t frame)
-{
-	CommData.AlienFrame = (FRAME)frame;
-}
-
-void
-c_SetCommDataAlienFont (uintptr_t font)
-{
-	CommData.AlienFont = (FONT)font;
-}
-
-void
-c_SetCommDataAlienColorMap (uintptr_t cmap)
-{
-	CommData.AlienColorMap = (COLORMAP)cmap;
-}
-
-void
-c_SetCommDataAlienSong (uintptr_t song)
-{
-	CommData.AlienSong = (MUSIC_REF)song;
-}
-
-void
-c_SetCommDataConversationPhrases (uintptr_t phrases)
-{
-	CommData.ConversationPhrases = (STRING)phrases;
-}
-
-void
-c_ClearCommDataConversationPhrasesRes (void)
-{
-	CommData.ConversationPhrasesRes = 0;
-}
-
-void
-c_ClearCommDataConversationPhrases (void)
-{
-	CommData.ConversationPhrases = 0;
-}
-
-const void *
-c_GetCommConversationPhrases (void)
-{
-	return (const void *)CommData.ConversationPhrases;
-}
-
+/* ---- Resource load bridges, graphics forwarders, CommData accessor bridges ---
+ * All DEAD CODE (never called from Rust). Removed:
+ * c_LoadGraphic, c_LoadFont, c_LoadColorMap, c_LoadMusic, c_LoadStringTable,
+ * c_CaptureDrawable, c_CaptureColorMap, c_CaptureStringTable,
+ * c_ReleaseDrawable, c_ReleaseColorMap, c_ReleaseStringTable,
+ * c_CreateContext, c_SetContext, c_SetContextClipRect, c_ClearContextClipRect,
+ * c_SetContextBackGroundColor, c_SetContextFont, c_CreateDrawable,
+ * c_SetFrameTransparentColor, c_GetFrameRect, c_SetTransitionSource,
+ * c_GetScreen, c_GetSpaceContext,
+ * c_GetCommDataAlienFrameRes, c_GetCommDataAlienFontRes, c_GetCommDataAlienColorMapRes,
+ * c_GetCommDataAlienSongRes, c_GetCommDataAlienAltSongRes, c_GetCommDataAlienSongFlags,
+ * c_GetCommDataConversationPhrasesRes, c_SetCommDataAlienFrame, c_SetCommDataAlienFont,
+ * c_SetCommDataAlienColorMap, c_SetCommDataAlienSong, c_SetCommDataConversationPhrases,
+ * c_ClearCommDataConversationPhrasesRes, c_ClearCommDataConversationPhrases,
+ * c_GetCommConversationPhrases */
 /* ---- Encounter function call bridges ------------------------------------- */
 /* c_CallInitEncounterFunc, c_CallPostEncounterFunc, c_CallUninitEncounterFunc — PORTED to Rust */
 
@@ -1396,16 +1117,5 @@ c_RunEncounterDoInput (void)
 	DoInput (&ES, FALSE);
 	c_SetCurInputState (NULL);
 }
-
-/* ---- Audio teardown bridges ---------------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P07 @requirement REQ-HL-005 */
-
-
-unsigned int
-c_GetTimeCounter (void)
-{
-	return (unsigned int)GetTimeCounter ();
-}
-
 
 #endif /* USE_RUST_COMM */
