@@ -530,7 +530,7 @@ pub unsafe extern "C" fn rust_race_communication() {
 
         let activity = c_extern::get_current_activity();
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-            let crew = c_extern::uqm_get_crew_enlisted();
+            let crew = crate::mainloop::ffi::get_crew_enlisted();
             if crew != 0xFFFF {
                 c_extern::set_current_activity(WON_LAST_BATTLE);
             }
@@ -552,7 +552,7 @@ pub unsafe extern "C" fn rust_race_communication() {
             init_communication(conv::CHMMR);
         }
 
-        let crew = c_extern::uqm_get_crew_enlisted();
+        let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew != 0xFFFF {
             let activity = c_extern::get_current_activity();
             let mut na = activity & !START_ENCOUNTER;
@@ -790,7 +790,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
 
     let activity = c_extern::get_current_activity();
     if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-        let glob_flags = c_extern::uqm_get_global_flags_and_data();
+        let glob_flags = crate::mainloop::ffi::get_global_flags_and_data();
         if lobyte(activity) == IN_LAST_BATTLE && (glob_flags & CYBORG_ENABLED) != 0 {
             let npc_q = ffi::rust_get_npc_built_ship_queue();
             ReinitQueue(npc_q);
@@ -1100,7 +1100,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
         init_communication(conv::ILWRATH);
 
-        let crew = c_extern::uqm_get_crew_enlisted();
+        let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew == 0xFFFF || (c_extern::get_current_activity() & CHECK_ABORT) != 0 {
             return;
         }
@@ -1123,7 +1123,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         // For now, skip time passage (the C archive handles this when
         // starbase is entered via the C path).
 
-        let crew = c_extern::uqm_get_crew_enlisted();
+        let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew == 0xFFFF {
             return; // You are now dead!
         }

@@ -314,14 +314,12 @@ mod cffi {
         }
 
         fn get_game_state(&self) -> GameStateInfo {
-            unsafe {
-                GameStateInfo {
-                    chmmr_bomb_state: c_extern::uqm_get_chmmr_bomb_state(),
-                    starbase_available: c_extern::uqm_get_starbase_available(),
-                    global_flags_and_data: c_extern::uqm_get_global_flags_and_data(),
-                    kohr_ah_killed_all: c_extern::uqm_get_kohr_ah_killed_all(),
-                    crew_enlisted: c_extern::uqm_get_crew_enlisted(),
-                }
+            GameStateInfo {
+                chmmr_bomb_state: crate::mainloop::ffi::get_chmmr_bomb_state(),
+                starbase_available: crate::mainloop::ffi::get_starbase_available(),
+                global_flags_and_data: crate::mainloop::ffi::get_global_flags_and_data(),
+                kohr_ah_killed_all: crate::mainloop::ffi::get_kohr_ah_killed_all(),
+                crew_enlisted: crate::mainloop::ffi::get_crew_enlisted(),
             }
         }
 

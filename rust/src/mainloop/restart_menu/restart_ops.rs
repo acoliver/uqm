@@ -311,7 +311,7 @@ impl RestartMenuOps for CffiOps {
     }
     fn get_crew_enlisted(&self) -> u16 {
         // SAFETY: Reads a global game-state counter.
-        unsafe { c_extern::uqm_get_crew_enlisted() }
+        crate::mainloop::ffi::get_crew_enlisted()
     }
 
     fn set_game_paused(&self, val: bool) {

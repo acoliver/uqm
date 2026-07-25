@@ -157,53 +157,46 @@ pub fn set_last_activity(val: ActivityValue) {
 #[inline]
 #[must_use]
 pub fn get_chmmr_bomb_state() -> u8 {
-    // SAFETY: reads a bit-packed game-state field via a named C wrapper.
-    unsafe { prod::uqm_get_chmmr_bomb_state() }
+    crate::state::game_state_keys::get_game_state("CHMMR_BOMB_STATE") as u8
 }
 
-/// Write `CHMMR_BOMB_STATE` via the named C accessor.
-///
-/// This calls `SET_GAME_STATE(CHMMR_BOMB_STATE, v)` internally in C.
+/// Write `CHMMR_BOMB_STATE` via direct Rust game-state access.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 /// @requirement REQ-ML-010
 #[inline]
 pub fn set_chmmr_bomb_state(val: u8) {
-    // SAFETY: writes a bit-packed game-state field via a named C wrapper.
-    unsafe { prod::uqm_set_chmmr_bomb_state(val) };
+    crate::state::game_state_keys::set_game_state("CHMMR_BOMB_STATE", val as u32);
 }
 
-/// Read `STARBASE_AVAILABLE` via the named C accessor.
+/// Read `STARBASE_AVAILABLE` via direct Rust game-state access.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 /// @requirement REQ-ML-010
 #[inline]
 #[must_use]
 pub fn get_starbase_available() -> u8 {
-    // SAFETY: reads a bit-packed game-state field via a named C wrapper.
-    unsafe { prod::uqm_get_starbase_available() }
+    crate::state::game_state_keys::get_game_state("STARBASE_AVAILABLE") as u8
 }
 
-/// Read `GLOBAL_FLAGS_AND_DATA` via the named C accessor.
+/// Read `GLOBAL_FLAGS_AND_DATA` via direct Rust game-state access.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 /// @requirement REQ-ML-010
 #[inline]
 #[must_use]
 pub fn get_global_flags_and_data() -> u8 {
-    // SAFETY: reads a bit-packed game-state field via a named C wrapper.
-    unsafe { prod::uqm_get_global_flags_and_data() }
+    crate::state::game_state_keys::get_game_state("GLOBAL_FLAGS_AND_DATA") as u8
 }
 
-/// Read `KOHR_AH_KILLED_ALL` via the named C accessor.
+/// Read `KOHR_AH_KILLED_ALL` via direct Rust game-state access.
 ///
 /// @plan PLAN-20260707-MAINLOOP.P03
 /// @requirement REQ-ML-010
 #[inline]
 #[must_use]
 pub fn get_kohr_ah_killed_all() -> u8 {
-    // SAFETY: reads a bit-packed game-state field via a named C wrapper.
-    unsafe { prod::uqm_get_kohr_ah_killed_all() }
+    crate::state::game_state_keys::get_game_state("KOHR_AH_KILLED_ALL") as u8
 }
 
 // ---------------------------------------------------------------------------
