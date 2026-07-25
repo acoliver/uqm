@@ -70,13 +70,31 @@ pub(super) mod c_bridge {
         pub fn FastReverse_Smooth();
         pub fn comm_CheckSubtitles();
         pub fn comm_ClearSubtitles();
-        pub fn c_UpdateSpeechGraphics();
-        pub fn c_InitSpeechGraphics();
         pub fn c_FeedbackPlayerPhrase(text: *const c_char);
         pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
         pub fn SetSliderImage(frame_index: c_uint);
         pub fn c_UpdateAnimations(seeking: c_int);
         pub fn get_current_activity() -> u16;
+
+        // Graphics functions for init_speech_graphics (replacing c_InitSpeechGraphics)
+        pub fn InitOscilloscope(scope_bg: *mut c_void);
+        pub fn InitSlider(
+            x: c_int,
+            y: c_int,
+            width: c_int,
+            slider_frame: *mut c_void,
+            knob_frame: *mut c_void,
+        );
+        pub fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
+        pub static mut ActivityFrame: *mut c_void;
+
+        // Graphics functions for update_speech_graphics (replacing c_UpdateSpeechGraphics)
+        pub fn GetTimeCounter() -> u32;
+        pub fn DrawOscilloscope();
+        pub fn DrawSlider();
+        pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
+        pub static mut RadarContext: *mut c_void;
+        pub static mut SpaceContext: *mut c_void;
 
         // Direct C functions for colormap/music (replacing c_ forwarders)
         pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
@@ -584,7 +602,7 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
 pub unsafe fn alien_talk_first_call_init() {
     #[cfg(not(test))]
     {
-        c_bridge::c_InitSpeechGraphics();
+        init_speech_graphics(&mut CommState::default());
         c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame();
         rust_UpdateSpeechGraphics();
@@ -1035,27 +1053,40 @@ fn clear_subtitles(state: &mut CommState) {
 }
 
 fn update_speech_graphics(state: &mut CommState) {
+    let _ = state;
     #[cfg(not(test))]
     unsafe {
-        let _ = state;
-        c_bridge::c_UpdateSpeechGraphics();
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-        // no-op in tests
+        // Ported from c_UpdateSpeechGraphics in rust_comm.c
+        // Rate-limited to ONE_SECOND/32 ticks
+        static mut NEXT_TIME: u32 = 0;
+        let now = c_bridge::GetTimeCounter();
+        if now < NEXT_TIME {
+            return;
+        }
+        NEXT_TIME = now + (840 / 32); // ONE_SECOND = 840
+
+        let old_ctx = c_bridge::SetContext(c_bridge::RadarContext);
+        c_bridge::DrawOscilloscope();
+        c_bridge::SetContext(c_bridge::SpaceContext);
+        c_bridge::DrawSlider();
+        c_bridge::SetContext(old_ctx);
     }
 }
 
 fn init_speech_graphics(state: &mut CommState) {
+    let _ = state;
     #[cfg(not(test))]
     unsafe {
-        let _ = state;
-        c_bridge::c_InitSpeechGraphics();
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
+        // Ported from c_InitSpeechGraphics in rust_comm.c
+        // SLIDER_Y = 107 (comm.h), SIS_SCREEN_WIDTH = SPACE_WIDTH - 14
+        let slider_y: std::ffi::c_int = 107;
+        let sis_w: std::ffi::c_int = 320 - 14;
+        let af = std::ptr::addr_of_mut!(c_bridge::ActivityFrame);
+        let frame5 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 5);
+        let frame2 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 2);
+        let frame9 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 9);
+        c_bridge::InitOscilloscope(frame9);
+        c_bridge::InitSlider(0, slider_y, sis_w, frame5, frame2);
     }
 }
 
