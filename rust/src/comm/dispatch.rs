@@ -356,20 +356,15 @@ mod ffi {
         // TFB_Random for PickCaptainName (libs/misc.h)
         pub fn TFB_Random() -> u32;
 
-        // Starbase dispatch bridges (rust_bridge_mainloop.c)
-        // Note: cleanup_after_starbase, do_time_passage, and do_starbase_menu_input
-        // were removed — they referenced static C functions. The starbase path
-        // needs these ported or made non-static.
-        pub fn rust_set_cur_star_desc_ptr_null();
-
         // CommIntroMode (comm.c) — C: SetCommIntroMode(mode, howLong)
         pub fn SetCommIntroMode(mode: u32, how_long: u32);
 
-        // CommData copy — copies LOCDATA to C's global CommData
-        pub fn rust_copy_locdata_to_comm_data(locdata_ptr: *const c_void);
-
         // CommData global for direct encounter function pointer calls
         pub static mut CommData: crate::comm::locdata::CLocData;
+
+        // CurStarDescPtr global (starmap.h: extern STAR_DESC *CurStarDescPtr)
+        #[link_name = "CurStarDescPtr"]
+        pub static mut CurStarDescPtr: *mut std::ffi::c_void;
 
         // GlobData global for direct queue/activity access
         #[link_name = "GlobData"]
@@ -811,7 +806,13 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     let loc_data_ptr = rust_init_race_dispatch(comm_id);
     if !loc_data_ptr.is_null() {
         // Copy LOCDATA to C's global CommData (C code reads from CommData)
-        ffi::rust_copy_locdata_to_comm_data(loc_data_ptr);
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                loc_data_ptr as *const u8,
+                std::ptr::addr_of_mut!(ffi::CommData) as *mut u8,
+                std::mem::size_of::<crate::comm::locdata::CLocData>(),
+            );
+        }
         // Sync to Rust's CommData singleton
         rust_sync_comm_data(loc_data_ptr);
     }
@@ -1123,7 +1124,7 @@ pub const ONE_SECOND: u32 = 840;
 pub unsafe extern "C" fn rust_visit_starbase() {
     // CHMMR_BOMB_STATE == 2: transported by Chmmr to Starbase
     if get_game_state("CHMMR_BOMB_STATE") == 2 {
-        ffi::rust_set_cur_star_desc_ptr_null();
+        ffi::CurStarDescPtr = std::ptr::null_mut();
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
     }
 
