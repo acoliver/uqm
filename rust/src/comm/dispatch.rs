@@ -538,7 +538,7 @@ pub unsafe extern "C" fn rust_race_communication() {
         return;
     }
 
-    let next_activity = c_extern::get_next_activity();
+    let next_activity = crate::mainloop::ffi::get_next_activity().0;
     if (next_activity & CHECK_LOAD) != 0 {
         let ec = get_game_state("ESCAPE_COUNTER") as u8;
 
@@ -559,7 +559,7 @@ pub unsafe extern "C" fn rust_race_communication() {
             if lobyte(na) == IN_INTERPLANETARY {
                 na |= START_INTERPLANETARY;
             }
-            c_extern::set_next_activity(na);
+            crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(na));
             c_extern::set_current_activity(activity | CHECK_LOAD);
         }
 
@@ -666,10 +666,12 @@ pub unsafe extern "C" fn rust_race_communication() {
 /// Calls C FFI functions that access global state.
 pub unsafe fn init_communication(which_comm: u32) -> u16 {
     let mut status: u16;
-    let last_activity = c_extern::get_last_activity();
+    let last_activity = crate::mainloop::ffi::get_last_activity().0;
 
     if (last_activity & CHECK_LOAD) != 0 {
-        c_extern::set_last_activity(last_activity & !CHECK_LOAD);
+        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
+            last_activity & !CHECK_LOAD,
+        ));
 
         if which_comm != conv::COMMANDER {
             if lobyte(last_activity) == 0 {

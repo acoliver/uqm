@@ -723,7 +723,7 @@ impl Coordinator {
             crate::mainloop::c_extern::set_current_activity(
                 crate::mainloop::c_extern::get_current_activity() | 0x4000,
             );
-            crate::mainloop::c_extern::set_main_exited(1);
+            crate::mainloop::ffi::set_main_exited(true);
         }
     }
 

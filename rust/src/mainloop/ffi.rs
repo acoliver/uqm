@@ -24,6 +24,34 @@ use super::c_extern as prod;
 use super::types::{ActivityValue, CBoolean};
 
 // ---------------------------------------------------------------------------
+// Direct C global access for standalone activity globals
+// ---------------------------------------------------------------------------
+
+#[cfg(not(test))]
+mod c_globals {
+    use super::CBoolean;
+    extern "C" {
+        #[link_name = "NextActivity"]
+        pub static mut NEXT_ACTIVITY: u16;
+        #[link_name = "LastActivity"]
+        pub static mut LAST_ACTIVITY: u16;
+        #[link_name = "MainExited"]
+        pub static mut MAIN_EXITED: CBoolean;
+    }
+}
+
+#[cfg(test)]
+mod c_globals {
+    use super::CBoolean;
+    #[allow(dead_code)]
+    pub static mut NEXT_ACTIVITY: u16 = 0;
+    #[allow(dead_code)]
+    pub static mut LAST_ACTIVITY: u16 = 0;
+    #[allow(dead_code)]
+    pub static mut MAIN_EXITED: CBoolean = 0;
+}
+
+// ---------------------------------------------------------------------------
 // CurrentActivity accessors
 // ---------------------------------------------------------------------------
 
@@ -88,7 +116,7 @@ pub fn get_next_activity() -> ActivityValue {
     #[cfg(not(test))]
     {
         // SAFETY: reads a C global, no preconditions.
-        let raw = unsafe { prod::get_next_activity() };
+        let raw = unsafe { c_globals::NEXT_ACTIVITY };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -108,7 +136,7 @@ pub fn set_next_activity(val: ActivityValue) {
     #[cfg(not(test))]
     {
         // SAFETY: writes a u16 to a C global.
-        unsafe { prod::set_next_activity(val.0) };
+        unsafe { c_globals::NEXT_ACTIVITY = val.0 };
     }
     #[cfg(test)]
     {
@@ -130,7 +158,7 @@ pub fn set_next_activity(val: ActivityValue) {
 #[must_use]
 pub fn get_last_activity() -> ActivityValue {
     // SAFETY: reads a C global, no preconditions.
-    let raw = unsafe { prod::get_last_activity() };
+    let raw = unsafe { c_globals::LAST_ACTIVITY };
     ActivityValue(raw)
 }
 
@@ -140,7 +168,7 @@ pub fn get_last_activity() -> ActivityValue {
 #[inline]
 pub fn set_last_activity(val: ActivityValue) {
     // SAFETY: writes a u16 to a C global.
-    unsafe { prod::set_last_activity(val.0) };
+    unsafe { c_globals::LAST_ACTIVITY = val.0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +288,7 @@ pub fn set_player_input_all_or_explode() {
 pub fn set_main_exited(value: bool) {
     let cval: CBoolean = if value { 1 } else { 0 };
     // SAFETY: writes a BOOLEAN global; cval is 0 or 1 (TRUE/FALSE).
-    unsafe { prod::set_main_exited(cval) };
+    unsafe { c_globals::MAIN_EXITED = cval };
 }
 
 /// Run the splash screen with the background init kernel.

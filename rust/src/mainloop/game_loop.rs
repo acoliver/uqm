@@ -306,11 +306,11 @@ mod cffi {
         }
 
         fn get_next_activity(&self) -> ActivityValue {
-            ActivityValue::new(unsafe { c_extern::get_next_activity() })
+            crate::mainloop::ffi::get_next_activity()
         }
 
         fn set_last_activity(&self, activity: ActivityValue) {
-            unsafe { c_extern::set_last_activity(u16::from(activity)) }
+            crate::mainloop::ffi::set_last_activity(activity)
         }
 
         fn get_game_state(&self) -> GameStateInfo {
@@ -409,7 +409,7 @@ mod cffi {
         }
 
         fn set_main_exited(&self, val: bool) {
-            unsafe { c_extern::set_main_exited(if val { 1 } else { 0 }) }
+            crate::mainloop::ffi::set_main_exited(val)
         }
 
         fn uninit_game_kernel(&self) {

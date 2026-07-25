@@ -279,7 +279,9 @@ pub fn activate(
                 rust_prepare_starbase_commander_scene();
             }
         }
-        crate::mainloop::c_extern::set_last_activity(crate::comm::dispatch::IN_ENCOUNTER);
+        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
+            crate::comm::dispatch::IN_ENCOUNTER,
+        ));
         crate::mainloop::c_extern::set_current_activity(plan.current_activity);
     }
 

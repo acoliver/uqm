@@ -184,16 +184,13 @@ impl RestartMenuOps for CffiOps {
         unsafe { c_extern::set_current_activity(v) }
     }
     fn get_last_activity(&self) -> u16 {
-        // SAFETY: Reads a global activity variable.
-        unsafe { c_extern::get_last_activity() }
+        crate::mainloop::ffi::get_last_activity().0
     }
     fn set_last_activity(&self, v: u16) {
-        // SAFETY: Writes a global activity variable.
-        unsafe { c_extern::set_last_activity(v) }
+        crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(v));
     }
     fn set_next_activity(&self, v: u16) {
-        // SAFETY: Writes a global activity variable.
-        unsafe { c_extern::set_next_activity(v) }
+        crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(v));
     }
 
     fn set_menu_state_ptr(&self, ptr: usize) {
@@ -569,6 +566,6 @@ impl RestartMenuOps for CffiOps {
     }
     fn set_main_exited(&self, val: bool) {
         // SAFETY: Sets the MainExited flag for C main() shutdown.
-        unsafe { c_extern::set_main_exited(if val { 1 } else { 0 }) }
+        crate::mainloop::ffi::set_main_exited(val)
     }
 }
