@@ -25,6 +25,19 @@ use crate::automation::runtime::RuntimeModel;
 //  C global input state — FFI access to ImmediateInputState.menu[]
 // ===========================================================================
 
+/// Snapshot of real interplanetary navigation state.
+#[repr(C)]
+#[derive(Default)]
+pub(crate) struct NavigationSnapshot {
+    pub(crate) active: i32,
+    pub(crate) inner_planet: i32,
+    pub(crate) ship_x: i32,
+    pub(crate) ship_y: i32,
+    pub(crate) ship_facing: i32,
+    pub(crate) target_x: i32,
+    pub(crate) target_y: i32,
+}
+
 /// The C `CONTROLLER_INPUT_STATE` struct, used only when linking against
 /// the real C archive.
 #[cfg(feature = "linked_c_archive")]
@@ -39,6 +52,22 @@ extern "C" {
     static mut ImmediateInputState: ControllerInputState;
     static CurrentInputState: ControllerInputState;
     static PulsedInputState: ControllerInputState;
+    static PlayerControls: [i32; 2];
+    fn rust_get_navigation_snapshot(target_planet: i32, snapshot: *mut NavigationSnapshot);
+}
+
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn navigation_snapshot(target_planet: i32) -> NavigationSnapshot {
+    let mut snapshot = NavigationSnapshot::default();
+    unsafe {
+        rust_get_navigation_snapshot(target_planet, &mut snapshot);
+    }
+    snapshot
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn navigation_snapshot(_target_planet: i32) -> NavigationSnapshot {
+    NavigationSnapshot::default()
 }
 
 /// The global runtime model for automation.
@@ -213,6 +242,33 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 // ===========================================================================
 //  Present hook: called from TFB_SwapBuffers
 // ===========================================================================
+
+/// Set one player-one gameplay control in `ImmediateInputState`.
+#[no_mangle]
+#[cfg(feature = "linked_c_archive")]
+pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, value: i32) -> i32 {
+    if !(0..7).contains(&index) {
+        return -1;
+    }
+    unsafe {
+        let template = PlayerControls[0] as usize;
+        if template >= ImmediateInputState.key.len() {
+            return -1;
+        }
+        ImmediateInputState.key[template][index as usize] = i32::from(value != 0);
+    }
+    0
+}
+
+#[no_mangle]
+#[cfg(not(feature = "linked_c_archive"))]
+pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i32) -> i32 {
+    if (0..7).contains(&index) {
+        0
+    } else {
+        -1
+    }
+}
 
 /// C-callable automation present callback hook.
 ///

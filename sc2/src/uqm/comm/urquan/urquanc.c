@@ -526,6 +526,7 @@ init_urquan_comm (void)
 {
 	LOCDATA *retval;
 
+
 	DWORD GrpOffs;
 
 	urquan_desc.init_encounter_func = Intro;

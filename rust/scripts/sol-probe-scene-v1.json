@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "sol-probe-scene-v1",
+  "start_scene": "sol_probe_encounter",
+  "budgets": {
+    "max_input_ticks": 120,
+    "max_presentations": 120,
+    "max_wallclock_seconds": 30
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "assert_scene", "scene": "sol_probe_encounter"},
+    {"action": "wait_input_ticks", "count": 12},
+    {"action": "capture", "label": "sol-probe-urquan"},
+    {"action": "wait_input_ticks", "count": 12},
+    {"action": "finish"}
+  ]
+}

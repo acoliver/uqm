@@ -29,15 +29,18 @@ pub mod identity;
 pub mod input;
 pub mod input_ffi;
 pub mod lifecycle;
+pub mod navigation;
 pub mod outcome;
 pub mod proof;
 pub mod runtime;
+pub mod scenario;
 pub mod scheduler;
 pub mod script;
 pub mod setup;
 pub mod sync_model;
 pub mod trace;
 pub mod transport;
+pub mod ui_observation;
 pub mod watchdog;
 
 pub use capture::{
@@ -65,10 +68,13 @@ pub use proof::{
     validate_proof_run, ArchRequirementStatus, ArchitectureReview, PreflightCheck, ProofIdentity,
     ProofReceipt, ProofValidationError,
 };
+pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePlan};
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
-    MainMenuTransition, MenuKey, RootDocument, ScriptStep, SetMenuKeyStep, TapMenuKeyStep,
-    ValidatedScript, WaitInputTicksStep, CAPABILITY_REQUIRED_FLAGS,
+    CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion, MainMenuTransition,
+    MenuKey, NavigateToPlanetStep, PlayerKey, RootDocument, SceneAssertion, ScriptStep,
+    SetMenuKeyStep, SetPlayerKeyStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
+    WaitInputTicksStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use transport::{

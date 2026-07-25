@@ -84,12 +84,6 @@ extern "C" {
 
     /// Time system uninit.
     pub fn UnInitTimeSystem();
-
-    /// Communication init. `comm.c` (Rust-backed under USE_RUST_COMM)
-    pub fn init_communication();
-
-    /// Communication uninit.
-    pub fn uninit_communication();
 }
 
 // ===========================================================================

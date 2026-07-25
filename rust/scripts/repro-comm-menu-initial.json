@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "name": "repro-comm-menu-initial",
+  "start_scene": "starbase_commander",
+  "budgets": {
+    "max_input_ticks": 500,
+    "max_presentations": 700,
+    "max_wallclock_seconds": 60
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 60},
+    {"action": "assert_communication_responses", "minimum": 1},
+    {"action": "capture", "label": "responses-before-input"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "capture", "label": "responses-after-down"},
+    {"action": "finish"}
+  ]
+}

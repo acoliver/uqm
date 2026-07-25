@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "repro-game-menu-initial",
+  "budgets": {
+    "max_input_ticks": 400,
+    "max_presentations": 400,
+    "max_wallclock_seconds": 60
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 1},
+    {"action": "assert_game_options"},
+    {"action": "capture", "label": "game-submenu-before-input"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "capture", "label": "game-submenu-after-down"},
+    {"action": "finish"}
+  ]
+}

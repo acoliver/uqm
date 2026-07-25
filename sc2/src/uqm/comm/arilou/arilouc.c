@@ -831,6 +831,7 @@ init_arilou_comm (void)
 {
 	LOCDATA *retval;
 
+
 	arilou_desc.init_encounter_func = Intro;
 	arilou_desc.post_encounter_func = post_arilou_enc;
 	arilou_desc.uninit_encounter_func = uninit_arilou;

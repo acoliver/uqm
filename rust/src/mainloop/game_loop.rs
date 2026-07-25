@@ -56,6 +56,8 @@ pub trait GameLoopOps {
     fn init_game_structures(&self);
     fn init_game_clock(&self);
     fn add_initial_game_events(&self);
+    /// Safe lifecycle boundary for one-shot deterministic automation scenes.
+    fn activate_automation_start_scene(&self) {}
 
     // --- Per-frame preamble ---
     fn set_status_message_mode_default(&self);
@@ -164,6 +166,7 @@ pub fn run_game_lifecycle_impl<O: GameLoopOps + ?Sized>(ops: &O) -> Result<(), M
         ops.init_game_structures();
         ops.init_game_clock();
         ops.add_initial_game_events();
+        ops.activate_automation_start_scene();
 
         // --- Inner loop: activity state machine ---
         loop {
@@ -336,6 +339,10 @@ mod cffi {
 
         fn add_initial_game_events(&self) {
             unsafe { c_extern::AddInitialGameEvents() }
+        }
+
+        fn activate_automation_start_scene(&self) {
+            crate::automation::coordinator::Coordinator::activate_start_scene();
         }
 
         fn set_status_message_mode_default(&self) {
@@ -555,6 +562,12 @@ mod tests {
                 s.current_activity = a;
             }
         }
+        fn activate_automation_start_scene(&self) {
+            self.inner
+                .borrow_mut()
+                .calls
+                .push("activate_automation_start_scene");
+        }
         fn set_status_message_mode_default(&self) {
             self.inner
                 .borrow_mut()
@@ -739,6 +752,8 @@ mod tests {
         assert_eq!(calls[init_idx + 1], "init_game_structures");
         assert_eq!(calls[init_idx + 2], "init_game_clock");
         assert_eq!(calls[init_idx + 3], "add_initial_game_events");
+        assert_eq!(calls[init_idx + 4], "activate_automation_start_scene");
+        assert_eq!(calls[init_idx + 5], "set_status_message_mode");
     }
 
     /// @plan PLAN-20260707-MAINLOOP.P06

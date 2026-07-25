@@ -374,8 +374,21 @@ MenuKeysToSoundFlags (const CONTROLLER_INPUT_STATE *state)
 void
 DoInput (void *pInputState, BOOLEAN resetInput)
 {
+#ifdef RUST_OWNS_MAIN
+	extern void rust_begin_input_loop (void);
+	extern int rust_complete_input_frame (int keep_running);
+#endif
+	BOOLEAN keep_running;
+
 	if (resetInput)
 		FlushInput ();
+
+#ifdef RUST_OWNS_MAIN
+	/* Owners commonly draw an input loop's initial state immediately before
+	 * entering DoInput. Present that complete transaction before the nested
+	 * synchronous loop can block its caller. */
+	rust_begin_input_loop ();
+#endif
 
 	do
 	{
@@ -461,7 +474,14 @@ DoInput (void *pInputState, BOOLEAN resetInput)
 		if (inputCallback)
 			inputCallback ();
 
-	} while (((INPUT_STATE_DESC*)pInputState)->InputFunc (pInputState));
+		keep_running = ((INPUT_STATE_DESC*)pInputState)->InputFunc (pInputState);
+#ifdef RUST_OWNS_MAIN
+		/* The callback's complete erase/redraw transaction is the frame
+		 * boundary. Rust presents it synchronously because there is no render
+		 * thread to drain committed commands between input iterations. */
+		keep_running = rust_complete_input_frame (keep_running);
+#endif
+	} while (keep_running);
 
 	if (resetInput)
 		FlushInput ();

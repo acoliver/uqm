@@ -6,7 +6,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P02
 //! @requirement REQ-SCHED-001..003, REQ-DET-001
 
-use crate::automation::script::{Action, MainMenuTransition, MenuKey};
+use crate::automation::script::{Action, MainMenuTransition, MenuKey, PlayerKey};
 
 // ===========================================================================
 //  Capture generation model (execution-contract §2.4)
@@ -101,6 +101,8 @@ pub enum ActionPhase {
     TapReleasePending,
     /// Tap is settling: consuming admitted input callbacks.
     TapSettling { remaining: u64 },
+    /// Driving the real flagship toward a planet with a bounded callback budget.
+    Navigating { remaining: u64 },
     /// Waiting for a committed present with a matching capture generation.
     WaitingCapture { generation: CaptureGeneration },
     /// Waiting for a typed main-menu transition event.
@@ -173,6 +175,8 @@ pub enum SchedulerEvent {
     AdmittedInput,
     /// A committed present carrying a capture generation (0 = no capture).
     CommittedPresent { generation: CaptureGeneration },
+    /// Real navigation entered the requested planet's inner system.
+    NavigationReached,
     /// An observed typed main-menu transition to `item`.
     MenuTransition { to: u8 },
 }
@@ -190,6 +194,10 @@ pub struct EffectPlan {
     pub write_key: Option<(MenuKey, u8)>,
     /// Release an owned menu key (write 0).
     pub release_key: Option<MenuKey>,
+    /// Write an owned player-one gameplay key to `value`.
+    pub write_player_key: Option<(PlayerKey, u8)>,
+    /// Release an owned player-one gameplay key.
+    pub release_player_key: Option<PlayerKey>,
     /// Arm capture with this generation.
     pub arm_capture: Option<CaptureGeneration>,
     /// Complete a capture with this generation.
@@ -203,6 +211,8 @@ impl EffectPlan {
         Self {
             write_key: None,
             release_key: None,
+            write_player_key: None,
+            release_player_key: None,
             arm_capture: None,
             complete_capture: None,
         }
@@ -213,6 +223,8 @@ impl EffectPlan {
     pub const fn is_empty(self) -> bool {
         self.write_key.is_none()
             && self.release_key.is_none()
+            && self.write_player_key.is_none()
+            && self.release_player_key.is_none()
             && self.arm_capture.is_none()
             && self.complete_capture.is_none()
     }
@@ -299,6 +311,16 @@ pub fn scheduler_reduce(
         SchedulerEvent::AdmittedInput => reduce_admitted_input(state, config, current_action, sv),
         SchedulerEvent::CommittedPresent { generation } => {
             reduce_committed_present(state, config, generation, current_action, sv)
+        }
+        SchedulerEvent::NavigationReached => {
+            if matches!(current_action, Action::NavigateToPlanet(_)) {
+                advance_to_next(state, config, sv, EffectPlan::none())
+            } else {
+                SchedulerTransition {
+                    new_state: *state,
+                    effects: EffectPlan::none(),
+                }
+            }
         }
         SchedulerEvent::MenuTransition { to } => reduce_menu_transition(state, config, to, sv),
     }
@@ -468,6 +490,106 @@ fn reduce_admitted_input(
             effects: EffectPlan::none(),
         },
 
+        (Action::SetPlayerKey(s), ActionPhase::WaitingForInput) => {
+            let effects = EffectPlan {
+                write_player_key: Some((s.key, u8::from(s.value != 0))),
+                ..EffectPlan::none()
+            };
+            advance_to_next(state, config, sv, effects)
+        }
+
+        (Action::TapPlayerKey(t), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: if t.hold == 1 {
+                    ActionPhase::TapReleasePending
+                } else {
+                    ActionPhase::TapHolding {
+                        remaining: t.hold.saturating_sub(1),
+                    }
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan {
+                write_player_key: Some((t.key, u8::from(t.value != 0))),
+                ..EffectPlan::none()
+            },
+        },
+        (Action::TapPlayerKey(t), ActionPhase::TapHolding { remaining }) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: if remaining == 1 {
+                    ActionPhase::TapReleasePending
+                } else {
+                    ActionPhase::TapHolding {
+                        remaining: remaining.saturating_sub(1),
+                    }
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan {
+                write_player_key: Some((t.key, u8::from(t.value != 0))),
+                ..EffectPlan::none()
+            },
+        },
+        (Action::TapPlayerKey(t), ActionPhase::TapReleasePending) => {
+            let effects = EffectPlan {
+                release_player_key: Some(t.key),
+                ..EffectPlan::none()
+            };
+            if t.settle == 0 {
+                advance_to_next(state, config, sv, effects)
+            } else {
+                SchedulerTransition {
+                    new_state: SchedulerState {
+                        phase: ActionPhase::TapSettling {
+                            remaining: t.settle,
+                        },
+                        state_version: sv,
+                        ..*state
+                    },
+                    effects,
+                }
+            }
+        }
+        (Action::TapPlayerKey(_), ActionPhase::TapSettling { remaining: 1 }) => {
+            advance_to_next(state, config, sv, EffectPlan::none())
+        }
+        (Action::TapPlayerKey(_), ActionPhase::TapSettling { remaining }) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::TapSettling {
+                    remaining: remaining.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+
+        (Action::NavigateToPlanet(navigation), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: navigation.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         // capture: arm once, commit to WaitingCapture.
         (Action::Capture(_), ActionPhase::WaitingForInput) => {
             let new_gen = match state.capture_generation.next() {
@@ -535,6 +657,16 @@ fn reduce_admitted_input(
 
         // AssertActivity: immediate advance (no callback needed).
         (Action::AssertActivity(_), ActionPhase::WaitingForInput) => {
+            advance_to_next(state, config, sv, EffectPlan::none())
+        }
+
+        // AssertScene is validated by the runtime coordinator before the
+        // reducer advances it. Keeping it callback-bound prevents an earlier
+        // action from chaining past the semantic check.
+        (Action::AssertScene(_), ActionPhase::WaitingForInput)
+        | (Action::AssertDispatch(_), ActionPhase::WaitingForInput)
+        | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
+        | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
 
@@ -745,7 +877,7 @@ mod tests {
     use super::*;
     use crate::automation::script::{
         ActivityAssertion, CaptureStep, MainMenuTransitionDto, SetMenuKeyStep, TapMenuKeyStep,
-        WaitInputTicksStep,
+        TapPlayerKeyStep, WaitInputTicksStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
@@ -844,6 +976,7 @@ mod tests {
                 key: MenuKey::Down,
                 value: 1,
                 hold: 1,
+
                 settle: 0,
             }),
             Action::Finish,
@@ -863,6 +996,40 @@ mod tests {
         assert_eq!(t.new_state.step_index, 1);
     }
 
+    #[test]
+    fn tap_player_key_holds_and_releases_gameplay_control() {
+        let actions = [
+            Action::TapPlayerKey(TapPlayerKeyStep {
+                key: PlayerKey::Thrust,
+                value: 1,
+                hold: 2,
+                settle: 0,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+
+        let first = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(first.effects.write_player_key, Some((PlayerKey::Thrust, 1)));
+        assert_eq!(
+            first.new_state.phase,
+            ActionPhase::TapHolding { remaining: 1 }
+        );
+        state = first.new_state;
+
+        let second = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            second.effects.write_player_key,
+            Some((PlayerKey::Thrust, 1))
+        );
+        assert_eq!(second.new_state.phase, ActionPhase::TapReleasePending);
+        state = second.new_state;
+
+        let release = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(release.effects.release_player_key, Some(PlayerKey::Thrust));
+        assert_eq!(release.new_state.step_index, 1);
+    }
     // --- Tap edge: hold=1, settle=1 (no infinite loop) ---
 
     #[test]

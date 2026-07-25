@@ -28,6 +28,10 @@
 #include <assert.h>
 #include "libs/log.h"
 
+/* Rust FFI: dispatches to correct init_*_comm + sets up Rust dialogue */
+extern void *rust_init_race_dispatch (unsigned int comm_id);
+extern int rust_init_race_dialogue (int comm_id);
+
 static int NPCNumberPhrase (int number, const char *fmt, UNICODE **ptrack);
 
 /* Under USE_RUST_COMM these functions are provided by the Rust implementation
@@ -367,17 +371,13 @@ LOCDATA*
 init_race (CONVERSATION comm_id)
 {
 #ifdef USE_RUST_COMM
-	/* P12: Check if this race has a Rust dialogue implementation */
-	if (rust_init_race_dialogue ((int)comm_id))
-	{
-		/* Rust dialogue initialized successfully.
-		 * Return the C LOCDATA which was synced to Rust CommData
-		 * by InitCommunication. The C LOCDATA is still needed for
-		 * animation/resource loading until those are fully ported. */
-	}
-	else
-	{
-		/* Fall through to C implementation */
+	/* When Rust dialogue is available, use rust_init_race_dispatch which
+	 * calls the correct C init_*_comm() and sets up Rust dialogue state.
+	 * This avoids the broken fall-through to init_arilou_comm() below. */
+	LOCDATA *retval = rust_init_race_dispatch ((unsigned int)comm_id);
+	if (retval != NULL)
+		return retval;
+	/* If Rust dispatch returned NULL (unknown race), fall through to C */
 #endif
 	switch (comm_id)
 	{
@@ -440,15 +440,4 @@ init_race (CONVERSATION comm_id)
 		default:
 			return init_chmmr_comm ();
 	}
-#ifdef USE_RUST_COMM
-	}
-#endif
-	/* If Rust dialogue init succeeded, still fall through to C init
-	 * for LOCDATA (resource keys, animation descriptors). The C
-	 * LOCDATA is needed for animation loading. The Rust dialogue
-	 * functions (intro, callbacks) are used instead of C ones. */
-	/* This point is only reached if rust_init_race_dialogue returned 1
-	 * and we fell through. In that case, we still need a LOCDATA,
-	 * so use the C switch above. */
-	return init_arilou_comm (); /* fallback for Arilou */
 }

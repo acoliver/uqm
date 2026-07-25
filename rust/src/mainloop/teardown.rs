@@ -34,8 +34,8 @@ pub fn teardown_subsystems() {
         // 2. Audio
         c_main_extern::unInitAudio();
 
-        // 3. Communication
-        c_main_extern::uninit_communication();
+        // 3. Communication — direct Rust call (no C bridge needed)
+        crate::comm::state::uninit_communication();
 
         // 4. Graphics: purge dangling resources, then tear down
         c_main_extern::TFB_PurgeDanglingGraphics();

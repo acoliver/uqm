@@ -31,6 +31,7 @@
 #define UQM_RUST_BRIDGE_MAINLOOP_H_
 
 #include "libs/compiler.h"
+#include "displist.h"    // QUEUE type definition
 
 #if defined(__cplusplus)
 extern "C" {

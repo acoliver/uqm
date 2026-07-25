@@ -1316,6 +1316,9 @@ BOOLEAN
 GameOptions (void)
 {
 	MENU_STATE MenuState;
+#ifdef RUST_OWNS_MAIN
+	extern void rust_automation_observe_game_options (int active);
+#endif
 
 	memset (&MenuState, 0, sizeof MenuState);
 
@@ -1339,7 +1342,13 @@ GameOptions (void)
 
 	SetMenuSounds (MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
 	MenuState.InputFunc = DoGameOptions;
+#ifdef RUST_OWNS_MAIN
+	rust_automation_observe_game_options (1);
+#endif
 	DoInput (&MenuState, TRUE);
+#ifdef RUST_OWNS_MAIN
+	rust_automation_observe_game_options (0);
+#endif
 
 	SetFlashRect (NULL);
 

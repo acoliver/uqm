@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "name": "load-save-v1",
+  "budgets": {
+    "max_input_ticks": 3000,
+    "max_presentations": 3000,
+    "max_wallclock_seconds": 120
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 5},
+    {"action": "capture", "label": "menu-load-game"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "capture", "label": "save-slot-list"},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 3, "settle": 5},
+    {"action": "capture", "label": "save-slot-0"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 30},
+    {"action": "capture", "label": "after-load"},
+    {"action": "wait_input_ticks", "count": 50},
+    {"action": "capture", "label": "loaded-game-state"},
+    {"action": "assert_activity", "mask": 255, "equals": 3},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 200, "settle": 5},
+    {"action": "capture", "label": "fly-up-1"},
+    {"action": "tap_menu_key", "key": "right", "value": 1, "hold": 200, "settle": 5},
+    {"action": "capture", "label": "fly-right-1"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 200, "settle": 5},
+    {"action": "capture", "label": "fly-down-1"},
+    {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 200, "settle": 5},
+    {"action": "capture", "label": "fly-left-1"},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 200, "settle": 5},
+    {"action": "capture", "label": "fly-up-2"},
+    {"action": "tap_menu_key", "key": "right", "value": 1, "hold": 200, "settle": 5},
+    {"action": "capture", "label": "fly-right-2"},
+    {"action": "wait_input_ticks", "count": 100},
+    {"action": "capture", "label": "final-state"},
+    {"action": "finish"}
+  ]
+}

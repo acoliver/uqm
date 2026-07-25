@@ -48,6 +48,10 @@
 #include "uqm/comm.h"
 #ifdef USE_RUST_BRIDGE
 #include "rust_bridge.h"
+
+/* Direct declarations for comm init/uninit (formerly via rust_comm.h) */
+int rust_InitCommunication(void);
+void rust_UninitCommunication(void);
 #endif
 #ifdef NETPLAY
 	#include "libs/callback.h"
@@ -631,7 +635,7 @@ uqm_c_do_init (int argc, char *argv[])
 		optGamma = 1.0f;
 
 	InitColorMaps ();
-	init_communication ();
+	rust_InitCommunication ();
 
 	assert (sizeof (int [NUM_TEMPLATES * NUM_KEYS]) ==
 			sizeof (int [NUM_TEMPLATES][NUM_KEYS]));
@@ -854,7 +858,7 @@ main (int argc, char *argv[])
 		optGamma = 1.0f; // failed or default
 	
 	InitColorMaps ();
-	init_communication ();
+	rust_InitCommunication ();
 	/* TODO: Once threading is gone, restore initAudio here.
 	   initAudio calls AssignTask, which currently blocks on
 	   ProcessThreadLifecycles... */
@@ -893,7 +897,7 @@ main (int argc, char *argv[])
 	{
 		TFB_UninitInput ();
 		unInitAudio ();
-		uninit_communication ();
+		rust_UninitCommunication ();
 		
 		TFB_PurgeDanglingGraphics ();
 		// Purge above refers to colormaps which have to be still up

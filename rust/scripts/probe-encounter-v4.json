@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "name": "probe-encounter-v4",
+  "budgets": {
+    "max_input_ticks": 15000,
+    "max_presentations": 15000,
+    "max_wallclock_seconds": 600
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 3},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "capture", "label": "new-game-confirmed"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "capture", "label": "hyperspace-start"},
+    {"action": "assert_activity", "mask": 255, "equals": 3},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3000, "settle": 5},
+    {"action": "capture", "label": "fly-down-long"},
+    {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 3000, "settle": 5},
+    {"action": "capture", "label": "fly-left-long"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3000, "settle": 5},
+    {"action": "capture", "label": "fly-down-long-2"},
+    {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 3000, "settle": 5},
+    {"action": "capture", "label": "fly-left-long-2"},
+    {"action": "wait_input_ticks", "count": 200},
+    {"action": "capture", "label": "probe-encounter-final"},
+    {"action": "finish"}
+  ]
+}

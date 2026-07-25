@@ -102,16 +102,10 @@ fn link_c_objects() {
     let gameinp_obj = out_dir.join("gameinp_rust_main.o");
     let bridge_obj = out_dir.join("rust_bridge_mainloop_rust.o");
     let gameopt_obj = out_dir.join("gameopt_rust_main.o");
-    let rust_comm_obj = out_dir.join("rust_comm_rust_main.o");
 
     compile_c_file(&sc2_src.join("uqm.c"), &uqm_obj, &cflags_common);
     compile_c_file(&sc2_src.join("uqm/gameinp.c"), &gameinp_obj, &cflags_common);
     compile_c_file(&sc2_src.join("uqm/gameopt.c"), &gameopt_obj, &cflags_common);
-    compile_c_file(
-        &sc2_src.join("uqm/rust_comm.c"),
-        &rust_comm_obj,
-        &cflags_common,
-    );
     compile_c_file(
         &sc2_src.join("uqm/rust_bridge_mainloop.c"),
         &bridge_obj,
@@ -155,13 +149,7 @@ fn link_c_objects() {
             )
         })
         .collect();
-    archive_inputs.extend([
-        &uqm_obj,
-        &gameinp_obj,
-        &gameopt_obj,
-        &rust_comm_obj,
-        &bridge_obj,
-    ]);
+    archive_inputs.extend([&uqm_obj, &gameinp_obj, &gameopt_obj, &bridge_obj]);
     archive_inputs.sort_by_key(|path| path.display().to_string());
 
     let object_manifest = archive_inputs
@@ -234,7 +222,6 @@ fn link_c_objects() {
     println!("cargo:rerun-if-changed=../sc2/src/uqm.c");
     println!("cargo:rerun-if-changed=../sc2/src/uqm/gameinp.c");
     println!("cargo:rerun-if-changed=../sc2/src/uqm/gameopt.c");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/rust_comm.c");
     println!("cargo:rerun-if-changed=../sc2/src/uqm/rust_bridge_mainloop.c");
 }
 

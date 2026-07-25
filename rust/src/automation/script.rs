@@ -14,6 +14,7 @@
 //! @requirement REQ-SCRIPT-001..006
 
 use crate::automation::error::AutomationError;
+use crate::automation::scenario::AutomationScene;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
 use serde::Deserialize;
 use serde_json::Value;
@@ -149,6 +150,54 @@ impl<'de> Deserialize<'de> for MenuKey {
     }
 }
 
+/// Gameplay controls read from `CurrentInputState.key[PlayerControls[0]]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum PlayerKey {
+    Thrust = 0,
+    Down = 1,
+    Left = 2,
+    Right = 3,
+    Weapon = 4,
+    Special = 5,
+    Escape = 6,
+}
+
+impl PlayerKey {
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "thrust" => Some(Self::Thrust),
+            "down" => Some(Self::Down),
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            "weapon" => Some(Self::Weapon),
+            "special" => Some(Self::Special),
+            "escape" => Some(Self::Escape),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> u8 {
+        self as u8
+    }
+}
+
+impl<'de> Deserialize<'de> for PlayerKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        Self::from_name(&name).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown player key '{name}'; expected one of: thrust, down, left, right, weapon, special, escape"
+            ))
+        })
+    }
+}
+
 // ===========================================================================
 //  Typed main-menu transition (REQ-SCRIPT-006, REQ-SEM-001)
 // ===========================================================================
@@ -266,6 +315,23 @@ pub struct TapMenuKeyStep {
     pub hold: u64,
     pub settle: u64,
 }
+/// A `set_player_key` step writes a gameplay control for player one.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SetPlayerKeyStep {
+    pub key: PlayerKey,
+    pub value: u8,
+}
+
+/// A `tap_player_key` step sustains a gameplay control, releases it, and settles.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct TapPlayerKeyStep {
+    pub key: PlayerKey,
+    pub value: u8,
+    pub hold: u64,
+    pub settle: u64,
+}
 
 /// A `capture` step: capture the logical surface and publish under `label`.
 ///
@@ -293,6 +359,41 @@ pub struct ActivityAssertion {
     pub equals: u16,
 }
 
+/// A `navigate_to_planet` step drives the real flagship via player controls.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NavigateToPlanetStep {
+    pub planet: u8,
+    pub max_ticks: u64,
+}
+
+/// An `assert_scene` step verifies the expected deterministic scene dispatch chain.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SceneAssertion {
+    pub scene: AutomationScene,
+}
+
+/// An `assert_dispatch` step validates observed encounter/dialogue IDs.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct DispatchAssertion {
+    pub encounter: u32,
+    pub dialogue: u32,
+}
+
+/// Assert that the nested production Game Options input loop is active.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GameOptionsAssertion {}
+
+/// Assert that a communication response list has at least `minimum` choices.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CommunicationResponsesAssertion {
+    pub minimum: usize,
+}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -305,8 +406,15 @@ pub enum Action {
     WaitInputTicks(WaitInputTicksStep),
     SetMenuKey(SetMenuKeyStep),
     TapMenuKey(TapMenuKeyStep),
+    SetPlayerKey(SetPlayerKeyStep),
+    TapPlayerKey(TapPlayerKeyStep),
+    NavigateToPlanet(NavigateToPlanetStep),
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
+    AssertScene(SceneAssertion),
+    AssertDispatch(DispatchAssertion),
+    AssertGameOptions(GameOptionsAssertion),
+    AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertMainMenuTransition(MainMenuTransitionDto),
     Finish,
 }
@@ -344,6 +452,8 @@ pub struct ScriptStep {
 pub struct RootDocument {
     pub version: u64,
     pub name: String,
+    #[serde(default)]
+    pub start_scene: Option<AutomationScene>,
     pub budgets: Budgets,
     pub steps: Vec<Action>,
 }
@@ -363,6 +473,7 @@ pub struct RootDocument {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedScript {
     pub(crate) name: String,
+    pub(crate) start_scene: Option<AutomationScene>,
     pub(crate) budgets: Budgets,
     pub(crate) steps: Vec<Action>,
     pub(crate) transitions: Vec<MainMenuTransition>,
@@ -373,6 +484,12 @@ impl ValidatedScript {
     #[must_use]
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// Optional deterministic scene to activate after game initialization.
+    #[must_use]
+    pub const fn start_scene(&self) -> Option<AutomationScene> {
+        self.start_scene
     }
 
     /// The validated budget triple.
@@ -837,6 +954,69 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         ),
                     })?;
             }
+            Action::SetPlayerKey(s) => {
+                if s.value > 1 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        format!("set_player_key value must be 0 or 1, got {}", s.value),
+                    ));
+                }
+            }
+            Action::TapPlayerKey(t) => {
+                if t.hold == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "tap_player_key hold must be positive",
+                    ));
+                }
+                if t.value > 1 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        format!("tap_player_key value must be 0 or 1, got {}", t.value),
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(t.hold)
+                    .and_then(|value| value.checked_add(t.settle))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: hold={}, settle={}",
+                            t.hold, t.settle
+                        ),
+                    })?;
+            }
+            Action::NavigateToPlanet(navigation) => {
+                if navigation.planet > 8 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        format!(
+                            "navigate_to_planet planet must be 0..=8, got {}",
+                            navigation.planet
+                        ),
+                    ));
+                }
+                if navigation.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "navigate_to_planet max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(navigation.max_ticks)
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            navigation.max_ticks
+                        ),
+                    })?;
+            }
             Action::Capture(c) => {
                 if !is_valid_label(&c.label) {
                     return Err(AutomationError::step(
@@ -859,6 +1039,16 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                             "assert_activity: equals (0x{:04X}) has bits outside mask (0x{:04X})",
                             a.equals, a.mask
                         ),
+                    ));
+                }
+            }
+            Action::AssertScene(_) | Action::AssertDispatch(_) | Action::AssertGameOptions(_) => {}
+            Action::AssertCommunicationResponses(assertion) => {
+                if assertion.minimum == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "assert_communication_responses: minimum must be greater than zero",
                     ));
                 }
             }
@@ -889,6 +1079,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
 
     Ok(ValidatedScript {
         name: doc.name,
+        start_scene: doc.start_scene,
         budgets: doc.budgets,
         steps,
         transitions,
@@ -1026,10 +1217,24 @@ mod tests {
     #[test]
     fn rejects_unknown_root_field() {
         let txt = r#"{"version":1,"name":"x","extra":true,"budgets":{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+
         let err = parse_script(txt.as_bytes(), p()).unwrap_err();
         assert!(matches!(err, AutomationError::UnknownField { .. }));
         let msg = format!("{err}");
         assert!(msg.contains("extra"));
+    }
+
+    #[test]
+    fn accepts_known_start_scene() {
+        let txt = r#"{"version":1,"name":"probe","start_scene":"sol_probe_encounter","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        assert!(parse_script(txt.as_bytes(), p()).is_ok());
+    }
+
+    #[test]
+    fn rejects_unknown_start_scene() {
+        let txt = r#"{"version":1,"name":"probe","start_scene":"not_a_scene","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let err = parse_script(txt.as_bytes(), p()).unwrap_err();
+        assert!(format!("{err}").contains("not_a_scene"));
     }
 
     #[test]
@@ -1052,6 +1257,19 @@ mod tests {
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         let err = validate_script(doc, p()).unwrap_err();
         assert!(matches!(err, AutomationError::UnsupportedVersion { .. }));
+    }
+
+    #[test]
+    fn accepts_assert_scene_action() {
+        let txt = r#"{"version":1,"name":"probe","start_scene":"sol_probe_encounter","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_scene","scene":"sol_probe_encounter"},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let script = validate_script(doc, p()).unwrap();
+        assert!(matches!(
+            script.steps().first(),
+            Some(Action::AssertScene(SceneAssertion {
+                scene: AutomationScene::SolProbeEncounter
+            }))
+        ));
     }
 
     #[test]
@@ -1188,6 +1406,29 @@ mod tests {
         assert!(matches!(err, AutomationError::Step { step: 0, .. }));
         let msg = format!("{err}");
         assert!(msg.contains("0 or 1"));
+    }
+
+    #[test]
+    fn accepts_sustained_player_control_input() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":20,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"tap_player_key","key":"thrust","value":1,"hold":10,"settle":1},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let validated = validate_script(doc, p()).unwrap();
+        assert!(matches!(
+            validated.steps()[0],
+            Action::TapPlayerKey(TapPlayerKeyStep {
+                key: PlayerKey::Thrust,
+                value: 1,
+                hold: 10,
+                settle: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_player_control_key() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"set_player_key","key":"teleport","value":1},{"action":"finish"}]}"#;
+        let err = parse_script(txt.as_bytes(), p()).unwrap_err();
+        assert!(err.to_string().contains("unknown player key 'teleport'"));
     }
 
     #[test]
