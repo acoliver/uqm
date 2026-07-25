@@ -29,6 +29,7 @@ pub(super) mod c_bridge {
 
         // Capture (converts raw handle to ref-counted handle)
         pub fn CaptureDrawable(handle: *mut c_void) -> *mut c_void;
+        pub fn ReleaseDrawable(handle: *mut c_void) -> *mut c_void;
         pub fn CaptureStringTable(handle: *mut c_void) -> *mut c_void;
 
         // Resource destruction
@@ -523,8 +524,8 @@ pub unsafe fn hail_alien() {
         // already do Release+Destroy internally.  Non-captured resources
         // (Font, Music) go straight to Destroy.
 
-        // ConversationPhrases — captured; DestroyStringTable does Release+Destroy
-        DestroyStringTable(phrases);
+        // ConversationPhrases — captured; Release to get back STRING_TABLE, then Destroy
+        DestroyStringTable(ReleaseStringTable(phrases));
 
         // AlienSong — not captured, direct Destroy
         DestroyMusic(alien_song);
@@ -535,14 +536,14 @@ pub unsafe fn hail_alien() {
         // AlienFont — not captured, direct Destroy
         DestroyFont(alien_font);
 
-        // AlienFrame — captured; DestroyDrawable does Release+Destroy
-        DestroyDrawable(alien_frame);
+        // AlienFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
+        DestroyDrawable(ReleaseDrawable(alien_frame));
 
         // TextCacheContext — context, direct destroy
         DestroyContext(text_cache_ctx);
 
-        // TextCacheFrame — captured; DestroyDrawable does Release+Destroy
-        DestroyDrawable(text_cache_frame);
+        // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
+        DestroyDrawable(ReleaseDrawable(text_cache_frame));
 
         // PlayerFont — not captured, direct Destroy
         DestroyFont(player_font);
