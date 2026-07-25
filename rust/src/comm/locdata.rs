@@ -202,11 +202,11 @@ extern "C" {
     /// C's `init_race()` — dispatches to the correct race's `init_*_comm()`
     /// and returns a static `LOCDATA*`.  This calls our Rust
     /// `rust_init_race_dispatch()` first, falling back to the C switch.
-    #[allow(
-        clashing_extern_declarations,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn c_init_race(comm_id: u32) -> *const CLocData;
+    // Direct C init_race (replaces c_init_race forwarder)
+    // Uses #[link_name] to call C's init_race directly without name collision.
+    #[link_name = "init_race"]
+    #[allow(clashing_extern_declarations)]
+    fn init_race_direct(comm_id: u32) -> *const CLocData;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +221,7 @@ extern "C" {
 /// Must be called from the game thread. The returned pointer is valid for
 /// the lifetime of the encounter.
 pub unsafe fn init_race(comm_id: i32) -> *const c_void {
-    unsafe { c_init_race(comm_id as u32) as *const c_void }
+    unsafe { init_race_direct(comm_id as u32) as *const c_void }
 }
 
 /// Read all fields from a C `LOCDATA*` into a Rust-owned `CommData`.

@@ -109,14 +109,7 @@ anim_desc_to_ffi (const ANIMATION_DESC *src, void *out)
 #include "commglue.h"
 
 /* Forward decl — init_race lives in commglue.c */
-extern LOCDATA *init_race (CONVERSATION comm_id);
-
-const void *
-c_init_race (int comm_id)
-{
-	return init_race ((CONVERSATION)comm_id);
-}
-
+/* c_init_race — PORTED to Rust (direct init_race FFI via #[link_name]) */
 /* c_get_conversation_phrase, c_get_commander_name, c_get_ship_name — PORTED to Rust */
 
 /* c_get_alliance_name, c_get_alliance_name_full, c_SpliceTrack — PORTED to Rust */
