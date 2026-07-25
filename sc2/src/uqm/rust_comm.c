@@ -157,22 +157,6 @@ void c_DrawSISComWindow (void);
  * rust_comm.c → rust_* → rust_comm.c routing. */
 
 
-/* ---- InitSpeechGraphics ---------------------------------------------------
- * comm.c's InitSpeechGraphics() is guarded; here we replicate its logic. */
-
-void
-c_InitSpeechGraphics (void)
-{
-	c_InitOscilloscope (9);
-	InitSlider (0, SLIDER_Y, SIS_SCREEN_WIDTH,
-			SetAbsFrameIndex (ActivityFrame, (COUNT)5),
-			SetAbsFrameIndex (ActivityFrame, (COUNT)2));
-}
-
-/* ---- UpdateSpeechGraphics -------------------------------------------------
- * Rate-limited oscilloscope + slider update.  Under USE_RUST_COMM the
- * static C version is guarded; call C drawing primitives directly. */
-
 void
 c_UpdateSpeechGraphics (void)
 {
@@ -193,47 +177,6 @@ c_UpdateSpeechGraphics (void)
 
 /* ---- DrawAlienFrame -------------------------------------------------------
  * Initial draw of the alien frame at the start of an encounter. */
-
-
-/* ---- CommIntroTransition --------------------------------------------------
- * Perform the intro screen transition.  Under USE_RUST_COMM the static C
- * CommIntroTransition() is guarded; call the equivalent logic here. */
-
-void
-c_CommIntroTransition (void)
-{
-	/* Replicate comm.c CommIntroTransition() for the USE_RUST_COMM path.
-	 * rust_GetCommIntroMode() returns the mode set via rust_SetCommIntroMode(). */
-	unsigned int mode = rust_GetCommIntroMode ();
-
-	if (mode == CIM_CROSSFADE_SCREEN)
-	{
-		ScreenTransition (3, NULL);
-		UnbatchGraphics ();
-	}
-	else if (mode == CIM_CROSSFADE_SPACE)
-	{
-		RECT r;
-		r.corner.x = SIS_ORG_X;
-		r.corner.y = SIS_ORG_Y;
-		r.extent.width = SIS_SCREEN_WIDTH;
-		r.extent.height = SIS_SCREEN_HEIGHT;
-		ScreenTransition (3, &r);
-		UnbatchGraphics ();
-	}
-	else if (mode == CIM_CROSSFADE_WINDOW)
-	{
-		ScreenTransition (3, &CommWndRect);
-		UnbatchGraphics ();
-	}
-	else
-	{
-		/* CIM_FADE_IN_SCREEN or unknown — unbatch to avoid lockup */
-		UnbatchGraphics ();
-	}
-
-	rust_SetCommIntroMode (CIM_DEFAULT);
-}
 
 /* ---- Animation state bridges --------------------------------------------- */
 
