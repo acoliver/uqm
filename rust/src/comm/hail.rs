@@ -92,10 +92,8 @@ mod c_bridge {
 
         // Activity flags — read C-side CurrentActivity via existing bridge
         pub fn get_current_activity() -> u16;
-        // Activity flags — read C-side LastActivity via extern static
-        #[allow(dead_code)]
-        pub static mut LastActivity: u16;
-        pub fn c_SetLastActivityCheckLoad();
+        // LastActivity is a C DWORD (u32) — direct access replaces c_SetLastActivityCheckLoad
+        pub static mut LastActivity: u32;
 
         // Screen / context globals
         pub static mut Screen: *mut c_void;
@@ -110,7 +108,7 @@ mod c_bridge {
         pub fn c_ClearPhraseBuf();
 
         // Game-state / layout queries
-        pub fn c_IsStarbaseConversation() -> c_int;
+        // c_IsStarbaseConversation — PORTED to Rust (direct game_state_keys access)
 
         // Dimension constants
 
@@ -164,7 +162,10 @@ unsafe fn call_encounter_func(func_ptr: *const std::ffi::c_void) {
 /// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
 #[cfg(not(test))]
 unsafe fn is_starbase_conversation() -> bool {
-    c_bridge::c_IsStarbaseConversation() != 0
+    // Direct game state access (replaces c_IsStarbaseConversation)
+    let global_flags = crate::state::game_state_keys::get_game_state("GLOBAL_FLAGS_AND_DATA");
+    let starbase_available = crate::state::game_state_keys::get_game_state("STARBASE_AVAILABLE");
+    global_flags == 0xFF && starbase_available != 0
 }
 
 /// Get the planet name from GlobData.SIS_state.PlanetName.
@@ -410,7 +411,8 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
         // ----------------------------------------------------------------
-        c_SetLastActivityCheckLoad();
+        // LastActivity |= CHECK_LOAD (0x1000)
+        LastActivity |= 0x1000;
         call_encounter_func(c_bridge::CommData.init_encounter_func);
 
         // Run the encounter loop: DoInput with rust_DoCommunication as InputFunc.

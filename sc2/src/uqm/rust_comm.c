@@ -1177,11 +1177,7 @@ c_GetSpaceContext (void)
 	return (uintptr_t)SpaceContext;
 }
 
-void
-c_SetLastActivityCheckLoad (void)
-{
-	LastActivity |= CHECK_LOAD;
-}
+/* c_SetLastActivityCheckLoad — PORTED to Rust (direct LastActivity access) */
 
 /* ---- CommData accessor bridges ------------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
@@ -1282,12 +1278,7 @@ c_GetCommConversationPhrases (void)
 /* ---- Game-state / layout query bridges ----------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
 
-int
-c_IsStarbaseConversation (void)
-{
-	return (GET_GAME_STATE (GLOBAL_FLAGS_AND_DATA) == (BYTE)~0
-			&& GET_GAME_STATE (STARBASE_AVAILABLE)) ? 1 : 0;
-}
+/* c_IsStarbaseConversation — PORTED to Rust (direct game_state_keys access) */
 
 /* c_GetGameString, c_GetPlanetName, c_GetSISOrigin, c_GetPlayerFontRes,
  * c_GetWantPixmap, c_GetCommWndRect, c_SetCommWndRect — PORTED to Rust */
