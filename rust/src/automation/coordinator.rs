@@ -18,6 +18,7 @@
 use crate::automation::input_ffi;
 use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::RuntimeModel;
+use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
 use crate::automation::scheduler::{
     scheduler_reduce, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
     SchedulerState, TerminalOutcome,
@@ -58,6 +59,8 @@ struct CoordInner {
     /// The label of the currently armed capture step, if any.
     /// Used when the capture completes to write a PNG artifact.
     armed_capture_label: Option<String>,
+    /// Declarative start scene, consumed once at the game-initialized boundary.
+    pending_start_scene: PendingStartScene,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -86,6 +89,7 @@ impl Coordinator {
     /// It activates the runtime model and writes the run_start trace.
     pub fn init(script: ValidatedScript, output_root: PathBuf) {
         let budgets = script.budgets();
+        let start_scene = script.start_scene();
         let actions = script.steps().to_vec();
         let transitions = script.transitions().to_vec();
 
@@ -122,6 +126,7 @@ impl Coordinator {
                 terminal_class: None,
                 pending_transitions: Vec::new(),
                 armed_capture_label: None,
+                pending_start_scene: PendingStartScene::new(start_scene),
             }),
         };
 
@@ -142,6 +147,57 @@ impl Coordinator {
     /// Whether automation is active and the coordinator is initialized.
     pub fn is_active() -> bool {
         Self::get().is_some()
+    }
+
+    /// Activate the script's start scene after game structures and initial
+    /// events are initialized, before the first activity dispatch.
+    pub fn activate_start_scene() {
+        let Some(coord) = Self::get() else {
+            return;
+        };
+
+        let scene = {
+            let mut inner = coord.inner.lock();
+            match inner
+                .pending_start_scene
+                .take(SceneActivationBoundary::GameInitialized)
+            {
+                Ok(scene) => scene,
+                Err(error) => {
+                    coord.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return;
+                }
+            }
+        };
+
+        let Some(scene) = scene else {
+            return;
+        };
+
+        match scenario::activate(scene, SceneActivationBoundary::GameInitialized) {
+            Ok(plan) => {
+                let mut inner = coord.inner.lock();
+                coord.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!("scene_activated:{}", plan.scene.name()),
+                );
+            }
+            Err(error) => {
+                let mut inner = coord.inner.lock();
+                coord.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    error.to_string(),
+                );
+                coord.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -212,13 +268,150 @@ impl Coordinator {
             }
         }
 
-        // Step 2: Feed to scheduler.
+        // Runtime semantic assertions are checked before allowing the pure
+        // scheduler to advance their action.
+        if let Some(Action::AssertScene(assertion)) = self.actions.get(inner.sched_state.step_index)
+        {
+            match scenario::verify(assertion.scene) {
+                Ok(plan) => self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "scene_verified:{}:encounter={}:dialogue={}",
+                        plan.scene.name(),
+                        plan.expected_encounter_conversation,
+                        plan.expected_dialogue_conversation
+                    ),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if let Some(Action::AssertDispatch(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match scenario::verify_dispatch(assertion.encounter, assertion.dialogue) {
+                Ok(()) => self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "dispatch_verified:encounter={}:dialogue={}",
+                        assertion.encounter, assertion.dialogue
+                    ),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::AssertGameOptions(_))
+        ) {
+            match crate::automation::ui_observation::verify_game_options_active() {
+                Ok(()) => self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    "game_options_active".to_string(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if let Some(Action::AssertCommunicationResponses(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match crate::automation::ui_observation::verify_communication_responses(
+                assertion.minimum,
+            ) {
+                Ok(actual) => self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!("communication_responses_active:count={actual}"),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if inner.input_seen.is_multiple_of(25) {
+            let snapshot = crate::automation::input_ffi::navigation_snapshot(2);
+            if snapshot.active != 0 {
+                eprintln!(
+                    "[automation-nav] step={} inner={} ship=({},{}) facing={} target=({},{})",
+                    inner.sched_state.step_index,
+                    snapshot.inner_planet,
+                    snapshot.ship_x,
+                    snapshot.ship_y,
+                    snapshot.ship_facing,
+                    snapshot.target_x,
+                    snapshot.target_y
+                );
+            }
+        }
+        // Step 2: Feed to scheduler. Navigation actions derive real player
+        // controls from the live solar-system state before UpdateInputState.
+        let mut scheduler_event = SchedulerEvent::AdmittedInput;
+        if let Some(Action::NavigateToPlanet(navigation)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let snapshot =
+                crate::automation::input_ffi::navigation_snapshot(i32::from(navigation.planet));
+            let reached =
+                snapshot.active != 0 && snapshot.inner_planet == i32::from(navigation.planet);
+            let control = crate::automation::navigation::steer_toward_target(
+                crate::automation::navigation::NavigationObservation {
+                    active: snapshot.active != 0,
+                    inner_planet: u8::try_from(snapshot.inner_planet).ok(),
+                    ship_x: snapshot.ship_x,
+                    ship_y: snapshot.ship_y,
+                    ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
+                    target_x: snapshot.target_x,
+                    target_y: snapshot.target_y,
+                },
+            );
+            Self::set_navigation_controls(control);
+            if reached {
+                scheduler_event = SchedulerEvent::NavigationReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!("navigation_reached:planet={}", navigation.planet),
+                );
+            }
+        }
+
         let config = SchedulerConfig {
             actions: &self.actions,
             transitions: &self.transitions,
         };
-        let transition =
-            scheduler_reduce(&inner.sched_state, &config, SchedulerEvent::AdmittedInput);
+        let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
 
         eprintln!(
             "[automation] input#{} sched: step={} phase={:?} -> step={} phase={:?} effects={:?}",
@@ -534,6 +727,21 @@ impl Coordinator {
         }
     }
 
+    fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) {
+        use crate::automation::script::PlayerKey;
+
+        for (key, active) in [
+            (PlayerKey::Thrust, control.thrust),
+            (PlayerKey::Left, control.left),
+            (PlayerKey::Right, control.right),
+        ] {
+            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+                i32::from(key.index()),
+                i32::from(active),
+            );
+        }
+    }
+
     /// Apply planned effects from the scheduler reducer.
     fn apply_effects(&self, inner: &mut CoordInner, effects: &EffectPlan) {
         // Note: `inner` is `&mut` so callers can pass it as mutable.
@@ -548,6 +756,18 @@ impl Coordinator {
             let index = crate::automation::input::menu_key_to_index(key);
             crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
                 i32::from(index),
+                0,
+            );
+        }
+        if let Some((key, value)) = effects.write_player_key {
+            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+                i32::from(key.index()),
+                i32::from(value),
+            );
+        }
+        if let Some(key) = effects.release_player_key {
+            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+                i32::from(key.index()),
                 0,
             );
         }
@@ -585,6 +805,31 @@ impl Coordinator {
             elapsed_ms: self.started_at.elapsed().as_millis() as u64,
             kind,
             label: None,
+            from: None,
+            to: None,
+            terminal_reason: None,
+        };
+
+        if let Ok(jsonl) = record.to_jsonl() {
+            let res = self.runtime.commit.reserve_sequence(seq);
+            res.commit_record(jsonl);
+        }
+    }
+
+    /// Write a trace record with a semantic/evidence label.
+    fn write_trace_labeled(&self, inner: &mut CoordInner, kind: RecordKind, label: String) {
+        let seq = inner.trace_seq;
+        inner.trace_seq = inner.trace_seq.saturating_add(1);
+
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            kind,
+            label: Some(label),
             from: None,
             to: None,
             terminal_reason: None,
@@ -719,6 +964,49 @@ impl Coordinator {
                 Err(_) => return,
             };
 
+            // Swizzle pixel data from SDL surface format to RGBA8.
+            // SDL on macOS typically uses [pad, R, G, B] (ARGB) or [B, G, R, pad]
+            // depending on the surface format. Use the masks to determine the
+            // actual layout and convert to standard [R, G, B, A] for PNG encoding.
+            let r_mask = info.rmask;
+            let g_mask = info.gmask;
+            let b_mask = info.bmask;
+            let a_mask = info.amask;
+
+            // Determine byte positions from masks (for 32-bit surfaces).
+            let r_shift = mask_to_shift(r_mask);
+            let g_shift = mask_to_shift(g_mask);
+            let b_shift = mask_to_shift(b_mask);
+            let a_shift = mask_to_shift(a_mask);
+
+            for chunk in pixel_buf.chunks_exact_mut(4) {
+                let pixel = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+                let r = if r_mask != 0 {
+                    ((pixel & r_mask) >> r_shift) as u8
+                } else {
+                    0
+                };
+                let g = if g_mask != 0 {
+                    ((pixel & g_mask) >> g_shift) as u8
+                } else {
+                    0
+                };
+                let b = if b_mask != 0 {
+                    ((pixel & b_mask) >> b_shift) as u8
+                } else {
+                    0
+                };
+                let a = if a_mask != 0 {
+                    ((pixel & a_mask) >> a_shift) as u8
+                } else {
+                    255
+                };
+                chunk[0] = r;
+                chunk[1] = g;
+                chunk[2] = b;
+                chunk[3] = a;
+            }
+
             let rgba_image = match image::RgbaImage::from_raw(width_u32, height_u32, pixel_buf) {
                 Some(img) => img,
                 None => {
@@ -762,6 +1050,16 @@ impl Coordinator {
             let _ = (inner, label, gen);
             eprintln!("[automation] capture: linked_c_archive feature not enabled, skipping PNG");
         }
+    }
+}
+
+/// Compute the bit shift for a color mask (number of trailing zeros).
+#[cfg(feature = "linked_c_archive")]
+fn mask_to_shift(mask: u32) -> u32 {
+    if mask == 0 {
+        0
+    } else {
+        mask.trailing_zeros()
     }
 }
 

@@ -84,6 +84,10 @@ pub fn validate_surface(meta: &SurfaceMetadata) -> Result<(), SurfaceError> {
     if meta.bpp != 32 || meta.bytes_per_pixel != 4 {
         return Err(SurfaceError::UnsupportedBpp);
     }
+    // Verify at least R, G, B masks are non-zero — otherwise we can't swizzle.
+    if meta.r_mask == 0 || meta.g_mask == 0 || meta.b_mask == 0 {
+        return Err(SurfaceError::UnsupportedBpp);
+    }
     // Checked size: pitch * height must not overflow.
     let size = i64::from(meta.pitch).checked_mul(i64::from(meta.height));
     match size {
@@ -414,10 +418,10 @@ mod tests {
             pitch: i32::MAX,
             bpp: 32,
             bytes_per_pixel: 4,
-            r_mask: 0,
-            g_mask: 0,
-            b_mask: 0,
-            a_mask: 0,
+            r_mask: 0x00FF0000,
+            g_mask: 0x0000FF00,
+            b_mask: 0x000000FF,
+            a_mask: 0xFF000000,
         };
         assert!(validate_surface(&m).is_ok());
     }
