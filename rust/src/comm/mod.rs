@@ -30,6 +30,7 @@ pub mod races;
 pub mod response;
 pub mod response_ui;
 pub mod segue;
+pub mod sis_graphics;
 pub mod speech_graphics;
 pub mod state;
 pub mod subtitle;

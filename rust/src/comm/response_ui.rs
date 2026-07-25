@@ -151,16 +151,14 @@ impl ResponseUI {
 }
 
 // ============================================================================
-// Production rendering functions (C bridge delegates)
+// Production rendering functions (ported to Rust — no C bridge needed)
 // ============================================================================
 
 /// Public entry point for talk_segue.rs to call refresh_responses.
 #[cfg(not(test))]
 pub fn refresh_responses_production(top: u8, count: u8, cur: u8) {
-    extern "C" {
-        fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
-    }
-    unsafe { c_RefreshResponses(top, count, cur) }
+    // Safety: called from single-threaded game loop with initialized graphics.
+    unsafe { crate::comm::sis_graphics::refresh_responses(top, count, cur) };
 }
 
 /// Public entry point for talk_segue.rs to call feedback_player_phrase.
@@ -169,19 +167,14 @@ pub fn refresh_responses_production(top: u8, count: u8, cur: u8) {
 /// Caller must ensure `text` is a valid null-terminated C string or null.
 #[cfg(not(test))]
 pub unsafe fn feedback_player_phrase_production(text: *const std::ffi::c_char) {
-    extern "C" {
-        fn c_FeedbackPlayerPhrase(text: *const std::ffi::c_char);
-    }
-    unsafe { c_FeedbackPlayerPhrase(text) }
+    crate::comm::sis_graphics::feedback_player_phrase(text);
 }
 
 /// Public entry point for talk_segue.rs to call select_conversation_summary.
 #[cfg(not(test))]
 pub fn select_conversation_summary_production() {
-    extern "C" {
-        fn c_SelectConversationSummary();
-    }
-    unsafe { c_SelectConversationSummary() }
+    // Safety: called from single-threaded game loop with initialized graphics.
+    unsafe { crate::comm::sis_graphics::select_conversation_summary() };
 }
 
 // ============================================================================
