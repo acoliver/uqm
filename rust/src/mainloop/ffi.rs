@@ -57,6 +57,30 @@ mod c_globals {
     pub static mut MAIN_EXITED: CBoolean = 0;
 }
 
+#[cfg(not(test))]
+mod c_ffi {
+    use std::ffi::c_void;
+    extern "C" {
+        // sis.h: extern void SetFlashRect(const RECT *pRect);
+        #[allow(non_snake_case)]
+        pub fn SetFlashRect(p_rect: *const c_void);
+        // Returns BOOLEAN (0 = failure, non-zero = success).
+        #[allow(non_snake_case)]
+        pub fn SetPlayerInputAll() -> i32;
+    }
+}
+
+#[cfg(test)]
+mod c_ffi {
+    use std::ffi::c_void;
+    #[allow(non_snake_case, dead_code)]
+    pub unsafe fn SetFlashRect(_p_rect: *const c_void) {}
+    #[allow(non_snake_case, dead_code)]
+    pub unsafe fn SetPlayerInputAll() -> i32 {
+        1
+    }
+}
+
 // ---------------------------------------------------------------------------
 // CurrentActivity accessors
 // ---------------------------------------------------------------------------
@@ -267,36 +291,68 @@ pub fn get_crew_enlisted() -> u16 {
 
 /// Zero the global velocity components.
 ///
-/// Wraps `ZeroVelocityComponents(&GLOBAL(velocity))`.
-///
-/// @plan PLAN-20260707-MAINLOOP.P03
+/// Wraps `ZeroVelocityComponents(&GLOBAL(velocity))` — which is `memset(pv,0,sizeof(*pv))`.
+/// Since `ZeroVelocityComponents` is a `#define` macro (not a function), we inline the
+/// memset directly on the `velocity` field in `GlobData.Game_state`.
 #[inline]
 pub fn zero_global_velocity() {
-    // SAFETY: no preconditions; zeroes a velocity struct.
-    unsafe { prod::uqm_zero_global_velocity() };
+    #[cfg(not(test))]
+    {
+        // SAFETY: zeroes the velocity field (18 bytes) in the C GlobData global.
+        unsafe {
+            let velocity_ptr =
+                std::ptr::addr_of_mut!(c_globals::globdata_ffi::GlobData.game_state._velocity)
+                    as *mut u8;
+            std::ptr::write_bytes(velocity_ptr, 0, 18);
+        }
+    }
+    #[cfg(test)]
+    {
+        // No-op in test mode — test shim doesn't model velocity.
+    }
 }
 
 /// Set the flash rectangle to NULL (full screen).
 ///
 /// Wraps `SetFlashRect(NULL)`.
-///
-/// @plan PLAN-20260707-MAINLOOP.P03
 #[inline]
 pub fn set_flash_rect_null() {
-    // SAFETY: no preconditions; sets a display rect.
-    unsafe { prod::uqm_set_flash_rect_null() };
+    #[cfg(not(test))]
+    {
+        // SAFETY: SetFlashRect accepts a const RECT* — NULL is valid (means full screen).
+        unsafe { c_ffi::SetFlashRect(std::ptr::null()) };
+    }
+    #[cfg(test)]
+    {
+        // No-op in test mode.
+    }
 }
 
 /// Call `SetPlayerInputAll()` or explode on failure.
 ///
 /// **This function does not return** if `SetPlayerInputAll()` fails.
-///
-/// @plan PLAN-20260707-MAINLOOP.P03
 #[inline]
 pub fn set_player_input_all_or_explode() {
-    // SAFETY: no preconditions. May abort the process on failure
-    // (mirrors C behavior via explode()).
-    unsafe { prod::uqm_set_player_input_all_or_explode() };
+    #[cfg(not(test))]
+    {
+        // SAFETY: SetPlayerInputAll is in the C archive. On failure, it calls
+        // log_add(log_Fatal, ...) then explode() (process abort).
+        let ok = unsafe { c_ffi::SetPlayerInputAll() };
+        if ok == 0 {
+            unsafe {
+                crate::logging::log_add(
+                    crate::logging::LogLevel::Fatal,
+                    "Could not set player input.",
+                );
+            }
+            // Mirror C's explode() — abort the process.
+            std::process::abort();
+        }
+    }
+    #[cfg(test)]
+    {
+        // No-op in test mode.
+    }
 }
 
 /// Set the `MainExited` global.

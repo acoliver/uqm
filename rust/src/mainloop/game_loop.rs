@@ -324,7 +324,7 @@ mod cffi {
         }
 
         fn set_player_input_all_or_explode(&self) {
-            unsafe { c_extern::uqm_set_player_input_all_or_explode() }
+            crate::mainloop::ffi::set_player_input_all_or_explode()
         }
 
         fn init_game_structures(&self) {
@@ -348,11 +348,11 @@ mod cffi {
         }
 
         fn zero_velocity(&self) {
-            unsafe { c_extern::uqm_zero_global_velocity() }
+            crate::mainloop::ffi::zero_global_velocity()
         }
 
         fn set_flash_rect_null(&self) {
-            unsafe { c_extern::uqm_set_flash_rect_null() }
+            crate::mainloop::ffi::set_flash_rect_null()
         }
 
         fn install_bomb_at_earth(&self) {

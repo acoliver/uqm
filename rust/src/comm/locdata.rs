@@ -113,7 +113,7 @@ pub struct CGameState {
     _ship_facing: u16,               // offset 114, UWORD
     _ip_planet: u8,                  // offset 116, BYTE
     _in_orbit: u8,                   // offset 117, BYTE
-    _velocity: [u8; 18],             // offset 118, VELOCITY_DESC (18 bytes)
+    pub _velocity: [u8; 18],         // offset 118, VELOCITY_DESC (18 bytes)
     _velocity_pad: [u8; 6],          // pad to offset 142 (align to u32 for BattleGroupRef)
     _battle_group_ref: u32,          // offset 144, DWORD
     pub avail_race_q: CQueue,        // offset 152 (verified)

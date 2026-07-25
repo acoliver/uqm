@@ -138,26 +138,6 @@ extern "C" {
 // ---------------------------------------------------------------------------
 
 extern "C" {
-    /// Wraps `ZeroVelocityComponents(&GLOBAL(velocity))`.
-    ///
-    /// C: `void uqm_zero_global_velocity(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn uqm_zero_global_velocity();
-
-    /// Wraps `SetFlashRect(NULL)`.
-    ///
-    /// C: `void uqm_set_flash_rect_null(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn uqm_set_flash_rect_null();
-
-    /// Calls `SetPlayerInputAll()`; on failure logs fatal and calls `explode()`.
-    ///
-    /// **Does not return** on failure (mirrors C main loop behavior).
-    ///
-    /// C: `void uqm_set_player_input_all_or_explode(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn uqm_set_player_input_all_or_explode();
-
     /// Sets the `MainExited` global.
     ///
     /// C: `void set_main_exited(BOOLEAN b)`.
