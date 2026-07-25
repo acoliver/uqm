@@ -77,7 +77,11 @@ mod c_bridge {
         pub fn DrawSISFrame();
         pub fn DrawSISMessage(msg: *const c_char);
         pub fn DrawSISTitle(title: *const c_char);
-        pub fn c_DrawSISComWindow();
+        // Graphics primitives needed by draw_sis_com_window
+        pub fn DrawFilledRectangle(rect: *mut crate::comm::locdata::CRect);
+        pub fn SetContextForeGroundColor(
+            color: crate::comm::locdata::CColor,
+        ) -> crate::comm::locdata::CColor;
 
         // Encounter loop — runs DoInput with rust_DoCommunication as InputFunc
         pub fn c_RunEncounterDoInput();
@@ -166,6 +170,58 @@ unsafe fn is_starbase_conversation() -> bool {
     let global_flags = crate::state::game_state_keys::get_game_state("GLOBAL_FLAGS_AND_DATA");
     let starbase_available = crate::state::game_state_keys::get_game_state("STARBASE_AVAILABLE");
     global_flags == 0xFF && starbase_available != 0
+}
+
+/// DrawSISComWindow — ported from c_DrawSISComWindow in rust_comm.c.
+///
+/// Draws the player's background area below the slider when the current
+/// activity is not WON_LAST_BATTLE. Uses C graphics primitives directly.
+#[cfg(not(test))]
+unsafe fn draw_sis_com_window() {
+    // WON_LAST_BATTLE = 5 (globdata.h enum, 0-indexed)
+    let activity = c_bridge::get_current_activity() as u8;
+    if activity == 5 {
+        return;
+    }
+
+    // SLIDER_Y = 107, SLIDER_HEIGHT = 15 (comm.h)
+    let slider_y: i16 = 107;
+    let slider_height: i16 = 15;
+    let sis_screen_width: i16 = 320 - 14; // SPACE_WIDTH - 14
+    let sis_screen_height: i16 = 240 - 13; // SPACE_HEIGHT - 13
+
+    let old_context = c_bridge::SetContext(c_bridge::SpaceContext);
+
+    let mut rect = crate::comm::locdata::CRect {
+        corner: crate::comm::locdata::CPoint {
+            x: 0,
+            y: slider_y + slider_height,
+        },
+        width: sis_screen_width,
+        height: sis_screen_height - (slider_y + slider_height),
+    };
+
+    // COMM_PLAYER_BACKGROUND_COLOR = MAKE_RGB15(0, 0, 0x14)
+    // CC5TO8(0)=0, CC5TO8(0x14=20)=165. Color = {r:0, g:0, b:165, a:0}
+    let bg_color = crate::comm::locdata::CColor {
+        r: 0,
+        g: 0,
+        b: 165,
+        a: 0,
+    };
+
+    // COMM_PLAYER_BACKGROUND_COLOR = MAKE_RGB15(0, 0, 0x14)
+    // CC5TO8(0)=0, CC5TO8(0x14=20)=165. Color = {r:0, g:0, b:165, a:0}
+    let bg_color = super::locdata::CColor {
+        r: 0,
+        g: 0,
+        b: 165,
+        a: 0,
+    };
+
+    c_bridge::SetContextForeGroundColor(bg_color);
+    c_bridge::DrawFilledRectangle(&mut rect as *mut _);
+    c_bridge::SetContext(old_context);
 }
 
 /// Get the planet name from GlobData.SIS_state.PlanetName.
@@ -405,8 +461,8 @@ pub unsafe fn hail_alien() {
             }
         }
 
-        // DrawSISComWindow is unconditional (C line 1278)
-        c_DrawSISComWindow();
+        // DrawSISComWindow (C line 1278) — ported from c_DrawSISComWindow
+        draw_sis_com_window();
 
         // ----------------------------------------------------------------
         // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
