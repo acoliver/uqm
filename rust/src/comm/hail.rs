@@ -101,11 +101,8 @@ mod c_bridge {
         pub static mut Screen: *mut c_void;
         pub static mut SpaceContext: *mut c_void;
 
-        // Encounter functions — call CommData function pointers directly
-        // CommData.init_encounter_func / post_encounter_func / uninit_encounter_func
-        pub fn c_CallInitEncounterFunc();
-        pub fn c_CallPostEncounterFunc();
-        pub fn c_CallUninitEncounterFunc();
+        // Encounter functions — now called directly via call_encounter_func()
+        // using CommData.init_encounter_func / post_encounter_func / uninit_encounter_func
 
         // Comm-internal static variable accessors
         pub fn c_SetTalkingFinished(finished: c_int);
@@ -151,6 +148,17 @@ const LDASF_USE_ALTERNATE: u32 = 0x0001;
 /// Game string base index for starbase strings (from gamestr.h).
 #[cfg(not(test))]
 const STARBASE_STRING_BASE: i32 = 0x0200;
+
+/// Call a CommData function pointer (init/post/uninit encounter func).
+/// The pointer is stored as *const c_void in CLocData — cast to extern fn and call.
+#[cfg(not(test))]
+unsafe fn call_encounter_func(func_ptr: *const std::ffi::c_void) {
+    if func_ptr.is_null() {
+        return;
+    }
+    let func: extern "C" fn() = std::mem::transmute(func_ptr);
+    func();
+}
 
 /// Check if this is a starbase conversation by reading C game state.
 /// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
@@ -403,7 +411,7 @@ pub unsafe fn hail_alien() {
         // Step 11: Set CHECK_LOAD flag, call encounter funcs, run DoInput
         // ----------------------------------------------------------------
         c_SetLastActivityCheckLoad();
-        c_CallInitEncounterFunc();
+        call_encounter_func(c_bridge::CommData.init_encounter_func);
 
         // Run the encounter loop: DoInput with rust_DoCommunication as InputFunc.
         // c_RunEncounterDoInput allocates ENCOUNTER_STATE, wires InputFunc,
@@ -442,9 +450,9 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         let activity = c_bridge::get_current_activity();
         if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
-            c_CallPostEncounterFunc();
+            call_encounter_func(c_bridge::CommData.post_encounter_func);
         }
-        c_CallUninitEncounterFunc();
+        call_encounter_func(c_bridge::CommData.uninit_encounter_func);
 
         // ----------------------------------------------------------------
         // Step 17: Restore context and font

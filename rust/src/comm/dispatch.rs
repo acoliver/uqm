@@ -368,9 +368,8 @@ mod ffi {
         // CommData copy — copies LOCDATA to C's global CommData
         pub fn rust_copy_locdata_to_comm_data(locdata_ptr: *const c_void);
 
-        // Encounter function pointer bridges (rust_comm.c)
-        pub fn c_CallPostEncounterFunc();
-        pub fn c_CallUninitEncounterFunc();
+        // CommData global for direct encounter function pointer calls
+        pub static mut CommData: crate::comm::locdata::CLocData;
 
         // Race-specific init_*_comm functions (C, from comm/*/racec.c)
         // These return LOCDATA* and are called directly to bypass
@@ -417,6 +416,15 @@ mod ffi {
 #[inline]
 unsafe fn pick_captain_name() -> u8 {
     ((ffi::TFB_Random() & 0x0F) + 5) as u8
+}
+
+/// Call a CommData function pointer (init/post/uninit encounter func).
+unsafe fn call_encounter_func(func_ptr: *const c_void) {
+    if func_ptr.is_null() {
+        return;
+    }
+    let func: extern "C" fn() = std::mem::transmute(func_ptr);
+    func();
 }
 
 /// C: `LOBYTE(x)` — extract low byte of a u16.
@@ -775,9 +783,9 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     } else if !loc_data_ptr.is_null() {
         let activity = c_extern::get_current_activity();
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-            ffi::c_CallPostEncounterFunc();
+            call_encounter_func(ffi::CommData.post_encounter_func);
         }
-        ffi::c_CallUninitEncounterFunc();
+        call_encounter_func(ffi::CommData.uninit_encounter_func);
     }
 
     let activity = c_extern::get_current_activity();

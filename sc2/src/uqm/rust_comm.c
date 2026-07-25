@@ -1313,28 +1313,7 @@ c_GetCommConversationPhrases (void)
 }
 
 /* ---- Encounter function call bridges ------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 */
-
-void
-c_CallInitEncounterFunc (void)
-{
-	fprintf (stderr, "[DBG] c_CallInitEncounterFunc: func=%p\n",
-		(void *)CommData.init_encounter_func);
-	(*CommData.init_encounter_func) ();
-	fprintf (stderr, "[DBG] c_CallInitEncounterFunc: returned\n");
-}
-
-void
-c_CallPostEncounterFunc (void)
-{
-	(*CommData.post_encounter_func) ();
-}
-
-void
-c_CallUninitEncounterFunc (void)
-{
-	(*CommData.uninit_encounter_func) ();
-}
+/* c_CallInitEncounterFunc, c_CallPostEncounterFunc, c_CallUninitEncounterFunc — PORTED to Rust */
 
 /* ---- Game-state / layout query bridges ----------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
