@@ -73,7 +73,6 @@ pub(super) mod c_bridge {
         pub fn c_FeedbackPlayerPhrase(text: *const c_char);
         pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
         pub fn SetSliderImage(frame_index: c_uint);
-        pub fn c_UpdateAnimations(seeking: c_int);
         pub fn get_current_activity() -> u16;
 
         // Graphics functions for init_speech_graphics (replacing c_InitSpeechGraphics)
@@ -96,15 +95,23 @@ pub(super) mod c_bridge {
         pub static mut RadarContext: *mut c_void;
         pub static mut SpaceContext: *mut c_void;
 
-        // Direct C functions for colormap/music (replacing c_ forwarders)
-        pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
-        pub fn GetColorMapAddress(cmap: *mut c_void) -> *mut c_void;
+        // Animation functions for update_animations (replacing c_UpdateAnimations)
+        pub fn c_GetAnimContext() -> *mut c_void;
+        pub fn c_GetClearSubtitles() -> c_int;
+        pub fn c_ResetClearSubtitles();
+        pub fn ProcessCommAnimations(do_clear: c_int, seeking: c_int) -> c_int;
+        pub fn comm_RedrawSubtitles();
+        pub fn BatchGraphics();
+        pub static mut CommContext: *mut c_void;
+
+        // Direct C functions for colormap/music/animation
         #[allow(clashing_extern_declarations)]
         pub fn PlayMusic(music: *mut c_void, do_loop: c_int, volume: u8);
+        pub fn GetColorMapAddress(cmap: *mut c_void) -> *mut c_void;
+        pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
         pub fn DrawAlienFrame();
         pub fn InitCommAnimations();
         pub fn runningIntroAnim() -> c_int;
-        pub fn c_RunCommAnimFrame();
         pub fn runningTalkingAnim() -> c_int;
         pub fn wantTalkingAnim() -> c_int;
         pub fn haveTalkingAnim() -> c_int;
@@ -187,7 +194,7 @@ pub(super) mod c_bridge {
     }
     #[cfg(not(test))]
     pub fn call_update_comm_graphics() {
-        unsafe { c_UpdateAnimations(0) }
+        unsafe { super::do_update_animations(false) }
     }
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase() {
@@ -1106,12 +1113,41 @@ fn update_animations(state: &mut CommState, seeking: bool) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_UpdateAnimations(seeking as i32);
+        do_update_animations(seeking);
     }
     #[cfg(test)]
     {
         state.animations_mut().process(if seeking { 0 } else { 1 });
     }
+}
+
+/// Ported from c_UpdateAnimations — processes communication animations with
+/// context switching, batched graphics, and subtitle redraw.
+///
+/// # Safety
+/// Must be called from the game thread with initialized graphics context.
+#[cfg(not(test))]
+unsafe fn do_update_animations(seeking: bool) {
+    let do_clear = c_bridge::c_GetClearSubtitles();
+    let old_ctx = c_bridge::SetContext(c_bridge::c_GetAnimContext());
+    c_bridge::BatchGraphics();
+    let change = c_bridge::ProcessCommAnimations(do_clear, if seeking { 1 } else { 0 });
+    if change != 0 || do_clear != 0 {
+        c_bridge::comm_RedrawSubtitles();
+    }
+    c_bridge::UnbatchGraphics();
+    c_bridge::c_ResetClearSubtitles();
+    c_bridge::SetContext(old_ctx);
+}
+
+/// Ported from c_RunCommAnimFrame — one animation frame + sleep.
+///
+/// # Safety
+/// Must be called from the game thread.
+#[cfg(not(test))]
+unsafe fn do_run_comm_anim_frame() {
+    do_update_animations(false);
+    c_bridge::SleepThread(840 / 40); // ONE_SECOND / 40
 }
 
 fn feedback_player_phrase(state: &mut CommState, text: &str) {
@@ -1134,7 +1170,7 @@ fn update_comm_graphics(state: &mut CommState) {
     unsafe {
         let _ = state;
         // UpdateCommGraphics() — calls UpdateAnimations + redraw
-        c_bridge::c_UpdateAnimations(0);
+        do_update_animations(false);
     }
     #[cfg(test)]
     {
@@ -1273,7 +1309,7 @@ fn run_comm_anim_frame(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_RunCommAnimFrame();
+        do_run_comm_anim_frame();
     }
     #[cfg(test)]
     {
