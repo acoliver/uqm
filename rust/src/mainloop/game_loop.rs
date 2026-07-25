@@ -278,9 +278,7 @@ mod cffi {
 
     impl GameLoopOps for CffiOps {
         fn init_audio(&self) {
-            // SAFETY: initAudio initializes the audio subsystem; safe to call
-            // once at startup on the Starcon2Main thread.
-            unsafe { c_extern::uqm_init_audio() }
+            crate::mainloop::ffi::init_audio()
         }
 
         fn load_kernel(&self) -> bool {

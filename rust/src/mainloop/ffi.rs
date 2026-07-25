@@ -67,6 +67,18 @@ mod c_ffi {
         // Returns BOOLEAN (0 = failure, non-zero = success).
         #[allow(non_snake_case)]
         pub fn SetPlayerInputAll() -> i32;
+
+        // setup.c: extern sint32 initAudio(sint32 driver, sint32 flags)
+        #[allow(non_snake_case)]
+        pub fn initAudio(driver: i32, flags: i32) -> i32;
+
+        // C globals from setup.c/options.c
+        #[link_name = "snddriver"]
+        #[allow(non_upper_case_globals)]
+        pub static mut snddriver: i32;
+        #[link_name = "soundflags"]
+        #[allow(non_upper_case_globals)]
+        pub static mut soundflags: i32;
     }
 }
 
@@ -79,6 +91,14 @@ mod c_ffi {
     pub unsafe fn SetPlayerInputAll() -> i32 {
         1
     }
+    #[allow(non_snake_case, dead_code)]
+    pub unsafe fn initAudio(_driver: i32, _flags: i32) -> i32 {
+        0
+    }
+    #[allow(dead_code, non_upper_case_globals)]
+    pub static mut snddriver: i32 = 0;
+    #[allow(dead_code, non_upper_case_globals)]
+    pub static mut soundflags: i32 = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +367,26 @@ pub fn set_player_input_all_or_explode() {
             }
             // Mirror C's explode() — abort the process.
             std::process::abort();
+        }
+    }
+    #[cfg(test)]
+    {
+        // No-op in test mode.
+    }
+}
+
+/// Initialize the audio subsystem.
+///
+/// Calls `initAudio(snddriver, soundflags)` using the C globals.
+#[inline]
+pub fn init_audio() {
+    #[cfg(not(test))]
+    {
+        // SAFETY: reads two i32 globals and calls initAudio (no pointers).
+        unsafe {
+            let driver = c_ffi::snddriver;
+            let flags = c_ffi::soundflags;
+            c_ffi::initAudio(driver, flags);
         }
     }
     #[cfg(test)]

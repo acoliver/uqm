@@ -242,12 +242,6 @@ extern "C" {
 // ---------------------------------------------------------------------------
 
 extern "C" {
-    /// `initAudio(snddriver, soundflags)` — C wrapper passes the globals.
-    ///
-    /// C: `void uqm_init_audio(void)`.
-    /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn uqm_init_audio();
-
     /// `BOOLEAN StartGame(void)` — outer-loop controller.
     ///
     /// Returns non-zero (true) to start/load a game, zero to quit.
