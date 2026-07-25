@@ -100,9 +100,23 @@ fn link_c_objects() {
 
     let uqm_obj = out_dir.join("uqm_rust_main.o");
     let gameinp_obj = out_dir.join("gameinp_rust_main.o");
+    let bridge_obj = out_dir.join("rust_bridge_mainloop_rust.o");
+    let gameopt_obj = out_dir.join("gameopt_rust_main.o");
+    let rust_comm_obj = out_dir.join("rust_comm_rust_main.o");
 
     compile_c_file(&sc2_src.join("uqm.c"), &uqm_obj, &cflags_common);
     compile_c_file(&sc2_src.join("uqm/gameinp.c"), &gameinp_obj, &cflags_common);
+    compile_c_file(&sc2_src.join("uqm/gameopt.c"), &gameopt_obj, &cflags_common);
+    compile_c_file(
+        &sc2_src.join("uqm/rust_comm.c"),
+        &rust_comm_obj,
+        &cflags_common,
+    );
+    compile_c_file(
+        &sc2_src.join("uqm/rust_bridge_mainloop.c"),
+        &bridge_obj,
+        &cflags_common,
+    );
 
     // Create a static archive from the object files
     // (excluding the original uqm.c.o and gameinp.c.o, which have
@@ -112,8 +126,9 @@ fn link_c_objects() {
     // Remove old archive if it exists
     let _ = fs::remove_file(&archive_path);
 
-    // Filter out the original uqm.c.o and gameinp.c.o — they're replaced
-    // by the RUST_OWNS_MAIN versions compiled above
+    // Filter out the original uqm.c.o, gameinp.c.o, and the stale
+    // rust_bridge_mainloop.c.o — they're replaced by the RUST_OWNS_MAIN
+    // versions compiled above
     let mut archive_inputs: Vec<&PathBuf> = obj_files
         .iter()
         .filter(|p| {
@@ -122,6 +137,9 @@ fn link_c_objects() {
                 name,
                 "uqm.c.o"
                     | "gameinp.c.o"
+                    | "gameopt.c.o"
+                    | "rust_comm.c.o"
+                    | "rust_bridge_mainloop.c.o"
                     | "alarm.c.o"
                     | "async.c.o"
                     | "callback.c.o"
@@ -137,7 +155,13 @@ fn link_c_objects() {
             )
         })
         .collect();
-    archive_inputs.extend([&uqm_obj, &gameinp_obj]);
+    archive_inputs.extend([
+        &uqm_obj,
+        &gameinp_obj,
+        &gameopt_obj,
+        &rust_comm_obj,
+        &bridge_obj,
+    ]);
     archive_inputs.sort_by_key(|path| path.display().to_string());
 
     let object_manifest = archive_inputs
@@ -209,6 +233,9 @@ fn link_c_objects() {
     }
     println!("cargo:rerun-if-changed=../sc2/src/uqm.c");
     println!("cargo:rerun-if-changed=../sc2/src/uqm/gameinp.c");
+    println!("cargo:rerun-if-changed=../sc2/src/uqm/gameopt.c");
+    println!("cargo:rerun-if-changed=../sc2/src/uqm/rust_comm.c");
+    println!("cargo:rerun-if-changed=../sc2/src/uqm/rust_bridge_mainloop.c");
 }
 
 /// Compile a single C source file to an object file.

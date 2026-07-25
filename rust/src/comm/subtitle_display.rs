@@ -64,7 +64,7 @@ impl SubtitleDisplay {
 
         #[cfg(not(test))]
         unsafe {
-            c_bridge::c_RedrawSubtitles();
+            c_bridge::comm_RedrawSubtitles();
         }
     }
 
@@ -102,7 +102,7 @@ impl SubtitleDisplay {
 mod c_bridge {
     extern "C" {
         /// Redraw the current subtitle text.
-        pub fn c_RedrawSubtitles();
+        pub fn comm_RedrawSubtitles();
     }
 }
 

@@ -95,169 +95,6 @@ anim_desc_to_ffi (const ANIMATION_DESC *src, void *out)
 	memcpy (p, &u32v, 4);
 }
 
-VoidFunc
-c_locdata_get_init_func (const void *locdata)
-{
-	return (VoidFunc)((const LOCDATA *)locdata)->init_encounter_func;
-}
-
-VoidFunc
-c_locdata_get_post_func (const void *locdata)
-{
-	return (VoidFunc)((const LOCDATA *)locdata)->post_encounter_func;
-}
-
-CountFunc
-c_locdata_get_uninit_func (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->uninit_encounter_func;
-}
-
-const char *
-c_locdata_get_alien_frame_res (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienFrameRes;
-}
-
-const char *
-c_locdata_get_alien_font_res (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienFontRes;
-}
-
-const char *
-c_locdata_get_alien_colormap_res (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienColorMapRes;
-}
-
-const char *
-c_locdata_get_alien_song_res (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienSongRes;
-}
-
-const char *
-c_locdata_get_alien_alt_song_res (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienAltSongRes;
-}
-
-const char *
-c_locdata_get_conversation_phrases_res (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->ConversationPhrasesRes;
-}
-
-uint32_t
-c_locdata_get_text_fcolor (const void *locdata)
-{
-	return color_to_u32 (((const LOCDATA *)locdata)->AlienTextFColor);
-}
-
-uint32_t
-c_locdata_get_text_bcolor (const void *locdata)
-{
-	return color_to_u32 (((const LOCDATA *)locdata)->AlienTextBColor);
-}
-
-int16_t
-c_locdata_get_text_baseline_x (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienTextBaseline.x;
-}
-
-int16_t
-c_locdata_get_text_baseline_y (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienTextBaseline.y;
-}
-
-uint16_t
-c_locdata_get_text_width (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienTextWidth;
-}
-
-uint32_t
-c_locdata_get_text_align (const void *locdata)
-{
-	return (uint32_t)((const LOCDATA *)locdata)->AlienTextAlign;
-}
-
-uint32_t
-c_locdata_get_text_valign (const void *locdata)
-{
-	return (uint32_t)((const LOCDATA *)locdata)->AlienTextValign;
-}
-
-uint32_t
-c_locdata_get_song_flags (const void *locdata)
-{
-	return (uint32_t)((const LOCDATA *)locdata)->AlienSongFlags;
-}
-
-uint32_t
-c_locdata_get_num_animations (const void *locdata)
-{
-	return (uint32_t)((const LOCDATA *)locdata)->NumAnimations;
-}
-
-void
-c_locdata_get_ambient_anim (const void *locdata, uint32_t index, void *out)
-{
-	const LOCDATA *ld = (const LOCDATA *)locdata;
-	if (index < (uint32_t)ld->NumAnimations && index < MAX_ANIMATIONS)
-		anim_desc_to_ffi (&ld->AlienAmbientArray[index], out);
-}
-
-void
-c_locdata_get_transition_desc (const void *locdata, void *out)
-{
-	anim_desc_to_ffi (&((const LOCDATA *)locdata)->AlienTransitionDesc, out);
-}
-
-void
-c_locdata_get_talk_desc (const void *locdata, void *out)
-{
-	anim_desc_to_ffi (&((const LOCDATA *)locdata)->AlienTalkDesc, out);
-}
-
-const void *
-c_locdata_get_number_speech (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienNumberSpeech;
-}
-
-void *
-c_locdata_get_alien_frame (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienFrame;
-}
-
-void *
-c_locdata_get_alien_font (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienFont;
-}
-
-void *
-c_locdata_get_alien_colormap (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienColorMap;
-}
-
-void *
-c_locdata_get_alien_song (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->AlienSong;
-}
-
-void *
-c_locdata_get_conversation_phrases (const void *locdata)
-{
-	return ((const LOCDATA *)locdata)->ConversationPhrases;
-}
 
 /*
  * ============================================================================
@@ -394,101 +231,7 @@ c_SpliceTrack (UNICODE *filespec, UNICODE *textspec,
 	SpliceTrack (filespec, textspec, timestamp, cb);
 	fprintf (stderr, "[DBG] c_SpliceTrack: done\n");
 }
-void
-c_SpliceMultiTrack (UNICODE *track_names[], UNICODE *track_text)
-{
-	SpliceMultiTrack (track_names, track_text);
-}
 
-void
-c_PlayTrack (void)
-{
-	PlayTrack ();
-}
-
-void
-c_StopTrack (void)
-{
-	StopTrack ();
-}
-
-void
-c_JumpTrack (void)
-{
-	JumpTrack ();
-}
-
-COUNT
-c_PlayingTrack (void)
-{
-	return PlayingTrack ();
-}
-
-void
-c_PauseTrack (void)
-{
-	PauseTrack ();
-}
-
-void
-c_ResumeTrack (void)
-{
-	ResumeTrack ();
-}
-
-const UNICODE *
-c_GetTrackSubtitle (void)
-{
-	return GetTrackSubtitle ();
-}
-
-SUBTITLE_REF
-c_GetFirstTrackSubtitle (void)
-{
-	return GetFirstTrackSubtitle ();
-}
-
-SUBTITLE_REF
-c_GetNextTrackSubtitle (SUBTITLE_REF last_ref)
-{
-	return GetNextTrackSubtitle (last_ref);
-}
-
-const UNICODE *
-c_GetTrackSubtitleText (SUBTITLE_REF sub_ref)
-{
-	return GetTrackSubtitleText (sub_ref);
-}
-
-void
-c_FastForward_Page (void)
-{
-	FastForward_Page ();
-}
-
-void
-c_FastForward_Smooth (void)
-{
-	FastForward_Smooth ();
-}
-
-void
-c_FastReverse_Page (void)
-{
-	FastReverse_Page ();
-}
-
-void
-c_FastReverse_Smooth (void)
-{
-	FastReverse_Smooth ();
-}
-
-int
-c_GetTrackPosition (int in_units)
-{
-	return GetTrackPosition (in_units);
-}
 
 /*
  * ============================================================================
@@ -522,11 +265,6 @@ void c_DrawSISComWindow (void);
 
 /* ---- Oscilloscope / Slider ----------------------------------------------- */
 
-void
-c_InitOscilloscope (unsigned int frame)
-{
-	InitOscilloscope (SetAbsFrameIndex (ActivityFrame, (COUNT)frame));
-}
 
 void
 c_InitSlider (int x, int y, int w, unsigned int bg_frame,
@@ -537,23 +275,6 @@ c_InitSlider (int x, int y, int w, unsigned int bg_frame,
 			SetAbsFrameIndex (ActivityFrame, (COUNT)cursor_frame));
 }
 
-void
-c_DrawOscilloscope (void)
-{
-	DrawOscilloscope ();
-}
-
-void
-c_DrawSlider (void)
-{
-	DrawSlider ();
-}
-
-void
-c_SetSliderImage (unsigned int frame)
-{
-	SetSliderImage (SetAbsFrameIndex (ActivityFrame, (COUNT)frame));
-}
 
 /* ---- Subtitle state bridges -----------------------------------------------
  * @plan PLAN-20260325-COMMPT3.P06
@@ -565,23 +286,6 @@ c_SetSliderImage (unsigned int frame)
  * (inside #ifdef USE_RUST_COMM), breaking the former circular
  * rust_comm.c → rust_* → rust_comm.c routing. */
 
-void
-c_ClearSubtitles (void)
-{
-	comm_ClearSubtitles ();
-}
-
-void
-c_CheckSubtitles (void)
-{
-	comm_CheckSubtitles ();
-}
-
-void
-c_RedrawSubtitles (void)
-{
-	comm_RedrawSubtitles ();
-}
 
 /* ---- InitSpeechGraphics ---------------------------------------------------
  * comm.c's InitSpeechGraphics() is guarded; here we replicate its logic. */
@@ -618,11 +322,6 @@ c_UpdateSpeechGraphics (void)
 /* ---- DrawAlienFrame -------------------------------------------------------
  * Initial draw of the alien frame at the start of an encounter. */
 
-void
-c_DrawAlienFrame (void)
-{
-	DrawAlienFrame (NULL, 0, TRUE);
-}
 
 /* ---- CommIntroTransition --------------------------------------------------
  * Perform the intro screen transition.  Under USE_RUST_COMM the static C
@@ -668,53 +367,6 @@ c_CommIntroTransition (void)
 
 #include "commanim.h"  /* ProcessCommAnimations, InitCommAnimations, etc. */
 
-int
-c_WantTalkingAnim (void)
-{
-	return wantTalkingAnim () ? 1 : 0;
-}
-
-int
-c_HaveTalkingAnim (void)
-{
-	return haveTalkingAnim () ? 1 : 0;
-}
-
-void
-c_SetRunTalkingAnim (void)
-{
-	setRunTalkingAnim ();
-}
-
-void
-c_SetStopTalkingAnim (void)
-{
-	setStopTalkingAnim ();
-}
-
-void
-c_SetRunIntroAnim (void)
-{
-	setRunIntroAnim ();
-}
-
-int
-c_RunningIntroAnim (void)
-{
-	return runningIntroAnim () ? 1 : 0;
-}
-
-int
-c_RunningTalkingAnim (void)
-{
-	return runningTalkingAnim () ? 1 : 0;
-}
-
-void
-c_InitCommAnimations (void)
-{
-	InitCommAnimations ();
-}
 
 /* UpdateAnimations: under USE_RUST_COMM, ProcessCommAnimations routes to Rust
  * via rust_ProcessCommAnimations_cb().  We still need a context switch and
@@ -927,7 +579,6 @@ c_RunTalkSegue (unsigned int wait_track)
 
 	return talkingState.ended;
 }
-
 
 
 /* ---- Feedback / Response display -----------------------------------------
@@ -1369,29 +1020,6 @@ c_PlayAlienMusic (void)
 	PlayMusic (song, TRUE, 1);
 }
 
-void
-c_PlayMusic (void *song, int looping, int priority)
-{
-	PlayMusic ((MUSIC_REF)song, (BOOLEAN)looping, (BYTE)priority);
-}
-
-unsigned int
-c_FadeMusic (int vol, int duration)
-{
-	return (unsigned int)FadeMusic ((BYTE)vol, (SIZE)duration);
-}
-
-void
-c_StopMusic (void)
-{
-	StopMusic ();
-}
-
-void
-c_SetMusicVolume (unsigned int vol)
-{
-	SetMusicVolume ((COUNT)vol);
-}
 
 /* ---- Colormap bridge ----------------------------------------------------- */
 
@@ -1413,19 +1041,9 @@ c_SetColorMapFromCommData (void)
 	SetColorMap (GetColorMapAddress (cmap));
 }
 
-void
-c_SetColorMap (void *colormap)
-{
-	SetColorMap (GetColorMapAddress ((COLORMAP)colormap));
-}
 
 /* ---- Input bridges ------------------------------------------------------- */
 
-void
-c_UpdateInputState (void)
-{
-	UpdateInputState ();
-}
 
 int
 c_GetPulsedMenuKey (int key_index)
@@ -1439,25 +1057,9 @@ c_GetCurrentMenuKey (int key_index)
 	return CurrentInputState.menu[key_index];
 }
 
-void
-c_SetMenuSounds (unsigned int up_down, unsigned int select)
-{
-	SetMenuSounds ((MENU_SOUND_FLAGS)up_down, (MENU_SOUND_FLAGS)select);
-}
 
 /* ---- Game-state bridges -------------------------------------------------- */
 
-int
-c_CheckAbort (void)
-{
-	return (GLOBAL (CurrentActivity) & CHECK_ABORT) ? 1 : 0;
-}
-
-int
-c_WonLastBattle (void)
-{
-	return (LOBYTE (GLOBAL (CurrentActivity)) == WON_LAST_BATTLE) ? 1 : 0;
-}
 
 /* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
 int
@@ -1484,53 +1086,9 @@ c_GetOptSmoothScroll (void)
 	return optSmoothScroll;
 }
 
-unsigned int
-c_FadeOutMusicForReplay (void)
-{
-	return (unsigned int)FadeMusic (0, (SIZE)(ONE_SECOND * 2));
-}
-
 /* ---- Resource destroy bridges ------------------------------------------- */
 
 #include "libs/gfxlib.h"
-
-void
-c_DestroyDrawable (uintptr_t handle)
-{
-	DRAWABLE d;
-	fprintf (stderr, "[DBG] c_DestroyDrawable: FRAME=%p\n", (void *)handle);
-	d = ReleaseDrawable ((FRAME)handle);
-	fprintf (stderr, "[DBG] c_DestroyDrawable: DRAWABLE=%p\n", (void *)d);
-	DestroyDrawable (d);
-	fprintf (stderr, "[DBG] c_DestroyDrawable: done\n");
-}
-
-
-void
-c_DestroyFont (uintptr_t handle)
-{
-	DestroyFont ((FONT)handle);
-}
-
-void
-c_DestroyColorMap (uintptr_t handle)
-{
-	DestroyColorMap (ReleaseColorMap ((COLORMAP)handle));
-}
-
-void
-c_DestroyMusic (uintptr_t handle)
-{
-	DestroyMusic ((MUSIC_REF)handle);
-}
-
-void
-c_DestroyStringTable (uintptr_t handle)
-{
-	fprintf (stderr, "[DBG] c_DestroyStringTable: handle=%p\n", (void *)handle);
-	DestroyStringTable (ReleaseStringTable ((STRING_TABLE)handle));
-	fprintf (stderr, "[DBG] c_DestroyStringTable: done\n");
-}
 
 
 /*
@@ -1633,11 +1191,6 @@ c_CreateContext (const char *name)
 	return (uintptr_t)CreateContext (name);
 }
 
-void
-c_DestroyContext (uintptr_t ctx)
-{
-	DestroyContext ((CONTEXT)ctx);
-}
 
 uintptr_t
 c_SetContext (uintptr_t ctx)
@@ -1645,11 +1198,6 @@ c_SetContext (uintptr_t ctx)
 	return (uintptr_t)SetContext ((CONTEXT)ctx);
 }
 
-void
-c_SetContextFGFrame (uintptr_t frame)
-{
-	SetContextFGFrame ((FRAME)frame);
-}
 
 void
 c_SetContextClipRect (int x, int y, int w, int h)
@@ -1698,11 +1246,6 @@ c_SetFrameTransparentColor (uintptr_t frame, int r, int g, int b)
 			BUILD_COLOR (MAKE_RGB15 ((BYTE)r, (BYTE)g, (BYTE)b), 0x00));
 }
 
-void
-c_ClearDrawable (void)
-{
-	ClearDrawable ();
-}
 
 void
 c_GetFrameRect (uintptr_t frame, int *x, int *y, int *w, int *h)
@@ -1718,17 +1261,6 @@ c_GetFrameRect (uintptr_t frame, int *x, int *y, int *w, int *h)
 /* ---- Graphics batching bridges ------------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
 
-void
-c_BatchGraphics (void)
-{
-	BatchGraphics ();
-}
-
-void
-c_UnbatchGraphics (void)
-{
-	UnbatchGraphics ();
-}
 
 /* ---- Transition bridges -------------------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
@@ -1740,41 +1272,14 @@ c_SetTransitionSource (uintptr_t rect_ptr)
 	SetTransitionSource ((const RECT *)(uintptr_t)rect_ptr);
 }
 
-void
-c_ScreenTransition (int num_frames, uintptr_t rect_ptr)
-{
-	ScreenTransition (num_frames, (const RECT *)(uintptr_t)rect_ptr);
-}
 
 /* ---- SIS Drawing bridges ------------------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-HL-007 */
 
-void
-c_DrawSISFrame (void)
-{
-	DrawSISFrame ();
-}
-
-void
-c_DrawSISMessage (const char *msg)
-{
-	DrawSISMessage ((const UNICODE *)msg);
-}
-
-void
-c_DrawSISTitle (const char *title)
-{
-	DrawSISTitle ((UNICODE *)title);
-}
 
 /* ---- DoInput bridge ------------------------------------------------------ */
 /* @plan PLAN-20260326-COMMPT2.P06 @requirement REQ-DI-001 */
 
-void
-c_DoInput (void *state, int exclusive)
-{
-	DoInput (state, (BOOLEAN)exclusive);
-}
 
 /* ---- Screen/context accessor bridges ------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P06 */
@@ -1936,35 +1441,6 @@ c_GetPlanetName (void)
 	return (const char *)GLOBAL_SIS (PlanetName);
 }
 
-int
-c_CheckLoad (void)
-{
-	return (GLOBAL (CurrentActivity) & CHECK_LOAD) ? 1 : 0;
-}
-
-int
-c_GetSISScreenWidth (void)
-{
-	return (int)SIS_SCREEN_WIDTH;
-}
-
-int
-c_GetSISScreenHeight (void)
-{
-	return (int)SIS_SCREEN_HEIGHT;
-}
-
-int
-c_GetSliderY (void)
-{
-	return (int)SLIDER_Y;
-}
-
-int
-c_GetSliderHeight (void)
-{
-	return (int)SLIDER_HEIGHT;
-}
 
 void
 c_GetSISOrigin (int *x, int *y)
@@ -2123,23 +1599,6 @@ c_RunEncounterDoInput (void)
 /* ---- Audio teardown bridges ---------------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P07 @requirement REQ-HL-005 */
 
-void
-c_StopSound (void)
-{
-	StopSound ();
-}
-
-void
-c_SleepThreadUntil (unsigned int time)
-{
-	SleepThreadUntil ((TimeCount)time);
-}
-
-void
-c_FlushColorXForms (void)
-{
-	FlushColorXForms ();
-}
 
 unsigned int
 c_GetTimeCounter (void)
@@ -2147,10 +1606,5 @@ c_GetTimeCounter (void)
 	return (unsigned int)GetTimeCounter ();
 }
 
-void
-c_SleepThread (unsigned int duration)
-{
-	SleepThread ((TimeCount)duration);
-}
 
 #endif /* USE_RUST_COMM */

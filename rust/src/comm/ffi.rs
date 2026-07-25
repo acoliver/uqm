@@ -1015,16 +1015,19 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
         state.responses().count()
     };
 
+    crate::automation::ui_observation::observe_communication_responses(response_count);
+
     if response_count == 0 {
         // No responses — run last-replay then done.
         // run_last_replay calls C bridges, so no lock.
         extern "C" {
-            fn c_FadeMusic(
-                target_vol: std::ffi::c_int,
-                duration: std::ffi::c_int,
-            ) -> std::ffi::c_uint;
+            #[allow(clashing_extern_declarations)]
+            fn FadeMusic(target_vol: u8, duration: i16) -> std::ffi::c_uint;
         }
-        let timeout = c_FadeMusic(0, super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3);
+        let timeout = FadeMusic(
+            0u8,
+            (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,
+        );
         super::talk_segue::run_last_replay_bridge(timeout as i32);
         return 0;
     }
@@ -1409,10 +1412,7 @@ extern "C" {
         cb: Option<unsafe extern "C" fn()>,
     );
     // Splice one or more voice clips with text (used by NPCPhrase_splice when clip exists).
-    fn c_SpliceMultiTrack(
-        track_names: *mut *mut std::ffi::c_char,
-        track_text: *mut std::ffi::c_char,
-    );
+    fn SpliceMultiTrack(track_names: *mut *mut std::ffi::c_char, track_text: *mut std::ffi::c_char);
 }
 
 /// NPCPhrase with callback — the Rust replacement for C's NPCPhrase_cb.
@@ -1566,7 +1566,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
             c_SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);
         } else {
             let mut tracks: [*mut std::ffi::c_char; 2] = [clip as *mut _, ptr::null_mut()];
-            c_SpliceMultiTrack(tracks.as_mut_ptr(), text as *mut _);
+            SpliceMultiTrack(tracks.as_mut_ptr(), text as *mut _);
         }
     }
 

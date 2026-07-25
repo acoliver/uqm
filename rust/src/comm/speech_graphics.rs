@@ -74,10 +74,10 @@ impl SpeechGraphics {
         #[cfg(not(test))]
         unsafe {
             // Frame index 9 is the oscilloscope background frame.
-            c_bridge::c_InitOscilloscope(9);
+            c_bridge::InitOscilloscope(9);
             // Slider defaults: position 0,0, full width, background frame 0,
             // cursor frame 1. Production code fills in real values from CommData.
-            c_bridge::c_InitSlider(0, 0, 0, 0, 1);
+            c_bridge::InitSlider(0, 0, 0, 0, 1);
         }
     }
 
@@ -87,7 +87,7 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            c_bridge::c_SetSliderImage(state.frame_index());
+            c_bridge::SetSliderImage(state.frame_index());
         }
     }
 
@@ -110,8 +110,8 @@ impl SpeechGraphics {
 
         #[cfg(not(test))]
         unsafe {
-            c_bridge::c_DrawOscilloscope();
-            c_bridge::c_DrawSlider();
+            c_bridge::DrawOscilloscope();
+            c_bridge::DrawSlider();
         }
     }
 
@@ -141,15 +141,15 @@ impl SpeechGraphics {
 mod c_bridge {
     extern "C" {
         /// Initialize oscilloscope display. `frame` is the background frame index.
-        pub fn c_InitOscilloscope(frame: u32);
+        pub fn InitOscilloscope(frame: u32);
         /// Initialize slider widget.
-        pub fn c_InitSlider(x: i32, y: i32, w: i32, bg_frame: u32, cursor_frame: u32);
+        pub fn InitSlider(x: i32, y: i32, w: i32, bg_frame: u32, cursor_frame: u32);
         /// Set slider display image by ActivityFrame index.
-        pub fn c_SetSliderImage(frame: u32);
+        pub fn SetSliderImage(frame: u32);
         /// Redraw oscilloscope waveform.
-        pub fn c_DrawOscilloscope();
+        pub fn DrawOscilloscope();
         /// Redraw slider widget.
-        pub fn c_DrawSlider();
+        pub fn DrawSlider();
     }
 }
 

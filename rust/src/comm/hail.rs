@@ -13,48 +13,54 @@
 
 #[cfg(not(test))]
 mod c_bridge {
-    use std::ffi::{c_char, c_int, c_uint};
+    use super::super::locdata::CLocData;
+    use std::ffi::{c_char, c_int, c_uint, c_void};
+
+    // The C global CommData (LOCDATA struct) — accessed directly without bridge functions
+    extern "C" {
+        pub static mut CommData: CLocData;
+    }
 
     extern "C" {
         // Resource loading — accepts RESOURCE (const char *) as *const c_char
-        pub fn c_LoadFont(res: *const c_char) -> usize;
-        pub fn c_LoadGraphic(res: *const c_char) -> usize;
-        pub fn c_LoadColorMap(res: *const c_char) -> usize;
-        pub fn c_LoadMusic(res: *const c_char) -> usize;
-        pub fn c_LoadStringTable(res: *const c_char) -> usize;
+        pub fn LoadGraphicInstance(res: *const c_char) -> *mut c_void;
+        pub fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
+        pub fn LoadStringTableInstance(res: *const c_char) -> *mut c_void;
 
         // Capture (converts raw handle to ref-counted handle)
-        pub fn c_CaptureDrawable(handle: usize) -> usize;
-        pub fn c_CaptureColorMap(handle: usize) -> usize;
-        pub fn c_CaptureStringTable(handle: usize) -> usize;
+        pub fn CaptureDrawable(handle: *mut c_void) -> *mut c_void;
+        pub fn CaptureStringTable(handle: *mut c_void) -> *mut c_void;
 
         // Resource destruction
-        pub fn c_DestroyDrawable(handle: usize);
-        pub fn c_DestroyFont(handle: usize);
-        pub fn c_DestroyColorMap(handle: usize);
-        pub fn c_DestroyMusic(handle: usize);
-        pub fn c_DestroyStringTable(handle: usize);
+        pub fn DestroyDrawable(handle: *mut c_void);
+        pub fn DestroyFont(handle: *mut c_void) -> c_int;
+        #[allow(clashing_extern_declarations)]
+        pub fn DestroyMusic(handle: *mut c_void) -> c_int;
+        pub fn DestroyStringTable(handle: *mut c_void) -> c_int;
+        pub fn ReleaseStringTable(handle: *mut c_void) -> *mut c_void;
 
         // Context management
-        pub fn c_CreateContext(name: *const c_char) -> usize;
-        pub fn c_DestroyContext(ctx: usize);
-        pub fn c_SetContext(ctx: usize) -> usize;
-        pub fn c_SetContextFGFrame(frame: usize);
-        pub fn c_SetContextClipRect(x: c_int, y: c_int, w: c_int, h: c_int);
-        pub fn c_SetContextBackGroundColor(r: c_int, g: c_int, b: c_int);
-        pub fn c_SetContextFont(font: usize) -> usize;
+        pub fn CreateContextAux(name: *const c_char) -> *mut c_void;
+        pub fn DestroyContext(ctx: *mut c_void) -> c_int;
+        pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
+        pub fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
+        pub fn SetContextClipRect(x: c_int, y: c_int, w: c_int, h: c_int);
+        #[allow(clashing_extern_declarations)]
+        pub fn SetContextBackGroundColor(r: c_int, g: c_int, b: c_int);
+        pub fn SetContextFont(font: *mut c_void) -> *mut c_void;
 
         // comm.c static variable setters
-        pub fn c_SetAnimContext(ctx: usize);
-        pub fn c_SetTextCacheContext(ctx: usize);
-        pub fn c_SetTextCacheFrame(frame: usize);
+        pub fn c_SetAnimContext(ctx: *mut c_void);
+        pub fn c_SetTextCacheContext(ctx: *mut c_void);
+        pub fn c_SetTextCacheFrame(frame: *mut c_void);
 
         // Drawable management
-        pub fn c_CreateDrawable(dtype: c_uint, w: c_int, h: c_int, nframes: c_int) -> usize;
-        pub fn c_SetFrameTransparentColor(frame: usize, r: c_int, g: c_int, b: c_int);
-        pub fn c_ClearDrawable();
-        pub fn c_GetFrameRect(
-            frame: usize,
+        pub fn CreateDrawable(dtype: u8, w: i16, h: i16, nframes: u16) -> *mut c_void;
+        pub fn SetFrameTransparentColor(frame: *mut c_void, r: c_int, g: c_int, b: c_int);
+        pub fn ClearDrawable();
+        #[allow(clashing_extern_declarations)]
+        pub fn GetFrameRect(
+            frame: *mut c_void,
             x: *mut c_int,
             y: *mut c_int,
             w: *mut c_int,
@@ -62,56 +68,35 @@ mod c_bridge {
         );
 
         // Graphics batching
-        pub fn c_BatchGraphics();
+        pub fn BatchGraphics();
 
         // Transitions
-        pub fn c_SetTransitionSource(src: usize);
+        pub fn SetTransitionSource(src: *mut c_void);
 
         // SIS drawing
-        pub fn c_DrawSISFrame();
-        pub fn c_DrawSISMessage(msg: *const c_char);
-        pub fn c_DrawSISTitle(title: *const c_char);
+        pub fn DrawSISFrame();
+        pub fn DrawSISMessage(msg: *const c_char);
+        pub fn DrawSISTitle(title: *const c_char);
         pub fn c_DrawSISComWindow();
 
         // Encounter loop — runs DoInput with rust_DoCommunication as InputFunc
         pub fn c_RunEncounterDoInput();
 
         // Audio teardown
-        pub fn c_StopMusic();
-        pub fn c_StopSound();
-        pub fn c_StopTrack();
-        #[allow(
-            clashing_extern_declarations,
-            reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-        )]
-        pub fn c_FadeMusic(vol: c_int, duration: c_int) -> c_uint;
-        pub fn c_SleepThreadUntil(time: c_uint);
-        pub fn c_FlushColorXForms();
+        pub fn StopMusic();
+        pub fn StopSound();
+        pub fn StopTrack();
+        pub fn FadeMusic(vol: u8, duration: i16) -> c_uint;
+        pub fn SleepThreadUntil(time: c_uint);
+        pub fn FlushColorXForms();
 
-        // Activity flags
+        // Activity flags — read C-side CurrentActivity via existing bridge
+        pub fn get_current_activity() -> u16;
         pub fn c_SetLastActivityCheckLoad();
-        pub fn c_CheckAbort() -> c_int;
-        pub fn c_CheckLoad() -> c_int;
 
-        // Screen / context accessors
-        pub fn c_GetScreen() -> usize;
-        pub fn c_GetSpaceContext() -> usize;
-
-        // CommData accessors
-        pub fn c_GetCommDataAlienFrameRes() -> *const c_char;
-        pub fn c_GetCommDataAlienFontRes() -> *const c_char;
-        pub fn c_GetCommDataAlienColorMapRes() -> *const c_char;
-        pub fn c_GetCommDataAlienSongRes() -> *const c_char;
-        pub fn c_GetCommDataAlienAltSongRes() -> *const c_char;
-        pub fn c_GetCommDataAlienSongFlags() -> c_uint;
-        pub fn c_GetCommDataConversationPhrasesRes() -> *const c_char;
-        pub fn c_SetCommDataAlienFrame(frame: usize);
-        pub fn c_SetCommDataAlienFont(font: usize);
-        pub fn c_SetCommDataAlienColorMap(cmap: usize);
-        pub fn c_SetCommDataAlienSong(song: usize);
-        pub fn c_SetCommDataConversationPhrases(phrases: usize);
-        pub fn c_ClearCommDataConversationPhrasesRes();
-        pub fn c_ClearCommDataConversationPhrases();
+        // Screen / context globals
+        pub static mut Screen: *mut c_void;
+        pub static mut SpaceContext: *mut c_void;
 
         // Encounter functions
         pub fn c_CallInitEncounterFunc();
@@ -127,18 +112,17 @@ mod c_bridge {
         pub fn c_IsStarbaseConversation() -> c_int;
         pub fn c_GetPlanetName() -> *const c_char;
         pub fn c_GetGameString(base: c_int, offset: c_int) -> *const c_char;
-        pub fn c_WonLastBattle() -> c_int;
         pub fn c_GetCommWndRect(x: *mut c_int, y: *mut c_int, w: *mut c_int, h: *mut c_int);
         pub fn c_SetCommWndRect(x: c_int, y: c_int, w: c_int, h: c_int);
 
         // Dimension constants
-        pub fn c_GetSISScreenWidth() -> c_int;
-        pub fn c_GetSISScreenHeight() -> c_int;
-        pub fn c_GetSliderY() -> c_int;
-        pub fn c_GetSliderHeight() -> c_int;
         pub fn c_GetSISOrigin(x: *mut c_int, y: *mut c_int);
         pub fn c_GetPlayerFontRes() -> *const c_char;
         pub fn c_GetWantPixmap() -> c_uint;
+
+        // C runtime globals for screen dimensions
+        pub static mut ScreenWidth: c_int;
+        pub static mut ScreenHeight: c_int;
     }
 }
 
@@ -204,55 +188,57 @@ pub unsafe fn hail_alien() {
         // Step 2: Load PlayerFont
         // ----------------------------------------------------------------
         let player_font_res = c_GetPlayerFontRes();
-        let player_font = c_LoadFont(player_font_res);
+        let player_font = LoadGraphicInstance(player_font_res);
 
         // ----------------------------------------------------------------
         // Step 3: Load and set alien resources
         // ----------------------------------------------------------------
 
         // AlienFrame: load → capture → set
-        let alien_frame_raw = c_LoadGraphic(c_GetCommDataAlienFrameRes());
-        let alien_frame = c_CaptureDrawable(alien_frame_raw);
-        c_SetCommDataAlienFrame(alien_frame);
+        let alien_frame_raw = LoadGraphicInstance(unsafe { c_bridge::CommData.alien_frame_res });
+        let alien_frame = CaptureDrawable(alien_frame_raw);
+        unsafe { c_bridge::CommData.alien_frame = alien_frame };
 
         // AlienFont: load → set (not captured, direct Destroy on exit)
-        let alien_font = c_LoadFont(c_GetCommDataAlienFontRes());
-        c_SetCommDataAlienFont(alien_font);
+        let alien_font = LoadGraphicInstance(unsafe { c_bridge::CommData.alien_font_res });
+        unsafe { c_bridge::CommData.alien_font = alien_font };
 
         // AlienColorMap: load → capture → set
-        let alien_cmap_raw = c_LoadColorMap(c_GetCommDataAlienColorMapRes());
-        let alien_cmap = c_CaptureColorMap(alien_cmap_raw);
-        c_SetCommDataAlienColorMap(alien_cmap);
+        let alien_cmap_raw =
+            LoadStringTableInstance(unsafe { c_bridge::CommData.alien_colormap_res });
+        let alien_cmap = CaptureStringTable(alien_cmap_raw);
+        unsafe { c_bridge::CommData.alien_colormap = alien_cmap };
 
         // AlienSong: alt-song fallback then primary
-        let song_flags = c_GetCommDataAlienSongFlags();
-        let alt_song_res = c_GetCommDataAlienAltSongRes();
+        let song_flags = unsafe { c_bridge::CommData.alien_song_flags };
+        let alt_song_res = unsafe { c_bridge::CommData.alien_alt_song_res };
         let alien_song = if (song_flags & LDASF_USE_ALTERNATE) != 0 && !alt_song_res.is_null() {
-            let alt = c_LoadMusic(alt_song_res);
-            if alt != 0 {
+            let alt = LoadMusicInstance(alt_song_res);
+            if !alt.is_null() {
                 alt
             } else {
-                c_LoadMusic(c_GetCommDataAlienSongRes())
+                LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
             }
         } else {
-            c_LoadMusic(c_GetCommDataAlienSongRes())
+            LoadMusicInstance(unsafe { c_bridge::CommData.alien_song_res })
         };
-        c_SetCommDataAlienSong(alien_song);
+        unsafe { c_bridge::CommData.alien_song = alien_song };
 
         // ConversationPhrases: load → capture → set
-        let phrases_raw = c_LoadStringTable(c_GetCommDataConversationPhrasesRes());
-        let phrases = c_CaptureStringTable(phrases_raw);
-        c_SetCommDataConversationPhrases(phrases);
+        let phrases_raw =
+            LoadStringTableInstance(unsafe { c_bridge::CommData.conversation_phrases_res });
+        let phrases = CaptureStringTable(phrases_raw);
+        unsafe { c_bridge::CommData.conversation_phrases = phrases };
 
         // Populate COMM_STATE.comm_data so Rust-side NPCPhrase can
         // resolve conversation phrases without calling back into C.
         {
             let comm_data = super::types::CommData {
-                conversation_phrases: phrases as *mut std::ffi::c_void,
-                alien_frame: alien_frame as *mut std::ffi::c_void,
-                alien_font: alien_font as *mut std::ffi::c_void,
-                alien_color_map: alien_cmap as *mut std::ffi::c_void,
-                alien_song: alien_song as *mut std::ffi::c_void,
+                conversation_phrases: phrases,
+                alien_frame,
+                alien_font,
+                alien_color_map: alien_cmap,
+                alien_song,
                 ..Default::default()
             };
             super::state::COMM_STATE.write().set_comm_data(comm_data);
@@ -267,26 +253,27 @@ pub unsafe fn hail_alien() {
         // Step 5: TextCacheContext setup
         // ----------------------------------------------------------------
         let text_cache_ctx_name = c"TextCacheContext".as_ptr() as *const _;
-        let text_cache_ctx = c_CreateContext(text_cache_ctx_name);
+        let text_cache_ctx = CreateContextAux(text_cache_ctx_name);
 
-        let sis_w = c_GetSISScreenWidth();
-        let sis_h = c_GetSISScreenHeight();
-        let slider_y = c_GetSliderY();
-        let slider_h = c_GetSliderHeight();
+        let sis_w = unsafe { c_bridge::ScreenWidth - 78 };
+        let sis_h = unsafe { c_bridge::ScreenHeight - 13 };
+        let slider_y = 107;
+        let slider_h = 15;
         let cache_height = sis_h - slider_y - slider_h + 2;
 
         let want_pixmap = c_GetWantPixmap();
-        let cache_frame_raw = c_CreateDrawable(want_pixmap, sis_w, cache_height, 1);
-        let text_cache_frame = c_CaptureDrawable(cache_frame_raw);
+        let cache_frame_raw =
+            CreateDrawable(want_pixmap as u8, sis_w as i16, cache_height as i16, 1);
+        let text_cache_frame = CaptureDrawable(cache_frame_raw);
 
         c_SetTextCacheContext(text_cache_ctx);
         c_SetTextCacheFrame(text_cache_frame);
-        c_SetContext(text_cache_ctx);
-        c_SetContextFGFrame(text_cache_frame);
+        SetContext(text_cache_ctx);
+        SetContextFGFrame(text_cache_frame);
         // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
-        c_SetContextBackGroundColor(0x00, 0x00, 0x10);
-        c_ClearDrawable();
-        c_SetFrameTransparentColor(text_cache_frame, 0x00, 0x00, 0x10);
+        SetContextBackGroundColor(0x00, 0x00, 0x10);
+        ClearDrawable();
+        SetFrameTransparentColor(text_cache_frame, 0x00, 0x00, 0x10);
 
         // ----------------------------------------------------------------
         // Step 6: Clear phrase buffer
@@ -296,25 +283,25 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 7: Set SpaceContext and save old font
         // ----------------------------------------------------------------
-        let space_ctx = c_GetSpaceContext();
-        c_SetContext(space_ctx);
-        let old_font = c_SetContextFont(player_font);
+        let space_ctx = unsafe { SpaceContext };
+        SetContext(space_ctx);
+        let old_font = SetContextFont(player_font);
 
         // ----------------------------------------------------------------
         // Step 8: Create AnimContext and configure
         // ----------------------------------------------------------------
         let anim_ctx_name = c"AnimContext".as_ptr() as *const _;
-        let anim_ctx = c_CreateContext(anim_ctx_name);
+        let anim_ctx = CreateContextAux(anim_ctx_name);
         c_SetAnimContext(anim_ctx);
-        c_SetContext(anim_ctx);
-        let screen = c_GetScreen();
-        c_SetContextFGFrame(screen);
+        SetContext(anim_ctx);
+        let screen = unsafe { Screen };
+        SetContextFGFrame(screen);
 
         let mut _frame_x: i32 = 0;
         let mut _frame_y: i32 = 0;
         let mut _frame_w: i32 = 0;
         let mut frame_h: i32 = 0;
-        c_GetFrameRect(
+        GetFrameRect(
             alien_frame,
             ptr::addr_of_mut!(_frame_x),
             ptr::addr_of_mut!(_frame_y),
@@ -339,10 +326,10 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Steps 9–10: Transition, batch, draw SIS UI
         // ----------------------------------------------------------------
-        c_SetTransitionSource(0);
-        c_BatchGraphics();
+        SetTransitionSource(ptr::null_mut());
+        BatchGraphics();
 
-        if c_WonLastBattle() != 0 {
+        if (c_bridge::get_current_activity() & 0xFF) == 5 {
             // WON_LAST_BATTLE branch: set clip to current CommWndRect corner
             let mut cx: i32 = 0;
             let mut cy: i32 = 0;
@@ -354,7 +341,7 @@ pub unsafe fn hail_alien() {
                 ptr::addr_of_mut!(cw),
                 ptr::addr_of_mut!(ch),
             );
-            c_SetContextClipRect(cx, cy, cw, ch);
+            SetContextClipRect(cx, cy, cw, ch);
         } else {
             // Normal branch
             let mut org_x: i32 = 0;
@@ -369,25 +356,25 @@ pub unsafe fn hail_alien() {
                 ptr::addr_of_mut!(_wnd_w2),
                 ptr::addr_of_mut!(_wnd_h2),
             );
-            c_SetContextClipRect(org_x, org_y, _wnd_w2, _wnd_h2);
+            SetContextClipRect(org_x, org_y, _wnd_w2, _wnd_h2);
             // Update CommWndRect.corner to SIS origin
             c_SetCommWndRect(org_x, org_y, _wnd_w2, _wnd_h2);
 
-            c_DrawSISFrame();
+            DrawSISFrame();
 
             if c_IsStarbaseConversation() != 0 {
                 // Talking to allied Starbase
                 // GAME_STRING(STARBASE_STRING_BASE + 1) = "Starbase Commander"
                 let msg = c_GetGameString(STARBASE_STRING_BASE, 1);
-                c_DrawSISMessage(msg);
+                DrawSISMessage(msg);
                 // GAME_STRING(STARBASE_STRING_BASE + 0) = "Starbase"
                 let title = c_GetGameString(STARBASE_STRING_BASE, 0);
-                c_DrawSISTitle(title);
+                DrawSISTitle(title);
             } else {
                 // Default titles: NULL message + planet name
-                c_DrawSISMessage(ptr::null());
+                DrawSISMessage(ptr::null());
                 let planet_name = c_GetPlanetName();
-                c_DrawSISTitle(planet_name);
+                DrawSISTitle(planet_name);
             }
         }
 
@@ -415,27 +402,28 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
 
         // AnimContext teardown (C lines 1126–1128)
-        c_SetContext(space_ctx);
-        c_DestroyContext(anim_ctx);
+        SetContext(space_ctx);
+        DestroyContext(anim_ctx);
 
         // FlushColorXForms, ClearSubtitles (C lines 1130–1131)
-        c_FlushColorXForms();
+        FlushColorXForms();
         super::ffi::rust_ClearSubtitles();
 
         // Stop audio, fade music (C lines 1133–1136)
-        c_StopMusic();
-        c_StopSound();
-        c_StopTrack();
-        let fade_end = c_FadeMusic(NORMAL_VOLUME, 0);
-        // ONE_SECOND/60 ≈ 16ms at 60Hz; c_FadeMusic returns TimeCount
+        StopMusic();
+        StopSound();
+        StopTrack();
+        let fade_end = FadeMusic(NORMAL_VOLUME as u8, 0);
+        // ONE_SECOND/60 ≈ 16ms at 60Hz; FadeMusic returns TimeCount
         // The sleep ensures the fade completes before teardown.
         // We approximate ONE_SECOND/60 as 1 tick unit (C uses GetTimeCounter units).
-        c_SleepThreadUntil(fade_end + 1);
+        SleepThreadUntil(fade_end + 1);
 
         // ----------------------------------------------------------------
         // Step 16: Call post/uninit encounter funcs
         // ----------------------------------------------------------------
-        if c_CheckAbort() == 0 && c_CheckLoad() == 0 {
+        let activity = c_bridge::get_current_activity();
+        if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
             c_CallPostEncounterFunc();
         }
         c_CallUninitEncounterFunc();
@@ -443,8 +431,8 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 17: Restore context and font
         // ----------------------------------------------------------------
-        c_SetContext(space_ctx);
-        c_SetContextFont(old_font);
+        SetContext(space_ctx);
+        SetContextFont(old_font);
 
         // ----------------------------------------------------------------
         // Step 18: Destroy all resources in exact C order
@@ -459,35 +447,35 @@ pub unsafe fn hail_alien() {
         // already do Release+Destroy internally.  Non-captured resources
         // (Font, Music) go straight to Destroy.
 
-        // ConversationPhrases — captured; c_DestroyStringTable does Release+Destroy
-        c_DestroyStringTable(phrases);
+        // ConversationPhrases — captured; DestroyStringTable does Release+Destroy
+        DestroyStringTable(phrases);
 
         // AlienSong — not captured, direct Destroy
-        c_DestroyMusic(alien_song);
+        DestroyMusic(alien_song);
 
-        // AlienColorMap — captured; c_DestroyColorMap does Release+Destroy
-        c_DestroyColorMap(alien_cmap);
+        // AlienColorMap — captured; release before destroying the table
+        DestroyStringTable(ReleaseStringTable(alien_cmap));
 
         // AlienFont — not captured, direct Destroy
-        c_DestroyFont(alien_font);
+        DestroyFont(alien_font);
 
-        // AlienFrame — captured; c_DestroyDrawable does Release+Destroy
-        c_DestroyDrawable(alien_frame);
+        // AlienFrame — captured; DestroyDrawable does Release+Destroy
+        DestroyDrawable(alien_frame);
 
         // TextCacheContext — context, direct destroy
-        c_DestroyContext(text_cache_ctx);
+        DestroyContext(text_cache_ctx);
 
-        // TextCacheFrame — captured; c_DestroyDrawable does Release+Destroy
-        c_DestroyDrawable(text_cache_frame);
+        // TextCacheFrame — captured; DestroyDrawable does Release+Destroy
+        DestroyDrawable(text_cache_frame);
 
         // PlayerFont — not captured, direct Destroy
-        c_DestroyFont(player_font);
+        DestroyFont(player_font);
 
         // ----------------------------------------------------------------
         // Steps 19–20: Clear CommData fields and pCurInputState
         // ----------------------------------------------------------------
-        c_ClearCommDataConversationPhrasesRes();
-        c_ClearCommDataConversationPhrases();
+        unsafe { c_bridge::CommData.conversation_phrases_res = std::ptr::null() };
+        unsafe { c_bridge::CommData.conversation_phrases = std::ptr::null_mut() };
         // Clear Rust-side comm_data (resources already destroyed above)
         super::state::COMM_STATE.write().clear_comm_data();
         // pCurInputState was already cleared by c_RunEncounterDoInput

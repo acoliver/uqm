@@ -141,6 +141,7 @@ extern "C" {
     )]
     pub fn ScreenTransition(a: c_int, b: *mut c_void);
     /// `Color SetContextBackGroundColor(Color)` — Color is a 4-byte struct.
+    #[allow(clashing_extern_declarations)]
     pub fn SetContextBackGroundColor(color: Color) -> Color;
     /// `DWORD SeedRandomNumbers(void)` — returns a seed value.
     pub fn SeedRandomNumbers() -> u32;

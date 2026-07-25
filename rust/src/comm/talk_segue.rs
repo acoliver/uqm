@@ -56,24 +56,23 @@ pub(super) mod c_bridge {
     use std::ffi::{c_char, c_int, c_uint};
 
     extern "C" {
-        pub fn c_PlayingTrack() -> u16;
-        pub fn c_JumpTrack();
-        pub fn c_PlayTrack();
-        pub fn c_StopTrack();
-        pub fn c_FastForward_Page();
-        pub fn c_FastForward_Smooth();
-        pub fn c_FastReverse_Page();
-        pub fn c_FastReverse_Smooth();
-        pub fn c_CheckSubtitles();
-        pub fn c_ClearSubtitles();
+        pub fn PlayingTrack() -> u16;
+        pub fn JumpTrack();
+        pub fn PlayTrack();
+        pub fn StopTrack();
+        pub fn FastForward_Page();
+        pub fn FastForward_Smooth();
+        pub fn FastReverse_Page();
+        pub fn FastReverse_Smooth();
+        pub fn comm_CheckSubtitles();
+        pub fn comm_ClearSubtitles();
         pub fn c_UpdateSpeechGraphics();
         pub fn c_InitSpeechGraphics();
         pub fn c_FeedbackPlayerPhrase(text: *const c_char);
-        pub fn c_FadeMusic(volume: c_int, duration: c_int) -> c_uint;
-        pub fn c_SetSliderImage(frame_index: c_uint);
+        pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
+        pub fn SetSliderImage(frame_index: c_uint);
         pub fn c_UpdateAnimations(seeking: c_int);
-        pub fn c_CheckAbort() -> c_int;
-        pub fn c_WonLastBattle() -> c_int;
+        pub fn get_current_activity() -> u16;
         /// @plan PLAN-20260325-COMMPT3.P03
         /// @requirement REQ-CM-001, REQ-CM-002
         /// @pseudocode 001-colormap-music-bridges lines 01-08
@@ -82,17 +81,17 @@ pub(super) mod c_bridge {
         /// @requirement REQ-MU-001, REQ-MU-002
         /// @pseudocode 001-colormap-music-bridges lines 09-15
         pub fn c_PlayAlienMusic();
-        pub fn c_DrawAlienFrame();
+        pub fn DrawAlienFrame();
         pub fn c_CommIntroTransition();
-        pub fn c_InitCommAnimations();
-        pub fn c_RunningIntroAnim() -> c_int;
+        pub fn InitCommAnimations();
+        pub fn runningIntroAnim() -> c_int;
         pub fn c_RunCommAnimFrame();
-        pub fn c_RunningTalkingAnim() -> c_int;
-        pub fn c_WantTalkingAnim() -> c_int;
-        pub fn c_HaveTalkingAnim() -> c_int;
-        pub fn c_SetRunTalkingAnim();
-        pub fn c_SetStopTalkingAnim();
-        pub fn c_SetRunIntroAnim();
+        pub fn runningTalkingAnim() -> c_int;
+        pub fn wantTalkingAnim() -> c_int;
+        pub fn haveTalkingAnim() -> c_int;
+        pub fn setRunTalkingAnim();
+        pub fn setStopTalkingAnim();
+        pub fn setRunIntroAnim();
         pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
         pub fn c_SelectConversationSummary();
         pub fn c_GetOptSmoothScroll() -> c_int;
@@ -100,10 +99,10 @@ pub(super) mod c_bridge {
         // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-007
         pub fn c_GetPulsedMenuKey(key_index: c_int) -> c_int;
         pub fn c_GetCurrentMenuKey(key_index: c_int) -> c_int;
-        pub fn c_UpdateInputState();
+        pub fn UpdateInputState();
         // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
         pub fn c_HasTransitionAnim() -> c_int;
-        pub fn c_SleepThread(duration: c_uint);
+        pub fn SleepThread(duration: c_int);
     }
 
     pub mod music_volume {
@@ -245,7 +244,7 @@ pub fn do_talk_segue(state: &mut CommState, ts: &mut TalkingState) -> bool {
     // and PulsedInputState from ImmediateInputState.
     #[cfg(not(test))]
     unsafe {
-        c_bridge::c_UpdateInputState();
+        c_bridge::UpdateInputState();
     }
 
     // ---- cancel (skip to end of current phrase) ----------------------------
@@ -287,7 +286,7 @@ pub fn do_talk_segue(state: &mut CommState, ts: &mut TalkingState) -> bool {
     // Matches C DoTalkSegue: SleepThreadUntil(NextTime) with ONE_SECOND/60 rate.
     #[cfg(not(test))]
     unsafe {
-        c_bridge::c_SleepThread(14); // ONE_SECOND / 60 = 840 / 60 = 14
+        c_bridge::SleepThread(14); // ONE_SECOND / 60 = 840 / 60 = 14
     }
 
     let cur_track = playing_track(state);
@@ -521,12 +520,12 @@ pub unsafe fn alien_talk_first_call_init() {
     {
         c_bridge::c_InitSpeechGraphics();
         c_bridge::c_SetColorMapFromCommData();
-        c_bridge::c_DrawAlienFrame();
+        c_bridge::DrawAlienFrame();
         rust_UpdateSpeechGraphics();
         c_bridge::c_CommIntroTransition();
         c_bridge::c_PlayAlienMusic();
-        c_bridge::c_FadeMusic(c_bridge::music_volume::BACKGROUND, 0);
-        c_bridge::c_InitCommAnimations();
+        c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
+        c_bridge::InitCommAnimations();
         c_bridge::c_ClearLastActivityLoadFlag();
     }
 }
@@ -543,9 +542,9 @@ extern "C" {
 pub unsafe fn fade_music_to_foreground_bridge() {
     #[cfg(not(test))]
     {
-        c_bridge::c_FadeMusic(
-            c_bridge::music_volume::FOREGROUND,
-            c_bridge::ONE_SECOND_TICKS,
+        c_bridge::FadeMusic(
+            c_bridge::music_volume::FOREGROUND as u8,
+            c_bridge::ONE_SECOND_TICKS as i16,
         );
     }
 }
@@ -637,7 +636,7 @@ fn check_abort(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_CheckAbort() != 0
+        c_bridge::get_current_activity() & 0x4000 != 0
     }
     #[cfg(test)]
     {
@@ -746,7 +745,7 @@ fn won_last_battle(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_WonLastBattle() != 0
+        c_bridge::get_current_activity() & 0xFF == 5
     }
     #[cfg(test)]
     {
@@ -761,7 +760,7 @@ fn won_last_battle(state: &CommState) -> bool {
 
 #[cfg(not(test))]
 pub fn check_abort_external() -> bool {
-    unsafe { c_bridge::c_CheckAbort() != 0 }
+    unsafe { c_bridge::get_current_activity() & 0x4000 != 0 }
 }
 
 #[cfg(not(test))]
@@ -791,7 +790,7 @@ pub fn check_left_external() -> bool {
 
 #[cfg(not(test))]
 pub fn won_last_battle_external() -> bool {
-    unsafe { c_bridge::c_WonLastBattle() != 0 }
+    unsafe { c_bridge::get_current_activity() & 0xFF == 5 }
 }
 
 /// Run the "last replay" DoInput loop from C (no lock needed).
@@ -807,7 +806,7 @@ pub fn run_last_replay_bridge(timeout: i32) {
 #[cfg(not(test))]
 pub fn fade_music_to_background_bridge() {
     unsafe {
-        c_bridge::c_FadeMusic(c_bridge::music_volume::BACKGROUND, 0);
+        c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
     }
 }
 
@@ -852,7 +851,7 @@ fn playing_track(state: &CommState) -> u32 {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_PlayingTrack() as u32
+        c_bridge::PlayingTrack() as u32
     }
     #[cfg(test)]
     {
@@ -869,7 +868,7 @@ fn jump_track(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_JumpTrack();
+        c_bridge::JumpTrack();
     }
     #[cfg(test)]
     {
@@ -881,7 +880,7 @@ fn play_track(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_PlayTrack();
+        c_bridge::PlayTrack();
     }
     #[cfg(test)]
     {
@@ -893,7 +892,7 @@ fn stop_track(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_StopTrack();
+        c_bridge::StopTrack();
     }
     #[cfg(test)]
     {
@@ -906,8 +905,8 @@ fn fast_forward(state: &mut CommState) {
     unsafe {
         let _ = state;
         match get_scroll_mode() {
-            ScrollMode::Page => c_bridge::c_FastForward_Page(),
-            ScrollMode::Smooth => c_bridge::c_FastForward_Smooth(),
+            ScrollMode::Page => c_bridge::FastForward_Page(),
+            ScrollMode::Smooth => c_bridge::FastForward_Smooth(),
         }
     }
     #[cfg(test)]
@@ -921,8 +920,8 @@ fn fast_reverse(state: &mut CommState) {
     unsafe {
         let _ = state;
         match get_scroll_mode() {
-            ScrollMode::Page => c_bridge::c_FastReverse_Page(),
-            ScrollMode::Smooth => c_bridge::c_FastReverse_Smooth(),
+            ScrollMode::Page => c_bridge::FastReverse_Page(),
+            ScrollMode::Smooth => c_bridge::FastReverse_Smooth(),
         }
     }
     #[cfg(test)]
@@ -947,7 +946,7 @@ fn check_subtitles(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_CheckSubtitles();
+        c_bridge::comm_CheckSubtitles();
     }
     #[cfg(test)]
     {
@@ -961,7 +960,7 @@ fn clear_subtitles(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_ClearSubtitles();
+        c_bridge::comm_ClearSubtitles();
     }
     #[cfg(test)]
     {
@@ -998,7 +997,7 @@ fn set_slider_image(state: &mut CommState, img: SliderImage) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_SetSliderImage(img as u32);
+        c_bridge::SetSliderImage(img as u32);
     }
     #[cfg(test)]
     {
@@ -1080,7 +1079,7 @@ fn want_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_WantTalkingAnim() != 0
+        c_bridge::wantTalkingAnim() != 0
     }
     #[cfg(test)]
     {
@@ -1092,7 +1091,7 @@ fn have_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_HaveTalkingAnim() != 0
+        c_bridge::haveTalkingAnim() != 0
     }
     #[cfg(test)]
     {
@@ -1117,7 +1116,7 @@ fn set_run_intro_anim(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_SetRunIntroAnim();
+        c_bridge::setRunIntroAnim();
     }
     #[cfg(test)]
     {
@@ -1129,7 +1128,7 @@ fn set_run_talking_anim(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_SetRunTalkingAnim();
+        c_bridge::setRunTalkingAnim();
     }
     #[cfg(test)]
     {
@@ -1141,7 +1140,7 @@ fn set_stop_talking_anim(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_SetStopTalkingAnim();
+        c_bridge::setStopTalkingAnim();
     }
     #[cfg(test)]
     {
@@ -1153,7 +1152,7 @@ fn running_intro_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_RunningIntroAnim() != 0
+        c_bridge::runningIntroAnim() != 0
     }
     #[cfg(test)]
     {
@@ -1165,7 +1164,7 @@ fn running_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_RunningTalkingAnim() != 0
+        c_bridge::runningTalkingAnim() != 0
     }
     #[cfg(test)]
     {
@@ -1207,7 +1206,7 @@ fn set_music_background_vol(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_FadeMusic(c_bridge::music_volume::BACKGROUND, 0);
+        c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
     }
     #[cfg(test)]
     {
@@ -1219,9 +1218,9 @@ fn fade_music_to_foreground(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_FadeMusic(
-            c_bridge::music_volume::FOREGROUND,
-            60, // ONE_SECOND
+        c_bridge::FadeMusic(
+            c_bridge::music_volume::FOREGROUND as u8,
+            60i16, // ONE_SECOND
         );
     }
     #[cfg(test)]
@@ -1234,9 +1233,9 @@ fn fade_music_to_background(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_FadeMusic(
-            c_bridge::music_volume::BACKGROUND,
-            60, // ONE_SECOND
+        c_bridge::FadeMusic(
+            c_bridge::music_volume::BACKGROUND as u8,
+            60i16, // ONE_SECOND
         );
     }
     #[cfg(test)]
@@ -1266,7 +1265,7 @@ fn draw_alien_frame(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_DrawAlienFrame();
+        c_bridge::DrawAlienFrame();
     }
     #[cfg(test)]
     {
@@ -1290,7 +1289,7 @@ fn init_comm_animations(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_InitCommAnimations();
+        c_bridge::InitCommAnimations();
     }
     #[cfg(test)]
     {

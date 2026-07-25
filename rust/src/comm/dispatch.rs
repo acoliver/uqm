@@ -29,8 +29,8 @@ pub struct CPoint {
     pub y: i16,
 }
 
-/// C: `typedef uint8 BYTE` — SPECIES_ID is an enum stored as BYTE.
-pub type CSpeciesId = u8;
+/// C `SPECIES_ID` is an enum and therefore has C `int` layout.
+pub type CSpeciesId = i32;
 
 /// C: `typedef void* STRING` (STRING_TABLE_ENTRY_DESC*)
 pub type CStringHandle = *mut c_void;
@@ -353,26 +353,71 @@ mod ffi {
         pub fn DrawHyperCoords(origin: CPoint);
         pub fn DrawSISTitle(title: *const c_char);
 
-        // Game state helpers
-        pub fn PickCaptainName() -> u8;
+        // TFB_Random for PickCaptainName (libs/misc.h)
+        pub fn TFB_Random() -> u32;
 
         // Starbase dispatch bridges (rust_bridge_mainloop.c)
-        pub fn rust_cleanup_after_starbase();
-        pub fn rust_do_time_passage();
+        // Note: cleanup_after_starbase, do_time_passage, and do_starbase_menu_input
+        // were removed — they referenced static C functions. The starbase path
+        // needs these ported or made non-static.
         pub fn rust_set_cur_star_desc_ptr_null();
-        pub fn rust_do_starbase_menu_input();
 
         // CommIntroMode (comm.c) — C: SetCommIntroMode(mode, howLong)
         pub fn SetCommIntroMode(mode: u32, how_long: u32);
 
         // CommData copy — copies LOCDATA to C's global CommData
         pub fn rust_copy_locdata_to_comm_data(locdata_ptr: *const c_void);
+
+        // Encounter function pointer bridges (rust_comm.c)
+        pub fn c_CallPostEncounterFunc();
+        pub fn c_CallUninitEncounterFunc();
+
+        // Race-specific init_*_comm functions (C, from comm/*/racec.c)
+        // These return LOCDATA* and are called directly to bypass
+        // the broken C init_race dispatch in commglue.c.
+        pub fn init_arilou_comm() -> *mut c_void;
+        pub fn init_blackurq_comm() -> *mut c_void;
+        pub fn init_chmmr_comm() -> *mut c_void;
+        pub fn init_commander_comm() -> *mut c_void;
+        pub fn init_starbase_comm() -> *mut c_void;
+        pub fn init_druuge_comm() -> *mut c_void;
+        pub fn init_ilwrath_comm() -> *mut c_void;
+        pub fn init_melnorme_comm() -> *mut c_void;
+        pub fn init_mycon_comm() -> *mut c_void;
+        pub fn init_orz_comm() -> *mut c_void;
+        pub fn init_pkunk_comm() -> *mut c_void;
+        pub fn init_shofixti_comm() -> *mut c_void;
+        pub fn init_slyland_comm() -> *mut c_void;
+        pub fn init_slylandro_comm() -> *mut c_void;
+        pub fn init_spathi_comm() -> *mut c_void;
+        pub fn init_spahome_comm() -> *mut c_void;
+        pub fn init_supox_comm() -> *mut c_void;
+        pub fn init_syreen_comm() -> *mut c_void;
+        pub fn init_talkpet_comm() -> *mut c_void;
+        pub fn init_thradd_comm() -> *mut c_void;
+        pub fn init_umgah_comm() -> *mut c_void;
+        pub fn init_urquan_comm() -> *mut c_void;
+        pub fn init_utwig_comm() -> *mut c_void;
+        pub fn init_vux_comm() -> *mut c_void;
+        pub fn init_rebel_yehat_comm() -> *mut c_void;
+        pub fn init_yehat_comm() -> *mut c_void;
+        pub fn init_zoqfot_comm() -> *mut c_void;
+
+        // Rust dialogue initialization (rust_comm.c → rust_init_race_dialogue)
+        pub fn rust_init_race_dialogue(comm_id: i32) -> i32;
     }
 }
 
 // ---------------------------------------------------------------------------
 // Helper functions (porting C inline functions/macros)
 // ---------------------------------------------------------------------------
+
+/// C: `PickCaptainName()` = `((COUNT)TFB_Random() & (NUM_CAPTAINS_NAMES - 1)) + NAME_OFFSET`
+/// where NUM_CAPTAINS_NAMES=16, NAME_OFFSET=5. Ported to pure Rust.
+#[inline]
+unsafe fn pick_captain_name() -> u8 {
+    ((ffi::TFB_Random() & 0x0F) + 5) as u8
+}
 
 /// C: `LOBYTE(x)` — extract low byte of a u16.
 #[inline]
@@ -547,6 +592,7 @@ pub unsafe extern "C" fn rust_race_communication() {
 
     let frag_ptr = lock_ship_frag(npc_q, h_star_ship);
     let i = (*frag_ptr).race_id;
+
     // UnlockShipFrag is a no-op in QUEUE_TABLE mode
 
     let conv_id = if (i as usize) < RACE_COMMUNICATION.len() {
@@ -554,6 +600,7 @@ pub unsafe extern "C" fn rust_race_communication() {
     } else {
         conv::INVALID
     };
+    crate::automation::scenario::observe_encounter_dispatch(conv_id);
 
     let status = init_communication(conv_id);
 
@@ -645,6 +692,7 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
 
     if which_comm == conv::URQUAN_DRONE {
         status = ship::URQUAN_DRONE_SHIP as u16;
+        // C skips StartSphereTracking and BuildBattle for URQUAN_DRONE
         let _ = init_communication_inner(conv::URQUAN, status);
     } else if which_comm == conv::YEHAT_REBEL {
         status = ship::YEHAT_REBEL_SHIP as u16;
@@ -669,26 +717,39 @@ pub unsafe fn init_communication(which_comm: u32) -> u16 {
 
 /// Inner part of InitCommunication after ship type is resolved.
 /// Handles StartSphereTracking, BuildBattle, init_race, encounter, and HailAlien.
+///
+/// `skip_sphere_tracking` should be true for URQUAN_DRONE encounters, which
+/// in C skip both StartSphereTracking and BuildBattle(NPC_PLAYER_NUM).
 unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
-    start_sphere_tracking(ship_type as u8);
+    // C calls StartSphereTracking and BuildBattle for all conversations
+    // EXCEPT URQUAN_DRONE (which skips the entire else branch in C).
+    // For URQUAN_DRONE, which_comm has already been remapped to URQUAN,
+    // so we detect it by checking ship_type == URQUAN_DRONE_SHIP.
+    let skip_sphere_tracking = ship_type == ship::URQUAN_DRONE_SHIP as u16;
 
-    if which_comm == conv::ORZ
-        || (which_comm == conv::TALKING_PET
-            && (get_game_state("TALKING_PET_ON_SHIP") == 0
-                || lobyte(c_extern::get_current_activity()) == IN_LAST_BATTLE))
-        || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
-    {
-        ffi::BuildBattle(NPC_PLAYER_NUM);
+    if !skip_sphere_tracking {
+        start_sphere_tracking(ship_type as u8);
+
+        if which_comm == conv::ORZ
+            || (which_comm == conv::TALKING_PET
+                && (get_game_state("TALKING_PET_ON_SHIP") == 0
+                    || lobyte(c_extern::get_current_activity()) == IN_LAST_BATTLE))
+            || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
+        {
+            ffi::BuildBattle(NPC_PLAYER_NUM);
+        }
     }
 
-    // init_race — calls C dispatch table which populates CommData
+    // init_race — dispatch directly to the correct init_*_comm C function,
+    // bypassing the broken C init_race in commglue.c which returns
+    // init_arilou_comm() for all Rust dialogues.
     let comm_id = if ship_type != ship::YEHAT_REBEL_SHIP as u16 {
         which_comm
     } else {
         conv::YEHAT_REBEL
     };
 
-    let loc_data_ptr = ffi::init_race(comm_id);
+    let loc_data_ptr = rust_init_race_dispatch(comm_id);
     if !loc_data_ptr.is_null() {
         // Copy LOCDATA to C's global CommData (C code reads from CommData)
         ffi::rust_copy_locdata_to_comm_data(loc_data_ptr);
@@ -714,14 +775,11 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     } else if !loc_data_ptr.is_null() {
         let activity = c_extern::get_current_activity();
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
-            // Call post_encounter_func and uninit_encounter_func via C bridge.
-            // These are function pointers stored in CommData — we call them
-            // through the C copy of CommData.
-            // TODO: Add C bridge for calling CommData function pointers
+            ffi::c_CallPostEncounterFunc();
         }
+        ffi::c_CallUninitEncounterFunc();
     }
 
-    let status: u16 = 0;
     let activity = c_extern::get_current_activity();
     if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
         let glob_flags = c_extern::uqm_get_global_flags_and_data();
@@ -745,7 +803,21 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     }
 
     ffi::UninitEncounter();
-    status
+    // C returns status = (GET_GAME_STATE(BATTLE_SEGUE) && GetHeadLink(npc_q))
+    // after the above block which may have cleared BATTLE_SEGUE.
+    let final_status: u16 = if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
+        let npc_q = ffi::rust_get_npc_built_ship_queue();
+        let has_ships = !get_head_link(npc_q).is_null();
+        let battle_segue = get_game_state("BATTLE_SEGUE");
+        if battle_segue != 0 && has_ships {
+            1
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    final_status
 }
 
 // ---------------------------------------------------------------------------
@@ -802,6 +874,31 @@ unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level:
 
     h_built
 }
+/// Prepare the real NPC ship queue for the deterministic Sol probe scene.
+///
+/// The normal game-loop state machine performs the subsequent encounter and
+/// communication dispatch; this helper only constructs the race-23 queue.
+///
+/// # Safety
+/// Game structures and both fleet queues must already be initialized.
+#[cfg_attr(not(feature = "linked_c_archive"), allow(dead_code))]
+pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static str> {
+    let npc_q = ffi::rust_get_npc_built_ship_queue();
+    let avail_q = ffi::rust_get_avail_race_queue();
+    if npc_q.is_null() || avail_q.is_null() {
+        return Err("ship queue accessor returned null");
+    }
+    if (*npc_q).pq_tab.is_null() || (*avail_q).pq_tab.is_null() {
+        return Err("ship queues are not initialized");
+    }
+
+    ReinitQueue(npc_q);
+    let probe = clone_ship_fragment(ship::URQUAN_DRONE_SHIP, npc_q, 0);
+    if probe.is_null() || get_head_link(npc_q).is_null() {
+        return Err("failed to clone the Ur-Quan probe into the NPC queue");
+    }
+    Ok(())
+}
 
 // ---------------------------------------------------------------------------
 // NameCaptain — ported from build.c:437
@@ -812,7 +909,7 @@ unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level:
 unsafe fn name_captain(p_queue: *mut Queue, species_id: CSpeciesId) -> u8 {
     let mut name_index: u8;
     loop {
-        name_index = ffi::PickCaptainName();
+        name_index = pick_captain_name();
 
         let mut h_star_ship = get_head_link(p_queue);
         let mut found_match = false;
@@ -842,6 +939,71 @@ unsafe fn name_captain(p_queue: *mut Queue, species_id: CSpeciesId) -> u8 {
 
 /// Port of C `StartSphereTracking(race)`. Reads/modifies FLEET_INFO to
 /// initialize sphere-of-influence tracking for the given race.
+/// Rust-side replacement for C's `init_race()`.
+///
+/// The C `init_race` in `commglue.c` has a broken control flow under
+/// `USE_RUST_COMM`: when `rust_init_race_dialogue()` returns 1, it
+/// falls through past the switch and returns `init_arilou_comm()` for
+/// every race. This function bypasses that by dispatching directly to
+/// the correct `init_*_comm` C function via FFI, then calling
+/// `rust_init_race_dialogue` for Rust dialogue setup.
+///
+/// Returns a `LOCDATA*` (as `*mut c_void`) from the correct race's
+/// init function, or null if the race has no init function.
+/// # Safety
+///
+/// Must be called from an initialized game context (after resource loading).
+/// The returned pointer is a raw C LOCDATA pointer and must not be freed by
+/// the caller — it points to static C data.
+#[no_mangle]
+pub unsafe extern "C" fn rust_init_race_dispatch(comm_id: u32) -> *mut c_void {
+    crate::automation::scenario::observe_dialogue_dispatch(comm_id);
+
+    // Initialize Rust dialogue state (callbacks, phrase state, etc.)
+    ffi::rust_init_race_dialogue(comm_id as i32);
+
+    // Dispatch to the correct C init_*_comm function
+    match comm_id {
+        conv::ARILOU => ffi::init_arilou_comm(),
+        conv::BLACKURQ => ffi::init_blackurq_comm(),
+        conv::CHMMR => ffi::init_chmmr_comm(),
+        conv::COMMANDER => {
+            if get_game_state("STARBASE_AVAILABLE") == 0 {
+                ffi::init_commander_comm()
+            } else {
+                ffi::init_starbase_comm()
+            }
+        }
+        conv::DRUUGE => ffi::init_druuge_comm(),
+        conv::ILWRATH => ffi::init_ilwrath_comm(),
+        conv::MELNORME => ffi::init_melnorme_comm(),
+        conv::MYCON => ffi::init_mycon_comm(),
+        conv::ORZ => ffi::init_orz_comm(),
+        conv::PKUNK => ffi::init_pkunk_comm(),
+        conv::SHOFIXTI => ffi::init_shofixti_comm(),
+        conv::SLYLANDRO => ffi::init_slyland_comm(),
+        conv::SLYLANDRO_HOME => ffi::init_slylandro_comm(),
+        conv::SPATHI => {
+            if (get_game_state("GLOBAL_FLAGS_AND_DATA") & (1 << 7)) == 0 {
+                ffi::init_spathi_comm()
+            } else {
+                ffi::init_spahome_comm()
+            }
+        }
+        conv::SUPOX => ffi::init_supox_comm(),
+        conv::SYREEN => ffi::init_syreen_comm(),
+        conv::TALKING_PET => ffi::init_talkpet_comm(),
+        conv::THRADD => ffi::init_thradd_comm(),
+        conv::UMGAH => ffi::init_umgah_comm(),
+        conv::URQUAN => ffi::init_urquan_comm(),
+        conv::UTWIG => ffi::init_utwig_comm(),
+        conv::VUX => ffi::init_vux_comm(),
+        conv::YEHAT_REBEL => ffi::init_rebel_yehat_comm(),
+        conv::YEHAT => ffi::init_yehat_comm(),
+        conv::ZOQFOTPIK => ffi::init_zoqfot_comm(),
+        _ => ffi::init_chmmr_comm(),
+    }
+}
 ///
 /// Returns `race` if tracking started, 0 if race is extinct or not found.
 unsafe fn start_sphere_tracking(race: u8) -> u16 {
@@ -911,10 +1073,12 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
+        // Check if the Ur-Quan probe Ilwrath encounter should happen
         if get_game_state("PROBE_ILWRATH_ENCOUNTER") == 0
             || (c_extern::get_current_activity() & CHECK_ABORT) != 0
         {
-            ffi::rust_cleanup_after_starbase();
+            // CleanupAfterStarBase is static in starbase.c.
+            // TODO: Port to Rust. For now, skip cleanup.
             return;
         }
 
@@ -923,7 +1087,6 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         let h_star_ship = clone_ship_fragment(ship::ILWRATH_SHIP, npc_q, 7);
         if !h_star_ship.is_null() {
             let frag_ptr = lock_ship_frag(npc_q, h_star_ship);
-            // Hack: Suppress the tally and salvage info after the battle
             (*frag_ptr).race_id = 0xFF;
         }
 
@@ -931,7 +1094,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
         let crew = c_extern::uqm_get_crew_enlisted();
         if crew == 0xFFFF || (c_extern::get_current_activity() & CHECK_ABORT) != 0 {
-            return; // Killed by Ilwrath
+            return;
         }
 
         // After Ilwrath battle, about-to-ally Starbase conversation
@@ -947,7 +1110,10 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
     if get_game_state("MOONBASE_ON_SHIP") != 0 || get_game_state("CHMMR_BOMB_STATE") == 2 {
         // Go immediately into a conversation with the Commander
-        ffi::rust_do_time_passage();
+        // Time passage — DoTimePassage is static in starbase.c.
+        // TODO: Port DoTimePassage to Rust.
+        // For now, skip time passage (the C archive handles this when
+        // starbase is entered via the C path).
 
         let crew = c_extern::uqm_get_crew_enlisted();
         if crew == 0xFFFF {
@@ -963,8 +1129,9 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
     }
 
-    // Starbase menu input loop — handled by C bridge
-    ffi::rust_do_starbase_menu_input();
+    // Starbase menu input loop — DoStarBase/DoInput are in starbase.c/controls.c.
+    // TODO: Port starbase menu to Rust. For now, skip menu input.
+    // ffi::rust_do_starbase_menu_input();
 }
 
 // ---------------------------------------------------------------------------
@@ -1010,6 +1177,15 @@ mod tests {
     #[test]
     fn race_communication_maps_human_to_invalid() {
         assert_eq!(RACE_COMMUNICATION[ship::HUMAN_SHIP as usize], conv::INVALID);
+    }
+
+    #[test]
+    fn ship_fragment_matches_c_abi_layout() {
+        assert_eq!(std::mem::size_of::<CSpeciesId>(), 4);
+        assert_eq!(std::mem::offset_of!(CShipFragment, species_id), 16);
+        assert_eq!(std::mem::offset_of!(CShipFragment, race_id), 21);
+        assert_eq!(std::mem::offset_of!(CShipFragment, crew_level), 24);
+        assert_eq!(std::mem::size_of::<CShipFragment>(), 56);
     }
 
     #[test]

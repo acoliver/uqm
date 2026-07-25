@@ -17,21 +17,21 @@ use std::ffi::{c_char, c_int, c_void, CStr};
 // to trackplayer.c.
 #[cfg(not(test))]
 extern "C" {
-    fn c_PlayTrack();
-    fn c_StopTrack();
-    fn c_JumpTrack();
-    fn c_PlayingTrack() -> u16;
-    fn c_PauseTrack();
-    fn c_ResumeTrack();
-    fn c_GetTrackSubtitle() -> *const c_char;
-    fn c_GetFirstTrackSubtitle() -> *mut c_void;
-    fn c_GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void;
-    fn c_GetTrackSubtitleText(sub_ref: *mut c_void) -> *const c_char;
-    fn c_FastForward_Page();
-    fn c_FastForward_Smooth();
-    fn c_FastReverse_Page();
-    fn c_FastReverse_Smooth();
-    fn c_GetTrackPosition(in_units: c_int) -> c_int;
+    fn PlayTrack();
+    fn StopTrack();
+    fn JumpTrack();
+    fn PlayingTrack() -> u16;
+    fn PauseTrack();
+    fn ResumeTrack();
+    fn GetTrackSubtitle() -> *const c_char;
+    fn GetFirstTrackSubtitle() -> *mut c_void;
+    fn GetNextTrackSubtitle(last_ref: *mut c_void) -> *mut c_void;
+    fn GetTrackSubtitleText(sub_ref: *mut c_void) -> *const c_char;
+    fn FastForward_Page();
+    fn FastForward_Smooth();
+    fn FastReverse_Page();
+    fn FastReverse_Smooth();
+    fn GetTrackPosition(in_units: c_int) -> c_int;
 }
 
 /// Bridge to the authoritative C trackplayer.
@@ -43,13 +43,13 @@ pub struct CTrackBridge;
 impl CTrackBridge {
     /// Check if a track is currently playing via the C trackplayer.
     pub fn is_playing() -> bool {
-        unsafe { c_PlayingTrack() != 0 }
+        unsafe { PlayingTrack() != 0 }
     }
 
     /// Get the current subtitle from the C trackplayer.
     pub fn current_subtitle() -> Option<String> {
         unsafe {
-            let ptr = c_GetTrackSubtitle();
+            let ptr = GetTrackSubtitle();
             if ptr.is_null() {
                 None
             } else {
@@ -62,9 +62,9 @@ impl CTrackBridge {
     pub fn enumerate_subtitle_history() -> Vec<String> {
         let mut entries = Vec::new();
         unsafe {
-            let mut sub = c_GetFirstTrackSubtitle();
+            let mut sub = GetFirstTrackSubtitle();
             while !sub.is_null() {
-                let text_ptr = c_GetTrackSubtitleText(sub);
+                let text_ptr = GetTrackSubtitleText(sub);
                 if !text_ptr.is_null() {
                     if let Ok(s) = CStr::from_ptr(text_ptr).to_str() {
                         if !s.is_empty() {
@@ -72,7 +72,7 @@ impl CTrackBridge {
                         }
                     }
                 }
-                sub = c_GetNextTrackSubtitle(sub);
+                sub = GetNextTrackSubtitle(sub);
             }
         }
         entries
@@ -80,52 +80,52 @@ impl CTrackBridge {
 
     /// Stop playback via the C trackplayer.
     pub fn stop() {
-        unsafe { c_StopTrack() }
+        unsafe { StopTrack() }
     }
 
     /// Play via the C trackplayer.
     pub fn play() {
-        unsafe { c_PlayTrack() }
+        unsafe { PlayTrack() }
     }
 
     /// Jump (skip current phrase) via the C trackplayer.
     pub fn jump() {
-        unsafe { c_JumpTrack() }
+        unsafe { JumpTrack() }
     }
 
     /// Pause via the C trackplayer.
     pub fn pause() {
-        unsafe { c_PauseTrack() }
+        unsafe { PauseTrack() }
     }
 
     /// Resume via the C trackplayer.
     pub fn resume() {
-        unsafe { c_ResumeTrack() }
+        unsafe { ResumeTrack() }
     }
 
     /// Fast forward by page.
     pub fn fast_forward_page() {
-        unsafe { c_FastForward_Page() }
+        unsafe { FastForward_Page() }
     }
 
     /// Fast forward smooth.
     pub fn fast_forward_smooth() {
-        unsafe { c_FastForward_Smooth() }
+        unsafe { FastForward_Smooth() }
     }
 
     /// Fast reverse by page.
     pub fn fast_reverse_page() {
-        unsafe { c_FastReverse_Page() }
+        unsafe { FastReverse_Page() }
     }
 
     /// Fast reverse smooth.
     pub fn fast_reverse_smooth() {
-        unsafe { c_FastReverse_Smooth() }
+        unsafe { FastReverse_Smooth() }
     }
 
     /// Get track position in the specified units.
     pub fn get_position(in_units: i32) -> i32 {
-        unsafe { c_GetTrackPosition(in_units) }
+        unsafe { GetTrackPosition(in_units) }
     }
 }
 

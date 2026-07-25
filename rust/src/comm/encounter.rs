@@ -25,13 +25,13 @@ pub const ATTACK: u32 = 1;
 // ============================================================================
 
 #[cfg(not(test))]
+#[allow(clashing_extern_declarations)]
 extern "C" {
-    // Resource destruction
-    fn c_DestroyDrawable(handle: usize);
-    fn c_DestroyFont(handle: usize);
-    fn c_DestroyColorMap(handle: usize);
-    fn c_DestroyMusic(handle: usize);
-    fn c_DestroyStringTable(handle: usize);
+    // Resource destruction — these are the C functions (not c_ forwarders)
+    fn DestroyDrawable(handle: *mut std::ffi::c_void);
+    fn DestroyFont(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
+    fn DestroyStringTable(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
+    fn DestroyMusic(handle: *mut std::ffi::c_void) -> std::ffi::c_int;
 }
 
 // ============================================================================
@@ -124,31 +124,32 @@ impl EncounterResources {
     pub fn destroy(&mut self) {
         unsafe {
             if self.conversation_phrases != 0 {
-                c_DestroyStringTable(self.conversation_phrases);
+                DestroyStringTable(self.conversation_phrases as *mut std::ffi::c_void);
                 self.conversation_phrases = 0;
             }
             if self.alien_song != 0 {
-                c_DestroyMusic(self.alien_song);
+                DestroyMusic(self.alien_song as *mut std::ffi::c_void);
                 self.alien_song = 0;
             }
             if self.alien_colormap != 0 {
-                c_DestroyColorMap(self.alien_colormap);
+                // DestroyColorMap is #define DestroyColorMap DestroyStringTable in gfxlib.h
+                DestroyStringTable(self.alien_colormap as *mut std::ffi::c_void);
                 self.alien_colormap = 0;
             }
             if self.alien_font != 0 {
-                c_DestroyFont(self.alien_font);
+                DestroyFont(self.alien_font as *mut std::ffi::c_void);
                 self.alien_font = 0;
             }
             if self.alien_frame != 0 {
-                c_DestroyDrawable(self.alien_frame);
+                DestroyDrawable(self.alien_frame as *mut std::ffi::c_void);
                 self.alien_frame = 0;
             }
             if self.player_font != 0 {
-                c_DestroyFont(self.player_font);
+                DestroyFont(self.player_font as *mut std::ffi::c_void);
                 self.player_font = 0;
             }
             if self.text_cache_frame != 0 {
-                c_DestroyDrawable(self.text_cache_frame);
+                DestroyDrawable(self.text_cache_frame as *mut std::ffi::c_void);
                 self.text_cache_frame = 0;
             }
             if self.text_cache_context != 0 {
