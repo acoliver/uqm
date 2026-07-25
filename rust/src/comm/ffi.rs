@@ -1382,28 +1382,15 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 // C bridge declarations used only by NPCPhrase (not test-compiled).
 #[cfg(not(test))]
 extern "C" {
-    // Return GLOBAL_SIS(CommanderName) as a UTF-8 C string.
-    fn c_get_commander_name() -> *const std::ffi::c_char;
-    // Return GLOBAL_SIS(ShipName) as a UTF-8 C string.
-    fn c_get_ship_name() -> *const std::ffi::c_char;
     // Full alliance-name lookup (i==3 appends CommanderName into caller-supplied buf).
     fn c_get_alliance_name_full(
         adjusted_index: c_int,
         buf: *mut std::ffi::c_char,
         buf_len: c_int,
     ) -> *const std::ffi::c_char;
-    // Return the text (GetStringAddress) for ConversationPhrases[1-based phrase index].
-    fn c_get_conversation_phrase(phrases: *const std::ffi::c_void, index: c_int) -> *const u8;
-    // Return the sound-clip pointer (GetStringSoundClip) for a 0-based index.
-    fn c_get_phrase_sound_clip(
-        phrases: *const std::ffi::c_void,
-        index: c_int,
-    ) -> *mut std::ffi::c_void;
-    // Return the timestamp pointer (GetStringTimeStamp) for a 0-based index.
-    fn c_get_phrase_timestamp(
-        phrases: *const std::ffi::c_void,
-        index: c_int,
-    ) -> *mut std::ffi::c_void;
+    // c_get_alliance_name uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
+    #[allow(dead_code)]
+    fn c_get_alliance_name(index: c_int) -> *const u8;
     // Splice text + optional audio into the C trackplayer.
     fn c_SpliceTrack(
         filespec: *mut std::ffi::c_char,
@@ -1411,7 +1398,18 @@ extern "C" {
         timestamp: *mut std::ffi::c_char,
         cb: Option<unsafe extern "C" fn()>,
     );
-    // Splice one or more voice clips with text (used by NPCPhrase_splice when clip exists).
+    // Direct C functions for phrase access (replacing c_get_* wrappers)
+    fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: c_int) -> *mut std::ffi::c_void;
+    fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
+    fn GetStringSoundClip(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn GetStringTimeStamp(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    // C globals for direct access
+    pub static mut GlobData: crate::comm::locdata::CGlobData;
+}
+
+// Splice one or more voice clips with text (used by NPCPhrase_splice when clip exists).
+#[cfg(not(test))]
+extern "C" {
     fn SpliceMultiTrack(track_names: *mut *mut std::ffi::c_char, track_text: *mut std::ffi::c_char);
 }
 
@@ -1455,17 +1453,17 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
         use std::ptr;
 
         if index == GLOBAL_PLAYER_NAME {
-            // Branch 2: commander name
-            let name = c_get_commander_name();
-            c_SpliceTrack(ptr::null_mut(), name as *mut _, ptr::null_mut(), cb);
+            // Branch 2: commander name — direct GlobData.SIS_state access
+            let name =
+                std::ptr::addr_of_mut!(GlobData.sis_state.commander_name) as *mut std::ffi::c_char;
+            c_SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index == GLOBAL_SHIP_NAME {
-            // Branch 3: ship name
-            let name = c_get_ship_name();
-            c_SpliceTrack(ptr::null_mut(), name as *mut _, ptr::null_mut(), cb);
+            // Branch 3: ship name — direct GlobData.SIS_state access
+            let name =
+                std::ptr::addr_of_mut!(GlobData.sis_state.ship_name) as *mut std::ffi::c_char;
+            c_SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant
-            // adjusted = index - GLOBAL_ALLIANCE_NAME (undo the base offset from
-            // the enum so alliance-name phrases map to small positive numbers)
             let adjusted = index - GLOBAL_ALLIANCE_NAME;
             let mut buf = [0u8; ALLIANCE_NAME_BUF_SIZE];
             let text_ptr = c_get_alliance_name_full(
@@ -1494,15 +1492,17 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
                 return;
             }
 
-            // c_get_conversation_phrase expects 1-based phrase index (C legacy contract),
-            // while clip/timestamp wrappers take 0-based table index.
-            let text = c_get_conversation_phrase(phrases, index);
+            // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
+            let s = SetAbsStringTableIndex(phrases as *mut _, index - 1);
+            let text = GetStringAddress(s);
             if text.is_null() {
                 return;
             }
             let table_idx = index - 1;
-            let clip = c_get_phrase_sound_clip(phrases, table_idx);
-            let timestamp = c_get_phrase_timestamp(phrases, table_idx);
+            let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
+            let clip = GetStringSoundClip(s2);
+            let s3 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
+            let timestamp = GetStringTimeStamp(s3);
 
             c_SpliceTrack(clip as *mut _, text as *mut _, timestamp as *mut _, cb);
         }
@@ -1553,14 +1553,16 @@ pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
             return;
         }
 
-        // c_get_conversation_phrase expects 1-based phrase index.
-        let text = c_get_conversation_phrase(phrases, index);
+        // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
+        let s = SetAbsStringTableIndex(phrases as *mut _, index - 1);
+        let text = GetStringAddress(s);
         if text.is_null() {
             return;
         }
 
         let table_idx = index - 1;
-        let clip = c_get_phrase_sound_clip(phrases, table_idx);
+        let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
+        let clip = GetStringSoundClip(s2);
 
         if clip.is_null() {
             c_SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);

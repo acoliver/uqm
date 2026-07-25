@@ -117,27 +117,7 @@ c_init_race (int comm_id)
 	return init_race ((CONVERSATION)comm_id);
 }
 
-const unsigned char *
-c_get_conversation_phrase (const void *phrases, int index)
-{
-	STRING s;
-	if (!phrases || index <= 0)
-		return NULL;
-	s = SetAbsStringTableIndex ((STRING)phrases, index - 1);
-	return (const unsigned char *)GetStringAddress (s);
-}
-
-const unsigned char *
-c_get_commander_name (void)
-{
-	return (const unsigned char *)GLOBAL_SIS (CommanderName);
-}
-
-const unsigned char *
-c_get_ship_name (void)
-{
-	return (const unsigned char *)GLOBAL_SIS (ShipName);
-}
+/* c_get_conversation_phrase, c_get_commander_name, c_get_ship_name — PORTED to Rust */
 
 const unsigned char *
 c_get_alliance_name (int index)
@@ -195,31 +175,7 @@ c_get_alliance_name_full (int adjusted_index, char *buf, int buf_len)
 	return (const unsigned char *)buf;
 }
 
-/* Return the sound-clip pointer for a phrase index (0-based into table).
- * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001
- */
-void *
-c_get_phrase_sound_clip (const void *phrases, int index)
-{
-	STRING S;
-	if (!phrases || index < 0)
-		return NULL;
-	S = SetAbsStringTableIndex ((STRING_TABLE)phrases, index);
-	return GetStringSoundClip (S);
-}
-
-/* Return the timestamp pointer for a phrase index (0-based into table).
- * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001
- */
-void *
-c_get_phrase_timestamp (const void *phrases, int index)
-{
-	STRING S;
-	if (!phrases || index < 0)
-		return NULL;
-	S = SetAbsStringTableIndex ((STRING_TABLE)phrases, index);
-	return GetStringTimeStamp (S);
-}
+/* c_get_phrase_sound_clip, c_get_phrase_timestamp — PORTED to Rust */
 
 
 void

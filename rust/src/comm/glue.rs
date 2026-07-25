@@ -38,18 +38,12 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 #[cfg(not(test))]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
     extern "C" {
-        fn c_get_conversation_phrase(phrases: *const c_void, index: i32) -> *const u8;
-        #[allow(
-            clashing_extern_declarations,
-            reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-        )]
-        fn c_get_commander_name() -> *const u8;
-        #[allow(
-            clashing_extern_declarations,
-            reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-        )]
-        fn c_get_ship_name() -> *const u8;
+        #[allow(dead_code)]
         fn c_get_alliance_name(index: i32) -> *const u8;
+        fn SetAbsStringTableIndex(table: *mut c_void, index: i32) -> *mut c_void;
+        #[allow(clashing_extern_declarations)]
+        fn GetStringAddress(s: *mut c_void) -> *const u8;
+        static mut GlobData: crate::comm::locdata::CGlobData;
     }
 
     if index == PHRASE_NOOP {
@@ -58,13 +52,17 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
 
     unsafe {
         let ptr = if index == GLOBAL_PLAYER_NAME {
-            c_get_commander_name()
+            // Direct GlobData.SIS_state.CommanderName access
+            std::ptr::addr_of_mut!(GlobData.sis_state.commander_name) as *const u8
         } else if index == GLOBAL_SHIP_NAME {
-            c_get_ship_name()
+            // Direct GlobData.SIS_state.ShipName access
+            std::ptr::addr_of_mut!(GlobData.sis_state.ship_name) as *const u8
         } else if index < 0 {
             c_get_alliance_name(index)
         } else if !phrases_handle.is_null() {
-            c_get_conversation_phrase(phrases_handle, index)
+            // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
+            let s = SetAbsStringTableIndex(phrases_handle as *mut _, index - 1);
+            GetStringAddress(s)
         } else {
             return None;
         };
