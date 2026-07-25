@@ -84,7 +84,6 @@ pub(super) mod c_bridge {
         #[allow(clashing_extern_declarations)]
         pub fn PlayMusic(music: *mut c_void, do_loop: c_int, volume: u8);
         pub fn DrawAlienFrame();
-        pub fn c_CommIntroTransition();
         pub fn InitCommAnimations();
         pub fn runningIntroAnim() -> c_int;
         pub fn c_RunCommAnimFrame();
@@ -98,6 +97,8 @@ pub(super) mod c_bridge {
         pub fn c_SelectConversationSummary();
         pub fn UpdateInputState();
         pub fn SleepThread(duration: c_int);
+        pub fn ScreenTransition(which: c_int, rect: *const c_void);
+        pub fn UnbatchGraphics();
     }
 
     #[repr(C)]
@@ -443,13 +444,16 @@ pub fn alien_talk_segue(state: &mut CommState, wait_track: u32) {
         set_colormap(state);
         draw_alien_frame(state);
         update_speech_graphics(state);
-        comm_intro_transition(state);
+        comm_intro_transition();
 
         play_alien_music(state);
         set_music_background_vol(state);
 
-        init_comm_animations(state);
-        clear_last_activity_load_flag(state);
+        #[cfg(not(test))]
+        unsafe {
+            c_bridge::InitCommAnimations();
+            c_bridge::clear_last_activity_load_flag();
+        }
     }
 
     let finished = talk_segue(state, wait_track);
@@ -584,7 +588,7 @@ pub unsafe fn alien_talk_first_call_init() {
         c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame();
         rust_UpdateSpeechGraphics();
-        c_bridge::c_CommIntroTransition();
+        comm_intro_transition();
         c_bridge::play_alien_music();
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::InitCommAnimations();
@@ -1335,44 +1339,59 @@ fn draw_alien_frame(state: &mut CommState) {
     }
 }
 
-fn comm_intro_transition(state: &mut CommState) {
+fn comm_intro_transition() {
     #[cfg(not(test))]
     unsafe {
-        let _ = state;
-        c_bridge::c_CommIntroTransition();
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
+        use std::ffi::{c_uint, c_void};
+
+        // Ported from c_CommIntroTransition in rust_comm.c
+        let mode = crate::comm::ffi::rust_GetCommIntroMode();
+
+        // CIM constants from comm.h
+        const CIM_CROSSFADE_SPACE: c_uint = 0;
+        const CIM_CROSSFADE_WINDOW: c_uint = 1;
+        const CIM_CROSSFADE_SCREEN: c_uint = 2;
+        const CIM_DEFAULT: c_uint = CIM_CROSSFADE_SPACE;
+
+        // SIS constants from units.h
+        let sis_org_x: c_int = 12; // SAFE_X + SIS_X_OFFSET
+        let sis_org_y: c_int = 13; // SAFE_Y + SIS_Y_OFFSET
+        let sis_screen_width: c_int = 320 - 14; // SPACE_WIDTH - 14
+        let sis_screen_height: c_int = 240 - 13; // SPACE_HEIGHT - 13
+
+        match mode {
+            CIM_CROSSFADE_SCREEN => {
+                c_bridge::ScreenTransition(3, std::ptr::null());
+                c_bridge::UnbatchGraphics();
+            }
+            CIM_CROSSFADE_SPACE => {
+                let mut rect = crate::comm::locdata::CRect {
+                    corner: crate::comm::locdata::CPoint {
+                        x: sis_org_x as i16,
+                        y: sis_org_y as i16,
+                    },
+                    width: sis_screen_width as i16,
+                    height: sis_screen_height as i16,
+                };
+                c_bridge::ScreenTransition(3, &mut rect as *mut _ as *const c_void);
+                c_bridge::UnbatchGraphics();
+            }
+            CIM_CROSSFADE_WINDOW => {
+                let rect_ptr = std::ptr::addr_of_mut!(crate::comm::hail::c_bridge::CommWndRect)
+                    as *const c_void;
+                c_bridge::ScreenTransition(3, rect_ptr);
+                c_bridge::UnbatchGraphics();
+            }
+            _ => {
+                // CIM_FADE_IN_SCREEN or unknown — unbatch to avoid lockup
+                c_bridge::UnbatchGraphics();
+            }
+        }
+
+        crate::comm::ffi::rust_SetCommIntroMode(CIM_DEFAULT);
     }
 }
 
-fn init_comm_animations(state: &mut CommState) {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        c_bridge::InitCommAnimations();
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-    }
-}
-
-fn clear_last_activity_load_flag(state: &mut CommState) {
-    #[cfg(not(test))]
-    unsafe {
-        let _ = state;
-        c_bridge::clear_last_activity_load_flag();
-    }
-    #[cfg(test)]
-    {
-        let _ = state;
-    }
-}
-
-/// Last-replay loop: lets player review alien's last words, then times out.
-/// Matches C `DoLastReplay` / the no-responses branch in `DoCommunication`.
 fn run_last_replay(state: &mut CommState) {
     #[cfg(not(test))]
     {

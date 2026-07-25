@@ -12,7 +12,7 @@
 // ============================================================================
 
 #[cfg(not(test))]
-mod c_bridge {
+pub(super) mod c_bridge {
     use super::super::locdata::{CGlobData, CLocData, CRect};
     use std::ffi::{c_char, c_int, c_uint, c_void};
 
