@@ -130,45 +130,51 @@ fn expand_dollar_vars(input: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// C bridge FFI (getter/setter for C globals + uio calls)
+// Direct C global access for directory handles (options.h/setup.c)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(test))]
 extern "C" {
-    fn uqm_get_repository() -> *mut uio_Repository;
-    #[allow(
-        improper_ctypes,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uqm_get_config_dir() -> *mut uio_DirHandle;
-    #[allow(
-        improper_ctypes,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uqm_get_content_dir() -> *mut uio_DirHandle;
-    fn uqm_get_content_mount_handle() -> *mut uio_MountHandle;
-    #[allow(
-        improper_ctypes,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uqm_set_config_dir(d: *mut uio_DirHandle);
-    #[allow(
-        improper_ctypes,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uqm_set_content_dir(d: *mut uio_DirHandle);
-    #[allow(
-        improper_ctypes,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uqm_set_save_dir(d: *mut uio_DirHandle);
-    #[allow(
-        improper_ctypes,
-        reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-    )]
-    fn uqm_set_melee_dir(d: *mut uio_DirHandle);
-    fn uqm_set_content_mount_handle(h: *mut uio_MountHandle);
-    fn uqm_set_base_content_path(path: *const c_char);
+    #[link_name = "repository"]
+    #[allow(non_upper_case_globals)]
+    pub static mut repository: *mut std::ffi::c_void;
+    #[link_name = "configDir"]
+    #[allow(non_upper_case_globals)]
+    pub static mut configDir: *mut std::ffi::c_void;
+    #[link_name = "contentDir"]
+    #[allow(non_upper_case_globals)]
+    pub static mut contentDir: *mut std::ffi::c_void;
+    #[link_name = "saveDir"]
+    #[allow(non_upper_case_globals)]
+    pub static mut saveDir: *mut std::ffi::c_void;
+    #[link_name = "meleeDir"]
+    #[allow(non_upper_case_globals)]
+    pub static mut meleeDir: *mut std::ffi::c_void;
+    #[link_name = "contentMountHandle"]
+    #[allow(non_upper_case_globals)]
+    pub static mut contentMountHandle: *mut std::ffi::c_void;
+    #[link_name = "baseContentPath"]
+    #[allow(non_upper_case_globals)]
+    pub static mut baseContentPath: [std::ffi::c_char; 4096];
 }
+
+/// Maximum path length, matching C's PATH_MAX on macOS.
+const PATH_MAX: usize = 4096;
+
+#[cfg(test)]
+#[allow(non_upper_case_globals)]
+mod c_dir_globals {
+    pub static mut repository: *mut std::ffi::c_void = std::ptr::null_mut();
+    pub static mut configDir: *mut std::ffi::c_void = std::ptr::null_mut();
+    pub static mut contentDir: *mut std::ffi::c_void = std::ptr::null_mut();
+    pub static mut saveDir: *mut std::ffi::c_void = std::ptr::null_mut();
+    pub static mut meleeDir: *mut std::ffi::c_void = std::ptr::null_mut();
+    pub static mut contentMountHandle: *mut std::ffi::c_void = std::ptr::null_mut();
+    pub static mut baseContentPath: [std::ffi::c_char; 4096] = [0; 4096];
+}
+
+#[cfg(test)]
+use c_dir_globals::*;
 
 // uio_* are Rust-implemented (USE_RUST_UIO) — same crate, call directly
 use crate::io::uio_bridge::{
@@ -182,7 +188,7 @@ use crate::io::uio_bridge::{
 
 /// Mount a stdio directory at "/" (or mountPoint) and return the handle.
 unsafe fn mount_stdio_dir(
-    repository: *mut uio_Repository,
+    repo: *mut uio_Repository,
     mount_point: &str,
     source_path: &str,
     flags: c_int,
@@ -190,7 +196,7 @@ unsafe fn mount_stdio_dir(
     let mp = CString::new(mount_point).unwrap();
     let sp = CString::new(source_path).unwrap();
     uio_mountDir(
-        repository,
+        repo,
         mp.as_ptr(),
         UIO_FSTYPE_STDIO,
         ptr::null_mut(),
@@ -203,9 +209,9 @@ unsafe fn mount_stdio_dir(
 }
 
 /// Open a directory in the repository and return the handle.
-unsafe fn open_dir(repository: *mut uio_Repository, path: &str) -> *mut uio_DirHandle {
+unsafe fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle {
     let p = CString::new(path).unwrap();
-    uio_openDir(repository, p.as_ptr(), 0)
+    uio_openDir(repo, p.as_ptr(), 0)
 }
 
 // ---------------------------------------------------------------------------
@@ -229,10 +235,11 @@ pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> 
 
     tracing::debug!("Using config dir '{}'", path_str);
 
-    let repo = unsafe { uqm_get_repository() };
+    let repo = unsafe { repository };
 
     // Mount config dir at "/"
-    let mount = unsafe { mount_stdio_dir(repo, "/", &path_str, UIO_MOUNT_TOP) };
+    let mount =
+        unsafe { mount_stdio_dir(repo as *mut uio_Repository, "/", &path_str, UIO_MOUNT_TOP) };
     if mount.is_null() {
         return Err(DirPrepError::MountFailed(format!(
             "Could not mount config dir: {path_str}"
@@ -240,14 +247,14 @@ pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> 
     }
 
     // Open "/" and set global
-    let dir = unsafe { open_dir(repo, "/") };
+    let dir = unsafe { open_dir(repo as *mut uio_Repository, "/") };
     if dir.is_null() {
         return Err(DirPrepError::MountFailed(
             "Could not open config dir after mount".to_string(),
         ));
     }
 
-    unsafe { uqm_set_config_dir(dir) };
+    unsafe { configDir = dir as *mut std::ffi::c_void };
 
     Ok(())
 }
@@ -271,7 +278,7 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
 
     tracing::debug!("Saved games are kept in {}.", path_str);
 
-    let config_dir = unsafe { uqm_get_config_dir() };
+    let config_dir = unsafe { configDir as *mut uio_DirHandle };
     let save = CString::new("save").unwrap();
     let dir = unsafe { uio_openDirRelative(config_dir, save.as_ptr(), 0) };
     if dir.is_null() {
@@ -280,7 +287,7 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
         )));
     }
 
-    unsafe { uqm_set_save_dir(dir) };
+    unsafe { saveDir = dir as *mut std::ffi::c_void };
     Ok(())
 }
 
@@ -301,7 +308,7 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
     std::env::set_var("UQM_MELEE_DIR", &path_str);
     std::fs::create_dir_all(&path)?;
 
-    let config_dir = unsafe { uqm_get_config_dir() };
+    let config_dir = unsafe { configDir as *mut uio_DirHandle };
     let teams = CString::new("teams").unwrap();
     let dir = unsafe { uio_openDirRelative(config_dir, teams.as_ptr(), 0) };
     if dir.is_null() {
@@ -310,7 +317,7 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
         )));
     }
 
-    unsafe { uqm_set_melee_dir(dir) };
+    unsafe { meleeDir = dir as *mut std::ffi::c_void };
     Ok(())
 }
 
@@ -347,35 +354,52 @@ pub fn prepare_content_dir(
 
     // Set the C global
     let c_path = CString::new(path_str.as_str()).unwrap();
-    unsafe { uqm_set_base_content_path(c_path.as_ptr()) };
+    let path_len = c_path.as_bytes().len();
+    unsafe {
+        let dst = std::ptr::addr_of_mut!(baseContentPath) as *mut u8;
+        std::ptr::copy_nonoverlapping(c_path.as_ptr() as *const u8, dst, path_len);
+        // Null-terminate at path_len (at most PATH_MAX - 1)
+        if path_len < PATH_MAX {
+            *dst.add(path_len) = 0;
+        } else {
+            *dst.add(PATH_MAX - 1) = 0;
+        }
+    }
 
-    let repo = unsafe { uqm_get_repository() };
+    let repo = unsafe { repository };
 
     // Mount content dir at "/"
-    let mount = unsafe { mount_stdio_dir(repo, "/", &path_str, UIO_MOUNT_TOP | UIO_MOUNT_RDONLY) };
+    let mount = unsafe {
+        mount_stdio_dir(
+            repo as *mut uio_Repository,
+            "/",
+            &path_str,
+            UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+        )
+    };
     if mount.is_null() {
         return Err(DirPrepError::MountFailed(format!(
             "Could not mount content dir: {path_str}"
         )));
     }
-    unsafe { uqm_set_content_mount_handle(mount) };
+    unsafe { contentMountHandle = mount as *mut std::ffi::c_void };
 
     // Open "/" and set global
-    let dir = unsafe { open_dir(repo, "/") };
+    let dir = unsafe { open_dir(repo as *mut uio_Repository, "/") };
     if dir.is_null() {
         return Err(DirPrepError::MountFailed(
             "Could not open content dir after mount".to_string(),
         ));
     }
-    unsafe { uqm_set_content_dir(dir) };
+    unsafe { contentDir = dir as *mut std::ffi::c_void };
 
     // Mount /packages zips
-    unsafe { mount_packages_zips(repo, dir) };
+    unsafe { mount_packages_zips(repo as *mut uio_Repository, dir) };
 
     // Mount addon dir
     if let Some(ad) = addon_dir {
         tracing::debug!("Using '{}' as addon dir.", ad);
-        unsafe { mount_addon_dir_explicit(repo, ad) };
+        unsafe { mount_addon_dir_explicit(repo as *mut uio_Repository, ad) };
     }
 
     // Scan and list addon packs
@@ -515,7 +539,7 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
 unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, relative_flags: c_int) {
     let empty = CString::new("").unwrap();
     let pattern = CString::new("\\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
-    let content_mount = uqm_get_content_mount_handle();
+    let content_mount = unsafe { contentMountHandle as *mut uio_MountHandle };
 
     let dir_list = uio_getDirList(dir_handle, empty.as_ptr(), pattern.as_ptr(), MATCH_REGEX);
     if dir_list.is_null() {
@@ -537,7 +561,7 @@ unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, rela
 
         let mp = CString::new(mount_point).unwrap();
         let result = uio_mountDir(
-            uqm_get_repository(),
+            unsafe { repository as *mut uio_Repository },
             mp.as_ptr(),
             UIO_FSTYPE_ZIP,
             dir_handle,
@@ -568,7 +592,7 @@ unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, rela
 /// For each addon, looks for a `shadow-content` subdirectory and mounts
 /// its zips (and non-zip content) on top of "/".
 pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
-    let content_dir = unsafe { uqm_get_content_dir() };
+    let content_dir = unsafe { contentDir as *mut uio_DirHandle };
     if content_dir.is_null() {
         return Ok(());
     }
@@ -604,7 +628,7 @@ pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
                     slash.as_ptr(),
                     shadow_dir,
                     UIO_MOUNT_RDONLY | UIO_MOUNT_ABOVE,
-                    uqm_get_content_mount_handle(),
+                    contentMountHandle as *mut uio_MountHandle,
                 );
             }
 
