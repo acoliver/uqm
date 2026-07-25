@@ -1382,35 +1382,104 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 // C bridge declarations used only by NPCPhrase (not test-compiled).
 #[cfg(not(test))]
 extern "C" {
-    // Full alliance-name lookup (i==3 appends CommanderName into caller-supplied buf).
-    fn c_get_alliance_name_full(
-        adjusted_index: c_int,
-        buf: *mut std::ffi::c_char,
-        buf_len: c_int,
-    ) -> *const std::ffi::c_char;
-    // c_get_alliance_name uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
-    #[allow(dead_code)]
-    fn c_get_alliance_name(index: c_int) -> *const u8;
-    // Splice text + optional audio into the C trackplayer.
-    fn c_SpliceTrack(
-        filespec: *mut std::ffi::c_char,
-        textspec: *mut std::ffi::c_char,
-        timestamp: *mut std::ffi::c_char,
-        cb: Option<unsafe extern "C" fn()>,
-    );
     // Direct C functions for phrase access (replacing c_get_* wrappers)
     fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: c_int) -> *mut std::ffi::c_void;
     fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
     fn GetStringSoundClip(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn GetStringTimeStamp(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    // Direct SpliceTrack call (replaces c_SpliceTrack forwarder)
+    fn SpliceTrack(
+        filespec: *mut std::ffi::c_char,
+        textspec: *mut std::ffi::c_char,
+        timestamp: *mut std::ffi::c_char,
+        cb: Option<unsafe extern "C" fn()>,
+    );
     // C globals for direct access
     pub static mut GlobData: crate::comm::locdata::CGlobData;
+    // C global CommData (for ConversationPhrases access)
+    pub static mut CommData: crate::comm::locdata::CLocData;
 }
 
 // Splice one or more voice clips with text (used by NPCPhrase_splice when clip exists).
 #[cfg(not(test))]
 extern "C" {
     fn SpliceMultiTrack(track_names: *mut *mut std::ffi::c_char, track_text: *mut std::ffi::c_char);
+}
+
+/// Ported from C's c_get_alliance_name: returns alliance name phrase text.
+/// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
+#[cfg(not(test))]
+#[allow(dead_code)]
+unsafe fn get_alliance_name(index: c_int) -> *const u8 {
+    let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
+    let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
+    if phrases.is_null() {
+        return std::ptr::null();
+    }
+    let s = SetAbsStringTableIndex(phrases, index + i);
+    GetStringAddress(s) as *const u8
+}
+
+/// Ported from C's c_get_alliance_name_full: full alliance name with CommanderName append.
+#[cfg(not(test))]
+unsafe fn get_alliance_name_full(
+    adjusted_index: c_int,
+    buf: *mut std::ffi::c_char,
+    buf_len: c_int,
+) -> *const std::ffi::c_char {
+    use std::ffi::CStr;
+
+    let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
+    if phrases.is_null() || buf.is_null() || buf_len <= 0 {
+        return std::ptr::null();
+    }
+
+    let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
+    let s = SetAbsStringTableIndex(phrases, (adjusted_index - 1) + i);
+    let src = GetStringAddress(s);
+    if src.is_null() {
+        return std::ptr::null();
+    }
+
+    // Copy src into buf (strncpy equivalent)
+    let src_cstr = CStr::from_ptr(src);
+    let src_bytes = src_cstr.to_bytes();
+    let copy_len = (buf_len as usize - 1).min(src_bytes.len());
+    std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), buf as *mut u8, copy_len);
+    *buf.add(copy_len) = 0;
+
+    // If state==3, append CommanderName
+    if i == 3 {
+        let cname_ptr =
+            std::ptr::addr_of_mut!(GlobData.sis_state.commander_name) as *const std::ffi::c_char;
+        if !cname_ptr.is_null() {
+            let cname = CStr::from_ptr(cname_ptr);
+            let cname_bytes = cname.to_bytes();
+            let used = libc_strlen(buf);
+            let remaining = (buf_len as usize).saturating_sub(used + 1);
+            let append_len = remaining.min(cname_bytes.len());
+            if append_len > 0 {
+                std::ptr::copy_nonoverlapping(
+                    cname_bytes.as_ptr(),
+                    buf.add(used) as *mut u8,
+                    append_len,
+                );
+                *buf.add(used + append_len) = 0;
+            }
+        }
+    }
+
+    buf as *const std::ffi::c_char
+}
+
+/// Minimal strlen for C strings (avoids linking libc's strlen).
+#[cfg(not(test))]
+unsafe fn libc_strlen(s: *const std::ffi::c_char) -> usize {
+    let mut len = 0;
+    while *s.add(len) != 0 {
+        len += 1;
+    }
+    len
 }
 
 /// NPCPhrase with callback — the Rust replacement for C's NPCPhrase_cb.
@@ -1423,7 +1492,7 @@ extern "C" {
 ///     state==3 appends CommanderName
 ///  5. index > 0 (normal): look up ConversationPhrases[index-1] for text,
 ///     clip, and timestamp
-///  6. For all non-zero paths: call c_SpliceTrack with resolved data + cb
+///  6. For all non-zero paths: call SpliceTrack with resolved data + cb
 ///
 /// # Safety
 /// Must be called from the game thread with a valid encounter active.
@@ -1456,17 +1525,17 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             // Branch 2: commander name — direct GlobData.SIS_state access
             let name =
                 std::ptr::addr_of_mut!(GlobData.sis_state.commander_name) as *mut std::ffi::c_char;
-            c_SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
+            SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index == GLOBAL_SHIP_NAME {
             // Branch 3: ship name — direct GlobData.SIS_state access
             let name =
                 std::ptr::addr_of_mut!(GlobData.sis_state.ship_name) as *mut std::ffi::c_char;
-            c_SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
+            SpliceTrack(ptr::null_mut(), name, ptr::null_mut(), cb);
         } else if index < 0 {
             // Branch 4: alliance-name variant
             let adjusted = index - GLOBAL_ALLIANCE_NAME;
             let mut buf = [0u8; ALLIANCE_NAME_BUF_SIZE];
-            let text_ptr = c_get_alliance_name_full(
+            let text_ptr = get_alliance_name_full(
                 adjusted,
                 buf.as_mut_ptr() as *mut _,
                 ALLIANCE_NAME_BUF_SIZE as c_int,
@@ -1474,7 +1543,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             if text_ptr.is_null() {
                 return;
             }
-            c_SpliceTrack(ptr::null_mut(), text_ptr as *mut _, ptr::null_mut(), cb);
+            SpliceTrack(ptr::null_mut(), text_ptr as *mut _, ptr::null_mut(), cb);
         } else {
             // Branch 5: normal phrase from ConversationPhrases[index-1]
             let phrases = {
@@ -1504,7 +1573,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             let s3 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
             let timestamp = GetStringTimeStamp(s3);
 
-            c_SpliceTrack(clip as *mut _, text as *mut _, timestamp as *mut _, cb);
+            SpliceTrack(clip as *mut _, text as *mut _, timestamp as *mut _, cb);
         }
     }
 
@@ -1565,7 +1634,7 @@ pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
         let clip = GetStringSoundClip(s2);
 
         if clip.is_null() {
-            c_SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);
+            SpliceTrack(ptr::null_mut(), text as *mut _, ptr::null_mut(), None);
         } else {
             let mut tracks: [*mut std::ffi::c_char; 2] = [clip as *mut _, ptr::null_mut()];
             SpliceMultiTrack(tracks.as_mut_ptr(), text as *mut _);

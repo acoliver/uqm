@@ -119,74 +119,7 @@ c_init_race (int comm_id)
 
 /* c_get_conversation_phrase, c_get_commander_name, c_get_ship_name — PORTED to Rust */
 
-const unsigned char *
-c_get_alliance_name (int index)
-{
-	/* Alliance name variants live in CommData.ConversationPhrases
-	 * at negative indices offset from GLOBAL_ALLIANCE_NAME.
-	 * For the bridge, just return the raw phrase text —
-	 * commander-name concatenation is done in Rust's construct_response. */
-	COUNT i;
-	STRING S;
-
-	i = GET_GAME_STATE (NEW_ALLIANCE_NAME);
-	S = SetAbsStringTableIndex (CommData.ConversationPhrases, index + i);
-	return (const unsigned char *)GetStringAddress (S);
-}
-
-/* Full alliance-name lookup matching C NPCPhrase_cb branch 4.
- * @plan PLAN-20260326-COMMPT2.P04 @requirement REQ-NP-001
- *
- * adjusted_index = phrase_id - GLOBAL_ALLIANCE_NAME (already done by caller).
- * Writes into buf (size buf_len) with optional CommanderName append (state==3).
- * Returns buf, or NULL if buf is too small or phrases unavailable.
- */
-const unsigned char *
-c_get_alliance_name_full (int adjusted_index, char *buf, int buf_len)
-{
-	COUNT i;
-	STRING S;
-	const UNICODE *src;
-
-	if (!CommData.ConversationPhrases || !buf || buf_len <= 0)
-		return NULL;
-
-	i = GET_GAME_STATE (NEW_ALLIANCE_NAME);
-	S = SetAbsStringTableIndex (CommData.ConversationPhrases,
-			(adjusted_index - 1) + i);
-	src = (const UNICODE *)GetStringAddress (S);
-	if (!src)
-		return NULL;
-
-	strncpy (buf, src, (size_t)buf_len - 1);
-	buf[buf_len - 1] = '\0';
-
-	if (i == 3)
-	{
-		const UNICODE *cname = GLOBAL_SIS (CommanderName);
-		if (cname)
-		{
-			size_t used = strlen (buf);
-			strncat (buf + used, cname, (size_t)buf_len - used - 1);
-			buf[buf_len - 1] = '\0';
-		}
-	}
-
-	return (const unsigned char *)buf;
-}
-
-/* c_get_phrase_sound_clip, c_get_phrase_timestamp — PORTED to Rust */
-
-
-void
-c_SpliceTrack (UNICODE *filespec, UNICODE *textspec,
-		UNICODE *timestamp, CallbackFunction cb)
-{
-	fprintf (stderr, "[DBG] c_SpliceTrack: file=%p text=%p ts=%p cb=%p\n",
-		(void *)filespec, (void *)textspec, (void *)timestamp, (void *)cb);
-	SpliceTrack (filespec, textspec, timestamp, cb);
-	fprintf (stderr, "[DBG] c_SpliceTrack: done\n");
-}
+/* c_get_alliance_name, c_get_alliance_name_full, c_SpliceTrack — PORTED to Rust */
 
 
 /*
