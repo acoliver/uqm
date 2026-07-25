@@ -40,6 +40,38 @@ pub struct CPoint {
     pub y: i16,
 }
 
+/// C `RECT` struct (units.h / comm.h).
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct CRect {
+    pub corner: CPoint,
+    pub width: i16,
+    pub height: i16,
+}
+
+/// C `SIS_STATE` struct (sis.h) — only the fields we need.
+/// CommanderName/ShipName/PlanetName are `UNICODE[SIS_NAME_SIZE]` = `char[16]`.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CSisState {
+    pub star_name: [u8; 16],
+    pub ship_name: [u8; 16],
+    pub commander_name: [u8; 16],
+    pub planet_name: [u8; 16],
+}
+
+/// Minimal C `GLOBDATA` — only the fields we access from Rust.
+/// SIS_state is at offset 0 in the C struct, Game_state follows.
+/// This is a partial mirror; we only need SIS_state and Game_state.GameState.
+#[repr(C)]
+pub struct CGlobData {
+    pub sis_state: CSisState,
+    // Game_state follows — we access GameState via the getGameState FFI
+    // using the pointer to the GameState array within Game_state.
+    // The exact layout after SIS_state is complex; we only need
+    // the SIS_state fields directly.
+}
+
 /// C `ANIMATION_DESC` struct (commanim.h).
 /// Fields in declaration order, matching the C layout for direct FFI reads.
 #[repr(C)]

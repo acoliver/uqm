@@ -1390,58 +1390,8 @@ c_IsStarbaseConversation (void)
 			&& GET_GAME_STATE (STARBASE_AVAILABLE)) ? 1 : 0;
 }
 
-const char *
-c_GetGameString (int base, int offset)
-{
-	return (const char *)GAME_STRING (base + offset);
-}
-
-const char *
-c_GetPlanetName (void)
-{
-	return (const char *)GLOBAL_SIS (PlanetName);
-}
-
-
-void
-c_GetSISOrigin (int *x, int *y)
-{
-	if (x) *x = (int)SIS_ORG_X;
-	if (y) *y = (int)SIS_ORG_Y;
-}
-
-const char *
-c_GetPlayerFontRes (void)
-{
-	return PLAYER_FONT;
-}
-
-unsigned int
-c_GetWantPixmap (void)
-{
-	return (unsigned int)WANT_PIXMAP;
-}
-
-/* ---- CommWndRect accessor bridge ----------------------------------------- */
-/* @plan PLAN-20260326-COMMPT2.P06 */
-
-void
-c_GetCommWndRect (int *x, int *y, int *w, int *h)
-{
-	if (x) *x = (int)CommWndRect.corner.x;
-	if (y) *y = (int)CommWndRect.corner.y;
-	if (w) *w = (int)CommWndRect.extent.width;
-	if (h) *h = (int)CommWndRect.extent.height;
-}
-
-void
-c_SetCommWndRect (int x, int y, int w, int h)
-{
-	CommWndRect.corner.x = (COORD)x;
-	CommWndRect.corner.y = (COORD)y;
-	CommWndRect.extent.width = (SIZE)w;
-	CommWndRect.extent.height = (SIZE)h;
-}
+/* c_GetGameString, c_GetPlanetName, c_GetSISOrigin, c_GetPlayerFontRes,
+ * c_GetWantPixmap, c_GetCommWndRect, c_SetCommWndRect — PORTED to Rust */
 
 /* ---- HailAlien encounter loop bridge ------------------------------------- */
 /* @plan PLAN-20260326-COMMPT2.P07 @requirement REQ-DI-001 */

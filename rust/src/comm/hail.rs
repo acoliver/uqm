@@ -13,7 +13,7 @@
 
 #[cfg(not(test))]
 mod c_bridge {
-    use super::super::locdata::CLocData;
+    use super::super::locdata::{CGlobData, CLocData, CRect};
     use std::ffi::{c_char, c_int, c_uint, c_void};
 
     // The C global CommData (LOCDATA struct) — accessed directly without bridge functions
@@ -92,13 +92,17 @@ mod c_bridge {
 
         // Activity flags — read C-side CurrentActivity via existing bridge
         pub fn get_current_activity() -> u16;
+        // Activity flags — read C-side LastActivity via extern static
+        #[allow(dead_code)]
+        pub static mut LastActivity: u16;
         pub fn c_SetLastActivityCheckLoad();
 
         // Screen / context globals
         pub static mut Screen: *mut c_void;
         pub static mut SpaceContext: *mut c_void;
 
-        // Encounter functions
+        // Encounter functions — call CommData function pointers directly
+        // CommData.init_encounter_func / post_encounter_func / uninit_encounter_func
         pub fn c_CallInitEncounterFunc();
         pub fn c_CallPostEncounterFunc();
         pub fn c_CallUninitEncounterFunc();
@@ -110,19 +114,25 @@ mod c_bridge {
 
         // Game-state / layout queries
         pub fn c_IsStarbaseConversation() -> c_int;
-        pub fn c_GetPlanetName() -> *const c_char;
-        pub fn c_GetGameString(base: c_int, offset: c_int) -> *const c_char;
-        pub fn c_GetCommWndRect(x: *mut c_int, y: *mut c_int, w: *mut c_int, h: *mut c_int);
-        pub fn c_SetCommWndRect(x: c_int, y: c_int, w: c_int, h: c_int);
 
         // Dimension constants
-        pub fn c_GetSISOrigin(x: *mut c_int, y: *mut c_int);
-        pub fn c_GetPlayerFontRes() -> *const c_char;
-        pub fn c_GetWantPixmap() -> c_uint;
 
         // C runtime globals for screen dimensions
         pub static mut ScreenWidth: c_int;
         pub static mut ScreenHeight: c_int;
+
+        // C globals for direct access (replacing c_ bridge functions)
+        #[allow(dead_code)]
+        pub static mut optSmoothScroll: c_int;
+        pub static mut CommWndRect: CRect;
+        pub static mut GameStrings: *mut c_void;
+        pub static mut GlobData: CGlobData;
+
+        // C functions used by direct-access replacements
+        pub fn SetAbsStringTableIndex(table: *mut c_void, index: c_int) -> *mut c_void;
+        pub fn GetStringAddress(s: *mut c_void) -> *const c_char;
+        #[allow(dead_code)]
+        pub fn getGameState(state: *const u8, name: c_int, end: c_int) -> u8;
     }
 }
 
@@ -141,6 +151,29 @@ const LDASF_USE_ALTERNATE: u32 = 0x0001;
 /// Game string base index for starbase strings (from gamestr.h).
 #[cfg(not(test))]
 const STARBASE_STRING_BASE: i32 = 0x0200;
+
+/// Check if this is a starbase conversation by reading C game state.
+/// Matches: GET_GAME_STATE(GLOBAL_FLAGS_AND_DATA) == 0xFF && GET_GAME_STATE(STARBASE_AVAILABLE)
+#[cfg(not(test))]
+unsafe fn is_starbase_conversation() -> bool {
+    c_bridge::c_IsStarbaseConversation() != 0
+}
+
+/// Get the planet name from GlobData.SIS_state.PlanetName.
+#[cfg(not(test))]
+unsafe fn planet_name() -> *const std::ffi::c_char {
+    // GlobData.SIS_state.PlanetName is a char[16] array
+    // Use addr_of_mut! to avoid creating a shared reference to mutable static
+    let planet_name_ptr = std::ptr::addr_of_mut!(c_bridge::GlobData.sis_state.planet_name);
+    planet_name_ptr as *const std::ffi::c_char
+}
+
+/// Get a game string via GAME_STRING macro: SetAbsStringTableIndex(GameStrings, i) → GetStringAddress.
+#[cfg(not(test))]
+unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
+    let s = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, index);
+    c_bridge::GetStringAddress(s)
+}
 
 // ============================================================================
 // NORMAL_VOLUME — matches libs/sndlib.h
@@ -187,7 +220,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 2: Load PlayerFont
         // ----------------------------------------------------------------
-        let player_font_res = c_GetPlayerFontRes();
+        let player_font_res = c"font.player".as_ptr();
         let player_font = LoadGraphicInstance(player_font_res);
 
         // ----------------------------------------------------------------
@@ -261,7 +294,7 @@ pub unsafe fn hail_alien() {
         let slider_h = 15;
         let cache_height = sis_h - slider_y - slider_h + 2;
 
-        let want_pixmap = c_GetWantPixmap();
+        let want_pixmap: std::ffi::c_uint = 2; // WANT_PIXMAP = 1 << 1
         let cache_frame_raw =
             CreateDrawable(want_pixmap as u8, sis_w as i16, cache_height as i16, 1);
         let text_cache_frame = CaptureDrawable(cache_frame_raw);
@@ -311,17 +344,14 @@ pub unsafe fn hail_alien() {
 
         // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_h }
         // CommWndRect.corner stays at its current value for WON_LAST_BATTLE
-        let mut wnd_x: i32 = 0;
-        let mut wnd_y: i32 = 0;
-        let mut _wnd_w: i32 = 0;
-        let mut _wnd_h: i32 = 0;
-        c_GetCommWndRect(
-            ptr::addr_of_mut!(wnd_x),
-            ptr::addr_of_mut!(wnd_y),
-            ptr::addr_of_mut!(_wnd_w),
-            ptr::addr_of_mut!(_wnd_h),
-        );
-        c_SetCommWndRect(wnd_x, wnd_y, sis_w, frame_h);
+        let wnd_x = unsafe { c_bridge::CommWndRect.corner.x as i32 };
+        let wnd_y = unsafe { c_bridge::CommWndRect.corner.y as i32 };
+        unsafe {
+            c_bridge::CommWndRect.corner.x = wnd_x as i16;
+            c_bridge::CommWndRect.corner.y = wnd_y as i16;
+            c_bridge::CommWndRect.width = sis_w as i16;
+            c_bridge::CommWndRect.height = frame_h as i16;
+        }
 
         // ----------------------------------------------------------------
         // Steps 9–10: Transition, batch, draw SIS UI
@@ -331,49 +361,37 @@ pub unsafe fn hail_alien() {
 
         if (c_bridge::get_current_activity() & 0xFF) == 5 {
             // WON_LAST_BATTLE branch: set clip to current CommWndRect corner
-            let mut cx: i32 = 0;
-            let mut cy: i32 = 0;
-            let mut cw: i32 = 0;
-            let mut ch: i32 = 0;
-            c_GetCommWndRect(
-                ptr::addr_of_mut!(cx),
-                ptr::addr_of_mut!(cy),
-                ptr::addr_of_mut!(cw),
-                ptr::addr_of_mut!(ch),
-            );
+            let cx = unsafe { c_bridge::CommWndRect.corner.x as i32 };
+            let cy = unsafe { c_bridge::CommWndRect.corner.y as i32 };
+            let cw = unsafe { c_bridge::CommWndRect.width as i32 };
+            let ch = unsafe { c_bridge::CommWndRect.height as i32 };
             SetContextClipRect(cx, cy, cw, ch);
         } else {
             // Normal branch
-            let mut org_x: i32 = 0;
-            let mut org_y: i32 = 0;
-            c_GetSISOrigin(ptr::addr_of_mut!(org_x), ptr::addr_of_mut!(org_y));
+            let org_x: i32 = 7; // SIS_ORG_X = 7 + SAFE_X(0)
+            let org_y: i32 = 10; // SIS_ORG_Y = 10 + SAFE_Y(0)
 
-            let mut _wnd_w2: i32 = 0;
-            let mut _wnd_h2: i32 = 0;
-            c_GetCommWndRect(
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::addr_of_mut!(_wnd_w2),
-                ptr::addr_of_mut!(_wnd_h2),
-            );
+            let _wnd_w2 = unsafe { c_bridge::CommWndRect.width as i32 };
+            let _wnd_h2 = unsafe { c_bridge::CommWndRect.height as i32 };
             SetContextClipRect(org_x, org_y, _wnd_w2, _wnd_h2);
             // Update CommWndRect.corner to SIS origin
-            c_SetCommWndRect(org_x, org_y, _wnd_w2, _wnd_h2);
+            unsafe {
+                c_bridge::CommWndRect.corner.x = org_x as i16;
+                c_bridge::CommWndRect.corner.y = org_y as i16;
+            }
 
             DrawSISFrame();
 
-            if c_IsStarbaseConversation() != 0 {
+            if is_starbase_conversation() {
                 // Talking to allied Starbase
-                // GAME_STRING(STARBASE_STRING_BASE + 1) = "Starbase Commander"
-                let msg = c_GetGameString(STARBASE_STRING_BASE, 1);
+                let msg = game_string(STARBASE_STRING_BASE + 1);
                 DrawSISMessage(msg);
-                // GAME_STRING(STARBASE_STRING_BASE + 0) = "Starbase"
-                let title = c_GetGameString(STARBASE_STRING_BASE, 0);
+                let title = game_string(STARBASE_STRING_BASE);
                 DrawSISTitle(title);
             } else {
                 // Default titles: NULL message + planet name
                 DrawSISMessage(ptr::null());
-                let planet_name = c_GetPlanetName();
+                let planet_name = planet_name();
                 DrawSISTitle(planet_name);
             }
         }
