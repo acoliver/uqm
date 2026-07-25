@@ -96,15 +96,57 @@ pub(super) mod c_bridge {
         pub fn setRunIntroAnim();
         pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
         pub fn c_SelectConversationSummary();
-        pub fn c_GetOptSmoothScroll() -> c_int;
-        pub fn c_ClearLastActivityLoadFlag();
-        // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-IP-007
-        pub fn c_GetPulsedMenuKey(key_index: c_int) -> c_int;
-        pub fn c_GetCurrentMenuKey(key_index: c_int) -> c_int;
         pub fn UpdateInputState();
-        // @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001
-        pub fn c_HasTransitionAnim() -> c_int;
         pub fn SleepThread(duration: c_int);
+    }
+
+    #[repr(C)]
+    struct ControllerInputState {
+        key: [[i32; 7]; 6],
+        menu: [i32; 24],
+    }
+
+    extern "C" {
+        static mut PulsedInputState: ControllerInputState;
+        static CurrentInputState: ControllerInputState;
+        static mut LastActivity: u32;
+        pub static optSmoothScroll: c_int;
+    }
+
+    /// Direct access to PulsedInputState.menu[key_index] (replaces c_GetPulsedMenuKey)
+    pub unsafe fn pulsed_menu_key(key_index: c_int) -> c_int {
+        std::ptr::addr_of_mut!(PulsedInputState)
+            .cast::<ControllerInputState>()
+            .as_mut()
+            .map(|s| s.menu[key_index as usize])
+            .unwrap_or(0)
+    }
+
+    /// Direct access to CurrentInputState.menu[key_index] (replaces c_GetCurrentMenuKey)
+    pub unsafe fn current_menu_key(key_index: c_int) -> c_int {
+        std::ptr::addr_of!(CurrentInputState)
+            .cast::<ControllerInputState>()
+            .as_ref()
+            .map(|s| s.menu[key_index as usize])
+            .unwrap_or(0)
+    }
+
+    /// Clear CHECK_LOAD bit from LastActivity (replaces c_ClearLastActivityLoadFlag)
+    pub unsafe fn clear_last_activity_load_flag() {
+        LastActivity &= !0x1000; // CHECK_LOAD = 0x1000
+    }
+
+    /// Check if CommData.AlienTransitionDesc.NumFrames > 0 (replaces c_HasTransitionAnim)
+    pub unsafe fn has_transition_anim() -> c_int {
+        if crate::comm::locdata::COMM_DATA
+            .alien_transition_desc
+            .num_frames
+            > 0
+        {
+            1
+        } else {
+            0
+        }
     }
 
     pub mod music_volume {
@@ -546,7 +588,7 @@ pub unsafe fn alien_talk_first_call_init() {
         c_bridge::play_alien_music();
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::InitCommAnimations();
-        c_bridge::c_ClearLastActivityLoadFlag();
+        c_bridge::clear_last_activity_load_flag();
     }
 }
 
@@ -671,7 +713,7 @@ fn check_cancel_input(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_GetPulsedMenuKey(KEY_MENU_CANCEL) != 0
+        c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) != 0
     }
     #[cfg(test)]
     {
@@ -686,7 +728,7 @@ fn check_select_input(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_GetPulsedMenuKey(KEY_MENU_SELECT) != 0
+        c_bridge::pulsed_menu_key(KEY_MENU_SELECT) != 0
     }
     #[cfg(test)]
     {
@@ -704,8 +746,8 @@ fn check_left_input(state: &CommState) -> bool {
     unsafe {
         let _ = state;
         match get_scroll_mode() {
-            ScrollMode::Page => c_bridge::c_GetPulsedMenuKey(KEY_MENU_LEFT) != 0,
-            ScrollMode::Smooth => c_bridge::c_GetCurrentMenuKey(KEY_MENU_LEFT) != 0,
+            ScrollMode::Page => c_bridge::pulsed_menu_key(KEY_MENU_LEFT) != 0,
+            ScrollMode::Smooth => c_bridge::current_menu_key(KEY_MENU_LEFT) != 0,
         }
     }
     #[cfg(test)]
@@ -722,8 +764,8 @@ fn check_right_input(state: &CommState) -> bool {
     unsafe {
         let _ = state;
         match get_scroll_mode() {
-            ScrollMode::Page => c_bridge::c_GetPulsedMenuKey(KEY_MENU_RIGHT) != 0,
-            ScrollMode::Smooth => c_bridge::c_GetCurrentMenuKey(KEY_MENU_RIGHT) != 0,
+            ScrollMode::Page => c_bridge::pulsed_menu_key(KEY_MENU_RIGHT) != 0,
+            ScrollMode::Smooth => c_bridge::current_menu_key(KEY_MENU_RIGHT) != 0,
         }
     }
     #[cfg(test)]
@@ -738,7 +780,7 @@ fn check_up_input(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_GetPulsedMenuKey(KEY_MENU_UP) != 0
+        c_bridge::pulsed_menu_key(KEY_MENU_UP) != 0
     }
     #[cfg(test)]
     {
@@ -752,7 +794,7 @@ fn check_down_input(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_GetPulsedMenuKey(KEY_MENU_DOWN) != 0
+        c_bridge::pulsed_menu_key(KEY_MENU_DOWN) != 0
     }
     #[cfg(test)]
     {
@@ -785,27 +827,27 @@ pub fn check_abort_external() -> bool {
 
 #[cfg(not(test))]
 pub fn check_select_external() -> bool {
-    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_SELECT) != 0 }
+    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_SELECT) != 0 }
 }
 
 #[cfg(not(test))]
 pub fn check_cancel_external() -> bool {
-    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_CANCEL) != 0 }
+    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) != 0 }
 }
 
 #[cfg(not(test))]
 pub fn check_up_external() -> bool {
-    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_UP) != 0 }
+    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_UP) != 0 }
 }
 
 #[cfg(not(test))]
 pub fn check_down_external() -> bool {
-    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_DOWN) != 0 }
+    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_DOWN) != 0 }
 }
 
 #[cfg(not(test))]
 pub fn check_left_external() -> bool {
-    unsafe { c_bridge::c_GetPulsedMenuKey(KEY_MENU_LEFT) != 0 }
+    unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) != 0 }
 }
 
 #[cfg(not(test))]
@@ -952,7 +994,7 @@ fn fast_reverse(state: &mut CommState) {
 
 #[cfg(not(test))]
 fn get_scroll_mode() -> ScrollMode {
-    let v = unsafe { c_bridge::c_GetOptSmoothScroll() };
+    let v = unsafe { c_bridge::optSmoothScroll };
     if v == 0 {
         ScrollMode::Page
     } else {
@@ -1124,7 +1166,7 @@ fn has_transition_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_HasTransitionAnim() != 0
+        c_bridge::has_transition_anim() != 0
     }
     #[cfg(test)]
     {
@@ -1321,7 +1363,7 @@ fn clear_last_activity_load_flag(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_ClearLastActivityLoadFlag();
+        c_bridge::clear_last_activity_load_flag();
     }
     #[cfg(test)]
     {

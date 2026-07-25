@@ -962,46 +962,10 @@ c_DrawSISComWindow (void)
 /* ---- Input bridges ------------------------------------------------------- */
 
 
-int
-c_GetPulsedMenuKey (int key_index)
-{
-	return PulsedInputState.menu[key_index];
-}
-
-int
-c_GetCurrentMenuKey (int key_index)
-{
-	return CurrentInputState.menu[key_index];
-}
-
-
-/* ---- Game-state bridges -------------------------------------------------- */
-
-
-/* @plan PLAN-20260326-COMMPT2.P03 @requirement REQ-AT-001 */
-int
-c_HasTransitionAnim (void)
-{
-	return CommData.AlienTransitionDesc.NumFrames > 0 ? 1 : 0;
-}
-
-int
-c_GetLastActivityAbortFlag (void)
-{
-	return (LastActivity & CHECK_ABORT) ? 1 : 0;
-}
-
-void
-c_ClearLastActivityLoadFlag (void)
-{
-	LastActivity &= ~CHECK_LOAD;
-}
-
-int
-c_GetOptSmoothScroll (void)
-{
-	return optSmoothScroll;
-}
+/* c_GetPulsedMenuKey, c_GetCurrentMenuKey, c_HasTransitionAnim,
+ * c_GetLastActivityAbortFlag, c_ClearLastActivityLoadFlag, c_GetOptSmoothScroll
+ * — PORTED to Rust (direct PulsedInputState/CurrentInputState/LastActivity/
+ * optSmoothScroll/CommData access) */
 
 /* ---- Resource destroy bridges ------------------------------------------- */
 
