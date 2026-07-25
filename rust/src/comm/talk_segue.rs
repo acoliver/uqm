@@ -109,7 +109,7 @@ pub(super) mod c_bridge {
         pub fn PlayMusic(music: *mut c_void, do_loop: c_int, volume: u8);
         pub fn GetColorMapAddress(cmap: *mut c_void) -> *mut c_void;
         pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
-        pub fn DrawAlienFrame();
+        pub fn DrawAlienFrame(sequences: *const c_void, num: u16, full_redraw: c_int) -> c_int;
         pub fn InitCommAnimations();
         pub fn runningIntroAnim() -> c_int;
         pub fn runningTalkingAnim() -> c_int;
@@ -611,7 +611,7 @@ pub unsafe fn alien_talk_first_call_init() {
     {
         init_speech_graphics(&mut CommState::default());
         c_bridge::set_color_map_from_comm_data();
-        c_bridge::DrawAlienFrame();
+        c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
         rust_UpdateSpeechGraphics();
         comm_intro_transition();
         c_bridge::play_alien_music();
@@ -1398,7 +1398,7 @@ fn draw_alien_frame(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::DrawAlienFrame();
+        c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
     }
     #[cfg(test)]
     {

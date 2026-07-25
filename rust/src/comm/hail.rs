@@ -44,7 +44,7 @@ pub(super) mod c_bridge {
         pub fn DestroyContext(ctx: *mut c_void) -> c_int;
         pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
         pub fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
-        pub fn SetContextClipRect(x: c_int, y: c_int, w: c_int, h: c_int);
+        pub fn SetContextClipRect(rect: *mut crate::comm::locdata::CRect);
         #[allow(clashing_extern_declarations)]
         pub fn SetContextBackGroundColor(r: c_int, g: c_int, b: c_int);
         pub fn SetContextFont(font: *mut c_void) -> *mut c_void;
@@ -425,24 +425,16 @@ pub unsafe fn hail_alien() {
         BatchGraphics();
 
         if (c_bridge::get_current_activity() & 0xFF) == 5 {
-            // WON_LAST_BATTLE branch: set clip to current CommWndRect corner
-            let cx = unsafe { c_bridge::CommWndRect.corner.x as i32 };
-            let cy = unsafe { c_bridge::CommWndRect.corner.y as i32 };
-            let cw = unsafe { c_bridge::CommWndRect.width as i32 };
-            let ch = unsafe { c_bridge::CommWndRect.height as i32 };
-            SetContextClipRect(cx, cy, cw, ch);
-        } else {
-            // Normal branch
-            let org_x: i32 = 7; // SIS_ORG_X = 7 + SAFE_X(0)
-            let org_y: i32 = 10; // SIS_ORG_Y = 10 + SAFE_Y(0)
-
-            let _wnd_w2 = unsafe { c_bridge::CommWndRect.width as i32 };
-            let _wnd_h2 = unsafe { c_bridge::CommWndRect.height as i32 };
-            SetContextClipRect(org_x, org_y, _wnd_w2, _wnd_h2);
-            // Update CommWndRect.corner to SIS origin
+            // WON_LAST_BATTLE branch: set clip to current CommWndRect
             unsafe {
-                c_bridge::CommWndRect.corner.x = org_x as i16;
-                c_bridge::CommWndRect.corner.y = org_y as i16;
+                SetContextClipRect(&raw mut c_bridge::CommWndRect);
+            }
+        } else {
+            // Normal branch: set clip to SIS origin + CommWndRect size
+            unsafe {
+                c_bridge::CommWndRect.corner.x = 7; // SIS_ORG_X
+                c_bridge::CommWndRect.corner.y = 10; // SIS_ORG_Y
+                SetContextClipRect(&raw mut c_bridge::CommWndRect);
             }
 
             DrawSISFrame();
