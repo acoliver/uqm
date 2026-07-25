@@ -97,7 +97,6 @@ pub(super) mod c_bridge {
         pub fn FlushColorXForms();
 
         // Activity flags — read C-side CurrentActivity via existing bridge
-        pub fn get_current_activity() -> u16;
         // LastActivity is a C DWORD (u32) — direct access replaces c_SetLastActivityCheckLoad
         pub static mut LastActivity: u32;
 
@@ -184,7 +183,7 @@ unsafe fn is_starbase_conversation() -> bool {
 #[cfg(not(test))]
 unsafe fn draw_sis_com_window() {
     // WON_LAST_BATTLE = 5 (globdata.h enum, 0-indexed)
-    let activity = c_bridge::get_current_activity() as u8;
+    let activity = crate::mainloop::ffi::get_current_activity().0 as u8;
     if activity == 5 {
         return;
     }
@@ -429,7 +428,7 @@ pub unsafe fn hail_alien() {
         SetTransitionSource(ptr::null_mut());
         BatchGraphics();
 
-        if (c_bridge::get_current_activity() & 0xFF) == 5 {
+        if (crate::mainloop::ffi::get_current_activity().0 & 0xFF) == 5 {
             // WON_LAST_BATTLE branch: set clip to current CommWndRect
             unsafe {
                 SetContextClipRect(&raw mut c_bridge::CommWndRect);
@@ -535,7 +534,7 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         // Step 16: Call post/uninit encounter funcs
         // ----------------------------------------------------------------
-        let activity = c_bridge::get_current_activity();
+        let activity = crate::mainloop::ffi::get_current_activity().0;
         if (activity & 0x4000) == 0 && (activity & 0x1000) == 0 {
             call_encounter_func(c_bridge::CommData.post_encounter_func);
         }

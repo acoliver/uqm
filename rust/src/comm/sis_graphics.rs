@@ -144,7 +144,6 @@ mod c_bridge {
         pub static mut TinyFont: *mut std::ffi::c_void;
 
         // Activity accessor (replaces GlobData.Game_state.CurrentActivity)
-        pub fn get_current_activity() -> u16;
 
         // Input state (controls.h)
         pub static mut PulsedInputState: CInputState;
@@ -253,7 +252,7 @@ unsafe extern "C" fn do_summary_page_cb(state: *mut SummaryLoopState) -> std::ff
         return 1;
     }
 
-    let activity = c_bridge::get_current_activity();
+    let activity = crate::mainloop::ffi::get_current_activity().0;
     if (activity & CHECK_ABORT) != 0 {
         return 0;
     }
@@ -444,7 +443,7 @@ unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
 /// Ported from `c_DrawSISComWindow()` in rust_comm.c.
 #[cfg(not(test))]
 pub unsafe fn draw_sis_com_window() {
-    let activity = c_bridge::get_current_activity();
+    let activity = crate::mainloop::ffi::get_current_activity().0;
     if activity as u8 != WON_LAST_BATTLE {
         let old_ctx = c_bridge::SetContext(c_bridge::SpaceContext);
         let mut rect = CRect {

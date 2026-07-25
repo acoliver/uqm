@@ -188,7 +188,6 @@ extern "C" {
     fn GetLinkSize(queue: *mut c_void) -> usize;
 
     // Activity getter
-    fn uqm_get_current_activity_lobyte() -> u8;
 }
 
 // ===========================================================================
@@ -467,7 +466,7 @@ pub unsafe extern "C" fn rust_ships_spawn(starship: *mut std::os::raw::c_void) -
             #[cfg(test)]
             let activity = 2u8; // IN_ENCOUNTER for tests
             #[cfg(not(test))]
-            let activity = uqm_get_current_activity_lobyte();
+            let activity = (crate::mainloop::ffi::get_current_activity().0 & 0xFF) as u8;
 
             match lifecycle_spawn(&mut starship_rust, activity) {
                 Ok(_) => {
@@ -652,7 +651,7 @@ pub unsafe extern "C" fn rust_ships_uninit() {
 
             if !rust_says_initialized {
                 // Check C-side: does CurrentActivity still have IN_BATTLE?
-                let c_activity = uqm_get_current_activity_lobyte();
+                let c_activity = (crate::mainloop::ffi::get_current_activity().0 & 0xFF) as u8;
                 // IN_ENCOUNTER is 2, which implies battle context may exist
                 let c_might_have_arena = c_activity == 2;
 

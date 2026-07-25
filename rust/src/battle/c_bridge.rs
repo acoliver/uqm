@@ -364,7 +364,7 @@ pub unsafe fn is_hq_space() -> bool {
 ///
 /// This is an FFI function called from C. The caller must ensure pointers are valid.
 pub unsafe fn current_activity() -> u16 {
-    get_current_activity()
+    crate::mainloop::ffi::get_current_activity().0
 }
 
 /// Safe wrapper: get a random number.

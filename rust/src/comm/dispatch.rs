@@ -442,7 +442,7 @@ fn lobyte(x: u16) -> u16 {
 /// # Safety
 /// Calls C FFI to read CurrentActivity from global state.
 unsafe fn in_hq_space() -> bool {
-    let activity = c_extern::get_current_activity();
+    let activity = crate::mainloop::ffi::get_current_activity().0;
     lobyte(activity) == IN_HYPERSPACE
 }
 
@@ -564,7 +564,7 @@ fn set_game_state(key: &str, value: u32) {
 /// # Safety
 /// Calls C FFI functions that access global state.
 pub unsafe extern "C" fn rust_race_communication() {
-    let current_activity = c_extern::get_current_activity();
+    let current_activity = crate::mainloop::ffi::get_current_activity().0;
 
     if lobyte(current_activity) == IN_LAST_BATTLE {
         // Going into talking pet conversation
@@ -573,11 +573,13 @@ pub unsafe extern "C" fn rust_race_communication() {
         clone_ship_fragment(ship::SAMATRA_SHIP, npc_q, 0);
         init_communication(conv::TALKING_PET);
 
-        let activity = c_extern::get_current_activity();
+        let activity = crate::mainloop::ffi::get_current_activity().0;
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
             let crew = crate::mainloop::ffi::get_crew_enlisted();
             if crew != 0xFFFF {
-                c_extern::set_current_activity(WON_LAST_BATTLE);
+                crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
+                    WON_LAST_BATTLE,
+                ));
             }
         }
         return;
@@ -599,13 +601,15 @@ pub unsafe extern "C" fn rust_race_communication() {
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew != 0xFFFF {
-            let activity = c_extern::get_current_activity();
+            let activity = crate::mainloop::ffi::get_current_activity().0;
             let mut na = activity & !START_ENCOUNTER;
             if lobyte(na) == IN_INTERPLANETARY {
                 na |= START_INTERPLANETARY;
             }
             crate::mainloop::ffi::set_next_activity(crate::mainloop::types::ActivityValue(na));
-            c_extern::set_current_activity(activity | CHECK_LOAD);
+            crate::mainloop::ffi::set_current_activity(crate::mainloop::types::ActivityValue(
+                activity | CHECK_LOAD,
+            ));
         }
 
         set_game_state("ESCAPE_COUNTER", ec as u32);
@@ -657,7 +661,7 @@ pub unsafe extern "C" fn rust_race_communication() {
 
     let status = init_communication(conv_id);
 
-    let activity = c_extern::get_current_activity();
+    let activity = crate::mainloop::ffi::get_current_activity().0;
     if (activity & (CHECK_ABORT | CHECK_LOAD)) != 0 {
         return;
     }
@@ -788,7 +792,7 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
         if which_comm == conv::ORZ
             || (which_comm == conv::TALKING_PET
                 && (get_game_state("TALKING_PET_ON_SHIP") == 0
-                    || lobyte(c_extern::get_current_activity()) == IN_LAST_BATTLE))
+                    || lobyte(crate::mainloop::ffi::get_current_activity().0) == IN_LAST_BATTLE))
             || (which_comm != conv::CHMMR && which_comm != conv::SYREEN)
         {
             ffi::BuildBattle(NPC_PLAYER_NUM);
@@ -828,14 +832,14 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
     if status == HAIL {
         crate::comm::ffi::rust_HailAlien();
     } else if !loc_data_ptr.is_null() {
-        let activity = c_extern::get_current_activity();
+        let activity = crate::mainloop::ffi::get_current_activity().0;
         if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
             call_encounter_func(ffi::CommData.post_encounter_func);
         }
         call_encounter_func(ffi::CommData.uninit_encounter_func);
     }
 
-    let activity = c_extern::get_current_activity();
+    let activity = crate::mainloop::ffi::get_current_activity().0;
     if (activity & (CHECK_ABORT | CHECK_LOAD)) == 0 {
         let glob_flags = crate::mainloop::ffi::get_global_flags_and_data();
         if lobyte(activity) == IN_LAST_BATTLE && (glob_flags & CYBORG_ENABLED) != 0 {
@@ -1130,7 +1134,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
         // Check if the Ur-Quan probe Ilwrath encounter should happen
         if get_game_state("PROBE_ILWRATH_ENCOUNTER") == 0
-            || (c_extern::get_current_activity() & CHECK_ABORT) != 0
+            || (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0
         {
             // CleanupAfterStarBase is static in starbase.c.
             // TODO: Port to Rust. For now, skip cleanup.
@@ -1148,7 +1152,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         init_communication(conv::ILWRATH);
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
-        if crew == 0xFFFF || (c_extern::get_current_activity() & CHECK_ABORT) != 0 {
+        if crew == 0xFFFF || (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
             return;
         }
 
@@ -1156,7 +1160,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
-        if (c_extern::get_current_activity() & CHECK_ABORT) != 0 {
+        if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
             return;
         }
         // This marks that we are in Starbase.
@@ -1178,7 +1182,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         ffi::SetCommIntroMode(cim::FADE_IN_SCREEN, ONE_SECOND * 2);
         init_communication(conv::COMMANDER);
 
-        if (c_extern::get_current_activity() & CHECK_ABORT) != 0 {
+        if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
             return;
         }
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);

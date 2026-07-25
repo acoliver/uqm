@@ -414,7 +414,7 @@ fn get_segue() -> Segue {
 }
 
 fn get_current_activity() -> u16 {
-    unsafe { crate::mainloop::c_extern::get_current_activity() }
+    crate::mainloop::ffi::get_current_activity().0
 }
 
 fn lobyte(val: u16) -> u8 {

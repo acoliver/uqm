@@ -72,7 +72,6 @@ pub(super) mod c_bridge {
         pub fn comm_ClearSubtitles();
         pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
         pub fn SetSliderImage(frame_index: c_uint);
-        pub fn get_current_activity() -> u16;
 
         // Graphics functions for init_speech_graphics (replacing c_InitSpeechGraphics)
         pub fn InitOscilloscope(scope_bg: *mut c_void);
@@ -317,7 +316,7 @@ pub mod dinput {
         );
 
         // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
-        let activity = unsafe { c_bridge::get_current_activity() } as u32;
+        let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
         if (activity & CHECK_ABORT) != 0 {
             ts.ended = 1;
             return 0;
@@ -446,7 +445,7 @@ pub mod dinput {
     unsafe extern "C" fn do_last_replay_cb(p_lrs: *mut LastReplayStateDInput) -> c_int {
         let lrs = unsafe { &mut *p_lrs };
 
-        let activity = unsafe { c_bridge::get_current_activity() } as u32;
+        let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
         if (activity & CHECK_ABORT) != 0 {
             return 0;
         }
@@ -999,9 +998,9 @@ enum SliderImage {
 
 fn check_abort(state: &CommState) -> bool {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
-        c_bridge::get_current_activity() & 0x4000 != 0
+        crate::mainloop::ffi::get_current_activity().0 & 0x4000 != 0
     }
     #[cfg(test)]
     {
@@ -1108,9 +1107,9 @@ fn check_down_input(state: &CommState) -> bool {
 
 fn won_last_battle(state: &CommState) -> bool {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
-        c_bridge::get_current_activity() & 0xFF == 5
+        crate::mainloop::ffi::get_current_activity().0 & 0xFF == 5
     }
     #[cfg(test)]
     {
@@ -1125,7 +1124,7 @@ fn won_last_battle(state: &CommState) -> bool {
 
 #[cfg(not(test))]
 pub fn check_abort_external() -> bool {
-    unsafe { c_bridge::get_current_activity() & 0x4000 != 0 }
+    crate::mainloop::ffi::get_current_activity().0 & 0x4000 != 0
 }
 
 #[cfg(not(test))]
@@ -1155,7 +1154,7 @@ pub fn check_left_external() -> bool {
 
 #[cfg(not(test))]
 pub fn won_last_battle_external() -> bool {
-    unsafe { c_bridge::get_current_activity() & 0xFF == 5 }
+    crate::mainloop::ffi::get_current_activity().0 & 0xFF == 5
 }
 
 /// Run the "last replay" DoInput loop via Rust port (no lock needed).

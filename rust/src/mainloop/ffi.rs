@@ -72,9 +72,12 @@ mod c_globals {
 pub fn get_current_activity() -> ActivityValue {
     #[cfg(not(test))]
     {
-        // SAFETY: get_current_activity() takes no pointer arguments and
-        // simply reads a C global. It has no preconditions.
-        let raw = unsafe { prod::get_current_activity() };
+        // SAFETY: reads CurrentActivity from C GlobData global.
+        let raw = unsafe {
+            c_globals::globdata_ffi::GlobData
+                .game_state
+                .current_activity
+        };
         ActivityValue(raw)
     }
     #[cfg(test)]
@@ -95,8 +98,12 @@ pub fn get_current_activity() -> ActivityValue {
 pub fn set_current_activity(val: ActivityValue) {
     #[cfg(not(test))]
     {
-        // SAFETY: set_current_activity() writes a u16 to a C global.
-        unsafe { prod::set_current_activity(val.0) };
+        // SAFETY: writes CurrentActivity to C GlobData global.
+        unsafe {
+            c_globals::globdata_ffi::GlobData
+                .game_state
+                .current_activity = val.0
+        };
     }
     #[cfg(test)]
     {
