@@ -1,4 +1,5 @@
 [build]
+incremental = false
 rustflags = ["-L", "/opt/homebrew/Cellar/sdl2/2.32.10/lib"]
 
 [target.aarch64-apple-darwin]
