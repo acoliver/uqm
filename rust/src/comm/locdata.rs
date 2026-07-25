@@ -7,6 +7,17 @@ use std::sync::Mutex;
 
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
 
+#[cfg(not(test))]
+mod comm_data_extern {
+    extern "C" {
+        #[link_name = "CommData"]
+        pub static mut COMM_DATA: super::CLocData;
+    }
+}
+
+#[cfg(not(test))]
+pub use comm_data_extern::COMM_DATA;
+
 // ===========================================================================
 // C-compatible repr(C) types — mirror the C struct layout exactly
 // ===========================================================================

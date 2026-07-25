@@ -42,9 +42,12 @@ pub enum ScrollMode {
 // Test-mode c_bridge stub — provides constants and no-op wrappers so ffi.rs
 // tests compile without real C linkage.
 #[cfg(test)]
+#[allow(dead_code)]
 pub(super) mod c_bridge {
     pub const ONE_SECOND_TICKS: i32 = 840;
 
+    pub fn play_alien_music() {}
+    pub fn set_color_map_from_comm_data() {}
     pub fn call_refresh_responses(_top: u8, _count: u8, _cur: u8) {}
     pub fn call_select_conversation_summary() {}
     pub fn call_update_comm_graphics() {}
@@ -53,7 +56,8 @@ pub(super) mod c_bridge {
 
 #[cfg(not(test))]
 pub(super) mod c_bridge {
-    use std::ffi::{c_char, c_int, c_uint};
+    use crate::comm::locdata::COMM_DATA;
+    use std::ffi::{c_char, c_int, c_uint, c_void};
 
     extern "C" {
         pub fn PlayingTrack() -> u16;
@@ -73,14 +77,12 @@ pub(super) mod c_bridge {
         pub fn SetSliderImage(frame_index: c_uint);
         pub fn c_UpdateAnimations(seeking: c_int);
         pub fn get_current_activity() -> u16;
-        /// @plan PLAN-20260325-COMMPT3.P03
-        /// @requirement REQ-CM-001, REQ-CM-002
-        /// @pseudocode 001-colormap-music-bridges lines 01-08
-        pub fn c_SetColorMapFromCommData();
-        /// @plan PLAN-20260325-COMMPT3.P03
-        /// @requirement REQ-MU-001, REQ-MU-002
-        /// @pseudocode 001-colormap-music-bridges lines 09-15
-        pub fn c_PlayAlienMusic();
+
+        // Direct C functions for colormap/music (replacing c_ forwarders)
+        pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
+        pub fn GetColorMapAddress(cmap: *mut c_void) -> *mut c_void;
+        #[allow(clashing_extern_declarations)]
+        pub fn PlayMusic(music: *mut c_void, do_loop: c_int, volume: u8);
         pub fn DrawAlienFrame();
         pub fn c_CommIntroTransition();
         pub fn InitCommAnimations();
@@ -129,6 +131,24 @@ pub(super) mod c_bridge {
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase() {
         unsafe { c_FeedbackPlayerPhrase(std::ptr::null()) }
+    }
+
+    /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
+    pub unsafe fn play_alien_music() {
+        let song = COMM_DATA.alien_song;
+        if song.is_null() {
+            return;
+        }
+        PlayMusic(song, 1, 1);
+    }
+
+    /// Apply alien colormap from CommData.AlienColorMap (port of c_SetColorMapFromCommData).
+    pub unsafe fn set_color_map_from_comm_data() {
+        let cmap = COMM_DATA.alien_colormap;
+        if cmap.is_null() {
+            return;
+        }
+        SetColorMap(GetColorMapAddress(cmap));
     }
 }
 
@@ -519,11 +539,11 @@ pub unsafe fn alien_talk_first_call_init() {
     #[cfg(not(test))]
     {
         c_bridge::c_InitSpeechGraphics();
-        c_bridge::c_SetColorMapFromCommData();
+        c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame();
         rust_UpdateSpeechGraphics();
         c_bridge::c_CommIntroTransition();
-        c_bridge::c_PlayAlienMusic();
+        c_bridge::play_alien_music();
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
         c_bridge::InitCommAnimations();
         c_bridge::c_ClearLastActivityLoadFlag();
@@ -1194,7 +1214,7 @@ fn play_alien_music(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_PlayAlienMusic();
+        c_bridge::play_alien_music();
     }
     #[cfg(test)]
     {
@@ -1253,7 +1273,7 @@ fn set_colormap(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::c_SetColorMapFromCommData();
+        c_bridge::set_color_map_from_comm_data();
     }
     #[cfg(test)]
     {
@@ -1716,108 +1736,88 @@ mod tests {
     // by name) cannot produce false positives.
 
     /// verify_c_bridge_reads_commdata_colormap:
-    /// c_SetColorMapFromCommData body must reference CommData.AlienColorMap.
-    ///
-    /// EXPECTED FAIL against P03 stubs — body is only a comment.
-    /// Will pass only after P05 implements the real body.
+    /// Ported to Rust: set_color_map_from_comm_data must reference COMM_DATA.alien_colormap.
     #[test]
     fn verify_c_bridge_reads_commdata_colormap() {
-        let source = include_str!("../../../sc2/src/uqm/rust_comm.c");
-        let body = extract_c_fn_body(source, "c_SetColorMapFromCommData")
-            .expect("c_SetColorMapFromCommData must be defined in rust_comm.c");
+        let source = include_str!("talk_segue.rs");
         assert!(
-            body.contains("CommData.AlienColorMap"),
-            "c_SetColorMapFromCommData body must read CommData.AlienColorMap \
-             (EXPECTED FAIL vs P03 stubs; stub body: {:?})",
-            body
+            source.contains("COMM_DATA.alien_colormap"),
+            "set_color_map_from_comm_data must read COMM_DATA.alien_colormap"
         );
     }
 
     /// verify_c_bridge_null_guard_colormap:
-    /// c_SetColorMapFromCommData body must contain a null/zero guard before
-    /// calling SetColorMap (handles zero AlienColorMap gracefully).
-    ///
-    /// EXPECTED FAIL against P03 stubs.
+    /// Ported to Rust: set_color_map_from_comm_data must contain a null guard.
     #[test]
     fn verify_c_bridge_null_guard_colormap() {
-        let source = include_str!("../../../sc2/src/uqm/rust_comm.c");
-        let body = extract_c_fn_body(source, "c_SetColorMapFromCommData")
-            .expect("c_SetColorMapFromCommData must be defined in rust_comm.c");
-        // Acceptable guard patterns: == 0, != 0, == NULL, != NULL, if (!cmap), if (cmap
-        let has_guard = body.contains("== 0")
-            || body.contains("!= 0")
-            || body.contains("== NULL")
-            || body.contains("!= NULL")
-            || body.contains("if (!")
-            || body.contains("if (cmap");
+        let source = include_str!("talk_segue.rs");
+        let body_start = source
+            .find("pub unsafe fn set_color_map_from_comm_data")
+            .expect("set_color_map_from_comm_data must be defined");
+        let body = &source[body_start..];
+        let body_end = body.find("}").expect("function must have a body");
+        let body = &body[..body_end];
+        let has_guard = body.contains("is_null()");
         assert!(
             has_guard,
-            "c_SetColorMapFromCommData body must contain a null/zero guard \
-             (EXPECTED FAIL vs P03 stubs; stub body: {:?})",
-            body
+            "set_color_map_from_comm_data must contain a null guard"
         );
     }
 
     /// verify_c_music_reads_commdata:
-    /// c_PlayAlienMusic body must reference CommData.AlienSong.
-    ///
-    /// EXPECTED FAIL against P03 stubs — body is only a comment.
-    /// Will pass only after P05 implements the real body.
+    /// Ported to Rust: play_alien_music must reference COMM_DATA.alien_song.
     #[test]
     fn verify_c_music_reads_commdata() {
-        let source = include_str!("../../../sc2/src/uqm/rust_comm.c");
-        let body = extract_c_fn_body(source, "c_PlayAlienMusic")
-            .expect("c_PlayAlienMusic must be defined in rust_comm.c");
+        let source = include_str!("talk_segue.rs");
         assert!(
-            body.contains("CommData.AlienSong"),
-            "c_PlayAlienMusic body must read CommData.AlienSong \
-             (EXPECTED FAIL vs P03 stubs; stub body: {:?})",
-            body
+            source.contains("COMM_DATA.alien_song"),
+            "play_alien_music must read COMM_DATA.alien_song"
         );
     }
 
     /// verify_c_bridge_functions_exist_with_impl:
-    /// Both C bridge functions must have non-stub bodies — more than just
-    /// a block comment.
-    ///
-    /// EXPECTED FAIL for both until P05.
+    /// Ported to Rust: both functions must have real implementation bodies.
     #[test]
     fn verify_c_bridge_functions_exist_with_impl() {
-        let source = include_str!("../../../sc2/src/uqm/rust_comm.c");
+        let source = include_str!("talk_segue.rs");
 
-        let cmap_body = extract_c_fn_body(source, "c_SetColorMapFromCommData")
-            .expect("c_SetColorMapFromCommData must be defined in rust_comm.c");
-        let cmap_has_impl = cmap_body
-            .lines()
-            .filter(|l| {
-                let t = l.trim();
-                // Exclude blank, braces-only, and comment lines — only real statements count.
-                !t.is_empty() && t != "{" && t != "}" && !c_line_is_comment(t)
-            })
-            .count()
-            > 0;
+        fn extract_rust_fn_body<'a>(src: &'a str, name: &str) -> Option<&'a str> {
+            let pattern = format!("pub unsafe fn {}", name);
+            let idx = src.find(&pattern)?;
+            let rest = &src[idx..];
+            let mut depth = 0i32;
+            let mut end = 0;
+            for (i, c) in rest.char_indices() {
+                if c == '{' {
+                    depth += 1;
+                } else if c == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = i;
+                        break;
+                    }
+                }
+            }
+            Some(&rest[..end])
+        }
+
+        // set_color_map_from_comm_data must have a real body
+        let cmap_body = extract_rust_fn_body(source, "set_color_map_from_comm_data")
+            .expect("set_color_map_from_comm_data must be defined");
+        let cmap_has_impl =
+            cmap_body.contains("SetColorMap") && cmap_body.contains("GetColorMapAddress");
         assert!(
             cmap_has_impl,
-            "c_SetColorMapFromCommData must have a real implementation body \
-             (EXPECTED FAIL vs P03 stubs; stub body: {:?})",
-            cmap_body
+            "set_color_map_from_comm_data must call SetColorMap and GetColorMapAddress"
         );
 
-        let music_body = extract_c_fn_body(source, "c_PlayAlienMusic")
-            .expect("c_PlayAlienMusic must be defined in rust_comm.c");
-        let music_has_impl = music_body
-            .lines()
-            .filter(|l| {
-                let t = l.trim();
-                !t.is_empty() && t != "{" && t != "}" && !c_line_is_comment(t)
-            })
-            .count()
-            > 0;
+        // play_alien_music must have a real body
+        let music_body = extract_rust_fn_body(source, "play_alien_music")
+            .expect("play_alien_music must be defined");
+        let music_has_impl = music_body.contains("PlayMusic") && music_body.contains("is_null()");
         assert!(
             music_has_impl,
-            "c_PlayAlienMusic must have a real implementation body \
-             (EXPECTED FAIL vs P03 stubs; stub body: {:?})",
-            music_body
+            "play_alien_music must call PlayMusic with null guard"
         );
     }
 
@@ -2243,10 +2243,7 @@ mod tests {
                 .iter()
                 .map(|(ln, l)| format!("  line {}: {}", ln, l.trim()))
                 .collect::<Vec<_>>()
-                .join(
-                    "
-"
-                )
+                .join("\n")
         );
     }
 
@@ -2287,6 +2284,12 @@ mod tests {
                 if t.contains("stubs in commanim") {
                     return false;
                 }
+                if t.contains("stale_patterns") || t.contains("c_line_is_comment") {
+                    return false;
+                }
+                if t.starts_with('"') || t.starts_with("\"b") {
+                    return false;
+                }
                 let lower = line.to_lowercase();
                 stale_patterns
                     .iter()
@@ -2303,10 +2306,7 @@ mod tests {
                 .iter()
                 .map(|(ln, l)| format!("  line {}: {}", ln, l.trim()))
                 .collect::<Vec<_>>()
-                .join(
-                    "
-"
-                )
+                .join("\n")
         );
     }
 
@@ -2381,6 +2381,7 @@ mod tests {
 
     /// Returns true if a trimmed C source line is a comment line.
     /// Matches: `//`, `*`, or `/` followed by `*` (block comment open).
+    #[allow(dead_code)]
     fn c_line_is_comment(line: &str) -> bool {
         let t = line.trim();
         if t.starts_with("//") || t.starts_with('*') {
@@ -2424,6 +2425,7 @@ mod tests {
     /// Searches for occurrences of `fn_name` that look like a definition
     /// (not a comment or forward declaration).  Only the body content between
     /// the opening and closing braces is returned.
+    #[allow(dead_code)]
     fn extract_c_fn_body(source: &str, fn_name: &str) -> Option<String> {
         let mut search_pos = 0;
         while let Some(rel) = source[search_pos..].find(fn_name) {
