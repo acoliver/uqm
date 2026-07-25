@@ -102,6 +102,7 @@ pub(super) mod c_bridge {
         pub fn ProcessCommAnimations(do_clear: c_int, seeking: c_int) -> c_int;
         pub fn comm_RedrawSubtitles();
         pub fn BatchGraphics();
+        #[allow(dead_code)]
         pub static mut CommContext: *mut c_void;
 
         // Direct C functions for colormap/music/animation
@@ -111,13 +112,6 @@ pub(super) mod c_bridge {
         pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
         pub fn DrawAlienFrame(sequences: *const c_void, num: u16, full_redraw: c_int) -> c_int;
         pub fn InitCommAnimations();
-        pub fn runningIntroAnim() -> c_int;
-        pub fn runningTalkingAnim() -> c_int;
-        pub fn wantTalkingAnim() -> c_int;
-        pub fn haveTalkingAnim() -> c_int;
-        pub fn setRunTalkingAnim();
-        pub fn setStopTalkingAnim();
-        pub fn setRunIntroAnim();
         pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
         pub fn c_SelectConversationSummary();
         pub fn UpdateInputState();
@@ -175,6 +169,62 @@ pub(super) mod c_bridge {
         }
     }
 
+    const WAIT_TALKING: u8 = 1 << 3;
+    const PAUSE_TALKING: u8 = 1 << 4;
+    const TALK_INTRO: u8 = 1 << 5;
+    const TALK_DONE: u8 = 1 << 6;
+
+    pub unsafe fn want_talking_anim() -> c_int {
+        if crate::comm::locdata::COMM_DATA.alien_talk_desc.anim_flags & PAUSE_TALKING == 0 {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub unsafe fn have_talking_anim() -> c_int {
+        if crate::comm::locdata::COMM_DATA.alien_talk_desc.num_frames > 0 {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub unsafe fn set_run_talking_anim() {
+        crate::comm::locdata::COMM_DATA.alien_talk_desc.anim_flags |= WAIT_TALKING;
+    }
+
+    pub unsafe fn set_stop_talking_anim() {
+        crate::comm::locdata::COMM_DATA.alien_talk_desc.anim_flags |= TALK_DONE;
+    }
+
+    pub unsafe fn running_talking_anim() -> c_int {
+        if crate::comm::locdata::COMM_DATA.alien_talk_desc.anim_flags & WAIT_TALKING != 0 {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub unsafe fn set_run_intro_anim() {
+        crate::comm::locdata::COMM_DATA
+            .alien_transition_desc
+            .anim_flags |= TALK_INTRO;
+    }
+
+    pub unsafe fn running_intro_anim() -> c_int {
+        if crate::comm::locdata::COMM_DATA
+            .alien_transition_desc
+            .anim_flags
+            & TALK_INTRO
+            != 0
+        {
+            1
+        } else {
+            0
+        }
+    }
+
     pub mod music_volume {
         pub const BACKGROUND: i32 = 64; // BACKGROUND_VOL
         pub const FOREGROUND: i32 = 255; // FOREGROUND_VOL
@@ -217,6 +267,233 @@ pub(super) mod c_bridge {
             return;
         }
         SetColorMap(GetColorMapAddress(cmap));
+    }
+}
+
+#[cfg(not(test))]
+pub mod dinput {
+    #![allow(dead_code)]
+    use super::c_bridge;
+    use super::{KEY_MENU_CANCEL, KEY_MENU_LEFT, KEY_MENU_RIGHT};
+    use crate::mainloop::restart_menu::c_extern::{DoInput, SetMenuSounds};
+    use std::ffi::{c_int, c_void};
+
+    const MENU_SOUND_NONE: u32 = 0;
+    const OPT_PC: c_int = 0x02;
+    const CHECK_ABORT: u32 = 0x4000;
+
+    extern "C" {
+        fn SleepThreadUntil(wake_time: u32);
+        fn StopSound();
+        static mut usingSpeech: c_int;
+    }
+
+    extern "C" {
+        fn rust_UpdateSpeechGraphics();
+    }
+
+    // DoInput-compatible talking state struct (matches C C_TALKING_STATE)
+    #[repr(C)]
+    struct TalkingStateDInput {
+        input_func: unsafe extern "C" fn(*mut TalkingStateDInput) -> c_int,
+        next_time: u32,
+        wait_track: u16,
+        rewind: c_int,
+        seeking: c_int,
+        ended: c_int,
+    }
+
+    // DoInput-compatible last-replay state struct
+    #[repr(C)]
+    struct LastReplayStateDInput {
+        input_func: unsafe extern "C" fn(*mut LastReplayStateDInput) -> c_int,
+        next_time: u32,
+        time_out: u32,
+    }
+
+    // DoInput callback for talk segue (replaces c_DoTalkSegue)
+    unsafe extern "C" fn do_talk_segue_cb(p_ts: *mut TalkingStateDInput) -> c_int {
+        let ts = unsafe { &mut *p_ts };
+        eprintln!(
+            "[DBG] do_talk_segue_cb: enter seeking={} ended={}",
+            ts.seeking, ts.ended
+        );
+
+        // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
+        let activity = unsafe { c_bridge::get_current_activity() } as u32;
+        if (activity & CHECK_ABORT) != 0 {
+            ts.ended = 1;
+            return 0;
+        }
+
+        // Cancel: skip to end
+        if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) } != 0 {
+            c_bridge::JumpTrack();
+            ts.ended = 1;
+            return 0;
+        }
+
+        // Seek input
+        let left;
+        let right;
+        if c_bridge::optSmoothScroll == OPT_PC {
+            left = unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0;
+            right = unsafe { c_bridge::pulsed_menu_key(KEY_MENU_RIGHT) } != 0;
+        } else {
+            left = unsafe { c_bridge::current_menu_key(KEY_MENU_LEFT) } != 0;
+            right = unsafe { c_bridge::current_menu_key(KEY_MENU_RIGHT) } != 0;
+        }
+
+        if right {
+            c_bridge::SetSliderImage(3);
+            if c_bridge::optSmoothScroll == OPT_PC {
+                c_bridge::FastForward_Page();
+            } else {
+                c_bridge::FastForward_Smooth();
+            }
+            ts.seeking = 1;
+        } else if left || ts.rewind != 0 {
+            ts.rewind = 0;
+            c_bridge::SetSliderImage(4);
+            if c_bridge::optSmoothScroll == OPT_PC {
+                c_bridge::FastReverse_Page();
+            } else {
+                c_bridge::FastReverse_Smooth();
+            }
+            ts.seeking = 1;
+        } else if ts.seeking != 0 {
+            ts.seeking = 0;
+            c_bridge::SetSliderImage(2);
+        } else {
+            c_bridge::comm_CheckSubtitles();
+        }
+
+        unsafe { super::do_update_animations(ts.seeking != 0) };
+        unsafe { rust_UpdateSpeechGraphics() };
+
+        let cur_track = c_bridge::PlayingTrack();
+        ts.ended = (ts.seeking == 0 && cur_track == 0) as c_int;
+
+        unsafe { SleepThreadUntil(ts.next_time) };
+        ts.next_time = c_bridge::GetTimeCounter() + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+
+        (ts.seeking != 0 || (cur_track != 0 && cur_track <= ts.wait_track)) as c_int
+    }
+
+    /// Ported from c_RunTalkSegue — runs the talk segue via DoInput.
+    /// Returns true if playback reached its natural end.
+    pub fn run_talk_segue_dinput(wait_track: u32) -> bool {
+        eprintln!(
+            "[DBG] run_talk_segue_dinput: enter wait_track={}",
+            wait_track
+        );
+        // Transition animation to talking state
+        if unsafe { c_bridge::want_talking_anim() } != 0
+            && unsafe { c_bridge::have_talking_anim() } != 0
+        {
+            if unsafe { c_bridge::has_transition_anim() } != 0 {
+                unsafe { c_bridge::set_run_intro_anim() };
+            }
+            unsafe { c_bridge::set_run_talking_anim() };
+            while unsafe { c_bridge::running_intro_anim() } != 0 {
+                unsafe { super::do_run_comm_anim_frame() };
+            }
+        }
+
+        let mut ts = TalkingStateDInput {
+            input_func: do_talk_segue_cb,
+            next_time: 0,
+            wait_track: if wait_track == 0 {
+                u16::MAX
+            } else {
+                wait_track as u16
+            },
+            rewind: if wait_track == 0 { 1 } else { 0 },
+            seeking: 0,
+            ended: 0,
+        };
+
+        if wait_track == 0 {
+            // Rewind mode
+        } else if unsafe { c_bridge::PlayingTrack() } == 0 {
+            unsafe { c_bridge::PlayTrack() };
+        }
+
+        unsafe {
+            SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
+            DoInput(&mut ts as *mut _ as *mut c_void, 0);
+        }
+        eprintln!(
+            "[DBG] run_talk_segue_dinput: DoInput returned, ended={}",
+            ts.ended
+        );
+
+        unsafe { c_bridge::comm_ClearSubtitles() };
+
+        if ts.ended != 0 {
+            unsafe { c_bridge::SetSliderImage(8) };
+        }
+
+        // Transition back to silent
+        if unsafe { c_bridge::running_talking_anim() } != 0 {
+            unsafe { c_bridge::set_stop_talking_anim() };
+        }
+        while unsafe { c_bridge::running_talking_anim() } != 0 {
+            unsafe { super::do_run_comm_anim_frame() };
+        }
+
+        ts.ended != 0
+    }
+
+    // DoInput callback for last replay (replaces c_DoLastReplay)
+    unsafe extern "C" fn do_last_replay_cb(p_lrs: *mut LastReplayStateDInput) -> c_int {
+        let lrs = unsafe { &mut *p_lrs };
+
+        let activity = unsafe { c_bridge::get_current_activity() } as u32;
+        if (activity & CHECK_ABORT) != 0 {
+            return 0;
+        }
+
+        if c_bridge::GetTimeCounter() > lrs.time_out {
+            return 0;
+        }
+
+        let won_last_battle = (activity & 0xFF) == 5; // WON_LAST_BATTLE
+        if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) } != 0 && !won_last_battle {
+            let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
+            let vol = if speech != 0 {
+                c_bridge::music_volume::BACKGROUND as u8 / 2
+            } else {
+                c_bridge::music_volume::BACKGROUND as u8
+            };
+            c_bridge::FadeMusic(vol, c_bridge::ONE_SECOND_TICKS as i16);
+            c_bridge::c_SelectConversationSummary();
+            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+                + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+        } else if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0 {
+            c_bridge::c_SelectConversationSummary();
+            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+                + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+        }
+
+        unsafe { super::do_update_animations(false) };
+
+        unsafe { SleepThreadUntil(lrs.next_time) };
+        lrs.next_time = c_bridge::GetTimeCounter() + (c_bridge::ONE_SECOND_TICKS as u32) / 40;
+
+        1
+    }
+
+    /// Ported from c_RunLastReplay — runs the last replay via DoInput.
+    pub fn run_last_replay_dinput(timeout: i32) {
+        let mut lrs = LastReplayStateDInput {
+            input_func: do_last_replay_cb,
+            next_time: 0,
+            time_out: timeout as u32 + (c_bridge::ONE_SECOND_TICKS as u32) / 60,
+        };
+        unsafe {
+            DoInput(&mut lrs as *mut _ as *mut c_void, 0);
+        }
     }
 }
 
@@ -612,7 +889,7 @@ pub unsafe fn alien_talk_first_call_init() {
         init_speech_graphics(&mut CommState::default());
         c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
-        rust_UpdateSpeechGraphics();
+        unsafe { rust_UpdateSpeechGraphics() };
         comm_intro_transition();
         c_bridge::play_alien_music();
         c_bridge::FadeMusic((c_bridge::music_volume::BACKGROUND) as u8, 0i16);
@@ -1212,7 +1489,7 @@ fn want_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::wantTalkingAnim() != 0
+        c_bridge::want_talking_anim() != 0
     }
     #[cfg(test)]
     {
@@ -1224,7 +1501,7 @@ fn have_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::haveTalkingAnim() != 0
+        c_bridge::have_talking_anim() != 0
     }
     #[cfg(test)]
     {
@@ -1249,7 +1526,7 @@ fn set_run_intro_anim(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::setRunIntroAnim();
+        c_bridge::set_run_intro_anim();
     }
     #[cfg(test)]
     {
@@ -1261,7 +1538,7 @@ fn set_run_talking_anim(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::setRunTalkingAnim();
+        c_bridge::set_run_talking_anim();
     }
     #[cfg(test)]
     {
@@ -1273,7 +1550,7 @@ fn set_stop_talking_anim(state: &mut CommState) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::setStopTalkingAnim();
+        c_bridge::set_stop_talking_anim();
     }
     #[cfg(test)]
     {
@@ -1285,7 +1562,7 @@ fn running_intro_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::runningIntroAnim() != 0
+        c_bridge::running_intro_anim() != 0
     }
     #[cfg(test)]
     {
@@ -1297,7 +1574,7 @@ fn running_talking_anim(state: &CommState) -> bool {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::runningTalkingAnim() != 0
+        c_bridge::running_talking_anim() != 0
     }
     #[cfg(test)]
     {

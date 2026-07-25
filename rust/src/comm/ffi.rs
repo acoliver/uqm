@@ -941,9 +941,8 @@ pub unsafe extern "C" fn rust_TalkSegue(wait: c_int) -> c_int {
 /// @pseudocode 003-do-communication-rewrite lines 41-81
 #[no_mangle]
 pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
+    #[cfg(not(test))]
     use super::talk_segue::WAIT_TRACK_ALL;
-
-    eprintln!("[DBG] rust_DoCommunication: entry");
 
     // Phase 1: If still talking, run the talk segue in C (via DoInput)
     // WITHOUT holding the COMM_STATE lock. The C-side talk segue uses
@@ -961,7 +960,6 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
             {
                 let mut state = COMM_STATE.write();
                 if !state.first_talk_call {
-                    eprintln!("[DBG] rust_DoCommunication: first_talk_call init");
                     state.first_talk_call = true;
                     // Drop lock before calling C bridges
                     drop(state);
@@ -969,19 +967,11 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
                 }
             }
 
-            // Run talk segue via C DoInput — NO Rust lock held
-            extern "C" {
-                fn c_RunTalkSegue(wait_track: std::ffi::c_uint) -> std::ffi::c_int;
-            }
-            eprintln!(
-                "[DBG] rust_DoCommunication: calling c_RunTalkSegue({})",
-                WAIT_TRACK_ALL
-            );
-            let ended = c_RunTalkSegue(WAIT_TRACK_ALL as std::ffi::c_uint) != 0;
-            eprintln!(
-                "[DBG] rust_DoCommunication: c_RunTalkSegue returned ended={}",
-                ended
-            );
+            // Run talk segue via Rust DoInput — NO Rust lock held
+            #[cfg(not(test))]
+            let ended = super::talk_segue::dinput::run_talk_segue_dinput(WAIT_TRACK_ALL);
+            #[cfg(test)]
+            let ended = true;
 
             // Update state with result
             {
@@ -1058,7 +1048,6 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
     let left = super::talk_segue::check_left_external();
 
     if select {
-        eprintln!("[DBG] rust_DoCommunication: SELECT pressed");
         // Player selected a response — extract callback info then drop lock
         let selection = {
             let mut state = COMM_STATE.write();
@@ -1114,10 +1103,8 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
         // Replay last phrase — all C bridge calls, no lock
         super::talk_segue::fade_music_to_background_bridge();
         super::talk_segue::c_bridge::call_feedback_player_phrase();
-        extern "C" {
-            fn c_RunTalkSegue(wait_track: std::ffi::c_uint) -> std::ffi::c_int;
-        }
-        let _ = c_RunTalkSegue(0);
+        #[cfg(not(test))]
+        let _ = super::talk_segue::dinput::run_talk_segue_dinput(0);
         if !super::talk_segue::check_abort_external() {
             let (top, count, cur) = {
                 let s = COMM_STATE.read();

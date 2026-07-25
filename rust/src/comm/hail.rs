@@ -204,7 +204,7 @@ unsafe fn draw_sis_com_window() {
 
     // COMM_PLAYER_BACKGROUND_COLOR = MAKE_RGB15(0, 0, 0x14)
     // CC5TO8(0)=0, CC5TO8(0x14=20)=165. Color = {r:0, g:0, b:165, a:0}
-    let bg_color = crate::comm::locdata::CColor {
+    let _bg_color = crate::comm::locdata::CColor {
         r: 0,
         g: 0,
         b: 165,

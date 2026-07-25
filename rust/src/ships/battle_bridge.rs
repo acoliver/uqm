@@ -183,7 +183,7 @@ extern "C" {
     fn TFB_Random() -> u32;
 
     // Frame operations (real C functions)
-    fn SetAbsFrameIndex(frame: Frame, index: c_int) -> Frame;
+    fn SetAbsFrameIndex(frame: Frame, index: u16) -> Frame;
     fn IncFrameIndex(frame: Frame) -> Frame;
     fn GetFrameCount(frame: Frame) -> c_int;
 
@@ -403,7 +403,7 @@ pub mod bridge {
     ///
     /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn set_abs_frame_index(frame: Frame, index: i32) -> Frame {
-        SetAbsFrameIndex(frame, index as c_int)
+        SetAbsFrameIndex(frame, index as u16)
     }
     /// # Safety
     ///

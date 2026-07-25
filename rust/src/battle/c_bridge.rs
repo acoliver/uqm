@@ -85,7 +85,7 @@ extern "C" {
     pub fn SetEquFrameIndex(target_array: Frame, source_frame: Frame) -> Frame;
 
     /// Get a frame at an absolute index
-    pub fn SetAbsFrameIndex(frame: Frame, index: c_int) -> Frame;
+    pub fn SetAbsFrameIndex(frame: Frame, index: u16) -> Frame;
 
     /// Increment frame index
     pub fn IncFrameIndex(frame: Frame) -> Frame;
@@ -160,8 +160,8 @@ extern "C" {
     /// Capture a drawable resource (increment ref count)
     pub fn CaptureDrawable(drawable: Drawable) -> Drawable;
 
-    /// Release a drawable resource (decrement ref count)
-    pub fn ReleaseDrawable(drawable: Drawable);
+    /// Release a drawable resource (decrement ref count, returns raw handle)
+    pub fn ReleaseDrawable(drawable: Drawable) -> Drawable;
 
     /// Destroy a drawable resource
     pub fn DestroyDrawable(drawable: Drawable);
