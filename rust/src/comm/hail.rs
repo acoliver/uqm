@@ -14,7 +14,7 @@
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use super::super::locdata::{CGlobData, CLocData, CRect};
-    use std::ffi::{c_char, c_int, c_uint, c_void};
+    use std::ffi::{c_char, c_int, c_uint};
 
     // The C global CommData (LOCDATA struct) — accessed directly without bridge functions
     extern "C" {
@@ -23,45 +23,45 @@ pub(super) mod c_bridge {
 
     extern "C" {
         // Resource loading — accepts RESOURCE (const char *) as *const c_char
-        pub fn LoadGraphicInstance(res: *const c_char) -> *mut c_void;
-        pub fn LoadMusicInstance(res: *const c_char) -> *mut c_void;
-        pub fn LoadStringTableInstance(res: *const c_char) -> *mut c_void;
+        pub fn LoadGraphicInstance(res: *const c_char) -> *mut std::ffi::c_void;
+        pub fn LoadMusicInstance(res: *const c_char) -> *mut std::ffi::c_void;
+        pub fn LoadStringTableInstance(res: *const c_char) -> *mut std::ffi::c_void;
 
         // Capture (converts raw handle to ref-counted handle)
-        pub fn CaptureDrawable(handle: *mut c_void) -> *mut c_void;
-        pub fn ReleaseDrawable(handle: *mut c_void) -> *mut c_void;
-        pub fn CaptureStringTable(handle: *mut c_void) -> *mut c_void;
+        pub fn CaptureDrawable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+        pub fn ReleaseDrawable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+        pub fn CaptureStringTable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
         // Resource destruction
-        pub fn DestroyDrawable(handle: *mut c_void);
-        pub fn DestroyFont(handle: *mut c_void) -> c_int;
+        pub fn DestroyDrawable(handle: *mut std::ffi::c_void);
+        pub fn DestroyFont(handle: *mut std::ffi::c_void) -> c_int;
         #[allow(clashing_extern_declarations)]
-        pub fn DestroyMusic(handle: *mut c_void) -> c_int;
-        pub fn DestroyStringTable(handle: *mut c_void) -> c_int;
-        pub fn ReleaseStringTable(handle: *mut c_void) -> *mut c_void;
+        pub fn DestroyMusic(handle: *mut std::ffi::c_void) -> c_int;
+        pub fn DestroyStringTable(handle: *mut std::ffi::c_void) -> c_int;
+        pub fn ReleaseStringTable(handle: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
         // Context management
-        pub fn CreateContextAux(name: *const c_char) -> *mut c_void;
-        pub fn DestroyContext(ctx: *mut c_void) -> c_int;
-        pub fn SetContext(ctx: *mut c_void) -> *mut c_void;
-        pub fn SetContextFGFrame(frame: *mut c_void) -> *mut c_void;
+        pub fn CreateContextAux(name: *const c_char) -> *mut std::ffi::c_void;
+        pub fn DestroyContext(ctx: *mut std::ffi::c_void) -> c_int;
+        pub fn SetContext(ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+        pub fn SetContextFGFrame(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
         pub fn SetContextClipRect(rect: *mut crate::comm::locdata::CRect);
         #[allow(clashing_extern_declarations)]
         pub fn SetContextBackGroundColor(r: c_int, g: c_int, b: c_int);
-        pub fn SetContextFont(font: *mut c_void) -> *mut c_void;
+        pub fn SetContextFont(font: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
         // comm.c static variable setters
-        pub fn c_SetAnimContext(ctx: *mut c_void);
-        pub fn c_SetTextCacheContext(ctx: *mut c_void);
-        pub fn c_SetTextCacheFrame(frame: *mut c_void);
+        pub fn c_SetAnimContext(ctx: *mut std::ffi::c_void);
+        pub fn c_SetTextCacheContext(ctx: *mut std::ffi::c_void);
+        pub fn c_SetTextCacheFrame(frame: *mut std::ffi::c_void);
 
         // Drawable management
-        pub fn CreateDrawable(dtype: u8, w: i16, h: i16, nframes: u16) -> *mut c_void;
-        pub fn SetFrameTransparentColor(frame: *mut c_void, r: c_int, g: c_int, b: c_int);
+        pub fn CreateDrawable(dtype: u8, w: i16, h: i16, nframes: u16) -> *mut std::ffi::c_void;
+        pub fn SetFrameTransparentColor(frame: *mut std::ffi::c_void, r: c_int, g: c_int, b: c_int);
         pub fn ClearDrawable();
         #[allow(clashing_extern_declarations)]
         pub fn GetFrameRect(
-            frame: *mut c_void,
+            frame: *mut std::ffi::c_void,
             x: *mut c_int,
             y: *mut c_int,
             w: *mut c_int,
@@ -72,7 +72,7 @@ pub(super) mod c_bridge {
         pub fn BatchGraphics();
 
         // Transitions
-        pub fn SetTransitionSource(src: *mut c_void);
+        pub fn SetTransitionSource(src: *mut std::ffi::c_void);
 
         // SIS drawing
         pub fn DrawSISFrame();
@@ -84,8 +84,9 @@ pub(super) mod c_bridge {
             color: crate::comm::locdata::CColor,
         ) -> crate::comm::locdata::CColor;
 
-        // Encounter loop — runs DoInput with rust_DoCommunication as InputFunc
-        pub fn c_RunEncounterDoInput();
+        // Encounter loop — related externs (DoInput imported from c_extern)
+        pub fn SetMenuSounds(sound_0: u16, sound_1: u16);
+        pub fn c_SetCurInputState(state: *mut std::ffi::c_void);
 
         // Audio teardown
         pub fn StopMusic();
@@ -101,8 +102,8 @@ pub(super) mod c_bridge {
         pub static mut LastActivity: u32;
 
         // Screen / context globals
-        pub static mut Screen: *mut c_void;
-        pub static mut SpaceContext: *mut c_void;
+        pub static mut Screen: *mut std::ffi::c_void;
+        pub static mut SpaceContext: *mut std::ffi::c_void;
 
         // Encounter functions — now called directly via call_encounter_func()
         // using CommData.init_encounter_func / post_encounter_func / uninit_encounter_func
@@ -125,12 +126,15 @@ pub(super) mod c_bridge {
         #[allow(dead_code)]
         pub static mut optSmoothScroll: c_int;
         pub static mut CommWndRect: CRect;
-        pub static mut GameStrings: *mut c_void;
+        pub static mut GameStrings: *mut std::ffi::c_void;
         pub static mut GlobData: CGlobData;
 
         // C functions used by direct-access replacements
-        pub fn SetAbsStringTableIndex(table: *mut c_void, index: c_int) -> *mut c_void;
-        pub fn GetStringAddress(s: *mut c_void) -> *const c_char;
+        pub fn SetAbsStringTableIndex(
+            table: *mut std::ffi::c_void,
+            index: c_int,
+        ) -> *mut std::ffi::c_void;
+        pub fn GetStringAddress(s: *mut std::ffi::c_void) -> *const c_char;
         #[allow(dead_code)]
         pub fn getGameState(state: *const u8, name: c_int, end: c_int) -> u8;
     }
@@ -465,9 +469,41 @@ pub unsafe fn hail_alien() {
         call_encounter_func(c_bridge::CommData.init_encounter_func);
 
         // Run the encounter loop: DoInput with rust_DoCommunication as InputFunc.
-        // c_RunEncounterDoInput allocates ENCOUNTER_STATE, wires InputFunc,
-        // registers pCurInputState, runs DoInput, then clears pCurInputState.
-        c_RunEncounterDoInput();
+        // Allocates ENCOUNTER_STATE, wires InputFunc, registers pCurInputState,
+        // runs DoInput, then clears pCurInputState.
+        {
+            const MENU_SOUND_UP: u16 = 1 << 0;
+            const MENU_SOUND_DOWN: u16 = 1 << 1;
+            const MENU_SOUND_SELECT: u16 = 1 << 4;
+
+            #[repr(C)]
+            struct EncounterStateDInput {
+                input_func: unsafe extern "C" fn(*mut EncounterStateDInput) -> std::ffi::c_int,
+                num_responses: u8,
+                cur_response: u8,
+                top_response: u8,
+                _phrase_buf: [u16; 1024],
+            }
+
+            unsafe extern "C" fn encounter_cb(_es: *mut EncounterStateDInput) -> std::ffi::c_int {
+                crate::comm::ffi::rust_DoCommunication()
+            }
+
+            let mut es = EncounterStateDInput {
+                input_func: encounter_cb,
+                num_responses: 0,
+                cur_response: 0,
+                top_response: 0,
+                _phrase_buf: [0; 1024],
+            };
+            unsafe {
+                use crate::mainloop::restart_menu::c_extern::DoInput;
+                c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
+                c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
+                DoInput(&mut es as *mut _ as *mut std::ffi::c_void, 0);
+                c_bridge::c_SetCurInputState(std::ptr::null_mut());
+            }
+        }
 
         // ----------------------------------------------------------------
         // DoCommunication exit handling (C lines 1126–1136):

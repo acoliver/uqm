@@ -99,8 +99,8 @@ impl ResponseUI {
         self.needs_refresh = false;
 
         #[cfg(not(test))]
-        unsafe {
-            c_bridge::c_RefreshResponses(range.top as u8, count as u8, selected as u8);
+        {
+            refresh_responses_production(range.top as u8, count as u8, selected as u8);
         }
     }
 
@@ -110,10 +110,11 @@ impl ResponseUI {
     /// window. In test mode, no-op.
     pub fn draw_feedback(&self, text: &str) {
         #[cfg(not(test))]
-        unsafe {
+        {
             use std::ffi::CString;
             if let Ok(cs) = CString::new(text) {
-                c_bridge::c_FeedbackPlayerPhrase(cs.as_ptr());
+                // Safety: cs.as_ptr() is valid for the duration of the C call.
+                unsafe { feedback_player_phrase_production(cs.as_ptr()) };
             }
         }
         #[cfg(test)]
@@ -150,21 +151,37 @@ impl ResponseUI {
 }
 
 // ============================================================================
-// C bridge
+// Production rendering functions (C bridge delegates)
 // ============================================================================
 
+/// Public entry point for talk_segue.rs to call refresh_responses.
 #[cfg(not(test))]
-mod c_bridge {
-    use std::ffi::c_char;
-
+pub fn refresh_responses_production(top: u8, count: u8, cur: u8) {
     extern "C" {
-        /// Refresh the response list display.
-        /// `top` = topmost visible index, `num_responses` = total count,
-        /// `cur_response` = currently selected index.
-        pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
-        /// Render player feedback text in the SIS comms window.
-        pub fn c_FeedbackPlayerPhrase(text: *const c_char);
+        fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
     }
+    unsafe { c_RefreshResponses(top, count, cur) }
+}
+
+/// Public entry point for talk_segue.rs to call feedback_player_phrase.
+///
+/// # Safety
+/// Caller must ensure `text` is a valid null-terminated C string or null.
+#[cfg(not(test))]
+pub unsafe fn feedback_player_phrase_production(text: *const std::ffi::c_char) {
+    extern "C" {
+        fn c_FeedbackPlayerPhrase(text: *const std::ffi::c_char);
+    }
+    unsafe { c_FeedbackPlayerPhrase(text) }
+}
+
+/// Public entry point for talk_segue.rs to call select_conversation_summary.
+#[cfg(not(test))]
+pub fn select_conversation_summary_production() {
+    extern "C" {
+        fn c_SelectConversationSummary();
+    }
+    unsafe { c_SelectConversationSummary() }
 }
 
 // ============================================================================
@@ -175,11 +192,8 @@ mod c_bridge {
 mod tests {
     use super::*;
 
-    // ---- calculate_visible_range -------------------------------------------
-
     #[test]
     fn test_visible_range_all_fit() {
-        // 3 responses, max_visible 5 — all fit, no indicators.
         let r = ResponseUI::calculate_visible_range(3, 0, 5);
         assert_eq!(r.top, 0);
         assert_eq!(r.bottom, 3);
@@ -189,7 +203,6 @@ mod tests {
 
     #[test]
     fn test_visible_range_overflow_down() {
-        // 6 responses, max_visible 4, selected = 1 — near start, down indicator.
         let r = ResponseUI::calculate_visible_range(6, 1, 4);
         assert_eq!(r.top, 0);
         assert_eq!(r.bottom, 4);
@@ -199,7 +212,6 @@ mod tests {
 
     #[test]
     fn test_visible_range_overflow_up() {
-        // 6 responses, max_visible 4, selected = 5 — near end, up indicator.
         let r = ResponseUI::calculate_visible_range(6, 5, 4);
         assert_eq!(r.top, 2);
         assert_eq!(r.bottom, 6);
@@ -209,16 +221,12 @@ mod tests {
 
     #[test]
     fn test_visible_range_both_indicators() {
-        // 8 responses, max_visible 3, selected = 4 — middle, both indicators.
         let r = ResponseUI::calculate_visible_range(8, 4, 3);
-        // top = 4 - 3 + 1 = 2, bottom = 5
         assert_eq!(r.top, 2);
         assert_eq!(r.bottom, 5);
         assert!(r.has_up_indicator);
         assert!(r.has_down_indicator);
     }
-
-    // ---- ResponseUI state --------------------------------------------------
 
     #[test]
     fn test_needs_refresh_default() {
@@ -238,3 +246,4 @@ mod tests {
         assert!(ui.needs_refresh());
     }
 }
+// ============================================================================

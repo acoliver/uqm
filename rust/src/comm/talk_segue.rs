@@ -57,7 +57,7 @@ pub(super) mod c_bridge {
 #[cfg(not(test))]
 pub(super) mod c_bridge {
     use crate::comm::locdata::COMM_DATA;
-    use std::ffi::{c_char, c_int, c_uint, c_void};
+    use std::ffi::{c_int, c_uint, c_void};
 
     extern "C" {
         pub fn PlayingTrack() -> u16;
@@ -70,7 +70,6 @@ pub(super) mod c_bridge {
         pub fn FastReverse_Smooth();
         pub fn comm_CheckSubtitles();
         pub fn comm_ClearSubtitles();
-        pub fn c_FeedbackPlayerPhrase(text: *const c_char);
         pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
         pub fn SetSliderImage(frame_index: c_uint);
         pub fn get_current_activity() -> u16;
@@ -112,8 +111,6 @@ pub(super) mod c_bridge {
         pub fn SetColorMap(map_ptr: *mut c_void) -> c_int;
         pub fn DrawAlienFrame(sequences: *const c_void, num: u16, full_redraw: c_int) -> c_int;
         pub fn InitCommAnimations();
-        pub fn c_RefreshResponses(top: u8, num_responses: u8, cur_response: u8);
-        pub fn c_SelectConversationSummary();
         pub fn UpdateInputState();
         pub fn SleepThread(duration: c_int);
         pub fn ScreenTransition(which: c_int, rect: *const c_void);
@@ -236,11 +233,11 @@ pub(super) mod c_bridge {
     // Safe wrappers for use from ffi.rs (outside lock)
     #[cfg(not(test))]
     pub fn call_refresh_responses(top: u8, count: u8, cur: u8) {
-        unsafe { c_RefreshResponses(top, count, cur) }
+        super::super::response_ui::refresh_responses_production(top, count, cur);
     }
     #[cfg(not(test))]
     pub fn call_select_conversation_summary() {
-        unsafe { c_SelectConversationSummary() }
+        super::super::response_ui::select_conversation_summary_production();
     }
     #[cfg(not(test))]
     pub fn call_update_comm_graphics() {
@@ -248,7 +245,7 @@ pub(super) mod c_bridge {
     }
     #[cfg(not(test))]
     pub fn call_feedback_player_phrase() {
-        unsafe { c_FeedbackPlayerPhrase(std::ptr::null()) }
+        unsafe { super::super::response_ui::feedback_player_phrase_production(std::ptr::null()) };
     }
 
     /// Play alien music from CommData.AlienSong (port of c_PlayAlienMusic).
@@ -467,11 +464,11 @@ pub mod dinput {
                 c_bridge::music_volume::BACKGROUND as u8
             };
             c_bridge::FadeMusic(vol, c_bridge::ONE_SECOND_TICKS as i16);
-            c_bridge::c_SelectConversationSummary();
+            super::super::response_ui::select_conversation_summary_production();
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         } else if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0 {
-            c_bridge::c_SelectConversationSummary();
+            super::super::response_ui::select_conversation_summary_production();
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
@@ -1161,13 +1158,10 @@ pub fn won_last_battle_external() -> bool {
     unsafe { c_bridge::get_current_activity() & 0xFF == 5 }
 }
 
-/// Run the "last replay" DoInput loop from C (no lock needed).
+/// Run the "last replay" DoInput loop via Rust port (no lock needed).
 #[cfg(not(test))]
 pub fn run_last_replay_bridge(timeout: i32) {
-    extern "C" {
-        fn c_RunLastReplay(timeout: std::ffi::c_int);
-    }
-    unsafe { c_RunLastReplay(timeout) }
+    dinput::run_last_replay_dinput(timeout);
 }
 
 /// Fade music to background volume (no lock needed).
@@ -1429,11 +1423,11 @@ unsafe fn do_run_comm_anim_frame() {
 
 fn feedback_player_phrase(state: &mut CommState, text: &str) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
         use std::ffi::CString;
         if let Ok(cs) = CString::new(text) {
-            c_bridge::c_FeedbackPlayerPhrase(cs.as_ptr());
+            unsafe { super::response_ui::feedback_player_phrase_production(cs.as_ptr()) };
         }
     }
     #[cfg(test)]
@@ -1457,11 +1451,11 @@ fn update_comm_graphics(state: &mut CommState) {
 
 fn refresh_responses(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let top = state.response_ui().top_response() as u8;
         let count = state.responses().count() as u8;
         let cur = state.responses().selected().max(0) as u8;
-        c_bridge::c_RefreshResponses(top, count, cur);
+        super::response_ui::refresh_responses_production(top, count, cur);
     }
     #[cfg(test)]
     {
@@ -1472,9 +1466,9 @@ fn refresh_responses(state: &mut CommState) {
 
 fn select_conversation_summary(state: &mut CommState) {
     #[cfg(not(test))]
-    unsafe {
+    {
         let _ = state;
-        c_bridge::c_SelectConversationSummary();
+        super::response_ui::select_conversation_summary_production();
     }
     #[cfg(test)]
     {
@@ -2542,8 +2536,8 @@ mod tests {
             .expect("must extract rust_ShowConversationSummary body from non-test block");
 
         assert!(
-            body.contains("c_SelectConversationSummary"),
-            "production rust_ShowConversationSummary must call c_SelectConversationSummary; body: {:?}",
+            body.contains("select_conversation_summary"),
+            "production rust_ShowConversationSummary must call select_conversation_summary; body: {:?}",
             body
         );
     }

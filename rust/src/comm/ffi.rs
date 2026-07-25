@@ -1281,8 +1281,7 @@ pub unsafe extern "C" fn rust_RedrawSubtitles() {
 #[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn rust_ShowConversationSummary() -> c_int {
-    use super::talk_segue::c_bridge::c_SelectConversationSummary;
-    c_SelectConversationSummary();
+    super::response_ui::select_conversation_summary_production();
     1
 }
 
