@@ -72,9 +72,10 @@ pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePl
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
     CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion, MainMenuTransition,
-    MenuKey, NavigateToPlanetStep, PlayerKey, RootDocument, SceneAssertion, ScriptStep,
-    SetMenuKeyStep, SetPlayerKeyStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
-    WaitInputTicksStep, CAPABILITY_REQUIRED_FLAGS,
+    MenuKey, NavigateToMoonStep, NavigateToPlanetStep, PlayerKey, RootDocument, SceneAssertion,
+    ScriptStep, SetMenuKeyStep, SetPlayerKeyStep, TapMenuKeyStep, TapPlayerKeyStep,
+    ValidatedScript, WaitForCommunicationEndStep, WaitForDispatchStep, WaitInputTicksStep,
+    CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use transport::{

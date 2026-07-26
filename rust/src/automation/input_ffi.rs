@@ -30,7 +30,11 @@ use crate::automation::runtime::RuntimeModel;
 #[derive(Default)]
 pub(crate) struct NavigationSnapshot {
     pub(crate) active: i32,
+    pub(crate) in_orbit: i32,
     pub(crate) inner_planet: i32,
+    pub(crate) orbital_moon: i32,
+    pub(crate) orbital_data_index: i32,
+    pub(crate) target_data_index: i32,
     pub(crate) ship_x: i32,
     pub(crate) ship_y: i32,
     pub(crate) ship_facing: i32,
@@ -48,25 +52,145 @@ struct ControllerInputState {
 }
 
 #[cfg(feature = "linked_c_archive")]
+#[repr(C)]
+struct CPlanetDesc {
+    _rand_seed: u32,
+    data_index: u8,
+    num_planets: u8,
+    radius: i16,
+    _location: crate::comm::locdata::CPoint,
+    _temp_color: crate::comm::locdata::CColor,
+    _next_index: u16,
+    image: crate::comm::locdata::CStamp,
+    previous: *mut CPlanetDesc,
+}
+
+#[cfg(feature = "linked_c_archive")]
+#[repr(C)]
+struct CSolarSystemState {
+    _input_func: *mut std::ffi::c_void,
+    _in_ip_flight: i32,
+    _wait_intersect: u16,
+    _wait_intersect_pad: [u8; 2],
+    sun: [CPlanetDesc; 1],
+    planets: [CPlanetDesc; 16],
+    moons: [CPlanetDesc; 4],
+    _base: *mut CPlanetDesc,
+    orbital: *mut CPlanetDesc,
+    _between_orbital_and_in_orbit: [u8; 256],
+    in_orbit: i32,
+    _tail: [u8; 4],
+}
+
+#[cfg(feature = "linked_c_archive")]
 extern "C" {
     static mut ImmediateInputState: ControllerInputState;
     static CurrentInputState: ControllerInputState;
     static PulsedInputState: ControllerInputState;
     static PlayerControls: [i32; 2];
-    fn rust_get_navigation_snapshot(target_planet: i32, snapshot: *mut NavigationSnapshot);
+    #[link_name = "pSolarSysState"]
+    static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemState;
+    #[link_name = "GlobData"]
+    static mut GLOB_DATA: crate::comm::locdata::CGlobData;
+    #[allow(non_snake_case)]
+    fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16;
 }
 
 #[cfg(feature = "linked_c_archive")]
-pub(crate) fn navigation_snapshot(target_planet: i32) -> NavigationSnapshot {
-    let mut snapshot = NavigationSnapshot::default();
+pub(crate) fn navigation_snapshot(
+    target_planet: i32,
+    target_moon: Option<i32>,
+) -> NavigationSnapshot {
+    let mut snapshot = NavigationSnapshot {
+        inner_planet: -1,
+        orbital_moon: -1,
+        orbital_data_index: -1,
+        target_data_index: -1,
+        ..NavigationSnapshot::default()
+    };
+
     unsafe {
-        rust_get_navigation_snapshot(target_planet, &mut snapshot);
+        // The production game invokes this hook synchronously on the game
+        // thread, so these mutable C globals cannot change during a snapshot.
+        let solar_system_ptr = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read();
+        let Some(solar_system) = solar_system_ptr.as_ref() else {
+            return snapshot;
+        };
+        if target_planet < 0 || target_planet >= i32::from(solar_system.sun[0].num_planets) {
+            return snapshot;
+        }
+
+        snapshot.active = 1;
+        snapshot.in_orbit = i32::from(solar_system.in_orbit != 0);
+        let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
+        let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
+        snapshot.ship_x = i32::from(ship_stamp.origin.x);
+        snapshot.ship_y = i32::from(ship_stamp.origin.y);
+        if !ship_stamp.frame.is_null() {
+            snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame));
+        }
+
+        if !solar_system.orbital.is_null() {
+            snapshot.orbital_data_index = i32::from((*solar_system.orbital).data_index);
+            let planet_start = solar_system.planets.as_ptr() as usize;
+            let moon_start = solar_system.moons.as_ptr() as usize;
+            let desc_size = std::mem::size_of::<CPlanetDesc>();
+            let orbital_address = solar_system.orbital as usize;
+            if orbital_address >= moon_start
+                && orbital_address < moon_start + solar_system.moons.len() * desc_size
+            {
+                snapshot.orbital_moon = ((orbital_address - moon_start) / desc_size) as i32;
+            }
+            let sun = solar_system.sun.as_ptr();
+            let orbital_planet = if std::ptr::eq((*solar_system.orbital).previous.cast_const(), sun)
+            {
+                solar_system.orbital
+            } else {
+                (*solar_system.orbital).previous
+            } as usize;
+            if orbital_planet >= planet_start {
+                snapshot.inner_planet = ((orbital_planet - planet_start) / desc_size) as i32;
+            }
+        }
+
+        if let Some(moon) = target_moon {
+            if snapshot.inner_planet == target_planet
+                && moon >= 0
+                && moon < i32::from(solar_system.planets[target_planet as usize].num_planets)
+            {
+                let target = &solar_system.moons[moon as usize];
+                snapshot.target_data_index = i32::from(target.data_index);
+                let target_origin = target.image.origin;
+                snapshot.target_x = i32::from(target_origin.x);
+                snapshot.target_y = i32::from(target_origin.y);
+                return snapshot;
+            }
+        }
+
+        let target_origin = solar_system.planets[target_planet as usize].image.origin;
+        let radius = i32::from(solar_system.sun[0].radius);
+        if radius != 0 {
+            // Match displayToLocation followed by locationToDisplay exactly.
+            // C integer division truncates toward zero, as Rust's does.
+            const SIS_HALF_WIDTH: i32 = 128;
+            const SIS_HALF_HEIGHT: i32 = 91;
+            const DISPLAY_TO_LOC: i32 = 60;
+            let location_x =
+                (i32::from(target_origin.x) - SIS_HALF_WIDTH) * radius / DISPLAY_TO_LOC;
+            let location_y =
+                (i32::from(target_origin.y) - SIS_HALF_HEIGHT) * radius / DISPLAY_TO_LOC;
+            snapshot.target_x = SIS_HALF_WIDTH + location_x * DISPLAY_TO_LOC / radius;
+            snapshot.target_y = SIS_HALF_HEIGHT + location_y * DISPLAY_TO_LOC / radius;
+        }
     }
     snapshot
 }
 
 #[cfg(not(feature = "linked_c_archive"))]
-pub(crate) fn navigation_snapshot(_target_planet: i32) -> NavigationSnapshot {
+pub(crate) fn navigation_snapshot(
+    _target_planet: i32,
+    _target_moon: Option<i32>,
+) -> NavigationSnapshot {
     NavigationSnapshot::default()
 }
 
@@ -252,7 +376,7 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, value: i3
     }
     unsafe {
         let template = PlayerControls[0] as usize;
-        if template >= ImmediateInputState.key.len() {
+        if template >= 6 {
             return -1;
         }
         ImmediateInputState.key[template][index as usize] = i32::from(value != 0);

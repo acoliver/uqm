@@ -9,7 +9,7 @@
 //! of `SoundChunk`s, each with its own decoder, subtitle text, and timing.
 
 use std::ptr::{self, NonNull};
-use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
@@ -176,9 +176,6 @@ impl TrackPlayerState {
 /// Global track player state (mutex-protected).
 static TRACK_STATE: std::sync::LazyLock<Mutex<TrackPlayerState>> =
     std::sync::LazyLock::new(|| Mutex::new(TrackPlayerState::new()));
-
-// Throttle hot-path subtitle logging so comm update loops stay responsive.
-static SUBTITLE_LOG_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Details for a resolved seek target.
 struct SeekTarget {
@@ -621,17 +618,10 @@ pub fn playing_track_num() -> u16 {
     if state.sound_sample.is_none() {
         return 0;
     }
-    let result = state
+    state
         .cur_chunk
         .map(|c| (unsafe { c.as_ref() }.track_num + 1) as u16)
-        .unwrap_or(0);
-    if result == 0 {
-        eprintln!(
-            "[DBG] playing_track_num: 0 (cur_chunk={})",
-            state.cur_chunk.is_some()
-        );
-    }
-    result
+        .unwrap_or(0)
 }
 
 // =============================================================================
@@ -799,12 +789,6 @@ pub fn get_track_subtitle() -> Option<String> {
 pub fn get_track_subtitle_cstr() -> *const std::os::raw::c_char {
     let state = TRACK_STATE.lock();
     let Some(cur_ptr) = state.cur_sub_chunk else {
-        if SUBTITLE_LOG_COUNTER
-            .fetch_add(1, Ordering::Relaxed)
-            .is_multiple_of(120)
-        {
-            eprintln!("[PARITY][SUBTITLE] active=<none>");
-        }
         return std::ptr::null();
     };
 
@@ -812,22 +796,7 @@ pub fn get_track_subtitle_cstr() -> *const std::os::raw::c_char {
     // (`chunks_head`) and only reset/updated while holding TRACK_STATE. We hold the
     // mutex here, so taking a mutable reference for lazy CString caching is safe.
     let chunk = unsafe { &mut *cur_ptr.as_ptr() };
-    let ptr = chunk.text_cstr_ptr();
-    if SUBTITLE_LOG_COUNTER
-        .fetch_add(1, Ordering::Relaxed)
-        .is_multiple_of(120)
-    {
-        if let Some(text) = chunk.text.as_ref() {
-            eprintln!(
-                "[PARITY][SUBTITLE] len={} ptr=0x{:x}",
-                text.len(),
-                ptr as usize
-            );
-        } else {
-            eprintln!("[PARITY][SUBTITLE] active=<null_text>");
-        }
-    }
-    ptr
+    chunk.text_cstr_ptr()
 }
 
 /// Get the first subtitle in the track.

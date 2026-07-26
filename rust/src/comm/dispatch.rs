@@ -330,12 +330,6 @@ mod ffi {
     use std::os::raw::{c_char, c_void};
 
     extern "C" {
-        // Queue pointer accessors (rust_bridge_mainloop.c)
-        pub fn rust_get_avail_race_queue() -> *mut Queue;
-        pub fn rust_get_npc_built_ship_queue() -> *mut Queue;
-        pub fn rust_get_encounter_queue() -> *mut Queue;
-        pub fn rust_get_built_ship_queue() -> *mut Queue;
-
         // init_race dispatch (commglue.c) — returns LOCDATA* or NULL
         pub fn init_race(comm_id: u32) -> *mut c_void;
 
@@ -1130,6 +1124,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
     if get_game_state("STARBASE_AVAILABLE") == 0 {
         // Unallied Starbase conversation
+        crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
         ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 

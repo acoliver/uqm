@@ -174,7 +174,6 @@ pub fn run_game_lifecycle_impl<O: GameLoopOps + ?Sized>(ops: &O) -> Result<(), M
 
             let current = ops.get_current_activity();
             let next = ops.get_next_activity();
-            let state = ops.get_game_state();
 
             // Load path (starcon.c:260-263)
             if state_machine::should_zero_velocity(current, next) {
@@ -186,8 +185,11 @@ pub fn run_game_lifecycle_impl<O: GameLoopOps + ?Sized>(ops: &O) -> Result<(), M
                 }
             }
 
-            // Re-read after load-path mutation
+            // Re-read both activity and game state after the previous dispatch.
+            // ExploreSolarSys can set START_ENCOUNTER and GLOBAL_FLAGS_AND_DATA
+            // while returning from a planet-orbit transition.
             let activity = ops.get_current_activity();
+            let state = ops.get_game_state();
 
             // Evaluate and dispatch
             let decision = state_machine::evaluate(activity, &state);

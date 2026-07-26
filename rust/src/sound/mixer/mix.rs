@@ -464,30 +464,11 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
                 src_guard.sample_cache = sample;
             }
 
-            // Debug: track speech source pos advancement
-            if *_handle == 13 {
-                static SPEECH_DIAG: std::sync::atomic::AtomicU64 =
-                    std::sync::atomic::AtomicU64::new(0);
-                let sd = SPEECH_DIAG.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if sd < 20 || sd.is_multiple_of(50000) {
-                    eprintln!("[SPEECH_MIX#{}] left={} pos={} buf_size={} count={} sample={:.1} buf_high={} buf_low={} buf_sampsize={}", sd, left, src_guard.pos, buf_size, src_guard.count, sample, buf_high, buf_low, buf_sampsize);
-                }
-            }
-
             fullsamp += sample;
 
             // Update buffer state / exhaustion logic (matches mixer.c 1047-1060)
             if src_guard.pos < buf_size || (left && buf_sampsize != mixer_sampsize) {
                 buf_guard.state = BufferState::Playing as u32;
-                // Diagnostic: check if pos >= buf_size but left saved it
-                if src_guard.pos >= buf_size && left && buf_sampsize != mixer_sampsize {
-                    static LEFT_SAVE_COUNT: std::sync::atomic::AtomicU64 =
-                        std::sync::atomic::AtomicU64::new(0);
-                    let lsc = LEFT_SAVE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    if lsc < 5 {
-                        eprintln!("[MIXER_LEFT_SAVE#{}] handle={} pos={} buf_size={} left={} buf_sampsize={} mixer_sampsize={} buf_org_chans={}", lsc, _handle, src_guard.pos, buf_size, left, buf_sampsize, mixer_sampsize, buf_org_channels);
-                    }
-                }
             } else {
                 // buffer exhausted, go next
                 static EXHAUST_COUNT: std::sync::atomic::AtomicU64 =

@@ -361,15 +361,12 @@ pub fn mixer_source_play(handle: usize) -> Result<(), MixerError> {
 
     src.check_state()?;
 
-    // Activate source if not already playing
     if src.state < (SourceState::Playing as u32)
         && src.first_queued.is_some()
         && src.next_queued.is_none()
     {
-        // Rewind if at end
         src.pos = 0;
         src.count = 0;
-        src.processed_count = 0;
         src.next_queued = src.first_queued;
         src.prev_queued = None;
     }
@@ -656,6 +653,28 @@ mod tests {
 
         let state = mixer_get_source_i(handles[0], SourceProp::SourceState).unwrap();
         assert_eq!(state, SourceState::Playing as i32);
+    }
+
+    #[test]
+    fn play_rewinds_a_naturally_completed_source() {
+        let source_handles = mixer_gen_sources(1).unwrap();
+        let buffer_handles = mixer_gen_buffers(1).unwrap();
+        let source = mixer_get_source(source_handles[0]).unwrap();
+        {
+            let mut src = source.lock();
+            src.state = SourceState::Stopped as u32;
+            src.first_queued = Some(buffer_handles[0]);
+            src.next_queued = None;
+            src.queued_count = 1;
+            src.processed_count = 1;
+        }
+
+        mixer_source_play(source_handles[0]).unwrap();
+
+        let src = source.lock();
+        assert_eq!(src.state, SourceState::Playing as u32);
+        assert_eq!(src.next_queued, Some(buffer_handles[0]));
+        assert_eq!(src.pos, 0);
     }
 
     #[test]

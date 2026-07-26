@@ -367,6 +367,15 @@ pub struct NavigateToPlanetStep {
     pub max_ticks: u64,
 }
 
+/// A `navigate_to_moon` step targets a generated moon in a planet's inner system.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NavigateToMoonStep {
+    pub planet: u8,
+    pub moon: u8,
+    pub max_ticks: u64,
+}
+
 /// An `assert_scene` step verifies the expected deterministic scene dispatch chain.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -382,6 +391,15 @@ pub struct DispatchAssertion {
     pub dialogue: u32,
 }
 
+/// Wait for a production communication dispatch to report the requested IDs.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForDispatchStep {
+    pub encounter: u32,
+    pub dialogue: u32,
+    pub max_ticks: u64,
+}
+
 /// Assert that the nested production Game Options input loop is active.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -392,6 +410,14 @@ pub struct GameOptionsAssertion {}
 #[serde(deny_unknown_fields)]
 pub struct CommunicationResponsesAssertion {
     pub minimum: usize,
+}
+
+/// Wait for at least `minimum_completions` communication loops to return naturally.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForCommunicationEndStep {
+    pub minimum_completions: u64,
+    pub max_ticks: u64,
 }
 
 /// The closed set of automation actions (REQ-SCRIPT-003).
@@ -409,12 +435,15 @@ pub enum Action {
     SetPlayerKey(SetPlayerKeyStep),
     TapPlayerKey(TapPlayerKeyStep),
     NavigateToPlanet(NavigateToPlanetStep),
+    NavigateToMoon(NavigateToMoonStep),
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
     AssertScene(SceneAssertion),
     AssertDispatch(DispatchAssertion),
+    WaitForDispatch(WaitForDispatchStep),
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
+    WaitForCommunicationEnd(WaitForCommunicationEndStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     Finish,
 }
@@ -895,12 +924,19 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
     let mut required_input_callbacks: u64 = 0;
     let required_presentations: u64 = 0;
     for (i, step) in steps.iter().enumerate() {
+        // Every action consumes at least one admitted input callback, including
+        // immediate assertions, capture arming, and the final Finish action.
+        required_input_callbacks = required_input_callbacks.checked_add(1).ok_or_else(|| {
+            AutomationError::ArithmeticOverflow {
+                path: path.to_string(),
+                reason: format!("required input ticks overflow at step {i}"),
+            }
+        })?;
         match step {
             Action::WaitInputTicks(w) => {
-                // count is u64 so always nonnegative; representability is the
-                // checked-add lower-bound below.
+                // The base callback above accounts for the first wait callback.
                 required_input_callbacks = required_input_callbacks
-                    .checked_add(w.count)
+                    .checked_add(w.count.saturating_sub(1))
                     .ok_or_else(|| AutomationError::ArithmeticOverflow {
                         path: path.to_string(),
                         reason: format!(
@@ -989,6 +1025,77 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         ),
                     })?;
             }
+            Action::WaitForDispatch(wait) => {
+                if wait.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_for_dispatch max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(wait.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            wait.max_ticks
+                        ),
+                    })?;
+            }
+            Action::WaitForCommunicationEnd(wait) => {
+                if wait.minimum_completions == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_for_communication_end minimum_completions must be positive",
+                    ));
+                }
+                if wait.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_for_communication_end max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(wait.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            wait.max_ticks
+                        ),
+                    })?;
+            }
+            Action::NavigateToMoon(navigation) => {
+                if navigation.planet > 8 || navigation.moon > 3 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        format!(
+                            "navigate_to_moon target must be planet 0..=8 and moon 0..=3, got planet={} moon={}",
+                            navigation.planet, navigation.moon
+                        ),
+                    ));
+                }
+                if navigation.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "navigate_to_moon max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(navigation.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            navigation.max_ticks
+                        ),
+                    })?;
+            }
             Action::NavigateToPlanet(navigation) => {
                 if navigation.planet > 8 {
                     return Err(AutomationError::step(
@@ -1008,7 +1115,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                     ));
                 }
                 required_input_callbacks = required_input_callbacks
-                    .checked_add(navigation.max_ticks)
+                    .checked_add(navigation.max_ticks.saturating_sub(1))
                     .ok_or_else(|| AutomationError::ArithmeticOverflow {
                         path: path.to_string(),
                         reason: format!(
@@ -1261,7 +1368,7 @@ mod tests {
 
     #[test]
     fn accepts_assert_scene_action() {
-        let txt = r#"{"version":1,"name":"probe","start_scene":"sol_probe_encounter","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_scene","scene":"sol_probe_encounter"},{"action":"finish"}]}"#;
+        let txt = r#"{"version":1,"name":"probe","start_scene":"sol_probe_encounter","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_scene","scene":"sol_probe_encounter"},{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         let script = validate_script(doc, p()).unwrap();
         assert!(matches!(
@@ -1285,6 +1392,72 @@ mod tests {
         );
     }
 
+    #[test]
+    fn accepts_real_gameplay_wait_and_moon_navigation_actions() {
+        let txt = r#"{
+            "version":1,
+            "name":"real-path-actions",
+            "budgets":{"max_input_ticks":35,"max_presentations":1,"max_wallclock_seconds":60},
+            "steps":[
+                {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
+                {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
+                {"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":10},
+                {"action":"finish"}
+            ]
+        }"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let script = validate_script(doc, p()).unwrap();
+        assert!(matches!(
+            script.steps(),
+            [
+                Action::WaitForCommunicationEnd(WaitForCommunicationEndStep {
+                    minimum_completions: 1,
+                    max_ticks: 10
+                }),
+                Action::NavigateToMoon(NavigateToMoonStep {
+                    planet: 2,
+                    moon: 0,
+                    max_ticks: 10
+                }),
+                Action::WaitForDispatch(WaitForDispatchStep {
+                    encounter: 2,
+                    dialogue: 2,
+                    max_ticks: 10
+                }),
+                Action::Finish
+            ]
+        ));
+    }
+
+    #[test]
+    fn rejects_zero_budgets_for_real_gameplay_waits() {
+        for action in [
+            r#"{"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":0}"#,
+            r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
+            r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
+        ] {
+            let txt = format!(
+                "{{\"version\":1,\"name\":\"invalid\",\"budgets\":{{\"max_input_ticks\":2,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
+            );
+            let doc = parse_script(txt.as_bytes(), p()).unwrap();
+            let err = validate_script(doc, p()).unwrap_err();
+            assert!(format!("{err}").contains("max_ticks must be positive"));
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_moon_navigation_indices() {
+        for action in [
+            r#"{"action":"navigate_to_moon","planet":9,"moon":0,"max_ticks":1}"#,
+            r#"{"action":"navigate_to_moon","planet":2,"moon":4,"max_ticks":1}"#,
+        ] {
+            let txt = format!(
+                "{{\"version\":1,\"name\":\"invalid\",\"budgets\":{{\"max_input_ticks\":3,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
+            );
+            let doc = parse_script(txt.as_bytes(), p()).unwrap();
+            assert!(validate_script(doc, p()).is_err());
+        }
+    }
     // --- REQ-SCRIPT-005: typed six-key mappings ---
 
     #[test]
@@ -1444,7 +1617,7 @@ mod tests {
 
     #[test]
     fn accepts_activity_equals_within_mask() {
-        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_activity","mask":61440,"equals":0},{"action":"finish"}]}"#;
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_activity","mask":61440,"equals":0},{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         assert!(validate_script(doc, p()).is_ok());
     }
@@ -1494,8 +1667,8 @@ mod tests {
 
     #[test]
     fn accepts_required_callbacks_at_inclusive_boundary() {
-        // wait_input_ticks count=5 needs max >= 6. Set max=6 -> admits 5 -> OK.
-        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":6,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_input_ticks","count":5},{"action":"finish"}]}"#;
+        // wait count=5 plus Finish needs six admitted callbacks, so max=7.
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":7,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_input_ticks","count":5},{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         assert!(validate_script(doc, p()).is_ok());
     }
@@ -1596,7 +1769,7 @@ mod tests {
             ("Quit", RestartMenuItem::Quit),
         ] {
             let txt = format!(
-                r#"{{"version":1,"name":"x","budgets":{{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1}},"steps":[{{"action":"assert_main_menu_transition","from":"NewGame","to":"{name}"}},{{"action":"finish"}}]}}"#
+                r#"{{"version":1,"name":"x","budgets":{{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1}},"steps":[{{"action":"assert_main_menu_transition","from":"NewGame","to":"{name}"}},{{"action":"finish"}}]}}"#
             );
             let doc = parse_script(txt.as_bytes(), p()).unwrap();
             let v = validate_script(doc, p()).unwrap();
@@ -1609,7 +1782,7 @@ mod tests {
         // REQ-SCRIPT-006: a capture/checkpoint cannot emit assertion pass.
         // We verify by confirming a script with only capture+finish has no
         // transitions (no assertion pass path).
-        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"capture","label":"ok"},{"action":"finish"}]}"#;
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"capture","label":"ok"},{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         let v = validate_script(doc, p()).unwrap();
         assert!(v.transitions().is_empty());

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "name": "real-sol-probe-to-starbase",
+  "budgets": {
+    "max_input_ticks": 17000,
+    "max_presentations": 18000,
+    "max_wallclock_seconds": 420
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "wait_input_ticks", "count": 20},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "navigate_to_planet", "planet": 2, "max_ticks": 1800},
+    {"action": "wait_input_ticks", "count": 200},
+    {"action": "assert_dispatch", "encounter": 24, "dialogue": 18},
+    {"action": "capture", "label": "real-probe-broadcast"},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 9000},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "capture", "label": "real-probe-returned-to-flight"},
+    {"action": "navigate_to_moon", "planet": 2, "moon": 0, "max_ticks": 2000},
+    {"action": "wait_input_ticks", "count": 1},
+    {"action": "wait_for_dispatch", "encounter": 2, "dialogue": 2, "max_ticks": 2000},
+    {"action": "capture", "label": "real-starbase-commander"},
+    {"action": "finish"}
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "name": "repro-sol-probe-comm-ui",
+  "start_scene": "sol_probe_encounter",
+  "budgets": {
+    "max_input_ticks": 500,
+    "max_presentations": 700,
+    "max_wallclock_seconds": 60
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "assert_scene", "scene": "sol_probe_encounter"},
+    {"action": "capture", "label": "urquan-speaking-before-skip"},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 60},
+    {"action": "assert_communication_responses", "minimum": 1},
+    {"action": "capture", "label": "urquan-responses-before-input"},
+    {"action": "tap_menu_key", "key": "down", "value": 1, "hold": 3, "settle": 10},
+    {"action": "capture", "label": "urquan-responses-after-down"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 10},
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "capture", "label": "urquan-after-response"},
+    {"action": "finish"}
+  ]
+}

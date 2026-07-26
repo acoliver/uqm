@@ -71,7 +71,7 @@ pub(super) mod c_bridge {
         pub fn comm_CheckSubtitles();
         pub fn comm_ClearSubtitles();
         pub fn FadeMusic(volume: u8, duration: i16) -> c_uint;
-        pub fn SetSliderImage(frame_index: c_uint);
+        pub fn SetSliderImage(frame: *mut c_void);
 
         // Graphics functions for init_speech_graphics (replacing c_InitSpeechGraphics)
         pub fn InitOscilloscope(scope_bg: *mut c_void);
@@ -310,10 +310,6 @@ pub mod dinput {
     // DoInput callback for talk segue (replaces c_DoTalkSegue)
     unsafe extern "C" fn do_talk_segue_cb(p_ts: *mut TalkingStateDInput) -> c_int {
         let ts = unsafe { &mut *p_ts };
-        eprintln!(
-            "[DBG] do_talk_segue_cb: enter seeking={} ended={}",
-            ts.seeking, ts.ended
-        );
 
         // Abort check: GLOBAL(CurrentActivity) & CHECK_ABORT
         let activity = crate::mainloop::ffi::get_current_activity().0 as u32;
@@ -341,7 +337,7 @@ pub mod dinput {
         }
 
         if right {
-            c_bridge::SetSliderImage(3);
+            super::set_slider_image_frame(3);
             if c_bridge::optSmoothScroll == OPT_PC {
                 c_bridge::FastForward_Page();
             } else {
@@ -350,7 +346,7 @@ pub mod dinput {
             ts.seeking = 1;
         } else if left || ts.rewind != 0 {
             ts.rewind = 0;
-            c_bridge::SetSliderImage(4);
+            super::set_slider_image_frame(4);
             if c_bridge::optSmoothScroll == OPT_PC {
                 c_bridge::FastReverse_Page();
             } else {
@@ -359,7 +355,7 @@ pub mod dinput {
             ts.seeking = 1;
         } else if ts.seeking != 0 {
             ts.seeking = 0;
-            c_bridge::SetSliderImage(2);
+            super::set_slider_image_frame(2);
         } else {
             c_bridge::comm_CheckSubtitles();
         }
@@ -379,10 +375,6 @@ pub mod dinput {
     /// Ported from c_RunTalkSegue — runs the talk segue via DoInput.
     /// Returns true if playback reached its natural end.
     pub fn run_talk_segue_dinput(wait_track: u32) -> bool {
-        eprintln!(
-            "[DBG] run_talk_segue_dinput: enter wait_track={}",
-            wait_track
-        );
         // Transition animation to talking state
         if unsafe { c_bridge::want_talking_anim() } != 0
             && unsafe { c_bridge::have_talking_anim() } != 0
@@ -419,15 +411,10 @@ pub mod dinput {
             SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
             DoInput(&mut ts as *mut _ as *mut c_void, 0);
         }
-        eprintln!(
-            "[DBG] run_talk_segue_dinput: DoInput returned, ended={}",
-            ts.ended
-        );
-
         unsafe { c_bridge::comm_ClearSubtitles() };
 
         if ts.ended != 0 {
-            unsafe { c_bridge::SetSliderImage(8) };
+            unsafe { super::set_slider_image_frame(8) };
         }
 
         // Transition back to silent
@@ -882,7 +869,7 @@ pub fn player_response_input(state: &mut CommState) -> PlayerInputResult {
 pub unsafe fn alien_talk_first_call_init() {
     #[cfg(not(test))]
     {
-        init_speech_graphics(&mut CommState::default());
+        rust_InitSpeechGraphics();
         c_bridge::set_color_map_from_comm_data();
         c_bridge::DrawAlienFrame(std::ptr::null(), 0, 1);
         unsafe { rust_UpdateSpeechGraphics() };
@@ -896,6 +883,7 @@ pub unsafe fn alien_talk_first_call_init() {
 
 #[cfg(not(test))]
 extern "C" {
+    fn rust_InitSpeechGraphics();
     fn rust_UpdateSpeechGraphics();
 }
 
@@ -1357,7 +1345,7 @@ fn init_speech_graphics(state: &mut CommState) {
         // Ported from c_InitSpeechGraphics in rust_comm.c
         // SLIDER_Y = 107 (comm.h), SIS_SCREEN_WIDTH = SPACE_WIDTH - 14
         let slider_y: std::ffi::c_int = 107;
-        let sis_w: std::ffi::c_int = 320 - 14;
+        let sis_w: std::ffi::c_int = 320 - 64 - 14;
         let af = std::ptr::addr_of_mut!(c_bridge::ActivityFrame);
         let frame5 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 5);
         let frame2 = c_bridge::SetAbsFrameIndex(std::ptr::read(af), 2);
@@ -1367,11 +1355,17 @@ fn init_speech_graphics(state: &mut CommState) {
     }
 }
 
+#[cfg(not(test))]
+unsafe fn set_slider_image_frame(index: u16) {
+    let frame = c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, index);
+    c_bridge::SetSliderImage(frame);
+}
+
 fn set_slider_image(state: &mut CommState, img: SliderImage) {
     #[cfg(not(test))]
     unsafe {
         let _ = state;
-        c_bridge::SetSliderImage(img as u32);
+        set_slider_image_frame(img as u16);
     }
     #[cfg(test)]
     {
@@ -1693,7 +1687,7 @@ fn comm_intro_transition() {
         // SIS constants from units.h
         let sis_org_x: c_int = 12; // SAFE_X + SIS_X_OFFSET
         let sis_org_y: c_int = 13; // SAFE_Y + SIS_Y_OFFSET
-        let sis_screen_width: c_int = 320 - 14; // SPACE_WIDTH - 14
+        let sis_screen_width: c_int = 320 - 64 - 14; // SPACE_WIDTH - 14
         let sis_screen_height: c_int = 240 - 13; // SPACE_HEIGHT - 13
 
         match mode {

@@ -40,6 +40,14 @@ pub struct CPoint {
     pub y: i16,
 }
 
+/// C `STAMP` struct: a screen origin and an opaque `FRAME` pointer.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct CStamp {
+    pub origin: CPoint,
+    pub frame: *mut c_void,
+}
+
 /// C `RECT` struct (units.h / comm.h).
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -61,7 +69,7 @@ pub struct CSisState {
     pub crew_enlisted: u16,
     pub total_element_mass: u16,
     pub total_bio_mass: u16,
-    pub module_slots: [u8; 20], // NUM_MODULES=20
+    pub module_slots: [u8; 16], // NUM_MODULE_SLOTS=16
     pub drive_slots: [u8; 11],  // NUM_DRIVE_SLOTS=11
     pub jet_slots: [u8; 8],     // NUM_JET_SLOTS=8
     pub num_landers: u8,
@@ -104,17 +112,19 @@ pub struct CGameState {
     pub fuel_cost: u8,               // offset 2
     pub module_cost: [u8; 20],       // offset 3, NUM_MODULES=20
     pub element_worth: [u8; 8],      // offset 23, NUM_ELEMENT_CATEGORIES=8
-    _display_array: [u8; 8],         // offset 31, PRIMITIVE* (8 bytes)
+    _display_array_pad: u8,          // offset 31, align PRIMITIVE* to 32
+    _display_array: *mut c_void,     // offset 32, PRIMITIVE*
     pub current_activity: u16,       // offset 40 (verified)
-    _clock_state: [u8; 48],          // offset 42, CLOCK_STATE (48 bytes)
-    _autopilot: [u8; 4],             // offset 90, POINT (4 bytes)
-    _ip_location: [u8; 4],           // offset 94, POINT (4 bytes)
-    _ship_stamp: [u8; 16],           // offset 98, STAMP (16 bytes)
-    _ship_facing: u16,               // offset 114, UWORD
-    _ip_planet: u8,                  // offset 116, BYTE
-    _in_orbit: u8,                   // offset 117, BYTE
-    pub _velocity: [u8; 18],         // offset 118, VELOCITY_DESC (18 bytes)
-    _velocity_pad: [u8; 6],          // pad to offset 142 (align to u32 for BattleGroupRef)
+    _current_activity_pad: [u8; 6],  // align CLOCK_STATE to offset 48
+    _clock_state: [u8; 48],          // offset 48, CLOCK_STATE
+    _autopilot: [u8; 4],             // offset 96, POINT
+    _ip_location: [u8; 4],           // offset 100, POINT
+    pub ship_stamp: CStamp,          // offset 104, STAMP
+    _ship_facing: u16,               // offset 120, UWORD
+    _ip_planet: u8,                  // offset 122, BYTE
+    _in_orbit: u8,                   // offset 123, BYTE
+    pub _velocity: [u8; 18],         // offset 124, VELOCITY_DESC
+    _velocity_pad: [u8; 2],          // align BattleGroupRef to offset 144
     _battle_group_ref: u32,          // offset 144, DWORD
     pub avail_race_q: CQueue,        // offset 152 (verified)
     pub npc_built_ship_q: CQueue,    // offset 192 (verified)
@@ -393,6 +403,22 @@ mod tests {
             "CLocData too small for 3 function pointers: {}",
             size
         );
+    }
+
+    #[test]
+    fn c_game_state_layout_matches_verified_c_abi() {
+        assert_eq!(std::mem::size_of::<CSisState>(), 124);
+        assert_eq!(std::mem::offset_of!(CSisState, module_slots), 22);
+        assert_eq!(std::mem::offset_of!(CSisState, drive_slots), 38);
+        assert_eq!(std::mem::offset_of!(CSisState, ship_name), 74);
+        assert_eq!(std::mem::size_of::<CStamp>(), 16);
+        assert_eq!(std::mem::size_of::<CGlobData>(), 640);
+        assert_eq!(std::mem::offset_of!(CGlobData, game_state), 128);
+        assert_eq!(std::mem::size_of::<CGameState>(), 512);
+        assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
+        assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);
+        assert_eq!(std::mem::offset_of!(CGameState, avail_race_q), 152);
+        assert_eq!(std::mem::offset_of!(CGameState, game_state_bytes), 352);
     }
 
     #[test]

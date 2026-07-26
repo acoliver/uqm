@@ -61,6 +61,10 @@ struct CoordInner {
     armed_capture_label: Option<String>,
     /// Declarative start scene, consumed once at the game-initialized boundary.
     pending_start_scene: PendingStartScene,
+    /// Completion counter captured when entering a communication wait action.
+    communication_wait_baseline: Option<(usize, u64)>,
+    /// Most recent dispatch generation consumed by a dispatch wait.
+    consumed_dispatch_generation: u64,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -109,6 +113,14 @@ impl Coordinator {
         // Activate the runtime.
         runtime.activate();
 
+        let communication_wait_baseline =
+            if matches!(actions.first(), Some(Action::WaitForCommunicationEnd(_))) {
+                let (_, completions) = crate::automation::ui_observation::communication_lifecycle();
+                Some((0, completions))
+            } else {
+                None
+            };
+
         let coord = Coordinator {
             actions,
             transitions,
@@ -127,6 +139,8 @@ impl Coordinator {
                 pending_transitions: Vec::new(),
                 armed_capture_label: None,
                 pending_start_scene: PendingStartScene::new(start_scene),
+                communication_wait_baseline,
+                consumed_dispatch_generation: 0,
             }),
         };
 
@@ -360,29 +374,64 @@ impl Coordinator {
             }
         }
 
-        if inner.input_seen.is_multiple_of(25) {
-            let snapshot = crate::automation::input_ffi::navigation_snapshot(2);
-            if snapshot.active != 0 {
-                eprintln!(
-                    "[automation-nav] step={} inner={} ship=({},{}) facing={} target=({},{})",
-                    inner.sched_state.step_index,
-                    snapshot.inner_planet,
-                    snapshot.ship_x,
-                    snapshot.ship_y,
-                    snapshot.ship_facing,
-                    snapshot.target_x,
-                    snapshot.target_y
+        // Step 2: Feed to scheduler. Runtime waits are satisfied only by
+        // observed production state, never by injected input.
+        let mut scheduler_event = SchedulerEvent::AdmittedInput;
+        if let Some(Action::WaitForCommunicationEnd(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let (active, completions) =
+                crate::automation::ui_observation::communication_lifecycle();
+            let baseline = match inner.communication_wait_baseline {
+                Some((step, baseline)) if step == inner.sched_state.step_index => baseline,
+                _ => {
+                    inner.communication_wait_baseline =
+                        Some((inner.sched_state.step_index, completions));
+                    completions
+                }
+            };
+            let target = baseline.saturating_add(wait.minimum_completions);
+            if !active && completions >= target {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "communication_completed:count={completions}:baseline={baseline}:minimum={}",
+                        wait.minimum_completions
+                    ),
+                );
+            }
+        } else if let Some(Action::WaitForDispatch(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let (generation, encounter, dialogue) = scenario::dispatch_observation();
+            if generation > inner.consumed_dispatch_generation
+                && encounter == Some(wait.encounter)
+                && dialogue == Some(wait.dialogue)
+            {
+                inner.consumed_dispatch_generation = generation;
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "dispatch_observed:generation={generation}:encounter={}:dialogue={}",
+                        wait.encounter, wait.dialogue
+                    ),
                 );
             }
         }
-        // Step 2: Feed to scheduler. Navigation actions derive real player
-        // controls from the live solar-system state before UpdateInputState.
-        let mut scheduler_event = SchedulerEvent::AdmittedInput;
+
+        // Navigation actions derive real player controls from the live
+        // solar-system state before UpdateInputState.
         if let Some(Action::NavigateToPlanet(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
-            let snapshot =
-                crate::automation::input_ffi::navigation_snapshot(i32::from(navigation.planet));
+            let snapshot = crate::automation::input_ffi::navigation_snapshot(
+                i32::from(navigation.planet),
+                None,
+            );
             let reached =
                 snapshot.active != 0 && snapshot.inner_planet == i32::from(navigation.planet);
             let control = crate::automation::navigation::steer_toward_target(
@@ -396,14 +445,60 @@ impl Coordinator {
                     target_y: snapshot.target_y,
                 },
             );
-            Self::set_navigation_controls(control);
             if reached {
+                Self::set_navigation_controls(
+                    crate::automation::navigation::NavigationControl::default(),
+                );
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
                     &mut inner,
                     RecordKind::SemanticAssertion,
                     format!("navigation_reached:planet={}", navigation.planet),
                 );
+            } else {
+                Self::set_navigation_controls(control);
+            }
+        } else if let Some(Action::NavigateToMoon(navigation)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let snapshot = crate::automation::input_ffi::navigation_snapshot(
+                i32::from(navigation.planet),
+                Some(i32::from(navigation.moon)),
+            );
+            let reached = snapshot.active != 0
+                && snapshot.in_orbit != 0
+                && snapshot.inner_planet == i32::from(navigation.planet)
+                && snapshot.orbital_moon == i32::from(navigation.moon)
+                && snapshot.orbital_data_index == snapshot.target_data_index;
+            let control = crate::automation::navigation::steer_toward_target(
+                crate::automation::navigation::NavigationObservation {
+                    active: snapshot.active != 0,
+                    inner_planet: None,
+                    ship_x: snapshot.ship_x,
+                    ship_y: snapshot.ship_y,
+                    ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
+                    target_x: snapshot.target_x,
+                    target_y: snapshot.target_y,
+                },
+            );
+            if reached {
+                Self::set_navigation_controls(
+                    crate::automation::navigation::NavigationControl::default(),
+                );
+                scheduler_event = SchedulerEvent::NavigationReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "navigation_reached:planet={}:moon={}:orbital_data={}:target_data={}",
+                        navigation.planet,
+                        navigation.moon,
+                        snapshot.orbital_data_index,
+                        snapshot.target_data_index
+                    ),
+                );
+            } else {
+                Self::set_navigation_controls(control);
             }
         }
 
@@ -413,17 +508,9 @@ impl Coordinator {
         };
         let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
 
-        eprintln!(
-            "[automation] input#{} sched: step={} phase={:?} -> step={} phase={:?} effects={:?}",
-            inner.input_seen,
-            inner.sched_state.step_index,
-            inner.sched_state.phase,
-            transition.new_state.step_index,
-            transition.new_state.phase,
-            transition.effects,
-        );
-
+        let previous_step = inner.sched_state.step_index;
         inner.sched_state = transition.new_state;
+        self.record_action_entry(&mut inner, previous_step);
 
         // Step 3: Apply effects.
         self.apply_effects(&mut inner, &transition.effects);
@@ -449,7 +536,9 @@ impl Coordinator {
                     &config2,
                     SchedulerEvent::MenuTransition { to },
                 );
+                let previous_step = inner.sched_state.step_index;
                 inner.sched_state = t2.new_state;
+                self.record_action_entry(&mut inner, previous_step);
                 self.write_trace(&mut inner, RecordKind::MenuTransition);
                 if inner.sched_state.is_terminal() {
                     break;
@@ -550,7 +639,9 @@ impl Coordinator {
             },
         );
 
+        let previous_step = inner.sched_state.step_index;
         inner.sched_state = transition.new_state;
+        self.record_action_entry(&mut inner, previous_step);
         self.apply_effects(&mut inner, &transition.effects);
 
         self.write_trace(&mut inner, RecordKind::Presentation);
@@ -611,7 +702,9 @@ impl Coordinator {
                 &config,
                 SchedulerEvent::MenuTransition { to },
             );
+            let previous_step = inner.sched_state.step_index;
             inner.sched_state = transition.new_state;
+            self.record_action_entry(&mut inner, previous_step);
 
             self.write_trace(&mut inner, RecordKind::MenuTransition);
 
@@ -646,6 +739,7 @@ impl Coordinator {
             eprintln!("[automation] finalize_inner: already finalized, returning");
             return;
         }
+
         inner.finalized = true;
 
         // Write run_end trace.
@@ -706,6 +800,19 @@ impl Coordinator {
     // -----------------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------------
+    fn record_action_entry(&self, inner: &mut CoordInner, previous_step: usize) {
+        if inner.sched_state.step_index == previous_step {
+            return;
+        }
+        inner.communication_wait_baseline = None;
+        if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::WaitForCommunicationEnd(_))
+        ) {
+            let (_, completions) = crate::automation::ui_observation::communication_lifecycle();
+            inner.communication_wait_baseline = Some((inner.sched_state.step_index, completions));
+        }
+    }
 
     /// Set a terminal outcome on both the coordinator and the runtime mirror.
     /// Also propagates the stop to the game loop by setting CHECK_ABORT

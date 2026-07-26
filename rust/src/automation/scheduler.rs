@@ -103,6 +103,8 @@ pub enum ActionPhase {
     TapSettling { remaining: u64 },
     /// Driving the real flagship toward a planet with a bounded callback budget.
     Navigating { remaining: u64 },
+    /// Waiting for a runtime-observed semantic condition with a bounded budget.
+    WaitingCondition { remaining: u64 },
     /// Waiting for a committed present with a matching capture generation.
     WaitingCapture { generation: CaptureGeneration },
     /// Waiting for a typed main-menu transition event.
@@ -177,6 +179,8 @@ pub enum SchedulerEvent {
     CommittedPresent { generation: CaptureGeneration },
     /// Real navigation entered the requested planet's inner system.
     NavigationReached,
+    /// A runtime-observed condition required by the current action was reached.
+    ConditionReached,
     /// An observed typed main-menu transition to `item`.
     MenuTransition { to: u8 },
 }
@@ -313,8 +317,57 @@ pub fn scheduler_reduce(
             reduce_committed_present(state, config, generation, current_action, sv)
         }
         SchedulerEvent::NavigationReached => {
-            if matches!(current_action, Action::NavigateToPlanet(_)) {
-                advance_to_next(state, config, sv, EffectPlan::none())
+            if matches!(
+                current_action,
+                Action::NavigateToPlanet(_) | Action::NavigateToMoon(_)
+            ) {
+                match state.phase {
+                    ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
+                        advance_to_next(state, config, sv, EffectPlan::none())
+                    }
+                    ActionPhase::Navigating { remaining: 0 } => SchedulerTransition {
+                        new_state: SchedulerState {
+                            terminal: Some(TerminalOutcome::SemanticMismatch),
+                            state_version: sv,
+                            ..*state
+                        },
+                        effects: EffectPlan::none(),
+                    },
+                    _ => SchedulerTransition {
+                        new_state: *state,
+                        effects: EffectPlan::none(),
+                    },
+                }
+            } else {
+                SchedulerTransition {
+                    new_state: *state,
+                    effects: EffectPlan::none(),
+                }
+            }
+        }
+        SchedulerEvent::ConditionReached => {
+            if matches!(
+                current_action,
+                Action::WaitForCommunicationEnd(_) | Action::WaitForDispatch(_)
+            ) {
+                match state.phase {
+                    ActionPhase::WaitingForInput
+                    | ActionPhase::WaitingCondition { remaining: 1.. } => {
+                        advance_to_next(state, config, sv, EffectPlan::none())
+                    }
+                    ActionPhase::WaitingCondition { remaining: 0 } => SchedulerTransition {
+                        new_state: SchedulerState {
+                            terminal: Some(TerminalOutcome::SemanticMismatch),
+                            state_version: sv,
+                            ..*state
+                        },
+                        effects: EffectPlan::none(),
+                    },
+                    _ => SchedulerTransition {
+                        new_state: *state,
+                        effects: EffectPlan::none(),
+                    },
+                }
             } else {
                 SchedulerTransition {
                     new_state: *state,
@@ -578,10 +631,98 @@ fn reduce_admitted_input(
                 effects: EffectPlan::none(),
             }
         }
-        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining }) => {
+        (Action::NavigateToMoon(navigation), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::Navigating {
+                    remaining: navigation.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForDispatch(wait), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: wait.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::WaitForDispatch(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForDispatch(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForCommunicationEnd(wait), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: wait.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForCommunicationEnd(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForCommunicationEnd(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
                         remaining: remaining.saturating_sub(1),
                     },
                     state_version: sv,
@@ -876,8 +1017,9 @@ fn advance_to_next(
 mod tests {
     use super::*;
     use crate::automation::script::{
-        ActivityAssertion, CaptureStep, MainMenuTransitionDto, SetMenuKeyStep, TapMenuKeyStep,
-        TapPlayerKeyStep, WaitInputTicksStep,
+        ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToMoonStep, SetMenuKeyStep,
+        TapMenuKeyStep, TapPlayerKeyStep, WaitForCommunicationEndStep, WaitForDispatchStep,
+        WaitInputTicksStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
@@ -1550,11 +1692,135 @@ mod tests {
 
         assert_eq!(run1, run2);
     }
-}
 
-// ===========================================================================
-//  Property tests
-// ===========================================================================
+    #[test]
+    fn moon_navigation_budget_exhaustion_is_terminal() {
+        let actions = [Action::NavigateToMoon(NavigateToMoonStep {
+            planet: 2,
+            moon: 0,
+            max_ticks: 1,
+        })];
+        let config = cfg(&actions);
+        let started = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            started.new_state.phase,
+            ActionPhase::Navigating { remaining: 0 }
+        );
+
+        let expired = scheduler_reduce(&started.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+    }
+
+    #[test]
+    fn communication_wait_advances_only_on_condition() {
+        let actions = [
+            Action::WaitForCommunicationEnd(WaitForCommunicationEndStep {
+                minimum_completions: 1,
+                max_ticks: 3,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 2 }
+        );
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
+
+        assert_eq!(reached.new_state.step_index, 1);
+        assert_eq!(reached.new_state.terminal, None);
+        let finished = scheduler_reduce(&reached.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            finished.new_state.terminal,
+            Some(TerminalOutcome::FinishComplete)
+        );
+    }
+
+    #[test]
+    fn dispatch_wait_expires_with_semantic_mismatch() {
+        let actions = [Action::WaitForDispatch(WaitForDispatchStep {
+            encounter: 2,
+            dialogue: 2,
+            max_ticks: 1,
+        })];
+        let config = cfg(&actions);
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 0 }
+        );
+        let expired = scheduler_reduce(&waiting.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+    }
+
+    #[test]
+    fn reached_events_cannot_bypass_exhausted_budgets() {
+        let navigation = [Action::NavigateToMoon(NavigateToMoonStep {
+            planet: 2,
+            moon: 0,
+            max_ticks: 1,
+        })];
+        let navigation_config = cfg(&navigation);
+        let navigation_waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &navigation_config,
+            SchedulerEvent::AdmittedInput,
+        );
+        let late_navigation = scheduler_reduce(
+            &navigation_waiting.new_state,
+            &navigation_config,
+            SchedulerEvent::NavigationReached,
+        );
+        assert_eq!(
+            late_navigation.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+
+        let condition = [Action::WaitForDispatch(WaitForDispatchStep {
+            encounter: 2,
+            dialogue: 2,
+            max_ticks: 1,
+        })];
+        let condition_config = cfg(&condition);
+        let condition_waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &condition_config,
+            SchedulerEvent::AdmittedInput,
+        );
+        let late_condition = scheduler_reduce(
+            &condition_waiting.new_state,
+            &condition_config,
+            SchedulerEvent::ConditionReached,
+        );
+        assert_eq!(
+            late_condition.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+    }
+}
 
 #[cfg(test)]
 mod property_tests {
@@ -1668,6 +1934,7 @@ mod property_tests {
             };
 
             prop_assert_eq!(run1, run2);
+
         }
     }
 }

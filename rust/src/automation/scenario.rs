@@ -172,6 +172,7 @@ struct SceneObservation {
     active: Option<AutomationScene>,
     encounter_conversation: Option<u32>,
     dialogue_conversation: Option<u32>,
+    dispatch_generation: u64,
 }
 
 impl SceneObservation {
@@ -180,15 +181,20 @@ impl SceneObservation {
             active: Some(scene),
             encounter_conversation: None,
             dialogue_conversation: None,
+            dispatch_generation: 0,
         };
     }
 
     fn observe_encounter(&mut self, conversation: u32) {
         self.encounter_conversation = Some(conversation);
+        self.dialogue_conversation = None;
     }
 
     fn observe_dialogue(&mut self, conversation: u32) {
         self.dialogue_conversation = Some(conversation);
+        if self.encounter_conversation.is_some() {
+            self.dispatch_generation = self.dispatch_generation.saturating_add(1);
+        }
     }
 
     fn verify_dispatch(&self, encounter: u32, dialogue: u32) -> Result<(), SceneError> {
@@ -273,10 +279,10 @@ pub fn activate(
                 crate::state::game_state_keys::set_game_state("PROBE_MESSAGE_DELIVERED", 0);
             }
             AutomationScene::StarbaseCommander => {
-                extern "C" {
-                    fn rust_prepare_starbase_commander_scene();
-                }
-                rust_prepare_starbase_commander_scene();
+                crate::state::game_state_keys::set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
+                crate::state::game_state_keys::set_game_state("STARBASE_AVAILABLE", 1);
+                crate::state::game_state_keys::set_game_state("PROBE_ILWRATH_ENCOUNTER", 0);
+                crate::state::game_state_keys::set_game_state("MOONBASE_ON_SHIP", 0);
             }
         }
         crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
@@ -322,6 +328,17 @@ pub fn verify(scene: AutomationScene) -> Result<ScenePlan, SceneError> {
 /// Verify the most recently observed normal encounter/dialogue dispatch IDs.
 pub fn verify_dispatch(encounter: u32, dialogue: u32) -> Result<(), SceneError> {
     observation().lock().verify_dispatch(encounter, dialogue)
+}
+
+/// Return the latest complete dispatch generation and IDs.
+#[must_use]
+pub fn dispatch_observation() -> (u64, Option<u32>, Option<u32>) {
+    let observed = observation().lock();
+    (
+        observed.dispatch_generation,
+        observed.encounter_conversation,
+        observed.dialogue_conversation,
+    )
 }
 
 #[cfg(test)]

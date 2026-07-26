@@ -837,11 +837,7 @@ pub unsafe extern "C" fn ResumeTrack() {
 /// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn PlayingTrack() -> u16 {
-    let n = trackplayer::playing_track_num();
-    if n == 0 {
-        eprintln!("[PlayingTrack] returns 0 (not playing)");
-    }
-    n
+    trackplayer::playing_track_num()
 }
 
 ///

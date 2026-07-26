@@ -219,46 +219,6 @@ rust_get_avail_race_queue (void)
 }
 
 
-typedef struct uqm_navigation_snapshot
-{
-	int active;
-	int inner_planet;
-	int ship_x;
-	int ship_y;
-	int ship_facing;
-	int target_x;
-	int target_y;
-} UQM_NAVIGATION_SNAPSHOT;
-
-void
-rust_get_navigation_snapshot (int target_planet,
-		UQM_NAVIGATION_SNAPSHOT *snapshot)
-{
-	POINT target;
-
-	if (snapshot == NULL)
-		return;
-	memset (snapshot, 0, sizeof (*snapshot));
-	snapshot->inner_planet = -1;
-
-	if (pSolarSysState == NULL || target_planet < 0
-			|| target_planet >= pSolarSysState->SunDesc[0].NumPlanets)
-		return;
-
-	snapshot->active = 1;
-	snapshot->ship_x = GLOBAL (ShipStamp.origin.x);
-	snapshot->ship_y = GLOBAL (ShipStamp.origin.y);
-	snapshot->ship_facing = GLOBAL (ShipStamp.frame)
-			? GetFrameIndex (GLOBAL (ShipStamp.frame)) : -1;
-	if (pSolarSysState->pOrbitalDesc != NULL)
-		snapshot->inner_planet = planetIndex (pSolarSysState,
-				pSolarSysState->pOrbitalDesc);
-
-	target = locationToDisplay (planetOuterLocation ((COUNT)target_planet),
-			pSolarSysState->SunDesc[0].radius);
-	snapshot->target_x = target.x;
-	snapshot->target_y = target.y;
-}
 QUEUE *
 rust_get_npc_built_ship_queue (void)
 {
@@ -281,15 +241,6 @@ QUEUE *
 rust_get_ip_group_queue (void)
 {
 	return &GLOBAL (ip_group_q);
-}
-
-void
-rust_prepare_starbase_commander_scene (void)
-{
-	SET_GAME_STATE (GLOBAL_FLAGS_AND_DATA, (BYTE)~0);
-	SET_GAME_STATE (STARBASE_AVAILABLE, 1);
-	SET_GAME_STATE (PROBE_ILWRATH_ENCOUNTER, 0);
-	SET_GAME_STATE (MOONBASE_ON_SHIP, 0);
 }
 
 // Starbase dispatch bridges for Rust (P16)

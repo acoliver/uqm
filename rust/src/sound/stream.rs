@@ -883,36 +883,6 @@ impl MixerPumpSource {
         let mut raw = vec![0u8; 4096];
         let _ = super::mixer::mix::mixer_mix_channels(&mut raw);
 
-        // Periodic diagnostic: log mixer state every ~500 calls (~12s at 44100 Hz)
-        static DIAG_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let count = DIAG_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if count < 5 || count.is_multiple_of(500) {
-            let freq = super::mixer::mix::mixer_get_frequency();
-            let fmt = super::mixer::mix::mixer_get_format();
-            let non_zero = raw.iter().position(|&b| b != 0);
-            let sources = super::mixer::source::get_all_sources();
-            let playing: Vec<_> = sources
-                .iter()
-                .filter_map(|(handle, src)| {
-                    let s = src.lock();
-                    if s.state == (super::mixer::types::SourceState::Playing as u32) {
-                        Some((*handle, s.next_queued, s.pos, s.gain))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            eprintln!(
-                "[mixer_pump_diag#{}] freq={} fmt={:?} nonzero={:?} total_sources={} playing={:?}",
-                count,
-                freq,
-                fmt,
-                non_zero,
-                sources.len(),
-                playing
-            );
-        }
-
         // Convert raw bytes to i16 samples
         self.buf.clear();
         for chunk in raw.chunks_exact(2) {
@@ -1097,8 +1067,6 @@ fn process_source_stream(source_index: usize, sample_arc: &Arc<Mutex<SoundSample
 
                     source.stream_should_be_playing = false;
                     deferred.push(DeferredCallback::EndStream);
-                } else {
-                    let _ = mixer_source::mixer_source_play(source.handle);
                 }
             }
             // Drop locks, execute deferred

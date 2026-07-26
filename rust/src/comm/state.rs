@@ -357,18 +357,6 @@ impl CommState {
 
     /// Set talking finished
     pub fn set_talking_finished(&mut self, finished: bool) {
-        if finished != self.talking_finished {
-            eprintln!(
-                "[DBG] set_talking_finished: {}->{}",
-                self.talking_finished, finished
-            );
-            if finished {
-                eprintln!(
-                    "  backtrace: {:?}",
-                    std::backtrace::Backtrace::force_capture()
-                );
-            }
-        }
         self.talking_finished = finished;
         if finished {
             self.talking = false;

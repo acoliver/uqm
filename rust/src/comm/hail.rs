@@ -46,8 +46,9 @@ pub(super) mod c_bridge {
         pub fn SetContext(ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
         pub fn SetContextFGFrame(frame: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
         pub fn SetContextClipRect(rect: *mut crate::comm::locdata::CRect);
-        #[allow(clashing_extern_declarations)]
-        pub fn SetContextBackGroundColor(r: c_int, g: c_int, b: c_int);
+        pub fn SetContextBackGroundColor(
+            color: crate::comm::locdata::CColor,
+        ) -> crate::comm::locdata::CColor;
         pub fn SetContextFont(font: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
         // comm.c static variable setters
@@ -57,16 +58,12 @@ pub(super) mod c_bridge {
 
         // Drawable management
         pub fn CreateDrawable(dtype: u8, w: i16, h: i16, nframes: u16) -> *mut std::ffi::c_void;
-        pub fn SetFrameTransparentColor(frame: *mut std::ffi::c_void, r: c_int, g: c_int, b: c_int);
-        pub fn ClearDrawable();
-        #[allow(clashing_extern_declarations)]
-        pub fn GetFrameRect(
+        pub fn SetFrameTransparentColor(
             frame: *mut std::ffi::c_void,
-            x: *mut c_int,
-            y: *mut c_int,
-            w: *mut c_int,
-            h: *mut c_int,
+            color: crate::comm::locdata::CColor,
         );
+        pub fn ClearDrawable();
+        pub fn GetFrameRect(frame: *mut std::ffi::c_void, rect: *mut std::ffi::c_void);
 
         // Graphics batching
         pub fn BatchGraphics();
@@ -78,12 +75,6 @@ pub(super) mod c_bridge {
         pub fn DrawSISFrame();
         pub fn DrawSISMessage(msg: *const c_char);
         pub fn DrawSISTitle(title: *const c_char);
-        // Graphics primitives needed by draw_sis_com_window
-        pub fn DrawFilledRectangle(rect: *mut crate::comm::locdata::CRect);
-        pub fn SetContextForeGroundColor(
-            color: crate::comm::locdata::CColor,
-        ) -> crate::comm::locdata::CColor;
-
         // Encounter loop — related externs (DoInput imported from c_extern)
         pub fn SetMenuSounds(sound_0: u16, sound_1: u16);
         pub fn c_SetCurInputState(state: *mut std::ffi::c_void);
@@ -176,56 +167,10 @@ unsafe fn is_starbase_conversation() -> bool {
     global_flags == 0xFF && starbase_available != 0
 }
 
-/// DrawSISComWindow — ported from c_DrawSISComWindow in rust_comm.c.
-///
-/// Draws the player's background area below the slider when the current
-/// activity is not WON_LAST_BATTLE. Uses C graphics primitives directly.
+/// Draw the player communication panel using the shared C-parity renderer.
 #[cfg(not(test))]
 unsafe fn draw_sis_com_window() {
-    // WON_LAST_BATTLE = 5 (globdata.h enum, 0-indexed)
-    let activity = crate::mainloop::ffi::get_current_activity().0 as u8;
-    if activity == 5 {
-        return;
-    }
-
-    // SLIDER_Y = 107, SLIDER_HEIGHT = 15 (comm.h)
-    let slider_y: i16 = 107;
-    let slider_height: i16 = 15;
-    let sis_screen_width: i16 = 320 - 14; // SPACE_WIDTH - 14
-    let sis_screen_height: i16 = 240 - 13; // SPACE_HEIGHT - 13
-
-    let old_context = c_bridge::SetContext(c_bridge::SpaceContext);
-
-    let mut rect = crate::comm::locdata::CRect {
-        corner: crate::comm::locdata::CPoint {
-            x: 0,
-            y: slider_y + slider_height,
-        },
-        width: sis_screen_width,
-        height: sis_screen_height - (slider_y + slider_height),
-    };
-
-    // COMM_PLAYER_BACKGROUND_COLOR = MAKE_RGB15(0, 0, 0x14)
-    // CC5TO8(0)=0, CC5TO8(0x14=20)=165. Color = {r:0, g:0, b:165, a:0}
-    let _bg_color = crate::comm::locdata::CColor {
-        r: 0,
-        g: 0,
-        b: 165,
-        a: 0,
-    };
-
-    // COMM_PLAYER_BACKGROUND_COLOR = MAKE_RGB15(0, 0, 0x14)
-    // CC5TO8(0)=0, CC5TO8(0x14=20)=165. Color = {r:0, g:0, b:165, a:0}
-    let bg_color = super::locdata::CColor {
-        r: 0,
-        g: 0,
-        b: 165,
-        a: 0,
-    };
-
-    c_bridge::SetContextForeGroundColor(bg_color);
-    c_bridge::DrawFilledRectangle(&mut rect as *mut _);
-    c_bridge::SetContext(old_context);
+    super::sis_graphics::draw_sis_com_window();
 }
 
 /// Get the planet name from GlobData.SIS_state.PlanetName.
@@ -373,9 +318,15 @@ pub unsafe fn hail_alien() {
         SetContext(text_cache_ctx);
         SetContextFGFrame(text_cache_frame);
         // TextBack = BUILD_COLOR(MAKE_RGB15(0x00, 0x00, 0x10), 0x00)
-        SetContextBackGroundColor(0x00, 0x00, 0x10);
+        let text_back = crate::comm::locdata::CColor {
+            r: 0,
+            g: 0,
+            b: (0x10 << 3) | (0x10 >> 2),
+            a: 0xff,
+        };
+        SetContextBackGroundColor(text_back);
         ClearDrawable();
-        SetFrameTransparentColor(text_cache_frame, 0x00, 0x00, 0x10);
+        SetFrameTransparentColor(text_cache_frame, text_back);
 
         // ----------------------------------------------------------------
         // Step 6: Clear phrase buffer
@@ -399,19 +350,13 @@ pub unsafe fn hail_alien() {
         let screen = unsafe { Screen };
         SetContextFGFrame(screen);
 
-        let mut _frame_x: i32 = 0;
-        let mut _frame_y: i32 = 0;
-        let mut _frame_w: i32 = 0;
-        let mut frame_h: i32 = 0;
+        let mut frame_rect = crate::comm::locdata::CRect::default();
         GetFrameRect(
             alien_frame,
-            ptr::addr_of_mut!(_frame_x),
-            ptr::addr_of_mut!(_frame_y),
-            ptr::addr_of_mut!(_frame_w),
-            ptr::addr_of_mut!(frame_h),
+            ptr::addr_of_mut!(frame_rect).cast::<std::ffi::c_void>(),
         );
 
-        // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_h }
+        // CommWndRect.extent = { SIS_SCREEN_WIDTH, frame_rect.height }
         // CommWndRect.corner stays at its current value for WON_LAST_BATTLE
         let wnd_x = unsafe { c_bridge::CommWndRect.corner.x as i32 };
         let wnd_y = unsafe { c_bridge::CommWndRect.corner.y as i32 };
@@ -419,7 +364,7 @@ pub unsafe fn hail_alien() {
             c_bridge::CommWndRect.corner.x = wnd_x as i16;
             c_bridge::CommWndRect.corner.y = wnd_y as i16;
             c_bridge::CommWndRect.width = sis_w as i16;
-            c_bridge::CommWndRect.height = frame_h as i16;
+            c_bridge::CommWndRect.height = frame_rect.height;
         }
 
         // ----------------------------------------------------------------
@@ -499,7 +444,9 @@ pub unsafe fn hail_alien() {
                 use crate::mainloop::restart_menu::c_extern::DoInput;
                 c_bridge::c_SetCurInputState(&mut es as *mut _ as *mut std::ffi::c_void);
                 c_bridge::SetMenuSounds(MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT);
+                crate::automation::ui_observation::begin_communication();
                 DoInput(&mut es as *mut _ as *mut std::ffi::c_void, 0);
+                crate::automation::ui_observation::complete_communication();
                 c_bridge::c_SetCurInputState(std::ptr::null_mut());
             }
         }

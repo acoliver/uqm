@@ -97,10 +97,10 @@ impl Default for SummaryLoopState {
 const WON_LAST_BATTLE: u8 = 5;
 const SLIDER_Y: i16 = 107;
 const SLIDER_HEIGHT: i16 = 15;
-const SIS_SCREEN_WIDTH: i16 = 306; // 320 - 14
+const SIS_SCREEN_WIDTH: i16 = 242; // 320 - STATUS_WIDTH(64) - 14
 const SIS_SCREEN_HEIGHT: i16 = 227; // 240 - 13
 #[cfg(not(test))]
-const TEXT_X_OFFS: i16 = 7; // SIS_ORG_X
+const TEXT_X_OFFS: i16 = 1; // comm.h
 #[cfg(not(test))]
 const PLAYER_TEXT_WIDTH: i16 = SIS_SCREEN_WIDTH - 8 - (TEXT_X_OFFS << 2);
 #[cfg(not(test))]
@@ -177,7 +177,7 @@ mod c_bridge {
         pub fn UnbatchGraphics();
 
         // Font/resource management
-        pub fn LoadFont(font_ref: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+        pub fn LoadGraphicInstance(resource: *const std::ffi::c_char) -> *mut std::ffi::c_void;
         pub fn DestroyFont(font: *mut std::ffi::c_void) -> std::ffi::c_int;
         pub fn SetAbsFrameIndex(frame: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
 
@@ -208,9 +208,9 @@ mod c_bridge {
         ) -> std::ffi::c_int;
 
         // Trackplayer subtitle functions (trackplayer.c)
-        pub fn c_GetFirstTrackSubtitle() -> *mut std::ffi::c_void;
-        pub fn c_GetNextTrackSubtitle(last: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
-        pub fn c_GetTrackSubtitleText(sub: *mut std::ffi::c_void) -> *const std::ffi::c_char;
+        pub fn GetFirstTrackSubtitle() -> *mut std::ffi::c_void;
+        pub fn GetNextTrackSubtitle(last: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+        pub fn GetTrackSubtitleText(sub: *mut std::ffi::c_void) -> *const std::ffi::c_char;
         pub fn comm_ClearSubtitles();
     }
 }
@@ -244,7 +244,7 @@ unsafe extern "C" fn do_summary_page_cb(state: *mut SummaryLoopState) -> std::ff
 
     if pss.initialized == 0 {
         pss.print_next = 1;
-        pss.next_sub = c_bridge::c_GetFirstTrackSubtitle();
+        pss.next_sub = c_bridge::GetFirstTrackSubtitle();
         pss.left_over = std::ptr::null();
         pss.initialized = 1;
         pss.input_func = Some(do_summary_page_cb);
@@ -306,9 +306,9 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
             t.p_str = pss.left_over;
             pss.left_over = std::ptr::null();
         } else {
-            t.p_str = c_bridge::c_GetTrackSubtitleText(pss.next_sub);
+            t.p_str = c_bridge::GetTrackSubtitleText(pss.next_sub);
             if t.p_str.is_null() {
-                pss.next_sub = c_bridge::c_GetNextTrackSubtitle(pss.next_sub);
+                pss.next_sub = c_bridge::GetNextTrackSubtitle(pss.next_sub);
                 continue;
             }
         }
@@ -332,7 +332,7 @@ unsafe fn draw_summary_page_contents(pss: &mut SummaryLoopState) {
         c_bridge::font_DrawText(&mut t);
         t.baseline.y += DELTA_Y_SUMMARY;
         row += 1;
-        pss.next_sub = c_bridge::c_GetNextTrackSubtitle(pss.next_sub);
+        pss.next_sub = c_bridge::GetNextTrackSubtitle(pss.next_sub);
     }
 
     if row >= MAX_SUMM_ROWS && (!pss.next_sub.is_null() || !pss.left_over.is_null()) {
@@ -474,7 +474,8 @@ pub unsafe fn feedback_player_phrase(text: *const std::ffi::c_char) {
     draw_sis_com_window();
 
     if !text.is_null() && *text != 0 {
-        let player_font = c_bridge::LoadFont(PLAYER_FONT_STR.as_ptr() as *const std::ffi::c_char);
+        let player_font =
+            c_bridge::LoadGraphicInstance(PLAYER_FONT_STR.as_ptr() as *const std::ffi::c_char);
         let old_font = c_bridge::SetContextFont(player_font);
 
         let mut ct = CText::default();
@@ -530,7 +531,8 @@ pub unsafe fn refresh_responses(top: u8, num_responses: u8, cur_response: u8) {
     LAST_CUR_RESPONSE = cur_response;
 
     let old_ctx = c_bridge::SetContext(c_bridge::SpaceContext);
-    let player_font = c_bridge::LoadFont(PLAYER_FONT_STR.as_ptr() as *const std::ffi::c_char);
+    let player_font =
+        c_bridge::LoadGraphicInstance(PLAYER_FONT_STR.as_ptr() as *const std::ffi::c_char);
     let old_font = c_bridge::SetContextFont(player_font);
 
     let mut leading: i16 = 0;
@@ -663,7 +665,7 @@ pub unsafe fn select_conversation_summary() {
 #[cfg(not(test))]
 unsafe fn do_summary_page(state: &mut SummaryLoopState) {
     state.print_next = 1;
-    state.next_sub = c_bridge::c_GetFirstTrackSubtitle();
+    state.next_sub = c_bridge::GetFirstTrackSubtitle();
     state.left_over = std::ptr::null();
     state.initialized = 1;
     state.input_func = Some(do_summary_page_cb);
@@ -702,7 +704,7 @@ mod tests {
         assert_eq!(WON_LAST_BATTLE, 5);
         assert_eq!(SLIDER_Y, 107);
         assert_eq!(SLIDER_HEIGHT, 15);
-        assert_eq!(SIS_SCREEN_WIDTH, 306);
+        assert_eq!(SIS_SCREEN_WIDTH, 242);
         assert_eq!(SIS_SCREEN_HEIGHT, 227);
         assert_eq!(CHECK_ABORT, 0x4000);
         assert_eq!(ONE_SECOND, 840);
