@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "name": "real-sol-commander-completion",
+  "budgets": {
+    "max_input_ticks": 22000,
+    "max_presentations": 24000,
+    "max_wallclock_seconds": 600
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "wait_input_ticks", "count": 20},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "navigate_to_planet", "planet": 2, "max_ticks": 1800},
+    {"action": "wait_input_ticks", "count": 200},
+    {"action": "assert_dispatch", "encounter": 24, "dialogue": 18},
+    {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 9000},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
+    {"action": "navigate_to_moon", "planet": 2, "moon": 0, "max_ticks": 2000},
+    {"action": "wait_for_dispatch", "encounter": 2, "dialogue": 2, "max_ticks": 2000},
+    {"action": "wait_input_ticks", "count": 120},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 15},
+    {"action": "assert_communication_responses", "minimum": 3},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 20},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 20},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 20},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 20},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 20},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 15},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 60},
+    {"action": "capture", "label": "real-commander-completed"},
+    {"action": "finish"}
+  ]
+}

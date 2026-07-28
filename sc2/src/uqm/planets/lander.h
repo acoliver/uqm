@@ -61,18 +61,13 @@ typedef struct
 
 extern MUSIC_REF LanderMusic;
 
-extern void PlanetSide (POINT planetLoc);
 extern void DoDiscoveryReport (SOUND ReadOutSounds);
 extern void SetPlanetMusic (BYTE planet_type);
 extern void LoadLanderData (void);
 extern void FreeLanderData (void);
 
-extern void object_animation (ELEMENT *ElementPtr);
-
 extern void SetLanderTakeoff (void);
 extern bool KillLanderCrewSeq (COUNT numKilled, DWORD period);
-
-extern unsigned GetThermalHazardRating (int temp);
 
 // ELEMENT.playerNr constants
 enum

@@ -4,7 +4,53 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 static GAME_OPTIONS_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_RESPONSE_COUNT: AtomicUsize = AtomicUsize::new(0);
+static COMMUNICATION_RESPONSE_GENERATION: AtomicU64 = AtomicU64::new(0);
+static COMMUNICATION_RESPONSES_READY: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+static PLANET_MENU_PHASE: AtomicUsize = AtomicUsize::new(0);
+static PLANET_MENU_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// Production planet-menu phases exposed to semantic automation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+pub enum PlanetMenuPhase {
+    Inactive = 0,
+    Orbit = 1,
+    AutoScan = 2,
+    Dispatch = 3,
+    LandingSite = 4,
+}
+
+/// Record the current production planet-menu phase.
+#[no_mangle]
+pub extern "C" fn rust_automation_observe_planet_menu(phase: usize) {
+    let previous = PLANET_MENU_PHASE.swap(phase, Ordering::AcqRel);
+    if phase != PlanetMenuPhase::Inactive as usize && previous != phase {
+        PLANET_MENU_GENERATION.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+/// Return the current production planet-menu generation and phase.
+#[must_use]
+pub fn planet_menu_observation() -> (u64, PlanetMenuPhase) {
+    (
+        PLANET_MENU_GENERATION.load(Ordering::Acquire),
+        planet_menu_phase(),
+    )
+}
+
+/// Return the current production planet-menu phase.
+#[must_use]
+pub fn planet_menu_phase() -> PlanetMenuPhase {
+    match PLANET_MENU_PHASE.load(Ordering::Acquire) {
+        1 => PlanetMenuPhase::Orbit,
+        2 => PlanetMenuPhase::AutoScan,
+        3 => PlanetMenuPhase::Dispatch,
+        4 => PlanetMenuPhase::LandingSite,
+        _ => PlanetMenuPhase::Inactive,
+    }
+}
+
 static COMMUNICATION_COMPLETIONS: AtomicU64 = AtomicU64::new(0);
 
 /// Record entry to or exit from the production Game Options input loop.
@@ -15,17 +61,37 @@ pub extern "C" fn rust_automation_observe_game_options(active: i32) {
 
 /// Record the number of response choices in the current communication frame.
 pub fn observe_communication_responses(count: usize) {
-    COMMUNICATION_RESPONSE_COUNT.store(count, Ordering::Release);
+    let previous = COMMUNICATION_RESPONSE_COUNT.swap(count, Ordering::AcqRel);
+    if count > 0 && previous == 0 {
+        COMMUNICATION_RESPONSE_GENERATION.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+/// Current response-list generation and number of choices.
+#[must_use]
+pub fn communication_responses() -> (u64, usize, bool) {
+    (
+        COMMUNICATION_RESPONSE_GENERATION.load(Ordering::Acquire),
+        COMMUNICATION_RESPONSE_COUNT.load(Ordering::Acquire),
+        COMMUNICATION_RESPONSES_READY.load(Ordering::Acquire),
+    )
+}
+
+/// Record whether the production response phase can accept Select input.
+pub fn set_communication_responses_ready(ready: bool) {
+    COMMUNICATION_RESPONSES_READY.store(ready, Ordering::Release);
 }
 
 /// Record entry into a production communication input loop.
 pub fn begin_communication() {
     COMMUNICATION_RESPONSE_COUNT.store(0, Ordering::Release);
+    COMMUNICATION_RESPONSES_READY.store(false, Ordering::Release);
     COMMUNICATION_ACTIVE.store(true, Ordering::Release);
 }
 
 /// Record normal return from a production communication input loop.
 pub fn complete_communication() {
+    COMMUNICATION_RESPONSES_READY.store(false, Ordering::Release);
     COMMUNICATION_ACTIVE.store(false, Ordering::Release);
     COMMUNICATION_COMPLETIONS.fetch_add(1, Ordering::AcqRel);
 }
@@ -82,10 +148,39 @@ mod tests {
 
     #[test]
     fn response_observation_requires_the_requested_minimum() {
+        observe_communication_responses(0);
+        let (before, _, _) = communication_responses();
         observe_communication_responses(3);
+        assert_eq!(communication_responses(), (before + 1, 3, false));
         assert_eq!(verify_communication_responses(2), Ok(3));
         assert!(verify_communication_responses(4).is_err());
+        observe_communication_responses(2);
+        assert_eq!(communication_responses(), (before + 1, 2, false));
+        set_communication_responses_ready(true);
+        assert_eq!(communication_responses(), (before + 1, 2, true));
         observe_communication_responses(0);
+        set_communication_responses_ready(false);
+    }
+
+    #[test]
+    fn planet_menu_observation_requires_a_new_active_phase() {
+        rust_automation_observe_planet_menu(PlanetMenuPhase::Inactive as usize);
+        let (before, _) = planet_menu_observation();
+        rust_automation_observe_planet_menu(PlanetMenuPhase::Orbit as usize);
+        assert_eq!(
+            planet_menu_observation(),
+            (before + 1, PlanetMenuPhase::Orbit)
+        );
+        rust_automation_observe_planet_menu(PlanetMenuPhase::Orbit as usize);
+        assert_eq!(
+            planet_menu_observation(),
+            (before + 1, PlanetMenuPhase::Orbit)
+        );
+        rust_automation_observe_planet_menu(PlanetMenuPhase::Inactive as usize);
+        assert_eq!(
+            planet_menu_observation(),
+            (before + 1, PlanetMenuPhase::Inactive)
+        );
     }
 
     #[test]

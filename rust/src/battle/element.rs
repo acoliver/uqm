@@ -944,4 +944,19 @@ mod tests {
         assert_eq!(end.x, 30);
         assert_eq!(end.y, 40);
     }
+
+    #[test]
+    fn element_layout_matches_c_abi() {
+        assert_eq!(std::mem::size_of::<Element>(), 176);
+        assert_eq!(std::mem::offset_of!(Element, preprocess_func), 16);
+        assert_eq!(std::mem::offset_of!(Element, player_nr), 48);
+        assert_eq!(std::mem::offset_of!(Element, state_flags), 50);
+        assert_eq!(std::mem::offset_of!(Element, life_span), 52);
+        assert_eq!(std::mem::offset_of!(Element, crew_or_hp), 54);
+        assert_eq!(std::mem::offset_of!(Element, prim_index), 104);
+        assert_eq!(std::mem::offset_of!(Element, current), 112);
+        assert_eq!(std::mem::offset_of!(Element, next), 136);
+        assert_eq!(std::mem::offset_of!(Element, p_parent), 160);
+        assert_eq!(std::mem::offset_of!(Element, h_target), 168);
+    }
 }

@@ -376,6 +376,38 @@ pub struct NavigateToMoonStep {
     pub max_ticks: u64,
 }
 
+/// A `navigate_to_orbit` step targets the planet itself from its inner system.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NavigateToOrbitStep {
+    pub planet: u8,
+    pub max_ticks: u64,
+}
+
+/// Wait until a Rust PlanetSide session has started.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForPlanetSideStartStep {
+    pub max_ticks: u64,
+}
+
+/// Select once when the requested production planet-menu phase is active.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SelectPlanetMenuStep {
+    pub phase: PlanetMenuPhaseName,
+    pub max_ticks: u64,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanetMenuPhaseName {
+    Orbit,
+    AutoScan,
+    Dispatch,
+    LandingSite,
+}
+
 /// An `assert_scene` step verifies the expected deterministic scene dispatch chain.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -412,6 +444,14 @@ pub struct CommunicationResponsesAssertion {
     pub minimum: usize,
 }
 
+/// Wait for a fresh communication response list before selecting its first entry.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SelectCommunicationResponseStep {
+    pub index: usize,
+    pub max_ticks: u64,
+}
+
 /// Wait for at least `minimum_completions` communication loops to return naturally.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -436,6 +476,9 @@ pub enum Action {
     TapPlayerKey(TapPlayerKeyStep),
     NavigateToPlanet(NavigateToPlanetStep),
     NavigateToMoon(NavigateToMoonStep),
+    NavigateToOrbit(NavigateToOrbitStep),
+    WaitForPlanetSideStart(WaitForPlanetSideStartStep),
+    SelectPlanetMenu(SelectPlanetMenuStep),
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
     AssertScene(SceneAssertion),
@@ -443,6 +486,7 @@ pub enum Action {
     WaitForDispatch(WaitForDispatchStep),
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
+    SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     Finish,
@@ -1043,6 +1087,31 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         ),
                     })?;
             }
+            Action::SelectCommunicationResponse(select) => {
+                if select.index >= 8 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "select_communication_response index must be 0..=7",
+                    ));
+                }
+                if select.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "select_communication_response max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(select.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            select.max_ticks
+                        ),
+                    })?;
+            }
             Action::WaitForCommunicationEnd(wait) => {
                 if wait.minimum_completions == 0 {
                     return Err(AutomationError::step(
@@ -1093,6 +1162,60 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         reason: format!(
                             "required input ticks overflow at step {i}: max_ticks={}",
                             navigation.max_ticks
+                        ),
+                    })?;
+            }
+            Action::NavigateToOrbit(navigation) => {
+                if navigation.planet > 8 || navigation.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "navigate_to_orbit requires planet 0..=8 and positive max_ticks",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(navigation.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            navigation.max_ticks
+                        ),
+                    })?;
+            }
+            Action::WaitForPlanetSideStart(wait) => {
+                if wait.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_for_planet_side_start max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(wait.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            wait.max_ticks
+                        ),
+                    })?;
+            }
+            Action::SelectPlanetMenu(select) => {
+                if select.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "select_planet_menu max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(select.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            select.max_ticks
                         ),
                     })?;
             }
@@ -1397,10 +1520,13 @@ mod tests {
         let txt = r#"{
             "version":1,
             "name":"real-path-actions",
-            "budgets":{"max_input_ticks":35,"max_presentations":1,"max_wallclock_seconds":60},
+            "budgets":{"max_input_ticks":65,"max_presentations":1,"max_wallclock_seconds":60},
             "steps":[
                 {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
+                {"action":"select_communication_response","index":0,"max_ticks":10},
                 {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
+                {"action":"navigate_to_orbit","planet":3,"max_ticks":10},
+                {"action":"wait_for_planet_side_start","max_ticks":10},
                 {"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":10},
                 {"action":"finish"}
             ]
@@ -1414,11 +1540,20 @@ mod tests {
                     minimum_completions: 1,
                     max_ticks: 10
                 }),
+                Action::SelectCommunicationResponse(SelectCommunicationResponseStep {
+                    index: 0,
+                    max_ticks: 10
+                }),
                 Action::NavigateToMoon(NavigateToMoonStep {
                     planet: 2,
                     moon: 0,
                     max_ticks: 10
                 }),
+                Action::NavigateToOrbit(NavigateToOrbitStep {
+                    planet: 3,
+                    max_ticks: 10
+                }),
+                Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
                 Action::WaitForDispatch(WaitForDispatchStep {
                     encounter: 2,
                     dialogue: 2,
@@ -1433,6 +1568,7 @@ mod tests {
     fn rejects_zero_budgets_for_real_gameplay_waits() {
         for action in [
             r#"{"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":0}"#,
+            r#"{"action":"select_communication_response","index":0,"max_ticks":0}"#,
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
         ] {

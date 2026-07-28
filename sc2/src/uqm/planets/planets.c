@@ -17,6 +17,7 @@
  */
 
 #include "planets.h"
+extern void rust_automation_observe_planet_menu (size_t phase);
 
 #include "scan.h"
 #include "lander.h"
@@ -234,6 +235,12 @@ DrawOrbitalDisplay (DRAW_ORBITAL_MODE Mode)
 
 	// for later RepairBackRect()
 	LoadIntoExtraScreen (&r);
+}
+
+void
+RedrawPlanetOrbitDisplay (void)
+{
+	DrawOrbitalDisplay (DRAW_ORBITAL_FULL);
 }
 
 // Initialise the surface graphics, and start the planet music.
@@ -473,8 +480,10 @@ PlanetOrbitMenu (void)
 	SetMenuSounds (MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
 	oldCallback = SetInputCallback (on_input_frame);
 
+	rust_automation_observe_planet_menu (1);
 	MenuState.InputFunc = DoPlanetOrbit;
 	DoInput (&MenuState, TRUE);
+	rust_automation_observe_planet_menu (0);
 
 	SetInputCallback (oldCallback);
 

@@ -537,7 +537,8 @@ pub unsafe fn hail_alien() {
         unsafe { c_bridge::CommData.conversation_phrases = std::ptr::null_mut() };
         // Clear Rust-side comm_data (resources already destroyed above)
         super::state::COMM_STATE.write().clear_comm_data();
-        // pCurInputState was already cleared by c_RunEncounterDoInput
+        // pCurInputState was already cleared by c_RunEncounterDoInput.
+        crate::automation::coordinator::Coordinator::service_communication_completion_boundary();
     }
 }
 

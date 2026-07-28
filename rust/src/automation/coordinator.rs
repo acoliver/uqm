@@ -41,6 +41,10 @@ use std::time::{Duration, Instant};
 /// activated, accessed via FFI hooks from the C game loop.
 static COORDINATOR: OnceLock<Coordinator> = OnceLock::new();
 
+/// Maximum number of script steps ahead of the current step that semantic
+/// communication actions may lookahead. Bounded to keep the search cheap
+/// and avoid scanning past unrelated actions.
+const SEMANTIC_LOOKAHEAD: usize = 4;
 /// Mutable inner state, protected by a Mutex. In RUST_OWNS_MAIN mode this
 /// is effectively uncontended (single-threaded), but the Mutex ensures
 /// memory safety and Sync-ness.
@@ -61,10 +65,18 @@ struct CoordInner {
     armed_capture_label: Option<String>,
     /// Declarative start scene, consumed once at the game-initialized boundary.
     pending_start_scene: PendingStartScene,
-    /// Completion counter captured when entering a communication wait action.
-    communication_wait_baseline: Option<(usize, u64)>,
+    /// Most recent communication completion consumed by a completion wait.
+    consumed_communication_completions: u64,
     /// Most recent dispatch generation consumed by a dispatch wait.
     consumed_dispatch_generation: u64,
+    /// Most recent communication response generation selected semantically.
+    consumed_response_generation: u64,
+    /// Most recent planet-menu generation selected semantically.
+    consumed_planet_menu_generation: u64,
+    /// Require one callback after orbit navigation before accepting menu ownership.
+    orbit_transition_pending: bool,
+    /// Release a semantically injected Select key on the next callback.
+    release_semantic_select: bool,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -113,13 +125,8 @@ impl Coordinator {
         // Activate the runtime.
         runtime.activate();
 
-        let communication_wait_baseline =
-            if matches!(actions.first(), Some(Action::WaitForCommunicationEnd(_))) {
-                let (_, completions) = crate::automation::ui_observation::communication_lifecycle();
-                Some((0, completions))
-            } else {
-                None
-            };
+        let (_, consumed_communication_completions) =
+            crate::automation::ui_observation::communication_lifecycle();
 
         let coord = Coordinator {
             actions,
@@ -139,8 +146,12 @@ impl Coordinator {
                 pending_transitions: Vec::new(),
                 armed_capture_label: None,
                 pending_start_scene: PendingStartScene::new(start_scene),
-                communication_wait_baseline,
+                consumed_communication_completions,
                 consumed_dispatch_generation: 0,
+                consumed_response_generation: 0,
+                consumed_planet_menu_generation: 0,
+                release_semantic_select: false,
+                orbit_transition_pending: false,
             }),
         };
 
@@ -227,12 +238,126 @@ impl Coordinator {
         coord.process_input_inner()
     }
 
+    /// Whether the current semantic response action is waiting for NPC speech
+    /// to finish before its pending response list can become selectable.
+    #[must_use]
+    pub fn should_skip_pending_communication_speech() -> bool {
+        let Some(coord) = Self::get() else {
+            return false;
+        };
+        let inner = coord.inner.lock();
+        let Some(Action::SelectCommunicationResponse(select)) =
+            coord.actions.get(inner.sched_state.step_index)
+        else {
+            return false;
+        };
+        let (generation, count, ready) =
+            crate::automation::ui_observation::communication_responses();
+        generation > inner.consumed_response_generation && count > select.index && !ready
+    }
+
+    /// Report whether a response action later in the current synchronous
+    /// prerequisite chain targets the pending communication list.
+    #[must_use]
+    pub fn pending_communication_response_action(response_count: usize) -> bool {
+        let Some(coord) = Self::get() else {
+            return false;
+        };
+        if response_count == 0 {
+            return false;
+        }
+        let inner = coord.inner.lock();
+        coord
+            .actions
+            .get(inner.sched_state.step_index..)
+            .unwrap_or_default()
+            .iter()
+            .take(SEMANTIC_LOOKAHEAD)
+            .any(|action| {
+                matches!(action, Action::SelectCommunicationResponse(select) if response_count > select.index)
+            })
+    }
+
+    /// Whether automation is waiting for this communication to close and can
+    /// therefore skip its final NPC speech segment.
+    #[must_use]
+    pub fn should_skip_communication_closing_speech() -> bool {
+        let Some(coord) = Self::get() else {
+            return false;
+        };
+        let inner = coord.inner.lock();
+        coord
+            .actions
+            .get(inner.sched_state.step_index..)
+            .unwrap_or_default()
+            .iter()
+            .take(SEMANTIC_LOOKAHEAD)
+            .any(|action| matches!(action, Action::WaitForCommunicationEnd(_)))
+    }
+
+    /// Advance one scheduler callback at a synchronous boundary and report
+    /// whether a pending semantic response action now requires speech skipping.
+    #[must_use]
+    pub fn service_and_should_skip_pending_communication_speech() -> bool {
+        for _ in 0..4 {
+            if Self::should_skip_pending_communication_speech() {
+                return true;
+            }
+
+            let Some(coord) = Self::get() else {
+                return false;
+            };
+            let before = coord.inner.lock().sched_state.step_index;
+            if coord.process_input_inner() {
+                return false;
+            }
+            if Self::should_skip_pending_communication_speech() {
+                return true;
+            }
+            let after = coord.inner.lock().sched_state.step_index;
+            if after == before {
+                return false;
+            }
+        }
+        false
+    }
+
+    /// Consume an already-observed communication completion after hail teardown
+    /// and expose the next action before returning to the outer game loop.
+    pub fn service_communication_completion_boundary() -> bool {
+        for _ in 0..2 {
+            let Some(coord) = Self::get() else {
+                return false;
+            };
+            let before = coord.inner.lock().sched_state.step_index;
+            if coord.process_input_inner() {
+                return true;
+            }
+            let after = coord.inner.lock().sched_state.step_index;
+            if after == before {
+                break;
+            }
+        }
+        false
+    }
+
     fn process_input_inner(&self) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
             return true;
         }
+
+        let released_semantic_select = inner.release_semantic_select;
+        if released_semantic_select {
+            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                i32::from(crate::automation::script::MenuKey::Select.index()),
+                0,
+            );
+            inner.release_semantic_select = false;
+        }
+        let orbit_transition_pending = inner.orbit_transition_pending;
+        inner.orbit_transition_pending = false;
 
         let now = Instant::now();
         let elapsed = now.duration_since(self.started_at);
@@ -382,23 +507,100 @@ impl Coordinator {
         {
             let (active, completions) =
                 crate::automation::ui_observation::communication_lifecycle();
-            let baseline = match inner.communication_wait_baseline {
-                Some((step, baseline)) if step == inner.sched_state.step_index => baseline,
-                _ => {
-                    inner.communication_wait_baseline =
-                        Some((inner.sched_state.step_index, completions));
-                    completions
-                }
-            };
-            let target = baseline.saturating_add(wait.minimum_completions);
+            let target = inner
+                .consumed_communication_completions
+                .saturating_add(wait.minimum_completions);
             if !active && completions >= target {
+                inner.consumed_communication_completions = completions;
                 scheduler_event = SchedulerEvent::ConditionReached;
                 self.write_trace_labeled(
                     &mut inner,
                     RecordKind::SemanticAssertion,
                     format!(
-                        "communication_completed:count={completions}:baseline={baseline}:minimum={}",
+                        "communication_completed:count={completions}:minimum={}",
                         wait.minimum_completions
+                    ),
+                );
+            }
+        } else if let Some(Action::SelectCommunicationResponse(select)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let (generation, count, ready) =
+                crate::automation::ui_observation::communication_responses();
+            if !released_semantic_select
+                && generation > inner.consumed_response_generation
+                && count > select.index
+            {
+                if ready {
+                    crate::comm::ffi::rust_SelectResponseIndex(select.index as i32);
+                    crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                        i32::from(crate::automation::script::MenuKey::Select.index()),
+                        1,
+                    );
+                    inner.release_semantic_select = true;
+                    inner.consumed_response_generation = generation;
+                    scheduler_event = SchedulerEvent::ConditionReached;
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        format!(
+                            "communication_response_selected:generation={generation}:count={count}:index={}",
+                            select.index
+                        ),
+                    );
+                } else {
+                    let _ = crate::sound::trackplayer::jump_track(0);
+                }
+            }
+        } else if let Some(Action::SelectPlanetMenu(select)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            use crate::automation::script::PlanetMenuPhaseName;
+            use crate::automation::ui_observation::PlanetMenuPhase;
+            let expected = match select.phase {
+                PlanetMenuPhaseName::Orbit => PlanetMenuPhase::Orbit,
+                PlanetMenuPhaseName::AutoScan => PlanetMenuPhase::AutoScan,
+                PlanetMenuPhaseName::Dispatch => PlanetMenuPhase::Dispatch,
+                PlanetMenuPhaseName::LandingSite => PlanetMenuPhase::LandingSite,
+            };
+            let (generation, phase) = crate::automation::ui_observation::planet_menu_observation();
+            if !released_semantic_select
+                && !orbit_transition_pending
+                && generation > inner.consumed_planet_menu_generation
+                && phase == expected
+            {
+                crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                    i32::from(crate::automation::script::MenuKey::Select.index()),
+                    1,
+                );
+                inner.release_semantic_select = true;
+                inner.consumed_planet_menu_generation = generation;
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_menu_selected:generation={generation}:phase={:?}",
+                        select.phase
+                    ),
+                );
+            }
+        } else if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::WaitForPlanetSideStart(_))
+        ) {
+            let observation = crate::planet_side::telemetry::observation();
+            if observation.active {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_started:generation={}:crew={}:position={},{}",
+                        observation.generation,
+                        observation.start_crew,
+                        observation.start_x,
+                        observation.start_y
                     ),
                 );
             }
@@ -438,6 +640,7 @@ impl Coordinator {
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: u8::try_from(snapshot.inner_planet).ok(),
+                    in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
@@ -458,6 +661,43 @@ impl Coordinator {
             } else {
                 Self::set_navigation_controls(control);
             }
+        } else if let Some(Action::NavigateToOrbit(navigation)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let snapshot = crate::automation::input_ffi::navigation_snapshot(
+                i32::from(navigation.planet),
+                None,
+            );
+            let reached = snapshot.active != 0
+                && snapshot.in_orbit != 0
+                && snapshot.inner_planet == i32::from(navigation.planet)
+                && snapshot.orbital_moon < 0;
+            let control = crate::automation::navigation::steer_toward_target(
+                crate::automation::navigation::NavigationObservation {
+                    active: snapshot.active != 0,
+                    inner_planet: None,
+                    in_orbit: false,
+                    ship_x: snapshot.ship_x,
+                    ship_y: snapshot.ship_y,
+                    ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
+                    target_x: snapshot.target_x,
+                    target_y: snapshot.target_y,
+                },
+            );
+            if reached {
+                Self::set_navigation_controls(
+                    crate::automation::navigation::NavigationControl::default(),
+                );
+                inner.orbit_transition_pending = true;
+                scheduler_event = SchedulerEvent::NavigationReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!("orbit_reached:planet={}", navigation.planet),
+                );
+            } else {
+                Self::set_navigation_controls(control);
+            }
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -474,6 +714,7 @@ impl Coordinator {
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: None,
+                    in_orbit: snapshot.in_orbit != 0,
                     ship_x: snapshot.ship_x,
                     ship_y: snapshot.ship_y,
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
@@ -507,10 +748,7 @@ impl Coordinator {
             transitions: &self.transitions,
         };
         let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
-
-        let previous_step = inner.sched_state.step_index;
         inner.sched_state = transition.new_state;
-        self.record_action_entry(&mut inner, previous_step);
 
         // Step 3: Apply effects.
         self.apply_effects(&mut inner, &transition.effects);
@@ -536,9 +774,7 @@ impl Coordinator {
                     &config2,
                     SchedulerEvent::MenuTransition { to },
                 );
-                let previous_step = inner.sched_state.step_index;
                 inner.sched_state = t2.new_state;
-                self.record_action_entry(&mut inner, previous_step);
                 self.write_trace(&mut inner, RecordKind::MenuTransition);
                 if inner.sched_state.is_terminal() {
                     break;
@@ -638,10 +874,8 @@ impl Coordinator {
                 generation: CaptureGeneration(generation),
             },
         );
-
-        let previous_step = inner.sched_state.step_index;
         inner.sched_state = transition.new_state;
-        self.record_action_entry(&mut inner, previous_step);
+
         self.apply_effects(&mut inner, &transition.effects);
 
         self.write_trace(&mut inner, RecordKind::Presentation);
@@ -702,9 +936,7 @@ impl Coordinator {
                 &config,
                 SchedulerEvent::MenuTransition { to },
             );
-            let previous_step = inner.sched_state.step_index;
             inner.sched_state = transition.new_state;
-            self.record_action_entry(&mut inner, previous_step);
 
             self.write_trace(&mut inner, RecordKind::MenuTransition);
 
@@ -800,20 +1032,6 @@ impl Coordinator {
     // -----------------------------------------------------------------------
     //  Internal helpers
     // -----------------------------------------------------------------------
-    fn record_action_entry(&self, inner: &mut CoordInner, previous_step: usize) {
-        if inner.sched_state.step_index == previous_step {
-            return;
-        }
-        inner.communication_wait_baseline = None;
-        if matches!(
-            self.actions.get(inner.sched_state.step_index),
-            Some(Action::WaitForCommunicationEnd(_))
-        ) {
-            let (_, completions) = crate::automation::ui_observation::communication_lifecycle();
-            inner.communication_wait_baseline = Some((inner.sched_state.step_index, completions));
-        }
-    }
-
     /// Set a terminal outcome on both the coordinator and the runtime mirror.
     /// Also propagates the stop to the game loop by setting CHECK_ABORT
     /// and MainExited to force the game loop to exit.
@@ -841,6 +1059,7 @@ impl Coordinator {
             (PlayerKey::Thrust, control.thrust),
             (PlayerKey::Left, control.left),
             (PlayerKey::Right, control.right),
+            (PlayerKey::Escape, control.escape),
         ] {
             crate::automation::input_ffi::rust_automation_set_immediate_player_key(
                 i32::from(key.index()),

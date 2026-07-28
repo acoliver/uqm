@@ -153,6 +153,7 @@ fn link_c_objects() {
                     | "collide.c.o"
                     | "trans.c.o"
                     | "battlecontrols.c.o"
+                    | "lander.c.o"
             )
         })
         .collect();

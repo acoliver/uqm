@@ -319,7 +319,9 @@ pub fn scheduler_reduce(
         SchedulerEvent::NavigationReached => {
             if matches!(
                 current_action,
-                Action::NavigateToPlanet(_) | Action::NavigateToMoon(_)
+                Action::NavigateToPlanet(_)
+                    | Action::NavigateToMoon(_)
+                    | Action::NavigateToOrbit(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -348,7 +350,11 @@ pub fn scheduler_reduce(
         SchedulerEvent::ConditionReached => {
             if matches!(
                 current_action,
-                Action::WaitForCommunicationEnd(_) | Action::WaitForDispatch(_)
+                Action::WaitForCommunicationEnd(_)
+                    | Action::WaitForDispatch(_)
+                    | Action::SelectCommunicationResponse(_)
+                    | Action::WaitForPlanetSideStart(_)
+                    | Action::SelectPlanetMenu(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput
@@ -631,6 +637,18 @@ fn reduce_admitted_input(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: navigation.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         (Action::NavigateToMoon(navigation), ActionPhase::WaitingForInput) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: ActionPhase::Navigating {
@@ -642,7 +660,8 @@ fn reduce_admitted_input(
             effects: EffectPlan::none(),
         },
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -653,10 +672,77 @@ fn reduce_admitted_input(
             }
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining }) => {
+        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::SelectPlanetMenu(select), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: select.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::SelectPlanetMenu(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::SelectPlanetMenu(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForPlanetSideStart(wait), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: wait.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForPlanetSideStart(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForPlanetSideStart(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
                         remaining: remaining - 1,
                     },
                     state_version: sv,
@@ -686,6 +772,41 @@ fn reduce_admitted_input(
             }
         }
         (Action::WaitForDispatch(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::SelectCommunicationResponse(select), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: select.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (
+            Action::SelectCommunicationResponse(_),
+            ActionPhase::WaitingCondition { remaining: 0 },
+        ) => SchedulerTransition {
+            new_state: SchedulerState {
+                terminal: Some(TerminalOutcome::SemanticMismatch),
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::SelectCommunicationResponse(_), ActionPhase::WaitingCondition { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::WaitingCondition {
@@ -1750,6 +1871,37 @@ mod tests {
             finished.new_state.terminal,
             Some(TerminalOutcome::FinishComplete)
         );
+    }
+
+    #[test]
+    fn semantic_response_selection_advances_on_condition() {
+        let actions = [
+            Action::SelectCommunicationResponse(
+                crate::automation::script::SelectCommunicationResponseStep {
+                    index: 0,
+                    max_ticks: 3,
+                },
+            ),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 2 }
+        );
+
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
+        assert_eq!(reached.new_state.step_index, 1);
+        assert_eq!(reached.new_state.terminal, None);
     }
 
     #[test]

@@ -17,7 +17,9 @@
  */
 
 #include "lander.h"
+extern void rust_automation_observe_planet_menu (size_t phase);
 #include "lifeform.h"
+#include "rust_planet_side.h"
 #include "scan.h"
 #include "../build.h"
 #include "../colors.h"
@@ -42,6 +44,7 @@
 #include "libs/graphics/drawable.h"
 #include "libs/inplib.h"
 #include "libs/mathlib.h"
+#include "libs/log.h"
 
 extern FRAME SpaceJunkFrame;
 
@@ -623,7 +626,51 @@ DispatchLander (void)
 	SetContext (ScanContext);
 	drawPlanetCursor (FALSE);
 
-	PlanetSide (planetLoc);
+	{
+		RustPlanetSideRunContext context = { 0 };
+		RustPlanetSideRequest request = { 0 };
+		RustPlanetSideReply reply = { 0 };
+		COUNT i;
+
+		context.solar_system = pSolarSysState;
+		context.world = pSolarSysState->pOrbitalDesc;
+		context.misc_data_frame = MiscDataFrame;
+		context.energy_frame = pSolarSysState->PlanetSideFrame[1];
+		for (i = 0; i < MAX_LIFE_VARIATION; ++i)
+			context.life_frames[i] = pSolarSysState->PlanetSideFrame[i + 3];
+		context.landing_x = planetLoc.x;
+		context.landing_y = planetLoc.y;
+		context.facing = (BYTE)TFB_Random ();
+		for (i = 0; i < NUM_SCAN_TYPES; ++i)
+			context.retrieval_masks[i] =
+					pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask[i];
+		context.tick_period = ONE_SECOND / 35;
+		context.frame_budget = UINT32_MAX;
+
+		request.abi_version = RUST_PLANET_SIDE_ABI_VERSION;
+		request.operation = RUST_PLANET_SIDE_OP_RUN_SESSION;
+		request.context = &context;
+		if (uqm_rust_planet_side (&request, &reply)
+				!= RUST_PLANET_SIDE_STATUS_OK)
+		{
+			log_add (log_Fatal, "Rust PlanetSide failed with status %d",
+					reply.status);
+			GLOBAL (CurrentActivity) |= CHECK_ABORT;
+		}
+		else
+		{
+			for (i = 0; i < NUM_SCAN_TYPES; ++i)
+				pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask[i] =
+						context.retrieval_masks[i];
+			if (reply.detail == RUST_PLANET_SIDE_DETAIL_ADAPTER_FAILURE)
+				log_add (log_Error,
+						"Rust PlanetSide adapter failed (operation code %lu); returning to orbit",
+						(unsigned long)reply.value0);
+			else if (reply.detail == RUST_PLANET_SIDE_DETAIL_FRAME_BUDGET)
+				log_add (log_Error,
+						"Rust PlanetSide frame budget exhausted; returning to orbit");
+		}
+	}
 	if (GLOBAL (CurrentActivity) & CHECK_ABORT)
 		return FALSE;
 
@@ -639,6 +686,7 @@ DispatchLander (void)
 		return FALSE;
 	}
 
+	RedrawPlanetOrbitDisplay ();
 	if (optWhichCoarseScan == OPT_PC)
 		PrintCoarseScanPC ();
 	else
@@ -778,8 +826,10 @@ PickPlanetSide (void)
 	SetMenuSounds (MENU_SOUND_NONE, MENU_SOUND_SELECT);
 
 	PickState.success = false;
+	rust_automation_observe_planet_menu (4);
 	MenuState.InputFunc = DoPickPlanetSide;
 	DoInput (&MenuState, TRUE);
+	rust_automation_observe_planet_menu (3);
 
 	eraseLandingFuelUsage ();
 	if (PickState.success)
@@ -1089,6 +1139,7 @@ DoScan (MENU_STATE *pMS)
 		if (pMS->CurState == AUTO_SCAN)
 		{
 			pMS->CurState = DISPATCH_SHUTTLE;
+			rust_automation_observe_planet_menu (3);
 			DrawMenuStateStrings (PM_MIN_SCAN, pMS->CurState);
 		}
 	}
@@ -1194,8 +1245,10 @@ ScanSystem (void)
 	SetMenuSounds (MENU_SOUND_ARROWS, MENU_SOUND_SELECT);
 
 	MenuState.InputFunc = DoScan;
+	rust_automation_observe_planet_menu (2);
 	DoInput (&MenuState, FALSE);
 
+	rust_automation_observe_planet_menu (0);
 	SetFlashRect (NULL);
 
 	// cleanup scan graphics
@@ -1209,144 +1262,6 @@ ScanSystem (void)
 	eraseFrame = NULL;
 }
 
-static void
-generateBioNode (SOLARSYS_STATE *system, ELEMENT *NodeElementPtr,
-		BYTE *life_init_tab, COUNT creatureType)
-{
-	COUNT i;
-
-	// NOTE: TFB_Random() calls here are NOT part of the deterministic planet
-	//   generation PRNG flow.
-	if (CreatureData[creatureType].Attributes & SPEED_MASK)
-	{
-		// Place moving creatures at a random location.
-		i = TFB_Random ();
-		NodeElementPtr->current.location.x =
-				(LOBYTE (i) % (MAP_WIDTH - (8 << 1))) + 8;
-		NodeElementPtr->current.location.y =
-				(HIBYTE (i) % (MAP_HEIGHT - (8 << 1))) + 8;
-	}
-
-	if (system->PlanetSideFrame[0] == 0)
-		system->PlanetSideFrame[0] =
-				CaptureDrawable (LoadGraphic (CANNISTER_MASK_PMAP_ANIM));
-
-	for (i = 0; i < MAX_LIFE_VARIATION
-			&& life_init_tab[i] != (BYTE)(creatureType + 1);
-			++i)
-	{
-		if (life_init_tab[i] != 0)
-			continue;
-
-		life_init_tab[i] = (BYTE)creatureType + 1;
-
-		system->PlanetSideFrame[i + 3] = load_life_form (creatureType);
-		break;
-	}
-
-	NodeElementPtr->mass_points = (BYTE)creatureType;
-	NodeElementPtr->hit_points = HINIBBLE (
-			CreatureData[creatureType].ValueAndHitPoints);
-	DisplayArray[NodeElementPtr->PrimIndex].
-			Object.Stamp.frame = SetAbsFrameIndex (
-			system->PlanetSideFrame[i + 3], (COUNT)TFB_Random ());
-}
-
-void
-GeneratePlanetSide (void)
-{
-	SIZE scan;
-	BYTE life_init_tab[MAX_LIFE_VARIATION];
-			// life_init_tab is filled with the creature types of already
-			// selected creatures. If an entry is 0, none has been selected
-			// yet, otherwise, it is 1 more than the creature type.
-
-	InitDisplayList ();
-	if (pSolarSysState->pOrbitalDesc->data_index & PLANET_SHIELDED)
-		return;
-
-	memset (life_init_tab, 0, sizeof life_init_tab);
-
-	for (scan = BIOLOGICAL_SCAN; scan >= MINERAL_SCAN; --scan)
-	{
-		COUNT num_nodes;
-		FRAME f;
-
-		f = SetAbsFrameIndex (MiscDataFrame,
-				NUM_SCANDOT_TRANSITIONS * (scan - ENERGY_SCAN));
-
-		num_nodes = callGenerateForScanType (pSolarSysState,
-				pSolarSysState->pOrbitalDesc, GENERATE_ALL, scan, NULL);
-
-		while (num_nodes--)
-		{
-			HELEMENT hNodeElement;
-			ELEMENT *NodeElementPtr;
-			NODE_INFO info;
-
-			if (isNodeRetrieved (&pSolarSysState->SysInfo.PlanetInfo,
-					scan, num_nodes))
-				continue;
-
-			hNodeElement = AllocElement ();
-			if (!hNodeElement)
-				continue;
-
-			LockElement (hNodeElement, &NodeElementPtr);
-
-			callGenerateForScanType (pSolarSysState,
-					pSolarSysState->pOrbitalDesc, num_nodes,
-					scan, &info);
-
-			NodeElementPtr->scan_node = MAKE_WORD (scan, num_nodes + 1);
-			NodeElementPtr->playerNr = PS_NON_PLAYER;
-			NodeElementPtr->current.location.x = info.loc_pt.x;
-			NodeElementPtr->current.location.y = info.loc_pt.y;
-
-			SetPrimType (&DisplayArray[NodeElementPtr->PrimIndex], STAMP_PRIM);
-			if (scan == MINERAL_SCAN)
-			{
-				NodeElementPtr->turn_wait = info.type;
-				NodeElementPtr->mass_points = HIBYTE (info.density);
-				NodeElementPtr->current.image.frame = SetAbsFrameIndex (
-						MiscDataFrame, (NUM_SCANDOT_TRANSITIONS * 2)
-						+ ElementCategory (info.type) * 5);
-				NodeElementPtr->next.image.frame = SetRelFrameIndex (
-						NodeElementPtr->current.image.frame,
-						LOBYTE (info.density) + 1);
-				DisplayArray[NodeElementPtr->PrimIndex].Object.Stamp.frame =
-						IncFrameIndex (NodeElementPtr->next.image.frame);
-			}
-			else  /* (scan == BIOLOGICAL_SCAN || scan == ENERGY_SCAN) */
-			{
-				NodeElementPtr->current.image.frame = f;
-				NodeElementPtr->next.image.frame = SetRelFrameIndex (
-						f, NUM_SCANDOT_TRANSITIONS - 1);
-				NodeElementPtr->turn_wait = MAKE_BYTE (4, 4);
-				NodeElementPtr->preprocess_func = object_animation;
-				if (scan == ENERGY_SCAN)
-				{
-					NodeElementPtr->mass_points = MAX_SCROUNGED;
-					DisplayArray[NodeElementPtr->PrimIndex].Object.Stamp.frame =
-							pSolarSysState->PlanetSideFrame[1];
-				}
-				else /* (scan == BIOLOGICAL_SCAN) */
-				{
-					generateBioNode (pSolarSysState, NodeElementPtr,
-							life_init_tab, info.type);
-				}
-			}
-
-			NodeElementPtr->next.location.x =
-					NodeElementPtr->current.location.x << MAG_SHIFT;
-			NodeElementPtr->next.location.y =
-					NodeElementPtr->current.location.y << MAG_SHIFT;
-			UnlockElement (hNodeElement);
-
-			PutElement (hNodeElement);
-		}
-	}
-}
 
 bool
 isNodeRetrieved (PLANET_INFO *planetInfo, BYTE scanType, BYTE nodeNr)

@@ -787,6 +787,8 @@ pub fn select_response(state: &mut CommState) -> Option<(ResponseFunc, u32)> {
 
     state.set_talking_finished(false);
     state.responses_mut().clear();
+    crate::automation::ui_observation::observe_communication_responses(0);
+    crate::automation::ui_observation::set_communication_responses_ready(false);
     state.top_response = None;
 
     Some((func, response_ref))
@@ -2428,6 +2430,28 @@ mod tests {
         );
     }
 
+    /// Structural regression: the response callback runs inside the enclosing
+    /// `DoInput` loop, which owns event pumping and the sole `UpdateInputState`
+    /// call. Polling input again in `rust_DoCommunication` erases the Select
+    /// pulse before response handling can consume it.
+    #[test]
+    fn test_response_phase_does_not_poll_input_twice() {
+        let source = include_str!("ffi.rs");
+        let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
+            .expect("rust_DoCommunication must be in ffi.rs");
+        let response_phase = fn_body
+            .split("// Phase 2: Response handling.")
+            .nth(1)
+            .expect("rust_DoCommunication must contain the response phase");
+        assert!(
+            !response_phase.contains("UpdateInputState()"),
+            "response handling must consume the input snapshot produced by enclosing DoInput"
+        );
+        assert!(
+            !response_phase.contains("rust_automation_service_do_input()"),
+            "enclosing DoInput must be the sole automation service boundary"
+        );
+    }
     // ---- Test 9 ------------------------------------------------------------
 
     /// Structural: player_response_input must NOT appear in ffi.rs —

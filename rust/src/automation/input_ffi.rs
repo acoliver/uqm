@@ -323,6 +323,16 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
     0
 }
 
+/// Advance active automation at non-`DoInput` main-thread boundaries.
+///
+/// This is used after synchronous communication returns, where there may be no
+/// subsequent legacy input callback before Rust dispatch returns to the outer
+/// game loop. It runs only the scheduler service step; the next production
+/// input owner performs `UpdateInputState`.
+#[no_mangle]
+pub extern "C" fn rust_automation_service_boundary() -> i32 {
+    rust_automation_service_do_input()
+}
 // ===========================================================================
 //  Bounds-checked production setter (REQ-INJECT-003)
 // ===========================================================================

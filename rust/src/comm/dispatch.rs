@@ -1132,8 +1132,12 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         if get_game_state("PROBE_ILWRATH_ENCOUNTER") == 0
             || (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0
         {
-            // CleanupAfterStarBase is static in starbase.c.
-            // TODO: Port to Rust. For now, skip cleanup.
+            // The unallied commander conversation is complete. Marking the
+            // starbase available prevents the opening probe from being rebuilt
+            // on every return to interplanetary flight.
+            set_game_state("STARBASE_AVAILABLE", 1);
+            set_game_state("STARBASE_VISITED", 1);
+            crate::automation::input_ffi::rust_automation_service_boundary();
             return;
         }
 
