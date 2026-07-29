@@ -20,7 +20,7 @@ use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::RuntimeModel;
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
 use crate::automation::scheduler::{
-    scheduler_reduce, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
+    scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
     SchedulerState, TerminalOutcome,
 };
 use crate::automation::script::{Action, ValidatedScript};
@@ -646,6 +646,10 @@ impl Coordinator {
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
                     target_x: snapshot.target_x,
                     target_y: snapshot.target_y,
+                    velocity_x: snapshot.velocity_x,
+                    velocity_y: snapshot.velocity_y,
+                    view_center_x: snapshot.view_center_x,
+                    view_center_y: snapshot.view_center_y,
                 },
             );
             if reached {
@@ -682,6 +686,10 @@ impl Coordinator {
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
                     target_x: snapshot.target_x,
                     target_y: snapshot.target_y,
+                    velocity_x: snapshot.velocity_x,
+                    velocity_y: snapshot.velocity_y,
+                    view_center_x: snapshot.view_center_x,
+                    view_center_y: snapshot.view_center_y,
                 },
             );
             if reached {
@@ -705,12 +713,21 @@ impl Coordinator {
                 i32::from(navigation.planet),
                 Some(i32::from(navigation.moon)),
             );
-            let reached = snapshot.active != 0
+            // `enterOrbital` is the single production commitment point for a
+            // moon: it sets InOrbit and repoints pOrbitalDesc at the moon.
+            // The automation hook runs at the top of the next DoInput
+            // iteration, before DoIpFlight consumes InOrbit, so this state is
+            // observed exactly once per commitment. WaitIntersect must not be
+            // consulted here: CheckIntersect assigns it the target's own
+            // MAKE_WORD immediately before returning the descriptor that
+            // triggers enterOrbital, so it always equals the target at this
+            // instant.
+            let reached_orbit = snapshot.active != 0
                 && snapshot.in_orbit != 0
                 && snapshot.inner_planet == i32::from(navigation.planet)
                 && snapshot.orbital_moon == i32::from(navigation.moon)
                 && snapshot.orbital_data_index == snapshot.target_data_index;
-            let control = crate::automation::navigation::steer_toward_target(
+            let control = crate::automation::navigation::steer_moon_navigation(
                 crate::automation::navigation::NavigationObservation {
                     active: snapshot.active != 0,
                     inner_planet: None,
@@ -720,9 +737,36 @@ impl Coordinator {
                     ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
                     target_x: snapshot.target_x,
                     target_y: snapshot.target_y,
+                    velocity_x: snapshot.velocity_x,
+                    velocity_y: snapshot.velocity_y,
+                    view_center_x: snapshot.view_center_x,
+                    view_center_y: snapshot.view_center_y,
                 },
             );
-            if reached {
+            if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
+                if remaining % 250 == 0 {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        format!(
+                            "moon_navigation_state:remaining={remaining}:active={}:in_ip_flight={}:in_orbit={}:wait_intersect={}:inner={}:moon={}:ship={},{}:target={},{}:orbital_data={}:target_data={}",
+                            snapshot.active,
+                            snapshot.in_ip_flight,
+                            snapshot.in_orbit,
+                            snapshot.wait_intersect,
+                            snapshot.inner_planet,
+                            snapshot.orbital_moon,
+                            snapshot.ship_x,
+                            snapshot.ship_y,
+                            snapshot.target_x,
+                            snapshot.target_y,
+                            snapshot.orbital_data_index,
+                            snapshot.target_data_index
+                        ),
+                    );
+                }
+            }
+            if reached_orbit {
                 Self::set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
                 );

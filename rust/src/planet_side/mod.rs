@@ -19,6 +19,7 @@ pub mod geometry;
 pub mod graphics_adapter;
 pub mod hazards;
 pub mod init_lander;
+pub mod lifecycle;
 pub mod mask_adapter;
 pub mod model;
 pub mod orbit_music;
@@ -33,6 +34,7 @@ pub mod simulation;
 pub mod special_effects;
 pub mod telemetry;
 pub mod visual_adapter;
+pub mod world;
 
 pub use cargo::{BioCargo, CargoPickup, MineralCargo, NUM_ELEMENT_CATEGORIES};
 pub use creatures::{CreatureCatalog, CreatureKind, CreatureStats, CREATURE_COUNT};

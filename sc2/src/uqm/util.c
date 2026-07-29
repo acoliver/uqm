@@ -26,6 +26,11 @@
 #include "libs/mathlib.h"
 #include "libs/log.h"
 
+/* Runtime automation service hook. WaitForAnyButtonUntil is a nested
+ * main-thread input loop that never reaches DoInput, so automation would
+ * otherwise never be serviced while it blocks. */
+extern int rust_automation_service_boundary (void);
+
 
 void
 DrawStarConBox (RECT *pRect, SIZE BorderWidth, Color TopLeftColor,
@@ -228,6 +233,11 @@ WaitForAnyButtonUntil (BOOLEAN newButton, TimeCount timeOut,
 			&& !(GLOBAL (CurrentActivity) & CHECK_ABORT)
 			&& !QuitPosted)
 	{
+		/* Service automation before sleeping so a scripted dismissal is
+		 * injected into ImmediateInputState and observed by the
+		 * AnyButtonPress below, exactly as a real key press would be. */
+		if (rust_automation_service_boundary ())
+			break;
 		SleepThread (ONE_SECOND / 40);
 		buttonPressed = AnyButtonPress (TRUE);
 	} 
@@ -260,6 +270,10 @@ WaitForNoInputUntil (TimeCount timeOut, BOOLEAN resetInput)
 			&& !(GLOBAL (CurrentActivity) & CHECK_ABORT)
 			&& !QuitPosted)
 	{
+		/* WaitForAnyButtonUntil calls this first when newButton is set, so
+		 * automation must also be serviced here to release a held key. */
+		if (rust_automation_service_boundary ())
+			break;
 		SleepThread (ONE_SECOND / 40);
 		buttonPressed = AnyButtonPress (TRUE);
 	} 

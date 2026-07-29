@@ -646,6 +646,12 @@ DispatchLander (void)
 					pSolarSysState->SysInfo.PlanetInfo.ScanRetrieveMask[i];
 		context.tick_period = ONE_SECOND / 35;
 		context.frame_budget = UINT32_MAX;
+		context.tectonics_rating =
+				pSolarSysState->SysInfo.PlanetInfo.Tectonics;
+		context.weather_rating =
+				pSolarSysState->SysInfo.PlanetInfo.Weather;
+		context.temperature =
+				pSolarSysState->SysInfo.PlanetInfo.SurfaceTemperature;
 
 		request.abi_version = RUST_PLANET_SIDE_ABI_VERSION;
 		request.operation = RUST_PLANET_SIDE_OP_RUN_SESSION;

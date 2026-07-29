@@ -18,20 +18,22 @@ pub enum CreatureBehavior {
 
 /// Creature awareness range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Awareness {
-    Low,
-    Medium,
-    High,
-    Reserved,
+    Low = 0,
+    Medium = 1,
+    High = 2,
+    Reserved = 3,
 }
 
 /// Creature movement speed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum CreatureSpeed {
-    Motionless,
-    Slow,
-    Medium,
-    Fast,
+    Motionless = 0,
+    Slow = 1,
+    Medium = 2,
+    Fast = 3,
 }
 
 /// Creature collision danger.
@@ -66,6 +68,11 @@ impl CreatureKind {
     #[must_use]
     pub const fn index(self) -> u8 {
         self.0
+    }
+
+    #[must_use]
+    pub const fn is_brainbox_bulldozer(self) -> bool {
+        self.0 == 24
     }
 }
 

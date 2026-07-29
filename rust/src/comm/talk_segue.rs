@@ -2452,6 +2452,21 @@ mod tests {
             "enclosing DoInput must be the sole automation service boundary"
         );
     }
+
+    #[test]
+    fn test_waiting_automation_skips_unbounded_closing_replay() {
+        let source = include_str!("ffi.rs");
+        let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
+            .expect("rust_DoCommunication must be in ffi.rs");
+        let no_response_branch = fn_body
+            .split("if response_count == 0")
+            .nth(1)
+            .expect("rust_DoCommunication must contain the no-response branch");
+        assert!(
+            no_response_branch.contains("Coordinator::should_skip_communication_closing_speech()"),
+            "automation waiting for communication end must not block inside the closing speech replay"
+        );
+    }
     // ---- Test 9 ------------------------------------------------------------
 
     /// Structural: player_response_input must NOT appear in ffi.rs —

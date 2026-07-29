@@ -1,5 +1,7 @@
 //! Safe generational storage for deterministic surface entities.
 
+use crate::battle::velocity::VelocityDesc;
+
 use super::creatures::CreatureKind;
 use super::hazards::HazardKind;
 use super::model::SurfacePoint;
@@ -26,6 +28,17 @@ pub enum SurfaceEntityKind {
         kind: CreatureKind,
         hit_points: u8,
         aware: bool,
+        /// Bresenham-style fixed-point velocity, matching C `ELEMENT.velocity`.
+        velocity: VelocityDesc,
+        /// Packed `MAKE_BYTE(low, high)` animation/thrust cadence, matching C
+        /// `ELEMENT.thrust_wait`. The low nibble is the inter-frame countdown;
+        /// the high nibble is the reload value added when it hits zero. When
+        /// the countdown reaches zero the creature AI may choose a new heading.
+        thrust_wait: u8,
+        /// Monotonic surface-frame counter used by `!(frame_index & 3)` gating
+        /// in `object_animation`, matching the per-element frame index derived
+        /// from `GetFrameIndex` in the C implementation.
+        frame_index: u16,
     },
     CannedCreature {
         value: u16,
@@ -118,6 +131,14 @@ impl SurfaceWorld {
             .iter()
             .copied()
             .filter_map(|id| self.get(id).map(|entity| (id, entity)))
+    }
+
+    /// Return a snapshot of all live entity IDs in insertion order.
+    ///
+    /// The world can be mutated safely while iterating over this snapshot.
+    #[must_use]
+    pub fn ids(&self) -> Vec<SurfaceEntityId> {
+        self.order.clone()
     }
 
     /// Decrement finite lifetimes in display order and remove expired entities.

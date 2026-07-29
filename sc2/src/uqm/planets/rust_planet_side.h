@@ -26,6 +26,10 @@ typedef struct RustPlanetSideRunContext
 	uint32_t retrieval_masks[3];
 	uint32_t tick_period;
 	uint32_t frame_budget;
+	uint8_t tectonics_rating;
+	uint8_t weather_rating;
+	uint8_t hazard_padding[2];
+	int32_t temperature;
 } RustPlanetSideRunContext;
 
 typedef struct RustPlanetSideRequest

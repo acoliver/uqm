@@ -36,10 +36,6 @@ const BIOLOGICAL_DISASTER: u8 = 0;
 const LIGHTNING_DISASTER: u8 = 2;
 const LAVASPOT_DISASTER: u8 = 3;
 
-/// `OVERRIDE_LANDER_FLAGS` bit (from sis.h).
-#[allow(dead_code)]
-const OVERRIDE_LANDER_FLAGS: u8 = 1 << 7;
-
 /// `MAX_SCROUNGED` (from planets.h).
 const MAX_SCROUNGED: u16 = 50;
 
@@ -346,11 +342,6 @@ mod tests {
     #[test]
     fn angle_to_facing_full_circle_is_sixteen() {
         assert_eq!(angle_to_facing(FULL_CIRCLE), 16);
-    }
-
-    #[test]
-    fn override_lander_flags_bit_seven() {
-        assert_eq!(OVERRIDE_LANDER_FLAGS, 0x80);
     }
 
     #[test]

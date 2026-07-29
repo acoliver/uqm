@@ -2,11 +2,14 @@
 
 use std::ffi::c_void;
 
-use super::assembly::{EntityVisual, SurfaceVisualPort};
+use super::assembly::{EntityVisual, SurfaceVisualPort, WorldVisualPort};
+use super::creatures::CreatureKind;
 use super::entities::{SurfaceEntity, SurfaceEntityKind};
 use super::generation::{GeneratedEntity, ScanType};
 use super::graphics_adapter::SurfaceFrame;
+use super::hazards::HazardKind;
 use super::mask_adapter::extract_frame_mask;
+use super::resources::{LanderGraphic, PlanetSideAssetAccess};
 use super::runtime::AdapterError;
 
 const NUM_SCANDOT_TRANSITIONS: u16 = 8;
@@ -99,7 +102,7 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
         entity: &SurfaceEntity,
     ) -> Result<EntityVisual, AdapterError> {
         let (base, index) = match entity.kind {
-            SurfaceEntityKind::MineralNode { category, .. } => {
+            SurfaceEntityKind::MineralNode { category, amount } => {
                 let category =
                     u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
                 if category >= 8 {
@@ -107,7 +110,11 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
                 }
                 (
                     self.misc_data,
-                    MINERAL_FRAME_BASE + category * MINERAL_FRAMES_PER_CATEGORY,
+                    MINERAL_FRAME_BASE
+                        + category * MINERAL_FRAMES_PER_CATEGORY
+                        + amount
+                            .saturating_add(2)
+                            .min(MINERAL_FRAMES_PER_CATEGORY - 1),
                 )
             }
             SurfaceEntityKind::EnergyNode { .. } => {
@@ -133,6 +140,100 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
         let mask = unsafe { extract_frame_mask(selected)? };
         Ok(EntityVisual {
             frame: SurfaceFrame { base, index },
+            mask,
+        })
+    }
+}
+
+/// Production visual port for dynamically-spawned world entities.
+///
+/// Provides frames and collision masks for lander stun-bolt shots, canned
+/// creatures, and environmental hazards using the globally loaded PlanetSide
+/// asset set.
+pub struct CffiWorldVisuals<'a, A: PlanetSideAssetAccess> {
+    assets: &'a A,
+    /// Reuses the life-frame slot table from [`CffiSurfaceVisuals`] for canned
+    /// creature visuals.
+    surface_visuals: &'a mut CffiSurfaceVisuals,
+}
+
+impl<'a, A: PlanetSideAssetAccess> CffiWorldVisuals<'a, A> {
+    pub fn new(assets: &'a A, surface_visuals: &'a mut CffiSurfaceVisuals) -> Self {
+        Self {
+            assets,
+            surface_visuals,
+        }
+    }
+
+    fn lander_shot_frame(&self, facing: u8) -> Result<(*mut c_void, u16), AdapterError> {
+        let base = self.assets.graphic(LanderGraphic::Lander);
+        if base.is_null() {
+            return Err(AdapterError::new("lander_frame_not_loaded"));
+        }
+        // Shot images immediately follow the 16 directional lander images.
+        Ok((base, 16 + u16::from(facing % 16)))
+    }
+
+    fn hazard_base(&self, kind: HazardKind) -> Result<*mut c_void, AdapterError> {
+        let graphic = match kind {
+            HazardKind::Earthquake => LanderGraphic::Earthquake,
+            HazardKind::Lightning => LanderGraphic::Lightning,
+            HazardKind::Lava => LanderGraphic::Lava,
+            HazardKind::Biological => return Err(AdapterError::new("biological_hazard_visual")),
+        };
+        let base = self.assets.graphic(graphic);
+        if base.is_null() {
+            return Err(AdapterError::new("hazard_frame_not_loaded"));
+        }
+        Ok(base)
+    }
+}
+
+impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
+    fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
+        let (base, index) = self.lander_shot_frame(facing)?;
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, index) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("shot_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame { base, index },
+            mask,
+        })
+    }
+
+    fn canned_creature_visual(&mut self, kind: CreatureKind) -> Result<EntityVisual, AdapterError> {
+        let base = self.surface_visuals.life_frame(kind.index())?;
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, 0) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("canned_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame { base, index: 0 },
+            mask,
+        })
+    }
+
+    fn hazard_visual(&mut self, kind: HazardKind) -> Result<EntityVisual, AdapterError> {
+        let base = self.hazard_base(kind)?;
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, 0) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("hazard_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame { base, index: 0 },
             mask,
         })
     }
@@ -172,6 +273,19 @@ mod tests {
             visuals.life_frame(10),
             Err(AdapterError::new("life_variation_overflow"))
         );
+    }
+
+    #[test]
+    fn shot_frame_follows_lander_facing() {
+        let assets = crate::planet_side::resources::BorrowedPlanetSideAssets::for_test(
+            [pointer(1); 8],
+            pointer(2),
+        );
+        let mut surface = CffiSurfaceVisuals::new(pointer(3), pointer(4), [pointer(5); 3]).unwrap();
+        let visuals = CffiWorldVisuals::new(&assets, &mut surface);
+        assert_eq!(visuals.lander_shot_frame(0), Ok((pointer(1), 16)));
+        assert_eq!(visuals.lander_shot_frame(7), Ok((pointer(1), 23)));
+        assert_eq!(visuals.lander_shot_frame(15), Ok((pointer(1), 31)));
     }
 
     #[test]

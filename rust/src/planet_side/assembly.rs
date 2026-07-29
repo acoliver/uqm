@@ -26,6 +26,28 @@ pub trait SurfaceVisualPort {
     ) -> Result<EntityVisual, AdapterError>;
 }
 
+/// Visual selection for dynamically-spawned world entities (shots, hazards,
+/// canned creatures).
+///
+/// Each method returns the [`EntityVisual`] (frame + collision mask) that the
+/// world step should register in the surface assembly's frame and mask maps.
+pub trait WorldVisualPort {
+    /// Visual for a lander stun-bolt shot.
+    fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError>;
+
+    /// Visual for a creature that was canned (hit points reached zero).
+    fn canned_creature_visual(
+        &mut self,
+        kind: super::creatures::CreatureKind,
+    ) -> Result<EntityVisual, AdapterError>;
+
+    /// Visual for a spawned hazard (earthquake, lightning, lava).
+    fn hazard_visual(
+        &mut self,
+        kind: super::hazards::HazardKind,
+    ) -> Result<EntityVisual, AdapterError>;
+}
+
 /// Complete Rust ownership assembled before the active frame loop starts.
 pub struct SurfaceAssembly {
     pub world: SurfaceWorld,
@@ -84,6 +106,42 @@ pub fn remove_surface_entity(
     assembly.masks.remove_entity(entity);
     assembly.generated.retain(|entry| entry.entity != entity);
     Ok(removed)
+}
+
+/// Insert a dynamically-spawned entity (shot, hazard, canned creature) into all
+/// runtime registries atomically.
+///
+/// The visual port supplies the frame and collision mask. Returns the new
+/// entity ID.
+pub fn insert_surface_entity(
+    assembly: &mut SurfaceAssembly,
+    entity: SurfaceEntity,
+    visual: EntityVisual,
+) -> SurfaceEntityId {
+    let id = assembly.world.insert(entity);
+    assembly.frames.insert(id, visual.frame);
+    assembly.masks.insert_entity(id, visual.mask);
+    id
+}
+
+/// Transform a live creature into a canned creature, updating its visual in all
+/// registries atomically.
+///
+/// The creature's hit points have already reached zero. The visual port selects
+/// the canned-creature frame. The entity's position is preserved.
+pub fn transform_creature_to_canned(
+    assembly: &mut SurfaceAssembly,
+    entity: SurfaceEntityId,
+    value: u16,
+    visual: EntityVisual,
+) -> Result<(), AdapterError> {
+    let Some(target) = assembly.world.get_mut(entity) else {
+        return Err(AdapterError::new("canned_entity_missing"));
+    };
+    target.kind = super::entities::SurfaceEntityKind::CannedCreature { value };
+    assembly.frames.insert(entity, visual.frame);
+    assembly.masks.insert_entity(entity, visual.mask);
+    Ok(())
 }
 
 #[cfg(test)]

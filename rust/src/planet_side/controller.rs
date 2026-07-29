@@ -149,18 +149,14 @@ mod tests {
 
     #[test]
     fn controller_runs_until_one_terminal_outcome() {
-        let mut controller = PlanetSideController::new(
-            session(),
-            adapters(vec![
-                FrameInput::default(),
-                FrameInput {
-                    takeoff: true,
-                    ..FrameInput::default()
-                },
-            ]),
-            1,
-            2,
-        );
+        // Takeoff now runs through TakingOff + Return animation phases before
+        // settling, so the budget must cover those extra frames.
+        let takeoff_total = super::super::lifecycle::LifecycleAnimation::takeoff_total();
+        let budget = 2 + u32::from(takeoff_total) + 1;
+        let mut input = vec![FrameInput::default()];
+        input.resize(budget as usize, FrameInput::default());
+        input[1].takeoff = true;
+        let mut controller = PlanetSideController::new(session(), adapters(input), 1, budget);
         assert!(matches!(controller.run(), Ok(SessionOutcome::Returned(_))));
         assert_eq!(controller.adapters.ship.0.len(), 1);
     }

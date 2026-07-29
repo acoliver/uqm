@@ -1,5 +1,7 @@
 //! Typed surface-generation and scan-persistence boundary.
 
+use crate::battle::velocity::VelocityDesc;
+
 use super::creatures::CreatureKind;
 use super::entities::{SurfaceEntity, SurfaceEntityId, SurfaceEntityKind, SurfaceWorld};
 use super::model::SurfacePoint;
@@ -171,6 +173,9 @@ pub fn populate_surface(
                     kind: creature,
                     hit_points,
                     aware: false,
+                    velocity: VelocityDesc::new(),
+                    thrust_wait: 0,
+                    frame_index: 0,
                 },
             };
             let entity = world.insert(SurfaceEntity {

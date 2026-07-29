@@ -57,6 +57,12 @@ pub struct PlanetSideRunContext {
     pub retrieval_masks: [u32; 3],
     pub tick_period: u32,
     pub frame_budget: u32,
+    /// Live planet tectonics rating (0-7) from `PLANET_INFO.Tectonics`.
+    pub tectonics_rating: u8,
+    /// Live planet weather rating (0-7) from `PLANET_INFO.Weather`.
+    pub weather_rating: u8,
+    /// Live planet surface temperature from `PLANET_INFO.SurfaceTemperature`.
+    pub temperature: i32,
 }
 
 /// Fixed-size reply. No Rust-owned pointer escapes through this record.
@@ -137,6 +143,10 @@ fn dispatch(request: PlanetSideRequest) -> PlanetSideReply {
         _ => failure(STATUS_UNKNOWN_OPERATION),
     }
 }
+#[cfg(feature = "linked_c_archive")]
+extern "C" {
+    fn GetFrameCount(frame: *mut c_void) -> libc::c_int;
+}
 
 const fn failure(status: i32) -> PlanetSideReply {
     PlanetSideReply {
@@ -188,7 +198,7 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
         let assembly = assemble_surface(&mut generator, persistence, &mut visuals, lander_masks)?;
         let surface = share_surface(assembly);
         let mut ship = CffiShipStatus;
-        let session = create_production_session(
+        let mut session = create_production_session(
             &mut ship,
             SurfacePoint {
                 x: context.landing_x,
@@ -196,15 +206,27 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             },
             context.facing,
         )?;
+        session.set_hazard_chances(super::world::hazard_chances(
+            context.tectonics_rating,
+            context.weather_rating,
+            context.temperature,
+        ));
+        let world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
         let collision = SurfaceCollisionAdapter {
             surface: surface.clone(),
             random: CffiGameplayRandom,
             generator,
             persistence,
+            world_visuals,
+            earthquake_frame_count: unsafe {
+                GetFrameCount(assets.graphic(LanderGraphic::Earthquake)) as u16
+            },
+            lava_frame_count: unsafe { GetFrameCount(assets.graphic(LanderGraphic::Lava)) as u16 },
         };
         let graphics = CffiPlanetSideGraphics {
             surface,
             assets: &assets,
+            last_scan_position: None,
         };
         super::telemetry::begin(&session);
         let adapters = RuntimeAdapters {

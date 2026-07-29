@@ -62,6 +62,12 @@ impl PlanetSideAssetAccess for BorrowedPlanetSideAssets {
     }
 }
 
+#[cfg(test)]
+impl BorrowedPlanetSideAssets {
+    pub(crate) fn for_test(graphics: [*mut c_void; 8], sounds: *mut c_void) -> Self {
+        Self { graphics, sounds }
+    }
+}
 /// Complete loaded PlanetSide asset set. Drop releases every successful load.
 pub struct PlanetSideAssets<R: ResourcePort> {
     port: R,

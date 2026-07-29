@@ -30,7 +30,9 @@ use crate::automation::runtime::RuntimeModel;
 #[derive(Default)]
 pub(crate) struct NavigationSnapshot {
     pub(crate) active: i32,
+    pub(crate) in_ip_flight: i32,
     pub(crate) in_orbit: i32,
+    pub(crate) wait_intersect: u16,
     pub(crate) inner_planet: i32,
     pub(crate) orbital_moon: i32,
     pub(crate) orbital_data_index: i32,
@@ -40,6 +42,10 @@ pub(crate) struct NavigationSnapshot {
     pub(crate) ship_facing: i32,
     pub(crate) target_x: i32,
     pub(crate) target_y: i32,
+    pub(crate) velocity_x: i32,
+    pub(crate) velocity_y: i32,
+    pub(crate) view_center_x: i32,
+    pub(crate) view_center_y: i32,
 }
 
 /// The C `CONTROLLER_INPUT_STATE` struct, used only when linking against
@@ -69,8 +75,8 @@ struct CPlanetDesc {
 #[repr(C)]
 struct CSolarSystemState {
     _input_func: *mut std::ffi::c_void,
-    _in_ip_flight: i32,
-    _wait_intersect: u16,
+    in_ip_flight: i32,
+    wait_intersect: u16,
     _wait_intersect_pad: [u8; 2],
     sun: [CPlanetDesc; 1],
     planets: [CPlanetDesc; 16],
@@ -94,18 +100,83 @@ extern "C" {
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
     #[allow(non_snake_case)]
     fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16;
+    #[link_name = "ScreenWidth"]
+    static SCREEN_WIDTH: std::ffi::c_int;
+    #[link_name = "ScreenHeight"]
+    static SCREEN_HEIGHT: std::ffi::c_int;
 }
+/// The interplanetary view geometry derived from the live screen size.
+///
+/// These mirror the C macros in `units.h` and `planets.h`, which are all
+/// functions of the runtime `ScreenWidth`/`ScreenHeight` globals rather than
+/// compile-time constants. Hardcoding them desynchronises every
+/// display/location conversion whenever the game is not at one specific
+/// resolution.
+///
+/// C: `sc2/src/uqm/units.h`, `sc2/src/uqm/planets/planets.h`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ViewGeometry {
+    pub(crate) half_width: i32,
+    pub(crate) half_height: i32,
+    pub(crate) display_to_loc: i32,
+}
+
+impl ViewGeometry {
+    /// Compute the geometry for a given screen size.
+    ///
+    /// C: `SPACE_WIDTH = SCREEN_WIDTH - STATUS_WIDTH - SAFE_X * 2`,
+    /// `SIS_SCREEN_WIDTH = SPACE_WIDTH - 14`,
+    /// `SIS_SCREEN_HEIGHT = SCREEN_HEIGHT - SAFE_Y * 2 - 13`,
+    /// `DISPLAY_FACTOR = (SIS_SCREEN_WIDTH >> 1) - 8`,
+    /// `DISPLAY_TO_LOC = DISPLAY_FACTOR >> 1`.
+    /// `SAFE_X` and `SAFE_Y` are both 0.
+    pub(crate) const fn from_screen(screen_width: i32, screen_height: i32) -> Self {
+        const STATUS_WIDTH: i32 = 64;
+        let sis_screen_width = screen_width - STATUS_WIDTH - 14;
+        let sis_screen_height = screen_height - 13;
+        let display_factor = (sis_screen_width >> 1) - 8;
+        Self {
+            half_width: sis_screen_width >> 1,
+            half_height: sis_screen_height >> 1,
+            display_to_loc: display_factor >> 1,
+        }
+    }
+
+    /// Read the geometry from the live C screen-size globals.
+    #[cfg(feature = "linked_c_archive")]
+    fn current() -> Self {
+        // SAFETY: `ScreenWidth`/`ScreenHeight` are set once during graphics
+        // init and are read-only thereafter; this hook runs on the game thread.
+        let (width, height) = unsafe {
+            (
+                std::ptr::addr_of!(SCREEN_WIDTH).read(),
+                std::ptr::addr_of!(SCREEN_HEIGHT).read(),
+            )
+        };
+        Self::from_screen(width, height)
+    }
+}
+
+/// The game's baseline screen size, used only when the C globals are absent.
+#[cfg(not(feature = "linked_c_archive"))]
+const DEFAULT_SCREEN_WIDTH: i32 = 320;
+/// The game's baseline screen size, used only when the C globals are absent.
+#[cfg(not(feature = "linked_c_archive"))]
+const DEFAULT_SCREEN_HEIGHT: i32 = 240;
 
 #[cfg(feature = "linked_c_archive")]
 pub(crate) fn navigation_snapshot(
     target_planet: i32,
     target_moon: Option<i32>,
 ) -> NavigationSnapshot {
+    let geometry = ViewGeometry::current();
     let mut snapshot = NavigationSnapshot {
         inner_planet: -1,
         orbital_moon: -1,
         orbital_data_index: -1,
         target_data_index: -1,
+        view_center_x: geometry.half_width,
+        view_center_y: geometry.half_height,
         ..NavigationSnapshot::default()
     };
 
@@ -121,7 +192,9 @@ pub(crate) fn navigation_snapshot(
         }
 
         snapshot.active = 1;
+        snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
         snapshot.in_orbit = i32::from(solar_system.in_orbit != 0);
+        snapshot.wait_intersect = solar_system.wait_intersect;
         let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
         let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
         snapshot.ship_x = i32::from(ship_stamp.origin.x);
@@ -129,6 +202,10 @@ pub(crate) fn navigation_snapshot(
         if !ship_stamp.frame.is_null() {
             snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame));
         }
+        let velocity = std::ptr::addr_of!((*game_state)._velocity)
+            .cast::<crate::battle::velocity::VelocityDesc>()
+            .read_unaligned();
+        (snapshot.velocity_x, snapshot.velocity_y) = velocity.get_current_components();
 
         if !solar_system.orbital.is_null() {
             snapshot.orbital_data_index = i32::from((*solar_system.orbital).data_index);
@@ -172,15 +249,13 @@ pub(crate) fn navigation_snapshot(
         if radius != 0 {
             // Match displayToLocation followed by locationToDisplay exactly.
             // C integer division truncates toward zero, as Rust's does.
-            const SIS_HALF_WIDTH: i32 = 128;
-            const SIS_HALF_HEIGHT: i32 = 91;
-            const DISPLAY_TO_LOC: i32 = 60;
-            let location_x =
-                (i32::from(target_origin.x) - SIS_HALF_WIDTH) * radius / DISPLAY_TO_LOC;
-            let location_y =
-                (i32::from(target_origin.y) - SIS_HALF_HEIGHT) * radius / DISPLAY_TO_LOC;
-            snapshot.target_x = SIS_HALF_WIDTH + location_x * DISPLAY_TO_LOC / radius;
-            snapshot.target_y = SIS_HALF_HEIGHT + location_y * DISPLAY_TO_LOC / radius;
+            let location_x = (i32::from(target_origin.x) - geometry.half_width) * radius
+                / geometry.display_to_loc;
+            let location_y = (i32::from(target_origin.y) - geometry.half_height) * radius
+                / geometry.display_to_loc;
+            snapshot.target_x = geometry.half_width + location_x * geometry.display_to_loc / radius;
+            snapshot.target_y =
+                geometry.half_height + location_y * geometry.display_to_loc / radius;
         }
     }
     snapshot
@@ -191,7 +266,15 @@ pub(crate) fn navigation_snapshot(
     _target_planet: i32,
     _target_moon: Option<i32>,
 ) -> NavigationSnapshot {
-    NavigationSnapshot::default()
+    // `active` stays 0, so no controls are derived from this snapshot. The
+    // view centre is still reported honestly so that a caller which reads it
+    // without checking `active` cannot silently steer against (0, 0).
+    let geometry = ViewGeometry::from_screen(DEFAULT_SCREEN_WIDTH, DEFAULT_SCREEN_HEIGHT);
+    NavigationSnapshot {
+        view_center_x: geometry.half_width,
+        view_center_y: geometry.half_height,
+        ..NavigationSnapshot::default()
+    }
 }
 
 /// The global runtime model for automation.
@@ -545,5 +628,31 @@ mod tests {
     #[test]
     fn observation_inactive_returns_zero() {
         assert_eq!(rust_automation_after_input_update(), 0);
+    }
+
+    /// Ground truth captured by compiling the real C macros from `units.h`
+    /// and `planets.h` against each screen size. The interplanetary view
+    /// centre is not a constant, so navigation must not assume one.
+    #[test]
+    fn view_geometry_matches_the_c_macros_at_every_supported_resolution() {
+        let low = ViewGeometry::from_screen(320, 240);
+        assert_eq!(low.half_width, 121);
+        assert_eq!(low.half_height, 113);
+        assert_eq!(low.display_to_loc, 56);
+
+        let high = ViewGeometry::from_screen(640, 480);
+        assert_eq!(high.half_width, 281);
+        assert_eq!(high.half_height, 233);
+        assert_eq!(high.display_to_loc, 136);
+    }
+
+    /// Earth's moon 0 (the Hierarchy Starbase) sits at display (86, 113) in
+    /// the 320x240 inner view. That y-coordinate is exactly the view centre,
+    /// which the previously hardcoded 91 would have mismatched by 22 pixels.
+    #[test]
+    fn view_geometry_centre_matches_the_observed_inner_system_layout() {
+        let geometry = ViewGeometry::from_screen(320, 240);
+        assert_eq!(geometry.half_height, 113);
+        assert_eq!(geometry.half_width - 35, 86);
     }
 }
