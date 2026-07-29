@@ -17,3 +17,20 @@ sc2/rust-bridge.log
 logs/
 
 tmp/
+
+# Ad-hoc local experiments and run output
+/test_copy_fix
+/test_copy_fix.rs
+/draw_fontchar_impl.rs
+/screenshot.png
+/phase3_run_sequence.txt
+/prompt_for_next_session.txt
+/video_presentation_summary.md
+/enable_rust.sh
+/run_phase3_*.sh
+/uqm_run_*.log
+/uqm_run_*.txt
+sc2/uqm_test_output.txt
+/sc2/build.vars.bak*
+/sc2/config_unix.h.bak*
+rust/src/graphics/font
