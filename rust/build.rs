@@ -29,6 +29,7 @@ fn main() {
 }
 
 fn run() -> Result<(), String> {
+    println!("cargo:rerun-if-env-changed=UQM_DEPENDENCY_CAPTURE");
     let target = env_value("TARGET")?;
     let toolchain = resolve_toolchain(Path::new("."), &target)?;
     apply_toolchain_environment(&toolchain);
