@@ -41,9 +41,17 @@ const UIO_STREAM_OPERATION_NONE: c_int = 0;
 const UIO_STREAM_OPERATION_READ: c_int = 1;
 
 // Helper function to set errno across FFI boundary
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
 fn set_errno(code: c_int) {
     unsafe {
         *libc::__error() = code;
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn set_errno(code: c_int) {
+    unsafe {
+        *libc::__errno_location() = code;
     }
 }
 
