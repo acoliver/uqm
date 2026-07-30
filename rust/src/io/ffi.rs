@@ -93,10 +93,14 @@ extern "C" {
     pub fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char) -> c_int;
 }
 
-// errno variable from C
-extern "C" {
-    #[link_name = "errno"]
-    static mut errno: c_int;
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
+fn current_errno() -> c_int {
+    unsafe { *libc::__error() }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn current_errno() -> c_int {
+    unsafe { *libc::__errno_location() }
 }
 
 // Constants for uio_open flags
@@ -240,7 +244,7 @@ pub unsafe extern "C" fn copyFile(
     loop {
         let num_in_buf = uio_read(src, buf.as_mut_ptr(), BUFSIZE);
         if num_in_buf == -1 {
-            if errno == EINTR {
+            if current_errno() == EINTR {
                 continue;
             }
             // Error reading - clean up and delete partial copy
@@ -260,7 +264,7 @@ pub unsafe extern "C" fn copyFile(
         while remaining > 0 {
             let num_written = uio_write(dst, buf_ptr, remaining);
             if num_written == -1 {
-                if errno == EINTR {
+                if current_errno() == EINTR {
                     continue;
                 }
                 // Error writing - clean up and delete partial copy
