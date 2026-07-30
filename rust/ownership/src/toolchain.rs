@@ -179,7 +179,7 @@ pub fn reject_ambient_build_flags() -> Result<(), String> {
 }
 
 pub fn production_packages(target: &str) -> &'static [&'static str] {
-    if target.contains("apple-darwin") {
+    if target.contains("apple-darwin") || target.starts_with("macos-") {
         &MACOS_PRODUCTION_PACKAGES
     } else {
         &COMMON_PRODUCTION_PACKAGES
@@ -365,6 +365,10 @@ mod tests {
     fn production_packages_follow_platform_discovery() {
         assert_eq!(
             production_packages("aarch64-apple-darwin"),
+            ["sdl2", "libpng", "liblzma", "bzip2"]
+        );
+        assert_eq!(
+            production_packages("macos-aarch64"),
             ["sdl2", "libpng", "liblzma", "bzip2"]
         );
         assert_eq!(
