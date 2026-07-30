@@ -195,44 +195,18 @@ where
 {
     let deadline = Tick(adapters.clock.now().0.wrapping_add(tick_period));
 
+    if matches!(
+        session.phase,
+        SessionPhase::Warmup
+            | SessionPhase::Launch
+            | SessionPhase::Landing
+            | SessionPhase::TakingOff
+    ) {
+        run_transition_frame(session, adapters, deadline)?;
+        return Ok(RuntimeStep::Continue);
+    }
+
     match session.phase {
-        SessionPhase::Warmup => {
-            session.phase = SessionPhase::Launch;
-            session.animation.reset();
-            adapters.audio.play(SoundCue::Departs)?;
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
-        SessionPhase::Launch => {
-            if session.advance_launch() {
-                session.phase = SessionPhase::Landing;
-                session.animation.reset();
-            }
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
-        SessionPhase::Landing => {
-            if session.advance_landing() {
-                session.phase = SessionPhase::Active;
-                session.lander.in_transit = false;
-                session.animation.reset();
-            }
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
-        SessionPhase::TakingOff => {
-            if session.advance_takeoff() {
-                session.phase = SessionPhase::Return;
-                session.animation.reset();
-                adapters.audio.play(SoundCue::Returns)?;
-            }
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
         SessionPhase::Return => {
             if session.advance_return() {
                 let outcome = session.settle();
@@ -263,6 +237,10 @@ where
             return Ok(RuntimeStep::Continue);
         }
         SessionPhase::Active | SessionPhase::Complete | SessionPhase::Aborted => {}
+        SessionPhase::Warmup
+        | SessionPhase::Launch
+        | SessionPhase::Landing
+        | SessionPhase::TakingOff => unreachable!("transition phases return before gameplay"),
     }
 
     debug_assert!(
@@ -354,6 +332,49 @@ where
     })?;
     adapters.clock.sleep_until(deadline)?;
     Ok(RuntimeStep::Continue)
+}
+
+fn run_transition_frame<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<(), RuntimeError>
+where
+    G: PlanetSideGraphics,
+    A: PlanetSideAudio,
+    K: PlanetSideClock,
+{
+    match session.phase {
+        SessionPhase::Warmup => {
+            session.phase = SessionPhase::Launch;
+            session.animation.reset();
+            adapters.audio.play(SoundCue::Departs)?;
+        }
+        SessionPhase::Launch => {
+            if session.advance_launch() {
+                session.phase = SessionPhase::Landing;
+                session.animation.reset();
+            }
+        }
+        SessionPhase::Landing => {
+            if session.advance_landing() {
+                session.phase = SessionPhase::Active;
+                session.lander.in_transit = false;
+                session.animation.reset();
+            }
+        }
+        SessionPhase::TakingOff => {
+            if session.advance_takeoff() {
+                session.phase = SessionPhase::Return;
+                session.animation.reset();
+                adapters.audio.play(SoundCue::Returns)?;
+            }
+        }
+        _ => unreachable!("run_transition_frame requires a transition phase"),
+    }
+    render_lifecycle(session, adapters)?;
+    adapters.clock.sleep_until(deadline)?;
+    Ok(())
 }
 
 /// Render one lifecycle animation frame (Launch, Landing, TakingOff, Return,

@@ -190,6 +190,102 @@ static NEXT_OBJECT_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::Atomi
 // Audio Thread
 // =============================================================================
 
+fn source_int_value(
+    sources: &mut HashMap<AudioObject, SourceState>,
+    id: AudioObject,
+    prop: i32,
+) -> AudioIntVal {
+    let Some(src) = sources.get_mut(&id) else {
+        return 0;
+    };
+    let value = match prop {
+        AUDIO_SOURCE_STATE => {
+            if let Some(ref sink) = src.sink {
+                if sink.empty() {
+                    src.state = AUDIO_STOPPED;
+                    src.play_start_time = None;
+                    AUDIO_STOPPED
+                } else if sink.is_paused() {
+                    AUDIO_PAUSED
+                } else {
+                    AUDIO_PLAYING
+                }
+            } else {
+                src.state
+            }
+        }
+        AUDIO_BUFFERS_QUEUED => src.queued_buffers.len() as i32,
+        AUDIO_BUFFERS_PROCESSED => {
+            if let Some(ref sink) = src.sink {
+                if sink.empty() {
+                    while let Some(buf) = src.queued_buffers.pop() {
+                        src.processed_buffers.push(buf.id);
+                    }
+                    src.total_samples_queued = 0;
+                    src.samples_consumed = 0;
+                    src.play_start_time = None;
+                } else {
+                    src.update_processed_buffers();
+                }
+            } else {
+                src.update_processed_buffers();
+            }
+            src.processed_buffers.len() as i32
+        }
+        AUDIO_LOOPING if src.looping => 1,
+        _ => 0,
+    };
+    value as AudioIntVal
+}
+
+fn play_source(
+    sources: &mut HashMap<AudioObject, SourceState>,
+    buffers: &HashMap<AudioObject, BufferData>,
+    stream_handle: &rodio::OutputStreamHandle,
+    id: AudioObject,
+) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    if let Some(ref sink) = src.sink {
+        if sink.is_paused() {
+            sink.play();
+            src.state = AUDIO_PLAYING;
+            if src.sample_rate != 0 {
+                src.play_start_time = Some(std::time::Instant::now());
+            }
+            return;
+        }
+    }
+    if src.queued_buffers.is_empty() {
+        return;
+    }
+    let Ok(sink) = Sink::try_new(stream_handle) else {
+        return;
+    };
+    sink.set_volume(src.gain);
+    for qbuf in &src.queued_buffers {
+        if let Some(buf) = buffers.get(&qbuf.id) {
+            if src.sample_rate == 0 {
+                src.sample_rate = buf.frequency;
+            }
+            let source = SamplesBuffer::new(buf.channels, buf.frequency, buf.samples.clone());
+            if src.looping {
+                sink.append(source.repeat_infinite());
+            } else {
+                sink.append(source);
+            }
+        }
+    }
+    src.sink = Some(sink);
+    src.state = AUDIO_PLAYING;
+    if src.sample_rate != 0 {
+        src.play_start_time = Some(std::time::Instant::now());
+    }
+    src.samples_played_before_pause = 0;
+    src.samples_consumed = 0;
+}
+
 fn audio_thread_main(rx: Receiver<AudioCmd>) {
     rust_bridge_log_msg("RODIO_BACKEND: audio thread starting");
 
@@ -275,102 +371,11 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
                 }
 
                 AudioCmd::SourceGetInt(id, prop, response) => {
-                    let value = if let Some(src) = sources.get_mut(&id) {
-                        match prop {
-                            AUDIO_SOURCE_STATE => {
-                                // Check if sink is empty
-                                if let Some(ref sink) = src.sink {
-                                    if sink.empty() {
-                                        src.state = AUDIO_STOPPED;
-                                        src.play_start_time = None;
-                                        AUDIO_STOPPED
-                                    } else if sink.is_paused() {
-                                        AUDIO_PAUSED
-                                    } else {
-                                        AUDIO_PLAYING
-                                    }
-                                } else {
-                                    src.state
-                                }
-                            }
-                            AUDIO_BUFFERS_QUEUED => src.queued_buffers.len() as i32,
-                            AUDIO_BUFFERS_PROCESSED => {
-                                if let Some(ref sink) = src.sink {
-                                    if sink.empty() {
-                                        while let Some(buf) = src.queued_buffers.pop() {
-                                            src.processed_buffers.push(buf.id);
-                                        }
-                                        src.total_samples_queued = 0;
-                                        src.samples_consumed = 0;
-                                        src.play_start_time = None;
-                                    } else {
-                                        // Update processed buffers based on timing
-                                        src.update_processed_buffers();
-                                    }
-                                } else {
-                                    // Update processed buffers based on timing
-                                    src.update_processed_buffers();
-                                }
-                                src.processed_buffers.len() as i32
-                            }
-                            AUDIO_LOOPING if src.looping => 1,
-                            _ => 0,
-                        }
-                    } else {
-                        0
-                    };
-                    let _ = response.send(value as AudioIntVal);
+                    let _ = response.send(source_int_value(&mut sources, id, prop));
                 }
 
                 AudioCmd::SourcePlay(id) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        // If we have a paused sink, resume it
-                        if let Some(ref sink) = src.sink {
-                            if sink.is_paused() {
-                                sink.play();
-                                src.state = AUDIO_PLAYING;
-                                if src.sample_rate != 0 {
-                                    src.play_start_time = Some(std::time::Instant::now());
-                                }
-                                continue;
-                            }
-                        }
-
-                        // Otherwise, create a new sink and play queued buffers
-                        if !src.queued_buffers.is_empty() {
-                            if let Ok(sink) = Sink::try_new(&stream_handle) {
-                                sink.set_volume(src.gain);
-
-                                // Play all queued buffers
-                                for qbuf in &src.queued_buffers {
-                                    if let Some(buf) = buffers.get(&qbuf.id) {
-                                        // Set sample rate from first buffer
-                                        if src.sample_rate == 0 {
-                                            src.sample_rate = buf.frequency;
-                                        }
-                                        let source = SamplesBuffer::new(
-                                            buf.channels,
-                                            buf.frequency,
-                                            buf.samples.clone(),
-                                        );
-                                        if src.looping {
-                                            sink.append(source.repeat_infinite());
-                                        } else {
-                                            sink.append(source);
-                                        }
-                                    }
-                                }
-
-                                src.sink = Some(sink);
-                                src.state = AUDIO_PLAYING;
-                                if src.sample_rate != 0 {
-                                    src.play_start_time = Some(std::time::Instant::now());
-                                }
-                                src.samples_played_before_pause = 0;
-                                src.samples_consumed = 0;
-                            }
-                        }
-                    }
+                    play_source(&mut sources, &buffers, &stream_handle, id);
                 }
 
                 AudioCmd::SourcePause(id) => {
