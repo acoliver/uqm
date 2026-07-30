@@ -319,7 +319,7 @@
     },
     {
       "source": "sc2/src/libs/graphics/sdl/scalers.c",
-      "source_sha256": "2f355386d62cb8be6ffc2ee98ee8402fe62d16000a496459675ad1fd397065e6",
+      "source_sha256": "9979c7b064e68d58b4dcc00752a34b261117b051fca22d962432605481bc2143",
       "object_output": "scalers.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "GFX",

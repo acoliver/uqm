@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json",
     "gist_revision": "519aea3f1f27ba6ac6022dfe08e1520e979cbe1c",
     "sha256": "9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5",
-    "projection_sha256": "b384da5066499272904cfff148ac8b1db7648d342cf586a55ab321588be508e1",
+    "projection_sha256": "cc08f03a890d60f38ad6f2380b679a9978f26fd1a5d8a7a22c1d5dd1187af90e",
     "raw_revision": "9b0d2a1cced5d0ac3eb73432f765a008053eb81b"
   },
   "scan_root": "native",
@@ -517,7 +517,7 @@
       "issue": "GFX",
       "canonical_source": "sc2/src/libs/graphics/sdl/scalers.c",
       "scan_root": "native",
-      "sha256": "2f355386d62cb8be6ffc2ee98ee8402fe62d16000a496459675ad1fd397065e6",
+      "sha256": "9979c7b064e68d58b4dcc00752a34b261117b051fca22d962432605481bc2143",
       "archive_decision": "include",
       "provider": "native_object:native/scalers.c.o",
       "reason": "Transitional C ambient archive member",
