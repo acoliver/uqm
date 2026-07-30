@@ -335,6 +335,7 @@ fn pkg_config_output(
 ) -> Result<Vec<String>, String> {
     let output = Command::new(&pkg_config.executable)
         .current_dir(root)
+        .env("PKG_CONFIG_ALLOW_SYSTEM_CFLAGS", "1")
         .args(arguments)
         .output()
         .map_err(|error| format!("cannot execute pkg-config {:?}: {error}", arguments))?;

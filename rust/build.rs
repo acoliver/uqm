@@ -520,7 +520,7 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
             );
         }
         "linux" => {
-            println!("cargo:rustc-link-lib=static:+whole-archive=uqm_c");
+            println!("cargo:rustc-link-lib=static:+whole-archive,-bundle=uqm_c");
         }
         other => return Err(format!("unsupported validated target OS: {other}")),
     }
