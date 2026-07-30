@@ -171,8 +171,8 @@ jobs:
           lcov -a coverage/coverage-ubuntu/coverage-ubuntu.lcov \
                -a coverage/coverage-macos/coverage-macos.lcov \
                -o combined.lcov
-          # Remove generated bindings from coverage (target/.../bindings.rs)
-          lcov --ignore-errors unused --remove combined.lcov '*/target/*/bindings.rs' -o combined.lcov
+          # Remove generated build output; source under rust/target is not retained by this job.
+          lcov --ignore-errors unused --remove combined.lcov '*/target/*' -o combined.lcov
 
       - name: Generate HTML report
         run: |
