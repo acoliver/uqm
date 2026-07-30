@@ -12,7 +12,7 @@ verify_hash() {
     [ "$actual" = "$expected" ] || { echo "fixture provenance mismatch: $path" >&2; exit 1; }
 }
 
-verify_hash c634bc64fd7df94a29c41cfaa5d41119edf1b2a449f93db3202f22b648a64bf3 "$FIXTURES/queue-provider.rs"
+verify_hash f99bf7105764ab7dbff93550b9b0efaa1e361ae4943110d53decd72492f3361f "$FIXTURES/queue-provider.rs"
 verify_hash 76062c0fc7495bed6411058f7d75d4db1fb6c67a143043050bab611c90c1fd9c "$FIXTURES/queue-consumer.rs"
 
 rm -rf "$OUT"

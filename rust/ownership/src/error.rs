@@ -32,8 +32,6 @@ pub enum DiagnosticCode {
     PathViolation,
     /// An object appears twice in the manifest.
     DuplicateObject,
-    /// An object exists on disk but is missing from the manifest.
-    MissingFromManifest,
     /// An object is declared in the manifest but not found on disk.
     MissingFromDisk,
     /// An object's SHA-256 does not match the manifest.
@@ -63,7 +61,6 @@ impl DiagnosticCode {
             Self::MalformedManifest => "MALFORMED_MANIFEST",
             Self::PathViolation => "PATH_VIOLATION",
             Self::DuplicateObject => "DUPLICATE_OBJECT",
-            Self::MissingFromManifest => "MISSING_FROM_MANIFEST",
             Self::MissingFromDisk => "MISSING_FROM_DISK",
             Self::StaleObject => "STALE_OBJECT",
             Self::UnknownDecision => "UNKNOWN_DECISION",

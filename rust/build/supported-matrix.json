@@ -1,0 +1,82 @@
+{
+  "schema": "uqm-supported-matrix-v1",
+  "axes": {
+    "os": [
+      "macos",
+      "linux"
+    ],
+    "architecture": [
+      "aarch64",
+      "x86_64"
+    ],
+    "renderer": [
+      "sdl2-software"
+    ],
+    "input": [
+      "sdl2"
+    ],
+    "content": [
+      "uqm-content-v0.8"
+    ],
+    "audio": [
+      "cpal",
+      "cpal-alsa"
+    ],
+    "network": [
+      "full"
+    ],
+    "package": [
+      "directory-manifest"
+    ]
+  },
+  "supported": [
+    {
+      "os": "macos",
+      "architectures": [
+        "aarch64",
+        "x86_64"
+      ],
+      "renderer": "sdl2-software",
+      "input": "sdl2",
+      "content": "uqm-content-v0.8",
+      "audio": "cpal",
+      "network": "full",
+      "package": "directory-manifest",
+      "prerequisites": [
+        "cc",
+        "ar",
+        "nm",
+        "pkg-config",
+        "sdl2",
+        "libpng",
+        "liblzma",
+        "bzip2"
+      ]
+    },
+    {
+      "os": "linux",
+      "architectures": [
+        "aarch64",
+        "x86_64"
+      ],
+      "renderer": "sdl2-software",
+      "input": "sdl2",
+      "content": "uqm-content-v0.8",
+      "audio": "cpal-alsa",
+      "network": "full",
+      "package": "directory-manifest",
+      "prerequisites": [
+        "cc",
+        "ar",
+        "nm",
+        "pkg-config",
+        "sdl2",
+        "libpng",
+        "liblzma",
+        "bzip2",
+        "alsa"
+      ]
+    }
+  ],
+  "unsupported_policy": "Any tuple not represented by one supported row fails before compilation with all requested dimensions in the diagnostic."
+}

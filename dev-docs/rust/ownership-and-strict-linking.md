@@ -1,24 +1,28 @@
 # Native Ownership and Strict Production Linking
 
-Issue S1/#21 owns only the control-plane entries assigned by immutable ownership
-ledger v3: raw revision `74c5f94716665c3cc649478cf69ac3e60c2687c2`,
-gist revision `d1a2a7c00ef4960fd592fdced63592a7c240b979`, SHA-256
-`9acad7ab2963c6dd4237e14e4ff72cdac2e9adc4ef82c1c32a40c6f8d5d7e746`,
-and assessment commit `54e1dba5f56e9f20a3aa773d5f151470a8cf0662`. Validation never fetches the
-Gist: the checked-in manifest pins both its immutable revision and content hash,
-and an authenticated projection digest covers every ledger-derived object
-field. A ledger update requires publishing a new immutable revision, updating
-all three identities and the projection digest together, and reviewing the
-resulting manifest delta.
+Issue S1/#21 retains provider authority under authoritative immutable ownership
+ledger v5: raw revision `9b0d2a1cced5d0ac3eb73432f765a008053eb81b`,
+gist revision `519aea3f1f27ba6ac6022dfe08e1520e979cbe1c`, SHA-256
+`9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5`,
+schema `uqm-native-ownership-ledger-v5`, and assessment commit
+`54e1dba5f56e9f20a3aa773d5f151470a8cf0662`. The immutable raw URL is
+<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json>.
+Validation never fetches the Gist: the checked-in manifest pins the schema, raw
+revision and URL, gist history revision, and content hash. An authenticated
+projection digest covers every ledger-derived object identity field. A ledger
+update requires publishing a new immutable revision, updating all identities,
+and reviewing the resulting manifest delta.
 
 ## Provider authority
 
-`rust/ownership/native-provider-manifest.json` is the only authority for the
-transitional C archive. Its 339 entries use canonical repository-relative paths;
-no basename exclusion or recursive directory result authorizes membership.
-Each object records SHA-256, canonical domain issue, typed provider, archive
-decision, and producing command. Recompiled native entries map an exact source
-to an exact `OUT_DIR` object.
+`rust/ownership/native-provider-manifest.json` remains S1's archive authority.
+Its 338 entries identify exact produced-object names under `native/`; retained
+production objects also pin tracked canonical source and source SHA-256. No
+basename exclusion, ignored-object scan, or recursive directory result
+authorizes membership. The stale source-less `heap.c.o` entry is removed.
+Each object records canonical domain issue, typed provider, archive decision,
+and producing command. Recompiled entries map one source to one `OUT_DIR`
+object.
 
 The supported production profile enables exactly `audio_heart,linked_c_archive`.
 `rust/build.rs` loads `uqm-ownership` as a build dependency and fails before
@@ -39,9 +43,19 @@ future tracked-source deletion. S1 deletes no tracked native source. It excludes
 and rejects only `sc2/obj/release/src/uqm/displist.c.o` from production archive
 membership and assigns all ten queue exports solely to the Rust queue.
 
-The machine declaration records tracked native file delta 0, active native
-provider delta -1, permissive production-link mode delta -1, and retained source
-ownership under COLLECTIONS/#37.
+Ledger v5 additionally authorizes S2 to provide the 24 `CharHashTable_*` and
+`StringHashTable_*` ABI symbols solely from `rust/src/collections/hash_table.rs`.
+The manifest excludes `native/charhashtable.c.o` and
+`native/stringhashtable.c.o`, and each symbol contract names its one superseded
+C object. This narrow clean-build correction does not transfer canonical source
+ownership: RESOURCE/#22 retains `sc2/src/libs/uio/charhashtable.c` and its header,
+and CORE_NATIVE/#22 retains `sc2/src/libs/strings/stringhashtable.c` and its
+header, including eventual tracked-source deletion.
+
+The machine declaration records tracked native file delta 0, the four removed
+production providers (`displist.c.o`, source-less `heap.c.o`, and both hash-table
+objects), permissive production-link mode delta -1, and retained source ownership
+under COLLECTIONS/#37, RESOURCE/#22, and CORE_NATIVE/#22.
 
 ## Replay
 
@@ -63,3 +77,7 @@ contract without claiming ownership of S2's ignored native-object production.
 
 S2 retains clean root orchestration and supported-matrix ownership. S3 retains
 linked harnesses and all-feature probes. S4 retains comprehensive CI.
+
+## Issue #23 boundary
+
+The broad all-feature linked-harness gate remains failing and is owned by issue #23. This issue22 contract proves the exact focused production feature pair only; it neither claims that broad gate passed nor weakens it.

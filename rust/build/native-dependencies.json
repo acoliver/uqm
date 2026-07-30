@@ -1,0 +1,3982 @@
+{
+  "schema": "uqm-native-dependencies-v2",
+  "description": "Exact reviewed repository-local compiler depfile inventory per supported target. macOS/aarch64 was recaptured from all 321 production depfiles; other official target subsets are validated exactly by CI and updated only with the explicit capture-dependencies command.",
+  "dependencies": [
+    {
+      "path": "sc2/config_unix.h",
+      "sha256": "1dc53206103a8eab15df02b90c746a4037b65f2a1fc54656f9622131da5e29d5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/config.h",
+      "sha256": "2e879cce640deb6605677b5e1de1cbd1e4122afd9cf580d2ff4fa90c43839e2b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/endian_uqm.h",
+      "sha256": "2b95574b0c870a82d952a1c7b85c4c5f09a66b12cd181c0d4cecaaea17df5a1d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/getopt/getopt.h",
+      "sha256": "1e15f8e70323d7da5fc5d7f03416f9113d57694e4b93a0b77233ed72b6ee4aff",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/alarm.h",
+      "sha256": "244cb55ad4f831947ebc86c1d3807cae06927941a012bc037a1ca31035ab9599",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/async.h",
+      "sha256": "115466ec1e431103af47025fcb8fdff766064d3453875435f3b79be592f25708",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/callback.h",
+      "sha256": "65f1ccf03096d83f325e5de3f4fd08ff273396aa74f9a680d9249d77bb0953b5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/callback/alarm.h",
+      "sha256": "e8d802e5696d4a676887d5593d834e18fd8dee763bccbc55d1bcb26189e3f05c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/callback/async.h",
+      "sha256": "2cc56e65579210458e0429e1790b0dbac408aab7f6d74ed4ead6ad12c5847cbb",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/callback/callback.h",
+      "sha256": "9f4f407f18e29202b7b8be064663e5f2f64e1416d35fa3b3aab5de46ab9473bf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/compiler.h",
+      "sha256": "6049b1ee30a333d6c0e7fd1a764ce0dedf7fa0f5c3ce567a857e7f2b4a2be7ec",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/declib.h",
+      "sha256": "b12b0b00965f123b2e6c16ecc1ae9518e2a53d53aaf33f68e5f3d14cff5ddc47",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/decomp/lzh.h",
+      "sha256": "cfdeaed5891cc69bfd944433341d3f639e4ca46c7cd67bdcf61c886308d1e97b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/file.h",
+      "sha256": "7febeed693960c70f4d145408bcb03b6898092ceb1b801865b61ecdbcb554ff2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/file/filintrn.h",
+      "sha256": "53c3f6785d78ed730776239f01890308f4dc694a75d5a5240cfb3ac80e0f1b1b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/gfxlib.h",
+      "sha256": "4d2ce346e76f5b9c9c4e43b7f8fd36f874f4deebac4a1c9832cb422fbaf34534",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/bbox.h",
+      "sha256": "989c09e7c63404129710defaa9ff23690eb59018a1eb888946efdbcfdc85c5f5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/cmap.h",
+      "sha256": "4c384b7bc389f1793f7491a1d8cfc7de7345b9f6622691e4c1a3db74ecd43eec",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/context.h",
+      "sha256": "ab02950db1e89673997c4d489b5bc910f723338dcb9e788b7177f0a69c204cc6",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/dcqueue.h",
+      "sha256": "4be66f08a9de3e659721960779f1100b359b902aab031871601f660a2509a51a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/drawable.h",
+      "sha256": "244885c2f9c333a8ca90538029e9a33090cfb563bf6ef626ffbf5090ddfff5f3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/drawcmd.h",
+      "sha256": "33686a554524425d27fb82b1782ce8f8726115262ccc47c2ed6cb138e13f5b8e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/font.h",
+      "sha256": "4caa08297eb13e0e571dad7231e681a25755ac9525f069c3e3f009716269834c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/gfx_common.h",
+      "sha256": "f938441f66b654e0c81984c9a7cf2882fc5ec923edaaff49f41260f07d63fe39",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/gfxintrn.h",
+      "sha256": "7cc86db2915453a48a10611b17c5d6b140d526f9954d5df5a24668ed9aae05e0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/prim.h",
+      "sha256": "49ea5f552a130ae36685f1ee32a7039782fb494276846227dce193947253cc94",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/2xscalers.h",
+      "sha256": "adb242fc676a139a399ba340a9a5f862f620a1fff7e5be302636cad5ea5f203a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/opengl.h",
+      "sha256": "1155181a0fbde32ab274be3fc8a4bcb74e1ed8944b4e413191a906cb491ebbc0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/palette.h",
+      "sha256": "a0607939ba77cce74262d0b057f3f4fd4b0b1717e83f838ebe3669f327af7f22",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/png2sdl.h",
+      "sha256": "79969cd6264a2e08cba01f42d1ad74ce90d557cf518f3bac2bf99d27525f570a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/primitives.h",
+      "sha256": "8212856a003c65873f9fc7230460c865c20491da521f5651bafc5136aacbf91f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/pure.h",
+      "sha256": "024c3665ebaa479f09daf0aefcdf5b99ec0d1d9de7f833b8f46e93656c16f35c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/rotozoom.h",
+      "sha256": "a5127ca422a18eb8f2b442c65068d9dc21fb22ec57bb517aa990c4930877a1b9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/rust_gfx.h",
+      "sha256": "66055e66c6fb802a90cd2060f3105c58a0e73c5a827d44483169cffe3f3de3cf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/scaleint.h",
+      "sha256": "2c82bed05ecdb56dbe284b5024fc2ce5f63a4539acfb0955d3dcf1290c410c3b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/scalers.h",
+      "sha256": "8c6c030388944f270df9e09f5f05da2968e822ab1fde7ec82f63c25c52f5578d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/sdl_common.h",
+      "sha256": "98111561f9c9e1724f01016ae0f98a2914271e94ecdcfcb868eafc4db4a5793c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/sdl/sdluio.h",
+      "sha256": "5cb24786cc52926df1dfb8839fff4db75ae8eead11cad4b741a26e0a39e23179",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/tfb_draw.h",
+      "sha256": "00411a246a3bb553a453741c933ad2d311fd82c14c388f941b47d3e92e3ea490",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/tfb_prim.h",
+      "sha256": "5823a02917d62c3496d806de8fd87dcbe6b68c846bee74584de1c15fe6451155",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/graphics/widgets.h",
+      "sha256": "c6a30ef45bc6d7264c99b6c1ff15de2ad4e155184d7c22b6024ccb5085aa5cd1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/inplib.h",
+      "sha256": "e5a77df6ba2952de2c19618326f47e8c9c224676d9990809ade77a4e906390bf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/inpintrn.h",
+      "sha256": "35d0d4df36733d50c8f3bb9adf29ccd715dc5196d67fb826a45a3754191f1ac8",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/input_common.h",
+      "sha256": "7c650fc4ee1b0503b345f1b9fe88ff73f3dff8e307e62bd17a660781d11d9999",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/sdl/input.h",
+      "sha256": "8a235a7cd2ec562db8a8a123ae91919484b06c146eee24a21d56c32ca6f7d645",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/sdl/keynames.h",
+      "sha256": "552614cf504d96f3c040e10a86881ce20ec22d52d35ff6b61cd6418c8d9b0605",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/sdl/rust_input.h",
+      "sha256": "ed262a597eb7a21eada9eed411f6cad9a1ca23ccf15992f6c973883e8300de68",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/sdl/rust_vcontrol.h",
+      "sha256": "9341c72a58ae5dc1bbec5429816d6a5b9ffac03b7cffc6202f3a36bca5586875",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/input/sdl/vcontrol.h",
+      "sha256": "bdaa0741af7422a945aba952505fe3adcd445495de891135d76d4fdcbe3b1a83",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/list/list.h",
+      "sha256": "27987bdc1dacb0cde3800f00c1de07df381f8d4651b9a3bb72ac0c6dc5fe6081",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/log.h",
+      "sha256": "15729093b5331f6055cfb56d59bdd57b06944927db2c14c928e7aaee32fafc55",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/log/loginternal.h",
+      "sha256": "4c9317efaaeb8712343e33e304d40f1768fe19698774fbf4baa33f23acaca110",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/log/msgbox.h",
+      "sha256": "438cd3acafe2de5d1b4a1c0f5cef177c54aff196c735db8bf16c387e5e450d6b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/log/uqmlog.h",
+      "sha256": "4d489150c7acaa64bfbcecb1848ebabd435bdad14b4918bf219db5bcbbb25aaf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/math/random.h",
+      "sha256": "b28a36b9c0b6b97607206e34ae885ee376804fca44b905a0267b86292a352518",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/mathlib.h",
+      "sha256": "7081ace35824991be26c239f7b28452b1c57415f8188e72fd19efe83943b1263",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/memlib.h",
+      "sha256": "bedb0dffaf54ba851f53f26c807edcdef60a74f704fe90f3dc5af4c673e320b2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/mikmod/mikmod.h",
+      "sha256": "1c9698cd334ffe457daf2bfc6b3f191a64ea65d825aec08775a268639a91a148",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/mikmod/mikmod_ctype.h",
+      "sha256": "fee6a0ae6c8c6611bd5c113c183080fea3fb776a11b2e6063740a616e7a50fa5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/mikmod/mikmod_internals.h",
+      "sha256": "10dc94457ee9d0351c97bfb01445f5a05eacc3e16f10b95e6c4cbecb2a3e979c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/misc.h",
+      "sha256": "29c47e3d8c2730bcdd45bd696853bceab7b9d7e59e77a25ad7075cbb7f8d71aa",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/net.h",
+      "sha256": "c5114ed524fcf467062326f59baf7783a9795e5b2efaf5333a8ead4a96ea8749",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/bytesex.h",
+      "sha256": "b2b9f5a80986fbc79f45eef36f100bb8e8d9d89c5a456f6e5f797dafd277b7c1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/connect/connect.h",
+      "sha256": "f3b7a6487b3339124e1497c9082e666d46274229072c244a347cd4facf860cad",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/connect/listen.h",
+      "sha256": "32a7d89b289806e61c1364f45a28da9097fffd38712cc31aa9368fdda231146a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/connect/resolve.h",
+      "sha256": "262703830e27c0051cf6ad49ff090dc32c5ba7e4e0e93db377a61c757658add0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/netmanager/ndesc.h",
+      "sha256": "813ae8465dc17b2f1d7f2530c697b8ebad532d05127282cf44d71e77db228993",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/netmanager/ndindex.ci",
+      "sha256": "57bb3b28dd5effc9483a0e71d4959ecc97db6213419365c74ce84277700c1c01",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/netmanager/netmanager.h",
+      "sha256": "266346d0e5d66efd1a4149146e393632e6ecea79eb1ac443a75c40eabe71e41f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/netmanager/netmanager_bsd.h",
+      "sha256": "e89a7dd0b99d8e2dc136480ec466282cdf5ca4d21404318a30696c8b55474e56",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/netmanager/netmanager_common.ci",
+      "sha256": "12f980f034c5a4bf4a7a3e959f3f9c57c9918b3d39d29f9c3172aa6720f20d59",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/netport.h",
+      "sha256": "924a07b2b3bafacdaec15abe345a7405c8e4db1178a50bd1a07a634daea34fc7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/network.h",
+      "sha256": "1b474094e699eac304d4d24d382dee4d176ae18c366df1bab84a141a5818a419",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/socket/socket.h",
+      "sha256": "47aa81dfe5c1b0bc699a7102490a336c02818542abd128127da1a1f33574f54e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/network/socket/socket_bsd.h",
+      "sha256": "de593952f572a8beeff19ed5b37ef48bdc06190448919245acadd676f19738f8",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/platform.h",
+      "sha256": "e053a9ce3c015e92177d1df9d41a112c2790babf00d27cc4348cb29e1b386944",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/reslib.h",
+      "sha256": "02c03c772a4830ad7d84d83ec92e0b9f3fe0009186c93095d257fa91eb5c7550",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/resource/index.h",
+      "sha256": "a8dedc24dbce9611591662e55563b2f1896454dd97a3e8d9bc154a65bb7d28d3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/resource/propfile.h",
+      "sha256": "227f4848c37b210792af26b388b4f285a75099c6bf1e8ad9fd9ac5a09c250a53",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/resource/resintrn.h",
+      "sha256": "48a32ccb4faf7bbb2204c5d2f2ebf66e73ec7c4084983485aedc2e46b5186d0f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/resource/stringbank.h",
+      "sha256": "33d7545a10c0a86499632df770ac69c25c1522493a8f0d3d44eb2a2f3e78d38a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sndlib.h",
+      "sha256": "53bbd91fd51bf130dc4349f74e38c3fc940c995f2d836b360ed302e4f2d3179c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/audiocore.h",
+      "sha256": "d7c8003285a4a3f2d9f98329cc72daac1b9491d07d3d957b2ed9a641aa57a5ba",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/aiffaud.h",
+      "sha256": "57a949c76774b98a39018c74d886218a09a5c2063d0972808a1045989f65b236",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/decoder.h",
+      "sha256": "558e8ae3818c630047f88e5ae1beed32fadd7515383491db66fd6f0c2b8c708e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/dukaud.h",
+      "sha256": "422bba1a4c5d48d0b56761fd685e9bd910e29afe68209923e9bbf1c8302fbd5a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/modaud.h",
+      "sha256": "16a157382564f535b0fd0ef745179e5b7ac1f794bce7327a20d8cd29cdcac539",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/rust_aiff.h",
+      "sha256": "adc388206c43a81e1be1a1e656f6cd6d7b2ec78a1b3233fa00377ca2e5f5e4d4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/rust_dukaud.h",
+      "sha256": "ee6a17ff7ee6f9298e27b05013352daed9b440148d9a8fb432583bf2f0b4b7a9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/rust_mod.h",
+      "sha256": "fa5bd010a1ea4e415abd6936e271dc6fb010114e6abeb2b8ae581e6b0b8b6a41",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/rust_oggaud.h",
+      "sha256": "1c8bba61efd4ff7fb6f017a01ea16b1ef660bb2f07c1553cef1d8995906343a0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/rust_wav.h",
+      "sha256": "71286d614ef15f8e082a9410699321aa1a2df795511ec90e20e56d0ae543f6d1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/decoders/wav.h",
+      "sha256": "be079ae77b7c1069b655792ef553dd497fecc5a78b1abd9fb25f1c5933bad3ca",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/mixer/mixer.h",
+      "sha256": "16b90d1663fd202d73a6d9357a3e4b2b797eda1748b8ef952e4bb72351d1e30e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/mixer/nosound/audiodrv_nosound.h",
+      "sha256": "fb7ffa0fa6e31f5373ce69a405d521c0db398bd1f1901238d37f7ac443695f33",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/mixer/sdl/audiodrv_sdl.h",
+      "sha256": "5cdcb22220beea1e68fe40f5e7a8a6e4bd3a6de8c0c46e7677bff39034fd3153",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/rust_mixer.h",
+      "sha256": "75d1d1f0ecad3cc0967aede0cbfb0117a5e8d8df987a5261847b01e6726a2709",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/sndintrn.h",
+      "sha256": "36e22bb6ca09a226d57b5e69b370fc9574f1089ce95a7c41ba250ff0f8170b1d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/sound.h",
+      "sha256": "555b17c96bbaab4275efe74db4de4a6e6749053688a5e023c478abb0f5e0d95a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/stream.h",
+      "sha256": "ef6e4896c74954f93a95a9b3b6f9a205f7165502ce09903b43c65ba5490c366e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/trackint.h",
+      "sha256": "b614a4224d8b54c9df5bb80d64921e03638141b363653bfbdf019ac5e1459b0e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/sound/trackplayer.h",
+      "sha256": "4fcdd130df7acbb6080d9f08836b09d46b9f416c5b2d856d08daedba9a1979cd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/strings/stringhashtable.h",
+      "sha256": "12dd1b898f97a67e5202fcc4c90cab9135bb9167934593d5e8f53efd4f67f779",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/strings/strintrn.h",
+      "sha256": "cf601eae8816d79e62b2d767201cc8a16080ab2448ec71fef482f6285883d0d6",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/strlib.h",
+      "sha256": "8df58458d375bca1ec43d7fde89bf8fa0756d5af33c1adaea5c8f7d8768c47c3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/tasklib.h",
+      "sha256": "527c6b4dda67bd9f1d21a9da63a5d8fa9e650e201eeea03c32e22555c21b9d7c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/threadlib.h",
+      "sha256": "9f97df242b762ffcb32cb831f240426beb1116925a1509e387104c943d010df7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/threads/rust_threads.h",
+      "sha256": "a263923fe1b8589d424ca2c1d2e048701cb3eb24024f37453c3591291acbdfdf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/threads/sdl/sdlthreads.h",
+      "sha256": "8d9a7c590e1f2bc86e210d92d07cf8e8d79456e31840b055d5c9369ed11775b4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/threads/thrcommon.h",
+      "sha256": "a817075ad28f2bd1aa8b0f9e6b16b436710a513a2881264d99bec88816202ce1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/time/sdl/sdltime.h",
+      "sha256": "a8088eb7bee24cded4bea0375a6316a33a33c145d375d5308ecd4ec3cdf66e82",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/time/timecommon.h",
+      "sha256": "74937e8ee1314f3f96ab1a7632f7cb6bcf2fb7b824cfc757783b2a98a316c2f9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/timelib.h",
+      "sha256": "7f1dc4b9f3a76e451c41c9c8173bb42039b47a900746bc49bea5e3d1d48ee3fc",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio.h",
+      "sha256": "a04997a4b97bb68458464defcb39fbb721e2646c5035e96a982baebb1326f423",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/charhashtable.h",
+      "sha256": "384ea74c48de3e8b48966ee84f72a175d54d09c0d2848487fce5871b16b46374",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/debug.h",
+      "sha256": "404db59ce2a155f9788056e4afe4b61652bdf89d9e50a0853589645a7022b6e5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/fileblock.h",
+      "sha256": "bfa41e7524a852394c2f27595bd7ddf0b01798289c470a00912475eb8c0c2c58",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/fstypes.h",
+      "sha256": "9ebefaaa9d98359e7390293e05d18976771a4c9941812a61e8ea648641668569",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/getint.h",
+      "sha256": "5c77f8575c047d4d4a1ef080a8b81158177015d852d2fb661e247eec3a151c28",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/gphys.h",
+      "sha256": "aa588cbf574afc86bc77980be45e163aeadd66fdbafe2b44ef44643b2b5b48f3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/hashtable.h",
+      "sha256": "c945d19df128c3122efa11d60f36d903fdc67171523046b222a4ebdf88ac8b41",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/io.h",
+      "sha256": "929c33df8ddcf3a193facdb804fc20ba0485e074fdbfdfa4cc9f22ebf0fab1fc",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/iointrn.h",
+      "sha256": "7a0d5fa9d727bd961eaddd517b28f0abaf06d63efe1084cc7889b663868dd5f5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/match.h",
+      "sha256": "3537cb4438186bdb5a172f7fb939d7fc3809445e903cb8bf869fb60d70132d78",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/mem.h",
+      "sha256": "7aeb01e0aa4f845d5fd87c2b8a1d407668e5f907783d37afe85980a731257a6f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/mount.h",
+      "sha256": "c812237192d5734834b377451f20175a1c18c1f9c40d40d0a3208231f0643d39",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/mounttree.h",
+      "sha256": "d761dc2a5ff2fb61e3b51840fc69f16f89ca012183bec4150c75c78d6e45ed67",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/paths.h",
+      "sha256": "c1587f86b330ae5e7faf55ae9e2252c1e828c784b0d8dae7cecbfa2a4a3cc8c9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/physical.h",
+      "sha256": "336c972b648588a5efcd87a090202ef8193ba51ab621f6b2431e43261034daf1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/types.h",
+      "sha256": "1556bee018ebf60797c76b7d44f63c8b47f2e43bfca6b5ebb9082407d87ee79c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/uioport.h",
+      "sha256": "ab8aa04e93fb00da2c822e716dcbec3a524f7c286b899a8c1840d5e4d79caa7a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/uiostream.h",
+      "sha256": "d441ce0cfbd2705dd595491342260c2cad8296f0bb777c8f33462245619f333d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/uioutils.h",
+      "sha256": "cdafdd6c233764ff1af4dd1e69a56bb704cbec7d70381cfb49af96b5ea18854b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/utils.h",
+      "sha256": "a42bc5e8bb8a8e25ce4d5fcabc4adead2c5b5a43b677ece64efc8b7369a85312",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/uio/zip/zip.h",
+      "sha256": "5bfff9a812504d355083dec481fc7fb50b196423a07cc55c40e0737d7f705eb7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/unicode.h",
+      "sha256": "99b3b5057820657ea8d7a4172dc4149a452b5e02a0b4b2182a6ffc46eb701aae",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/video/dukvid.h",
+      "sha256": "ef1137969d802a15339bdb0d17b770e83d6f2a9b2d20e6a954924ae5312042c7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/video/rust_dukvid.h",
+      "sha256": "8cd4f8400ec6fed2f8b9d82408256323b23a1bc957b4df0e091729c07b99da7c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/video/video.h",
+      "sha256": "7ca7d33ee957c54d99474a7025e9536da7d51f07019b7e1b827c2550c57ead64",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/video/videodec.h",
+      "sha256": "0330a6aff3584ddae1f6dd5a991f4d907f83dfe4fb30441acc4e988c7ac5eb0c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/video/vidintrn.h",
+      "sha256": "46d9c7471ed8e73b1758df741c9e9bf72551e732bb6bc8f194ff17cc2716fdfd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/video/vidplayer.h",
+      "sha256": "2ba83340a34cb472b8c696bc77ae18d166a56ac577c7ce9c896b01027d488a2f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/libs/vidlib.h",
+      "sha256": "fe74b6b71a917315f4b77305b037a6a0710fd56f119979139ecb2fa82a9a6205",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/options.h",
+      "sha256": "1f3f70da2af8322dc125ca24a01e442ecf1b0de60f9a65e1379f22b271ea3cf5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/port.h",
+      "sha256": "080348daed076d303b372065038e3ac27a82e572e315beb192a715d7421c089a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/rust_bridge.h",
+      "sha256": "d995ea09924551d4d0b0147f2fd274806c01d8b09221e9567a4bde91fdfb2008",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/types.h",
+      "sha256": "99e43926b6825c2ea8fcfd7a095680cb952ab2170c09f25541d5693105cc01ab",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/battle.h",
+      "sha256": "0ca20954620274060a0fbed116230910b7b17e2f9811c9a80fc625c27717108b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/battlecontrols.h",
+      "sha256": "7db705a9beafa1efe22fc85b067c7af83f551754f7767223544d267c77f6a072",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/build.h",
+      "sha256": "f905bad791a9b91d19ad5996f72ef0f90737012508765910600ce43011668b97",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/clock.h",
+      "sha256": "5a781d33398eb8a14b34b55cf153bfd623e58ee08f4857df2148c9d0606fdcb9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/cnctdlg.h",
+      "sha256": "7bba741784d0cbdb53b3255fa59132f0ac757aaad35a6d958eda3659846154f7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/coderes.h",
+      "sha256": "3a9790e645b8503e5e2e1d847c05116066d3fdd7631d3896128e6f156528acc7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/collide.h",
+      "sha256": "d24df8076d157128274aa5c83aedadc3530502d0246692b99384d290e4901f29",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/colors.h",
+      "sha256": "9cf37a8c8d6b0bf53eb92f38fe79316f7e733ac55c66fdfcf9c0022d90664a24",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm.h",
+      "sha256": "5206eaf631604663659ef3f1c61a3f0cb76203b80dba617713b0bc5c26bf3413",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/arilou/resinst.h",
+      "sha256": "7a6f59c41f0ce49b998c60748c74801790b8c0058742986ca774a7be3ded8931",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/arilou/strings.h",
+      "sha256": "548d6dea67aa451287ff391cc7339991a3e49f0793bc2398b2239a226d83605a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/blackur/resinst.h",
+      "sha256": "ae58787f713f538f446dadf97cade356e1d0ff85fc0d3c42c782607a350b9d14",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/blackur/strings.h",
+      "sha256": "293e76992b03ac5c67ae86f1f39725591ba5d812a31db144a9f56023f85a10a1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/chmmr/resinst.h",
+      "sha256": "8bec94d8706b9126d38c3d1abd4edd3a89539431cfb40035a702146344ecdd9f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/chmmr/strings.h",
+      "sha256": "32b53d07032428e622139d8e3da63d1e2870e1e5d8cb085ffc6ec18e2ae311bf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/comandr/resinst.h",
+      "sha256": "e20578b04b4201d6744eac7e12c7dc798e7d80db4d5d21a32cbb82a41c7a19ed",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/comandr/strings.h",
+      "sha256": "315ec0deb6a3ca2a64fc80091f0c2b30697716c7f7adc22a45d3801d5fc7b73c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/commall.h",
+      "sha256": "eeee9d9a37ebedf15af0aff2d68d4cf1f32b0e496365db77f522f8d2cf1e4049",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/druuge/resinst.h",
+      "sha256": "19ccdf9a9aae0cecdb8ba2f384fe30734b44f61b00f283c29bcb99740f9e4bc5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/druuge/strings.h",
+      "sha256": "1dfe5bb28e43f3c6df1144dc4a41ea72af85a80c23967628c78e468e00af0bfc",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/ilwrath/resinst.h",
+      "sha256": "21118dc0d1c45ada0e35eec9229db0a893dc1f7e437365c50cb1497cf5bc807b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/ilwrath/strings.h",
+      "sha256": "33626b33380868679ef827ae60103814ec4c21d00d0d3a29fce744d2d34e7e63",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/melnorm/resinst.h",
+      "sha256": "2abd86ede07aca43fec1e204f81e55e9216116f73ab0fa615210c906b3860ee2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/melnorm/strings.h",
+      "sha256": "fa33635dd5124984ffcb2a2807943131c6f19e555fae0e67e7477a261bea9e8e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/mycon/resinst.h",
+      "sha256": "27fc7dd6e1bf8c20b54b0332ac3aab3b51322fe0fa1f106108ecc00dfc5d0669",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/mycon/strings.h",
+      "sha256": "feb1b8d3b77a07b40b5f9aed72f0bfc47539f4ed595775ffb38fe24ccb9d2c76",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/orz/resinst.h",
+      "sha256": "c0b3107edd6f90960d706b177d75b519ca15a09f422875c4a532ac96eea8dfcd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/orz/strings.h",
+      "sha256": "3b2b42d016c693bc6c06ef5d25743379335bd8d7b5d34e750e11284173b8f1f1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/pkunk/resinst.h",
+      "sha256": "d69284de53f74a805cbed8d0c2839727ccbf85ea3e4efc34f319657ecffb8045",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/pkunk/strings.h",
+      "sha256": "c3d112b0af2f62484efac3caad9f2c7f10827edbae63c928aaa29416d6d32bed",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/rebel/strings.h",
+      "sha256": "3a7c8ed83334dd5b9dc9b1ac2f042ec31b1457cc7649c0ec2facf2928a230f85",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/shofixt/resinst.h",
+      "sha256": "d12f649238001b8e166986d3d88e0cff12b658adad414104e8c3141aa2ac6d65",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/shofixt/strings.h",
+      "sha256": "6cd3968b077f1c20051636ba0f4fe8548a2648d2f2aa8e4b1c994a778b1bcf18",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/slyhome/resinst.h",
+      "sha256": "4a3a143db93a2d6304164fbb87b9d8a2cb96cb59cadecf82b83d2adf42acdb36",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/slyhome/strings.h",
+      "sha256": "a3911c40e201c1bbb5a1eabaeb7216589227730980529f5acd18ce4d69782d35",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/slyland/resinst.h",
+      "sha256": "ed4721152415519bc75cb8148f7b673da2887fcc31f220e171cef823fbc9fb7f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/slyland/strings.h",
+      "sha256": "bf56106555e4bbb6b8a657d9bfdf823d8681213f2e9fa5b1620723b09d3db37b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/spahome/strings.h",
+      "sha256": "d9918e7459e6977dd08d6d2519ead68016c1f1b82b9d3bba3958f7efb06536d7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/spathi/resinst.h",
+      "sha256": "f57b48caa58240d1a5ab2a70dcb4e2b640a463e0c51b083dd93c885e64665080",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/spathi/strings.h",
+      "sha256": "8e370257f92dd529b121474ae01e822e69cf7721a5a22c95baf4c2bbb6976849",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/starbas/strings.h",
+      "sha256": "03f025bec8e9e7f20c7b8b72c5be29bd5e816cf2924fba2b306bc1c7cb7a510e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/supox/resinst.h",
+      "sha256": "44c1c6f125e61417b9d83dabaa15c20cf151a199108db5c465f7916a2d7fa328",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/supox/strings.h",
+      "sha256": "cad9479215b0f1ddd24aa32eb4a2aa660b3e65ad749e1c4830bd8c4f022da266",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/syreen/resinst.h",
+      "sha256": "77e01206adb00604b2d2b7c0bee64980d4969183c590f7738bea8d6c94bbd791",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/syreen/strings.h",
+      "sha256": "3f0364c2d1d6454aec16a0f4a5621e97f550c9431c149229a875d8e8a97a9f5b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/talkpet/resinst.h",
+      "sha256": "543d29f06c623e191013cefcbf814a489d3430923c77af9c5f1d5b210bda1b23",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/talkpet/strings.h",
+      "sha256": "50c28df23dd5da3a10abdb56bb816a282d2c385d8756a27dcef0eb6a60c452ae",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/thradd/resinst.h",
+      "sha256": "218bd418b7c5bc3213dae11bc432f23ef8a56686a0b84455b27e1249a83316db",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/thradd/strings.h",
+      "sha256": "73014426a2817cb83d2baa6b235376290d797bd371e7ab4a8a0656bfca451740",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/umgah/resinst.h",
+      "sha256": "1d59e2905f640360f5196a3edfe51f8079155de11984f67deb4444ad9e37384d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/umgah/strings.h",
+      "sha256": "45de34c228d9e07e23e0a5d4233aa17faefbd1219201011f8fb6de2888ec7bf1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/urquan/resinst.h",
+      "sha256": "c65bf1ef8c46a3aa2927ae37ebf7c75c657ee1196fa2b91c3d0bf80cfd28210b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/urquan/strings.h",
+      "sha256": "a76932b448bb0f5416f1159edf381a095eb135d66cf8cdf6aae7f681665bf030",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/utwig/resinst.h",
+      "sha256": "93376d5c828499377f4311dc4745c7a8f5c371825e0c2cfae08448b655c719cf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/utwig/strings.h",
+      "sha256": "ce970f88c2a279b7df14b969f64b8fbfb2a1bb06d676785ea1946dd7b54a66cd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/vux/resinst.h",
+      "sha256": "dcc23c976165b5952973f5c302a169ab0801f4ece7d6a8a35daf28cdbee22b6e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/vux/strings.h",
+      "sha256": "337513868bee87ae759c160cfbc1dca610462b797ec3a401b68a7e61c97c84b4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/yehat/resinst.h",
+      "sha256": "5861db018e61d818912f419608a61bdac0e59cf45bc209fd935d4eebd1eb57d1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/yehat/strings.h",
+      "sha256": "ab285e9f231fd891bf9f4738bed4e2396c11c0024e1189b119d79fc532c942b5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/zoqfot/resinst.h",
+      "sha256": "cafddb7a1ea4e0774216657e18b30d957a5f4300bc3cd7696d59a73396549d5a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/comm/zoqfot/strings.h",
+      "sha256": "2230d6380ca241dbd47621a069240718e847c8533ab5f11e63529783b2cf3420",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/commanim.h",
+      "sha256": "c1b75b58bf370356906bf10398d22edfff392e31601589946a5402fcc0c6ae83",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/commglue.h",
+      "sha256": "a22c8b1693503328642918c71c1746e112f1fb26f79d550e2255dc6e82461e14",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/cons_res.h",
+      "sha256": "e03d0e47327ef1ddb7372de9282103a15818569f8b105b50e1aa9c8694e64598",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/controls.h",
+      "sha256": "9d154205ba8a5d13ea404791f8e430e36333264d9a4355b78530672206c52528",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/corecode.h",
+      "sha256": "eb573d51b3032d6d91b00cea6b13eb671dd9fce2f23ae27c29d7665a3d81736d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/credits.h",
+      "sha256": "bacdb82e68fb5e327d6c5a65af4750190e7cb3016502f75be143774eda2fb340",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/demo.h",
+      "sha256": "06ef6ffb8284c706c5d3f2acf0c34135c99c86de55244ff4144213a5f660a585",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/displist.h",
+      "sha256": "aef407c8b6e8b37067b2c0e007c30645a3a25efe3d34ba58645f13077d36ef8e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/dummy.h",
+      "sha256": "9c362fb4fd7f1eb42a3550ff457eafd0ee0bc1fc4ab7ada525e39b5ff2def974",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/element.h",
+      "sha256": "de848f259250da00280a0dee0145afca21a1d48299d2218939981fc75789e78b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/encount.h",
+      "sha256": "488622b2804a805414c42e55a32a2d4cfdaa49694d7b65762f57eeb43bdbb8f1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/flash.h",
+      "sha256": "fda0df830b5e048a7d8fd9f1c9ca4e4bdf7a6d05647e5e02108fd06b938cd356",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/fmv.h",
+      "sha256": "db20a572aaf1fab32443b60a9ba89b54c389149a46e12838d54a9ba5f51ee66a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/gameev.h",
+      "sha256": "d9000f7e6a047c02d85caa12e44b228428cf1af3d656e3f5206dbdc38eaa9175",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/gameopt.h",
+      "sha256": "b5df38b5dcbe7dd40b2df74a0c7cc4d5edc66cf4d120b4f308b7adb97f8704e0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/gamestr.h",
+      "sha256": "c3eb5089835dd0dfa1bfc0df42d10838948a639c5abe3ee90b5181c6448a110b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/gendef.h",
+      "sha256": "0ce2bd8bab92e00af4fc30d897f8d10b32d8b2e3ca1b0a40e30e179837988fe5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/globdata.h",
+      "sha256": "3cd1aa7b7ce9738a0dbe9c562e35ffb811d5536674c6afff1a67494ff54e82da",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/grpinfo.h",
+      "sha256": "d4c39d924c7324668cdb6ea30c2591dc546e99819efb98c897a6517c85ff97bd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/grpintrn.h",
+      "sha256": "cabb75dd723f4728a37025f7fb73421d20b4dbee5f5a27485b5967b1fddb13b4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/hyper.h",
+      "sha256": "25104eea1c58ded1894ff7deda964ee64f2406ae3679d4462ba4a12f0e2e37b4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ifontres.h",
+      "sha256": "8b6225c40ed6326d58ab1be537b1ef9cf335dc2d03fc586f9d4feb198ebe9253",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/igfxres.h",
+      "sha256": "73d658385fd39f2efc49b86ec544d9d6dabdd5dfdc76cfa138abc6d232360c87",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ikey_con.h",
+      "sha256": "69323e74cff91f97b8dcdddee72496e464636d66144fd8c3569c4a963d6ddc23",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/imusicre.h",
+      "sha256": "c73a81635fef3ca32de6b57d8972bccbec842b8695c9fa706a4063e31912db77",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/init.h",
+      "sha256": "05675fa98cded8c16dc16587084deeefb528368c832fb506d5329e44d2071a76",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/intel.h",
+      "sha256": "826080f32c008372a742c15fb68cc6be97c727d58721dc3a6589f4dea9b24184",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ipdisp.h",
+      "sha256": "1186c6afcf9456ae010573cc40dbb30c0b90f89e2242bc03c55a243e212fdd1b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/isndres.h",
+      "sha256": "920c19402a880a0974d6dc4c5c4be621f319cfae9b975b99137182945a056efc",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/istrtab.h",
+      "sha256": "5d94b93f00c7f52daa72954d864e5a73cbf7de306a30c004751887b14e8af92b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/master.h",
+      "sha256": "4dbd21c66c6d1982e9b939dabbb233a4f7b4e36c4a36a7318a7113a43b029a84",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/menustat.h",
+      "sha256": "133e648cae78b4db61c3b5b2a55c4b92b479f4bd27ef567bf49205790727b95b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/nameref.h",
+      "sha256": "074ecbc8bfc65ee93deadf339609884305c4f2b41a802766c85e5dfd16257797",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/oscill.h",
+      "sha256": "c8be9afebe2d0d3f94bc46b027a9b726e1407aefc732bd8e59bfb4112e227eaa",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/pickship.h",
+      "sha256": "cfc50c85c99e1d7d49436d27d21157dce619fb0360962b346fae4e5afc778d18",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/elemdata.h",
+      "sha256": "6a216512b643be55477b235f0e5f5a2d76b25e83b90b0539614c93cf0089fcba",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/generate.h",
+      "sha256": "577b495ebb237ac3ab42c4b0ba06ed49ade26f4978d3b68bfb5372ed2e24008d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/generate/genall.h",
+      "sha256": "154253a5f12bf0a4b91b9d4df4a470c1973a6b7e54db494a375e3df8ca507ae9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/generate/gendefault.h",
+      "sha256": "a2e02376d3e2151eed2f46626ca5a0cdb10003ed6eb7a5ec965e14283c623cd8",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/lander.h",
+      "sha256": "b36b346ff74f703e9a618ca1d23251e7074670dc5d4a063cf697397bfc3c6c09",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/lifeform.h",
+      "sha256": "29f7ab2a8b1c9e675b91cf583b01d283ce604bba1f2da68bdbac77a769a1da64",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/plandata.h",
+      "sha256": "2a408057fd17471ce0161f85f9861383e0ac0c8f5b40421a958e1d260535d80b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/planets.h",
+      "sha256": "414e993b6346b3200426dceb6d11a929330cb931da1ec377e69e1ac825da0523",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/rust_planet_side.h",
+      "sha256": "577f7df4dca0bf6699c75f79743f886e98b31c2b9cead321b3bd9d46c65f880b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/scan.h",
+      "sha256": "86d9f1be53d5fb2a0a163b2ccca7e98014911e4d977a6614fa8508694d96d6e3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/solarsys.h",
+      "sha256": "aabef8f6a8f65c3f2578bd1c2ddf9a84c013479a81abf68961f5d4ebba494b18",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/planets/sundata.h",
+      "sha256": "6163351921aff343ac16b651d21129cd1c910fcb6f13609a5b88f0d80b4513d6",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/process.h",
+      "sha256": "bb9371c5e95e28a516c081f848245f569de9c7312f4c5f760512ec9f2a63edbf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/races.h",
+      "sha256": "95302499ab1dcfaa468a88018a014ef80d397d79d045c5ec53fab404fbd73209",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/resinst.h",
+      "sha256": "29245686b66db61b21dbffaae61da095b1be16fd38ac0cba93957aa9b9fd31ed",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/restart.h",
+      "sha256": "bb6a38d64af2a5780b5eda861889024714a20de8d885f97ec1c2822533724a9d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/rust_bridge_mainloop.h",
+      "sha256": "eb61074923d328e2cd4397e148528c3e6d2bf21b1d1c3c267b848e2c60bb4438",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/rust_bridge_restart.h",
+      "sha256": "0b2bf340a6bd182d783402a1aa53824a008832099f97708345ecb286876582ed",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/rust_bridge_ships.h",
+      "sha256": "1ebb578f76929217910d70024a2ba5154e16efb4f8fa1ac9e5e666f6671b9378",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/rust_comm.h",
+      "sha256": "1bc75b1f27de4ac8c455ee22738a71de6f5cf02eb8356b80f51c5633c0fcf4a5",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/save.h",
+      "sha256": "6c48804123abfe05ac5cd3a83388912f2a82fce4c48dcd871c3a7350791428a3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/settings.h",
+      "sha256": "01690a86b2acc96e94bb78b97df0204452ed4cbb1475af2c382ed174a3e8610a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/setup.h",
+      "sha256": "1fe395da6ccc317d5e258c21a8acc60f68ca879b0a0eeb94759d8a4e855c22b9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/setupmenu.h",
+      "sha256": "9e4dc70c51c40959a58a56a3a789c976a16ff9209c21cd725ceff4cc6a884632",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ship.h",
+      "sha256": "201e6be01264b3e10b60519e6e807b47c37152972302e2a0db6d93c7aae4e12c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/shipcont.h",
+      "sha256": "a6e6eac60ed3a9ac154bc7f1e720d57b08c466364c2b4a4709831a16bafae7b9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/androsyn/androsyn.h",
+      "sha256": "15f0b81da56e4fd7294e5fcd6c50b626cd80abd1f11a620f6d83a468da6e21cd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/androsyn/icode.h",
+      "sha256": "666384181aa0ba57efabccde22b8ef8d1408427cafa09f5d2ed7b8b12c67bbbb",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/androsyn/resinst.h",
+      "sha256": "8ce0f07596b5a083c7a53503a8c37b2fc498702177003bcf94ee7236ac47e1c6",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/arilou/arilou.h",
+      "sha256": "9ecdae14b0f8778a634047afbf0f23fb8d8b015fcc9cec6ab3b042334eef8ea4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/arilou/icode.h",
+      "sha256": "89f0f859c85e547cea0daa615557f5bf4ab01eaa0c108408fee34e6b04969c1b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/arilou/resinst.h",
+      "sha256": "8bb5346486c90c29018c6c453f0a1cc77f56c40b8ec16e8821feb85aa16a5832",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/blackurq/blackurq.h",
+      "sha256": "1c814f53432bb200773d1305f85e3419e6bf148b205cb07953251cb0fbd1d6bf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/blackurq/icode.h",
+      "sha256": "2a30fe188d6783877f652cab4aa46eb76ac9717f37713c9ff5d1000a8eef4b7e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/blackurq/resinst.h",
+      "sha256": "ff12f811457738e9aee0dfa2dad845316920010936d329184d73fbe6b7f2886b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/chenjesu/chenjesu.h",
+      "sha256": "779035989116288c6368464b8479cafa0e72fd0a59691cc5dfe02a870cbdc9eb",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/chenjesu/icode.h",
+      "sha256": "7fbac5bf8e454f60cfbff8218a550f49710bc016d2acb6265b755a02c16655ee",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/chenjesu/resinst.h",
+      "sha256": "6169e18c109785254e86a11aff92ed9e844d91350840e3461902fb8443a248bf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/chmmr/chmmr.h",
+      "sha256": "c3e09d259b6e2bd12c462be6ffaf1c84213d54aaea46b9fa475d0c15d449ef63",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/chmmr/icode.h",
+      "sha256": "4d0f88f775712161ed9c7f4945ac30c02b0feadd453efa4a6f2689c29c4862f9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/chmmr/resinst.h",
+      "sha256": "95e143cad1e5bc86d12901299ea0dd3ec31bbbdd1b6d048f799382aeb03a5232",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/druuge/druuge.h",
+      "sha256": "29337374e9e1037aca481ea1553af09f62370dc2dce61b3c7ffb7f9f644afef7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/druuge/icode.h",
+      "sha256": "2850ae0466b1b6b4c0e04f83b0f9e4d9cb69bf29e725f9fbcebde39e09a3c8d2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/druuge/resinst.h",
+      "sha256": "4aef02bd2ed4a56ef4054a15ee8239742b97ebb8a3aada191f09d3be259e8955",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/human/human.h",
+      "sha256": "6484ca2068c19b552a34566b6e9ed52b3d128e5f9d90e1367abae1c58534d47f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/human/icode.h",
+      "sha256": "fe40dc2d871fee4c1ffc9f499e30cac934ad98ada99c000c96d5a28e11beb2bb",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/human/resinst.h",
+      "sha256": "c24ae1a93c39feaa9cd2b4ba8337ece1eef1ab9b8faf5f19c5df74292d245657",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/ilwrath/icode.h",
+      "sha256": "d3dde39d8c3a69796ce8256e0ca380fb50e612a54b779dc9487556aa96421e8e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/ilwrath/ilwrath.h",
+      "sha256": "9c1916e99e259e3ec14b72ca8a2de8464edc0bec46c10c0cedbfd4769140d6d7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/ilwrath/resinst.h",
+      "sha256": "ddb087e48bb2d29861d8d889b521a223a2ae4d02f29d45accf5f44af7ab698c2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/lastbat/icode.h",
+      "sha256": "9de89b9ca5b75b165a20505999279731d824e31e98d657f5c9bdcff73d6dcab3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/lastbat/lastbat.h",
+      "sha256": "fd4d1e43fe78ff813319b859a3dc4e9842ff33cbd623679dff3020caf92fb150",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/lastbat/resinst.h",
+      "sha256": "f4df82cb35eb5746e8871bc1931d3ba42a0897edef31d5c2c8b6ac518300a102",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/melnorme/icode.h",
+      "sha256": "363e94e276038bc78ba4ce6dac4aba11d38c24c3b661b9740b462e618ffa6a11",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/melnorme/melnorme.h",
+      "sha256": "b3555c133967d981f1f441d3d392ed82b14b26a55345afeee977805e249718ae",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/melnorme/resinst.h",
+      "sha256": "82819661b9457c5cae1dec774bae4970f3a06e196187299d23bf21cf7583772f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/mmrnmhrm/icode.h",
+      "sha256": "a317789e42b3e701e842340ca9a9f5ea00eb5db4cf0c4036e5696c0a030ccf15",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/mmrnmhrm/mmrnmhrm.h",
+      "sha256": "62b5cd593df20d82d600c7612126571c15292122f47e3a6a13d8aa6a0f0b49f0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/mmrnmhrm/resinst.h",
+      "sha256": "4d4349a7f69f50a52a6d422ac703ebb71663ccf5d408ce3657716f609446ae3a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/mycon/icode.h",
+      "sha256": "3e85924a0f6565d39c43785f8b255a203f57ecd8fc206539b68b65aaff6b8a76",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/mycon/mycon.h",
+      "sha256": "bf3668bd382cb6db791b64e55bbe0bdcabc7db860654969f16498a448fe3b35a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/mycon/resinst.h",
+      "sha256": "97dfe3375ef13236409c254f137785c434ef888154642b64ea61b58059c67faa",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/orz/icode.h",
+      "sha256": "3402d0dc905fcf05b90f6827a620e58d9411de1bf21810549b92168dc34a710b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/orz/orz.h",
+      "sha256": "f29e23a593a36400048d86da92fc29a7e3f095d70133450f80321d96e670161a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/orz/resinst.h",
+      "sha256": "8564094376333c08fb945512feb2178fe706ab475f54fbb377cf22ca1bb9f52e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/pkunk/icode.h",
+      "sha256": "4e24c179dffdc7cadea8e55ac3f357d23794f97fcbd2f960175e295b5ff25e17",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/pkunk/pkunk.h",
+      "sha256": "3475ac3dd6b021cb362d72a9816c2670b116323951f25ff33df461c86f6bcc8d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/pkunk/resinst.h",
+      "sha256": "d311147510b5d87d95170e734738ac76e7703eaaa9f9550b33bca7f6f33c618e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/probe/icode.h",
+      "sha256": "941c6cf2c10660390857e4827b14f883c869f4176ff6293f3ab479c3e0c4d3ce",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/probe/probe.h",
+      "sha256": "a8e89edb4485a1f7440e0c3539a280fdd8fb462acabfa9f666bc1c611cfa8b6f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/probe/resinst.h",
+      "sha256": "92e46a489ee33c6749ecf4b2dcc388fe8e44bb842cd462ca315abd3ad5f85cf2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/ship.h",
+      "sha256": "1c039d19baf401cd23d4df0ad163909e116eceee4c6114be464aab076f505958",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/shofixti/icode.h",
+      "sha256": "2fab80005c63270aebd40048f88d167397645a2ff6c7bf1701d98b6f30eb96fa",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/shofixti/resinst.h",
+      "sha256": "86fab465d98429b9a29b3f61afcd9f3b19505fa661f4b0aae4625d3ab486ce74",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/shofixti/shofixti.h",
+      "sha256": "fa8aa00b7011909789078b239b7596afb41f957da9e53d7e8108841a8d0288e2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/sis_ship/icode.h",
+      "sha256": "1bbe871423eb02eb082844ea804caee7ff0d009ad49c8b5937906e9689648f15",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/sis_ship/resinst.h",
+      "sha256": "07facc67116f3f6dc6671edcefc7586051d589b013fe53e400b2908ccbfb7b6b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/sis_ship/sis_ship.h",
+      "sha256": "1af2c99bd9a49d34f048d4353ba722e41a8d3e30639e0e158122fad133470b77",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/slylandr/icode.h",
+      "sha256": "8261d6dde3ef8e8e90691d9b028682c828151ca9ddbe60127218cd8845c22871",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/slylandr/resinst.h",
+      "sha256": "ae1090383152213c374fcc8ec72783b7d51bebde16077d78c9aea0c08e97ded2",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/slylandr/slylandr.h",
+      "sha256": "81c9e97bc936378b13ceaa1b254d9aefa9872dfa923b6d20d1522509ad161b5d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/spathi/icode.h",
+      "sha256": "f4ebf58fc8671215b61fbcb7d183ea0f272a2dc9c9a60d0c3a75fc9e72e4bf8d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/spathi/resinst.h",
+      "sha256": "3347a09249856d497ebe1ecc47674163d72b7804ac88ed2ec554e510b67a0bb9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/spathi/spathi.h",
+      "sha256": "3d657d8eaf95769d6f7afa9ca09e73e2618d9ddb7f8c61600ff319d975c395c7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/supox/icode.h",
+      "sha256": "36f78c3511c6496af39e7fe49e066f2d028a1d0d4caade6582c160e1c3655cf1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/supox/resinst.h",
+      "sha256": "ee2308808f4912cd227efb7b3c6891eec39d73a00c09428a9e7a026bff2fb18e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/supox/supox.h",
+      "sha256": "f8a3cc5d64c2b1d8312a27b9f6bc4fa0babf4e77ccf43d2b482a1bbee54cfb32",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/syreen/icode.h",
+      "sha256": "94f142f71362c103e276bdd9276ee4f3cc622cbff0e25d525420a7d826807b45",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/syreen/resinst.h",
+      "sha256": "69e231d1209921da456d2e02aae6599185c5b3e26378662ed11452f722cf3fb3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/syreen/syreen.h",
+      "sha256": "117c81c1ac30b21709915d6c5cad3ed542b184b12cb383d431c48ff8d559d180",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/thradd/icode.h",
+      "sha256": "105d11a340f840f6557346ac09233c1b5035097ebebd7af864b71bc3f6832b3b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/thradd/resinst.h",
+      "sha256": "31e06c8d046ed985bb129893288db2eaa892b980cccabd4bd1271e60be161ebf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/thradd/thradd.h",
+      "sha256": "a48dcd6036862c1270b395b71613d19460e3f1232b57ca52759294f6dbf78e34",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/umgah/icode.h",
+      "sha256": "676f592b222529823bde0157a31d39e86c7d9eab146ecca471f549db436ebc6a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/umgah/resinst.h",
+      "sha256": "cb95af5b344399517768f601d8002ba422632abb68d30912ffbe6587ed646e81",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/umgah/umgah.h",
+      "sha256": "51d90f0585449409451c734e02ae1ad95e61a195572563f4a6606141e72631e3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/urquan/icode.h",
+      "sha256": "1588271e725c4e126f58e87dd37a556ee9bbd6aa61ed3b76551c34c9ab4b0e86",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/urquan/resinst.h",
+      "sha256": "5240cce3d0f9bcd641b8aad94b31a58ea298439ef782af9ac2ed6ecaff1d0b2a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/urquan/urquan.h",
+      "sha256": "e0bdb0fc2ad1494fe87efd22b814a15393b2d4d83388dd3c13529461036447ad",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/utwig/icode.h",
+      "sha256": "0dabfa81e419e4b7784365a7ee833977e453f2534008c3d8800d3267b90d9d52",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/utwig/resinst.h",
+      "sha256": "2cc4b794399d424ff2d5bbbd4054d8272e3caef6b3d3102b3205508efc3e75c8",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/utwig/utwig.h",
+      "sha256": "f93fd4bd68684e9f95f7d5dbdb1ad0d228545eead80316ac238cc93e82f67278",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/vux/icode.h",
+      "sha256": "181d794cdc97f0f5cd96ef7603d69bcd129873e1e7e96858e3d2728fd82d171d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/vux/resinst.h",
+      "sha256": "0539c39232e28479f860d88c8315b5cd01caed2d5dcc8bdcb9ae78b02ba55a06",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/vux/vux.h",
+      "sha256": "3b54fdf83014bdcf5aa302080fce7b4c2501d66ade471a9eb9ec2b82901d8860",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/yehat/icode.h",
+      "sha256": "bc73c5320ebbab82994f3a76db8a9036b58b502ebb4f94a458a76dd3aee34391",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/yehat/resinst.h",
+      "sha256": "7d318acddca8a9b492a79c16c7f3cd80a3e23048ed3308c2647a66154e204f2e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/yehat/yehat.h",
+      "sha256": "f442348198c20d79d249382ebd32bd9e157e844e87c64c42ba9aa9f6df21e8b8",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/zoqfot/icode.h",
+      "sha256": "d638716cee9c16b0674dfb9e1692aef1448ead20d028a6f358b15174ae659c42",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/zoqfot/resinst.h",
+      "sha256": "5755f286e60ce4f8cea27549031a1d0c21b83882d9ab1e5b9a63cf626d3cfd26",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/ships/zoqfot/zoqfot.h",
+      "sha256": "e0221e0425dd681ca51ba2e17ee88762d7105d042ef45629f13328d917c6a43a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/sis.h",
+      "sha256": "e6244856e99da48b2aa1077b1f8f2c54efa736284278c5d2584261cf9d25ab8d",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/sounds.h",
+      "sha256": "3c2c2953db455062ec36d702e007ad15ea42f7f26718d7462b700d210107329a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/starbase.h",
+      "sha256": "ddbe1b1bc514768aa78520c8d733500eb323dcbe3df749f7c56f2244e325895b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/starcon.h",
+      "sha256": "adb75cabdea32b1257785011bb83cca874f839943d046a604fe50686a9c0e26c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/starmap.h",
+      "sha256": "973c7d02bab8d2fc05563746d0f976323c10c0fb88fbffb236c9d90e131570d4",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/state.h",
+      "sha256": "a22a5e63b5e978282c380475ad9435ee3bfd226b705ab42d64db403887faf1cf",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/status.h",
+      "sha256": "0256f474e68797642e3d8206a3213f95b1dd4f5b988646b0259a28a49ca494b0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/buildpick.h",
+      "sha256": "28c8e50ed71e2e2f048a416d2d9d2c4dc9bd32c5f3b21e696be8654e62e3b9ec",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/loadmele.h",
+      "sha256": "018496f759d26a330bf0305303d14ddca2f0e4aba1da28988a67e7c18b799ed7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/melee.h",
+      "sha256": "94a0a0a2938e8684e5fe3d21eabe0cc331e8b2f3ea3698d4bfe4c28637a08be1",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/meleesetup.h",
+      "sha256": "525926c3df1221eb11ff9e9c7acfc374571928c7d6c22555cf32f5c08830493e",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/meleeship.h",
+      "sha256": "55d654d077efa0f3fdc3a722645555f4a48905629be87fbf829eb5baeeda8b19",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/checkbuf.h",
+      "sha256": "f3c356dd7e03d4e912bb116f52802b72bc78d447d483b31e045b9fe7947f4977",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/checksum.h",
+      "sha256": "f61052d2e732892da15d5bb2927880a4fc0dd9ee9877970096e74a2513144a6b",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/crc.h",
+      "sha256": "90ffe21de02b507b59197947514adfdfb76a4ab585ec9129df7c6bddc50d302c",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/nc_connect.ci",
+      "sha256": "5c64e44cacc508149aaa012d589e2fcebb641e7c98727f321be2fcc78730ad78",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netconnection.h",
+      "sha256": "02d13278fb25f778789abd6d63b19d191cc6d9e5b992053b92578a7779684241",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netinput.h",
+      "sha256": "91281f1b6c2d9fb4e4580c83704e49455fc7d380de88e5c107b88ac54a11eb3f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netmelee.h",
+      "sha256": "118093c074026827fc34e269ce72bbc302b76958cc3e8fa47385e7b23c28cef3",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netmisc.h",
+      "sha256": "d1e066320827b7c96e9b114e248e7a557a1c342ebf7a7f275291c5673d74b398",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netoptions.h",
+      "sha256": "9d3a930d6ee58335a456189d391874ecc581ae2c94c43f9ff10044ac72f9fc57",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netplay.h",
+      "sha256": "7566b29e6ce01335eb7616b16958bae56ff5bef68f1e01e7bb945c2b31fd9d79",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netrcv.h",
+      "sha256": "4320dd84cc6fcac69ee8082c3a19638af059a0f1445390b16efd4e8f2f470394",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netsend.h",
+      "sha256": "9abe544fa8c2c458b5a4cf3c6d90b8c9c542be1639cb1460f988ded17d040388",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/netstate.h",
+      "sha256": "206dc5e04c8fcfd49332ec535e1d8dca025a7bee48de92ece426ca4f0a2c9305",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/notify.h",
+      "sha256": "73f33a89e244fa1af8b9333fddf47c2e028c69dd42f7b69125214cf66f8e4ffd",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/notifyall.h",
+      "sha256": "906582f3b9774a4cf40dca3e5681c227a19809b4f745ae17bae4ea5f9367121a",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/packet.h",
+      "sha256": "73062a6492efc7dc5d1d713ce685a88380cdca4239b9c8fdb33cde3f4595ddea",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/packethandlers.h",
+      "sha256": "704d32687104984362c0cc4bde2647c3156364c71683aa80713ac8f5d6065a9f",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/packetq.h",
+      "sha256": "087c144454125b7b17039b687c2fc69c72b8360a3e73bbe8ce26b8c714c014ce",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/packetsenders.h",
+      "sha256": "da7fe2d430800511a30dbd19be99e6d1e8c2cccc0f7c09804087d046c194c944",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/proto/npconfirm.h",
+      "sha256": "9f2a87e415810e78c05ed869e8f974a37c16f383bf576e47791b440288184373",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/proto/ready.h",
+      "sha256": "26cb573d6cf4bb4623badf28718ad5f9b462823d38c555feccb2818d7adfb486",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/netplay/proto/reset.h",
+      "sha256": "428c99d1026d778316d8cf52a82d4f6b9e9422bc4bd20db2d17dd057f5bcda47",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/pickmele.h",
+      "sha256": "e69b0bae05801760e367ddabeb589f317bd05fc361886d8685613f75fda389a9",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/supermelee/rust_supermelee.h",
+      "sha256": "6604e614d66ac148332399effeaf14afc958545720cdcb18bc4b9764f0b4db93",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/tactrans.h",
+      "sha256": "bb48b7700aae565e8891a17a403d12326c8a9ce5e588345e31ea20ba68418adb",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/units.h",
+      "sha256": "55061f177ecd8d8b408adc5bc09f7f6bfe013f4df13c1a241bf5e49ebf603a99",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/uqmdebug.h",
+      "sha256": "455a5f8a666396a378c27f25baed0a4d08a4a3e0f9893281af333ae2884d47f7",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/util.h",
+      "sha256": "968dd51c63a1dd56b3bf9abfbc798fa540fcb2a4b7f4c05795867b37daa2a351",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/velocity.h",
+      "sha256": "9d9eb870bd5b83d2b63f04dc47a8c6bd23f06183865837a2f2f1afa9c0bf1f98",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqm/weapon.h",
+      "sha256": "beea72ee36a6598c79fa35ff9f5163fbdb740c8e6418371719606e9d4ea040a0",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    },
+    {
+      "path": "sc2/src/uqmversion.h",
+      "sha256": "6313c0ee6d172764d90cb30a7510641f8b90904bee46bda4765181daee0c63ee",
+      "targets": [
+        "linux-aarch64",
+        "linux-x86_64",
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    }
+  ],
+  "captured_targets": [
+    "linux-aarch64",
+    "linux-x86_64",
+    "macos-aarch64",
+    "macos-x86_64"
+  ]
+}

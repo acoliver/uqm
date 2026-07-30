@@ -26,6 +26,9 @@ This directory contains the working rules for planning and implementation in Jef
 - [rust/ownership-and-strict-linking.md](./rust/ownership-and-strict-linking.md)
   - S1 provider-manifest authority, strict production linking, mutation fixtures, and replay commands.
 
+- [rust/reproducible-build.md](./rust/reproducible-build.md)
+  - S2 root commands, tracked native inputs, supported matrix, prerequisites, deterministic artifacts, and clean-checkout replay.
+
 ## Recommended Reading Order
 
 1. `RULES.md`

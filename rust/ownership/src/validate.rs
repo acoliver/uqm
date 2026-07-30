@@ -237,8 +237,19 @@ impl Validator {
     }
     /// Validate parsed observations from the exact Rust archive, C archive, and executable.
     pub fn validate_production_nm(&self, nm: &ProductionNm) -> Result<(), OwnershipError> {
-        let mut observed =
-            parse_archive_definitions(&nm.rust_archive, crate::QUEUE_RUST_PROVIDER, true);
+        let mut observed = parse_archive_definitions(&nm.rust_archive, "rust archive", true);
+        for definition in &mut observed {
+            if let Some(contract) = self
+                .manifest
+                .symbol_contracts
+                .iter()
+                .find(|contract| contract.symbol == definition.symbol)
+            {
+                definition
+                    .provider
+                    .clone_from(&contract.active_provider.path);
+            }
+        }
         observed.extend(parse_archive_definitions(
             &nm.c_archive,
             "libuqm_c.a",
@@ -281,49 +292,26 @@ impl Validator {
         })
     }
 
-    /// Validate the S1 Cargo and native compilation profile before compiling C.
+    /// Require exact equality with the authoritative typed production profile.
     pub fn validate_production_profile(
         &self,
-        cargo_features: &[&str],
-        build_vars_flags: &str,
-        config: &str,
-        recompile_flags: &str,
+        actual: &crate::native::ProductionProfile,
     ) -> Result<(), OwnershipError> {
-        let profile = &self.manifest.accepted_production_profile;
-        let actual_features: BTreeSet<_> = cargo_features.iter().copied().collect();
-        let expected_features: BTreeSet<_> =
-            profile.cargo_features.iter().map(String::as_str).collect();
-        let mut diagnostics = Vec::new();
-        if actual_features != expected_features {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::ManifestDrift,
-                Some("CARGO_FEATURE_*"),
-                format!(
-                    "production features must be exactly {:?}, got {:?}",
-                    expected_features, actual_features
-                ),
-            ));
-        }
-        validate_required_forbidden(
-            "sc2/build.vars uqm_CFLAGS",
-            build_vars_flags,
-            &profile.required_build_vars_flags,
-            &profile.forbidden_build_vars_flags,
-            &mut diagnostics,
-        );
-        validate_config_defines(profile, config, &mut diagnostics);
-        validate_required_forbidden(
-            "recompiled C flags",
-            recompile_flags,
-            &profile.required_recompile_flags,
-            &profile.forbidden_recompile_flags,
-            &mut diagnostics,
-        );
-        sort_diagnostics(&mut diagnostics);
-        if diagnostics.is_empty() {
+        crate::native::validate_profile(actual).map_err(|detail| {
+            OwnershipError::single(
+                DiagnosticCode::MalformedManifest,
+                Some("production_profile".into()),
+                detail,
+            )
+        })?;
+        if actual == &self.manifest.accepted_production_profile {
             Ok(())
         } else {
-            Err(OwnershipError::multiple(diagnostics))
+            Err(OwnershipError::single(
+                DiagnosticCode::ManifestDrift,
+                Some("production_profile".into()),
+                "actual production profile does not exactly equal provider authority",
+            ))
         }
     }
 
@@ -375,50 +363,30 @@ impl Validator {
     }
 
     fn check_disk_objects(&self, options: &ValidateOptions, diagnostics: &mut Vec<Diagnostic>) {
-        let scan_root = options.repo_root.join(&self.manifest.scan_root);
-        let disk = match collect_disk_objects(&scan_root, &self.manifest.scan_root) {
-            Ok(objects) => objects,
-            Err(error) => {
+        for object in &self.manifest.objects {
+            let Some(source) = object.canonical_source.as_deref() else {
+                continue;
+            };
+            let path = options.repo_root.join(source);
+            if !path.is_file() {
                 diagnostics.push(diagnostic(
                     DiagnosticCode::MissingFromDisk,
-                    Some(&self.manifest.scan_root),
-                    format!("cannot inventory object root: {error}"),
+                    Some(source),
+                    "tracked canonical source is absent",
                 ));
-                return;
+                continue;
             }
-        };
-        let manifest: BTreeMap<_, _> = self
-            .manifest
-            .objects
-            .iter()
-            .map(|object| (object.path.as_str(), object))
-            .collect();
-        let disk_paths: BTreeSet<_> = disk.keys().map(String::as_str).collect();
-        let manifest_paths: BTreeSet<_> = manifest.keys().copied().collect();
-
-        for path in disk_paths.difference(&manifest_paths) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::MissingFromManifest,
-                Some(path),
-                "object exists on disk but has no ownership decision",
-            ));
-        }
-        for path in manifest_paths.difference(&disk_paths) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::MissingFromDisk,
-                Some(path),
-                "manifest object is absent from the assessed inventory",
-            ));
-        }
-        for (path, object) in manifest {
-            if let Some(hash) = disk.get(path) {
-                if hash != &object.sha256 {
-                    diagnostics.push(diagnostic(
-                        DiagnosticCode::StaleObject,
-                        Some(path),
-                        format!("SHA-256 drift: manifest={}, disk={hash}", object.sha256),
-                    ));
-                }
+            match sha256_file(&path) {
+                Ok(hash) if hash == object.sha256 => {}
+                Ok(hash) => diagnostics.push(diagnostic(
+                    DiagnosticCode::StaleObject,
+                    Some(source),
+                    format!(
+                        "canonical source SHA-256 drift: manifest={}, disk={hash}",
+                        object.sha256
+                    ),
+                )),
+                Err(error) => diagnostics.extend(error.diagnostics),
             }
         }
     }
@@ -453,7 +421,7 @@ impl Validator {
                 self.manifest
                     .recompiled_objects
                     .iter()
-                    .map(|object| object.repo_relative_path.as_str()),
+                    .map(|object| object.canonical_source.as_str()),
             )
             .collect();
         for path in actual.difference(&expected) {
@@ -638,67 +606,8 @@ fn normalize_contract_symbol(token: &str) -> Option<String> {
     let cleaned = token
         .trim_matches(|character: char| matches!(character, ':' | ',' | '(' | ')' | '[' | ']'));
     let symbol = cleaned.strip_prefix('_').unwrap_or(cleaned);
-    crate::QUEUE_SYMBOLS
-        .contains(&symbol)
+    (crate::QUEUE_SYMBOLS.contains(&symbol) || crate::HASH_TABLE_SYMBOLS.contains(&symbol))
         .then(|| symbol.to_string())
-}
-
-fn validate_required_forbidden(
-    location: &str,
-    value: &str,
-    required: &[String],
-    forbidden: &[String],
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let tokens: BTreeSet<_> = value.split_whitespace().collect();
-    for flag in required {
-        if !tokens.contains(flag.as_str()) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::ManifestDrift,
-                Some(location),
-                format!("required flag '{flag}' is absent"),
-            ));
-        }
-    }
-    for flag in forbidden {
-        if tokens.contains(flag.as_str()) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::ManifestDrift,
-                Some(location),
-                format!("forbidden flag '{flag}' is present"),
-            ));
-        }
-    }
-}
-
-fn validate_config_defines(
-    profile: &crate::manifest::AcceptedProductionProfile,
-    config: &str,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let definitions: BTreeSet<_> = config
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("#define "))
-        .filter_map(|rest| rest.split_whitespace().next())
-        .collect();
-    for name in &profile.required_config_defines {
-        if !definitions.contains(name.as_str()) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::ManifestDrift,
-                Some("sc2/config_unix.h"),
-                format!("required define '{name}' is absent"),
-            ));
-        }
-    }
-    for name in &profile.forbidden_config_defines {
-        if definitions.contains(name.as_str()) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::ManifestDrift,
-                Some("sc2/config_unix.h"),
-                format!("forbidden define '{name}' is present"),
-            ));
-        }
-    }
 }
 
 fn run_tool(tool: &str, arguments: &[&str], artifact: &Path) -> Result<String, OwnershipError> {
@@ -718,7 +627,7 @@ fn run_tool(tool: &str, arguments: &[&str], artifact: &Path) -> Result<String, O
 }
 
 fn run_nm(arguments: &[&str], artifact: &Path) -> Result<String, OwnershipError> {
-    let output = Command::new("nm")
+    let output = Command::new(std::env::var_os("NM").unwrap_or_else(|| "nm".into()))
         .args(arguments)
         .arg(artifact)
         .output()
@@ -749,7 +658,7 @@ fn executable_details(executable: &Path) -> Result<String, OwnershipError> {
 }
 
 fn artifact_digest(path: &Path) -> Result<ArtifactDigest, OwnershipError> {
-    let bytes = fs::read(path).map_err(OwnershipError::from)?;
+    let bytes = fs::read(path).map_err(|error| hash_io_error(path, error))?;
     Ok(ArtifactDigest {
         path: path.to_string_lossy().into_owned(),
         sha256: hex_sha256(&bytes),
@@ -764,41 +673,18 @@ fn tool_error(tool: &str, path: &Path, detail: impl Into<String>) -> OwnershipEr
     )
 }
 
-fn collect_disk_objects(
-    scan_root: &Path,
-    canonical_scan_root: &str,
-) -> Result<BTreeMap<String, String>, std::io::Error> {
-    fn visit(
-        directory: &Path,
-        scan_root: &Path,
-        canonical_scan_root: &str,
-        objects: &mut BTreeMap<String, String>,
-    ) -> Result<(), std::io::Error> {
-        let mut entries: Vec<_> = fs::read_dir(directory)?.collect::<Result<_, _>>()?;
-        entries.sort_by_key(std::fs::DirEntry::path);
-        for entry in entries {
-            let path = entry.path();
-            let file_type = entry.file_type()?;
-            if file_type.is_dir() {
-                visit(&path, scan_root, canonical_scan_root, objects)?;
-            } else if !file_type.is_symlink()
-                && path.extension().is_some_and(|extension| extension == "o")
-            {
-                let relative = path
-                    .strip_prefix(scan_root)
-                    .map_err(std::io::Error::other)?
-                    .to_str()
-                    .ok_or_else(|| std::io::Error::other("object path is not UTF-8"))?;
-                let canonical = format!("{canonical_scan_root}/{relative}");
-                objects.insert(canonical, hex_sha256(&fs::read(path)?));
-            }
-        }
-        Ok(())
-    }
+fn sha256_file(path: &Path) -> Result<String, OwnershipError> {
+    fs::read(path)
+        .map(|bytes| hex_sha256(&bytes))
+        .map_err(|error| hash_io_error(path, error))
+}
 
-    let mut objects = BTreeMap::new();
-    visit(scan_root, scan_root, canonical_scan_root, &mut objects)?;
-    Ok(objects)
+fn hash_io_error(path: &Path, error: std::io::Error) -> OwnershipError {
+    OwnershipError::single(
+        DiagnosticCode::IoError,
+        Some(path.to_string_lossy().into_owned()),
+        format!("cannot hash file: {error}"),
+    )
 }
 
 /// Compute lowercase SHA-256 for manifest drift checks.
