@@ -6180,8 +6180,7 @@ mod tests {
             // Create test files
             std::fs::write(dir_path.join("index.rmp"), b"test").unwrap();
             std::fs::write(dir_path.join("music.RMP"), b"test").unwrap();
-
-            std::fs::write(dir_path.join("INDEX.RMP"), b"test").unwrap();
+            std::fs::write(dir_path.join("archive.RmP"), b"test").unwrap();
             std::fs::write(dir_path.join("data.txt"), b"test").unwrap();
             std::fs::write(dir_path.join("file.zip"), b"test").unwrap();
 
@@ -6204,7 +6203,10 @@ mod tests {
 
                 assert!(!list.is_null());
                 let num_names = (*list).numNames;
-                assert_eq!(num_names, 2, "Should match both .rmp and .RMP files");
+                assert_eq!(
+                    num_names, 3,
+                    "Should match every case variant of .rmp files"
+                );
 
                 uio_DirList_free(list);
                 let _ = Box::from_raw(dir_handle);
