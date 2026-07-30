@@ -344,6 +344,7 @@ fn clean(root: &Path) -> Result<(), String> {
 fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<ProductionPaths, String> {
     let output = Command::new(&toolchain.cargo.executable)
         .current_dir(root)
+        .env("CARGO_BUILD_JOBS", "1")
         .args([
             "build",
             "--locked",
@@ -813,6 +814,7 @@ fn verify_artifact_manifest(root: &Path) -> Result<(), String> {
         return Err("artifact proof schema or fixed production constants differ".into());
     }
     let toolchain = canonical_toolchain(root)?;
+    apply_toolchain_environment(&toolchain);
     let epoch = source_date_epoch(root)?;
     validate_live_native_evidence(root, &manifest.native_build, &toolchain, epoch)?;
     if manifest.git_head != git_text(root, &["rev-parse", "HEAD"], "full HEAD")?

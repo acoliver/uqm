@@ -155,6 +155,7 @@ pub fn canonical_build_environment(
         ("CC".into(), toolchain.cc.executable.clone()),
         ("CFLAGS".into(), String::new()),
         ("CARGO".into(), toolchain.cargo.executable.clone()),
+        ("CARGO_BUILD_JOBS".into(), "1".into()),
         ("LDFLAGS".into(), String::new()),
         ("LINKER".into(), toolchain.linker.executable.clone()),
         ("NM".into(), toolchain.nm.executable.clone()),
@@ -335,6 +336,7 @@ fn pkg_config_output(
 ) -> Result<Vec<String>, String> {
     let output = Command::new(&pkg_config.executable)
         .current_dir(root)
+        .env("PKG_CONFIG_ALLOW_SYSTEM_CFLAGS", "1")
         .args(arguments)
         .output()
         .map_err(|error| format!("cannot execute pkg-config {:?}: {error}", arguments))?;
