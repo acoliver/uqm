@@ -8,15 +8,20 @@
 
 ## The Core Coexistence Model
 
-Every ported subsystem has a C preprocessor define (`USE_RUST_*`). When set:
+The active transitional production executable is the Cargo `uqm` binary from
+`rust/src/main.rs`. It links Rust-owned implementations directly and, while the
+remaining domains are migrated, a manifest-selected native archive. C
+preprocessor defines (`USE_RUST_*`) still determine which implementation each
+transitional C object expects:
 
-1. The C file's body compiles to nothing (via `#ifndef` / `#ifdef` guards).
-2. The linker resolves those symbols from the Rust static library (`libuqm_rust.a`).
-3. Rust exposes `#[no_mangle] pub extern "C" fn` entry points that C calls directly.
+1. The C file's superseded body is omitted through its `#ifndef` / `#ifdef` guard.
+2. The linker resolves that API from `libuqm_rust.a`.
+3. Rust exports `#[no_mangle] pub extern "C" fn` entry points for retained C callers.
 
-**C always owns `main()`.** The binary is `sc2/uqm`. Rust is a statically linked
-library, never the executable. (`rust/src/main.rs` exists but is dead code — see
-`howtorun.md`.)
+The `linked_c_archive` Cargo feature is the explicit production-link boundary.
+Without it, Cargo builds and tests do not consume ignored native objects. With
+it, `rust/build.rs` validates `rust/ownership/native-provider-manifest.json`
+before constructing and strictly linking the transitional archive.
 
 ---
 
@@ -94,25 +99,23 @@ To test these, manually add `-DUSE_RUST_FOO` to CCOMMONFLAGS in `build.config`.
 | `sc2/config_unix.h.in` | Template with `@SYMBOL_USE_RUST_*_DEF@` placeholders | **Yes** — add new defines here |
 | `sc2/config_unix.h` | **Generated** C header — `#define` or `/* #undef */` per flag | No |
 | `sc2/build.vars` | **Generated** build variables — compiler/linker flags | No |
-| `rust/Cargo.toml` | `[features]` section — currently only `audio_heart` | **Yes** |
+| `rust/Cargo.toml` | `[features]`: `audio_heart`, `debug-process`, and `linked_c_archive` (`default = []`) | **Yes** |
 
 ### Sync Mechanism: `uqm_pre_build()` (~line 700 in build.config)
 
-Before compiling C, the build system runs Cargo with the correct features:
+Before compiling C, the legacy build invokes Cargo for the Rust library with
+`linked_c_archive`; it adds `audio_heart` when `USE_RUST_AUDIO_HEART` is active.
+The production Cargo binary uses the same feature boundary:
 
 ```sh
-uqm_pre_build() {
-    if [ "$USE_RUST_BRIDGE" = "1" ]; then
-        RUST_FEATURES=""
-        if printf "%s" "$TARGET_CFLAGS" | grep -q -- '-DUSE_RUST_AUDIO_HEART'; then
-            RUST_FEATURES="--features audio_heart"
-        fi
-        (cd "$TOPDIR/../rust" && cargo build --release $RUST_FEATURES)
-    fi
-}
+cargo build --manifest-path rust/Cargo.toml --release \
+  --features audio_heart,linked_c_archive --bin uqm
 ```
 
-This keeps the C defines and Cargo features in sync automatically.
+`linked_c_archive` makes `rust/build.rs` require the exact manifest-declared
+object inventory. A normal `cargo check`, `cargo test`, or pure-Rust build does
+not consume `sc2/obj/release`. S2/#22 owns replacing the remaining recursive
+legacy orchestration with one clean-checkout root command.
 
 ---
 
@@ -290,23 +293,18 @@ If it says `#define USE_RUST_FOO`, Rust is active. If `/* #undef ... */`, C is a
 
 ---
 
-## Common Configuration Tasks
+## Supported Production Configuration
+
+The current S1 production profile is exactly `audio_heart,linked_c_archive`:
 
 ```sh
-# Enable everything including audio-heart:
-USE_RUST_AUDIO_HEART=1 ./build.sh uqm
-
-# Enable Rust bridge, not audio-heart:
-./build.sh uqm config    # "Rust bridge -> enabled"
-./build.sh uqm
-
-# Disable all Rust:
-./build.sh uqm config    # "Rust bridge -> disabled"
-./build.sh uqm
-
-# Reprocess config without interactive menu:
-./build.sh uqm reprocess_config
+cargo build --manifest-path rust/Cargo.toml --release \
+  --features audio_heart,linked_c_archive --bin uqm
 ```
+
+The provider manifest validates the Cargo feature pair and the corresponding
+`USE_RUST_BRIDGE`, `USE_RUST_AUDIO_HEART`, `RUST_OWNS_MAIN`, and
+`USE_RUST_MAINLOOP=1` native flags before recompiling transitional C sources.
 
 ---
 
@@ -321,3 +319,10 @@ USE_RUST_AUDIO_HEART=1 ./build.sh uqm
 | Crash in `HMalloc` | `USE_RUST_MEM` mismatch — C calling Rust but lib not linked |
 | Keyboard not working | `USE_RUST_INPUT` active but VControl init failed |
 | `config_unix.h` has `#define` but feature still off | Some defines are set only via `-D` CFLAGS, not in `config_unix.h.in` |
+
+
+---
+
+## S1 Native Provider Manifest
+
+The production-inverted Rust binary derives archive membership only from `rust/ownership/native-provider-manifest.json`. `rust/build.rs` validates the complete exact-path object inventory and hashes before archive creation. `sc2/obj/release/src/uqm/displist.c.o` is rejected while `rust/src/collections/queue.rs` is the sole queue provider. Permissive unresolved internal-symbol linking is not a supported configuration. See `ownership-and-strict-linking.md`.

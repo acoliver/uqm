@@ -1,20 +1,20 @@
 use std::env;
+use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use uqm_ownership::{ValidateOptions, Validator, DISPLIST_OBJECT};
 
 fn main() {
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
 
-    // Compile internal helper for uio_vfprintf (not an exported UIO symbol)
     cc::Build::new()
         .warnings(true)
         .file("src/io/uio_vfprintf_helper.c")
         .cpp(false)
         .compile("uio_vfprintf_helper");
-
     println!("cargo:rerun-if-changed=src/io/uio_vfprintf_helper.c");
 
-    // Compile the main loop test bridge shim.
     cc::Build::new()
         .warnings(true)
         .file("src/mainloop/rust_test_bridge.c")
@@ -22,278 +22,248 @@ fn main() {
         .compile("uqm_test_bridge");
     println!("cargo:rerun-if-changed=src/mainloop/rust_test_bridge.c");
 
-    // ===========================================================
-    // P06: Link C object files into the Rust binary.
-    // ===========================================================
-    // The C build system (sc2/build.sh) compiles all C sources into
-    // .o files in sc2/obj/release/. We archive them into a static
-    // library and link it into the Rust binary target.
-    //
-    // This makes the Rust binary the process entry point (main.rs)
-    // while still using all the C game code.
-    //
-    // @plan PLAN-20260707-BINARY-INVERSION.P06
-    link_c_objects();
-
-    // ===========================================================
-    // P00: Compile harness C sources for linked-harness feasibility.
-    // ===========================================================
-    // @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §8
+    if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
+        if let Err(error) = link_c_objects() {
+            fail(format!(
+                "S1 ownership/strict-link validation failed: {error}"
+            ));
+        }
+    }
     compile_p00_harness();
 }
 
-/// Create a static archive from C object files and link it into the binary.
-///
-/// @plan PLAN-20260707-BINARY-INVERSION.P06
-fn link_c_objects() {
-    // Use absolute path to be robust against CWD differences
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let obj_dir = Path::new(&manifest_dir).join("../sc2/obj/release");
+fn fail(message: impl Display) -> ! {
+    eprintln!("{message}");
+    std::process::exit(1)
+}
 
-    // Collect all .o files from the C build
-    let mut obj_files: Vec<PathBuf> = Vec::new();
-    collect_object_files(&obj_dir, &mut obj_files);
-    obj_files.sort();
-
-    if obj_files.is_empty() {
-        panic!(
-            "P06: No C object files found in {}. Run 'cd sc2 && ./build.sh uqm' first.",
-            obj_dir.display()
-        );
+fn require<T, E: Display>(result: Result<T, E>, context: &str) -> T {
+    match result {
+        Ok(value) => value,
+        Err(error) => fail(format!("{context}: {error}")),
     }
+}
 
-    // Read CFLAGS from build.vars to stay in sync with the C build.
-    // We extract the uqm_CFLAGS value and supplement with RUST_OWNS_MAIN.
-    let build_vars_path = Path::new(&manifest_dir).join("../sc2/build.vars");
-    let build_vars =
-        fs::read_to_string(&build_vars_path).expect("failed to read sc2/build.vars for CFLAGS");
+fn require_some<T>(value: Option<T>, context: &str) -> T {
+    match value {
+        Some(value) => value,
+        None => fail(context),
+    }
+}
+
+/// Build a production archive exclusively from exact manifest paths.
+fn link_c_objects() -> Result<(), String> {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR")
+        .map_err(|error| format!("CARGO_MANIFEST_DIR is unavailable: {error}"))?;
+    let rust_root = PathBuf::from(&manifest_dir);
+    let repo_root = rust_root
+        .parent()
+        .ok_or_else(|| "Rust crate has no repository parent".to_string())?
+        .to_path_buf();
+    let manifest_path = rust_root.join("ownership/native-provider-manifest.json");
+    println!("cargo:rerun-if-changed={}", manifest_path.display());
+
+    let validator =
+        Validator::from_manifest_file(&manifest_path).map_err(|error| error.to_string())?;
+    validator
+        .validate(&ValidateOptions::production(repo_root.clone()))
+        .map_err(|error| error.to_string())?;
+    let manifest = validator.manifest();
+
+    let build_vars_path = repo_root.join("sc2/build.vars");
+    let build_vars = fs::read_to_string(&build_vars_path)
+        .map_err(|error| format!("cannot read {}: {error}", build_vars_path.display()))?;
     let cflags_base = build_vars
         .lines()
         .find_map(|line| {
-            let trimmed = line.trim();
-            trimmed
+            line.trim()
                 .strip_prefix("uqm_CFLAGS='")
-                .and_then(|rest| rest.strip_suffix("'"))
+                .and_then(|rest| rest.strip_suffix('\''))
         })
-        .expect("uqm_CFLAGS not found in build.vars")
-        .to_string();
-
-    // Build the CFLAGS for RUST_OWNS_MAIN compilation: use the C build's
-    // flags plus RUST_OWNS_MAIN and USE_RUST_MAINLOOP.
-    // Fix relative include paths (-I".") to resolve from sc2/ directory.
-    // Remove -W -Wall (we use -w to suppress warnings from our recompiled files).
-    let sc2_dir = Path::new(&manifest_dir).join("../sc2");
-    let sc2_inc = format!("-I{} -I{}/src", sc2_dir.display(), sc2_dir.display());
-    // Match -I"." from build.vars (\x22 = double quote)
-    let dot_inc = "-I\x22.\x22";
-    let cflags_common = format!(
-        "{base} -DRUST_OWNS_MAIN -DUSE_RUST_MAINLOOP=1 -w -c",
-        base = cflags_base
+        .ok_or_else(|| "uqm_CFLAGS is absent from sc2/build.vars".to_string())?;
+    let sc2_dir = repo_root.join("sc2");
+    let sc2_include = format!("-I{} -I{}/src", sc2_dir.display(), sc2_dir.display());
+    let cflags = format!(
+        "{} -DRUST_OWNS_MAIN -DUSE_RUST_MAINLOOP=1 -w -c",
+        cflags_base
             .replace("-W -Wall", "")
-            .replace(dot_inc, &sc2_inc)
-            .replace("-I.", &sc2_inc),
+            .replace("-I\x22.\x22", &sc2_include)
+            .replace("-I.", &sc2_include),
     );
-
-    let sc2_src = Path::new(&manifest_dir).join("../sc2/src");
-
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
-
-    let uqm_obj = out_dir.join("uqm_rust_main.o");
-    let gameinp_obj = out_dir.join("gameinp_rust_main.o");
-    let bridge_obj = out_dir.join("rust_bridge_mainloop_rust.o");
-    let gameopt_obj = out_dir.join("gameopt_rust_main.o");
-    let globdata_obj = out_dir.join("globdata_rust_state.o");
-
-    compile_c_file(&sc2_src.join("uqm.c"), &uqm_obj, &cflags_common);
-    compile_c_file(&sc2_src.join("uqm/gameinp.c"), &gameinp_obj, &cflags_common);
-    compile_c_file(&sc2_src.join("uqm/gameopt.c"), &gameopt_obj, &cflags_common);
-    compile_c_file(
-        &sc2_src.join("uqm/globdata.c"),
-        &globdata_obj,
-        &cflags_common,
-    );
-    compile_c_file(
-        &sc2_src.join("uqm/rust_bridge_mainloop.c"),
-        &bridge_obj,
-        &cflags_common,
-    );
-
-    // Create a static archive from the object files
-    // (excluding the original uqm.c.o and gameinp.c.o, which have
-    // been recompiled with RUST_OWNS_MAIN above)
-    let archive_path = out_dir.join("libuqm_c.a");
-
-    // Remove old archive if it exists
-    let _ = fs::remove_file(&archive_path);
-
-    // Filter out the original uqm.c.o, gameinp.c.o, and the stale
-    // rust_bridge_mainloop.c.o — they're replaced by the RUST_OWNS_MAIN
-    // versions compiled above
-    let mut archive_inputs: Vec<&PathBuf> = obj_files
+    let config_path = repo_root.join("sc2/config_unix.h");
+    let config = fs::read_to_string(&config_path)
+        .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+    let active_features: Vec<_> = manifest
+        .accepted_production_profile
+        .cargo_features
         .iter()
-        .filter(|p| {
-            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            !matches!(
-                name,
-                "uqm.c.o"
-                    | "gameinp.c.o"
-                    | "gameopt.c.o"
-                    | "globdata.c.o"
-                    | "rust_comm.c.o"
-                    | "rust_bridge_mainloop.c.o"
-                    | "alarm.c.o"
-                    | "async.c.o"
-                    | "callback.c.o"
-                    | "gravity.c.o"
-                    | "random.c.o"
-                    | "random2.c.o"
-                    | "sqrt.c.o"
-                    | "velocity.c.o"
-                    | "gendef.c.o"
-                    | "collide.c.o"
-                    | "trans.c.o"
-                    | "battlecontrols.c.o"
-                    | "lander.c.o"
-            )
+        .filter(|feature| {
+            let variable = format!("CARGO_FEATURE_{}", feature.to_ascii_uppercase());
+            env::var_os(variable.replace('-', "_")).is_some()
         })
+        .map(String::as_str)
         .collect();
-    archive_inputs.extend([
-        &uqm_obj,
-        &gameinp_obj,
-        &gameopt_obj,
-        &globdata_obj,
-        &bridge_obj,
-    ]);
-    archive_inputs.sort_by_key(|path| path.display().to_string());
+    validator
+        .validate_production_profile(&active_features, cflags_base, &config, &cflags)
+        .map_err(|error| error.to_string())?;
 
-    let object_manifest = archive_inputs
-        .iter()
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>()
-        .join("\n");
-    fs::write(
-        out_dir.join("uqm-c-objects.manifest"),
-        format!("{object_manifest}\n"),
-    )
-    .expect("failed to write deterministic C object manifest");
+    let out_dir = env::var_os("OUT_DIR")
+        .map(PathBuf::from)
+        .ok_or_else(|| "OUT_DIR is unavailable".to_string())?;
 
-    // Use ar to create the archive (includes RUST_OWNS_MAIN versions)
-    let ar_status = std::process::Command::new("ar")
+    let mut archive_inputs = Vec::new();
+    let mut canonical_inputs = Vec::new();
+    for object in manifest.included_objects() {
+        let path = repo_root.join(&object.path);
+        archive_inputs.push(path);
+        canonical_inputs.push(object.path.clone());
+    }
+    for object in &manifest.recompiled_objects {
+        let source = repo_root.join(&object.repo_relative_path);
+        let output = out_dir.join(&object.object_output);
+        compile_c_file(&source, &output, &cflags)?;
+        archive_inputs.push(output);
+        canonical_inputs.push(object.repo_relative_path.clone());
+    }
+    archive_inputs.sort();
+    canonical_inputs.sort();
+
+    if canonical_inputs.iter().any(|path| path == DISPLIST_OBJECT) {
+        return Err(format!(
+            "excluded duplicate provider reached archive membership: {DISPLIST_OBJECT}"
+        ));
+    }
+
+    let sidecar = out_dir.join("uqm-c-objects.manifest");
+    fs::write(&sidecar, format!("{}\n", canonical_inputs.join("\n")))
+        .map_err(|error| format!("cannot write {}: {error}", sidecar.display()))?;
+    validator
+        .validate(&ValidateOptions {
+            repo_root: repo_root.clone(),
+            check_disk_objects: false,
+            check_archive: true,
+            archive_path: Some(sidecar),
+            check_strict_link: true,
+        })
+        .map_err(|error| error.to_string())?;
+
+    let archive_path = out_dir.join("libuqm_c.a");
+    match fs::remove_file(&archive_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!(
+                "cannot remove stale {}: {error}",
+                archive_path.display()
+            ))
+        }
+    }
+    let status = std::process::Command::new("ar")
         .arg("rcs")
         .arg(&archive_path)
         .args(&archive_inputs)
-        .status();
-
-    if !ar_status.map(|s| s.success()).unwrap_or(false) {
-        panic!("P06: Failed to create C archive");
+        .status()
+        .map_err(|error| format!("cannot execute ar: {error}"))?;
+    if !status.success() {
+        return Err(format!(
+            "ar failed while creating {}",
+            archive_path.display()
+        ));
     }
+    validator
+        .validate_archive_file(&archive_path)
+        .map_err(|error| error.to_string())?;
+    let report = validator.generate_report();
+    let report_path = out_dir.join("provider-report.json");
+    fs::write(
+        &report_path,
+        format!("{}\n", report.to_json().map_err(|error| error.to_string())?),
+    )
+    .map_err(|error| format!("cannot write {}: {error}", report_path.display()))?;
 
     println!("cargo:rustc-link-search=native={}", out_dir.display());
-    // Force-load the C archive into the binary target so that all C object
-    // files are included, resolving internal C-to-C reference chains (e.g.
-    // Starcon2Main → audio functions) that normal archive extraction would
-    // miss because no Rust code directly references the intermediate symbols.
-    // cargo:rustc-link-arg-bin only applies to the named binary target,
-    // so the staticlib is not affected.
-    println!(
-        "cargo:rustc-link-arg-bin=uqm=-Wl,-force_load,{}",
-        archive_path.display()
-    );
-    // Allow unresolved transitional symbols (e.g. graphics_backend,
-    // format_conv_surf from pure.c which is compiled out by USE_RUST_GFX).
-    // These symbols are never called at runtime when the Rust graphics
-    // driver is active.
-    println!("cargo:rustc-link-arg-bin=uqm=-Wl,-undefined,dynamic_lookup");
+    let target = env::var("CARGO_CFG_TARGET_OS")
+        .map_err(|error| format!("CARGO_CFG_TARGET_OS is unavailable: {error}"))?;
+    match target.as_str() {
+        "macos" => println!(
+            "cargo:rustc-link-arg-bin=uqm=-Wl,-force_load,{}",
+            archive_path.display()
+        ),
+        "linux" => {
+            println!("cargo:rustc-link-arg-bin=uqm=-Wl,--whole-archive");
+            println!("cargo:rustc-link-arg-bin=uqm={}", archive_path.display());
+            println!("cargo:rustc-link-arg-bin=uqm=-Wl,--no-whole-archive");
+        }
+        unsupported => return Err(format!("unsupported strict-link target OS: {unsupported}")),
+    }
 
-    // Link external C libraries (from build.vars LDFLAGS)
-    println!("cargo:rustc-link-arg=-lpng16");
-    println!("cargo:rustc-link-arg=-lz");
-    println!("cargo:rustc-link-arg=-lm");
-    println!("cargo:rustc-link-arg=-lSDL2");
-    println!("cargo:rustc-link-arg=-lobjc");
-    println!("cargo:rustc-link-arg=-framework");
-    println!("cargo:rustc-link-arg=Cocoa");
-    println!("cargo:rustc-link-arg=-framework");
-    println!("cargo:rustc-link-arg=CoreAudio");
-    println!("cargo:rustc-link-arg=-framework");
-    println!("cargo:rustc-link-arg=AudioToolbox");
-    println!("cargo:rustc-link-arg=-framework");
-    println!("cargo:rustc-link-arg=CoreFoundation");
-    println!("cargo:rustc-link-arg=-llzma");
-    println!("cargo:rustc-link-arg=-lbz2");
-
-    // Add SDL2 and library search paths
-    println!("cargo:rustc-link-search=native=/opt/homebrew/lib");
-    println!("cargo:rustc-link-search=native=/opt/homebrew/opt/libpng/lib");
-    println!("cargo:rustc-link-search=native=/opt/homebrew/opt/SDL2/lib");
+    for library in ["png16", "z", "m", "SDL2", "lzma", "bz2"] {
+        println!("cargo:rustc-link-arg=-l{library}");
+    }
+    if target == "macos" {
+        println!("cargo:rustc-link-arg=-lobjc");
+        for framework in ["Cocoa", "CoreAudio", "AudioToolbox", "CoreFoundation"] {
+            println!("cargo:rustc-link-arg=-framework");
+            println!("cargo:rustc-link-arg={framework}");
+        }
+        for path in [
+            "/opt/homebrew/lib",
+            "/opt/homebrew/opt/libpng/lib",
+            "/opt/homebrew/opt/SDL2/lib",
+        ] {
+            println!("cargo:rustc-link-search=native={path}");
+        }
+    }
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../sc2/build.vars");
     println!("cargo:rerun-if-changed=../sc2/config_unix.h");
-    for object in &obj_files {
-        println!("cargo:rerun-if-changed={}", object.display());
+    for object in &manifest.objects {
+        println!("cargo:rerun-if-changed=../{}", object.path);
     }
-    println!("cargo:rerun-if-changed=../sc2/src/uqm.c");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/gameinp.c");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/gameopt.c");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/globdata.c");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/globdata.h");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/sis.h");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/planets/planets.h");
-    println!("cargo:rerun-if-changed=../sc2/src/uqm/rust_bridge_mainloop.c");
+    for object in &manifest.recompiled_objects {
+        println!("cargo:rerun-if-changed=../{}", object.repo_relative_path);
+    }
+    Ok(())
 }
 
-/// Compile a single C source file to an object file.
-/// Uses shell-like tokenization for CFLAGS to handle quoted paths.
-fn compile_c_file(source: &Path, output: &Path, cflags: &str) {
-    let mut cmd = std::process::Command::new("cc");
+fn compile_c_file(source: &Path, output: &Path, cflags: &str) -> Result<(), String> {
+    let mut command = std::process::Command::new("cc");
     for token in shell_tokenize(cflags) {
-        cmd.arg(&token);
+        command.arg(token);
     }
-    cmd.arg("-o").arg(output).arg(source);
-
-    let status = cmd.status();
-    if !status.map(|s| s.success()).unwrap_or(false) {
-        panic!("P06: Failed to compile {}", source.display());
+    let status = command
+        .arg("-o")
+        .arg(output)
+        .arg(source)
+        .status()
+        .map_err(|error| format!("cannot compile {}: {error}", source.display()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("C compiler rejected {}", source.display()))
     }
 }
 
-/// Simple shell-like tokenizer for CFLAGS strings.
-/// Handles double-quoted arguments (e.g. -I"some path").
-fn shell_tokenize(s: &str) -> Vec<String> {
+fn shell_tokenize(value: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;
-
-    for ch in s.chars() {
-        match ch {
+    for character in value.chars() {
+        match character {
             '"' => in_quotes = !in_quotes,
-            c if c.is_whitespace() && !in_quotes => {
+            character if character.is_whitespace() && !in_quotes => {
                 if !current.is_empty() {
                     tokens.push(std::mem::take(&mut current));
                 }
             }
-            c => current.push(c),
+            character => current.push(character),
         }
     }
     if !current.is_empty() {
         tokens.push(current);
     }
     tokens
-}
-
-/// Recursively collect all .o files from a directory.
-fn collect_object_files(dir: &Path, files: &mut Vec<PathBuf>) {
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                collect_object_files(&path, files);
-            } else if path.extension().map(|e| e == "o").unwrap_or(false) {
-                files.push(path);
-            }
-        }
-    }
 }
 
 /// Compile P00 harness C sources.
@@ -333,7 +303,7 @@ fn compile_p00_harness() {
 
     let sc2_dir = Path::new(&manifest_dir).join("../sc2");
     let harness_dir = Path::new(&manifest_dir).join("harness");
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
+    let out_dir = PathBuf::from(require_some(env::var_os("OUT_DIR"), "OUT_DIR not set"));
 
     // SDL surface accessors — auto-linked into all targets (no production symbol refs)
     cc::Build::new()
@@ -420,8 +390,10 @@ fn compile_harness_c(source: &Path, output: &Path, cflags: &str) {
 fn generate_state_bindings(globdata_path: &Path) {
     println!("cargo:rerun-if-changed={}", globdata_path.display());
 
-    let source = fs::read_to_string(globdata_path)
-        .expect("failed to read sc2/src/uqm/globdata.h for Rust state bindings");
+    let source = require(
+        fs::read_to_string(globdata_path),
+        "failed to read sc2/src/uqm/globdata.h for Rust state bindings",
+    );
 
     let mut bit = 0usize;
     let mut entries = Vec::new();
@@ -439,7 +411,7 @@ fn generate_state_bindings(globdata_path: &Path) {
 
     let num_bits = bit;
     let num_bytes = (num_bits + 7) >> 3;
-    let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
+    let out_dir = PathBuf::from(require_some(env::var_os("OUT_DIR"), "OUT_DIR not set"));
     let mut generated = String::new();
 
     generated.push_str("// @generated by rust/build.rs from sc2/src/uqm/globdata.h\n");
@@ -461,8 +433,10 @@ fn generate_state_bindings(globdata_path: &Path) {
     generated.push_str("    }\n");
     generated.push_str("}\n");
 
-    fs::write(out_dir.join("state_generated.rs"), generated)
-        .expect("failed to write generated Rust state bindings");
+    require(
+        fs::write(out_dir.join("state_generated.rs"), generated),
+        "failed to write generated Rust state bindings",
+    );
 }
 
 fn parse_game_state_entry(line: &str) -> Option<(String, usize)> {

@@ -5,12 +5,47 @@ on:
     branches: [ main, develop, phase0-foundation ]
     paths:
       - rust/**
+      - .github/workflows/rust-quality.yaml
+      - dev-docs/rust/ownership-and-strict-linking.md
+      - dev-docs/rust/howtorun.md
+      - dev-docs/rust/howtoconfigure.md
+      - dev-docs/README.md
   pull_request:
     branches: [ main, develop ]
     paths:
       - rust/**
+      - .github/workflows/rust-quality.yaml
+      - dev-docs/rust/ownership-and-strict-linking.md
+      - dev-docs/rust/howtorun.md
+      - dev-docs/rust/howtoconfigure.md
+      - dev-docs/README.md
 
 jobs:
+  ownership-strict-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Validate ownership mutations
+        run: cargo test --manifest-path rust/ownership/Cargo.toml --all-targets
+      - name: Lint ownership validator
+        run: cargo clippy --manifest-path rust/ownership/Cargo.toml --all-targets -- -D warnings
+      - name: Verify focused S1 strict production-link contract
+        run: rust/ownership/verify-fixture.sh
+      - name: Upload focused S1 strict-link artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ownership-s1-strict-link-fixture
+          path: rust/target/ownership-strict-link-fixture/
+          if-no-files-found: error
+
   quality-gate:
     runs-on: ubuntu-latest
     steps:

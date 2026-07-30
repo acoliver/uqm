@@ -23,6 +23,9 @@ This directory contains the working rules for planning and implementation in Jef
   - How coordinators execute phase-by-phase work with subagents.
   - Covers strict sequencing, verification gating, and remediation loops.
 
+- [rust/ownership-and-strict-linking.md](./rust/ownership-and-strict-linking.md)
+  - S1 provider-manifest authority, strict production linking, mutation fixtures, and replay commands.
+
 ## Recommended Reading Order
 
 1. `RULES.md`

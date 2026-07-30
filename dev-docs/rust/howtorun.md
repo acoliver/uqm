@@ -10,17 +10,13 @@
 
 UQM (The Ur-Quan Masters) is an open-source port of Star Control II. This repo
 is incrementally porting the C codebase to Rust, **subsystem by subsystem**. The
-C and Rust code coexist at compile time:
+active transitional production path is Rust-owned:
 
-- C preprocessor guards (`#ifdef USE_RUST_*`) select which implementation is active.
-- Rust compiles as a **static library** (`libuqm_rust.a`) that the C binary links via FFI.
-- The C `main()` in `sc2/src/uqm.c` is always the real entry point. Rust does
-  **not** own `main`.
-
-> **Correction note:** `rust/src/main.rs` exists in the repo but is **not part
-> of the normal build**. `Cargo.toml` defines only `staticlib` and `rlib` crate
-> types — there is no `[[bin]]` target. The file is a leftover from early
-> prototyping. Do not reference it as the active launcher.
+- Cargo auto-discovers `rust/src/main.rs` as the `uqm` binary target.
+- The `uqm` binary is the process entry point and calls retained C game code through the transitional archive.
+- C preprocessor guards (`#ifdef USE_RUST_*`) select which retained native implementations are omitted in favor of Rust exports.
+- `libuqm_rust.a` remains available for transitional callers and harnesses.
+- `linked_c_archive` enables the manifest-validated native archive; ordinary Rust checks and tests do not consume ignored native objects.
 
 ---
 
@@ -78,20 +74,19 @@ directory with a `specification.md`, analysis artifacts, and phased plan files.
 
 | Mode | Command | Result |
 |---|---|---|
-| C-only | `cd sc2 && ./build.sh uqm` | Original C, no Rust |
-| Rust bridge | `cd sc2 && ./build.sh uqm config` → "Rust bridge → enabled", then `./build.sh uqm` | All Rust subsystems active except audio-heart |
-| Rust bridge + audio-heart | `USE_RUST_AUDIO_HEART=1 ./build.sh uqm` | Everything Rust including streaming/music/SFX |
+| Pure Rust checks/tests | `cargo test --manifest-path rust/Cargo.toml` | Does not consume the transitional native object tree |
+| Supported transitional production | `cargo build --manifest-path rust/Cargo.toml --release --features audio_heart,linked_c_archive --bin uqm` | Rust entry point plus the strictly linked manifest-selected archive and Rust audio heart |
 
-The build menu toggles **all** Rust subsystems as a single unit (details in
-`howtoconfigure.md`). Audio-heart is the only independently opt-in subsystem.
+The C build menu still toggles retained subsystem guards as a unit. Audio-heart
+is independently opt-in; `linked_c_archive` is the explicit Cargo boundary for
+production native linkage.
 
 ---
 
 ## Running the Game
 
 ```sh
-cd sc2
-./uqm
+rust/target/release/uqm --contentdir=sc2/content
 ```
 
 ### CLI Flags
@@ -108,7 +103,7 @@ cd sc2
 | `--fullscreen` | Fullscreen mode |
 | `--fps` | Show FPS counter |
 
-CLI parsing is handled by the C `main()` in `sc2/src/uqm.c` using `getopt_long`.
+CLI parsing begins in the Rust `uqm` entry point and is translated to the retained C option boundary while that domain remains transitional.
 
 ### Capturing Logs
 
@@ -191,19 +186,20 @@ grep 'features' rust/Cargo.toml          # Cargo features
 
 ```
 rust/
-├── Cargo.toml              # deps, features (audio_heart), crate-type = staticlib+rlib
-├── build.rs                # cc/bindgen — compiles mem_wrapper.c
+├── Cargo.toml              # deps, audio_heart/linked_c_archive features, staticlib+rlib library
+├── build.rs                # bindings plus manifest-validated production archive linking
+├── ownership/              # S1 provider manifest, validator, fixtures, strict-link replay
 ├── tests/                  # integration tests
 │   ├── sound_integration.rs
 │   ├── phase2_integration_tests.rs
 │   ├── input_integration_tests.rs
 │   └── sdl_driver_tests.rs
 └── src/
-    ├── lib.rs              #  top-level module map + re-exports
-    ├── main.rs             #  DEAD CODE — not compiled (no [[bin]] target)
+    ├── lib.rs              # top-level Rust module map + re-exports
+    ├── main.rs             # active Rust-owned uqm binary entry point
     ├── bridge_log.rs       # rust-bridge.log file logging
-    ├── c_bindings.rs       # FFI declarations for calling into C
-    ├── cli.rs              # clap CLI parser (unused in normal build)
+    ├── c_bindings.rs       # FFI declarations for retained C boundaries
+    ├── cli.rs              # clap CLI parser used by the Rust entry point
     ├── config.rs           # Options struct
     ├── logging.rs          # LogLevel enum + FFI to C log_add()
     ├── memory.rs           # HMalloc/HFree/HCalloc/HRealloc
@@ -231,21 +227,20 @@ rust/
     └── video/              # DukVid decoder, player, scaler
 ```
 
-### C Side (`sc2/`)
+### Transitional Native Side (`sc2/`)
 
 ```
 sc2/
-├── build.sh                # main build script
-├── build.vars              #  generated — do not hand-edit
-├── config_unix.h           #  generated — USE_RUST_* defines
+├── build.sh                # legacy native-input orchestration
+├── build.vars              # generated — do not hand-edit
+├── config_unix.h           # generated USE_RUST_* defines
 ├── config_unix.h.in        # template (SYMBOL_* placeholders)
 ├── build/unix/
-│   └── build.config        #  build menu + rust_bridge_enabled_action()
+│   └── build.config        # build menu + rust_bridge_enabled_action()
 └── src/
-    ├── uqm.c              #  C main() — the real entry point
-    ├── mem_wrapper.c       # compiled into libuqm_core by Rust build.rs
-    ├── darwin/SDLMain.m    # macOS SDL bootstrap → calls main() in uqm.c
-    └── ...                 # C subsystem files with #ifdef guards (see howtoconfigure.md)
+    ├── uqm.c               # retained Starcon2Main implementation, recompiled without native main
+    ├── darwin/SDLMain.m    # legacy native launcher input
+    └── ...                 # transitional subsystem files with guards (see howtoconfigure.md)
 ```
 
 ### Project Plans
@@ -284,14 +279,14 @@ dev-docs/
 
 ## How the C/Rust Coexistence Model Works (Summary)
 
-Full details in `howtoconfigure.md`. The essential mental model:
+Full details are in `howtoconfigure.md`. The essential mental model:
 
-1. **C owns `main()`**. The binary is always a C program (`sc2/uqm`).
-2. **Rust compiles to `libuqm_rust.a`** and links into the C binary.
-3. **`#ifdef USE_RUST_*` guards** in C files switch between C and Rust implementations at compile time.
-4. Rust exposes `#[no_mangle] pub extern "C" fn` entry points that C calls.
-5. When Rust bridge is enabled, **all** subsystem defines are set together (no per-subsystem build menu). Audio-heart is the sole independent toggle.
-6. The build system runs `cargo build --release` as a pre-build step, keeping C defines and Cargo features in sync.
+1. **Rust owns the process entry point** through the Cargo `uqm` binary.
+2. **`linked_c_archive` is the production boundary** that enables exact manifest-validated native inputs.
+3. **`#ifdef USE_RUST_*` guards** omit superseded native implementations in favor of Rust exports.
+4. Rust exposes `#[no_mangle] pub extern "C" fn` entry points for retained C callers.
+5. The native build menu still sets subsystem defines together; audio-heart is independently opt-in.
+6. S2/#22 owns replacing the remaining recursive legacy orchestration with a clean root build.
 
 ---
 
@@ -308,3 +303,10 @@ Full details in `howtoconfigure.md`. The essential mental model:
 9. [ ] If gated by Cargo feature: add to `[features]` in `Cargo.toml`, use `#[cfg(feature = "...")]`
 10. [ ] Write spec in `project-plans/<feature>/specification.md`
 11. [ ] Write tests before implementation (`RULES.md` requires TDD)
+
+
+---
+
+## S1 Production Ownership Verification
+
+Production emits `provider-report.json` and exact-path `uqm-c-objects.manifest` beside `libuqm_c.a`. Run `rust/ownership/verify-production.sh`; it performs a forced production build, discovers only that invocation's artifacts from Cargo JSON, validates real archive membership and symbols, and records exact artifact hashes. Clean root orchestration remains S2 scope.
