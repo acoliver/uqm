@@ -1,4 +1,5 @@
 use crate::logging::{log_add, LogLevel};
+use libc::c_char;
 use std::ffi::c_void;
 
 /// Allocate memory using the system malloc
@@ -144,19 +145,20 @@ pub unsafe extern "C" fn rust_mem_uninit() -> bool {
 /// # Safety
 /// The caller must ensure proper cleanup using the correct deallocator for each component.
 #[allow(dead_code)]
-pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut i8, Vec<*mut i8>) {
+pub unsafe fn copy_argv_to_c(argv: &[String]) -> (*mut *mut c_char, Vec<*mut c_char>) {
     use std::ffi::CString;
     use std::ptr;
 
     // Convert each Rust string to a C string
-    let mut c_strings: Vec<*mut i8> = Vec::with_capacity(argv.len());
+    let mut c_strings: Vec<*mut c_char> = Vec::with_capacity(argv.len());
     for arg in argv {
         let c_string = CString::new(arg.as_str()).expect("Failed to convert argument to C string");
         c_strings.push(c_string.into_raw());
     }
 
     // Allocate an array of pointers
-    let array_ptr = rust_hmalloc(std::mem::size_of::<*mut i8>() * (argv.len() + 1)) as *mut *mut i8;
+    let array_ptr =
+        rust_hmalloc(std::mem::size_of::<*mut c_char>() * (argv.len() + 1)) as *mut *mut c_char;
     // Copy the pointers to the array
     for (i, ptr) in c_strings.iter().enumerate() {
         ptr::write(array_ptr.add(i), *ptr);
@@ -306,10 +308,10 @@ mod tests {
             let (array_ptr, _) = copy_argv_to_c(&argv);
 
             // Verify the array
-            let first: *mut i8 = *array_ptr.add(0);
-            let second: *mut i8 = *array_ptr.add(1);
-            let third: *mut i8 = *array_ptr.add(2);
-            let fourth: *mut i8 = *array_ptr.add(3);
+            let first: *mut c_char = *array_ptr.add(0);
+            let second: *mut c_char = *array_ptr.add(1);
+            let third: *mut c_char = *array_ptr.add(2);
+            let fourth: *mut c_char = *array_ptr.add(3);
 
             assert!(!first.is_null());
             assert!(!second.is_null());

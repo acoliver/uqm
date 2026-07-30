@@ -273,6 +273,13 @@
       ]
     },
     {
+      "path": "sc2/src/libs/graphics/sdl/2xscalers_mmx.h",
+      "sha256": "ca8b6ddbd02ea302dc2c898843530b95ed1d38f91cbff0986e4b200c18460700",
+      "targets": [
+        "linux-x86_64"
+      ]
+    },
+    {
       "path": "sc2/src/libs/graphics/sdl/opengl.h",
       "sha256": "1155181a0fbde32ab274be3fc8a4bcb74e1ed8944b4e413191a906cb491ebbc0",
       "targets": [
