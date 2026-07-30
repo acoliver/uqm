@@ -52,6 +52,11 @@ debug-process = []
 linked_c_archive = []
 
 [[bin]]
+name = "uqm"
+path = "src/main.rs"
+required-features = ["linked_c_archive"]
+
+[[bin]]
 name = "p00_probes"
 path = "probes/p00_probes.rs"
 
