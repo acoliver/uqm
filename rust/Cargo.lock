@@ -2544,6 +2544,7 @@ dependencies = [
  "rodio",
  "rstest",
  "sdl2",
+ "sdl2-sys",
  "serde",
  "serde_json",
  "serial_test",

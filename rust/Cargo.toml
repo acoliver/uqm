@@ -18,6 +18,7 @@ anyhow = "1.0"
 thiserror = "1.0"
 clap = { version = "4.4", features = ["derive"] }
 sdl2 = "0.37"
+sdl2-sys = "0.37"
 gl = "0.14"
 crossbeam = "0.8"
 parking_lot = "0.12"

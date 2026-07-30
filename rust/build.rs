@@ -278,40 +278,27 @@ fn shell_tokenize(value: &str) -> Vec<String> {
 fn compile_p00_harness() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
 
-    // Read SDL2 include path from build.vars
-    let build_vars_path = Path::new(&manifest_dir).join("../sc2/build.vars");
-    let build_vars = fs::read_to_string(&build_vars_path).unwrap_or_default();
-
-    // Extract SDL2 include path from CFLAGS (e.g. -I/opt/homebrew/include/SDL2)
-    let sdl2_inc = build_vars
-        .lines()
-        .find_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.starts_with("uqm_CFLAGS=") {
-                let rest = trimmed
-                    .strip_prefix("uqm_CFLAGS='")
-                    .and_then(|r| r.strip_suffix("'"))?;
-                for token in rest.split_whitespace() {
-                    if token.starts_with("-I") && token.contains("SDL2") {
-                        return Some(token[2..].to_string());
-                    }
-                }
-            }
-            None
-        })
-        .unwrap_or_else(|| "/opt/homebrew/include/SDL2".to_string());
+    let sdl2_includes = require_some(
+        env::var_os("DEP_SDL2_INCLUDE"),
+        "SDL2 dependency did not publish DEP_SDL2_INCLUDE",
+    );
+    let sdl2_includes: Vec<PathBuf> = env::split_paths(&sdl2_includes).collect();
+    if sdl2_includes.is_empty() {
+        fail("DEP_SDL2_INCLUDE did not contain an SDL2 include directory");
+    }
 
     let sc2_dir = Path::new(&manifest_dir).join("../sc2");
     let harness_dir = Path::new(&manifest_dir).join("harness");
     let out_dir = PathBuf::from(require_some(env::var_os("OUT_DIR"), "OUT_DIR not set"));
 
     // SDL surface accessors — auto-linked into all targets (no production symbol refs)
-    cc::Build::new()
+    let mut sdl_accessors = cc::Build::new();
+    sdl_accessors
         .warnings(true)
         .file("harness/sdl_surface_accessors.c")
         .include(&harness_dir)
         .include(&sc2_dir)
-        .include(&sdl2_inc)
+        .includes(&sdl2_includes)
         .cpp(false)
         .compile("p00_sdl_accessors");
 
@@ -325,14 +312,18 @@ fn compile_p00_harness() {
 
     // Menu binding accessor — compiled as object only (references production symbols)
     let menu_accessor_obj = out_dir.join("menu_binding_accessor.o");
+    let sdl_include_flags = sdl2_includes
+        .iter()
+        .map(|path| format!("-I{}", path.display()))
+        .collect::<Vec<_>>()
+        .join(" ");
     compile_harness_c(
         &harness_dir.join("menu_binding_accessor.c"),
         &menu_accessor_obj,
         &format!(
-            "-I{}/src -I{} -I{} -w -c",
+            "-I{}/src -I{} {sdl_include_flags} -w -c",
             sc2_dir.display(),
             sc2_dir.display(),
-            sdl2_inc
         ),
     );
 
