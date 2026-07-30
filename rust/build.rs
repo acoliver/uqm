@@ -131,14 +131,18 @@ fn link_c_objects(packages: &NativePackages, toolchain: &ToolchainIdentity) -> R
     let dependencies = load_native_dependencies(&dependency_path)?;
     validate_native_authority(&repo_root, &inputs, &dependencies, validator.manifest())?;
     validate_active_profile(&inputs, &validator)?;
-    validate_package_defines(&packages.defines, &inputs.production_profile.defines)?;
+    let target_os = env_value("CARGO_CFG_TARGET_OS")?;
+    let target_arch = env_value("CARGO_CFG_TARGET_ARCH")?;
+    let target = target_key(&target_os, &target_arch)?;
+    validate_package_defines(
+        &target,
+        &packages.defines,
+        &inputs.production_profile.defines,
+    )?;
 
     for dependency in &dependencies.dependencies {
         println!("cargo:rerun-if-changed=../{}", dependency.path);
     }
-    let target_os = env_value("CARGO_CFG_TARGET_OS")?;
-    let target_arch = env_value("CARGO_CFG_TARGET_ARCH")?;
-    let target = target_key(&target_os, &target_arch)?;
     let out_dir = output_directory()?;
     let object_dir = out_dir.join("native");
     fs::create_dir_all(&object_dir)
@@ -188,13 +192,17 @@ fn validate_active_profile(
 }
 
 fn validate_package_defines(
+    target: &str,
     discovered: &BTreeSet<(String, Option<String>)>,
     authoritative: &[PreprocessorDefine],
 ) -> Result<(), String> {
-    let expected: BTreeSet<_> = authoritative
+    let mut expected: BTreeSet<_> = authoritative
         .iter()
         .map(|define| (define.name.clone(), define.value.clone()))
         .collect();
+    if target.contains("linux") {
+        expected.insert(("_REENTRANT".into(), None));
+    }
     if let Some(unknown) = discovered.difference(&expected).next() {
         return Err(format!(
             "pkg-config preprocessor define differs from authoritative profile: {unknown:?}"
@@ -242,7 +250,7 @@ fn discover_packages(packages: &[&str]) -> Result<NativePackages, String> {
             .map_err(|error| {
                 format!("structured pkg-config discovery failed for {package}: {error}")
             })?;
-        if !library.ld_args.is_empty() {
+        if library.ld_args.iter().any(|args| !args.is_empty()) {
             return Err(format!(
                 "pkg-config returned unsupported raw linker arguments for {package}"
             ));
