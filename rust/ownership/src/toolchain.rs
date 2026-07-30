@@ -12,8 +12,9 @@ use crate::validate::hex_sha256;
 
 pub const BUILD_EVIDENCE_SCHEMA: &str = "uqm-native-build-evidence-v1";
 pub const BUILD_EVIDENCE_FILE: &str = "native-build-evidence.json";
-pub const PRODUCTION_PACKAGES: [&str; 4] = ["sdl2", "libpng", "liblzma", "bzip2"];
 pub const DEPENDENCY_FLAGS: [&str; 3] = ["-MMD", "-MF", "<depfile>"];
+const COMMON_PRODUCTION_PACKAGES: [&str; 3] = ["sdl2", "libpng", "liblzma"];
+const MACOS_PRODUCTION_PACKAGES: [&str; 4] = ["sdl2", "libpng", "liblzma", "bzip2"];
 pub const REPOSITORY_INCLUDE_ROOTS: [&str; 3] = ["sc2", "sc2/src", "sc2/src/libs/uio"];
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -174,6 +175,14 @@ pub fn reject_ambient_build_flags() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+pub fn production_packages(target: &str) -> &'static [&'static str] {
+    if target.contains("apple-darwin") {
+        &MACOS_PRODUCTION_PACKAGES
+    } else {
+        &COMMON_PRODUCTION_PACKAGES
+    }
 }
 
 pub fn discover_package_identities(
@@ -344,4 +353,21 @@ fn pkg_config_output(
 
 fn path_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::production_packages;
+
+    #[test]
+    fn production_packages_follow_platform_discovery() {
+        assert_eq!(
+            production_packages("aarch64-apple-darwin"),
+            ["sdl2", "libpng", "liblzma", "bzip2"]
+        );
+        assert_eq!(
+            production_packages("x86_64-unknown-linux-gnu"),
+            ["sdl2", "libpng", "liblzma"]
+        );
+    }
 }

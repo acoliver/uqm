@@ -19,7 +19,8 @@ const DEPENDENCY_AUTHORITY: &str = "build/native-dependencies.json";
 const INPUT_AUTHORITY: &str = "build/native-inputs.json";
 const PROVIDER_AUTHORITY: &str = "ownership/native-provider-manifest.json";
 const SDL_PACKAGE: [&str; 1] = ["sdl2"];
-const PRODUCTION_PACKAGES: [&str; 3] = ["libpng", "liblzma", "bzip2"];
+const COMMON_PRODUCTION_PACKAGES: [&str; 2] = ["libpng", "liblzma"];
+const MACOS_PRODUCTION_PACKAGES: [&str; 3] = ["libpng", "liblzma", "bzip2"];
 
 fn main() {
     if let Err(error) = run() {
@@ -39,7 +40,13 @@ fn run() -> Result<(), String> {
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
         reject_ambient_build_flags()?;
         validate_toolchain_marker(&toolchain)?;
-        packages.extend(discover_packages(&PRODUCTION_PACKAGES)?);
+        let production_packages = if target_os == "macos" {
+            &MACOS_PRODUCTION_PACKAGES[..]
+        } else {
+            println!("cargo:rustc-link-lib=bz2");
+            &COMMON_PRODUCTION_PACKAGES[..]
+        };
+        packages.extend(discover_packages(production_packages)?);
         link_c_objects(&packages, &toolchain)?;
     } else {
         emit_package_links(&packages, &target_os);
@@ -337,7 +344,7 @@ fn native_build_evidence(
         packages: discover_package_identities(
             root,
             &toolchain.pkg_config,
-            &uqm_ownership::PRODUCTION_PACKAGES,
+            uqm_ownership::production_packages(target),
         )?,
         compile_profile: profile.clone(),
         build_environment: canonical_build_environment(toolchain, epoch),

@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -609,7 +610,10 @@ fn validate_prerequisites(target: &SupportedTarget) -> Result<(), String> {
     let packages: Vec<_> = target
         .prerequisites
         .iter()
-        .filter(|name| !matches!(name.as_str(), "cc" | "ar" | "nm" | "pkg-config"))
+        .filter(|name| {
+            !matches!(name.as_str(), "cc" | "ar" | "nm" | "pkg-config")
+                && !(target.os == "linux" && name.as_str() == "bzip2")
+        })
         .map(String::as_str)
         .collect();
     run_command(
@@ -617,7 +621,36 @@ fn validate_prerequisites(target: &SupportedTarget) -> Result<(), String> {
             .arg("--exists")
             .args(&packages),
         &format!("pkg-config prerequisites [{}]", packages.join(", ")),
-    )
+    )?;
+    if target.os == "linux" {
+        validate_linux_bzip2(&toolchain.cc.executable)?;
+    }
+    Ok(())
+}
+
+fn validate_linux_bzip2(cc: &str) -> Result<(), String> {
+    let mut child = Command::new(cc)
+        .args(["-x", "c", "-", "-lbz2", "-o", "/dev/null"])
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("cannot execute {cc} for bzip2 prerequisite: {error}"))?;
+    let source = b"#include <bzlib.h>\nint main(void) { bz_stream stream = {0}; return BZ2_bzCompressInit(&stream, 1, 0, 0); }\n";
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| format!("cannot open {cc} stdin for bzip2 prerequisite"))?
+        .write_all(source)
+        .map_err(|error| format!("cannot write bzip2 prerequisite probe: {error}"))?;
+    let status = child
+        .wait()
+        .map_err(|error| format!("cannot wait for bzip2 prerequisite probe: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "bzip2 header/library prerequisite failed with {status}; install libbz2-dev"
+        ))
+    }
 }
 
 fn print_matrix(root: &Path) -> Result<(), String> {
@@ -882,7 +915,7 @@ fn validate_live_native_evidence(
     let packages = discover_package_identities(
         root,
         &toolchain.pkg_config,
-        &uqm_ownership::PRODUCTION_PACKAGES,
+        uqm_ownership::production_packages(&toolchain.target),
     )?;
     let expected_environment = canonical_build_environment(toolchain, epoch);
     let expected_defines: Vec<_> = [

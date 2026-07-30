@@ -53,9 +53,9 @@ pub use report::{
 };
 pub use toolchain::{
     apply_toolchain_environment, canonical_build_environment, discover_package_identities,
-    read_build_evidence, reject_ambient_build_flags, resolve_toolchain, write_build_evidence,
-    NativeBuildEvidence, NativeCompileProfile, PackageIdentity, ToolIdentity, ToolchainIdentity,
-    BUILD_EVIDENCE_FILE, BUILD_EVIDENCE_SCHEMA, DEPENDENCY_FLAGS, PRODUCTION_PACKAGES,
+    production_packages, read_build_evidence, reject_ambient_build_flags, resolve_toolchain,
+    write_build_evidence, NativeBuildEvidence, NativeCompileProfile, PackageIdentity, ToolIdentity,
+    ToolchainIdentity, BUILD_EVIDENCE_FILE, BUILD_EVIDENCE_SCHEMA, DEPENDENCY_FLAGS,
     REPOSITORY_INCLUDE_ROOTS,
 };
 pub use validate::{

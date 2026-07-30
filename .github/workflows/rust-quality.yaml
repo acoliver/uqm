@@ -67,6 +67,8 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+          rustflags: ''
+          cache: false
       - name: Assert official runner architecture
         run: |
           actual=$(uname -m)
