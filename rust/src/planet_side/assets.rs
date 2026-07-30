@@ -80,6 +80,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
     }
 }
 
+#[cfg(any(feature = "linked_c_archive", test))]
 const fn sound_index(cue: SoundCue) -> u16 {
     match cue {
         SoundCue::BiologicalDisaster => 0,
