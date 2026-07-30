@@ -172,7 +172,7 @@ jobs:
                -a coverage/coverage-macos/coverage-macos.lcov \
                -o combined.lcov
           # Remove generated build output; source under rust/target is not retained by this job.
-          lcov --ignore-errors unused --remove combined.lcov '*/target/*' -o combined.lcov
+          lcov --ignore-errors unused --remove combined.lcov '*/target/*' 'target/*' -o combined.lcov
 
       - name: Generate HTML report
         run: |
