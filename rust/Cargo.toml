@@ -3,6 +3,9 @@ members = ["ownership", "xtask"]
 default-members = ["."]
 resolver = "2"
 
+[profile.release]
+codegen-units = 1
+
 [package]
 name = "uqm"
 version = "0.8.0"

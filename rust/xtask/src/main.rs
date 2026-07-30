@@ -978,28 +978,52 @@ fn validate_live_native_evidence(
             evidence.compile_profile.command_template
         ));
     }
-    if evidence.schema != BUILD_EVIDENCE_SCHEMA
-        || evidence.source_date_epoch != epoch
-        || evidence.build_date != source_date(root)?
-        || evidence.target != uqm_ownership::target_key(env::consts::OS, env::consts::ARCH)?
-        || evidence.active_features != inputs.production_profile.cargo_features
-        || &evidence.toolchain != toolchain
-        || evidence.packages != packages
-        || evidence.build_environment != expected_environment
-        || evidence.compile_profile.target != evidence.target
-        || evidence.compile_profile.compiler != toolchain.cc.executable
-        || evidence.compile_profile.ordered_defines != expected_defines
-        || evidence.compile_profile.ordered_compile_flags != inputs.production_profile.compile_flags
-        || evidence.compile_profile.dependency_flags
-            != DEPENDENCY_FLAGS
-                .iter()
-                .map(|flag| (*flag).to_string())
-                .collect::<Vec<_>>()
-    {
-        return Err(
-            "native build evidence differs from live source/toolchain/configuration identity"
-                .into(),
-        );
+    let expected_target = uqm_ownership::target_key(env::consts::OS, env::consts::ARCH)?;
+    let expected_dependency_flags = DEPENDENCY_FLAGS
+        .iter()
+        .map(|flag| (*flag).to_string())
+        .collect::<Vec<_>>();
+    let checks = [
+        ("schema", evidence.schema == BUILD_EVIDENCE_SCHEMA),
+        ("source_date_epoch", evidence.source_date_epoch == epoch),
+        ("build_date", evidence.build_date == source_date(root)?),
+        ("target", evidence.target == expected_target),
+        (
+            "active_features",
+            evidence.active_features == inputs.production_profile.cargo_features,
+        ),
+        ("toolchain", &evidence.toolchain == toolchain),
+        ("packages", evidence.packages == packages),
+        (
+            "build_environment",
+            evidence.build_environment == expected_environment,
+        ),
+        (
+            "compile_profile.target",
+            evidence.compile_profile.target == evidence.target,
+        ),
+        (
+            "compile_profile.compiler",
+            evidence.compile_profile.compiler == toolchain.cc.executable,
+        ),
+        (
+            "compile_profile.ordered_defines",
+            evidence.compile_profile.ordered_defines == expected_defines,
+        ),
+        (
+            "compile_profile.ordered_compile_flags",
+            evidence.compile_profile.ordered_compile_flags
+                == inputs.production_profile.compile_flags,
+        ),
+        (
+            "compile_profile.dependency_flags",
+            evidence.compile_profile.dependency_flags == expected_dependency_flags,
+        ),
+    ];
+    if let Some((field, _)) = checks.iter().find(|(_, matches)| !matches) {
+        return Err(format!(
+            "native build evidence field differs from live identity: {field}"
+        ));
     }
     Ok(())
 }
