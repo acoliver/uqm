@@ -407,96 +407,8 @@ impl Coordinator {
             }
         }
 
-        // Runtime semantic assertions are checked before allowing the pure
-        // scheduler to advance their action.
-        if let Some(Action::AssertScene(assertion)) = self.actions.get(inner.sched_state.step_index)
-        {
-            match scenario::verify(assertion.scene) {
-                Ok(plan) => self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "scene_verified:{}:encounter={}:dialogue={}",
-                        plan.scene.name(),
-                        plan.expected_encounter_conversation,
-                        plan.expected_dialogue_conversation
-                    ),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(
-                        &mut inner,
-                        RecordKind::SemanticAssertion,
-                        error.to_string(),
-                    );
-                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
-        }
-
-        if let Some(Action::AssertDispatch(assertion)) =
-            self.actions.get(inner.sched_state.step_index)
-        {
-            match scenario::verify_dispatch(assertion.encounter, assertion.dialogue) {
-                Ok(()) => self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "dispatch_verified:encounter={}:dialogue={}",
-                        assertion.encounter, assertion.dialogue
-                    ),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(
-                        &mut inner,
-                        RecordKind::SemanticAssertion,
-                        error.to_string(),
-                    );
-                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
-        }
-
-        if matches!(
-            self.actions.get(inner.sched_state.step_index),
-            Some(Action::AssertGameOptions(_))
-        ) {
-            match crate::automation::ui_observation::verify_game_options_active() {
-                Ok(()) => self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    "game_options_active".to_string(),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(
-                        &mut inner,
-                        RecordKind::SemanticAssertion,
-                        error.to_string(),
-                    );
-                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
-        }
-
-        if let Some(Action::AssertCommunicationResponses(assertion)) =
-            self.actions.get(inner.sched_state.step_index)
-        {
-            match crate::automation::ui_observation::verify_communication_responses(
-                assertion.minimum,
-            ) {
-                Ok(actual) => self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!("communication_responses_active:count={actual}"),
-                ),
-                Err(error) => {
-                    self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, error);
-                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
-                    return true;
-                }
-            }
+        if self.verify_runtime_assertions(&mut inner) {
+            return true;
         }
 
         // Step 2: Feed to scheduler. Runtime waits are satisfied only by
@@ -835,6 +747,102 @@ impl Coordinator {
             );
             self.set_terminal(&mut inner, class);
             return true;
+        }
+
+        false
+    }
+
+    fn verify_runtime_assertions(&self, inner: &mut CoordInner) -> bool {
+        // Runtime semantic assertions are checked before allowing the pure
+        // scheduler to advance their action.
+        if let Some(Action::AssertScene(assertion)) = self.actions.get(inner.sched_state.step_index)
+        {
+            match scenario::verify(assertion.scene) {
+                Ok(plan) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "scene_verified:{}:encounter={}:dialogue={}",
+                        plan.scene.name(),
+                        plan.expected_encounter_conversation,
+                        plan.expected_dialogue_conversation
+                    ),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if let Some(Action::AssertDispatch(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match scenario::verify_dispatch(assertion.encounter, assertion.dialogue) {
+                Ok(()) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "dispatch_verified:encounter={}:dialogue={}",
+                        assertion.encounter, assertion.dialogue
+                    ),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::AssertGameOptions(_))
+        ) {
+            match crate::automation::ui_observation::verify_game_options_active() {
+                Ok(()) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    "game_options_active".to_string(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.to_string(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
+        if let Some(Action::AssertCommunicationResponses(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match crate::automation::ui_observation::verify_communication_responses(
+                assertion.minimum,
+            ) {
+                Ok(actual) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!("communication_responses_active:count={actual}"),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
         }
 
         false

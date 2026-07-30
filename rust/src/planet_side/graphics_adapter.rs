@@ -7,11 +7,16 @@ use super::assembly::SharedSurface;
 use super::entities::{SurfaceEntityId, SurfaceEntityKind};
 use super::resources::PlanetSideAssetAccess;
 use super::runtime::{AdapterError, PlanetSideGraphics, RenderSnapshot};
+#[cfg(any(feature = "linked_c_archive", test))]
 use super::selection::{LANDING_CURSOR_STEP, MAP_WIDTH};
 
+#[cfg(any(feature = "linked_c_archive", test))]
 const SURFACE_WIDTH: i32 = 242;
+#[cfg(any(feature = "linked_c_archive", test))]
 const SURFACE_HEIGHT: i32 = 162;
+#[cfg(any(feature = "linked_c_archive", test))]
 const LANDER_SCREEN_X: i32 = SURFACE_WIDTH / 2;
+#[cfg(any(feature = "linked_c_archive", test))]
 const LANDER_SCREEN_Y: i32 = SURFACE_HEIGHT / 2;
 
 // --- Radar panel layout (from deleted lander.c DeltaLanderCrew / FillLanderHold) ---
@@ -42,6 +47,7 @@ const BIO_FRAME_ODD: u16 = 42;
 const MINERAL_FRAME_EVEN: u16 = 43;
 const MINERAL_FRAME_ODD: u16 = 44;
 const CREW_ALIVE_FRAME: u16 = 55;
+#[cfg(feature = "linked_c_archive")]
 const CREW_DEAD_FRAME: u16 = 56;
 
 /// Drawable frame assigned to a Rust surface entity.
@@ -230,6 +236,7 @@ impl<A: PlanetSideAssetAccess> PlanetSideGraphics for CffiPlanetSideGraphics<'_,
 /// `LanderGraphic::Return`. During `Explosion`, the base lander frame set index
 /// 46+ is used (the explosion sub-frames). All other phases use the standard
 /// facing-indexed lander frame.
+#[cfg(any(feature = "linked_c_archive", test))]
 #[must_use]
 fn select_lander_graphic(
     phase: super::session::SessionPhase,
@@ -430,6 +437,7 @@ unsafe fn draw_surface_tiles(frame: *mut c_void, camera: super::model::SurfacePo
 
 /// Convert fixed-point world coordinates to a viewport coordinate, choosing
 /// the shortest horizontal route across the wrapping surface.
+#[cfg(any(feature = "linked_c_archive", test))]
 fn project_surface_point(
     point: super::model::SurfacePoint,
     camera: super::model::SurfacePoint,

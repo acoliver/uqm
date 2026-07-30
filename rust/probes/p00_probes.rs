@@ -350,7 +350,6 @@ fn probe_rename_no_replace(src: &Path, dst: &Path) -> &'static str {
     {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
-        use std::os::unix::io::AsRawFd;
 
         // RENAME_NOREPLACE = 1
         const RENAME_NOREPLACE: libc::c_uint = 1;
@@ -391,7 +390,7 @@ fn probe_rename_no_replace(src: &Path, dst: &Path) -> &'static str {
         if err.raw_os_error() == Some(libc::EEXIST) {
             return "supported(EEXIST)";
         }
-        return "failed";
+        "failed"
     }
     #[cfg(not(target_os = "linux"))]
     {

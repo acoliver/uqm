@@ -31,27 +31,38 @@ static LANDER_FRAMES: Mutex<LanderFrameState> = Mutex::new(LanderFrameState {
 });
 
 /// Disaster shield bit indices (from planets.h DISASTER_TYPE enum).
+#[cfg(any(feature = "linked_c_archive", test))]
 const EARTHQUAKE_DISASTER: u8 = 1;
+#[cfg(any(feature = "linked_c_archive", test))]
 const BIOLOGICAL_DISASTER: u8 = 0;
+#[cfg(any(feature = "linked_c_archive", test))]
 const LIGHTNING_DISASTER: u8 = 2;
+#[cfg(any(feature = "linked_c_archive", test))]
 const LAVASPOT_DISASTER: u8 = 3;
 
 /// `MAX_SCROUNGED` (from planets.h).
+#[cfg(any(feature = "linked_c_archive", test))]
 const MAX_SCROUNGED: u16 = 50;
 
 /// `RADAR_WIDTH` = STATUS_WIDTH - 8 = 64 - 8 = 56 (from units.h).
+#[cfg(any(feature = "linked_c_archive", test))]
 const RADAR_WIDTH: i16 = 56;
 /// `RADAR_HEIGHT` (from units.h).
+#[cfg(any(feature = "linked_c_archive", test))]
 const RADAR_HEIGHT: i16 = 53;
 
 /// `FULL_CIRCLE` = 1 << CIRCLE_SHIFT = 1 << 6 = 64 (from units.h).
+#[cfg(any(feature = "linked_c_archive", test))]
 const FULL_CIRCLE: u16 = 64;
 /// `CIRCLE_SHIFT` (from units.h).
+#[cfg(any(feature = "linked_c_archive", test))]
 const CIRCLE_SHIFT: u32 = 6;
 /// `FACING_SHIFT` (from units.h).
+#[cfg(any(feature = "linked_c_archive", test))]
 const FACING_SHIFT: u32 = 4;
 
 /// `ANGLE_TO_FACING(a) = (a + (1 << (CIRCLE_SHIFT - FACING_SHIFT - 1))) >> (CIRCLE_SHIFT - FACING_SHIFT)`
+#[cfg(any(feature = "linked_c_archive", test))]
 fn angle_to_facing(angle: u16) -> u16 {
     let shift = CIRCLE_SHIFT - FACING_SHIFT;
     (angle + (1 << (shift - 1))) >> shift

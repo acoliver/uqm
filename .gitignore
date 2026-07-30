@@ -34,3 +34,5 @@ sc2/uqm_test_output.txt
 /sc2/build.vars.bak*
 /sc2/config_unix.h.bak*
 rust/src/graphics/font
+/rust/ownership/target/
+/rust/ownership/Cargo.lock

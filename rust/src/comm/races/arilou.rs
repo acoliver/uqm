@@ -138,8 +138,29 @@ extern "C" {
     fn rust_set_game_state_bits(start: c_int, end: c_int, val: u8);
 }
 
+type EventType = c_int;
+
 extern "C" {
-    fn rust_add_event_relative(days_offset: u32, func_index: u8) -> u32;
+    fn AddEvent(
+        type_: EventType,
+        month_index: u16,
+        day_index: u16,
+        year_index: u16,
+        func_index: u8,
+    ) -> *mut std::ffi::c_void;
+}
+
+const RELATIVE_EVENT: EventType = 1;
+const ARILOU_UMGAH_CHECK: u8 = 14;
+
+fn schedule_arilou_umgah_check_with(mut add_event: impl FnMut(EventType, u16, u16, u16, u8)) {
+    add_event(RELATIVE_EVENT, 0, 10, 0, ARILOU_UMGAH_CHECK);
+}
+
+fn schedule_arilou_umgah_check() {
+    schedule_arilou_umgah_check_with(|event_type, month, day, year, function| unsafe {
+        AddEvent(event_type, month, day, year, function);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +293,7 @@ extern "C" fn arilou_home(r: u32) {
     } else if r == UMGAH_ACTING_WEIRD {
         npc_phrase(WELL_GO_CHECK);
         set_gs("ARILOU_CHECKED_UMGAH", 1);
-        unsafe { rust_add_event_relative(10, 0) }; // ARILOU_UMGAH_CHECK event
+        schedule_arilou_umgah_check();
         disable_phrase(UMGAH_ACTING_WEIRD);
     } else if r == WHAT_DO_NOW {
         npc_phrase(GO_FIND_OUT);
@@ -788,5 +809,14 @@ mod tests {
     #[test]
     fn test_unknown_key_returns_none() {
         assert!(bit_range("NONEXISTENT_KEY").is_none());
+    }
+
+    #[test]
+    fn arilou_umgah_check_crosses_add_event_boundary_with_c_values() {
+        let mut captured = None;
+        schedule_arilou_umgah_check_with(|event_type, month, day, year, function| {
+            captured = Some((event_type, month, day, year, function));
+        });
+        assert_eq!(captured, Some((1, 0, 10, 0, 14)));
     }
 }

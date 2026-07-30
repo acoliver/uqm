@@ -1,0 +1,18 @@
+[package]
+name = "uqm-ownership"
+version = "0.8.0"
+edition = "2021"
+description = "Native provider manifest validator and strict-link enforcement for UQM transitional production linking"
+
+[lib]
+name = "uqm_ownership"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+proptest = "1.4"
+tempfile = "3"

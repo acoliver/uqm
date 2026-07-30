@@ -41,9 +41,29 @@ const UIO_STREAM_OPERATION_NONE: c_int = 0;
 const UIO_STREAM_OPERATION_READ: c_int = 1;
 
 // Helper function to set errno across FFI boundary
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
 fn set_errno(code: c_int) {
     unsafe {
         *libc::__error() = code;
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn set_errno(code: c_int) {
+    unsafe {
+        *libc::__errno_location() = code;
+    }
+}
+
+#[cfg(test)]
+fn current_errno() -> c_int {
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
+    unsafe {
+        *libc::__error()
+    }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    unsafe {
+        *libc::__errno_location()
     }
 }
 
@@ -5275,11 +5295,11 @@ mod tests {
 
             unsafe {
                 // Clear errno first
-                *libc::__error() = 0;
+                set_errno(0);
 
                 let result = uio_access(dir_handle, path.as_ptr(), 0);
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::ENOENT);
+                assert_eq!(current_errno(), libc::ENOENT);
 
                 let _ = Box::from_raw(dir_handle);
                 let _ = Box::from_raw(repository);
@@ -5310,12 +5330,12 @@ mod tests {
 
             unsafe {
                 // Clear errno first
-                *libc::__error() = 0;
+                set_errno(0);
 
                 let result = uio_mkdir(dir_handle, path.as_ptr(), 0o755);
                 assert_eq!(result, -1);
                 // errno should be EEXIST (directory already exists)
-                assert_eq!(*libc::__error(), libc::EEXIST);
+                assert_eq!(current_errno(), libc::EEXIST);
 
                 let _ = Box::from_raw(dir_handle);
                 let _ = Box::from_raw(repository);
@@ -5344,11 +5364,11 @@ mod tests {
 
             unsafe {
                 // Clear errno first
-                *libc::__error() = 0;
+                set_errno(0);
 
                 let stream = uio_fopen(dir_handle, path.as_ptr(), invalid_mode.as_ptr());
                 assert!(stream.is_null());
-                assert_eq!(*libc::__error(), libc::EINVAL);
+                assert_eq!(current_errno(), libc::EINVAL);
 
                 let _ = Box::from_raw(dir_handle);
                 let _ = Box::from_raw(repository);
@@ -5376,11 +5396,11 @@ mod tests {
 
             unsafe {
                 // Clear errno first
-                *libc::__error() = 0;
+                set_errno(0);
 
                 let handle = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
                 assert!(handle.is_null());
-                assert_eq!(*libc::__error(), libc::ENOENT);
+                assert_eq!(current_errno(), libc::ENOENT);
 
                 let _ = Box::from_raw(dir_handle);
                 let _ = Box::from_raw(repository);
@@ -5548,21 +5568,19 @@ mod tests {
             }));
 
             // TOP with non-null relative should fail
-            let result = unsafe {
-                *libc::__error() = 0;
-                register_mount(
-                    repo,
-                    Path::new("/content"),
-                    PathBuf::from("/tmp/mount"),
-                    UIO_FSTYPE_STDIO,
-                    UIO_MOUNT_TOP,
-                    dummy_mount,
-                    true,
-                )
-            };
+            set_errno(0);
+            let result = register_mount(
+                repo,
+                Path::new("/content"),
+                PathBuf::from("/tmp/mount"),
+                UIO_FSTYPE_STDIO,
+                UIO_MOUNT_TOP,
+                dummy_mount,
+                true,
+            );
 
             assert!(result.is_null());
-            assert_eq!(unsafe { *libc::__error() }, libc::EINVAL);
+            assert_eq!(current_errno(), libc::EINVAL);
 
             unsafe {
                 let _ = Box::from_raw(dummy_mount);
@@ -5581,21 +5599,19 @@ mod tests {
             let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
 
             // ABOVE with null relative should fail
-            let result = unsafe {
-                *libc::__error() = 0;
-                register_mount(
-                    repo,
-                    Path::new("/content"),
-                    PathBuf::from("/tmp/mount"),
-                    UIO_FSTYPE_STDIO,
-                    UIO_MOUNT_ABOVE,
-                    ptr::null_mut(),
-                    true,
-                )
-            };
+            set_errno(0);
+            let result = register_mount(
+                repo,
+                Path::new("/content"),
+                PathBuf::from("/tmp/mount"),
+                UIO_FSTYPE_STDIO,
+                UIO_MOUNT_ABOVE,
+                ptr::null_mut(),
+                true,
+            );
 
             assert!(result.is_null());
-            assert_eq!(unsafe { *libc::__error() }, libc::EINVAL);
+            assert_eq!(current_errno(), libc::EINVAL);
 
             unsafe {
                 let _ = Box::from_raw(repo);
@@ -5646,10 +5662,10 @@ mod tests {
             let path = CString::new("test.txt").unwrap();
 
             unsafe {
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_access(dir_handle, path.as_ptr(), W_OK);
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EACCES);
 
                 let _ = Box::from_raw(dir_handle);
                 let _ = Box::from_raw(mount);
@@ -5823,10 +5839,10 @@ mod tests {
 
                 // nonexistent.txt doesn't exist - should fail
                 let path3 = CString::new("nonexistent.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_access(dir_handle, path3.as_ptr(), F_OK);
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::ENOENT);
+                assert_eq!(current_errno(), libc::ENOENT);
 
                 let _ = Box::from_raw(dir_handle);
                 let _ = Box::from_raw(mount1);
@@ -5874,19 +5890,19 @@ mod tests {
 
                 // Try to open for writing - should fail with EACCES
                 let path = CString::new("test.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let handle = uio_open(dir_handle, path.as_ptr(), O_WRONLY, 0o644);
 
                 assert!(handle.is_null());
-                assert_eq!(*libc::__error(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EACCES);
 
                 // Try to open with O_CREAT - should also fail
                 let new_file = CString::new("newfile.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let handle2 = uio_open(dir_handle, new_file.as_ptr(), O_WRONLY | O_CREAT, 0o644);
 
                 assert!(handle2.is_null());
-                assert_eq!(*libc::__error(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EACCES);
 
                 // Reading should still work
                 let handle3 = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
@@ -5945,11 +5961,11 @@ mod tests {
                 // Try to rename across mounts - should fail with EXDEV
                 let old_path = CString::new("file.txt").unwrap();
                 let new_path = CString::new("moved.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_rename(dir1, old_path.as_ptr(), dir2, new_path.as_ptr());
 
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::EXDEV);
+                assert_eq!(current_errno(), libc::EXDEV);
 
                 // File should still exist in original location
                 assert!(temp_dir1.join("file.txt").exists());
@@ -5996,11 +6012,11 @@ mod tests {
 
                 // Try to unlink - should fail with EACCES
                 let path = CString::new("file.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_unlink(dir, path.as_ptr());
 
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EACCES);
 
                 // File should still exist
                 assert!(temp_dir.join("file.txt").exists());
@@ -6041,11 +6057,11 @@ mod tests {
 
                 // Try to create directory - should fail with EACCES
                 let path = CString::new("newdir").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_mkdir(dir, path.as_ptr(), 0o755);
 
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EACCES);
 
                 // Directory should not exist
                 assert!(!temp_dir.join("newdir").exists());
@@ -6089,11 +6105,11 @@ mod tests {
 
                 // Try to remove directory - should fail with EACCES
                 let path = CString::new("testdir").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_rmdir(dir, path.as_ptr());
 
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EACCES);
 
                 // Directory should still exist
                 assert!(temp_dir.join("testdir").exists());
@@ -6164,8 +6180,7 @@ mod tests {
             // Create test files
             std::fs::write(dir_path.join("index.rmp"), b"test").unwrap();
             std::fs::write(dir_path.join("music.RMP"), b"test").unwrap();
-
-            std::fs::write(dir_path.join("INDEX.RMP"), b"test").unwrap();
+            std::fs::write(dir_path.join("archive.RmP"), b"test").unwrap();
             std::fs::write(dir_path.join("data.txt"), b"test").unwrap();
             std::fs::write(dir_path.join("file.zip"), b"test").unwrap();
 
@@ -6188,7 +6203,10 @@ mod tests {
 
                 assert!(!list.is_null());
                 let num_names = (*list).numNames;
-                assert_eq!(num_names, 2, "Should match both .rmp and .RMP files");
+                assert_eq!(
+                    num_names, 3,
+                    "Should match every case variant of .rmp files"
+                );
 
                 uio_DirList_free(list);
                 let _ = Box::from_raw(dir_handle);
@@ -6612,7 +6630,7 @@ mod tests {
                 // Try to create block beyond file size
                 let block = uio_openFileBlock2(handle, 0, 100);
                 assert!(block.is_null());
-                assert_eq!(*libc::__error(), libc::EINVAL);
+                assert_eq!(current_errno(), libc::EINVAL);
 
                 let _ = Box::from_raw(handle);
             }
@@ -6914,7 +6932,7 @@ mod tests {
         unsafe {
             let block = uio_openFileBlock(ptr::null_mut());
             assert!(block.is_null());
-            assert_eq!(*libc::__error(), libc::EINVAL);
+            assert_eq!(current_errno(), libc::EINVAL);
         }
     }
 
@@ -7106,11 +7124,11 @@ mod tests {
                 }));
 
                 let path = CString::new("subdir").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(handle.is_null());
-                assert_eq!(*libc::__error(), libc::EISDIR);
+                assert_eq!(current_errno(), libc::EISDIR);
 
                 let _ = Box::from_raw(dir);
                 let _ = Box::from_raw(repo);
@@ -7144,11 +7162,11 @@ mod tests {
                 }));
 
                 let path = CString::new("nonexistent.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(handle.is_null());
-                assert_eq!(*libc::__error(), libc::ENOENT);
+                assert_eq!(current_errno(), libc::ENOENT);
 
                 let _ = Box::from_raw(dir);
                 let _ = Box::from_raw(repo);
@@ -7204,12 +7222,12 @@ mod tests {
                 }));
 
                 let path = CString::new("data.txt").unwrap();
-                *libc::__error() = 0;
+                set_errno(0);
                 // No tempDir provided - should fail
                 let handle = uio_getStdioAccess(dir, path.as_ptr(), 0, ptr::null_mut());
 
                 assert!(handle.is_null());
-                assert_eq!(*libc::__error(), libc::EINVAL);
+                assert_eq!(current_errno(), libc::EINVAL);
 
                 let _ = Box::from_raw(dir);
                 let _ = Box::from_raw(mount);
@@ -7226,10 +7244,10 @@ mod tests {
     #[serial]
     fn test_stdio_access_getpath_null_handle() {
         unsafe {
-            *libc::__error() = 0;
+            set_errno(0);
             let path = uio_StdioAccessHandle_getPath(ptr::null_mut());
             assert!(path.is_null());
-            assert_eq!(*libc::__error(), libc::EINVAL);
+            assert_eq!(current_errno(), libc::EINVAL);
         }
     }
 
@@ -7321,11 +7339,11 @@ mod tests {
                 let src_path = CString::new("source.txt").unwrap();
                 let dst_path = CString::new("dest.txt").unwrap();
 
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, -1);
                 // Should fail with EEXIST (O_EXCL semantics)
-                assert_eq!(*libc::__error(), libc::EEXIST);
+                assert_eq!(current_errno(), libc::EEXIST);
 
                 // Destination should still have original content
                 let content = std::fs::read_to_string(&dst_file).unwrap();
@@ -7365,10 +7383,10 @@ mod tests {
                 let src_path = CString::new("nonexistent.txt").unwrap();
                 let dst_path = CString::new("dest.txt").unwrap();
 
-                *libc::__error() = 0;
+                set_errno(0);
                 let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, -1);
-                assert_eq!(*libc::__error(), libc::ENOENT);
+                assert_eq!(current_errno(), libc::ENOENT);
 
                 // Destination should not exist
                 let dst_file = temp_dir.path().join("dest.txt");
