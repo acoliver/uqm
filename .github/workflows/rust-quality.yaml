@@ -108,7 +108,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           cd rust
-          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-ubuntu.lcov \
+          cargo llvm-cov --lib --lcov --remap-path-prefix --output-path coverage-ubuntu.lcov \
             --ignore-filename-regex '(/target/|/bindings\.rs$)'
 
       - name: Upload coverage artifact
@@ -139,7 +139,7 @@ jobs:
           LIBRARY_PATH: /opt/homebrew/lib:/usr/local/lib
         run: |
           cd rust
-          cargo llvm-cov --lcov --remap-path-prefix --output-path coverage-macos.lcov \
+          cargo llvm-cov --lib --lcov --remap-path-prefix --output-path coverage-macos.lcov \
             --ignore-filename-regex '(/target/|/bindings\.rs$)'
 
       - name: Upload coverage artifact
