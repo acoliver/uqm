@@ -276,7 +276,7 @@ fn run_preflight(root: &Path, preflight: Preflight) -> Result<(), String> {
     match preflight {
         Preflight::StrictSource => {
             validate_contract(root, true)?;
-            reject_untracked_non_ignored(root)?;
+            reject_dirty_source(root)?;
             Ok(())
         }
         Preflight::Full => validate_contract(root, true).map(|_| ()),
@@ -285,35 +285,32 @@ fn run_preflight(root: &Path, preflight: Preflight) -> Result<(), String> {
     }
 }
 
-fn reject_untracked_non_ignored(root: &Path) -> Result<(), String> {
+fn reject_dirty_source(root: &Path) -> Result<(), String> {
     let output = Command::new("git")
         .current_dir(root)
-        .args(["status", "--porcelain", "--untracked-files=normal"])
+        .args(["status", "--porcelain=v1", "--untracked-files=all", "-z"])
         .output()
-        .map_err(|error| format!("cannot inspect untracked files: {error}"))?;
+        .map_err(|error| format!("cannot run source cleanliness check: {error}"))?;
     if !output.status.success() {
-        return Err("git could not inspect untracked files".into());
+        return Err(format!(
+            "source cleanliness check failed with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    for line in text.lines() {
-        if let Some(rest) = line.strip_prefix("?? ") {
-            if !is_gitignored(root, rest) {
-                return Err(format!(
-                    "untracked non-ignored file blocks proof/production/package: {rest}"
-                ));
-            }
-        }
+    let dirty = output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| String::from_utf8_lossy(entry).into_owned())
+        .collect::<Vec<_>>();
+    if dirty.is_empty() {
+        return Ok(());
     }
-    Ok(())
-}
-
-fn is_gitignored(root: &Path, path: &str) -> bool {
-    let output = Command::new("git")
-        .current_dir(root)
-        .args(["check-ignore", "--quiet", "--"])
-        .arg(path)
-        .output();
-    matches!(output, Ok(out) if out.status.success())
+    Err(format!(
+        "dirty tracked or untracked source blocks proof/production/package: {}",
+        dirty.join(", ")
+    ))
 }
 
 fn repository_root() -> Result<PathBuf, String> {
