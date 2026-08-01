@@ -19,9 +19,10 @@ transitional C object expects:
 3. Rust exports `#[no_mangle] pub extern "C" fn` entry points for retained C callers.
 
 The `linked_c_archive` Cargo feature is the explicit production-link boundary.
-Without it, Cargo builds and tests do not consume ignored native objects. With
-it, `rust/build.rs` validates `rust/ownership/native-provider-manifest.json`
-before constructing and strictly linking the transitional archive.
+Without it, Cargo builds and tests do not compile transitional native inputs.
+With it, `rust/build.rs` validates `rust/build/native-inputs.json` and
+`rust/ownership/native-provider-manifest.json`, compiles tracked canonical
+sources, then strictly links the transitional archive.
 
 ---
 
@@ -101,21 +102,18 @@ To test these, manually add `-DUSE_RUST_FOO` to CCOMMONFLAGS in `build.config`.
 | `sc2/build.vars` | **Generated** build variables — compiler/linker flags | No |
 | `rust/Cargo.toml` | `[features]`: `audio_heart`, `debug-process`, and `linked_c_archive` (`default = []`) | **Yes** |
 
-### Sync Mechanism: `uqm_pre_build()` (~line 700 in build.config)
+### One-way orchestration
 
-Before compiling C, the legacy build invokes Cargo for the Rust library with
-`linked_c_archive`; it adds `audio_heart` when `USE_RUST_AUDIO_HEART` is active.
-The production Cargo binary uses the same feature boundary:
+The Rust root command owns orchestration. `uqm_pre_build()` does not invoke
+Cargo, which prevents Cargo → native build → Cargo recursion. Production is:
 
 ```sh
-cargo build --manifest-path rust/Cargo.toml --release \
-  --features audio_heart,linked_c_archive --bin uqm
+cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production
 ```
 
-`linked_c_archive` makes `rust/build.rs` require the exact manifest-declared
-object inventory. A normal `cargo check`, `cargo test`, or pure-Rust build does
-not consume `sc2/obj/release`. S2/#22 owns replacing the remaining recursive
-legacy orchestration with one clean-checkout root command.
+`linked_c_archive` makes `rust/build.rs` validate and compile the exact tracked
+sources in `rust/build/native-inputs.json`. It rejects rather than inspects or consumes
+`sc2/obj/release` or `sc2/build.vars`. See `reproducible-build.md`.
 
 ---
 

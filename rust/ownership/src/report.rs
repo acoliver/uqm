@@ -48,7 +48,7 @@ impl ProductionArtifactReport {
 pub struct SymbolReportEntry {
     /// Linker symbol.
     pub symbol: String,
-    /// Canonical owner retained from ledger v3.
+    /// Canonical owner retained from the authoritative ledger.
     pub canonical_owner: String,
     /// Active provider kind.
     pub provider_kind: ProviderKind,

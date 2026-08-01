@@ -1,0 +1,3049 @@
+{
+  "schema": "uqm-native-inputs-v2",
+  "description": "Explicit shrinking transitional native inputs. Every object is compiled from a git-tracked canonical source; ignored object trees and generated native source are never inputs. Canonical implementation ownership remains with each owner domain.",
+  "inputs": [
+    {
+      "source": "sc2/src/libs/decomp/lzdecode.c",
+      "source_sha256": "bdcdd1d60baca9b4d98ea64d2808d13e07e321bd68a44c532c23a89a2e332a8e",
+      "object_output": "lzdecode.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/lzdecode.c.o"
+    },
+    {
+      "source": "sc2/src/libs/decomp/lzencode.c",
+      "source_sha256": "4776b00f04306ca1541328f0f31f282f7797aa1c8687f8dcb59d3050c91c5d6f",
+      "object_output": "lzencode.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/lzencode.c.o"
+    },
+    {
+      "source": "sc2/src/libs/decomp/update.c",
+      "source_sha256": "07ffa8402f9638634b6af6f539ffd672eef8a3bcfc4e77f9498b02ffa6ea0fe6",
+      "object_output": "update.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/update.c.o"
+    },
+    {
+      "source": "sc2/src/libs/file/dirs.c",
+      "source_sha256": "9909c9650be9cdab247c38aa2d2ff0505424234691a3a47bd081ddece1e33169",
+      "object_output": "dirs.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/dirs.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/bbox.c",
+      "source_sha256": "2bbd8d5b18fa24b5a4a5314a9de39dfc46d9e812ee874e51bd8c9e8e36bbcead",
+      "object_output": "bbox.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/bbox.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/boxint.c",
+      "source_sha256": "6ff9799f20de3b45bfef3f83fbbc8a0b92d795bbd1d57dbbac4fc8d47f024640",
+      "object_output": "boxint.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/boxint.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/clipline.c",
+      "source_sha256": "64bfa4540db17017fc8d4d3c769628ebf411f5aa3c822a593e9fda01e477d522",
+      "object_output": "clipline.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/clipline.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/cmap.c",
+      "source_sha256": "448498f3a209f4b8ef57da83ab26c93311ef69f520b268193c6ca35a7242b391",
+      "object_output": "cmap.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/cmap.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/context.c",
+      "source_sha256": "097e9286c69f90a1b6e82e8c629afc613120d452d3b015a3775e981d2159473c",
+      "object_output": "context.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/context.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/dcqueue.c",
+      "source_sha256": "80532510c57143dc5354d4fceba45ac16a19c5b98d30031adca241a75cd59a50",
+      "object_output": "dcqueue.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/dcqueue.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/drawable.c",
+      "source_sha256": "5003bd71c79f81801cc842239795d4b92e2e39463b70e008e2288534ead4f588",
+      "object_output": "drawable.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/drawable.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/filegfx.c",
+      "source_sha256": "936ea54fd5dfd421f7dec94902a673288a1f22f347c414aadaae1e1fc85e5aaf",
+      "object_output": "filegfx.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/filegfx.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/font.c",
+      "source_sha256": "95896581d3f2cd6bf2cb754afc1fb3d512ea9421b52f746819892b0d79473fdc",
+      "object_output": "font.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/font.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/frame.c",
+      "source_sha256": "bf9016fe800f48f691d78c8defd03790750e56410df112b79bcf28401f3200c0",
+      "object_output": "frame.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/frame.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/gfx_common.c",
+      "source_sha256": "cbfda35b6fcf388e50228e3c25cc0927e87b753020537c92b447fc22c355aab0",
+      "object_output": "gfx_common.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/gfx_common.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/gfxload.c",
+      "source_sha256": "d9302a2a9119aa9b4a585a3a3c6fcefa5b2b830a350ff63c7b69fd2ad3fd809d",
+      "object_output": "gfxload.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/gfxload.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/intersec.c",
+      "source_sha256": "61c145674f4d57025b26b293870cd563b47e4f1c6ac37714bd34e8535b52f133",
+      "object_output": "intersec.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/intersec.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/loaddisp.c",
+      "source_sha256": "d123710e2180fe85e955a507b497db1448296a301163bdc1a5d8c64fdf252ea6",
+      "object_output": "loaddisp.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/loaddisp.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/pixmap.c",
+      "source_sha256": "2bcb440ee76cc92aff0fde7ceaf29f92175475512ca832e6ba98627806147541",
+      "object_output": "pixmap.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/pixmap.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/resgfx.c",
+      "source_sha256": "fb6455f2145e04de98bbf5dc26970ab6bc33b321c5a9434152411108e89dce05",
+      "object_output": "resgfx.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/resgfx.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/2xscalers.c",
+      "source_sha256": "f5936a6e39ab42016a4f833ee1a9237091a752a4384e5455757e3b138b571a32",
+      "object_output": "2xscalers.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/2xscalers.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/2xscalers_3dnow.c",
+      "source_sha256": "c78a4437b42be6f083d9654c11ca6d09c07f77b7422f999cb1dffa1dbc7d6cb5",
+      "object_output": "2xscalers_3dnow.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/2xscalers_3dnow.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/2xscalers_mmx.c",
+      "source_sha256": "55188266f3443a87d61db3da2dd5d6ca7da1b251d15b50073afaf09b29442ff1",
+      "object_output": "2xscalers_mmx.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/2xscalers_mmx.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/2xscalers_sse.c",
+      "source_sha256": "3f7949513d41b942327f7d33dad9cce0890ffb55cac51db95f2cce8bc9e2ec81",
+      "object_output": "2xscalers_sse.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/2xscalers_sse.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/biadv2x.c",
+      "source_sha256": "f35f3f5051f189ee5afef4c153667be288ff6abe8b64b11bc39d97634902899d",
+      "object_output": "biadv2x.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/biadv2x.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/bilinear2x.c",
+      "source_sha256": "1ed22472d166538ca3125a618a4613de94927854918a206a13cd3b4f4fce83d6",
+      "object_output": "bilinear2x.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/bilinear2x.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/canvas.c",
+      "source_sha256": "037835e57c73482305638744dd235b6ab37ac2f1013ee80d5d4f14b2ee2abfe1",
+      "object_output": "canvas.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/canvas.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/hq2x.c",
+      "source_sha256": "95291f8229c7fccb450cee3825f76bcf637ce30e917cbcdd5727feceb3ee751f",
+      "object_output": "hq2x.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/hq2x.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/nearest2x.c",
+      "source_sha256": "dc3b677dfe99ac28e88e5fea2abc86e4664038c68001ba39814dfaf5f8ba3b4f",
+      "object_output": "nearest2x.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/nearest2x.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/opengl.c",
+      "source_sha256": "55eb04f935cbb827e7db459a1ae9594a55c28f1cf39035521bbbee8ed071cf98",
+      "object_output": "opengl.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/opengl.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/palette.c",
+      "source_sha256": "c4a4d05f6c0393e621ca78eda4973c3e6d83395c17f520f3db17f472a588c482",
+      "object_output": "palette.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/palette.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/png2sdl.c",
+      "source_sha256": "784c0a741870375cea5fb43adf9d699ae9eba3e867afd432087b5b94fd0a5e5c",
+      "object_output": "png2sdl.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/png2sdl.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/primitives.c",
+      "source_sha256": "4615b5aa45e200931c8d66b8bce128f26d989fe0cf4e3dce8909601f6d3e962f",
+      "object_output": "primitives.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/primitives.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/pure.c",
+      "source_sha256": "16c1639857051668759919e1745d1dc3abbb29c976673dadf374ca5789b444ce",
+      "object_output": "pure.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/pure.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/rotozoom.c",
+      "source_sha256": "cb1919a35c9fcf9c2209b8cdd17c6d1e0795cd8816e4c95cd61e8ba947b4ac34",
+      "object_output": "rotozoom.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/rotozoom.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/scalers.c",
+      "source_sha256": "9979c7b064e68d58b4dcc00752a34b261117b051fca22d962432605481bc2143",
+      "object_output": "scalers.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/scalers.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/sdl1_common.c",
+      "source_sha256": "9a52c6031831800384fdb3f4fdd6c4513d178b705cc66d3bc8b16c622d9ff4b9",
+      "object_output": "sdl1_common.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/sdl1_common.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/sdl2_common.c",
+      "source_sha256": "b1520bcbf264efdf6586dd8280fc8a33c4c4176d5dda3550e0840fb7fe36cfaa",
+      "object_output": "sdl2_common.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/sdl2_common.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/sdl2_pure.c",
+      "source_sha256": "44f4733196b8c241569645c3c3eab9fabbd31a2ba7b73c61ea10218cc2347fba",
+      "object_output": "sdl2_pure.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/sdl2_pure.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/sdl_common.c",
+      "source_sha256": "6c96b8e66650334096d7d61933af3d3bac10f6d17315c5a7b1cc723229eb52ea",
+      "object_output": "sdl_common.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/sdl_common.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/sdluio.c",
+      "source_sha256": "d38491f625ab5f153aa13d74d885eeaf8a2062d3d5b8adc2afc5e0a41294892b",
+      "object_output": "sdluio.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/sdluio.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/sdl/triscan2x.c",
+      "source_sha256": "3430ddb725744eee412770281c76f5a1dd335e4aa7d6fd6a53a07dcbae1d9710",
+      "object_output": "triscan2x.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/triscan2x.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/tfb_draw.c",
+      "source_sha256": "91086ca70bf5450976a8981e954a954c5ecc33b5e12366324424e7f8c821cfa9",
+      "object_output": "tfb_draw.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/tfb_draw.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/tfb_prim.c",
+      "source_sha256": "8b42cc18114d5b7c74106bc939946eeb369fd2b1a03db7d0e65710ecb97d5373",
+      "object_output": "tfb_prim.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/tfb_prim.c.o"
+    },
+    {
+      "source": "sc2/src/libs/graphics/widgets.c",
+      "source_sha256": "6f761778b943929b1921fe7d5752acdb3839087afebbd33de339a77562e7e17d",
+      "object_output": "widgets.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/widgets.c.o"
+    },
+    {
+      "source": "sc2/src/libs/input/input_common.c",
+      "source_sha256": "8f67781ee786f6863a83a1c2fdaf0c1360c517809040436aefafa12acfadecff",
+      "object_output": "input_common.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "INPUT",
+      "production_profile": "production",
+      "provider": "native_object:native/input_common.c.o"
+    },
+    {
+      "source": "sc2/src/libs/input/sdl/input.c",
+      "source_sha256": "5adab0c9209a73d0842822669fbe113beb1d38e78b23ddf028973240edb1c2a7",
+      "object_output": "input.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "INPUT",
+      "production_profile": "production",
+      "provider": "native_object:native/input.c.o"
+    },
+    {
+      "source": "sc2/src/libs/input/sdl/keynames.c",
+      "source_sha256": "f5fc0fa520c53ab362d66a254210f923445d19c65463340b6916de341a73df3e",
+      "object_output": "keynames.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "INPUT",
+      "production_profile": "production",
+      "provider": "native_object:native/keynames.c.o"
+    },
+    {
+      "source": "sc2/src/libs/input/sdl/rust_vcontrol_impl.c",
+      "source_sha256": "39da6aa83aef1d1e75f1e9435d4897fde3813363e0aa1bb1cdea2a09d1879d37",
+      "object_output": "rust_vcontrol_impl.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "INPUT",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_vcontrol_impl.c.o"
+    },
+    {
+      "source": "sc2/src/libs/list/list.c",
+      "source_sha256": "281a1be67c840277a419b6f867fefc1797137e89c743f2312f06e9727af62247",
+      "object_output": "list.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "COLLECTIONS",
+      "production_profile": "production",
+      "provider": "native_object:native/list.c.o"
+    },
+    {
+      "source": "sc2/src/libs/log/msgbox_stub.c",
+      "source_sha256": "fe4062bcdb582f4cac459be3d13ebd4a414051634db666e08930adf8bdbc907f",
+      "object_output": "msgbox_stub.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/msgbox_stub.c.o"
+    },
+    {
+      "source": "sc2/src/libs/log/uqmlog.c",
+      "source_sha256": "d9743ac2aff061b3f0ab1c529e69c8948c61336ca311db46280c18d34b0c0047",
+      "object_output": "uqmlog.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/uqmlog.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/drv_nos.c",
+      "source_sha256": "3886ffb2238619e115e99fe971d8549bca057f968785d73253d28c7eb999eabe",
+      "object_output": "drv_nos.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/drv_nos.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/load_it.c",
+      "source_sha256": "d30292d3926a987e3b613f154a8c4583164f2f52f29adccabbabe45604fb0ea1",
+      "object_output": "load_it.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/load_it.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/load_mod.c",
+      "source_sha256": "6631d1606253a92c7b288fe1c38876d19fb35f6e09b4a927459d3d46870f9e3a",
+      "object_output": "load_mod.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/load_mod.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/load_s3m.c",
+      "source_sha256": "8b5f5cfbc1f0cf6b97c11fa1196254c40ca4ee59470e7837c5c038e3a57c3470",
+      "object_output": "load_s3m.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/load_s3m.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/load_stm.c",
+      "source_sha256": "4b81c57cdc3af8d89a1a53d784fee241d2c3c8fa424bf9fcf6ff282304d3a757",
+      "object_output": "load_stm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/load_stm.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/load_xm.c",
+      "source_sha256": "f6bdcfb51f83dc9249a8ad026ea09da8a65734e5cd0c4c48fe377bc402970373",
+      "object_output": "load_xm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/load_xm.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mdreg.c",
+      "source_sha256": "b5423e8069835c0bafd6d4547ff9bb238f64c30d9b98b776dfdc384e2110c685",
+      "object_output": "mdreg.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mdreg.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mdriver.c",
+      "source_sha256": "cd5d491a124a71f686b287f4e4d6c34f2cba56720269d00408d97f06e48d91f6",
+      "object_output": "mdriver.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mdriver.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mdulaw.c",
+      "source_sha256": "0a555e45ed0e320b66ea34a100a29ed2772f178d6da4b8f27b18dbd3d674d4a3",
+      "object_output": "mdulaw.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mdulaw.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mloader.c",
+      "source_sha256": "b840681ab22f23185bf3e770a78097572db9d815817075c46308babf476e2774",
+      "object_output": "mloader.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mloader.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mlreg.c",
+      "source_sha256": "195235201d36de32bc861098e6cdbe9a1676ca6360acde6264d3f1acf5cabed2",
+      "object_output": "mlreg.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mlreg.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mlutil.c",
+      "source_sha256": "eb6c43b91d94cbed8fddb8b5ec2ef21bcc230f625e23d2fc466271347ae9aa0d",
+      "object_output": "mlutil.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mlutil.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mmalloc.c",
+      "source_sha256": "5804e98cb64cba1a2bf62443c24fec298da51957931359002519e8b1e8b2100c",
+      "object_output": "mmalloc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mmalloc.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mmerror.c",
+      "source_sha256": "7e1e84d0340fd28f1243366a20e316e0ab4287c4843e90661cabe8b3d97fc8ec",
+      "object_output": "mmerror.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mmerror.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mmio.c",
+      "source_sha256": "2309987a8943665f9150e83b165e83c7f21ec5d400fb20e42e92fba4d2dbb700",
+      "object_output": "mmio.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mmio.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mplayer.c",
+      "source_sha256": "2393772312766d591affc098769327676c5b9672a644acdfce2f56df7bf73a98",
+      "object_output": "mplayer.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mplayer.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/munitrk.c",
+      "source_sha256": "6df66b3ba0361524ae39af516e1e87109ef4a51e13f30cb62e45ac726c0fb774",
+      "object_output": "munitrk.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/munitrk.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/mwav.c",
+      "source_sha256": "b8ed545d9198e2750e435f81fd89dae422321c9a26641bc3a3b8d2d9ea6e3e10",
+      "object_output": "mwav.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/mwav.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/npertab.c",
+      "source_sha256": "64c66e11f66d3c7432e3d59ba199ecab9b0028b8408606368491cf52fc02b73e",
+      "object_output": "npertab.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/npertab.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/sloader.c",
+      "source_sha256": "65735d64127ae93b3812cf1db7636e4449424c9ad375f1dd60f2e1d896ec1df9",
+      "object_output": "sloader.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/sloader.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/virtch.c",
+      "source_sha256": "c286e3e17a13a8e6c942e5ca93d4ff74bd606b450275e2203f6503fc200be05b",
+      "object_output": "virtch.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/virtch.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/virtch2.c",
+      "source_sha256": "ec5fe08ff73b1b15944265449092319f6d751293e6e7925cd02b2a6bbbb7dcbe",
+      "object_output": "virtch2.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/virtch2.c.o"
+    },
+    {
+      "source": "sc2/src/libs/mikmod/virtch_common.c",
+      "source_sha256": "85c392da62fb49619dc7be21e8cba15ef55bcb009916f56be39501466f01f8ac",
+      "object_output": "virtch_common.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/virtch_common.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/connect/connect.c",
+      "source_sha256": "b2041b4eabda15fe18a62ccefb4f1f9592e775c8a3adc7078aced8aae3cabc3d",
+      "object_output": "connect.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/connect.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/connect/listen.c",
+      "source_sha256": "f925fd1dc250739c0c6f3b33983b7cf5765e6bf0a0f192176b174226c0457e66",
+      "object_output": "listen.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/listen.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/connect/resolve.c",
+      "source_sha256": "1d8cbb4fbc697f4d913187e0875018267c008f6b0fffcab0eac40705f7d8e6be",
+      "object_output": "resolve.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/resolve.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/netmanager/ndesc.c",
+      "source_sha256": "b40bed3c0f33e2406e6d82176534297a2c1c8b83d2c4e9e33e70b8f68f839085",
+      "object_output": "ndesc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/ndesc.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/netmanager/netmanager_bsd.c",
+      "source_sha256": "76c73b27c45a942aa77523674996cda8cb25509ae719f3ac3b325daa9d82844f",
+      "object_output": "netmanager_bsd.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netmanager_bsd.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/netport.c",
+      "source_sha256": "fe2d073f38a6c8c47da091c37917e2d2b337611c715dd07ab94059406ea87cd9",
+      "object_output": "netport.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netport.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/network_bsd.c",
+      "source_sha256": "990e6aac5d6e65e1db26948e0657105cc782a960b3ca9af0c6156258409ecfb8",
+      "object_output": "network_bsd.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/network_bsd.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/socket/socket.c",
+      "source_sha256": "af5c2975deafa34c8dece900e75c987cf23a6340fa01f710cd390306fe350b68",
+      "object_output": "socket.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/socket.c.o"
+    },
+    {
+      "source": "sc2/src/libs/network/socket/socket_bsd.c",
+      "source_sha256": "d90e116ec4490d5d54a94e857f08127d98774648c8603225dc63dbd2dbbeda55",
+      "object_output": "socket_bsd.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/socket_bsd.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/direct.c",
+      "source_sha256": "43018ff531330ffb33779fe3a980733b8b4dcf9779819c42ae2eccabe943a76f",
+      "object_output": "direct.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/direct.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/filecntl.c",
+      "source_sha256": "f776378e720f7f56a44ca4270c5fa17cb5a6ef52a9aefa08a060d434dfb3c6b5",
+      "object_output": "filecntl.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/filecntl.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/getres.c",
+      "source_sha256": "4243d18424f85f2c197f3aeff9c082708823289fc8b58ec47047a2a837f41c1c",
+      "object_output": "getres.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/getres.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/loadres.c",
+      "source_sha256": "cab5abb4341b6773b6b0b1dee84254c1faab8a53b0e1b24a54848e7bc20e832b",
+      "object_output": "loadres.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/loadres.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/propfile.c",
+      "source_sha256": "5cef0ba3285bba46a7b9e72c15f5c2aae2098147d04951701b8d3430aed1c775",
+      "object_output": "propfile.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/propfile.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/resinit.c",
+      "source_sha256": "6b17d062ee7eb1d263b1598ddfc58d0d0480375282a3be57f7dab749392d3e85",
+      "object_output": "resinit.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/resinit.c.o"
+    },
+    {
+      "source": "sc2/src/libs/resource/stringbank.c",
+      "source_sha256": "b4a9e8c4434c7a9b6c2bf55fbd45a6e6690a68c231a3170bf6597edc3d3b9e44",
+      "object_output": "stringbank.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/stringbank.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/audiocore_rust.c",
+      "source_sha256": "c153f8fe23084c6059c9c691f296f7033382e0d430bda819df7af8dac1dece4c",
+      "object_output": "audiocore_rust.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/audiocore_rust.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/decoders/aiffaud.c",
+      "source_sha256": "6f430b11084c4c620981bb2c096725a1d932e3646d6296a7484eb56d2137d10b",
+      "object_output": "aiffaud.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/aiffaud.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/decoders/decoder.c",
+      "source_sha256": "1aab6e880982cb5df38665d5bea34a0a78a6309640843627773b77524275544a",
+      "object_output": "decoder.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/decoder.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/decoders/dukaud.c",
+      "source_sha256": "c7fad67207f2a9117243cc4dde5ea907a4106c1ddfabd0e51b5e09833c267c96",
+      "object_output": "dukaud.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/dukaud.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/decoders/modaud.c",
+      "source_sha256": "a15ce8a59413cd9d5a6d7fb1db3cf3a6b97e29be2fcf563b1cd07eb776b59526",
+      "object_output": "modaud.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_MOD",
+      "production_profile": "production",
+      "provider": "native_object:native/modaud.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/decoders/wav.c",
+      "source_sha256": "4f108c4df0f69d55d3d18838cb0984a1bd1d9dd9c0f4f1565406c4c19fc61333",
+      "object_output": "wav.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CODEC_OTHER",
+      "production_profile": "production",
+      "provider": "native_object:native/wav.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/fileinst.c",
+      "source_sha256": "8148865056bc614436d58e660e1ff55a47f24d41c62c6b60e5fa0c9c3cd8587d",
+      "object_output": "fileinst.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/fileinst.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/mixer/nosound/audiodrv_nosound.c",
+      "source_sha256": "cb364d458bc8c523a33694cf6c4254a6bf06db9d5e6f76418c9d01c6aab3543d",
+      "object_output": "audiodrv_nosound.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/audiodrv_nosound.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/mixer/sdl/audiodrv_sdl.c",
+      "source_sha256": "e310ff0d7f43501428acdfc2b938fe552ad14c23b943e3748f50df078de961c9",
+      "object_output": "audiodrv_sdl.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/audiodrv_sdl.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/music.c",
+      "source_sha256": "3708442fdbacb1e0b94231563fbaffe38a71d9d5e312c624292062db59772721",
+      "object_output": "music.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/music.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/resinst.c",
+      "source_sha256": "d1bbd7c0e41830c7383710c75b96ebea5231b7055a4646dd13644afac77bb8c7",
+      "object_output": "resinst.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/resinst.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/sfx.c",
+      "source_sha256": "cff28ca4656c4bbd620541812317315a8ebc426f3d776022be7ec8964532ffe9",
+      "object_output": "sfx.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/sfx.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/sound.c",
+      "source_sha256": "ebc3589742f4d2856e323f74a9484cb0990ba398dc4c9746d10c181f71ab7135",
+      "object_output": "sound.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/sound.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/stream.c",
+      "source_sha256": "20b5a61ce8a9e5064b185e6bcb0f39e310a8f1c774c57406bf4b72e96027a948",
+      "object_output": "stream.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/stream.c.o"
+    },
+    {
+      "source": "sc2/src/libs/sound/trackplayer.c",
+      "source_sha256": "c7893ac265599c75125234638e69e78ae2e8c6a18ce70f562b9f92608d96d7eb",
+      "object_output": "trackplayer.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/trackplayer.c.o"
+    },
+    {
+      "source": "sc2/src/libs/strings/getstr.c",
+      "source_sha256": "5bb4046b7dde62f73a180bff2ca0c3dfd77d6979e5df7a1d9d8c76567a946c03",
+      "object_output": "getstr.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/getstr.c.o"
+    },
+    {
+      "source": "sc2/src/libs/strings/sfileins.c",
+      "source_sha256": "c6da0966594471ed5c8f87d0655f86a415573d97f5396d4a964cdac2e5b29aad",
+      "object_output": "sfileins.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/sfileins.c.o"
+    },
+    {
+      "source": "sc2/src/libs/strings/sresins.c",
+      "source_sha256": "e113de5dc0449b063979890efcf7142e1c575ad9b668d060eb811dedf01fa8ba",
+      "object_output": "sresins.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/sresins.c.o"
+    },
+    {
+      "source": "sc2/src/libs/strings/strings.c",
+      "source_sha256": "4fcfaf43d8c58e544a784ff03385a9d25d4197669dcc02c63bdbbf1108c3eb82",
+      "object_output": "strings.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/strings.c.o"
+    },
+    {
+      "source": "sc2/src/libs/strings/unicode.c",
+      "source_sha256": "6ac4f2a5219dba16ae964dc8a725a0defdac2e7207553d0504542c862966a074",
+      "object_output": "unicode.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/unicode.c.o"
+    },
+    {
+      "source": "sc2/src/libs/task/tasklib.c",
+      "source_sha256": "4a24095b637be1be044ec223dc39f71551011ceb56e697f46563177fa3b8239e",
+      "object_output": "tasklib.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/tasklib.c.o"
+    },
+    {
+      "source": "sc2/src/libs/threads/rust_thrcommon.c",
+      "source_sha256": "f4b31695ad9b8369983a2eb7aba52b0988ff8496c0b933bbf3461152305ce62d",
+      "object_output": "rust_thrcommon.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_thrcommon.c.o"
+    },
+    {
+      "source": "sc2/src/libs/threads/sdl/sdlthreads.c",
+      "source_sha256": "12798821bc537e0fd01dfff67163f6962d365d20e9b701873b7accb2a4d18547",
+      "object_output": "sdlthreads.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/sdlthreads.c.o"
+    },
+    {
+      "source": "sc2/src/libs/threads/thrcommon.c",
+      "source_sha256": "88100ee68d10e4421ba033c93c4af7d5bfb3137aa1fc33afdf7bc38ea859364d",
+      "object_output": "thrcommon.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/thrcommon.c.o"
+    },
+    {
+      "source": "sc2/src/libs/time/sdl/sdltime.c",
+      "source_sha256": "b37791d02cbf646d5f624a44a56ffdb6617a52021b8a1b17edf9ea6196d9e9fc",
+      "object_output": "sdltime.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/sdltime.c.o"
+    },
+    {
+      "source": "sc2/src/libs/time/timecommon.c",
+      "source_sha256": "51a3b9a5a412785e7dca8bf9b0c5360b8129b57784c296cdea8de1ead560aabf",
+      "object_output": "timecommon.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/timecommon.c.o"
+    },
+    {
+      "source": "sc2/src/libs/uio/debug.c",
+      "source_sha256": "edb384e67966f844ba6d70620b339f7d579db02f781e2eadb8e4b4d339461da8",
+      "object_output": "debug.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/debug.c.o"
+    },
+    {
+      "source": "sc2/src/libs/uio/paths.c",
+      "source_sha256": "9de55b665d8b505e1b8cf51a43224d39dd61cc2b9be45a20310f79367419f5a8",
+      "object_output": "paths.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/paths.c.o"
+    },
+    {
+      "source": "sc2/src/libs/uio/uioutils.c",
+      "source_sha256": "1016a85c403979ef184e4be25dc2e1b354bc71da6d3120bb3e87185de0ac15ea",
+      "object_output": "uioutils.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/uioutils.c.o"
+    },
+    {
+      "source": "sc2/src/libs/uio/zip/zip.c",
+      "source_sha256": "da6d391223e89d377bad15ba5dd262d7db32cf3be35cf06be39524e67286ff98",
+      "object_output": "zip.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RESOURCE",
+      "production_profile": "production",
+      "provider": "native_object:native/zip.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/dukvid.c",
+      "source_sha256": "2b8c252206fd18a04c9df07dfce86a7ac10145d526bed3fecb839bf7230112ba",
+      "object_output": "dukvid.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/dukvid.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/legacyplayer.c",
+      "source_sha256": "db53c3abf6dee862f3f0a2b656b1196bc44dc93ec5dd1bd7bac0436dc5ea549b",
+      "object_output": "legacyplayer.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/legacyplayer.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/rust_video.c",
+      "source_sha256": "170d402da465c0ade082853028959457a20f538dec22d79b9a92ce4c8919189a",
+      "object_output": "rust_video.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_video.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/vfileins.c",
+      "source_sha256": "86a9a43327079d47d1d9a59e8afb74747ffe1e4e9b845d5c7084714263e2c7c5",
+      "object_output": "vfileins.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/vfileins.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/video.c",
+      "source_sha256": "52608f934780976bb29e10f13d097637cb0b82973871bff01d9dbe8374efc21c",
+      "object_output": "video.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/video.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/videodec.c",
+      "source_sha256": "627936742d5e9ddc13668e143dd59ade7d209b3efd01556380dd8b18ec476a90",
+      "object_output": "videodec.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/videodec.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/vidplayer.c",
+      "source_sha256": "95d1d37cc9b4566d927e8d19b4fdba68b6e2925c2e0de9b651bc80a551a23496",
+      "object_output": "vidplayer.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/vidplayer.c.o"
+    },
+    {
+      "source": "sc2/src/libs/video/vresins.c",
+      "source_sha256": "078fb4d3e2c0fe3b37b14a3532e0a44bbba13c8911e2fead1192e16df319728f",
+      "object_output": "vresins.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/vresins.c.o"
+    },
+    {
+      "source": "sc2/src/options.c",
+      "source_sha256": "488444d1871e1f4cae041ad3bbc31d83ded7bba54fd18b75bdf38b243d1f4b39",
+      "object_output": "options.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/options.c.o"
+    },
+    {
+      "source": "sc2/src/port.c",
+      "source_sha256": "52fc478f24c8b01ca8d0a8b2ae5030f04f8dec9ca8e08e9fec0d3d25bc1b6f14",
+      "object_output": "port.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/port.c.o"
+    },
+    {
+      "source": "sc2/src/uqm.c",
+      "source_sha256": "57c539ae4214e5c66903b07cda9fc63ebac7f79c5c53f1a02f0a13abb1119547",
+      "object_output": "uqm_rust_main.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "recompiled_native:sc2/src/uqm.c"
+    },
+    {
+      "source": "sc2/src/uqm/battle.c",
+      "source_sha256": "0eb7ecb8856f346efc1794177245403e8ad51d9e28fe19714310f25741cdd078",
+      "object_output": "battle.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "BATTLE",
+      "production_profile": "production",
+      "provider": "native_object:native/battle.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/border.c",
+      "source_sha256": "8908a1c01019e9d1be4e257e97498295d9bef7ee4b1c776d4477c795e322eb94",
+      "object_output": "border.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/border.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/build.c",
+      "source_sha256": "fb0ceda43c1b163c622d99da2e66d841e3df0d5b4312ed5c6fa54a3b01e43d7f",
+      "object_output": "build.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIPS_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/build.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/cleanup.c",
+      "source_sha256": "2970c40644542c07d276e4d19c43ad4b06c245f07c5790cb10aa86090b6e36d5",
+      "object_output": "cleanup.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/cleanup.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/clock_rust.c",
+      "source_sha256": "0fc3c5433025e250d5f3b023e5c240cf2664026a8fc604247078172412e31a2a",
+      "object_output": "clock_rust.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/clock_rust.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/cnctdlg.c",
+      "source_sha256": "bf49828a8384724b8dea489ddc18e4e0e146fe1262c1d543f7530c65ee04fadd",
+      "object_output": "cnctdlg.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/cnctdlg.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm.c",
+      "source_sha256": "29a688ac7ca3e40a7be2ce15a26d9abea27fc6a4a648420d638d33d2405c56e2",
+      "object_output": "comm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "COMM_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/comm.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/arilou/arilouc.c",
+      "source_sha256": "223202753706270ff2d1a48607cf55c491492cde17cd4efe7656d9f876b5f88e",
+      "object_output": "arilouc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_ARILOU",
+      "production_profile": "production",
+      "provider": "native_object:native/arilouc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/blackur/blackurc.c",
+      "source_sha256": "3f492eb6048c9436d2948d4168af058218e278e22ba777a99d901f8d757462e0",
+      "object_output": "blackurc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_BLACKUR",
+      "production_profile": "production",
+      "provider": "native_object:native/blackurc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/chmmr/chmmrc.c",
+      "source_sha256": "3194e2109b13884bf11250d7df7879953ae81c99dba9481311bd81a94e559d56",
+      "object_output": "chmmrc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_CHMMR",
+      "production_profile": "production",
+      "provider": "native_object:native/chmmrc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/comandr/comandr.c",
+      "source_sha256": "8413a9b9dae22ab8bc0b47e0d58f7bee12f89b06a33e33b78290dc53c76c2552",
+      "object_output": "comandr.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_COMANDR",
+      "production_profile": "production",
+      "provider": "native_object:native/comandr.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/druuge/druugec.c",
+      "source_sha256": "d883c1f8becd47ae26e2513d58a32ea7e151326d74f325ea868c80bac5040229",
+      "object_output": "druugec.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_DRUUGE",
+      "production_profile": "production",
+      "provider": "native_object:native/druugec.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/ilwrath/ilwrathc.c",
+      "source_sha256": "82d7081699c111fcf4ab86cd6debffe492a41977b027e958e92623eac1ee2e3b",
+      "object_output": "ilwrathc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_ILWRATH",
+      "production_profile": "production",
+      "provider": "native_object:native/ilwrathc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/melnorm/melnorm.c",
+      "source_sha256": "711cdb037442811a398f234f2a42df4e8f878d38a90cd953af45f248b6c54722",
+      "object_output": "melnorm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_MELNORM",
+      "production_profile": "production",
+      "provider": "native_object:native/melnorm.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/mycon/myconc.c",
+      "source_sha256": "e0b34937a11d0c8a6e3809c2c3ccdb36ebb01015632e7439a84d3295d705edf8",
+      "object_output": "myconc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_MYCON",
+      "production_profile": "production",
+      "provider": "native_object:native/myconc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/orz/orzc.c",
+      "source_sha256": "6bd49b7a9d38d902d5bd94374064f4def030c8be6db6645c85f082af69015f2a",
+      "object_output": "orzc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_ORZ",
+      "production_profile": "production",
+      "provider": "native_object:native/orzc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/pkunk/pkunkc.c",
+      "source_sha256": "720ea151dbfdaa049044c34390ba5a2f28b9703741c7767649ed4a815c125ea9",
+      "object_output": "pkunkc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_PKUNK",
+      "production_profile": "production",
+      "provider": "native_object:native/pkunkc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/rebel/rebel.c",
+      "source_sha256": "6812032a3151d40150085d347bdd6b9c59346d5e8559efaf66c88f4989680a28",
+      "object_output": "rebel.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_REBEL",
+      "production_profile": "production",
+      "provider": "native_object:native/rebel.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/shofixt/shofixt.c",
+      "source_sha256": "93e574f66e93f7d3ea8b8777869787202081402c2ce206dd3fa0c0f385bd56e3",
+      "object_output": "shofixt.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SHOFIXT",
+      "production_profile": "production",
+      "provider": "native_object:native/shofixt.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/slyhome/slyhome.c",
+      "source_sha256": "ef6e1ea1e0eacc0f1bdb76f033e48fc1164f94a2bbc665096655161dab263c33",
+      "object_output": "slyhome.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SLYHOME",
+      "production_profile": "production",
+      "provider": "native_object:native/slyhome.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/slyland/slyland.c",
+      "source_sha256": "2d8e157648f557ceb510807e71c4c0e1fa8ddc8296b5b36e6fd3267f37948117",
+      "object_output": "slyland.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SLYLAND",
+      "production_profile": "production",
+      "provider": "native_object:native/slyland.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/spahome/spahome.c",
+      "source_sha256": "d5346de9457ea51f34ef51fc2adc3ead4dd8fb5ed3467a2296d9886698c22409",
+      "object_output": "spahome.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SPAHOME",
+      "production_profile": "production",
+      "provider": "native_object:native/spahome.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/spathi/spathic.c",
+      "source_sha256": "a24a550b03a7a108208d76b7609a28decf946fa775c300c2e53784684eb2b85d",
+      "object_output": "spathic.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SPATHI",
+      "production_profile": "production",
+      "provider": "native_object:native/spathic.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/starbas/starbas.c",
+      "source_sha256": "43eca52577fcfb58e0ce92ee1f650dbb585c3c277ddb3dd50649aadae537a786",
+      "object_output": "starbas.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STARBASE",
+      "production_profile": "production",
+      "provider": "native_object:native/starbas.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/supox/supoxc.c",
+      "source_sha256": "e977f24bfe42f5d1abba0ffe10c6f54c779525d09ca84a8d3b99956a9206d90c",
+      "object_output": "supoxc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SUPOX",
+      "production_profile": "production",
+      "provider": "native_object:native/supoxc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/syreen/syreenc.c",
+      "source_sha256": "062d6b024ef9221d2841ae505a67707d57d977ebdc8a5d367134e0a09b433191",
+      "object_output": "syreenc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_SYREEN",
+      "production_profile": "production",
+      "provider": "native_object:native/syreenc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/talkpet/talkpet.c",
+      "source_sha256": "a5092fbf65bdc250f16da426d2f580e1f343158192b274a82ef1ed56b9729713",
+      "object_output": "talkpet.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_TALKPET",
+      "production_profile": "production",
+      "provider": "native_object:native/talkpet.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/thradd/thraddc.c",
+      "source_sha256": "5bc01acd08b24cd7df6bedc907de3c6adf7fe072fa3550c04872a6da58363239",
+      "object_output": "thraddc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_THRADD",
+      "production_profile": "production",
+      "provider": "native_object:native/thraddc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/umgah/umgahc.c",
+      "source_sha256": "efb80453367cd28a8b98cf594d9f2eb1a44beeeefe0d56795f141bcc22b10954",
+      "object_output": "umgahc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_UMGAH",
+      "production_profile": "production",
+      "provider": "native_object:native/umgahc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/urquan/urquanc.c",
+      "source_sha256": "f9224a89bb0dcd9615e8854eeecbdc556ce8753410072cc3aaf0671a9daee013",
+      "object_output": "urquanc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_URQUAN",
+      "production_profile": "production",
+      "provider": "native_object:native/urquanc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/utwig/utwigc.c",
+      "source_sha256": "ae38d404492af5badf5924fbaf99582569b1e63fc9a3573c365f819d627e1013",
+      "object_output": "utwigc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_UTWIG",
+      "production_profile": "production",
+      "provider": "native_object:native/utwigc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/vux/vuxc.c",
+      "source_sha256": "b03d4b9e14962c0d16be57e7fa7f519ad878fadd4a5daeba5ffc89a82edcaaec",
+      "object_output": "vuxc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_VUX",
+      "production_profile": "production",
+      "provider": "native_object:native/vuxc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/yehat/yehatc.c",
+      "source_sha256": "cdde5a0d070588f044f29ae087434bf2121fca7e2a443336c9e5204cbf2c5ab7",
+      "object_output": "yehatc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_YEHAT",
+      "production_profile": "production",
+      "provider": "native_object:native/yehatc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/comm/zoqfot/zoqfotc.c",
+      "source_sha256": "8c8dd5b92562d4bbc6feb48da52bd6c0af97e4152d484c4d982d33bba65a34aa",
+      "object_output": "zoqfotc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RACE_ZOQFOT",
+      "production_profile": "production",
+      "provider": "native_object:native/zoqfotc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/commanim.c",
+      "source_sha256": "4a8c0cc70b785c725900037cfb5a5d989b2ebdb57be23b7d3de5cf4eb07bca2f",
+      "object_output": "commanim.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "COMM_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/commanim.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/commglue.c",
+      "source_sha256": "52c83aa807d5d4905e600f6954afcb4eb55e3a511c3bc86aee532234a705503f",
+      "object_output": "commglue.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "COMM_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/commglue.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/confirm.c",
+      "source_sha256": "f1c39130e86ebaedc22b32636a7b9c5036b3b6a1a288400fe72ac8a55581db5c",
+      "object_output": "confirm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/confirm.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/cons_res.c",
+      "source_sha256": "e3288ff5e2129044a99cf366d9facee0dc3dca9a9469f8106ee2c765f5117610",
+      "object_output": "cons_res.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/cons_res.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/credits.c",
+      "source_sha256": "8d74a36303d97b9e5c637771458ac0ee1d05fcd83cb6436cf5795e06994ea252",
+      "object_output": "credits.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/credits.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/cyborg.c",
+      "source_sha256": "22f0e1668023c50ba99c5c5c350d75c1963c656a589c93f87196d937cb23f982",
+      "object_output": "cyborg.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/cyborg.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/demo.c",
+      "source_sha256": "089722a0d96e0c9a816518bae60b544d4f6b60b914b063e6d14ca9f14895ba89",
+      "object_output": "demo.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/demo.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/dummy.c",
+      "source_sha256": "eb0fbb8c2fc01c6109d8bafb887b8ff8c0a4dca34a1e420d048c04eb4bdccb42",
+      "object_output": "dummy.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/dummy.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/encount.c",
+      "source_sha256": "8cbaef674ef585f9fa026b544fc42fc90859a49ecbed0f27ea396346db728a7f",
+      "object_output": "encount.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/encount.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/flash.c",
+      "source_sha256": "86f2b3d96eb13a98b7cedbd8f5241aecfe08ce26c9ee84bf7bcf7ee7e7782a0c",
+      "object_output": "flash.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/flash.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/fmv.c",
+      "source_sha256": "ad633d3950a6c5746f1b9c234db005d3ae85c643eb09b98a3354d713a85dcd1f",
+      "object_output": "fmv.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/fmv.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/galaxy.c",
+      "source_sha256": "882e025c00204afd9fbf5f0329417eb663b3d10560e3c14b808c678c07327099",
+      "object_output": "galaxy.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/galaxy.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/gameev.c",
+      "source_sha256": "78d93806630bb0ac90c437f69778c1cc387290b8cc3cfc2912e56df1c1923732",
+      "object_output": "gameev.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/gameev.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/gameinp.c",
+      "source_sha256": "0964edf62722f24457d753e0779e5bff15ab714fccfd2f5f2d2403b63500bc23",
+      "object_output": "gameinp_rust_main.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "INPUT",
+      "production_profile": "production",
+      "provider": "recompiled_native:sc2/src/uqm/gameinp.c"
+    },
+    {
+      "source": "sc2/src/uqm/gameopt.c",
+      "source_sha256": "409a3b31a7aef08ca351dfdc350d1fc0b205c76fe6198c3c13b7858d64f1b787",
+      "object_output": "gameopt_rust_main.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "recompiled_native:sc2/src/uqm/gameopt.c"
+    },
+    {
+      "source": "sc2/src/uqm/getchar.c",
+      "source_sha256": "579b2da2b145de185d03bd33e4fd3fb26be4d0f1de18c0f7979c90c0fe868969",
+      "object_output": "getchar.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/getchar.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/globdata.c",
+      "source_sha256": "c85fffc880b5018583e7f9838186567f5decab1820f375a59313b2fc535e583e",
+      "object_output": "globdata_rust_state.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STATE",
+      "production_profile": "production",
+      "provider": "recompiled_native:sc2/src/uqm/globdata.c"
+    },
+    {
+      "source": "sc2/src/uqm/grpinfo.c",
+      "source_sha256": "51fba6e8ef5f93b8bc804424939fbf060f26450ddfaa884ef8252753c140aa90",
+      "object_output": "grpinfo.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/grpinfo.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/hyper.c",
+      "source_sha256": "9b7a5fd6907cc04e34dcb017ff21ac6fd0061b77c160baa67efad96085796dc0",
+      "object_output": "hyper.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/hyper.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/init.c",
+      "source_sha256": "c375a455627d6a34f48706d813f6adc9ff78be58c4b2ffc755cb9787aebeeac2",
+      "object_output": "init.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/init.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/intel.c",
+      "source_sha256": "b80d766b359ec5e07d80a3ea64980220be657b32470c7b2ad07987a01dd74a0f",
+      "object_output": "intel.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "BATTLE",
+      "production_profile": "production",
+      "provider": "native_object:native/intel.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/intro.c",
+      "source_sha256": "0e54bfd17906818a83c088ff5d08cd8ccbea4cb5fac424e69b1151e13e058e96",
+      "object_output": "intro.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "VIDEO",
+      "production_profile": "production",
+      "provider": "native_object:native/intro.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ipdisp.c",
+      "source_sha256": "64e051c5ee2598053670d0e11c25ec5282e07ae9a94b577d9c33142ca01ffcea",
+      "object_output": "ipdisp.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/ipdisp.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/load.c",
+      "source_sha256": "a5adf159825091d772659bb562bc19abd5409f2fa69b4ccd641cdbdfd4aa768a",
+      "object_output": "load.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PERSISTENCE",
+      "production_profile": "production",
+      "provider": "native_object:native/load.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/load_legacy.c",
+      "source_sha256": "1f3a48c60701fd069cfc6f2658cc9771e3e9ad5c9083ac00e9ab726839146dca",
+      "object_output": "load_legacy.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PERSISTENCE",
+      "production_profile": "production",
+      "provider": "native_object:native/load_legacy.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/loadship.c",
+      "source_sha256": "15b31d7634e823e3528f427e53d7e89f95d97bb9fb775341bdd630c80ed746c5",
+      "object_output": "loadship.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PERSISTENCE",
+      "production_profile": "production",
+      "provider": "native_object:native/loadship.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/master.c",
+      "source_sha256": "a04ade09fb13811fbeddfa55a1755cde235472e8c03b51bac2fce90791045ab3",
+      "object_output": "master.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIPS_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/master.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/menu.c",
+      "source_sha256": "64a7d040a993b0b3e011295ca8901e43093889b297d4f5f595728a333123fe2a",
+      "object_output": "menu.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/menu.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/misc.c",
+      "source_sha256": "f69432bddd7bca5f3f1a367bf026923a3f0c87c088028eb064d43c29d1450755",
+      "object_output": "misc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/misc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/oscill.c",
+      "source_sha256": "d8b882c1c21f437484e5928accaf2f70edfe280ad1743a286e3e433455455095",
+      "object_output": "oscill.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/oscill.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/outfit.c",
+      "source_sha256": "d23e4755f6facda80322ad59577633cac7bd9ac54a55540183a9f95e9c105a0f",
+      "object_output": "outfit.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STARBASE",
+      "production_profile": "production",
+      "provider": "native_object:native/outfit.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/pickship.c",
+      "source_sha256": "639f4d1d7c90a64b0d1db7ab8965a537d3956ec2801d89b21fcd32bad2ea8561",
+      "object_output": "pickship.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/pickship.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/plandata.c",
+      "source_sha256": "09bcdc468f525f862334054377a5cdb12a1bb697d2f07baac90f0639970da338",
+      "object_output": "plandata.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/plandata.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/calc.c",
+      "source_sha256": "eb19397bbe10e1387708a43acc47b4b83764bfcdb8c3224030d34128480cd18b",
+      "object_output": "calc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANET_GEN",
+      "production_profile": "production",
+      "provider": "native_object:native/calc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/cargo.c",
+      "source_sha256": "33a4d4f2ed1a8e2645d11346dde380d3c575f468bce6d67f438b371d7171c186",
+      "object_output": "cargo.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANETSIDE_INTEGRATION",
+      "production_profile": "production",
+      "provider": "native_object:native/cargo.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/devices.c",
+      "source_sha256": "0689e396b66fdad4b3fecdee6b9583de4f910aecb452bc08390e89b685b6ca51",
+      "object_output": "devices.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANETSIDE_INTEGRATION",
+      "production_profile": "production",
+      "provider": "native_object:native/devices.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genand.c",
+      "source_sha256": "5d96ba0212c3fbcb53d45df96b62e2de6653ad5bf85280d9efd9afc84e7ce0d4",
+      "object_output": "genand.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENAND",
+      "production_profile": "production",
+      "provider": "native_object:native/genand.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genburv.c",
+      "source_sha256": "72d19514a632ff0b30d99f39202de20cb7f61cc9a32b39581411706822caf494",
+      "object_output": "genburv.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENBURV",
+      "production_profile": "production",
+      "provider": "native_object:native/genburv.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genchmmr.c",
+      "source_sha256": "b1998fb72661df8080453427cb734638816c33e08a1b6d036e5d3449c94d77c2",
+      "object_output": "genchmmr.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENCHMMR",
+      "production_profile": "production",
+      "provider": "native_object:native/genchmmr.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gencol.c",
+      "source_sha256": "e2b3e6f3ad806377b22564ff147d318b9fb4708cbaad20fe1e5e63173193203c",
+      "object_output": "gencol.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENCOL",
+      "production_profile": "production",
+      "provider": "native_object:native/gencol.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gendefault.c",
+      "source_sha256": "6ecdc0c8235e1ce178ba56ae878ea6b05a2590c7a0b4a3debd2103328fe95184",
+      "object_output": "gendefault.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANET_GEN",
+      "production_profile": "production",
+      "provider": "native_object:native/gendefault.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gendru.c",
+      "source_sha256": "dc73997dd1c2a33e6f07406d8e4c8572afcf18a32d6c8d4ec97e757b35e92a16",
+      "object_output": "gendru.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENDRU",
+      "production_profile": "production",
+      "provider": "native_object:native/gendru.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genilw.c",
+      "source_sha256": "2a9eb98fa3745be35140d7608e36529831fd296bc77ebc972b1a992c51097d8c",
+      "object_output": "genilw.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENILW",
+      "production_profile": "production",
+      "provider": "native_object:native/genilw.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genmel.c",
+      "source_sha256": "23dfe9e80daa408c7a7704778138d218e37477fcee2f67a5d86d33b0941e5617",
+      "object_output": "genmel.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENMEL",
+      "production_profile": "production",
+      "provider": "native_object:native/genmel.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genmyc.c",
+      "source_sha256": "5b9604174c41f90973655d4003b8844bc01a7e5ca8c2e049635bdad9fc72f61a",
+      "object_output": "genmyc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENMYC",
+      "production_profile": "production",
+      "provider": "native_object:native/genmyc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genorz.c",
+      "source_sha256": "cb9d2f1d2dcbc80ea497fb5a20348141f85025918880d6d452316f3662d9eab5",
+      "object_output": "genorz.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENORZ",
+      "production_profile": "production",
+      "provider": "native_object:native/genorz.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genpet.c",
+      "source_sha256": "8e857fe8f4a503eb05af4b2053f20e23ee71b51aab88de61fea29212b68f7279",
+      "object_output": "genpet.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENPET",
+      "production_profile": "production",
+      "provider": "native_object:native/genpet.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genpku.c",
+      "source_sha256": "312d1a4cbfd37a476c862b5f0fb078fdba2d3a9f3411d4ae8528a3fa6b9e51e7",
+      "object_output": "genpku.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENPKU",
+      "production_profile": "production",
+      "provider": "native_object:native/genpku.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genrain.c",
+      "source_sha256": "e90d751ec8b0699597a732484beca8b1ad2eacf6b8cf61534bfda3e408182ce6",
+      "object_output": "genrain.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENRAIN",
+      "production_profile": "production",
+      "provider": "native_object:native/genrain.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gensam.c",
+      "source_sha256": "e05cca503c2f740f27ab9babe74c9018dd651c388f18551fcd1a4d5ab8214c84",
+      "object_output": "gensam.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSAM",
+      "production_profile": "production",
+      "provider": "native_object:native/gensam.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genshof.c",
+      "source_sha256": "e6cdd87a332cabe0cac9cce13a628b0661647c45554df902710eafa2cbb19ca5",
+      "object_output": "genshof.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSHOF",
+      "production_profile": "production",
+      "provider": "native_object:native/genshof.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gensly.c",
+      "source_sha256": "07f327be3a088218ef2fecf75d4ebc8ae8fc0f28203d77df7afed6907e700d31",
+      "object_output": "gensly.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSLY",
+      "production_profile": "production",
+      "provider": "native_object:native/gensly.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gensol.c",
+      "source_sha256": "2e9772c579edba343966dd2bd0bd2402cf1c863900c3c4149639af16984f268a",
+      "object_output": "gensol.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSOL",
+      "production_profile": "production",
+      "provider": "native_object:native/gensol.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genspa.c",
+      "source_sha256": "e1dbdcd89e8aca5bf7dce144ccfa4a7769f6a07c1fe47d8229481524f29e1950",
+      "object_output": "genspa.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSPA",
+      "production_profile": "production",
+      "provider": "native_object:native/genspa.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gensup.c",
+      "source_sha256": "56b8dd14b63689c9d6f2092fc9795a9d9dbd700da3599b2a1f0fb2dc48bd8143",
+      "object_output": "gensup.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSUP",
+      "production_profile": "production",
+      "provider": "native_object:native/gensup.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gensyr.c",
+      "source_sha256": "8fa16fbf3278913ad18f03325900d121919aa99003118635e889d4b7d2893b01",
+      "object_output": "gensyr.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENSYR",
+      "production_profile": "production",
+      "provider": "native_object:native/gensyr.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genthrad.c",
+      "source_sha256": "190174890c502bd139485f927cd0a7e87c18f1e4bf8bb4df8ca9ab83a5b60e96",
+      "object_output": "genthrad.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENTHRAD",
+      "production_profile": "production",
+      "provider": "native_object:native/genthrad.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/gentrap.c",
+      "source_sha256": "f4ec9f9a384f5cdb417e43639f9bea023ebf4e4177af043930e0d1cab00b06f6",
+      "object_output": "gentrap.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENTRAP",
+      "production_profile": "production",
+      "provider": "native_object:native/gentrap.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genutw.c",
+      "source_sha256": "4720501bbf451fe02f0a5e11e68f4158b19dcd2d4da2758810a1d6a7fd15d0f4",
+      "object_output": "genutw.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENUTW",
+      "production_profile": "production",
+      "provider": "native_object:native/genutw.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genvault.c",
+      "source_sha256": "3b1893adea50edb936ea41ec70add7b0f09aa311a6a5821a7dc2f53365f048dc",
+      "object_output": "genvault.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENVAULT",
+      "production_profile": "production",
+      "provider": "native_object:native/genvault.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genvux.c",
+      "source_sha256": "896d9c899e94ea4e68e7e16204094a032d517e0582df7d3b90c7317048cc319a",
+      "object_output": "genvux.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENVUX",
+      "production_profile": "production",
+      "provider": "native_object:native/genvux.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genwreck.c",
+      "source_sha256": "4dfe6ee205c75167769e4922ee3cb404ccc4656d805057c057c17bf8a1071052",
+      "object_output": "genwreck.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENWRECK",
+      "production_profile": "production",
+      "provider": "native_object:native/genwreck.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genyeh.c",
+      "source_sha256": "a35fbaa1bb93dcfa97a2b3a38ac671468e772d1ce7991bf93d34313e2d63f224",
+      "object_output": "genyeh.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENYEH",
+      "production_profile": "production",
+      "provider": "native_object:native/genyeh.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genzfpscout.c",
+      "source_sha256": "0def56df3d243b9fcf93da1c75f59516af31af8665323c32ff2987e18e71b2fb",
+      "object_output": "genzfpscout.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENZFPSCOUT",
+      "production_profile": "production",
+      "provider": "native_object:native/genzfpscout.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/generate/genzoq.c",
+      "source_sha256": "21a46b23549419aa8d1969bf8972417f14ddf6af79aa49b053f4bad799bf92d8",
+      "object_output": "genzoq.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GEN_GENZOQ",
+      "production_profile": "production",
+      "provider": "native_object:native/genzoq.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/gentopo.c",
+      "source_sha256": "362121bb64b9462e9e1496126e75b7211bb8062537eef944e37c4c9672bebfc8",
+      "object_output": "gentopo.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANET_GEN",
+      "production_profile": "production",
+      "provider": "native_object:native/gentopo.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/orbits.c",
+      "source_sha256": "6002edee8b0120b2eb997a99c12dc0e2edb51c4e699c278b815aa7db30f5037a",
+      "object_output": "orbits.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/orbits.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/oval.c",
+      "source_sha256": "d904602e0a727c26d1029d5ae7f743e00246acc0db144db25e615fedb77088d1",
+      "object_output": "oval.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANET_GEN",
+      "production_profile": "production",
+      "provider": "native_object:native/oval.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/pl_stuff.c",
+      "source_sha256": "7d69bfed44d96d0990b4c3c00eef923229a7b7db0abed53e646c5b599690f222",
+      "object_output": "pl_stuff.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANET_GEN",
+      "production_profile": "production",
+      "provider": "native_object:native/pl_stuff.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/planets.c",
+      "source_sha256": "8dca6136a2135e976bc1be79b8bd1709a5e0f31b851e9bee01a01b875bebce24",
+      "object_output": "planets.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/planets.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/plangen.c",
+      "source_sha256": "0b1605af93c4c5a2c4b99200ad03a027255e3e5d8b7479c744c5d1afba153ec0",
+      "object_output": "plangen.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANET_GEN",
+      "production_profile": "production",
+      "provider": "native_object:native/plangen.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/pstarmap.c",
+      "source_sha256": "f45f2abe17c865c8c8ece509043dbb7ddd0fc04d220add45461a0cc9faf18c1e",
+      "object_output": "pstarmap.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/pstarmap.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/report.c",
+      "source_sha256": "f9e19e05f319aaa1853d3b4811c57668cdf40fafdbcfca56c241e7366ed857af",
+      "object_output": "report.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANETSIDE_INTEGRATION",
+      "production_profile": "production",
+      "provider": "native_object:native/report.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/roster.c",
+      "source_sha256": "e16b35d54bef7263cb3faa280cfaee289ebc6bcd0de5068c76bd1638f60c166e",
+      "object_output": "roster.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANETSIDE_INTEGRATION",
+      "production_profile": "production",
+      "provider": "native_object:native/roster.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/scan.c",
+      "source_sha256": "50bd15b797edb48b5ee4661cfeee2b7a16d6f86e101b450bb4812c056dd812af",
+      "object_output": "scan.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/scan.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/solarsys.c",
+      "source_sha256": "2b803e4726d944b137c45baf52c4709db98f04f75f2fe7b1a34f71b8ec9c8949",
+      "object_output": "solarsys.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/solarsys.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/planets/surface.c",
+      "source_sha256": "b8ae0c2acd3451445c5f46f0c4636e02db5e4925f401cde671304f942b2ce758",
+      "object_output": "surface.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PLANETSIDE_INTEGRATION",
+      "production_profile": "production",
+      "provider": "native_object:native/surface.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/process.c",
+      "source_sha256": "9d2897c7a72f3d32333de153510432d72296c0445f590659ecbee6bdf880bb1b",
+      "object_output": "process.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "BATTLE",
+      "production_profile": "production",
+      "provider": "native_object:native/process.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/restart.c",
+      "source_sha256": "989cfe2c3869786394c46c55e26ab71a4d56993f6046284977bd3d6c5ea05b1d",
+      "object_output": "restart.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/restart.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/rust_bridge_macros.c",
+      "source_sha256": "757c21c9fd08c7128709e07f73bb6f9f35e2566bfa9b5be1e5247259632830ca",
+      "object_output": "rust_bridge_macros.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "FINAL",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_bridge_macros.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/rust_bridge_main2.c",
+      "source_sha256": "4bca379b32c32e745e990285f09c34c3685036254c680f24cf0d116638bdd0ca",
+      "object_output": "rust_bridge_main2.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_bridge_main2.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/rust_bridge_mainloop.c",
+      "source_sha256": "8ab665ef379b6b617a683c1ca4de1c91acceed32e18010ecc5667aae0a96ddd8",
+      "object_output": "rust_bridge_mainloop_rust.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "recompiled_native:sc2/src/uqm/rust_bridge_mainloop.c"
+    },
+    {
+      "source": "sc2/src/uqm/rust_bridge_restart.c",
+      "source_sha256": "4a024df35cbf7e0cb40966ba9e1ef5e656918057c2cc9525f7abfdb58cd739a6",
+      "object_output": "rust_bridge_restart.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "RUNTIME",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_bridge_restart.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/rust_bridge_ships.c",
+      "source_sha256": "079d525f2d41f8073386513b35f8dfe34588be4f718a26418af7034a68c424b9",
+      "object_output": "rust_bridge_ships.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIPS_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/rust_bridge_ships.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/save.c",
+      "source_sha256": "bbc6bacac330fbbeb7a859e1c8cf5340a1dd137453053bb98a0f2fa50453556d",
+      "object_output": "save.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PERSISTENCE",
+      "production_profile": "production",
+      "provider": "native_object:native/save.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/settings.c",
+      "source_sha256": "abc0fedd6320127b2a38099c60b63d5c1eb30107c709b7da817847c9ea38f069",
+      "object_output": "settings.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PERSISTENCE",
+      "production_profile": "production",
+      "provider": "native_object:native/settings.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/setup.c",
+      "source_sha256": "339f3141b3a106c1b6831f5990d14a4dd93c8c10892d8b00cf2cef2c99d8acd1",
+      "object_output": "setup.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/setup.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/setupmenu.c",
+      "source_sha256": "215f41ae54d65ddd4b598bf784bd0a7ce940b591e754add6ae88c6bed955b59b",
+      "object_output": "setupmenu.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "PERSISTENCE",
+      "production_profile": "production",
+      "provider": "native_object:native/setupmenu.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ship.c",
+      "source_sha256": "4b09a72579762827a51254ebd3baa01777111b53b7c28c1c2821bc3899b57e49",
+      "object_output": "ship.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIPS_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/ship.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/androsyn/androsyn.c",
+      "source_sha256": "4eec790d59ddc7596f8a542edf6adbaf8d5a93cb2b1e7966888e70c8632da504",
+      "object_output": "androsyn.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_ANDROSYN",
+      "production_profile": "production",
+      "provider": "native_object:native/androsyn.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/arilou/arilou.c",
+      "source_sha256": "4658c81d1e522f0161fb3da17897c6747b8658c06b48722bafafd1d0b49a6ebd",
+      "object_output": "arilou.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_ARILOU",
+      "production_profile": "production",
+      "provider": "native_object:native/arilou.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/blackurq/blackurq.c",
+      "source_sha256": "a93d90b6227dfe6d110e802670d9301fef68d8685624fff5847a4eba7dc778cc",
+      "object_output": "blackurq.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_BLACKURQ",
+      "production_profile": "production",
+      "provider": "native_object:native/blackurq.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/chenjesu/chenjesu.c",
+      "source_sha256": "fe8aed82218ba42afac7db4f93146813d9924bf0a8992eb1194505cdf02badf4",
+      "object_output": "chenjesu.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_CHENJESU",
+      "production_profile": "production",
+      "provider": "native_object:native/chenjesu.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/chmmr/chmmr.c",
+      "source_sha256": "7b473541066cf11121c05a812da305648f61ace1beaedc2cdaba8f84626450a7",
+      "object_output": "chmmr.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_CHMMR",
+      "production_profile": "production",
+      "provider": "native_object:native/chmmr.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/druuge/druuge.c",
+      "source_sha256": "8fe6f9fdfd21c7d86c4ac6e22726907047e86fd4ebde98ff913276d8640a3dc4",
+      "object_output": "druuge.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_DRUUGE",
+      "production_profile": "production",
+      "provider": "native_object:native/druuge.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/human/human.c",
+      "source_sha256": "c08a27a2040cc7501ee58c6c6ae86f755532f4f45d05de4d0c1acacf18cf257e",
+      "object_output": "human.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_HUMAN",
+      "production_profile": "production",
+      "provider": "native_object:native/human.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/ilwrath/ilwrath.c",
+      "source_sha256": "b2be48eb7c6b147e3502fd8cb12aa03ca175942e13b6f29ac9621e4595b8532c",
+      "object_output": "ilwrath.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_ILWRATH",
+      "production_profile": "production",
+      "provider": "native_object:native/ilwrath.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/lastbat/lastbat.c",
+      "source_sha256": "483ab1c99a68c56834bc1811da9ec4b0eb837ea22cb882d5694e99ca14be3b90",
+      "object_output": "lastbat.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_LASTBAT",
+      "production_profile": "production",
+      "provider": "native_object:native/lastbat.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/melnorme/melnorme.c",
+      "source_sha256": "e0a03824dc5ce1c575e1b214141633f8be54422e7a6c5ffcbbd99dbe403469c1",
+      "object_output": "melnorme.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_MELNORME",
+      "production_profile": "production",
+      "provider": "native_object:native/melnorme.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/mmrnmhrm/mmrnmhrm.c",
+      "source_sha256": "2f8187d507a584daf39dbbd6f6408a2f7958d22e540ac252e0717330119d5d03",
+      "object_output": "mmrnmhrm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_MMRNMHRM",
+      "production_profile": "production",
+      "provider": "native_object:native/mmrnmhrm.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/mycon/mycon.c",
+      "source_sha256": "8f039ef15ec370446a36630d3eec1ba4e426ed9708b1e224643cc3aeda383b26",
+      "object_output": "mycon.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_MYCON",
+      "production_profile": "production",
+      "provider": "native_object:native/mycon.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/orz/orz.c",
+      "source_sha256": "234edf55abc658d7c84bab6a945b1f020831ebfe4b42bd9ca240cf346b3b4612",
+      "object_output": "orz.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_ORZ",
+      "production_profile": "production",
+      "provider": "native_object:native/orz.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/pkunk/pkunk.c",
+      "source_sha256": "7c26e7b826774886811fb09176b3bd918ee4610b751cc3238e5b699ad781fdfc",
+      "object_output": "pkunk.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_PKUNK",
+      "production_profile": "production",
+      "provider": "native_object:native/pkunk.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/probe/probe.c",
+      "source_sha256": "39c2370ec8b6015e4e2a4b153ee40b6b1141e2b63a01c6c4d1959fbfd47416bc",
+      "object_output": "probe.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_PROBE",
+      "production_profile": "production",
+      "provider": "native_object:native/probe.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/shofixti/shofixti.c",
+      "source_sha256": "def4f3b82eb1067a1f875f5223970745e0209eb5106c60172e8261286d4f102b",
+      "object_output": "shofixti.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_SHOFIXTI",
+      "production_profile": "production",
+      "provider": "native_object:native/shofixti.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/sis_ship/sis_ship.c",
+      "source_sha256": "61969e35f980e0c8bb65f44e1bb211795029f0063f1523fe487c740beb99745a",
+      "object_output": "sis_ship.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_SIS_SHIP",
+      "production_profile": "production",
+      "provider": "native_object:native/sis_ship.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/slylandr/slylandr.c",
+      "source_sha256": "f523dd3afacb4663ac54e89094aed51f0469e48ff08a27df738c1081eea52db4",
+      "object_output": "slylandr.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_SLYLANDR",
+      "production_profile": "production",
+      "provider": "native_object:native/slylandr.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/spathi/spathi.c",
+      "source_sha256": "92ec69d814a76489be223ebc7ee14a47f4ff12cae6036fc4e34c3a77e74b8b7f",
+      "object_output": "spathi.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_SPATHI",
+      "production_profile": "production",
+      "provider": "native_object:native/spathi.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/supox/supox.c",
+      "source_sha256": "87e25c1a783609326e34d715d16494a90fb6492f14917d1e39d1a58a62270ece",
+      "object_output": "supox.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_SUPOX",
+      "production_profile": "production",
+      "provider": "native_object:native/supox.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/syreen/syreen.c",
+      "source_sha256": "51888f767dbf11948424e0c620f8e2fc65c13cf94dc6e19d047827b2809d02f1",
+      "object_output": "syreen.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_SYREEN",
+      "production_profile": "production",
+      "provider": "native_object:native/syreen.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/thradd/thradd.c",
+      "source_sha256": "d9add7161dd37a02acc52b3ed8f374d29309f1804af5145601c5cece6b9fcdcc",
+      "object_output": "thradd.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_THRADD",
+      "production_profile": "production",
+      "provider": "native_object:native/thradd.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/umgah/umgah.c",
+      "source_sha256": "93319ef5c301fbbff8d64909a8d98a99f6c567e48d9974d80a7618ecd08695a3",
+      "object_output": "umgah.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_UMGAH",
+      "production_profile": "production",
+      "provider": "native_object:native/umgah.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/urquan/urquan.c",
+      "source_sha256": "da2aeff8b3d8dd8305d7e581f7e3e1588dfcb00d718f1b2b48bab8a19d4d085c",
+      "object_output": "urquan.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_URQUAN",
+      "production_profile": "production",
+      "provider": "native_object:native/urquan.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/utwig/utwig.c",
+      "source_sha256": "172b0e07760b9aebb00d919f28dea261ab225ffab30b65e3b4025b98380ccd17",
+      "object_output": "utwig.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_UTWIG",
+      "production_profile": "production",
+      "provider": "native_object:native/utwig.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/vux/vux.c",
+      "source_sha256": "664ce99bbf5efa1c7e525374270367291babc52e4d0dae00fcfce600b4d838c8",
+      "object_output": "vux.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_VUX",
+      "production_profile": "production",
+      "provider": "native_object:native/vux.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/yehat/yehat.c",
+      "source_sha256": "10741cc167e4410803dceaa676b00cc479b9cf1677ba20e3d903138b77644f10",
+      "object_output": "yehat.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_YEHAT",
+      "production_profile": "production",
+      "provider": "native_object:native/yehat.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/ships/zoqfot/zoqfot.c",
+      "source_sha256": "8572a0d5346e8b3cb8ead83ce98f5bdad0b805c841bb25866a028c48d98e4783",
+      "object_output": "zoqfot.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIP_ZOQFOT",
+      "production_profile": "production",
+      "provider": "native_object:native/zoqfot.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/shipstat.c",
+      "source_sha256": "d50cb88987caf0106b3b957be7c070c20849c635095221f4d56f3771a899ef4f",
+      "object_output": "shipstat.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "SHIPS_CORE",
+      "production_profile": "production",
+      "provider": "native_object:native/shipstat.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/shipyard.c",
+      "source_sha256": "d28caace03efa0e8841e8d9135c67d098f44a38f9ef96eb049275082456bc8fd",
+      "object_output": "shipyard.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STARBASE",
+      "production_profile": "production",
+      "provider": "native_object:native/shipyard.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/sis.c",
+      "source_sha256": "67ee200db11ca93cdeda24d8aa9bf7bb41ab825cdda7611dc5715b04d02dfb05",
+      "object_output": "sis.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STATE",
+      "production_profile": "production",
+      "provider": "native_object:native/sis.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/sounds.c",
+      "source_sha256": "bb7be986e31a493f2a92af65e4a6d4e4e1b51d19c6dca3e3d0c31d67b78a0cc1",
+      "object_output": "sounds.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "AUDIO",
+      "production_profile": "production",
+      "provider": "native_object:native/sounds.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/starbase.c",
+      "source_sha256": "922c68530fecc617b404eed079aabb3144b73bb14c2f7068a4b758f78abc447f",
+      "object_output": "starbase.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STARBASE",
+      "production_profile": "production",
+      "provider": "native_object:native/starbase.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/starcon.c",
+      "source_sha256": "78547af6807f1191425946fe3f3c4e9297228d701562227309b0c1e937b709d5",
+      "object_output": "starcon.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/starcon.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/starmap.c",
+      "source_sha256": "cc4ffcece29cd69eeec4814096efb8117cfbec3c3758758cf05537c714d2068f",
+      "object_output": "starmap.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NAVIGATION",
+      "production_profile": "production",
+      "provider": "native_object:native/starmap.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/state.c",
+      "source_sha256": "ce68dd020139f06b35452b9ec5e86c822755709331789e9e6ef933cf70ada958",
+      "object_output": "state.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "STATE",
+      "production_profile": "production",
+      "provider": "native_object:native/state.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/status.c",
+      "source_sha256": "806505f6ea85e8ce555d6817bde34158266308aa51861b9385e6f5988215570d",
+      "object_output": "status.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "GFX",
+      "production_profile": "production",
+      "provider": "native_object:native/status.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/buildpick.c",
+      "source_sha256": "cad12c863ae10df92d506a65d60b28d5ce57a803549603b544120268d5c3019b",
+      "object_output": "buildpick.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "MELEE",
+      "production_profile": "production",
+      "provider": "native_object:native/buildpick.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/loadmele.c",
+      "source_sha256": "a63a5ad481a7e91e9b01b1e64986617ae75718afb99220b664a98760beceb294",
+      "object_output": "loadmele.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "MELEE",
+      "production_profile": "production",
+      "provider": "native_object:native/loadmele.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/melee.c",
+      "source_sha256": "c4381ccc0d3b1e11ff292b4d41ff7644b07d30ec76dcb02ff679b564d7baa7a9",
+      "object_output": "melee.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "MELEE",
+      "production_profile": "production",
+      "provider": "native_object:native/melee.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/meleesetup.c",
+      "source_sha256": "b87bdfa646e9528a97982167b0936237bb364b012603993f619a15637d41b1b9",
+      "object_output": "meleesetup.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "MELEE",
+      "production_profile": "production",
+      "provider": "native_object:native/meleesetup.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/checkbuf.c",
+      "source_sha256": "97dfb8092e21a3a63dcff0bebd6b3abd0f479f6d4ac46a219fb3dc1e0b1d2d7d",
+      "object_output": "checkbuf.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/checkbuf.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/checksum.c",
+      "source_sha256": "54bcf10ed590f1e35936969a66a3e441f3bd3cf48d18f13c204c634c4171e1fe",
+      "object_output": "checksum.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/checksum.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/crc.c",
+      "source_sha256": "3cd636daaa2c1067b1e124b7772b60b66b59ec359f0ff8bffa8b782cd781547c",
+      "object_output": "crc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/crc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netconnection.c",
+      "source_sha256": "a3283d622a225a64d58d2b4a79d02badf9876d93e2bb21cc9639000ab39cd7cd",
+      "object_output": "netconnection.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netconnection.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netinput.c",
+      "source_sha256": "a771a04f95acae53f877826d377f4067bde9497450d959af792111ea4b2703dc",
+      "object_output": "netinput.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netinput.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netmelee.c",
+      "source_sha256": "3390eb2207600d6eae09d6d5b4d839e77b92244a21f35fa6f9d50222599d3355",
+      "object_output": "netmelee.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netmelee.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netmisc.c",
+      "source_sha256": "aea05f3bafdc02db36f6bff65226d3c7433e53460b0fe4e59bf7fb03939796b8",
+      "object_output": "netmisc.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netmisc.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netoptions.c",
+      "source_sha256": "7bfaf1fc80935b28a81acca7d0a9322e1080958de80dde87212ade70b5c1c88c",
+      "object_output": "netoptions.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netoptions.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netrcv.c",
+      "source_sha256": "dcef9f169720c292dc50bf70c587456b9e0df3a6f0ba9b9cdba3146c049d1f9a",
+      "object_output": "netrcv.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netrcv.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netsend.c",
+      "source_sha256": "94688903997089e9985aa95c92f9197aae5a91cbb682a174ac48571130bfcaea",
+      "object_output": "netsend.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netsend.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/netstate.c",
+      "source_sha256": "fa87b39a15fd56262dc255efdec67f3fcc26b706a869e62e4d388a35e9d0379a",
+      "object_output": "netstate.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/netstate.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/notify.c",
+      "source_sha256": "1c3993151c202839052e7f463805b67234c052639a5ff8ba5e7232198733cad9",
+      "object_output": "notify.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/notify.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/notifyall.c",
+      "source_sha256": "3c204f0d7f2856fc09012c05cc0af635a5baaab8345f006e7c9279cda56e4717",
+      "object_output": "notifyall.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/notifyall.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/packet.c",
+      "source_sha256": "4b9f8a1054489d81fa716fdc1f1d164bfd0a43ffd832e54849d8cdb420bf1087",
+      "object_output": "packet.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/packet.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/packethandlers.c",
+      "source_sha256": "a78378fad354661e90bf3b47885a8a4fb192035c153eb13eeadd4e69bd4cf88d",
+      "object_output": "packethandlers.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/packethandlers.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/packetq.c",
+      "source_sha256": "8906da7b9cf3c088fe3ccc38310e7c441c6a9d8426d856eed82cb8bf355da01b",
+      "object_output": "packetq.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/packetq.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/packetsenders.c",
+      "source_sha256": "19dbbb087aa95ae4f7dd9362990d19f25c3468901b4d6ec0e9b27f9650e943bc",
+      "object_output": "packetsenders.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/packetsenders.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/proto/npconfirm.c",
+      "source_sha256": "8981364480e1f2e350df7214ff6c95abc515084849894fdfde34b34a0ca142c5",
+      "object_output": "npconfirm.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/npconfirm.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/proto/ready.c",
+      "source_sha256": "1f75f8374f5c84a0781ab32d02514a5b7c6ce554a6ebf872f77f6e82c6429571",
+      "object_output": "ready.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/ready.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/netplay/proto/reset.c",
+      "source_sha256": "420568a9a2d7b4b324a3a3377f43c5393084f60f198a28af1b2b54035d3c7f90",
+      "object_output": "reset.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "NETWORK",
+      "production_profile": "production",
+      "provider": "native_object:native/reset.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/supermelee/pickmele.c",
+      "source_sha256": "097c006cadb6e0ea17bb91d4f04548ed62fff0dc5b2c91b3c3b9176d0c758769",
+      "object_output": "pickmele.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "MELEE",
+      "production_profile": "production",
+      "provider": "native_object:native/pickmele.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/tactrans.c",
+      "source_sha256": "20694aaef62430b93f83451baa4178c09d2bff1945f3fe13e7323266967bc479",
+      "object_output": "tactrans.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/tactrans.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/uqmdebug.c",
+      "source_sha256": "d5d2620fcd2eeb6b7442bfb489fadd72b37cb4a1f590f4f56b40bd6f4e4b3adc",
+      "object_output": "uqmdebug.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "LIFECYCLE",
+      "production_profile": "production",
+      "provider": "native_object:native/uqmdebug.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/util.c",
+      "source_sha256": "624049b7c8a22daa5a173852a500d2388e4d7127669b2e5cf8768270170e1aeb",
+      "object_output": "util.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "CORE_NATIVE",
+      "production_profile": "production",
+      "provider": "native_object:native/util.c.o"
+    },
+    {
+      "source": "sc2/src/uqm/weapon.c",
+      "source_sha256": "2905ad2c303b326ca1f67a0b043759267d9a1d195c4abd2aa6cb89b0261b9465",
+      "object_output": "weapon.c.o",
+      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
+      "owner": "BATTLE",
+      "production_profile": "production",
+      "provider": "native_object:native/weapon.c.o"
+    }
+  ],
+  "production_profile": {
+    "id": "production",
+    "cargo_features": [
+      "audio_heart",
+      "linked_c_archive"
+    ],
+    "defines": [
+      {
+        "name": "GFXMODULE_SDL",
+        "value": null
+      },
+      {
+        "name": "SDL_DIR",
+        "value": "SDL2"
+      },
+      {
+        "name": "_THREAD_SAFE",
+        "value": null
+      },
+      {
+        "name": "USE_INTERNAL_MIKMOD",
+        "value": null
+      },
+      {
+        "name": "OVCODEC_NONE",
+        "value": null
+      },
+      {
+        "name": "NETPLAY",
+        "value": "NETPLAY_FULL"
+      },
+      {
+        "name": "HAVE_JOYSTICK",
+        "value": null
+      },
+      {
+        "name": "HAVE_ZIP",
+        "value": "1"
+      },
+      {
+        "name": "USE_PLATFORM_ACCEL",
+        "value": null
+      },
+      {
+        "name": "THREADLIB_SDL",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_BRIDGE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_FILE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_CLOCK",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_UIO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_OGG",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AUDIO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_COMM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_INPUT",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_VIDEO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_VIDPLAYER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_GFX",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_RESOURCE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MOD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_WAV",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_DUKAUD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AIFF",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_THREADS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MIXER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MEM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_STATE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SHIPS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SUPERMELEE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AUDIO_HEART",
+        "value": null
+      },
+      {
+        "name": "RUST_OWNS_MAIN",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MAINLOOP",
+        "value": "1"
+      }
+    ],
+    "compile_flags": [
+      "-std=gnu99",
+      "-O2",
+      "-fPIC"
+    ]
+  }
+}

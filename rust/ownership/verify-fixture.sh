@@ -12,7 +12,7 @@ verify_hash() {
     [ "$actual" = "$expected" ] || { echo "fixture provenance mismatch: $path" >&2; exit 1; }
 }
 
-verify_hash c634bc64fd7df94a29c41cfaa5d41119edf1b2a449f93db3202f22b648a64bf3 "$FIXTURES/queue-provider.rs"
+verify_hash f99bf7105764ab7dbff93550b9b0efaa1e361ae4943110d53decd72492f3361f "$FIXTURES/queue-provider.rs"
 verify_hash 76062c0fc7495bed6411058f7d75d4db1fb6c67a143043050bab611c90c1fd9c "$FIXTURES/queue-consumer.rs"
 
 rm -rf "$OUT"
@@ -25,7 +25,9 @@ printf '' > "$OUT/empty-provider.rs"
 rustc --edition 2021 --crate-name fixture_c --crate-type staticlib \
     "$OUT/empty-provider.rs" -o "$OUT/libfixture_c.a"
 
+AR_PATH=$(command -v ar)
+NM_PATH=$(command -v nm)
 cargo run --quiet --manifest-path "$ROOT/rust/ownership/Cargo.toml" -- \
     "$ROOT" symbol-artifacts "$OUT/libfixture_rust.a" "$OUT/libfixture_c.a" "$OUT/uqm-fixture" \
-    > "$OUT/ownership-fixture-report.json"
+    "$AR_PATH" "$NM_PATH" > "$OUT/ownership-fixture-report.json"
 printf 'focused strict-link fixture verified: %s\n' "$OUT"

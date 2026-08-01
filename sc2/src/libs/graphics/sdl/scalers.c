@@ -21,7 +21,7 @@
 #include "scalers.h"
 #include "scaleint.h"
 #include "2xscalers.h"
-#ifdef USE_PLATFORM_ACCEL
+#if defined(USE_PLATFORM_ACCEL) && !defined(USE_RUST_GFX)
 #	ifndef __APPLE__
 	// MacOS X framework has no SDL_cpuinfo.h for some reason
 #		include SDL_INCLUDE(SDL_cpuinfo.h)
@@ -29,7 +29,7 @@
 #	ifdef MMX_ASM
 #		include "2xscalers_mmx.h"
 #	endif /* MMX_ASM */
-#endif /* USE_PLATFORM_ACCEL */
+#endif /* USE_PLATFORM_ACCEL && !USE_RUST_GFX */
 
 #if SDL_MAJOR_VERSION == 1
 #define SDL_HasMMX SDL_HasMMXExt
@@ -190,11 +190,11 @@ typedef struct
 static const Scale_PlatDef_t
 Scale_PlatDefs[] =
 {
-#if defined(MMX_ASM)
+#if defined(MMX_ASM) && !defined(USE_RUST_GFX)
 	{SCALEPLAT_SSE,     Scale_SSE_Functions},
 	{SCALEPLAT_3DNOW,   Scale_3DNow_Functions},
 	{SCALEPLAT_MMX,     Scale_MMX_Functions},
-#endif /* MMX_ASM */
+#endif /* MMX_ASM && !USE_RUST_GFX */
 	// Default
 	{SCALEPLAT_NULL,    Scale_C_Functions}
 };

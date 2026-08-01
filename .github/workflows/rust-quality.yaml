@@ -3,22 +3,12 @@ name: Rust Quality Checks
 on:
   push:
     branches: [ main, develop, phase0-foundation ]
-    paths:
-      - rust/**
-      - .github/workflows/rust-quality.yaml
-      - dev-docs/rust/ownership-and-strict-linking.md
-      - dev-docs/rust/howtorun.md
-      - dev-docs/rust/howtoconfigure.md
-      - dev-docs/README.md
   pull_request:
     branches: [ main, develop ]
-    paths:
-      - rust/**
-      - .github/workflows/rust-quality.yaml
-      - dev-docs/rust/ownership-and-strict-linking.md
-      - dev-docs/rust/howtorun.md
-      - dev-docs/rust/howtoconfigure.md
-      - dev-docs/README.md
+
+concurrency:
+  group: rust-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ownership-strict-link:
@@ -44,6 +34,85 @@ jobs:
         with:
           name: ownership-s1-strict-link-fixture
           path: rust/target/ownership-strict-link-fixture/
+          if-no-files-found: error
+
+
+  reproducible-build-contract:
+    name: Clean checkout root command (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            expected_arch: x86_64
+            tuple: linux-x86_64
+          - os: ubuntu-24.04-arm
+            expected_arch: aarch64
+            tuple: linux-aarch64
+          - os: macos-15-intel
+            expected_arch: x86_64
+            tuple: macos-x86_64
+          - os: macos-15
+            expected_arch: arm64
+            tuple: macos-aarch64
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          clean: true
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          rustflags: ''
+          cache: false
+      - name: Assert official runner architecture
+        run: |
+          actual=$(uname -m)
+          test "$actual" = "${{ matrix.expected_arch }}" || { echo "expected ${{ matrix.expected_arch }}, got $actual"; exit 1; }
+      - name: Install Ubuntu production prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libsdl2-dev libpng-dev liblzma-dev libbz2-dev pkg-config
+      - name: Install macOS production prerequisites
+        if: runner.os == 'macOS'
+        run: brew install sdl2 libpng xz bzip2 pkg-config
+      - name: Validate root command and machine-readable matrix
+        run: |
+          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- doctor
+          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- matrix > rust/target-supported-matrix.json
+      - name: Test root-command negative fixtures
+        run: cargo test --locked --manifest-path rust/xtask/Cargo.toml --all-targets
+      - name: Prove strict production determinism from clean builds
+        run: |
+          rm rust/target-supported-matrix.json
+          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- prove
+      - name: Verify all S1 strict-link invariants
+        run: rust/ownership/verify-production.sh
+      - name: Reject exact target dependency-inventory drift
+        run: |
+          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- capture-dependencies
+          jq -n \
+            --slurpfile authority rust/build/native-dependencies.json \
+            --slurpfile capture "rust/target/native-dependencies-${{ matrix.tuple }}.candidate.json" \
+            --arg tuple "${{ matrix.tuple }}" '
+            ([$authority[0].dependencies[] | select(.targets | index($tuple)) | .path] | sort)
+            == ($capture[0].dependencies | sort)
+          ' | grep -qx true
+      - name: Upload reproducibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: reproducible-build-${{ matrix.tuple }}
+          path: |
+            rust/target/production-artifacts.json
+            rust/target-supported-matrix.json
+            rust/target/ownership-production-report.json
           if-no-files-found: error
 
   quality-gate:
@@ -135,8 +204,6 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Run tests with coverage
-        env:
-          LIBRARY_PATH: /opt/homebrew/lib:/usr/local/lib
         run: |
           cd rust
           cargo llvm-cov --lib --lcov --remap-path-prefix --output-path coverage-macos.lcov \

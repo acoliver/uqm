@@ -1,10 +1,5 @@
 [build]
 incremental = false
-rustflags = ["-L", "/opt/homebrew/Cellar/sdl2/2.32.10/lib"]
 
-[target.aarch64-apple-darwin]
-rustflags = ["-L", "/opt/homebrew/Cellar/sdl2/2.32.10/lib"]
-
-[env]
-SDL2_LIB_DIR = "/opt/homebrew/Cellar/sdl2/2.32.10/lib"
-SDL2_INCLUDE_DIR = "/opt/homebrew/Cellar/sdl2/2.32.10/include"
+# External prerequisites are discovered for the active target through
+# pkg-config. No workstation- or package-manager-specific path is valid here.

@@ -70,16 +70,23 @@ directory with a `specification.md`, analysis artifacts, and phased plan files.
 
 ---
 
-## Build Modes
+## Root Build Modes
 
-| Mode | Command | Result |
-|---|---|---|
-| Pure Rust checks/tests | `cargo test --manifest-path rust/Cargo.toml` | Does not consume the transitional native object tree |
-| Supported transitional production | `cargo build --manifest-path rust/Cargo.toml --release --features audio_heart,linked_c_archive --bin uqm` | Rust entry point plus the strictly linked manifest-selected archive and Rust audio heart |
+All build modes use the S2 Rust command interface from the repository root:
 
-The C build menu still toggles retained subsystem guards as a unit. Audio-heart
-is independently opt-in; `linked_c_archive` is the explicit Cargo boundary for
-production native linkage.
+| Mode | Command |
+|---|---|
+| Debug | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- debug` |
+| Release | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- release` |
+| Test | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- test` |
+| Probe | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- probe` |
+| Harness | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- harness` |
+| Production | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production` |
+| Package | `cargo run --locked --manifest-path rust/xtask/Cargo.toml -- package` |
+
+Production compiles the manifest-selected transitional inputs directly from
+tracked canonical source, never from `sc2/obj`. See `reproducible-build.md` for
+the matrix, target prerequisites, trend gate, and deterministic artifacts.
 
 ---
 
@@ -309,4 +316,4 @@ Full details are in `howtoconfigure.md`. The essential mental model:
 
 ## S1 Production Ownership Verification
 
-Production emits `provider-report.json` and exact-path `uqm-c-objects.manifest` beside `libuqm_c.a`. Run `rust/ownership/verify-production.sh`; it performs a forced production build, discovers only that invocation's artifacts from Cargo JSON, validates real archive membership and symbols, and records exact artifact hashes. Clean root orchestration remains S2 scope.
+Production emits `provider-report.json` and exact-path `uqm-c-objects.manifest` beside `libuqm_c.a`. Run `rust/ownership/verify-production.sh`; it does not force a build; it first recomputes live git, tracked-worktree, toolchain, target/profile/features, and all five artifact identities through `xtask verify`, then validates real archive membership and symbols. Run `xtask prove` first when fresh two-clean-build evidence is required. Clean root orchestration remains S2 scope.

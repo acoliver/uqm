@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use proptest::prelude::*;
 use uqm_ownership::{
     DiagnosticCode, ExternalImport, Manifest, ObjectProvider, ObservedSymbol, ProductionNm,
-    ProviderKind, SymbolState, ValidateOptions, Validator, DISPLIST_OBJECT, QUEUE_RUST_PROVIDER,
-    QUEUE_SYMBOLS,
+    ProviderKind, SymbolState, ValidateOptions, Validator, DISPLIST_OBJECT,
+    HASH_TABLE_RUST_PROVIDER, HASH_TABLE_SYMBOLS, QUEUE_RUST_PROVIDER, QUEUE_SYMBOLS,
 };
 
 fn manifest() -> Manifest {
@@ -30,22 +30,29 @@ fn valid_symbols() -> Vec<ObservedSymbol> {
             provider: QUEUE_RUST_PROVIDER.to_string(),
             state: SymbolState::DefinedInternal,
         })
+        .chain(HASH_TABLE_SYMBOLS.iter().map(|symbol| ObservedSymbol {
+            symbol: (*symbol).to_string(),
+            provider: HASH_TABLE_RUST_PROVIDER.to_string(),
+            state: SymbolState::DefinedInternal,
+        }))
         .collect()
 }
 fn valid_nm() -> ProductionNm {
     let definitions = QUEUE_SYMBOLS
         .iter()
-        .map(|symbol| format!("libuqm_rust.a(queue.o): 00000000 T _{symbol}"))
+        .chain(HASH_TABLE_SYMBOLS.iter())
+        .map(|symbol| format!("libuqm_rust.a(provider.o): 00000000 T _{symbol}"))
         .collect::<Vec<_>>()
         .join("\n");
     ProductionNm {
         rust_archive: definitions.clone(),
         c_archive: QUEUE_SYMBOLS
             .iter()
+            .chain(HASH_TABLE_SYMBOLS.iter())
             .map(|symbol| format!("libuqm_c.a(caller.o): U _{symbol}"))
             .collect::<Vec<_>>()
             .join("\n"),
-        executable: definitions.replace("libuqm_rust.a(queue.o)", "uqm"),
+        executable: definitions.replace("libuqm_rust.a(provider.o)", "uqm"),
         executable_details: String::new(),
     }
 }
@@ -187,7 +194,7 @@ fn recompiled_declarations_are_a_duplicate_free_archive_bijection() {
 
     let mut extra = original.clone();
     let mut extra_entry = extra.recompiled_objects[0].clone();
-    extra_entry.repo_relative_path = "sc2/src/extra.c".into();
+    extra_entry.canonical_source = "sc2/src/extra.c".into();
     extra_entry.object_output = "extra.o".into();
     extra.recompiled_objects.push(extra_entry);
     assert!(extra.validate_self().is_err());
@@ -263,7 +270,7 @@ fn missing_rust_provider_paths_and_duplicate_sidecar_lines_fail() {
             value
                 .recompiled_objects
                 .iter()
-                .map(|object| object.repo_relative_path.as_str()),
+                .map(|object| object.canonical_source.as_str()),
         )
         .collect::<Vec<_>>();
     let directory = tempfile::tempdir().unwrap();
@@ -282,34 +289,31 @@ fn missing_rust_provider_paths_and_duplicate_sidecar_lines_fail() {
 }
 
 #[test]
-fn production_profile_rejects_feature_and_c_flag_drift() {
+fn production_profile_requires_exact_typed_equality() {
     let validator = Validator::new(manifest());
-    let valid_features = ["audio_heart", "linked_c_archive"];
-    let build_vars = "-DUSE_RUST_BRIDGE -DUSE_RUST_AUDIO_HEART -DRUST_OWNS_MAIN";
-    let config = "#define USE_RUST_BRIDGE\n#define USE_RUST_AUDIO_HEART\n";
-    let recompile = format!("{build_vars} -DUSE_RUST_MAINLOOP=1");
-    validator
-        .validate_production_profile(&valid_features, build_vars, config, &recompile)
-        .unwrap();
+    let profile = validator.manifest().accepted_production_profile.clone();
+    validator.validate_production_profile(&profile).unwrap();
 
+    let mut missing = profile.clone();
+    missing.defines.pop();
+    assert!(validator.validate_production_profile(&missing).is_err());
+
+    let mut extra = profile.clone();
+    extra.defines.push(uqm_ownership::PreprocessorDefine {
+        name: "EXTRA".into(),
+        value: None,
+    });
+    assert!(validator.validate_production_profile(&extra).is_err());
+
+    let mut contradictory = profile;
+    contradictory
+        .defines
+        .push(uqm_ownership::PreprocessorDefine {
+            name: contradictory.defines[0].name.clone(),
+            value: Some("1".into()),
+        });
     assert!(validator
-        .validate_production_profile(&["linked_c_archive"], build_vars, config, &recompile)
-        .is_err());
-    assert!(validator
-        .validate_production_profile(
-            &valid_features,
-            "-DUSE_RUST_BRIDGE -DRUST_OWNS_MAIN",
-            config,
-            &recompile,
-        )
-        .is_err());
-    assert!(validator
-        .validate_production_profile(
-            &valid_features,
-            build_vars,
-            config,
-            "-DUSE_RUST_BRIDGE -DUSE_RUST_AUDIO_HEART -DRUST_OWNS_MAIN -DUSE_RUST_MAINLOOP=0",
-        )
+        .validate_production_profile(&contradictory)
         .is_err());
 }
 
@@ -357,9 +361,6 @@ fn duplicate_missing_stale_unassigned_and_drift_object_mutations_fail() {
     ));
 
     let root = tempfile::tempdir().unwrap();
-    let object_root = root.path().join("sc2/obj/release");
-    fs::create_dir_all(&object_root).unwrap();
-    fs::write(object_root.join("unknown.c.o"), b"unknown").unwrap();
     let error = Validator::new(manifest())
         .validate(&ValidateOptions {
             repo_root: root.path().to_path_buf(),
@@ -369,21 +370,21 @@ fn duplicate_missing_stale_unassigned_and_drift_object_mutations_fail() {
             check_strict_link: false,
         })
         .unwrap_err();
-    assert!(has(&error, DiagnosticCode::MissingFromManifest));
     assert!(has(&error, DiagnosticCode::MissingFromDisk));
 
     let mut stale = manifest();
-    stale
+    let source = stale
         .objects
-        .retain(|object| object.path.ends_with("unknown.c.o"));
-    stale.objects = vec![manifest().objects[0].clone()];
-    let relative = stale.objects[0]
-        .path
-        .strip_prefix("sc2/obj/release/")
+        .iter()
+        .find_map(|object| object.canonical_source.clone())
         .unwrap();
-    let target = object_root.join(relative);
+    let target = root.path().join(&source);
     fs::create_dir_all(target.parent().unwrap()).unwrap();
-    fs::write(target, b"stale").unwrap();
+    fs::write(target, b"stale canonical source").unwrap();
+    stale.objects.retain(|object| {
+        object.canonical_source.as_deref() == Some(source.as_str())
+            || object.canonical_source.is_none()
+    });
     let error = Validator::new(stale)
         .validate(&ValidateOptions {
             repo_root: root.path().to_path_buf(),
@@ -406,7 +407,7 @@ fn identity_traversal_collision_displist_and_archive_mutations_fail() {
     ));
 
     let mut traversal = manifest();
-    traversal.objects[0].path = "sc2/obj/release/../escape.c.o".into();
+    traversal.objects[0].path = "native/../escape.c.o".into();
     assert!(has(
         &traversal.validate_self().unwrap_err(),
         DiagnosticCode::PathViolation
@@ -421,7 +422,7 @@ fn identity_traversal_collision_displist_and_archive_mutations_fail() {
         .clone();
     let mut object = source.clone();
     object.path = format!(
-        "sc2/obj/release/collision/{}",
+        "native/collision/{}",
         PathBuf::from(&source.path)
             .file_name()
             .unwrap()

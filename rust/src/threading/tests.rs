@@ -602,9 +602,8 @@ fn test_hibernate_thread() {
     let start = std::time::Instant::now();
     hibernate_thread(Duration::from_millis(50));
     let elapsed = start.elapsed();
-    // Should have slept approximately 50ms (with some tolerance)
+    // Scheduling can delay wakeup, but hibernation must not return early.
     assert!(elapsed >= Duration::from_millis(40));
-    assert!(elapsed < Duration::from_millis(150));
 }
 
 // ============================================================================

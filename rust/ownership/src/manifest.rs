@@ -1,9 +1,11 @@
 //! Strongly typed native-provider manifest model.
 
 use crate::error::{Diagnostic, DiagnosticCode, OwnershipError};
+use crate::native::ProductionProfile;
+use crate::path::validate_repo_relative_path;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Component, Path};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Manifest {
@@ -12,7 +14,7 @@ pub struct Manifest {
     pub description: String,
     pub generated_from_ledger: LedgerRef,
     pub scan_root: String,
-    pub accepted_production_profile: AcceptedProductionProfile,
+    pub accepted_production_profile: ProductionProfile,
     #[serde(default)]
     pub recompiled_objects: Vec<RecompiledObject>,
     #[serde(default)]
@@ -26,21 +28,14 @@ pub struct Manifest {
 pub struct LedgerRef {
     pub schema: String,
     pub assessment_commit: String,
+    pub raw_revision: String,
     pub raw_url: String,
     pub gist_revision: String,
     pub sha256: String,
     pub projection_sha256: String,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AcceptedProductionProfile {
-    pub cargo_features: Vec<String>,
-    pub required_build_vars_flags: Vec<String>,
-    pub forbidden_build_vars_flags: Vec<String>,
-    pub required_config_defines: Vec<String>,
-    pub forbidden_config_defines: Vec<String>,
-    pub required_recompile_flags: Vec<String>,
-    pub forbidden_recompile_flags: Vec<String>,
-}
+pub type AcceptedProductionProfile = ProductionProfile;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ManifestObject {
     pub path: String,
@@ -53,6 +48,8 @@ pub struct ManifestObject {
     pub provider: ObjectProvider,
     pub reason: String,
     pub producing_command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub production_profile: Option<String>,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -138,13 +135,17 @@ pub struct NoTrackedNativeChange {
     pub removed_production_providers: Vec<String>,
     pub removed_permissive_link_modes: Vec<String>,
     pub retained_canonical_sources: Vec<String>,
-    pub canonical_owner: String,
+    pub canonical_owners: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecompiledObject {
-    pub repo_relative_path: String,
+    pub canonical_source: String,
+    pub source_sha256: String,
     pub object_output: String,
+    pub owner: String,
+    pub provider: ObjectProvider,
     pub producing_command: String,
+    pub production_profile: String,
 }
 
 impl Manifest {
@@ -188,6 +189,11 @@ impl Manifest {
                 crate::EXPECTED_ASSESSMENT_COMMIT,
             ),
             (
+                "generated_from_ledger.raw_revision",
+                ledger.raw_revision.as_str(),
+                crate::EXPECTED_LEDGER_RAW_REVISION,
+            ),
+            (
                 "generated_from_ledger.raw_url",
                 ledger.raw_url.as_str(),
                 crate::EXPECTED_LEDGER_RAW_URL,
@@ -221,6 +227,13 @@ impl Manifest {
                     format!("expected '{expected}', got '{actual}'"),
                 ));
             }
+        }
+        if let Err(detail) = crate::native::validate_profile(&self.accepted_production_profile) {
+            diagnostics.push(diag(
+                DiagnosticCode::MalformedManifest,
+                Some("accepted_production_profile"),
+                detail,
+            ));
         }
         if self.objects.len() != crate::EXPECTED_OBJECT_COUNT {
             diagnostics.push(diag(
@@ -368,17 +381,26 @@ impl Manifest {
         let mut outputs = BTreeSet::new();
 
         for item in &self.recompiled_objects {
-            check_path(&item.repo_relative_path, diagnostics);
+            check_path(&item.canonical_source, diagnostics);
             if item.object_output.contains('/')
                 || !item.object_output.ends_with(".o")
                 || item.producing_command.trim().is_empty()
+                || item.source_sha256.len() != 64
+                || !item
+                    .source_sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || item.owner.is_empty()
+                || item.provider.kind != ProviderKind::RecompiledNative
+                || item.provider.path != item.canonical_source
+                || item.production_profile != crate::native::PRODUCTION_PROFILE_ID
             {
-                diagnostics.push(diag(DiagnosticCode::MalformedManifest, Some(&item.repo_relative_path), "recompiled output must be an OUT_DIR filename and include its producing command"));
+                diagnostics.push(diag(DiagnosticCode::MalformedManifest, Some(&item.canonical_source), "recompiled identity must contain exact source, hash, output, owner/provider, command, and production profile"));
             }
-            if !sources.insert(item.repo_relative_path.as_str()) {
+            if !sources.insert(item.canonical_source.as_str()) {
                 diagnostics.push(diag(
                     DiagnosticCode::DuplicateObject,
-                    Some(&item.repo_relative_path),
+                    Some(&item.canonical_source),
                     "recompiled source is declared more than once",
                 ));
             }
@@ -423,33 +445,48 @@ impl Manifest {
                 ));
             }
             check_path(&contract.active_provider.path, diagnostics);
-            if contract.active_provider.kind != ProviderKind::RustSource
-                || contract.active_provider.path != crate::QUEUE_RUST_PROVIDER
+            let Some((owner, provider, excluded)) = expected_symbol_contract(&contract.symbol)
+            else {
+                diagnostics.push(diag(
+                    DiagnosticCode::UnassignedObject,
+                    Some(&contract.symbol),
+                    "symbol is not in the canonical internal ABI inventory",
+                ));
+                continue;
+            };
+            if contract.canonical_owner != owner
+                || contract.active_provider.kind != ProviderKind::RustSource
+                || contract.active_provider.path != provider
             {
                 diagnostics.push(diag(
                     DiagnosticCode::UnassignedObject,
                     Some(&contract.symbol),
-                    "queue symbol active provider must be the canonical Rust queue source",
+                    "symbol owner or active Rust provider differs from the canonical cutover",
                 ));
             }
-            if !contract
-                .excluded_providers
-                .iter()
-                .any(|p| p.kind == ProviderKind::NativeObject && p.path == crate::DISPLIST_OBJECT)
+            if contract.excluded_providers
+                != [ProviderRef {
+                    kind: ProviderKind::NativeObject,
+                    path: excluded.to_string(),
+                }]
             {
                 diagnostics.push(diag(
                     DiagnosticCode::MissingProvider,
                     Some(&contract.symbol),
-                    "queue contract must record excluded displist provider",
+                    "symbol contract must record its one superseded native provider",
                 ));
             }
         }
-        let expected: BTreeSet<_> = crate::QUEUE_SYMBOLS.iter().copied().collect();
+        let expected: BTreeSet<_> = crate::QUEUE_SYMBOLS
+            .iter()
+            .chain(crate::HASH_TABLE_SYMBOLS.iter())
+            .copied()
+            .collect();
         if symbols != expected {
             diagnostics.push(diag(
                 DiagnosticCode::ManifestDrift,
                 Some("symbol_contracts"),
-                "queue symbol inventory differs from the canonical ten exports",
+                "internal symbol inventory differs from the queue and hash-table ABI exports",
             ));
         }
         let external_names: BTreeSet<_> = self
@@ -469,17 +506,41 @@ impl Manifest {
         let declaration = &self.no_tracked_native_change;
         let valid = declaration.declared
             && declaration.tracked_native_file_delta == 0
-            && declaration.removed_production_providers == [crate::DISPLIST_OBJECT]
+            && declaration.removed_production_providers == crate::REMOVED_PRODUCTION_PROVIDERS
             && declaration.removed_permissive_link_modes == [crate::DYNAMIC_LOOKUP_FLAG]
-            && declaration.retained_canonical_sources
-                == ["sc2/src/uqm/displist.c", "sc2/src/uqm/displist.h"]
-            && declaration.canonical_owner == "COLLECTIONS/#37";
+            && declaration.retained_canonical_sources == crate::RETAINED_CANONICAL_SOURCES
+            && declaration.canonical_owners == crate::RETAINED_CANONICAL_OWNERS;
         if !valid {
             diagnostics.push(diag(
                 DiagnosticCode::ManifestDrift,
                 Some("no_tracked_native_change"),
-                "declaration differs from ledger v3 S1 boundary",
+                "declaration differs from ledger v5 S1/S2 provider and source-ownership boundary",
             ));
+        }
+        if self
+            .objects
+            .iter()
+            .any(|object| object.path == crate::REMOVED_HEAP_OBJECT)
+        {
+            diagnostics.push(diag(
+                DiagnosticCode::UnassignedObject,
+                Some(crate::REMOVED_HEAP_OBJECT),
+                "stale heap provider must not appear in production inventory",
+            ));
+        }
+        for path in [
+            crate::CHAR_HASH_TABLE_OBJECT,
+            crate::STRING_HASH_TABLE_OBJECT,
+        ] {
+            let object = self.objects.iter().find(|object| object.path == path);
+            if !matches!(object, Some(object) if object.archive_decision == ArchiveDecision::ExcludeReplaced && object.provider.kind == ProviderKind::RustSource && object.provider.path == crate::HASH_TABLE_RUST_PROVIDER)
+            {
+                diagnostics.push(diag(
+                    DiagnosticCode::DuplicateProvider,
+                    Some(path),
+                    "superseded hash-table object must be excluded for the sole Rust provider",
+                ));
+            }
         }
         let displist = self
             .objects
@@ -518,20 +579,34 @@ impl Manifest {
             .collect()
     }
 }
-fn check_path(path: &str, diagnostics: &mut Vec<Diagnostic>) {
-    let candidate = Path::new(path);
-    let canonical = !path.is_empty()
-        && !path.contains('\\')
-        && !path.ends_with('/')
-        && candidate
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)));
-    if !canonical {
-        diagnostics.push(diag(
-            DiagnosticCode::PathViolation,
-            Some(path),
-            "path must be a canonical repository-relative path",
+fn expected_symbol_contract(symbol: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    if crate::QUEUE_SYMBOLS.contains(&symbol) {
+        return Some((
+            "COLLECTIONS/#37",
+            crate::QUEUE_RUST_PROVIDER,
+            crate::DISPLIST_OBJECT,
         ));
+    }
+    if symbol.starts_with("CharHashTable_") && crate::HASH_TABLE_SYMBOLS.contains(&symbol) {
+        return Some((
+            crate::CHAR_HASH_TABLE_OWNER,
+            crate::HASH_TABLE_RUST_PROVIDER,
+            crate::CHAR_HASH_TABLE_OBJECT,
+        ));
+    }
+    if symbol.starts_with("StringHashTable_") && crate::HASH_TABLE_SYMBOLS.contains(&symbol) {
+        return Some((
+            crate::STRING_HASH_TABLE_OWNER,
+            crate::HASH_TABLE_RUST_PROVIDER,
+            crate::STRING_HASH_TABLE_OBJECT,
+        ));
+    }
+    None
+}
+
+fn check_path(path: &str, diagnostics: &mut Vec<Diagnostic>) {
+    if let Err(detail) = validate_repo_relative_path(path) {
+        diagnostics.push(diag(DiagnosticCode::PathViolation, Some(path), detail));
     }
 }
 fn diag(code: DiagnosticCode, path: Option<&str>, detail: impl Into<String>) -> Diagnostic {
