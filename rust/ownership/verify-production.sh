@@ -19,7 +19,10 @@ RUST_ARCHIVE="$ROOT/$(artifact_path rust_static_archive)"
 C_ARCHIVE="$ROOT/$(artifact_path c_static_archive)"
 EXECUTABLE="$ROOT/$(artifact_path executable)"
 
+AR_PATH=$(jq -er '.native_build.toolchain.ar.executable' "$MANIFEST")
+NM_PATH=$(jq -er '.native_build.toolchain.nm.executable' "$MANIFEST")
+
 cargo run --quiet --locked --manifest-path "$RUST_ROOT/ownership/Cargo.toml" -- \
-    "$ROOT" artifacts "$RUST_ARCHIVE" "$C_ARCHIVE" "$EXECUTABLE" > "$REPORT"
+    "$ROOT" artifacts "$RUST_ARCHIVE" "$C_ARCHIVE" "$EXECUTABLE" "$AR_PATH" "$NM_PATH" > "$REPORT"
 
 printf 'strict production ownership verified: report=%s\n' "$REPORT"

@@ -50,7 +50,7 @@ Production resolves one target-aware toolchain before Cargo runs: canonical exec
 
 Production uses sorted source and archive input order, unique fixed member names, optimized non-debug C compilation, `ZERO_AR_DATE=1`, a unified `rust/Cargo.lock`, disabled incremental compilation, and deterministic `__DATE__`/`__TIME__` definitions. Repeated builds from the same checkout, target, toolchain, package metadata, dependency set, compile profile, and source epoch must produce byte-identical `uqm` bytes.
 
-`rust/target/production-artifacts.json` records the executable, Rust static archive, C static archive, exact object sidecar, and provider report. Every entry includes role, repository-relative path, MIME type, byte length, SHA-256, and producing command. `prove` performs two full `cargo clean` builds, compares all five artifacts by length and SHA-256, and records both digest sets as the determinism proof consumed by CI. `package` copies the executable and manifest to `rust/target/uqm-package/<target>/` after replacing the prior package directory.
+`rust/target/production-artifacts.json` records the executable, Rust static archive, C static archive, exact object sidecar, and provider report. Every entry includes role, repository-relative path, MIME type, byte length, SHA-256, and producing command. `prove` performs two genuinely empty/full release builds (removing the entire `rust/target/release` directory between each build), compares source/toolchain identity first, then all five artifacts by byte length and SHA-256, and records both digest sets and build identities as the determinism proof consumed by CI. `package` first runs the full `prove` determinism proof and validates staged evidence before installing the executable and manifest to `rust/target/uqm-package/<target>/`.
 
 ## Clean-checkout replay
 
@@ -78,3 +78,13 @@ CI proves all declared tuples on official runners and checks `uname -m`: Ubuntu 
 ## Issue #23 boundary
 
 The broad all-feature linked-harness gate is currently failing and is explicitly owned by issue #23. Issue #22 validates only its focused production feature pair and strict linked production artifact contract; this document does not claim the broad all-feature harness passed, and no gate is weakened or excluded here.
+
+## Scaler pixel format contract: only_u8x4
+
+UQM's scaler contract is RGBA U8x4 (RGBA8888). The `fast_image_resize` dependency is configured with the `only_u8x4` feature, which restricts the compiled scaler to exclusively support the U8x4 (four u8 channels) pixel format. This is required because:
+
+1. UQM's framebuffer is always RGBA8888; no other pixel format is ever used.
+2. The `only_u8x4` feature eliminates dead code paths for U8, U16x2, U16x3, and F32 pixel types, reducing binary size and improving reproducibility.
+3. Any future change to this feature must be accompanied by a ledger amendment documenting the new pixel format contract.
+
+The resolved locked Cargo feature graph — including `fast_image_resize/only_u8x4` — is recorded in production artifact evidence (`rust/target/production-artifacts.json` under `cargo_feature_graph`) and verified by `verify` against the live `Cargo.lock`.

@@ -53,6 +53,15 @@ pub struct ProductionArtifacts {
     pub executable: PathBuf,
 }
 
+/// Canonical tool paths recorded in production evidence for strict validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProductionToolPaths {
+    /// Exact canonical `ar` executable path from production evidence.
+    pub ar: PathBuf,
+    /// Exact canonical `nm` executable path from production evidence.
+    pub nm: PathBuf,
+}
+
 /// The ownership validator.
 pub struct Validator {
     manifest: Manifest,
@@ -266,21 +275,23 @@ impl Validator {
     pub fn validate_production_artifacts(
         &self,
         artifacts: &ProductionArtifacts,
+        tools: &ProductionToolPaths,
     ) -> Result<ProductionArtifactReport, OwnershipError> {
-        self.validate_archive_file(&artifacts.c_archive)?;
-        self.validate_symbol_artifacts(artifacts)
+        self.validate_archive_file(&artifacts.c_archive, &tools.ar)?;
+        self.validate_symbol_artifacts(artifacts, tools)
     }
 
     /// Validate strict symbol ownership for a provenance-locked focused link fixture.
     pub fn validate_symbol_artifacts(
         &self,
         artifacts: &ProductionArtifacts,
+        tools: &ProductionToolPaths,
     ) -> Result<ProductionArtifactReport, OwnershipError> {
         let nm = ProductionNm {
-            rust_archive: run_nm(&["-g", "-A"], &artifacts.rust_archive)?,
-            c_archive: run_nm(&["-g", "-A"], &artifacts.c_archive)?,
-            executable: run_nm(&["-g", "-A"], &artifacts.executable)?,
-            executable_details: executable_details(&artifacts.executable)?,
+            rust_archive: run_nm_with(&tools.nm, &["-g", "-A"], &artifacts.rust_archive)?,
+            c_archive: run_nm_with(&tools.nm, &["-g", "-A"], &artifacts.c_archive)?,
+            executable: run_nm_with(&tools.nm, &["-g", "-A"], &artifacts.executable)?,
+            executable_details: executable_details_with(&tools.nm, &artifacts.executable)?,
         };
         self.validate_production_nm(&nm)?;
         Ok(ProductionArtifactReport {
@@ -316,8 +327,12 @@ impl Validator {
     }
 
     /// Validate actual `ar -t` member names against the manifest-selected archive.
-    pub fn validate_archive_file(&self, archive: &Path) -> Result<(), OwnershipError> {
-        let members = run_tool("ar", &["-t"], archive)?;
+    pub fn validate_archive_file(
+        &self,
+        archive: &Path,
+        ar_path: &Path,
+    ) -> Result<(), OwnershipError> {
+        let members = run_tool_path(ar_path, &["-t"], archive)?;
         let mut diagnostics = Vec::new();
         self.check_archive_members(&members, &mut diagnostics);
         if diagnostics.is_empty() {
@@ -610,30 +625,39 @@ fn normalize_contract_symbol(token: &str) -> Option<String> {
         .then(|| symbol.to_string())
 }
 
-fn run_tool(tool: &str, arguments: &[&str], artifact: &Path) -> Result<String, OwnershipError> {
+fn run_tool_path(
+    tool: &Path,
+    arguments: &[&str],
+    artifact: &Path,
+) -> Result<String, OwnershipError> {
     let output = Command::new(tool)
         .args(arguments)
         .arg(artifact)
         .output()
-        .map_err(|error| tool_error(tool, artifact, error.to_string()))?;
+        .map_err(|error| tool_error(&tool.to_string_lossy(), artifact, error.to_string()))?;
     if !output.status.success() {
         return Err(tool_error(
-            tool,
+            &tool.to_string_lossy(),
             artifact,
             String::from_utf8_lossy(&output.stderr),
         ));
     }
-    String::from_utf8(output.stdout).map_err(|error| tool_error(tool, artifact, error.to_string()))
+    String::from_utf8(output.stdout)
+        .map_err(|error| tool_error(&tool.to_string_lossy(), artifact, error.to_string()))
 }
 
-fn run_nm(arguments: &[&str], artifact: &Path) -> Result<String, OwnershipError> {
-    let output = Command::new(std::env::var_os("NM").unwrap_or_else(|| "nm".into()))
+fn run_nm_with(
+    nm_path: &Path,
+    arguments: &[&str],
+    artifact: &Path,
+) -> Result<String, OwnershipError> {
+    let output = Command::new(nm_path)
         .args(arguments)
         .arg(artifact)
         .output()
-        .map_err(|error| tool_error("nm", artifact, error.to_string()))?;
+        .map_err(|error| tool_error(&nm_path.to_string_lossy(), artifact, error.to_string()))?;
     let stdout = String::from_utf8(output.stdout)
-        .map_err(|error| tool_error("nm", artifact, error.to_string()))?;
+        .map_err(|error| tool_error(&nm_path.to_string_lossy(), artifact, error.to_string()))?;
     if output.status.success() {
         return Ok(stdout);
     }
@@ -645,13 +669,13 @@ fn run_nm(arguments: &[&str], artifact: &Path) -> Result<String, OwnershipError>
     if known_reader_diagnostics && !stdout.is_empty() {
         Ok(stdout)
     } else {
-        Err(tool_error("nm", artifact, stderr))
+        Err(tool_error(&nm_path.to_string_lossy(), artifact, stderr))
     }
 }
 
-fn executable_details(executable: &Path) -> Result<String, OwnershipError> {
+fn executable_details_with(nm_path: &Path, executable: &Path) -> Result<String, OwnershipError> {
     if cfg!(target_os = "macos") {
-        run_nm(&["-g", "-m", "-A"], executable)
+        run_nm_with(nm_path, &["-g", "-m", "-A"], executable)
     } else {
         Ok(String::new())
     }

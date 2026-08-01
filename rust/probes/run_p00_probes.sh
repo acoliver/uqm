@@ -2,8 +2,9 @@
 #
 # P00 Executable Preflight Probe Runner
 #
-# Executes all P00 feasibility probes and captures results.
-# This script runs real probes that execute assumptions, not grep-only inspections.
+# Executes all P00 feasibility probes using artifacts produced by the
+# canonical xtask production flow. Does not depend on sc2/build.vars,
+# ambient sc2/obj, or legacy build.sh.
 #
 # Usage:  bash probes/run_p00_probes.sh [output_log]
 #
@@ -28,56 +29,7 @@ echo ""
 
 echo "--- Build/Config/Tool Checks ---"
 
-# Verify build.vars has required capabilities (execute: source and test values)
-if [ ! -f "${REPO_ROOT}/sc2/build.vars" ]; then
-    echo "FAIL: sc2/build.vars not found"
-    exit 1
-fi
-
-# Execute: check that required USE_RUST_* flags are enabled
-REQUIRED_FLAGS="USE_RUST_THREADS USE_RUST_GFX USE_RUST_INPUT USE_RUST_COMM USE_RUST_RESOURCE"
-for flag in ${REQUIRED_FLAGS}; do
-    if ! grep -q "D${flag}" "${REPO_ROOT}/sc2/build.vars"; then
-        echo "FAIL: ${flag} not found in build.vars CFLAGS"
-        exit 1
-    fi
-    echo "PASS: ${flag} enabled in build.vars"
-done
-
-# Execute: verify C object directory exists and has production symbols
-OBJ_DIR="${REPO_ROOT}/sc2/obj/release"
-if [ ! -d "${OBJ_DIR}" ]; then
-    echo "FAIL: C object directory ${OBJ_DIR} does not exist"
-    echo "  Run: cd sc2 && ./build.sh uqm"
-    exit 1
-fi
-echo "PASS: C object directory exists"
-
-# Execute: verify required production object symbols exist via nm
-check_symbol() {
-    local obj_file="$1"
-    local symbol_name="$2"
-    local full_path="${OBJ_DIR}/${obj_file}"
-    if [ ! -f "${full_path}" ]; then
-        echo "FAIL: object file not found: ${full_path}"
-        return 1
-    fi
-    if ! nm -A "${full_path}" | grep -q "T _${symbol_name}$"; then
-        echo "FAIL: symbol _${symbol_name} not found in ${obj_file}"
-        return 1
-    fi
-    echo "PASS: ${symbol_name} defined in ${obj_file}"
-}
-
-check_symbol "src/uqm/gameinp.c.o" "DoInput" || exit 1
-check_symbol "src/uqm/gameinp.c.o" "AnyButtonPress" || exit 1
-check_symbol "src/uqm/confirm.c.o" "DoConfirmExit" || exit 1
-check_symbol "src/libs/graphics/sdl/sdl_common.c.o" "TFB_ProcessEvents" || exit 1
-check_symbol "src/libs/graphics/sdl/sdl_common.c.o" "TFB_SwapBuffers" || exit 1
-check_symbol "src/libs/input/sdl/input.c.o" "ProcessInputEvent" || exit 1
-check_symbol "src/libs/graphics/dcqueue.c.o" "TFB_FlushGraphicsEx" || exit 1
-
-# Execute: verify config_unix.h has required definitions
+# Verify config_unix.h has required definitions (tracked source, not build.vars)
 if [ ! -f "${REPO_ROOT}/sc2/config_unix.h" ]; then
     echo "FAIL: sc2/config_unix.h not found"
     exit 1
@@ -104,7 +56,7 @@ echo "--- Rust Binary Probes ---"
 
 # Build and run the probe binary, capturing all output
 set +e
-cargo run --bin p00_probes 2>&1 | tee "${OUTPUT_LOG}"
+cargo run --locked --manifest-path "${RUST_DIR}/Cargo.toml" --bin p00_probes 2>&1 | tee "${OUTPUT_LOG}"
 PROBE_EXIT=$?
 set -e
 
@@ -117,56 +69,88 @@ fi
 echo ""
 echo "--- Archive/Library Checks ---"
 
-# Execute: verify the package build script produces a matching archive and
-# manifest. Build the library target so this probe does not depend on the full
-# transitional C/Rust executable link.
-cargo check --lib >/dev/null
+# Build using the canonical production flow to get exact artifacts
+cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
 
-# Select the newest debug manifest, then use the archive from the same OUT_DIR.
-MANIFEST=$(find "${RUST_DIR}/target/debug/build" -name "uqm-c-objects.manifest" -type f -print0 2>/dev/null \
-    | xargs -0 ls -t 2>/dev/null | head -1)
-if [ -z "${MANIFEST}" ]; then
-    echo "FAIL: uqm-c-objects.manifest not found"
+MANIFEST="${RUST_DIR}/target/production-artifacts.json"
+if [ ! -f "${MANIFEST}" ]; then
+    echo "FAIL: production-artifacts.json not found"
     exit 1
 fi
-ARCHIVE="$(dirname "${MANIFEST}")/libuqm_c.a"
+
+# Extract the exact C archive path from production evidence
+C_ARCHIVE_ENTRY=$(python3 - "${MANIFEST}" <<'PYTHON'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    manifest = json.load(source)
+for artifact in manifest.get("artifacts", []):
+    if artifact.get("role") == "c_static_archive":
+        print(artifact["path"])
+        sys.exit(0)
+sys.exit(1)
+PYTHON
+) || {
+    echo "FAIL: c_static_archive not found in production manifest"
+    exit 1
+}
+ARCHIVE="${REPO_ROOT}/${C_ARCHIVE_ENTRY}"
+
 if [ ! -f "${ARCHIVE}" ]; then
-    echo "FAIL: matching libuqm_c.a not found beside ${MANIFEST}"
+    echo "FAIL: matching libuqm_c.a not found at ${ARCHIVE}"
     exit 1
 fi
 echo "PASS: libuqm_c.a found at ${ARCHIVE}"
 
+# Extract the exact object sidecar path from production evidence
+SIDECAR_ENTRY=$(python3 - "${MANIFEST}" <<'PYTHON'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    manifest = json.load(source)
+for artifact in manifest.get("artifacts", []):
+    if artifact.get("role") == "object_sidecar":
+        print(artifact["path"])
+        sys.exit(0)
+sys.exit(1)
+PYTHON
+) || {
+    echo "FAIL: object_sidecar not found in production manifest"
+    exit 1
+}
+SIDECAR="${REPO_ROOT}/${SIDECAR_ENTRY}"
+AR_PATH=$(python3 - "${MANIFEST}" <<'PYTHON'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    print(json.load(source)["native_build"]["toolchain"]["ar"]["executable"])
+PYTHON
+)
+
 # Execute: verify archive member extraction is deterministic
-MEMBER_COUNT=$(ar t "${ARCHIVE}" 2>/dev/null | wc -l | tr -d ' ')
+MEMBER_COUNT=$("${AR_PATH}" t "${ARCHIVE}" 2>/dev/null | wc -l | tr -d ' ')
 if [ "${MEMBER_COUNT}" -lt "10" ]; then
     echo "FAIL: archive has only ${MEMBER_COUNT} members (expected >=10)"
     exit 1
 fi
 echo "PASS: archive has ${MEMBER_COUNT} members"
-echo "PASS: deterministic manifest found at ${MANIFEST}"
 
 # Execute: verify members are sorted in manifest
-if ! LC_ALL=C sort -c "${MANIFEST}" 2>/dev/null; then
+if ! LC_ALL=C sort -c "${SIDECAR}" 2>/dev/null; then
     echo "FAIL: manifest is not sorted"
     exit 1
 fi
 echo "PASS: manifest is sorted"
 
-# Execute: verify required production members exist in the archive
 check_archive_member() {
     local member="$1"
-    if ! ar t "${ARCHIVE}" 2>/dev/null | grep -q "^${member}$"; then
+    if ! "${AR_PATH}" t "${ARCHIVE}" 2>/dev/null | grep -q "^${member}$"; then
         echo "FAIL: member ${member} not found in archive"
         return 1
     fi
     echo "PASS: ${member} in archive"
 }
 
-check_archive_member "gameinp_rust_main.o" || exit 1
-check_archive_member "confirm.c.o" || exit 1
-check_archive_member "sdl_common.c.o" || exit 1
-check_archive_member "input.c.o" || exit 1
-check_archive_member "dcqueue.c.o" || exit 1
+for member in gameinp_rust_main.o confirm.c.o sdl_common.c.o input.c.o dcqueue.c.o; do
+    check_archive_member "${member}" || exit 1
+done
 
 echo ""
 echo "=== P00 Probes Complete ==="

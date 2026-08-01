@@ -8,7 +8,7 @@ use std::process::Command;
 use uqm_ownership::{
     apply_toolchain_environment, canonical_absolute, canonical_build_environment,
     discover_package_identities, load_native_dependencies, load_native_inputs,
-    parse_dependency_file, reject_ambient_build_flags, resolve_toolchain, target_key,
+    parse_dependency_file, reject_noncanonical_build_flags, resolve_toolchain, target_key,
     validate_native_authority, validate_observed_dependencies, write_build_evidence,
     NativeBuildEvidence, NativeCompileProfile, NativeInputManifest, PreprocessorDefine,
     ToolchainIdentity, ValidateOptions, Validator, BUILD_EVIDENCE_FILE, BUILD_EVIDENCE_SCHEMA,
@@ -39,7 +39,7 @@ fn run() -> Result<(), String> {
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
-        reject_ambient_build_flags()?;
+        reject_noncanonical_build_flags(&toolchain)?;
         validate_toolchain_marker(&toolchain)?;
         let production_packages = if target_os == "macos" {
             &MACOS_PRODUCTION_PACKAGES[..]
@@ -471,7 +471,7 @@ fn create_and_validate_archive(
         "production archive creation",
     )?;
     validator
-        .validate_archive_file(&archive)
+        .validate_archive_file(&archive, Path::new(&context.toolchain.ar.executable))
         .map_err(|error| error.to_string())?;
     write_provider_report(validator, context.out_dir)?;
     emit_archive_link(context.target_os, context.out_dir, &archive)?;

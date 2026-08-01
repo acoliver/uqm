@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uqm_ownership::{
     apply_toolchain_environment, canonical_build_environment, discover_package_identities,
-    read_build_evidence, reject_ambient_build_flags, resolve_toolchain, NativeBuildEvidence,
-    ToolchainIdentity, BUILD_EVIDENCE_FILE, BUILD_EVIDENCE_SCHEMA, DEPENDENCY_FLAGS,
-    REPOSITORY_INCLUDE_ROOTS,
+    read_build_evidence, reject_ambient_build_flags, reject_noncanonical_build_flags,
+    resolve_toolchain, NativeBuildEvidence, ToolchainIdentity, BUILD_EVIDENCE_FILE,
+    BUILD_EVIDENCE_SCHEMA, DEPENDENCY_FLAGS, REPOSITORY_INCLUDE_ROOTS,
 };
 
 const PRODUCTION_FEATURES: &str = "audio_heart,linked_c_archive";
@@ -23,7 +23,7 @@ const TREND: &str = "rust/build/native-input-trend.json";
 const PRODUCTION_COMMAND: &str =
     "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production";
 const PROVE_COMMAND: &str = "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- prove";
-const ARTIFACT_SCHEMA: &str = "uqm-deterministic-artifacts-v3";
+const ARTIFACT_SCHEMA: &str = "uqm-deterministic-artifacts-v4";
 const PROOF_COMPARISON: &str = "byte_length_and_sha256_identical";
 const CLEAN_BUILD_COUNT: u8 = 2;
 const CARGO_BUILD_COMMAND: &str = "cargo build --locked --manifest-path rust/Cargo.toml --release --no-default-features --features audio_heart,linked_c_archive --bin uqm";
@@ -123,9 +123,17 @@ struct ArtifactManifest {
     target: String,
     profile: String,
     features: Vec<String>,
+    cargo_feature_graph: Vec<CargoFeatureEntry>,
     artifacts: Vec<Artifact>,
     #[serde(skip_serializing_if = "Option::is_none")]
     determinism_proof: Option<DeterminismProof>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+struct CargoFeatureEntry {
+    name: String,
+    version: String,
+    features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -184,9 +192,29 @@ struct ProductionPaths {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Preflight {
+    /// Full prerequisites plus strict source identity (reject untracked).
+    StrictSource,
+    /// Full prerequisites and contract validation.
     Full,
+    /// Contract validation only (no external prerequisites).
     ContractOnly,
+    /// Pure inspection, no validation.
     PureInspection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Profile {
+    Debug,
+    Release,
+}
+
+impl Profile {
+    fn flag(&self) -> Option<&'static str> {
+        match self {
+            Self::Debug => None,
+            Self::Release => Some("--release"),
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -212,8 +240,8 @@ fn run() -> Result<(), String> {
     }
     run_preflight(&root, preflight_for(&command)?)?;
     match command.as_str() {
-        "debug" => cargo(&root, &["build"]),
-        "release" => cargo(&root, &["build", "--release"]),
+        "debug" => build_profile(&root, Profile::Debug),
+        "release" => build_profile(&root, Profile::Release),
         "test" => test_all(&root),
         "probe" => run_script(&root, "rust/probes/run_p00_probes.sh"),
         "harness" => run_script(&root, "rust/harness/run_p00_harness.sh"),
@@ -234,17 +262,11 @@ fn usage() -> String {
 
 fn preflight_for(command: &str) -> Result<Preflight, String> {
     match command {
-        "debug"
-        | "release"
-        | "probe"
-        | "harness"
-        | "package"
-        | "production"
-        | "prove"
-        | "capture-dependencies"
-        | "doctor" => Ok(Preflight::Full),
-        "verify" => Ok(Preflight::ContractOnly),
-        "test" => Ok(Preflight::ContractOnly),
+        "production" | "prove" | "package" => Ok(Preflight::StrictSource),
+        "debug" | "release" | "probe" | "harness" | "capture-dependencies" | "doctor" => {
+            Ok(Preflight::Full)
+        }
+        "verify" | "test" => Ok(Preflight::ContractOnly),
         "matrix" => Ok(Preflight::PureInspection),
         _ => Err(format!("unknown command '{command}'\n{}", usage())),
     }
@@ -252,10 +274,46 @@ fn preflight_for(command: &str) -> Result<Preflight, String> {
 
 fn run_preflight(root: &Path, preflight: Preflight) -> Result<(), String> {
     match preflight {
+        Preflight::StrictSource => {
+            validate_contract(root, true)?;
+            reject_untracked_non_ignored(root)?;
+            Ok(())
+        }
         Preflight::Full => validate_contract(root, true).map(|_| ()),
         Preflight::ContractOnly => validate_contract(root, false).map(|_| ()),
         Preflight::PureInspection => Ok(()),
     }
+}
+
+fn reject_untracked_non_ignored(root: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["status", "--porcelain", "--untracked-files=normal"])
+        .output()
+        .map_err(|error| format!("cannot inspect untracked files: {error}"))?;
+    if !output.status.success() {
+        return Err("git could not inspect untracked files".into());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("?? ") {
+            if !is_gitignored(root, rest) {
+                return Err(format!(
+                    "untracked non-ignored file blocks proof/production/package: {rest}"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_gitignored(root: &Path, path: &str) -> bool {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(["check-ignore", "--quiet", "--"])
+        .arg(path)
+        .output();
+    matches!(output, Ok(out) if out.status.success())
 }
 
 fn repository_root() -> Result<PathBuf, String> {
@@ -267,36 +325,76 @@ fn repository_root() -> Result<PathBuf, String> {
         .ok_or_else(|| "xtask is not inside the repository".into())
 }
 
-fn cargo(root: &Path, arguments: &[&str]) -> Result<(), String> {
-    let (subcommand, options) = arguments
-        .split_first()
-        .ok_or_else(|| "Cargo subcommand is missing".to_string())?;
+fn build_profile(root: &Path, profile: Profile) -> Result<(), String> {
+    prepare_source_environment(root)?;
+    let toolchain = canonical_toolchain(root)?;
+    prepare_canonical_build(&toolchain)?;
+    let args = build_profile_args(profile);
     run_command(
-        Command::new("cargo")
+        Command::new(&toolchain.cargo.executable)
             .current_dir(root)
-            .arg(subcommand)
-            .args(["--locked", "--manifest-path", "rust/Cargo.toml"])
-            .args(options),
-        "Cargo",
+            .args(&args),
+        "Cargo build",
     )
 }
 
+fn build_profile_args(profile: Profile) -> Vec<String> {
+    let mut args = vec![
+        "build".to_string(),
+        "--locked".into(),
+        "--manifest-path".into(),
+        "rust/Cargo.toml".into(),
+    ];
+    if let Some(flag) = profile.flag() {
+        args.push(flag.into());
+    }
+    args.extend([
+        "--no-default-features".into(),
+        "--features".into(),
+        PRODUCTION_FEATURES.into(),
+        "--bin".into(),
+        "uqm".into(),
+    ]);
+    args
+}
+
 fn test_all(root: &Path) -> Result<(), String> {
-    cargo(root, &["test", "--workspace", "--all-targets"])
+    let toolchain = canonical_toolchain(root)?;
+    run_command(
+        Command::new(&toolchain.cargo.executable)
+            .current_dir(root)
+            .args([
+                "test",
+                "--locked",
+                "--manifest-path",
+                "rust/Cargo.toml",
+                "--workspace",
+                "--all-targets",
+            ]),
+        "Cargo test workspace",
+    )
+}
+fn prepare_source_environment(root: &Path) -> Result<(), String> {
+    env::set_var("SOURCE_DATE_EPOCH", source_date_epoch(root)?.to_string());
+    env::set_var("UQM_BUILD_DATE", source_date(root)?);
+    Ok(())
+}
+
+fn prepare_canonical_build(toolchain: &ToolchainIdentity) -> Result<(), String> {
+    reject_noncanonical_build_flags(toolchain)?;
+    apply_toolchain_environment(toolchain);
+    env::set_var(
+        "UQM_CANONICAL_TOOLCHAIN",
+        serde_json::to_string(toolchain)
+            .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?,
+    );
+    Ok(())
 }
 
 fn production(root: &Path) -> Result<ArtifactManifest, String> {
-    let epoch = source_date_epoch(root)?;
-    env::set_var("SOURCE_DATE_EPOCH", epoch.to_string());
-    env::set_var("UQM_BUILD_DATE", source_date(root)?);
+    prepare_source_environment(root)?;
     let toolchain = canonical_toolchain(root)?;
-    apply_toolchain_environment(&toolchain);
-    env::set_var(
-        "UQM_CANONICAL_TOOLCHAIN",
-        serde_json::to_string(&toolchain)
-            .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?,
-    );
-    reject_ambient_build_flags()?;
+    prepare_canonical_build(&toolchain)?;
     let paths = cargo_production(root, &toolchain)?;
     let manifest = artifact_manifest(root, paths, None)?;
     write_artifact_manifest(root, &manifest)?;
@@ -308,6 +406,14 @@ fn prove_determinism(root: &Path) -> Result<(), String> {
     let first = production(root)?;
     clean(root)?;
     let mut second = production(root)?;
+    let first_identity = build_identity(&first);
+    let second_identity = build_identity(&second);
+    if first_identity != second_identity {
+        return Err(
+            "source/toolchain identity differs across two clean builds before artifact comparison"
+                .into(),
+        );
+    }
     if first.artifacts != second.artifacts {
         return Err(describe_artifact_difference(
             &first.artifacts,
@@ -321,24 +427,42 @@ fn prove_determinism(root: &Path) -> Result<(), String> {
         comparison: PROOF_COMPARISON.to_string(),
         first_build: artifact_digests(&first.artifacts),
         second_build: artifact_digests(&second.artifacts),
-        first_identity: build_identity(&first),
-        second_identity: build_identity(&second),
+        first_identity,
+        second_identity,
     });
     write_artifact_manifest(root, &second)
 }
 
 fn clean(root: &Path) -> Result<(), String> {
+    let release_dir = root.join("rust/target/release");
+    let manifest_path = manifest_path_str(root)?;
+    let toolchain = canonical_toolchain(root)?;
+    clean_release_dir(&release_dir)?;
     run_command(
-        Command::new("cargo").current_dir(root).args([
-            "clean",
-            "--manifest-path",
-            "rust/Cargo.toml",
-            "--release",
-            "-p",
-            "uqm",
-        ]),
-        "Cargo clean",
+        Command::new(&toolchain.cargo.executable)
+            .current_dir(root)
+            .args(["clean", "--manifest-path", &manifest_path, "--release"]),
+        "Cargo clean release",
     )
+}
+
+fn manifest_path_str(root: &Path) -> Result<String, String> {
+    root.join("rust/Cargo.toml")
+        .to_str()
+        .map(str::to_string)
+        .ok_or_else(|| "rust/Cargo.toml manifest path is not UTF-8".to_string())
+}
+
+fn clean_release_dir(release_dir: &Path) -> Result<(), String> {
+    if release_dir.is_dir() {
+        fs::remove_dir_all(release_dir).map_err(|error| {
+            format!(
+                "cannot remove release directory {}: {error}",
+                release_dir.display()
+            )
+        })?;
+    }
+    Ok(())
 }
 
 fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<ProductionPaths, String> {
@@ -436,8 +560,11 @@ fn exactly_one(paths: BTreeSet<PathBuf>, label: &str) -> Result<PathBuf, String>
 }
 
 fn package(root: &Path) -> Result<(), String> {
-    let production = production(root)?;
-    let executable = production
+    prove_determinism(root)?;
+    verify_artifact_manifest(root)?;
+    let manifest: ArtifactManifest =
+        read_json(&root.join("rust/target/production-artifacts.json"))?;
+    let executable = manifest
         .artifacts
         .iter()
         .find(|item| item.role == "executable")
@@ -482,11 +609,22 @@ fn populate_package(root: &Path, executable: &Artifact, staging: &Path) -> Resul
     if hex_sha256(&packaged) != executable.sha256 {
         return Err("packaged executable digest differs from production invocation".into());
     }
-    fs::copy(
-        root.join("rust/target/production-artifacts.json"),
-        staging.join("production-artifacts.json"),
-    )
-    .map_err(|error| format!("cannot package artifact manifest: {error}"))?;
+    let manifest_source = root.join("rust/target/production-artifacts.json");
+    let manifest_staged = staging.join("production-artifacts.json");
+    fs::copy(&manifest_source, &manifest_staged)
+        .map_err(|error| format!("cannot package artifact manifest: {error}"))?;
+    let staged_bytes = fs::read(&manifest_staged)
+        .map_err(|error| format!("cannot read staged manifest: {error}"))?;
+    let source_bytes = fs::read(&manifest_source)
+        .map_err(|error| format!("cannot read source manifest: {error}"))?;
+    if staged_bytes != source_bytes {
+        return Err("staged manifest differs from source manifest".into());
+    }
+    let staged: ArtifactManifest = serde_json::from_slice(&staged_bytes)
+        .map_err(|error| format!("staged manifest is invalid: {error}"))?;
+    if staged.determinism_proof.is_none() {
+        return Err("staged manifest lacks mandatory determinism proof".into());
+    }
     Ok(())
 }
 
@@ -635,16 +773,12 @@ fn validate_linux_bzip2(cc: &str) -> Result<(), String> {
         .stdin(Stdio::piped())
         .spawn()
         .map_err(|error| format!("cannot execute {cc} for bzip2 prerequisite: {error}"))?;
-    let source = b"#include <bzlib.h>\nint main(void) { bz_stream stream = {0}; return BZ2_bzCompressInit(&stream, 1, 0, 0); }\n";
-    child
-        .stdin
-        .take()
-        .ok_or_else(|| format!("cannot open {cc} stdin for bzip2 prerequisite"))?
-        .write_all(source)
-        .map_err(|error| format!("cannot write bzip2 prerequisite probe: {error}"))?;
-    let status = child
+    let write_result = write_bzip2_probe(&mut child);
+    let wait_result = child
         .wait()
-        .map_err(|error| format!("cannot wait for bzip2 prerequisite probe: {error}"))?;
+        .map_err(|error| format!("cannot wait for bzip2 prerequisite probe: {error}"));
+    write_result?;
+    let status = wait_result?;
     if status.success() {
         Ok(())
     } else {
@@ -652,6 +786,17 @@ fn validate_linux_bzip2(cc: &str) -> Result<(), String> {
             "bzip2 header/library prerequisite failed with {status}; install libbz2-dev"
         ))
     }
+}
+
+fn write_bzip2_probe(child: &mut std::process::Child) -> Result<(), String> {
+    let source = b"#include <bzlib.h>\nint main(void) { bz_stream stream = {0}; return BZ2_bzCompressInit(&stream, 1, 0, 0); }\n";
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "cannot open stdin for bzip2 prerequisite".to_string())?;
+    stdin
+        .write_all(source)
+        .map_err(|error| format!("cannot write bzip2 prerequisite probe: {error}"))
 }
 
 fn print_matrix(root: &Path) -> Result<(), String> {
@@ -666,6 +811,7 @@ fn capture_dependencies(root: &Path) -> Result<(), String> {
     env::set_var("SOURCE_DATE_EPOCH", epoch.to_string());
     env::set_var("UQM_BUILD_DATE", source_date(root)?);
     let toolchain = canonical_toolchain(root)?;
+    reject_ambient_build_flags()?;
     apply_toolchain_environment(&toolchain);
     env::set_var(
         "UQM_CANONICAL_TOOLCHAIN",
@@ -740,6 +886,7 @@ fn artifact_manifest(
         )?,
     ];
     let native_build = read_build_evidence(&paths.build_evidence)?;
+    let cargo_feature_graph = resolve_cargo_feature_graph(root, &native_build.toolchain)?;
     Ok(ArtifactManifest {
         schema: ARTIFACT_SCHEMA.to_string(),
         git_head: git_text(root, &["rev-parse", "HEAD"], "full HEAD")?,
@@ -752,8 +899,84 @@ fn artifact_manifest(
         target: host_target()?,
         profile: "release".to_string(),
         features: vec!["audio_heart".to_string(), "linked_c_archive".to_string()],
+        cargo_feature_graph,
         artifacts,
         determinism_proof,
+    })
+}
+
+fn resolve_cargo_feature_graph(
+    root: &Path,
+    toolchain: &ToolchainIdentity,
+) -> Result<Vec<CargoFeatureEntry>, String> {
+    let output = Command::new(&toolchain.cargo.executable)
+        .current_dir(root.join("rust"))
+        .args([
+            "tree",
+            "--locked",
+            "--manifest-path",
+            "Cargo.toml",
+            "--no-default-features",
+            "--features",
+            PRODUCTION_FEATURES,
+            "--edges",
+            "normal,build",
+            "--prefix",
+            "none",
+            "--no-dedupe",
+            "--format",
+            "{p}|{f}",
+        ])
+        .output()
+        .map_err(|error| format!("cannot execute cargo tree for feature graph: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo tree feature graph failed with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    let text = String::from_utf8(output.stdout)
+        .map_err(|error| format!("cargo tree output is not UTF-8: {error}"))?;
+    let mut entries = BTreeMap::<(String, String), BTreeSet<String>>::new();
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        let entry = parse_cargo_tree_line(line)?;
+        entries
+            .entry((entry.name, entry.version))
+            .or_default()
+            .extend(entry.features);
+    }
+    Ok(entries
+        .into_iter()
+        .map(|((name, version), features)| CargoFeatureEntry {
+            name,
+            version,
+            features: features.into_iter().collect(),
+        })
+        .collect())
+}
+
+fn parse_cargo_tree_line(line: &str) -> Result<CargoFeatureEntry, String> {
+    let (package, features) = line
+        .split_once('|')
+        .ok_or_else(|| format!("cargo tree emitted malformed feature row: {line}"))?;
+    let mut words = package.split_whitespace();
+    let name = words
+        .next()
+        .ok_or_else(|| format!("cargo tree feature row lacks package name: {line}"))?;
+    let version = words
+        .next()
+        .and_then(|word| word.strip_prefix('v'))
+        .ok_or_else(|| format!("cargo tree feature row lacks package version: {line}"))?;
+    let features = features
+        .split(',')
+        .filter(|feature| !feature.is_empty())
+        .map(str::to_string)
+        .collect();
+    Ok(CargoFeatureEntry {
+        name: name.to_string(),
+        version: version.to_string(),
+        features,
     })
 }
 
@@ -828,6 +1051,10 @@ fn verify_artifact_manifest(root: &Path) -> Result<(), String> {
             "production proof is stale for live source, toolchain, target, or SOURCE_DATE_EPOCH"
                 .into(),
         );
+    }
+    let live_feature_graph = resolve_cargo_feature_graph(root, &toolchain)?;
+    if manifest.cargo_feature_graph != live_feature_graph {
+        return Err("locked Cargo feature graph differs from live Cargo.lock".into());
     }
     let expected_tuples = [
         (
@@ -1238,18 +1465,26 @@ mod tests {
 
     #[test]
     fn every_work_command_has_preflight_and_pure_exceptions_are_explicit() {
+        for command in ["production", "prove", "package"] {
+            assert_eq!(
+                preflight_for(command).unwrap(),
+                Preflight::StrictSource,
+                "{command} should have strict source preflight"
+            );
+        }
         for command in [
             "debug",
             "release",
             "probe",
             "harness",
-            "package",
-            "production",
-            "prove",
             "capture-dependencies",
             "doctor",
         ] {
-            assert_eq!(preflight_for(command).unwrap(), Preflight::Full);
+            assert_eq!(
+                preflight_for(command).unwrap(),
+                Preflight::Full,
+                "{command} should have full preflight"
+            );
         }
         assert_eq!(preflight_for("test").unwrap(), Preflight::ContractOnly);
         assert_eq!(preflight_for("verify").unwrap(), Preflight::ContractOnly);
@@ -1273,5 +1508,103 @@ mod tests {
         ] {
             assert!(message.contains(dimension));
         }
+    }
+
+    #[test]
+    fn clean_release_dir_removes_existing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let release = temp.path().join("release");
+        fs::create_dir_all(&release).unwrap();
+        fs::write(release.join("artifact.o"), b"data").unwrap();
+        clean_release_dir(&release).unwrap();
+        assert!(!release.exists());
+    }
+
+    #[test]
+    fn clean_release_dir_succeeds_when_directory_absent() {
+        let temp = tempfile::tempdir().unwrap();
+        let release = temp.path().join("nonexistent");
+        clean_release_dir(&release).unwrap();
+    }
+
+    #[test]
+    fn profile_flag_returns_release_only_for_release() {
+        assert_eq!(Profile::Debug.flag(), None);
+        assert_eq!(Profile::Release.flag(), Some("--release"));
+    }
+
+    #[test]
+    fn build_profile_args_includes_release_flag_for_release() {
+        let args = build_profile_args(Profile::Release);
+        assert!(args.contains(&"--release".to_string()));
+        assert!(args.contains(&PRODUCTION_FEATURES.to_string()));
+        assert!(args.contains(&"uqm".to_string()));
+    }
+
+    #[test]
+    fn build_profile_args_omits_release_flag_for_debug() {
+        let args = build_profile_args(Profile::Debug);
+        assert!(!args.contains(&"--release".to_string()));
+        assert!(args.contains(&"build".to_string()));
+    }
+
+    #[test]
+    fn parse_cargo_tree_line_extracts_real_cargo_features() {
+        let entry = parse_cargo_tree_line("fast_image_resize v5.5.0|only_u8x4").unwrap();
+        assert_eq!(entry.name, "fast_image_resize");
+        assert_eq!(entry.version, "5.5.0");
+        assert_eq!(entry.features, vec!["only_u8x4"]);
+    }
+
+    #[test]
+    fn parse_cargo_tree_line_ignores_package_annotations() {
+        let entry = parse_cargo_tree_line("clap_derive v4.6.4 (proc-macro)|default").unwrap();
+        assert_eq!(entry.name, "clap_derive");
+        assert_eq!(entry.version, "4.6.4");
+        assert_eq!(entry.features, vec!["default"]);
+    }
+
+    #[test]
+    fn parse_cargo_tree_line_handles_workspace_paths_and_empty_features() {
+        let entry = parse_cargo_tree_line("uqm v0.8.0 (/checkout/rust)|").unwrap();
+        assert_eq!(entry.name, "uqm");
+        assert_eq!(entry.version, "0.8.0");
+        assert!(entry.features.is_empty());
+    }
+
+    #[test]
+    fn parse_cargo_tree_line_rejects_malformed_rows() {
+        assert!(parse_cargo_tree_line("libc v0.2.0").is_err());
+        assert!(parse_cargo_tree_line("libc|default").is_err());
+    }
+
+    #[test]
+    fn artifact_schema_is_v4() {
+        assert_eq!(ARTIFACT_SCHEMA, "uqm-deterministic-artifacts-v4");
+    }
+
+    #[test]
+    fn prove_command_constant_includes_full_release_clean() {
+        assert!(PROVE_COMMAND.contains("prove"));
+        assert_eq!(CLEAN_BUILD_COUNT, 2);
+    }
+
+    #[test]
+    fn feature_graph_entries_are_sortable() {
+        let mut entries = [
+            CargoFeatureEntry {
+                name: "zlib".into(),
+                version: "1.0".into(),
+                features: vec![],
+            },
+            CargoFeatureEntry {
+                name: "abc".into(),
+                version: "2.0".into(),
+                features: vec!["only_u8x4".into()],
+            },
+        ];
+        entries.sort_by(|a, b| a.name.cmp(&b.name).then(a.version.cmp(&b.version)));
+        assert_eq!(entries[0].name, "abc");
+        assert_eq!(entries[1].name, "zlib");
     }
 }

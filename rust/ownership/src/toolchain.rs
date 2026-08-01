@@ -104,12 +104,15 @@ pub fn resolve_toolchain(root: &Path, target: &str) -> Result<ToolchainIdentity,
     let pkg_names = target_names("PKG_CONFIG", target, true);
     let linker_name = format!("CARGO_TARGET_{}_LINKER", target_env_suffix(target));
     let cc_selector = selector_refs(&cc_names, "cc");
+    let cc = resolve_tool(root, &cc_selector, &["--version"], &[])?;
+    let ar_selector = selector_refs(&ar_names, "ar");
+    let ar = resolve_archive_tool(root, &ar_selector, &cc)?;
     Ok(ToolchainIdentity {
         target: target.to_string(),
         rustc,
         cargo,
-        cc: resolve_tool(root, &cc_selector, &["--version"], &[])?,
-        ar: resolve_tool(root, &selector_refs(&ar_names, "ar"), &["--version"], &[])?,
+        cc: cc.clone(),
+        ar,
         nm: resolve_tool(root, &selector_refs(&nm_names, "nm"), &["--version"], &[])?,
         pkg_config: resolve_tool(
             root,
@@ -124,6 +127,29 @@ pub fn resolve_toolchain(root: &Path, target: &str) -> Result<ToolchainIdentity,
             &[],
         )?,
     })
+}
+
+fn resolve_archive_tool(
+    root: &Path,
+    requested: &str,
+    compiler: &ToolIdentity,
+) -> Result<ToolIdentity, String> {
+    if cfg!(target_os = "macos")
+        && Path::new(requested)
+            .file_name()
+            .is_some_and(|name| name == "ar")
+    {
+        let executable = find_executable(requested)?;
+        let bytes = fs::read(&executable)
+            .map_err(|error| format!("cannot hash tool {}: {error}", executable.display()))?;
+        return Ok(ToolIdentity {
+            executable: path_text(&executable),
+            version: compiler.version.clone(),
+            sha256: hex_sha256(&bytes),
+            effective_args: Vec::new(),
+        });
+    }
+    resolve_tool(root, requested, &["--version"], &[])
 }
 
 pub fn apply_toolchain_environment(toolchain: &ToolchainIdentity) {
@@ -150,7 +176,7 @@ pub fn canonical_build_environment(
     toolchain: &ToolchainIdentity,
     source_date_epoch: u64,
 ) -> BTreeMap<String, String> {
-    BTreeMap::from([
+    let mut env = BTreeMap::from([
         ("AR".into(), toolchain.ar.executable.clone()),
         ("CC".into(), toolchain.cc.executable.clone()),
         ("CFLAGS".into(), String::new()),
@@ -164,14 +190,118 @@ pub fn canonical_build_environment(
         ("RUSTFLAGS".into(), String::new()),
         ("SOURCE_DATE_EPOCH".into(), source_date_epoch.to_string()),
         ("ZERO_AR_DATE".into(), "1".into()),
-    ])
+    ]);
+    env.extend(effective_deployment_data());
+    env
 }
 
 pub fn reject_ambient_build_flags() -> Result<(), String> {
+    reject_base_build_flags()?;
+    reject_encoded_and_profile_overrides()?;
+    reject_target_specific_toolchain_overrides(None)?;
+    reject_sdk_and_deployment_overrides()?;
+    reject_pkg_config_overrides()
+}
+
+/// Reject artifact-affecting values that differ from the canonical xtask setup.
+pub fn reject_noncanonical_build_flags(toolchain: &ToolchainIdentity) -> Result<(), String> {
+    reject_base_build_flags()?;
+    reject_encoded_and_profile_overrides()?;
+    reject_target_specific_toolchain_overrides(Some(toolchain))?;
+    reject_sdk_and_deployment_overrides()?;
+    reject_pkg_config_overrides()
+}
+
+fn reject_base_build_flags() -> Result<(), String> {
     for variable in ["CFLAGS", "CPPFLAGS", "LDFLAGS", "RUSTFLAGS"] {
         if env::var_os(variable).is_some_and(|value| !value.is_empty()) {
             return Err(format!(
                 "{variable} is not accepted by the exact production profile; declare deterministic arguments in native-inputs.json"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_encoded_and_profile_overrides() -> Result<(), String> {
+    if env::var_os("CARGO_ENCODED_RUSTFLAGS").is_some_and(|value| !value.is_empty()) {
+        return Err(
+            "CARGO_ENCODED_RUSTFLAGS is not accepted by the exact production profile".into(),
+        );
+    }
+    for (name, _) in env::vars_os() {
+        let key = match name.into_string() {
+            Ok(key) => key,
+            Err(_) => continue,
+        };
+        if key.starts_with("CARGO_PROFILE_RELEASE_") {
+            return Err(format!(
+                "{key} is not accepted by the exact production profile; release profile is canonical"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_target_specific_toolchain_overrides(
+    canonical: Option<&ToolchainIdentity>,
+) -> Result<(), String> {
+    for (name, value) in env::vars_os() {
+        let key = match name.into_string() {
+            Ok(key) => key,
+            Err(_) => continue,
+        };
+        if !key.starts_with("CARGO_TARGET_") {
+            continue;
+        }
+        let expected = canonical.and_then(|toolchain| canonical_target_value(toolchain, &key));
+        if key.ends_with("_RUSTFLAGS") || expected.as_deref() != value.to_str() {
+            return Err(format!(
+                "{key} is a target-specific override channel; canonical toolchain resolution is authoritative"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn canonical_target_value(toolchain: &ToolchainIdentity, key: &str) -> Option<String> {
+    let prefix = format!("CARGO_TARGET_{}", target_env_suffix(&toolchain.target));
+    if !key.starts_with(&prefix) {
+        return None;
+    }
+    if key.ends_with("_LINKER") {
+        Some(toolchain.linker.executable.clone())
+    } else if key.ends_with("_AR") {
+        Some(toolchain.ar.executable.clone())
+    } else if key.ends_with("_CC") {
+        Some(toolchain.cc.executable.clone())
+    } else if key.ends_with("_NM") {
+        Some(toolchain.nm.executable.clone())
+    } else {
+        None
+    }
+}
+
+fn reject_sdk_and_deployment_overrides() -> Result<(), String> {
+    for variable in ["SDKROOT", "MACOSX_DEPLOYMENT_TARGET"] {
+        if env::var_os(variable).is_some_and(|value| !value.is_empty()) {
+            return Err(format!(
+                "{variable} is not accepted; canonical SDK and deployment target are authoritative"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn reject_pkg_config_overrides() -> Result<(), String> {
+    for variable in [
+        "PKG_CONFIG_PATH",
+        "PKG_CONFIG_SYSROOT_DIR",
+        "PKG_CONFIG_LIBDIR",
+    ] {
+        if env::var_os(variable).is_some_and(|value| !value.is_empty()) {
+            return Err(format!(
+                "{variable} is not accepted; pkg-config discovery is canonical"
             ));
         }
     }
@@ -184,6 +314,27 @@ pub fn production_packages(target: &str) -> &'static [&'static str] {
     } else {
         &COMMON_PRODUCTION_PACKAGES
     }
+}
+
+/// Capture effective target and deployment data for reproducibility evidence.
+///
+/// Returns a sorted map of environment variables that describe the effective
+/// target and deployment context. Unlike the rejected override channels, these
+/// are read-only observations used for recording, never for influencing the
+/// build.
+pub fn effective_deployment_data() -> BTreeMap<String, String> {
+    let mut data = BTreeMap::new();
+    if let Ok(value) = env::var("MACOSX_DEPLOYMENT_TARGET") {
+        if !value.is_empty() {
+            data.insert("effective_macos_deployment_target".into(), value);
+        }
+    }
+    if let Ok(value) = env::var("SDKROOT") {
+        if !value.is_empty() {
+            data.insert("effective_sdkroot".into(), value);
+        }
+    }
+    data
 }
 
 pub fn discover_package_identities(
@@ -257,24 +408,22 @@ fn resolve_tool(
         .args(version_args)
         .output()
         .map_err(|error| format!("cannot identify tool {}: {error}", canonical.display()))?;
-    if !output.status.success() && output.stdout.is_empty() && output.stderr.is_empty() {
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| format!("tool identity stdout is not UTF-8: {error}"))?;
+    if !output.status.success() {
         return Err(format!(
-            "tool identity command failed without identity output for {} with {}",
+            "tool identity command failed for {} with {}: {}",
             canonical.display(),
-            output.status
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    let mut version = String::from_utf8(output.stdout)
-        .map_err(|error| format!("tool identity stdout is not UTF-8: {error}"))?;
-    version.push_str(
-        &String::from_utf8(output.stderr)
-            .map_err(|error| format!("tool identity stderr is not UTF-8: {error}"))?,
-    );
+    let version = stdout.trim().to_string();
     let bytes = fs::read(&canonical)
         .map_err(|error| format!("cannot hash tool {}: {error}", canonical.display()))?;
     Ok(ToolIdentity {
         executable: path_text(&canonical),
-        version: version.trim().to_string(),
+        version,
         sha256: hex_sha256(&bytes),
         effective_args: effective_args.to_vec(),
     })
@@ -359,7 +508,8 @@ fn path_text(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::production_packages;
+    use super::*;
+    use serial_test::serial;
 
     #[test]
     fn production_packages_follow_platform_discovery() {
@@ -375,5 +525,149 @@ mod tests {
             production_packages("x86_64-unknown-linux-gnu"),
             ["sdl2", "libpng", "liblzma"]
         );
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_accepts_clean_environment() {
+        clean_environment_for_tests();
+        assert!(reject_ambient_build_flags().is_ok());
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_encoded_rustflags() {
+        clean_environment_for_tests();
+        env::set_var("CARGO_ENCODED_RUSTFLAGS", "--cfg=foo");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("CARGO_ENCODED_RUSTFLAGS"));
+        env::remove_var("CARGO_ENCODED_RUSTFLAGS");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_profile_release_overrides() {
+        clean_environment_for_tests();
+        env::set_var("CARGO_PROFILE_RELEASE_OPT_LEVEL", "3");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("CARGO_PROFILE_RELEASE_OPT_LEVEL"));
+        env::remove_var("CARGO_PROFILE_RELEASE_OPT_LEVEL");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_target_rustflags() {
+        clean_environment_for_tests();
+        env::set_var("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS", "--cfg=bar");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS"));
+        env::remove_var("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_target_linker_override() {
+        clean_environment_for_tests();
+        env::set_var("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER", "gcc-12");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER"));
+        env::remove_var("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_sdkroot_override() {
+        clean_environment_for_tests();
+        env::set_var(
+            "SDKROOT",
+            "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+        );
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("SDKROOT"));
+        env::remove_var("SDKROOT");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_deployment_target_override() {
+        clean_environment_for_tests();
+        env::set_var("MACOSX_DEPLOYMENT_TARGET", "11.0");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("MACOSX_DEPLOYMENT_TARGET"));
+        env::remove_var("MACOSX_DEPLOYMENT_TARGET");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_pkg_config_path_override() {
+        clean_environment_for_tests();
+        env::set_var("PKG_CONFIG_PATH", "/custom/path");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("PKG_CONFIG_PATH"));
+        env::remove_var("PKG_CONFIG_PATH");
+    }
+
+    #[test]
+    #[serial]
+    fn reject_ambient_build_flags_rejects_pkg_config_sysroot_override() {
+        clean_environment_for_tests();
+        env::set_var("PKG_CONFIG_SYSROOT_DIR", "/sysroot");
+        let error = reject_ambient_build_flags().unwrap_err();
+        assert!(error.contains("PKG_CONFIG_SYSROOT_DIR"));
+        env::remove_var("PKG_CONFIG_SYSROOT_DIR");
+    }
+
+    #[test]
+    #[serial]
+    fn effective_deployment_data_captures_set_values() {
+        clean_environment_for_tests();
+        env::set_var("MACOSX_DEPLOYMENT_TARGET", "12.0");
+        env::set_var("SDKROOT", "/some/sdk");
+        let data = effective_deployment_data();
+        assert_eq!(
+            data.get("effective_macos_deployment_target"),
+            Some(&"12.0".to_string())
+        );
+        assert_eq!(
+            data.get("effective_sdkroot"),
+            Some(&"/some/sdk".to_string())
+        );
+        env::remove_var("MACOSX_DEPLOYMENT_TARGET");
+        env::remove_var("SDKROOT");
+    }
+
+    #[test]
+    fn resolve_tool_rejects_every_nonzero_status() {
+        let root = std::env::current_dir().unwrap();
+        let error = resolve_tool(&root, "false", &["--version"], &[]);
+        assert!(error.is_err());
+        let message = error.unwrap_err();
+        assert!(
+            message.contains("tool identity command failed"),
+            "message was: {message}"
+        );
+    }
+
+    #[test]
+    fn resolve_tool_keeps_stderr_separate_from_successful_identity() {
+        let root = std::env::current_dir().unwrap();
+        let identity = resolve_tool(&root, "echo", &["1.0.0"], &[]).unwrap();
+        assert_eq!(identity.version, "1.0.0");
+    }
+
+    fn clean_environment_for_tests() {
+        env::remove_var("CFLAGS");
+        env::remove_var("CPPFLAGS");
+        env::remove_var("LDFLAGS");
+        env::remove_var("RUSTFLAGS");
+        env::remove_var("CARGO_ENCODED_RUSTFLAGS");
+        env::remove_var("SDKROOT");
+        env::remove_var("MACOSX_DEPLOYMENT_TARGET");
+        env::remove_var("PKG_CONFIG_PATH");
+        env::remove_var("PKG_CONFIG_SYSROOT_DIR");
+        env::remove_var("PKG_CONFIG_LIBDIR");
+        env::remove_var("CARGO_PROFILE_RELEASE_OPT_LEVEL");
+        env::remove_var("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS");
+        env::remove_var("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER");
     }
 }

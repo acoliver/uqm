@@ -113,14 +113,13 @@ fn validate_sizing(
 ) -> Result<TableSizing, ConstructorError> {
     if !min_fill_quotient.is_finite()
         || !max_fill_quotient.is_finite()
-        || min_fill_quotient < 0.0
         || max_fill_quotient <= 0.0
-        || min_fill_quotient > max_fill_quotient
-        || max_fill_quotient > 1.0
+        || max_fill_quotient < min_fill_quotient
     {
         return Err(ConstructorError::InvalidFillQuotient);
     }
-    let desired = ((initial_size.max(4) as f64) / max_fill_quotient).ceil();
+    let clamped = initial_size.max(4);
+    let desired = ((f64::from(clamped)) / max_fill_quotient).ceil();
     if desired > f64::from(u32::MAX) {
         return Err(ConstructorError::BucketCountOverflow);
     }
@@ -657,14 +656,19 @@ mod tests {
     }
 
     #[test]
-    fn constructor_validation_rejects_invalid_boundary_and_overflow_inputs() {
+    fn constructor_validation_preserves_historical_c_behavior() {
+        let (min, max) = (0.9, 0.8);
+        assert_eq!(
+            validate_sizing(4, min, max),
+            Err(ConstructorError::InvalidFillQuotient)
+        );
         for (min, max) in [
             (f64::NAN, 0.9),
-            (0.1, f64::INFINITY),
-            (-0.1, 0.9),
-            (0.9, 0.8),
+            (0.85, f64::NAN),
+            (f64::NEG_INFINITY, 0.9),
+            (0.85, f64::INFINITY),
             (0.0, 0.0),
-            (0.1, 1.000_001),
+            (-1.0, -0.5),
         ] {
             assert_eq!(
                 validate_sizing(4, min, max),

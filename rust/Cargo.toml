@@ -55,7 +55,12 @@ serde_json = "1" # @plan PLAN-20260723-RUNTIME-AUTOMATION.P01 @requirement REQ-D
 sha2 = "0.10" # @plan PLAN-20260723-RUNTIME-AUTOMATION.P03 @requirement REQ-IO-003
 
 mod_player = "0.1"
-fast_image_resize = "5.0"
+# UQM's scaler contract requires RGBA U8x4 pixel format exclusively.
+# The only_u8x4 feature disables all non-U8x4 pixel paths in fast_image_resize,
+# reducing code size and ensuring the scaler only compiles paths that match
+# UQM's RGBA8888 framebuffer format. This is a reproducibility and correctness
+# requirement: UQM never uses U8, U16, or F32 pixel types with the scaler.
+fast_image_resize = { version = "5.0", features = ["only_u8x4"] }
 
 [features]
 default = []

@@ -1,7 +1,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use uqm_ownership::{ProductionArtifacts, ValidateOptions, Validator};
+use uqm_ownership::{ProductionArtifacts, ProductionToolPaths, ValidateOptions, Validator};
 
 fn next_path(
     arguments: &mut impl Iterator<Item = std::ffi::OsString>,
@@ -39,11 +39,15 @@ fn run() -> Result<(), String> {
                 c_archive: next_path(&mut arguments, "C archive")?,
                 executable: next_path(&mut arguments, "executable")?,
             };
+            let tools = ProductionToolPaths {
+                ar: next_path(&mut arguments, "canonical ar path")?,
+                nm: next_path(&mut arguments, "canonical nm path")?,
+            };
             ensure_finished(&mut arguments)?;
             let report = if production {
-                validator.validate_production_artifacts(&artifacts)
+                validator.validate_production_artifacts(&artifacts, &tools)
             } else {
-                validator.validate_symbol_artifacts(&artifacts)
+                validator.validate_symbol_artifacts(&artifacts, &tools)
             }
             .map_err(|error| error.to_string())?;
             println!("{}", report.to_json().map_err(|error| error.to_string())?);
