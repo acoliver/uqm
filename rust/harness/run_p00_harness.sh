@@ -178,8 +178,7 @@ elif [ "${OS_NAME}" = "Linux" ]; then
     if ! "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
         -L"${OUT_DIR}" \
         -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
-        "${C_ARCHIVE}" \
-        "${RUST_ARCHIVE}" \
+        -Wl,--start-group "${C_ARCHIVE}" "${RUST_ARCHIVE}" -Wl,--end-group \
         ${PKG_LIBS} -lz -lm -lbz2 -lasound \
         -Wl,-Map,"${LINK_MAP}" \
         -o "${HARNESS_BIN}" 2>&1; then

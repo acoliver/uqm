@@ -127,20 +127,15 @@ pub unsafe extern "C" fn rust_tfb_init_graphics(
 }
 
 // ===========================================================================
-// #7 init_communication — delegate to C
+// #7 init_communication — Rust-owned communication state
 // ===========================================================================
 
-extern "C" {
-    fn init_communication();
-}
-
-/// Initialize the communication system.
-///
-/// Delegates to C `init_communication()` which sets up comm globals.
-/// The Rust comm module (`comm::`) has its own FFI layer that runs alongside.
+/// Initialize the communication system through its Rust implementation.
 #[no_mangle]
 pub extern "C" fn rust_init_communication() {
-    unsafe { init_communication() };
+    unsafe {
+        crate::comm::ffi::rust_InitCommunication();
+    }
     tracing::debug!("Communication system initialized");
 }
 

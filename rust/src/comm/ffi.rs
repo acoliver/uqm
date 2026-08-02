@@ -1437,8 +1437,7 @@ extern "C" {
 /// Ported from C's c_get_alliance_name: returns alliance name phrase text.
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
-#[allow(dead_code)]
-unsafe fn get_alliance_name(index: c_int) -> *const u8 {
+pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
     let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {

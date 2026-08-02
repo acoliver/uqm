@@ -38,8 +38,6 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 #[cfg(not(test))]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
     extern "C" {
-        #[allow(dead_code)]
-        fn c_get_alliance_name(index: i32) -> *const u8;
         fn SetAbsStringTableIndex(table: *mut c_void, index: i32) -> *mut c_void;
         #[allow(clashing_extern_declarations)]
         fn GetStringAddress(s: *mut c_void) -> *const u8;
@@ -58,7 +56,7 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
             // Direct GlobData.SIS_state.ShipName access
             std::ptr::addr_of_mut!(GlobData.sis_state.ship_name) as *const u8
         } else if index < 0 {
-            c_get_alliance_name(index)
+            crate::comm::ffi::get_alliance_name(index)
         } else if !phrases_handle.is_null() {
             // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
             let s = SetAbsStringTableIndex(phrases_handle as *mut _, index - 1);
