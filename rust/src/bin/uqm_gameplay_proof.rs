@@ -645,9 +645,11 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
 }
 
 fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
+    let root = fs::canonicalize(root)
+        .map_err(|error| format!("canonicalize LCAR root {}: {error}", root.display()))?;
     if manifest.command.len() != 7
         || manifest.command[0]
-            != artifact_path(root, manifest, ArtifactRole::ExecutableSnapshot)?
+            != artifact_path(&root, manifest, ArtifactRole::ExecutableSnapshot)?
                 .display()
                 .to_string()
         || manifest.command[1] != format!("--contentdir={}", command_content(&manifest.command[1])?)
@@ -671,7 +673,7 @@ fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> 
         .strip_prefix("--automation-script=")
         .ok_or_else(|| "script command argument is malformed".to_string())?;
     if script
-        != artifact_path(root, manifest, ArtifactRole::ScriptSnapshot)?
+        != artifact_path(&root, manifest, ArtifactRole::ScriptSnapshot)?
             .display()
             .to_string()
     {
@@ -1633,20 +1635,24 @@ mod tests {
         };
         write_new_json(&root.join("run/teardown-complete.json"), &teardown).unwrap();
         let artifacts = collect_artifacts(root).unwrap();
+        let canonical_root = fs::canonicalize(root).unwrap();
         let manifest = LcarManifest {
             schema: SCHEMA.into(),
             passed: true,
             first_failed_contract: None,
             git_head: "a".repeat(40),
             command: vec![
-                root.join("snapshots/uqm").display().to_string(),
+                canonical_root.join("snapshots/uqm").display().to_string(),
                 "--contentdir=/repo/sc2/content".into(),
-                format!("--configdir={}", root.join("config").display()),
+                format!("--configdir={}", canonical_root.join("config").display()),
                 format!(
                     "--automation-script={}",
-                    root.join("snapshots/script.json").display()
+                    canonical_root.join("snapshots/script.json").display()
                 ),
-                format!("--automation-output={}", root.join("run").display()),
+                format!(
+                    "--automation-output={}",
+                    canonical_root.join("run").display()
+                ),
                 "--res=640x480".into(),
                 "--windowed".into(),
             ],
