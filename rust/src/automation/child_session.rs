@@ -356,8 +356,8 @@ impl ProofResult {
 
 #[cfg(unix)]
 mod os {
-    use std::ffi::c_int;
-    use std::ffi::c_void;
+    #[cfg(target_os = "macos")]
+    use std::ffi::{c_int, c_void};
     use std::fs::{File, OpenOptions};
     use std::io::{self, ErrorKind, Read, Write};
     use std::path::{Path, PathBuf};
