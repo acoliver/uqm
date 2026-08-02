@@ -467,6 +467,13 @@ pub struct WaitForCommunicationEndStep {
     pub max_ticks: u64,
 }
 
+/// Wait for replay of the most recent alien phrase to become active.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForCommunicationReplayStep {
+    pub max_ticks: u64,
+}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -496,6 +503,8 @@ pub enum Action {
     AssertBattleFrames(BattleFramesAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
+    SeekCommunicationToEnd,
+    WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     Finish,
 }
@@ -1145,6 +1154,24 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         ),
                     })?;
             }
+            Action::WaitForCommunicationReplay(wait) => {
+                if wait.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_for_communication_replay max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(wait.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            wait.max_ticks
+                        ),
+                    })?;
+            }
             Action::NavigateToMoon(navigation) => {
                 if navigation.planet > 8 || navigation.moon > 3 {
                     return Err(AutomationError::step(
@@ -1304,7 +1331,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                 let to = parse_menu_item(&dto_inner.to, i, path)?;
                 transitions.push(MainMenuTransition::new(from, to));
             }
-            Action::Finish => {}
+            Action::SeekCommunicationToEnd | Action::Finish => {}
         }
     }
 
@@ -1537,9 +1564,10 @@ mod tests {
         let txt = r#"{
             "version":1,
             "name":"real-path-actions",
-            "budgets":{"max_input_ticks":65,"max_presentations":1,"max_wallclock_seconds":60},
+            "budgets":{"max_input_ticks":75,"max_presentations":1,"max_wallclock_seconds":60},
             "steps":[
                 {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
+                {"action":"wait_for_communication_replay","max_ticks":10},
                 {"action":"select_communication_response","index":0,"max_ticks":10},
                 {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
                 {"action":"navigate_to_orbit","planet":3,"max_ticks":10},
@@ -1555,6 +1583,9 @@ mod tests {
             [
                 Action::WaitForCommunicationEnd(WaitForCommunicationEndStep {
                     minimum_completions: 1,
+                    max_ticks: 10
+                }),
+                Action::WaitForCommunicationReplay(WaitForCommunicationReplayStep {
                     max_ticks: 10
                 }),
                 Action::SelectCommunicationResponse(SelectCommunicationResponseStep {
@@ -1585,6 +1616,7 @@ mod tests {
     fn rejects_zero_budgets_for_real_gameplay_waits() {
         for action in [
             r#"{"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":0}"#,
+            r#"{"action":"wait_for_communication_replay","max_ticks":0}"#,
             r#"{"action":"select_communication_response","index":0,"max_ticks":0}"#,
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,

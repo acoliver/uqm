@@ -76,6 +76,8 @@ struct CoordInner {
     consumed_dispatch_generation: u64,
     /// Most recent communication response generation selected semantically.
     consumed_response_generation: u64,
+    /// Most recent communication replay generation consumed semantically.
+    consumed_replay_generation: u64,
     /// Most recent planet-menu generation selected semantically.
     consumed_planet_menu_generation: u64,
     /// Require one callback after orbit navigation before accepting menu ownership.
@@ -154,6 +156,7 @@ impl Coordinator {
                 consumed_communication_completions,
                 consumed_dispatch_generation: 0,
                 consumed_response_generation: 0,
+                consumed_replay_generation: 0,
                 consumed_planet_menu_generation: 0,
                 release_semantic_select: false,
                 orbit_transition_pending: false,
@@ -291,13 +294,10 @@ impl Coordinator {
             return false;
         };
         let inner = coord.inner.lock();
-        coord
-            .actions
-            .get(inner.sched_state.step_index..)
-            .unwrap_or_default()
-            .iter()
-            .take(SEMANTIC_LOOKAHEAD)
-            .any(|action| matches!(action, Action::WaitForCommunicationEnd(_)))
+        matches!(
+            coord.actions.get(inner.sched_state.step_index),
+            Some(Action::WaitForCommunicationEnd(_))
+        )
     }
 
     /// Advance one scheduler callback at a synchronous boundary and report
@@ -438,6 +438,20 @@ impl Coordinator {
                         "communication_completed:count={completions}:minimum={}",
                         wait.minimum_completions
                     ),
+                );
+            }
+        } else if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::WaitForCommunicationReplay(_))
+        ) {
+            let (generation, _) =
+                crate::automation::ui_observation::communication_replay_observation();
+            if consume_new_generation(&mut inner.consumed_replay_generation, generation) {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    "communication_replay_active".to_owned(),
                 );
             }
         } else if let Some(Action::SelectCommunicationResponse(select)) =
@@ -1221,6 +1235,14 @@ impl Coordinator {
                 0,
             );
         }
+        if effects.seek_communication_to_end {
+            crate::comm::talk_segue::automation_seek_communication_to_end();
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                "communication_page_seeked_to_end".to_owned(),
+            );
+        }
         if let Some(gen) = effects.arm_capture {
             self.runtime.mirror.set_capture_generation(gen.0);
             // Store the capture label from the current action so we can
@@ -1456,6 +1478,14 @@ fn active_automation_status(
         .ok_or_else(|| "automation run ended without a terminal outcome".into())
 }
 
+fn consume_new_generation(consumed: &mut u64, observed: u64) -> bool {
+    if observed <= *consumed {
+        return false;
+    }
+    *consumed = observed;
+    true
+}
+
 /// Map a scheduler TerminalOutcome to a TerminalClass for the runtime mirror.
 fn map_scheduler_terminal(terminal: Option<TerminalOutcome>) -> TerminalClass {
     match terminal {
@@ -1477,6 +1507,16 @@ fn map_scheduler_terminal(terminal: Option<TerminalOutcome>) -> TerminalClass {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn replay_generation_is_consumed_once_and_retains_early_events() {
+        let mut consumed = 0;
+        assert!(consume_new_generation(&mut consumed, 1));
+        assert_eq!(consumed, 1);
+        assert!(!consume_new_generation(&mut consumed, 1));
+        assert!(consume_new_generation(&mut consumed, 2));
+        assert_eq!(consumed, 2);
+    }
 
     #[test]
     fn coordinator_not_active_by_default() {

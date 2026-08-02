@@ -1050,17 +1050,11 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
             #[allow(clashing_extern_declarations)]
             fn FadeMusic(target_vol: u8, duration: i16) -> std::ffi::c_uint;
         }
-        let skip_replay =
-            crate::automation::coordinator::Coordinator::should_skip_communication_closing_speech();
-        if skip_replay {
-            let _ = crate::sound::trackplayer::jump_track(0);
-        } else {
-            let timeout = FadeMusic(
-                0u8,
-                (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,
-            );
-            super::talk_segue::run_last_replay_bridge(timeout as i32);
-        }
+        let timeout = FadeMusic(
+            0u8,
+            (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,
+        );
+        super::talk_segue::run_last_replay_bridge(timeout as i32);
         return 0;
     }
 

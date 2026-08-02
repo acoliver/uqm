@@ -16,6 +16,14 @@
 use super::response::ResponseFunc;
 use super::state::CommState;
 
+fn communication_background_volume(background: u8, using_speech: i32) -> u8 {
+    if using_speech != 0 {
+        background / 2
+    } else {
+        background
+    }
+}
+
 // ============================================================================
 // Wait-track sentinel
 // ============================================================================
@@ -266,6 +274,18 @@ pub(super) mod c_bridge {
     }
 }
 
+/// Seek the current production communication page to its end for deterministic automation.
+#[cfg(not(test))]
+pub fn automation_seek_communication_to_end() {
+    extern "C" {
+        fn rust_FastForward_Page();
+    }
+    unsafe { rust_FastForward_Page() }
+}
+
+#[cfg(test)]
+pub fn automation_seek_communication_to_end() {}
+
 #[cfg(not(test))]
 pub mod dinput {
     #![allow(dead_code)]
@@ -305,6 +325,7 @@ pub mod dinput {
         input_func: unsafe extern "C" fn(*mut LastReplayStateDInput) -> c_int,
         next_time: u32,
         time_out: u32,
+        left_armed: c_int,
     }
 
     // DoInput callback for talk segue (replaces c_DoTalkSegue)
@@ -402,7 +423,7 @@ pub mod dinput {
         };
 
         if wait_track == 0 {
-            // Rewind mode
+            crate::automation::ui_observation::observe_communication_replay(true);
         } else if unsafe { c_bridge::PlayingTrack() } == 0 {
             unsafe { c_bridge::PlayTrack() };
         }
@@ -410,6 +431,9 @@ pub mod dinput {
         unsafe {
             SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
             DoInput(&mut ts as *mut _ as *mut c_void, 0);
+        }
+        if wait_track == 0 {
+            crate::automation::ui_observation::observe_communication_replay(false);
         }
         unsafe { c_bridge::comm_ClearSubtitles() };
 
@@ -444,19 +468,36 @@ pub mod dinput {
         let won_last_battle = (activity & 0xFF) == 5; // WON_LAST_BATTLE
         if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) } != 0 && !won_last_battle {
             let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
-            let vol = if speech != 0 {
-                c_bridge::music_volume::BACKGROUND as u8 / 2
-            } else {
-                c_bridge::music_volume::BACKGROUND as u8
-            };
-            c_bridge::FadeMusic(vol, c_bridge::ONE_SECOND_TICKS as i16);
+            c_bridge::FadeMusic(
+                super::communication_background_volume(
+                    crate::sound::types::NORMAL_VOLUME as u8,
+                    speech,
+                ),
+                c_bridge::ONE_SECOND_TICKS as i16,
+            );
             super::super::response_ui::select_conversation_summary_production();
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
-        } else if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0 {
-            super::super::response_ui::select_conversation_summary_production();
-            lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
-                + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+        } else {
+            let left_down = unsafe { c_bridge::current_menu_key(KEY_MENU_LEFT) } != 0;
+            if !left_down {
+                lrs.left_armed = 1;
+            } else if lrs.left_armed != 0
+                && unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0
+            {
+                lrs.left_armed = 0;
+                let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
+                c_bridge::FadeMusic(
+                    super::communication_background_volume(
+                        crate::sound::types::NORMAL_VOLUME as u8,
+                        speech,
+                    ),
+                    c_bridge::ONE_SECOND_TICKS as i16,
+                );
+                run_talk_segue_dinput(0);
+                lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
+                    + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
+            }
         }
 
         unsafe { super::do_update_animations(false) };
@@ -469,10 +510,12 @@ pub mod dinput {
 
     /// Ported from c_RunLastReplay — runs the last replay via DoInput.
     pub fn run_last_replay_dinput(timeout: i32) {
+        let left_down = unsafe { c_bridge::current_menu_key(KEY_MENU_LEFT) } != 0;
         let mut lrs = LastReplayStateDInput {
             input_func: do_last_replay_cb,
             next_time: 0,
             time_out: timeout as u32 + (c_bridge::ONE_SECOND_TICKS as u32) / 60,
+            left_armed: (!left_down) as c_int,
         };
         unsafe {
             DoInput(&mut lrs as *mut _ as *mut c_void, 0);
@@ -2454,7 +2497,19 @@ mod tests {
     }
 
     #[test]
-    fn test_waiting_automation_skips_unbounded_closing_replay() {
+    fn communication_background_volume_matches_speech_mode() {
+        assert_eq!(
+            super::communication_background_volume(crate::sound::types::NORMAL_VOLUME as u8, 0),
+            160
+        );
+        assert_eq!(
+            super::communication_background_volume(crate::sound::types::NORMAL_VOLUME as u8, 1),
+            80
+        );
+    }
+
+    #[test]
+    fn test_no_response_path_runs_production_last_replay() {
         let source = include_str!("ffi.rs");
         let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
             .expect("rust_DoCommunication must be in ffi.rs");
@@ -2463,8 +2518,12 @@ mod tests {
             .nth(1)
             .expect("rust_DoCommunication must contain the no-response branch");
         assert!(
-            no_response_branch.contains("Coordinator::should_skip_communication_closing_speech()"),
-            "automation waiting for communication end must not block inside the closing speech replay"
+            no_response_branch.contains("run_last_replay_bridge(timeout as i32)"),
+            "no-response communication must exercise the production last-replay input loop"
+        );
+        assert!(
+            !no_response_branch.contains("should_skip_communication_closing_speech"),
+            "automation must not bypass the production last-replay input loop"
         );
     }
     // ---- Test 9 ------------------------------------------------------------

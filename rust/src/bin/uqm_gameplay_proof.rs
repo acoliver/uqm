@@ -276,6 +276,7 @@ fn prepare_evidence(
         format!("--automation-output={}", run_root.display()),
         "--res=640x480".into(),
         "--windowed".into(),
+        "--scroll=pc".into(),
     ];
     let environment = BTreeMap::from([
         ("SDL_AUDIODRIVER".into(), "dummy".into()),
@@ -314,7 +315,7 @@ fn supervise_child(
         .arg(format!("--configdir={}", evidence.config_root.display()))
         .arg(format!("--automation-script={}", script.display()))
         .arg(format!("--automation-output={}", run_root.display()))
-        .args(["--res=640x480", "--windowed"])
+        .args(["--res=640x480", "--windowed", "--scroll=pc"])
         .current_dir(repo_root)
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
@@ -647,7 +648,7 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
 fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
     let root = fs::canonicalize(root)
         .map_err(|error| format!("canonicalize LCAR root {}: {error}", root.display()))?;
-    if manifest.command.len() != 7
+    if manifest.command.len() != 8
         || manifest.command[0]
             != artifact_path(&root, manifest, ArtifactRole::ExecutableSnapshot)?
                 .display()
@@ -658,6 +659,7 @@ fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> 
         || manifest.command[4] != format!("--automation-output={}", root.join("run").display())
         || manifest.command[5] != "--res=640x480"
         || manifest.command[6] != "--windowed"
+        || manifest.command[7] != "--scroll=pc"
     {
         return Err("recorded gameplay command is not the exact supported command".into());
     }
@@ -1660,6 +1662,7 @@ mod tests {
                 ),
                 "--res=640x480".into(),
                 "--windowed".into(),
+                "--scroll=pc".into(),
             ],
             environment: BTreeMap::from([
                 ("SDL_AUDIODRIVER".into(), "dummy".into()),
