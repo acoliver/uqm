@@ -1401,11 +1401,17 @@ mod os_tests {
         }
     }
 
+    fn delayed_command(script: &str) -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", &format!("sleep 1; {script}")]);
+        command
+    }
+
     #[test]
     fn normal_completion_exit_zero() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let cmd = Command::new("true");
+        let cmd = delayed_command("exit 0");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let receipt = session.finish().expect("finish");
         assert_eq!(receipt.exit_code, Some(0));
@@ -1419,7 +1425,7 @@ mod os_tests {
     fn normal_completion_exit_nonzero() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let cmd = Command::new("false");
+        let cmd = delayed_command("exit 1");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let receipt = session.finish().expect("finish");
         assert_eq!(receipt.exit_code, Some(1));
@@ -1429,8 +1435,7 @@ mod os_tests {
     fn stdout_drained_to_file() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "printf 'hello-stdout'"]);
+        let cmd = delayed_command("printf 'hello-stdout'");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let receipt = session.finish().expect("finish");
         assert_eq!(receipt.exit_code, Some(0));
@@ -1443,8 +1448,7 @@ mod os_tests {
     fn stderr_drained_to_file() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "printf 'hello-stderr' >&2"]);
+        let cmd = delayed_command("printf 'hello-stderr' >&2");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let receipt = session.finish().expect("finish");
         assert_eq!(receipt.exit_code, Some(0));
@@ -1457,8 +1461,7 @@ mod os_tests {
     fn stdout_and_stderr_both_drained() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "printf 'OUT'; printf 'ERR' >&2"]);
+        let cmd = delayed_command("printf 'OUT'; printf 'ERR' >&2");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let receipt = session.finish().expect("finish");
         assert_eq!(receipt.stdout_bytes, 3);
@@ -1516,8 +1519,7 @@ mod os_tests {
         let dir = TempDir::new().expect("tempdir");
         let mut config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
         config.stdout_budget = 4; // tiny budget
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "printf 'AAAAAAAAAA'"]); // 10 bytes > 4
+        let cmd = delayed_command("printf 'AAAAAAAAAA'"); // 10 bytes > 4
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let failure = session.finish().expect_err("expected budget error");
         assert!(failure.receipt.output_drained);
@@ -1536,8 +1538,7 @@ mod os_tests {
         let dir = TempDir::new().expect("tempdir");
         let mut config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
         config.stderr_budget = 4;
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", "printf 'BBBBBBBBBB' >&2"]);
+        let cmd = delayed_command("printf 'BBBBBBBBBB' >&2");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let failure = session.finish().expect_err("expected budget error");
         assert!(failure.receipt.output_drained);
@@ -1577,7 +1578,7 @@ mod os_tests {
     fn identity_captures_pid_and_start_time() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let cmd = Command::new("true");
+        let cmd = delayed_command("exit 0");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
         let id = session.identity();
         assert!(id.pid > 0);
