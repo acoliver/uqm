@@ -49,6 +49,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
+          rustflags: ''
       - name: Install production prerequisites
         run: |
           sudo apt-get update
