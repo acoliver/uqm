@@ -49,6 +49,8 @@
  * No battle implementation ownership transfers. */
 extern void rust_battle_frame_reset (void);
 extern void rust_battle_frame_advance (void);
+extern DWORD rust_automation_seed_value (DWORD domain, DWORD fallback);
+#define RUST_AUTOMATION_SEED_SUPER_MELEE_BATTLE 2
 #include "libs/mathlib.h"
 
 
@@ -406,12 +408,19 @@ BOOLEAN
 Battle (BattleFrameCallback *callback)
 {
 	SIZE num_ships;
+	DWORD automation_seed;
 
 
 #if !(DEMO_MODE || CREATE_JOURNAL)
 	if (LOBYTE (GLOBAL (CurrentActivity)) != SUPER_MELEE) {
-		// In Supermelee, the RNG is already initialised.
 		TFB_SeedRandom (GetTimeCounter ());
+	}
+	else
+	{
+		automation_seed = rust_automation_seed_value (
+				RUST_AUTOMATION_SEED_SUPER_MELEE_BATTLE, 0);
+		if (automation_seed != 0)
+			TFB_SeedRandom (automation_seed);
 	}
 #else /* DEMO_MODE */
 	if (BattleSeed == 0)

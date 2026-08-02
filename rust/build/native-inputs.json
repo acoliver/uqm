@@ -1192,7 +1192,7 @@
     },
     {
       "source": "sc2/src/uqm/battle.c",
-      "source_sha256": "8c5937a1a2342c62a8fe14a7eb5845fa9da0b9835abc3490297c4e020b39cfbc",
+      "source_sha256": "153d05dd8363edf26c8aff5f390c03397f17b57e43cfa254cb2a0367f74a00be",
       "object_output": "battle.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "BATTLE",
