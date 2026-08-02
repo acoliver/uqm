@@ -1457,6 +1457,11 @@ fn battle_evidence_digest(
         ) {
             record.elapsed_ms = 0;
             record.sequence = normalized.len() as u64;
+            record.input_seen = 0;
+            record.present_seen = 0;
+            if let Some(presentation) = &mut record.presentation {
+                presentation.count = 0;
+            }
             if let Some(seed) = &record.seed_application {
                 if seed.seed != AUTOMATION_SEED {
                     return Err("battle trace contains a noncanonical RNG seed".into());

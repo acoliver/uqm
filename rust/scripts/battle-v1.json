@@ -97,12 +97,12 @@
       "count": 60
     },
     {
-      "action": "capture",
-      "label": "battle-final"
-    },
-    {
       "action": "assert_battle_frames",
       "minimum": 30
+    },
+    {
+      "action": "capture",
+      "label": "battle-final"
     },
     {
       "action": "finish"
