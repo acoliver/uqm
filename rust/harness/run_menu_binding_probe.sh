@@ -114,9 +114,9 @@ verify_symbol() {
     local tmpfile
     tmpfile=$(mktemp)
     "${NM_PATH}" -A "${archive}" > "${tmpfile}" 2>/dev/null || true
-    if grep -q " T _${symbol}\$" "${tmpfile}"; then
+    if grep -Eq " T _?${symbol}\$" "${tmpfile}"; then
         local origin
-        origin=$(grep " T _${symbol}\$" "${tmpfile}" | head -1)
+        origin=$(grep -E " T _?${symbol}\$" "${tmpfile}" | head -1)
         echo "  PASS: ${symbol} defined in ${origin}"
         rm -f "${tmpfile}"
     else

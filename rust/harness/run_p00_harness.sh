@@ -180,6 +180,7 @@ if [ "${OS_NAME}" = "Darwin" ]; then
 elif [ "${OS_NAME}" = "Linux" ]; then
     if ! "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
         -L"${OUT_DIR}" \
+        -Wl,--gc-sections \
         -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
         -Wl,--start-group "${C_ARCHIVE}" "${RUST_ARCHIVE}" -Wl,--end-group \
         ${PKG_LIBS} -lz -lm -lbz2 -lasound \
