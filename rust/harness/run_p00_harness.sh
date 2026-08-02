@@ -95,8 +95,10 @@ echo ""
 # --- 1. Verify archive member symbol extraction (nm) ---
 echo "--- 1. Archive member symbol extraction (nm) ---"
 
+NM_LISTING=$(mktemp -t p00_nm_listing)
+"${NM_PATH}" -A "${C_ARCHIVE}" > "${NM_LISTING}"
 for sym in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do
-    member=$("${NM_PATH}" -A "${C_ARCHIVE}" 2>/dev/null | awk -v symbol="${sym}" '$(NF - 1) == "T" && ($NF == symbol || $NF == "_" symbol) { print; exit }')
+    member=$(awk -v symbol="${sym}" '$(NF - 1) == "T" && ($NF == symbol || $NF == "_" symbol) { print; exit }' "${NM_LISTING}")
     if [ -z "${member}" ]; then
         echo "FAIL: Symbol '${sym}' not found in ${C_ARCHIVE}"
         exit 1
@@ -125,7 +127,7 @@ HARNESS_MAIN=$(mktemp -t p00_harness_main).c
 LINK_MAP=$(mktemp -t p00_link_map).map
 HARNESS_BIN=$(mktemp -t p00_harness_bin)
 cleanup() {
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
+    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}" "${NM_LISTING}"
 }
 trap cleanup EXIT
 
