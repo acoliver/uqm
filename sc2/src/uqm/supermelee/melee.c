@@ -62,6 +62,11 @@
 
 
 #include <assert.h>
+
+/* Transitional consumer: Rust automation owns deterministic seed authority. */
+extern DWORD rust_automation_seed_value (DWORD domain, DWORD fallback);
+#define RUST_AUTOMATION_SEED_SUPER_MELEE_MENU 1
+#define RUST_AUTOMATION_SEED_SUPER_MELEE_BATTLE 2
 #include <string.h>
 
 #ifdef USE_RUST_SUPERMELEE
@@ -1292,6 +1297,9 @@ numPlayersReady (void)
 static BOOLEAN
 DoConfirmSettings (MELEE_STATE *pMS)
 {
+#ifndef NETPLAY
+	DWORD seed, automation_seed;
+#endif
 #ifdef NETPLAY
 	ssize_t numDone;
 #endif
@@ -1327,7 +1335,11 @@ DoConfirmSettings (MELEE_STATE *pMS)
 
 #ifndef NETPLAY
 	pMS->InputFunc = DoMelee;
-	SeedRandomNumbers ();
+	seed = SeedRandomNumbers ();
+	automation_seed = rust_automation_seed_value (
+			RUST_AUTOMATION_SEED_SUPER_MELEE_BATTLE, seed);
+	if (automation_seed != seed)
+		TFB_SeedRandom (automation_seed);
 	pMS->meleeStarted = TRUE;
 	StartMelee (pMS);
 	pMS->meleeStarted = FALSE;
@@ -2063,7 +2075,9 @@ Melee (void)
 
 		MenuState.randomContext = RandomContext_New ();
 		RandomContext_SeedRandom (MenuState.randomContext,
-				GetTimeCounter ());
+				rust_automation_seed_value (
+						RUST_AUTOMATION_SEED_SUPER_MELEE_MENU,
+						GetTimeCounter ()));
 				// Using the current time still leaves the random state a bit
 				// predictable, but it is good enough.
 

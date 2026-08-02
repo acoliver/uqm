@@ -13,6 +13,7 @@ use crate::automation::error::AutomationError;
 use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::RuntimeModel;
 use crate::automation::trace::{OrderedCommit, RecordKind, TraceRecord};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 // ===========================================================================
@@ -67,20 +68,30 @@ pub fn map_status(terminal: Option<TerminalClass>, game_result: i32) -> i32 {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P05
 /// @requirement REQ-EXIT-009
+/// Closed receipt containing only facts observed by the child lifecycle.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct TeardownReceipt {
+    pub schema: String,
+    pub terminal: Option<TerminalClass>,
+    pub game_status: i32,
+    pub process_status: i32,
+    pub runtime_finalized: bool,
+    pub runtime_deactivated: bool,
+    pub callbacks_quiescent: bool,
+    pub trace_durable: bool,
+}
+
+/// Durably publish a typed child teardown receipt.
 pub fn write_teardown_receipt(
     output_root: &Path,
-    terminal: Option<TerminalClass>,
-    game_result: i32,
+    receipt: &TeardownReceipt,
 ) -> Result<DurableResult, AutomationError> {
-    let status = map_status(terminal, game_result);
-    let content = format!(
-        r#"{{"schema":1,"status":{status},"terminal":"{terminal_str}"}}"#,
-        terminal_str = match terminal {
-            Some(t) => format!("{t:?}"),
-            None => "None".into(),
-        }
-    );
-    write_durable(output_root, "teardown-complete", "json", content.as_bytes())
+    let content = serde_json::to_vec(receipt).map_err(|error| AutomationError::InvalidJson {
+        path: output_root.display().to_string(),
+        reason: error.to_string(),
+    })?;
+    write_durable(output_root, "teardown-complete", "json", &content)
 }
 
 // ===========================================================================
@@ -138,19 +149,41 @@ pub fn run_lifecycle<L: GameLifecycle>(
     let game_result = lifecycle.run_game();
 
     // Step 4: Automation finalize.
-    let terminal = if let Some(rt) = runtime {
-        let _ = rt.finalize();
-        rt.mirror.terminal.load()
-    } else {
-        None
-    };
+    let (terminal, runtime_finalized, runtime_deactivated, callbacks_quiescent) =
+        if let Some(rt) = runtime {
+            let finalized = matches!(
+                rt.finalize(),
+                crate::automation::runtime::FinalizationResult::Finalized
+            );
+            (
+                rt.mirror.terminal.load(),
+                finalized,
+                !rt.mirror.is_active(),
+                !rt.can_write(),
+            )
+        } else {
+            (None, false, true, true)
+        };
 
     // Step 5: Teardown subsystems (no automation mutex/I/O lock held).
     lifecycle.teardown_subsystems();
 
     // Step 6: Teardown receipt (only after teardown returns).
     let receipt_written = if let Some(root) = output_root {
-        write_teardown_receipt(root, terminal, game_result).is_ok()
+        write_teardown_receipt(
+            root,
+            &TeardownReceipt {
+                schema: "uqm-teardown-v1".into(),
+                terminal,
+                game_status: game_result,
+                process_status: map_status(terminal, game_result),
+                runtime_finalized,
+                runtime_deactivated,
+                callbacks_quiescent,
+                trace_durable: false,
+            },
+        )
+        .is_ok()
     } else {
         false
     };
@@ -192,6 +225,9 @@ pub fn write_lifecycle_trace(
             from: None,
             to: None,
             terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: None,
         };
         let jsonl = record.to_jsonl()?;
         let res = commit.reserve_sequence(*sequence);
@@ -365,8 +401,10 @@ mod tests {
         assert!(result.receipt_written);
         assert!(lc.teardown_called);
         assert!(dir.join("teardown-complete.json").exists());
-        let content = std::fs::read_to_string(dir.join("teardown-complete.json")).unwrap();
-        assert!(content.contains(r#""status":0"#));
+        let content = std::fs::read(dir.join("teardown-complete.json")).unwrap();
+        let receipt: TeardownReceipt = serde_json::from_slice(&content).unwrap();
+        assert_eq!(receipt.process_status, 0);
+        assert_eq!(receipt.game_status, 0);
     }
 
     // --- Lifecycle: receipt not written before teardown (REQ-EXIT-009 ordering) ---

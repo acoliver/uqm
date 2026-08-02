@@ -2650,7 +2650,7 @@
     },
     {
       "source": "sc2/src/uqm/supermelee/melee.c",
-      "source_sha256": "c4381ccc0d3b1e11ff292b4d41ff7644b07d30ec76dcb02ff679b564d7baa7a9",
+      "source_sha256": "991503519336bf67e2f3296a353664969ac23ddde7ca6cbc9d181c8523d7d765",
       "object_output": "melee.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "MELEE",

@@ -244,7 +244,7 @@ fn run() -> Result<(), String> {
         "release" => build_profile(&root, Profile::Release),
         "test" => test_all(&root),
         "probe" => run_script(&root, "rust/probes/run_p00_probes.sh"),
-        "harness" => run_script(&root, "rust/harness/run_p00_harness.sh"),
+        "harness" => run_harnesses(&root),
         "production" => production(&root).map(|_| ()),
         "prove" => prove_determinism(&root),
         "verify" => verify_artifact_manifest(&root),
@@ -1466,6 +1466,11 @@ fn host_target() -> Result<String, String> {
         .lines()
         .find_map(|line| line.strip_prefix("host: ").map(str::to_string))
         .ok_or_else(|| "rustc did not report a host target".into())
+}
+
+fn run_harnesses(root: &Path) -> Result<(), String> {
+    run_script(root, "rust/harness/run_p00_harness.sh")?;
+    run_script(root, "rust/harness/run_menu_binding_probe.sh")
 }
 
 fn run_script(root: &Path, script: &str) -> Result<(), String> {

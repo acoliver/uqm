@@ -9,6 +9,8 @@
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
+use serde::{Deserialize, Serialize};
+
 // ===========================================================================
 //  Terminal outcome classification (REQ-STATE-001)
 // ===========================================================================
@@ -18,7 +20,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P04
 /// @requirement REQ-STATE-001
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
 #[repr(u8)]
 pub enum TerminalClass {
     /// Scheduler completed all steps successfully.

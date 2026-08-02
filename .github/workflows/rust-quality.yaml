@@ -150,6 +150,90 @@ jobs:
             rust/target/ownership-production-report.json
           if-no-files-found: error
 
+  issue23-native-acceptance:
+    name: Issue 23 native acceptance (${{ matrix.tuple }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            expected_arch: x86_64
+            tuple: macos-x86_64-compatibility
+          - os: macos-14
+            expected_arch: arm64
+            tuple: macos-14-aarch64
+          - os: ubuntu-22.04
+            expected_arch: x86_64
+            tuple: ubuntu-22.04-x86_64
+          - os: ubuntu-24.04-arm
+            expected_arch: aarch64
+            tuple: ubuntu-24.04-aarch64
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          clean: true
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
+        with:
+          toolchain: stable
+          cache: false
+      - name: Assert native runner architecture
+        run: |
+          actual=$(uname -m)
+          test "$actual" = "${{ matrix.expected_arch }}" || { echo "expected ${{ matrix.expected_arch }}, got $actual"; exit 1; }
+      - name: Install Linux gameplay prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libsdl2-dev libpng-dev liblzma-dev libbz2-dev pkg-config
+      - name: Install macOS gameplay prerequisites
+        if: runner.os == 'macOS'
+        run: brew install sdl2 libpng xz bzip2 pkg-config
+      - name: Run canonical strict link, probes, harnesses, gameplay, shutdown, and mutations
+        run: rust/scripts/run_issue23_acceptance.sh
+      - name: Upload all issue-23 evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue23-native-${{ matrix.tuple }}
+          path: |
+            rust/target/issue23-acceptance/
+            rust/target/production-artifacts.json
+            rust/target/ownership-production-report.json
+            rust/target/debug/build/uqm-*/out/native-build-evidence.json
+            rust/target/debug/build/uqm-*/out/provider-report.json
+            rust/target/debug/build/uqm-*/out/uqm-c-objects.manifest
+          if-no-files-found: warn
+
+  issue23-macos13-exclusion:
+    name: Issue 23 macOS 13 x86_64 runner exclusion
+    runs-on: macos-15-intel
+    permissions:
+      contents: read
+    steps:
+      - name: Record unavailable official runner tuple
+        run: |
+          mkdir -p rust/target/issue23-exclusions
+          cat > rust/target/issue23-exclusions/macos-13-x86_64.json <<'JSON'
+          {
+            "schema": "uqm-excluded-native-execution-v1",
+            "tuple": "macos-13-x86_64",
+            "executed": false,
+            "reason": "GitHub Actions no longer provides the macos-13 hosted runner label; actionlint's official runner-label database rejects it. The maintained native Intel compatibility execution uses macos-15-intel."
+          }
+          JSON
+      - name: Upload machine-readable exclusion
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue23-excluded-macos-13-x86_64
+          path: rust/target/issue23-exclusions/macos-13-x86_64.json
+          if-no-files-found: error
+
   quality-gate:
     runs-on: ubuntu-latest
     steps:

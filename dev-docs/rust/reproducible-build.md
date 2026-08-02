@@ -72,7 +72,7 @@ Production requires only tracked source plus external prerequisites. It does not
 
 Production native objects are source-derived. The compiler uses canonical absolute paths for the 321 tracked translation units, emits dependency files, and rejects any repository-local dependency outside the active explicit target subset in `rust/build/native-dependencies.json`. Every dependency declaration is tracked and hash-checked; `sc2/config_unix.h` is included. Ambient or ignored `sc2/obj` content never grants authority.
 
-CI proves all declared tuples on official runners and checks `uname -m`: Ubuntu 24.04 x86_64, Ubuntu 24.04 ARM aarch64, macOS 15 Intel x86_64, and macOS 15 Apple Silicon aarch64.
+CI proves all declared build tuples on official runners and checks `uname -m`: Ubuntu 24.04 x86_64, Ubuntu 24.04 ARM aarch64, macOS 15 Intel x86_64, and macOS 15 Apple Silicon aarch64. Issue 23 additionally executes native gameplay acceptance on macOS 14 arm64, the maintained macOS Intel runner, Ubuntu 22.04 x86_64, and `ubuntu-24.04-arm` aarch64. GitHub has retired the requested `macos-13` hosted label, so CI records that tuple as an explicit machine-readable excluded execution rather than claiming a run. Applicable jobs run the production executable rather than treating cross-compilation as runtime evidence, retain typed passing/failing LCARs, and compare two real battle runs from one production artifact.
 
 
 ## Issue #23 boundary

@@ -51,7 +51,8 @@ pub use capture::{
 };
 #[cfg(unix)]
 pub use child_session::{
-    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionReceipt, StreamKind,
+    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt,
+    StreamKind,
 };
 pub use child_session::{
     ChildSessionModel, HangClassification, ProcessIdentity, ProofResult, ProofType, SessionResult,
@@ -66,8 +67,9 @@ pub use input::{
 };
 pub use lifecycle::{
     check_terminal_guard, map_status, reassert_abort_if_terminal, run_lifecycle, GameLifecycle,
-    LifecycleResult,
+    LifecycleResult, TeardownReceipt,
 };
+pub use outcome::TerminalClass;
 pub use proof::{
     counter_paths_are_distinct, inactive_teardown_is_distinct, teardown_is_distinct,
     validate_proof_run, ArchRequirementStatus, ArchitectureReview, PreflightCheck, ProofIdentity,
@@ -84,6 +86,7 @@ pub use script::{
     WaitInputTicksStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
+pub use trace::{PresentationEvidence, RecordKind, SeedDomain, TraceRecord};
 pub use transport::{
     AckKind, AckRecord, CommandId, TransportCounters, TransportPacket, TransportState,
     MAX_SOCKET_PATH_LEN, PACKETS_PER_PUMP, PROTOCOL_VERSION,

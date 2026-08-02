@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
     "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
     "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
-    "projection_sha256": "a83bbf8475beb2a80798b5e00de5b47ec3c59578533510d5df0dffbd1c9917d5",
+    "projection_sha256": "3446127e48f4b76b97b88c88ab0cc2809949b2ca3f372f1d7feeacd57a3666d1",
     "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
@@ -3757,7 +3757,7 @@
       "issue": "MELEE",
       "canonical_source": "sc2/src/uqm/supermelee/melee.c",
       "scan_root": "native",
-      "sha256": "c4381ccc0d3b1e11ff292b4d41ff7644b07d30ec76dcb02ff679b564d7baa7a9",
+      "sha256": "991503519336bf67e2f3296a353664969ac23ddde7ca6cbc9d181c8523d7d765",
       "archive_decision": "include",
       "provider": "native_object:native/melee.c.o",
       "reason": "Transitional C ambient archive member",

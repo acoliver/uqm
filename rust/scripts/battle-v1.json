@@ -45,12 +45,12 @@
     },
     {
       "action": "capture",
-      "label": "hyperspace-start"
+      "label": "super-melee-battle-start"
     },
     {
       "action": "assert_activity",
-      "mask": 255,
-      "equals": 3
+      "mask": 767,
+      "equals": 512
     },
     {
       "action": "tap_menu_key",

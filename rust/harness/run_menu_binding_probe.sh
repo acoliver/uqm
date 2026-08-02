@@ -44,9 +44,13 @@ fi
 echo "PASS: menu.key found at ${CONTENT_DIR}/menu.key"
 echo ""
 
-# Build and consume only artifacts named by canonical production evidence.
-cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
+# Build once when needed, then reject stale evidence instead of rebuilding it.
 MANIFEST_JSON="${RUST_DIR}/target/production-artifacts.json"
+if [ -f "${MANIFEST_JSON}" ]; then
+    cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- verify >/dev/null
+else
+    cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
+fi
 
 extract_artifact_path() {
     local role="$1"
@@ -69,6 +73,12 @@ HARNESS_ARCHIVE="${OUT_DIR}/libp00_harness_shim.a"
 CC_PATH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["cc"]["executable"])' "${MANIFEST_JSON}")"
 NM_PATH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["nm"]["executable"])' "${MANIFEST_JSON}")"
 PKG_CONFIG_TOOL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["pkg_config"]["executable"])' "${MANIFEST_JSON}")"
+PRODUCTION_PACKAGES=(sdl2 libpng liblzma)
+if [ "$(uname -s)" = "Darwin" ]; then
+    PRODUCTION_PACKAGES+=(bzip2)
+fi
+PKG_CFLAGS=( $("${PKG_CONFIG_TOOL}" --cflags "${PRODUCTION_PACKAGES[@]}") )
+PKG_LIBS=( $("${PKG_CONFIG_TOOL}" --libs "${PRODUCTION_PACKAGES[@]}") )
 
 for file in "${C_ARCHIVE}" "${HARNESS_ARCHIVE}" "${RUST_ARCHIVE}"; do
     if [ ! -f "${file}" ]; then
@@ -139,6 +149,10 @@ echo "--- Linking probe executable ---"
 
 PROBE_BIN=$(mktemp -t menu_binding_probe_bin)
 LINK_MAP=$(mktemp -t menu_binding_link_map).map
+cleanup() {
+    rm -f "${PROBE_BIN}" "${LINK_MAP}"
+}
+trap cleanup EXIT
 PROBE_OBJ="${OUT_DIR}/menu_binding_probe.o"
 
 if [ ! -f "${PROBE_OBJ}" ]; then
@@ -147,31 +161,39 @@ if [ ! -f "${PROBE_OBJ}" ]; then
     exit 1
 fi
 
-# Link order per execution-contract §8:
-#   -L$OUT_DIR
-#   PROBE_OBJ (probe entry with main)
-#   -Wl,-force_load, libp00_harness_shim.a (accessor, no main)
-#   libuqm_c.a (C archive: VControl wrapper, subsystem registration)
-#   libuqm_rust.a (Rust: resource system, UIO, VControl parser)
-#   External libraries: -lpng16 -lz -lm -lSDL2 -lobjc
-#   Frameworks: Cocoa CoreAudio AudioToolbox CoreFoundation
-#   Compression: -llzma -lbz2
-"${CC_PATH}" \
-    -L"${OUT_DIR}" \
-    "${PROBE_OBJ}" \
-    -Wl,-force_load,"${HARNESS_ARCHIVE}" \
-    "${C_ARCHIVE}" \
-    "${RUST_ARCHIVE}" \
-    -lpng16 -lz -lm -lSDL2 -lobjc \
-    -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
-    -llzma -lbz2 \
-    -Wl,-map,"${LINK_MAP}" \
-    -o "${PROBE_BIN}" 2>&1
-
-LINK_EXIT=$?
-if [ ${LINK_EXIT} -ne 0 ]; then
-    echo "FAIL: probe link failed (exit ${LINK_EXIT})"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
+# Link order per execution-contract §8, with the exact package flags obtained
+# from the manifest-recorded pkg-config executable. No undefined-symbol or
+# dynamic-lookup escape hatch is permitted.
+OS_NAME="$(uname -s)"
+if [ "${OS_NAME}" = "Darwin" ]; then
+    if ! "${CC_PATH}" "${PKG_CFLAGS[@]}" \
+        -L"${OUT_DIR}" \
+        "${PROBE_OBJ}" \
+        -Wl,-force_load,"${HARNESS_ARCHIVE}" \
+        "${C_ARCHIVE}" \
+        "${RUST_ARCHIVE}" \
+        "${PKG_LIBS[@]}" -lz -lm -lobjc \
+        -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
+        -Wl,-map,"${LINK_MAP}" \
+        -o "${PROBE_BIN}" 2>&1; then
+        echo "FAIL: Darwin menu binding probe link failed"
+        exit 1
+    fi
+elif [ "${OS_NAME}" = "Linux" ]; then
+    if ! "${CC_PATH}" "${PKG_CFLAGS[@]}" \
+        -L"${OUT_DIR}" \
+        "${PROBE_OBJ}" \
+        -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
+        "${C_ARCHIVE}" \
+        "${RUST_ARCHIVE}" \
+        "${PKG_LIBS[@]}" -lbz2 -lz -lm -lasound \
+        -Wl,-Map,"${LINK_MAP}" \
+        -o "${PROBE_BIN}" 2>&1; then
+        echo "FAIL: Linux menu binding probe link failed"
+        exit 1
+    fi
+else
+    echo "FAIL: unsupported OS: ${OS_NAME}"
     exit 1
 fi
 echo "PASS: probe linked successfully"
@@ -292,5 +314,6 @@ echo "=== Menu Binding Probe: ALL CHECKS PASSED ==="
 echo "Evidence saved to: ${EVIDENCE_DIR}"
 echo "Finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# Cleanup temporary binary (keep evidence)
-rm -f "${PROBE_BIN}"
+# Cleanup temporary files (keep evidence)
+cleanup
+trap - EXIT

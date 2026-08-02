@@ -42,9 +42,12 @@ validator rehashes the executable, script, content/config inputs, trace,
 captures, logs, and teardown receipt.
 
 `battle-v1.json` is the production battle proof. It enters Super Melee through
-the normal menu path, selects the human combatant through player-one weapon
-input, waits for real combat, captures the presented battle surface, and
-requires at least 30 frames from the production battle loop observer.
+the normal menu path, asserts the full activity word has the `SUPER_MELEE` base
+and `IN_BATTLE` flag, selects the human combatant through player-one weapon
+input, waits for real combat, captures the exact composited frame committed by
+the renderer, and requires at least 30 monotonic observations from the real
+production battle loop. The observer counts completed battle-loop frames; it
+does not claim combat elapsed time, animation frames, or unique pixel output.
 
 Successful trace evidence includes:
 

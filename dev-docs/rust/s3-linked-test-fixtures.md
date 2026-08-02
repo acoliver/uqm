@@ -51,11 +51,25 @@ The DEBUG-only biological-value consumer calls the narrow
 the C consumer to fail fast; valid values preserve the low-nibble semantics of
 `calculateBioValue`.
 
-## Evidence limits
+## Native gameplay acceptance and evidence
 
-The focused CI job retains its complete command log plus native build evidence,
-provider report, and archive-input sidecar. These artifacts prove parsing,
-building, profile selection, and provider authority. They are not autonomous
-gameplay proof, screenshots, child-supervision receipts, or LCAR gameplay
-artifacts. No gameplay completion is claimed until actual game execution,
-capture correlation, and teardown evidence are implemented and replayed.
+Issue 23 now runs native acceptance on macOS 14 arm64, Ubuntu 22.04 x86_64,
+the supported GitHub-hosted Ubuntu ARM runner, and the maintained macOS Intel
+runner. The requested macOS 13 hosted label has been retired from GitHub
+Actions; CI emits a machine-readable excluded-execution record with that reason
+instead of pretending the tuple ran. Each applicable job reuses one canonical
+production artifact while executing the strict linked
+test, probes, the composed P00/menu-binding harness, menu, communication,
+PlanetSide, and battle scenarios. Every scenario is supervised and emits a
+closed LCAR with typed process/teardown receipts, exact artifact inventory,
+immutable source/config identity snapshots, correlated trace/capture evidence,
+and verified config cleanup.
+
+The checked-in battle scenario is executed twice from the same production
+artifact. The acceptance command normalizes only process-specific elapsed time,
+requires both super-melee menu and battle RNG-boundary records, and compares
+semantic-trace and PNG digests byte-for-byte. Offline validation and deterministic
+negative LCAR mutations run in every native tuple. CI uploads passing or failing
+LCARs, logs, captures, harness maps, provider reports, and native build evidence
+with `if: always()`. A child failure is therefore evidence-bearing rather than a
+missing-artifact success claim.

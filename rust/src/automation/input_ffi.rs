@@ -501,10 +501,8 @@ pub extern "C" fn rust_automation_presented_frame() -> i32 {
     if !Coordinator::is_active() {
         return 0;
     }
-    let generation = with_runtime()
-        .map(|runtime| runtime.mirror.capture_generation())
-        .unwrap_or(0);
-    Coordinator::process_present(generation).into()
+    let frame = crate::graphics::ffi::take_presented_frame();
+    Coordinator::process_present(frame).into()
 }
 
 // ===========================================================================

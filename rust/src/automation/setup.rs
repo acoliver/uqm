@@ -278,8 +278,8 @@ mod tests {
         }
     }
 
-    fn write_script(dir: &std::path::Path, content: &str) -> String {
-        let path = dir.join("script.json");
+    fn write_script(dir: &tempfile::TempDir, content: &str) -> String {
+        let path = dir.path().join("script.json");
         std::fs::write(&path, content).unwrap();
         path.to_string_lossy().into_owned()
     }
@@ -300,8 +300,8 @@ mod tests {
         }"#
     }
 
-    fn tmpdir() -> PathBuf {
-        tempfile::tempdir().unwrap().keep()
+    fn tmpdir() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
     }
 
     // --- REQ-MODE-003: inactive ---
@@ -348,7 +348,7 @@ mod tests {
         let script_path = write_script(&dir, valid_script_json());
         let opts = AutomationOptions {
             script_path: Some(script_path),
-            output_dir: Some(dir.join("out").to_string_lossy().into_owned()),
+            output_dir: Some(dir.path().join("out").to_string_lossy().into_owned()),
         };
         let err = setup_automation(&opts, &unsupported_caps()).unwrap_err();
         let msg = format!("{err}");
@@ -361,7 +361,7 @@ mod tests {
     fn supported_build_with_valid_script_succeeds() {
         let dir = tmpdir();
         let script_path = write_script(&dir, valid_script_json());
-        let out_dir = dir.join("output");
+        let out_dir = dir.path().join("output");
         let opts = AutomationOptions {
             script_path: Some(script_path),
             output_dir: Some(out_dir.to_string_lossy().into_owned()),
@@ -377,7 +377,7 @@ mod tests {
     fn active_setup_creates_output_dir() {
         let dir = tmpdir();
         let script_path = write_script(&dir, valid_script_json());
-        let out_dir = dir.join("run-001");
+        let out_dir = dir.path().join("run-001");
         assert!(!out_dir.exists());
         let opts = AutomationOptions {
             script_path: Some(script_path),
@@ -412,7 +412,7 @@ mod tests {
         let script_path = write_script(&dir, bad_script);
         let opts = AutomationOptions {
             script_path: Some(script_path),
-            output_dir: Some(dir.join("out").to_string_lossy().into_owned()),
+            output_dir: Some(dir.path().join("out").to_string_lossy().into_owned()),
         };
         assert!(setup_automation(&opts, &supported_caps()).is_err());
     }

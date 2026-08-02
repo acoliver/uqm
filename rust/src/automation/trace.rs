@@ -34,7 +34,59 @@ pub enum RecordKind {
     Capture,
     MenuTransition,
     SemanticAssertion,
+    SeedApplication,
     Terminal,
+}
+
+/// Stable automation seed domains. Each application is recorded at the exact
+/// initialization boundary that consumes the seed.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SeedDomain {
+    SuperMeleeMenu,
+    SuperMeleeBattle,
+}
+
+impl SeedDomain {
+    pub const SUPER_MELEE_MENU_ID: u32 = 1;
+    pub const SUPER_MELEE_BATTLE_ID: u32 = 2;
+
+    #[must_use]
+    pub fn from_ffi(value: u32) -> Option<Self> {
+        match value {
+            Self::SUPER_MELEE_MENU_ID => Some(Self::SuperMeleeMenu),
+            Self::SUPER_MELEE_BATTLE_ID => Some(Self::SuperMeleeBattle),
+            _ => None,
+        }
+    }
+}
+
+/// Typed seed application evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SeedApplication {
+    pub domain: SeedDomain,
+    pub seed: u32,
+}
+
+/// Metadata for the immutable frame read back immediately before presentation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PresentationEvidence {
+    pub count: u64,
+    pub generation: u64,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Typed activity assertion evidence from the live activity word.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ActivityEvidence {
+    pub word: u16,
+    pub mask: u16,
+    pub equals: u16,
+    pub passed: bool,
 }
 
 /// A typed JSONL trace record. Each record is independently serializable as
@@ -43,6 +95,7 @@ pub enum RecordKind {
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P03
 /// @requirement REQ-TRACE-001
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct TraceRecord {
     pub schema: u16,
     pub run: u64,
@@ -59,6 +112,12 @@ pub struct TraceRecord {
     pub to: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_application: Option<SeedApplication>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<PresentationEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<ActivityEvidence>,
 }
 
 impl TraceRecord {
@@ -335,6 +394,9 @@ mod tests {
             from: None,
             to: None,
             terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: None,
         };
         let jsonl = rec.to_jsonl().unwrap();
         assert!(jsonl.ends_with('\n'));
@@ -356,11 +418,101 @@ mod tests {
             from: Some("NewGame".into()),
             to: Some("LoadGame".into()),
             terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: None,
         };
         let jsonl = rec.to_jsonl().unwrap();
         assert!(jsonl.contains("NewGame"));
         assert!(jsonl.contains("LoadGame"));
         assert!(jsonl.contains("semantic_assertion"));
+    }
+
+    #[test]
+    fn typed_runtime_evidence_roundtrips() {
+        let records = [
+            TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 0,
+                input_seen: 0,
+                present_seen: 0,
+                elapsed_ms: 0,
+                kind: RecordKind::SeedApplication,
+                label: None,
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: Some(SeedApplication {
+                    domain: SeedDomain::SuperMeleeBattle,
+                    seed: 0x55AA_2317,
+                }),
+                presentation: None,
+                activity: None,
+            },
+            TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 1,
+                input_seen: 1,
+                present_seen: 2,
+                elapsed_ms: 3,
+                kind: RecordKind::Presentation,
+                label: None,
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: None,
+                presentation: Some(PresentationEvidence {
+                    count: 2,
+                    generation: 4,
+                    width: 320,
+                    height: 240,
+                }),
+                activity: None,
+            },
+            TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 2,
+                input_seen: 2,
+                present_seen: 2,
+                elapsed_ms: 4,
+                kind: RecordKind::SemanticAssertion,
+                label: Some("activity_assertion_passed".into()),
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: None,
+                presentation: None,
+                activity: Some(ActivityEvidence {
+                    word: 0x0102,
+                    mask: 0x00ff,
+                    equals: 2,
+                    passed: true,
+                }),
+            },
+        ];
+
+        for record in records {
+            let parsed = TraceRecord::from_jsonl(&record.to_jsonl().unwrap()).unwrap();
+            assert_eq!(parsed, record);
+        }
+    }
+
+    #[test]
+    fn seed_domains_are_strict_and_repeated_applications_remain_distinct() {
+        assert_eq!(SeedDomain::from_ffi(1), Some(SeedDomain::SuperMeleeMenu));
+        assert_eq!(SeedDomain::from_ffi(2), Some(SeedDomain::SuperMeleeBattle));
+        assert_eq!(SeedDomain::from_ffi(0), None);
+        assert_eq!(SeedDomain::from_ffi(3), None);
+
+        let first = SeedApplication {
+            domain: SeedDomain::SuperMeleeBattle,
+            seed: 0x55AA_2317,
+        };
+        let second = first.clone();
+        assert_eq!(first, second);
     }
 
     #[test]
@@ -378,6 +530,9 @@ mod tests {
                 from: None,
                 to: None,
                 terminal_reason: None,
+                seed_application: None,
+                presentation: None,
+                activity: None,
             })
             .collect();
         let lines: Vec<_> = recs.iter().map(|r| r.to_jsonl().unwrap()).collect();

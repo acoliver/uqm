@@ -244,6 +244,9 @@ pub fn input_trace_record(
         from: None,
         to: None,
         terminal_reason: None,
+        seed_application: None,
+        presentation: None,
+        activity: None,
     }
 }
 
@@ -278,6 +281,9 @@ pub fn semantic_trace_record(
         from: Some(format!("item_{from}")),
         to: Some(format!("item_{to}")),
         terminal_reason: None,
+        seed_application: None,
+        presentation: None,
+        activity: None,
     }
 }
 
