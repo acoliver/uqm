@@ -737,7 +737,13 @@ impl Coordinator {
                     SchedulerEvent::MenuTransition { to },
                 );
                 inner.sched_state = t2.new_state;
-                self.write_trace(&mut inner, RecordKind::MenuTransition);
+                let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch)
+                {
+                    format!("menu_transition_failed:to={to}")
+                } else {
+                    format!("menu_transition_passed:to={to}")
+                };
+                self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
                 if inner.sched_state.is_terminal() {
                     break;
                 }
@@ -1071,7 +1077,12 @@ impl Coordinator {
             );
             inner.sched_state = transition.new_state;
 
-            self.write_trace(&mut inner, RecordKind::MenuTransition);
+            let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch) {
+                format!("menu_transition_failed:to={to}")
+            } else {
+                format!("menu_transition_passed:to={to}")
+            };
+            self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
 
             if inner.sched_state.is_terminal() {
                 let class = map_scheduler_terminal(inner.sched_state.terminal);
