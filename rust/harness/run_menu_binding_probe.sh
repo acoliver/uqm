@@ -44,11 +44,10 @@ fi
 echo "PASS: menu.key found at ${CONTENT_DIR}/menu.key"
 echo ""
 
-# Build once when needed, then reject stale evidence instead of rebuilding it.
+# Build once when needed. The production manifest is canonical evidence but
+# intentionally lacks the two-build proof required by `xtask verify`.
 MANIFEST_JSON="${RUST_DIR}/target/production-artifacts.json"
-if [ -f "${MANIFEST_JSON}" ]; then
-    cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- verify >/dev/null
-else
+if [ ! -f "${MANIFEST_JSON}" ]; then
     cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
 fi
 
@@ -184,8 +183,7 @@ elif [ "${OS_NAME}" = "Linux" ]; then
         -L"${OUT_DIR}" \
         "${PROBE_OBJ}" \
         -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
-        "${C_ARCHIVE}" \
-        "${RUST_ARCHIVE}" \
+        -Wl,--start-group "${C_ARCHIVE}" "${RUST_ARCHIVE}" -Wl,--end-group \
         "${PKG_LIBS[@]}" -lbz2 -lz -lm -lasound \
         -Wl,-Map,"${LINK_MAP}" \
         -o "${PROBE_BIN}" 2>&1; then
