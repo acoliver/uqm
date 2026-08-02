@@ -34,7 +34,7 @@ run_proof() {
 }
 
 run_proof menu "${SCRIPT_DIR}/main-menu-v1.json"
-run_proof communication "${SCRIPT_DIR}/comm-encounter-v1.json"
+run_proof communication "${SCRIPT_DIR}/real-sol-probe-completion.json"
 run_proof planetside "${SCRIPT_DIR}/real-sol-rust-planetside-smoke.json"
 run_proof battle-first "${SCRIPT_DIR}/battle-v1.json"
 run_proof battle-second "${SCRIPT_DIR}/battle-v1.json"
