@@ -152,8 +152,8 @@ echo ""
 
 echo "--- Linking probe executable ---"
 
-PROBE_BIN=$(mktemp -t menu_binding_probe_bin)
-LINK_MAP=$(mktemp -t menu_binding_link_map).map
+PROBE_BIN=$(mktemp "${TMPDIR:-/tmp}/menu_binding_probe_bin.XXXXXX")
+LINK_MAP=$(mktemp "${TMPDIR:-/tmp}/menu_binding_link_map.XXXXXX").map
 cleanup() {
     rm -f "${PROBE_BIN}" "${LINK_MAP}"
 }
