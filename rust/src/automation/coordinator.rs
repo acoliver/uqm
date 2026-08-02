@@ -1351,6 +1351,9 @@ impl Coordinator {
             generation,
             label,
         );
+        record.run = 1;
+        record.input_seen = inner.input_seen;
+        record.present_seen = inner.present_seen;
         record.presentation = Some(frame.presentation_evidence());
         inner.trace_seq = inner.trace_seq.saturating_add(1);
         let reservation = self.runtime.commit.reserve_sequence(record.sequence);
@@ -1483,6 +1486,21 @@ mod tests {
         assert!(!failed.passed);
         assert_eq!(failed.mask, 0x02ff);
         assert_eq!(failed.equals, 0x0200);
+    }
+
+    #[test]
+    fn capture_trace_is_bound_to_the_active_run_and_callback_counts() {
+        let generation = CaptureGeneration(3);
+        let mut record =
+            crate::automation::capture::capture_trace_record(11, 25, generation, "capture");
+        record.run = 1;
+        record.input_seen = 7;
+        record.present_seen = 9;
+
+        assert_eq!(record.run, 1);
+        assert_eq!(record.sequence, 11);
+        assert_eq!(record.input_seen, 7);
+        assert_eq!(record.present_seen, 9);
     }
 
     #[test]
