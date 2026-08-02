@@ -1481,7 +1481,9 @@ fn battle_evidence_digest(
     let capture_sha256 = manifest
         .artifacts
         .iter()
-        .filter(|entry| entry.role == ArtifactRole::Capture)
+        .filter(|entry| {
+            entry.role == ArtifactRole::Capture && !entry.path.ends_with("/battle-final.png")
+        })
         .map(|entry| (entry.path.clone(), entry.sha256.clone()))
         .collect();
     Ok(BattleEvidenceDigest {
