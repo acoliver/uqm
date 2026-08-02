@@ -95,7 +95,7 @@ echo ""
 # --- 1. Verify archive member symbol extraction (nm) ---
 echo "--- 1. Archive member symbol extraction (nm) ---"
 
-NM_LISTING=$(mktemp -t p00_nm_listing)
+NM_LISTING=$(mktemp "${TMPDIR:-/tmp}/p00_nm_listing.XXXXXX")
 HARNESS_MAIN=""
 LINK_MAP=""
 HARNESS_BIN=""
@@ -130,9 +130,9 @@ echo ""
 # --- 3. Compile and link the harness with force-load ordering ---
 echo "--- 3. Compile and link harness (force-load order per §8) ---"
 
-HARNESS_MAIN=$(mktemp -t p00_harness_main).c
-LINK_MAP=$(mktemp -t p00_link_map).map
-HARNESS_BIN=$(mktemp -t p00_harness_bin)
+HARNESS_MAIN=$(mktemp "${TMPDIR:-/tmp}/p00_harness_main.XXXXXX").c
+LINK_MAP=$(mktemp "${TMPDIR:-/tmp}/p00_link_map.XXXXXX").map
+HARNESS_BIN=$(mktemp "${TMPDIR:-/tmp}/p00_harness_bin.XXXXXX")
 
 cat > "${HARNESS_MAIN}" << 'HARNESS_EOF'
 #include <stdio.h>
