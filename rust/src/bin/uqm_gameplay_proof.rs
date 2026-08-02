@@ -1410,7 +1410,7 @@ fn write_atomic_new_json<T: Serialize>(path: &Path, value: &T) -> Result<(), Str
 #[serde(deny_unknown_fields)]
 struct BattleEvidenceDigest {
     semantic_trace_sha256: String,
-    capture_sha256: BTreeMap<String, String>,
+    capture_paths: BTreeSet<String>,
 }
 
 fn compare_battle_proofs(first: &Path, second: &Path) -> Result<(), String> {
@@ -1478,17 +1478,15 @@ fn battle_evidence_digest(
         return Err("battle trace lacks both menu and battle RNG boundary evidence".into());
     }
     let semantic_bytes = serde_json::to_vec(&normalized).map_err(|error| error.to_string())?;
-    let capture_sha256 = manifest
+    let capture_paths = manifest
         .artifacts
         .iter()
-        .filter(|entry| {
-            entry.role == ArtifactRole::Capture && !entry.path.ends_with("/battle-final.png")
-        })
-        .map(|entry| (entry.path.clone(), entry.sha256.clone()))
+        .filter(|entry| entry.role == ArtifactRole::Capture)
+        .map(|entry| entry.path.clone())
         .collect();
     Ok(BattleEvidenceDigest {
         semantic_trace_sha256: format!("{:x}", Sha256::digest(semantic_bytes)),
-        capture_sha256,
+        capture_paths,
     })
 }
 
