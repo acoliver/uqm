@@ -11,8 +11,9 @@ use uqm_ownership::{
     parse_dependency_file, reject_noncanonical_build_flags, resolve_toolchain, target_key,
     validate_native_authority, validate_observed_dependencies, write_build_evidence,
     NativeBuildEvidence, NativeCompileProfile, NativeInputManifest, PreprocessorDefine,
-    ToolchainIdentity, ValidateOptions, Validator, BUILD_EVIDENCE_FILE, BUILD_EVIDENCE_SCHEMA,
-    DEPENDENCY_FLAGS, DISPLIST_OBJECT, REPOSITORY_INCLUDE_ROOTS,
+    ProductionProfile, ToolchainIdentity, ValidateOptions, Validator, BUILD_EVIDENCE_FILE,
+    BUILD_EVIDENCE_SCHEMA, DEPENDENCY_FLAGS, DISPLIST_OBJECT, LINKED_TEST_PROFILE_ID,
+    PRODUCTION_PROFILE_ID, REPOSITORY_INCLUDE_ROOTS,
 };
 
 const DEPENDENCY_AUTHORITY: &str = "build/native-dependencies.json";
@@ -131,15 +132,11 @@ fn link_c_objects(packages: &NativePackages, toolchain: &ToolchainIdentity) -> R
     let inputs = load_native_inputs(&input_path)?;
     let dependencies = load_native_dependencies(&dependency_path)?;
     validate_native_authority(&repo_root, &inputs, &dependencies, validator.manifest())?;
-    validate_active_profile(&inputs, &validator)?;
+    let profile_authority = validate_active_profile(&inputs, &validator)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     let target_arch = env_value("CARGO_CFG_TARGET_ARCH")?;
     let target = target_key(&target_os, &target_arch)?;
-    validate_package_defines(
-        &target,
-        &packages.defines,
-        &inputs.production_profile.defines,
-    )?;
+    validate_package_defines(&target, &packages.defines, &profile_authority.defines)?;
 
     for dependency in &dependencies.dependencies {
         println!("cargo:rerun-if-changed=../{}", dependency.path);
@@ -148,8 +145,10 @@ fn link_c_objects(packages: &NativePackages, toolchain: &ToolchainIdentity) -> R
     let object_dir = out_dir.join("native");
     fs::create_dir_all(&object_dir)
         .map_err(|error| format!("cannot create {}: {error}", object_dir.display()))?;
-    let profile = native_compile_profile(&repo_root, &target, toolchain, &inputs, packages)?;
-    let evidence = native_build_evidence(&repo_root, &target, toolchain, &inputs, &profile)?;
+    let profile =
+        native_compile_profile(&repo_root, &target, toolchain, profile_authority, packages)?;
+    let evidence =
+        native_build_evidence(&repo_root, &target, toolchain, profile_authority, &profile)?;
     write_build_evidence(&out_dir.join(BUILD_EVIDENCE_FILE), &evidence)?;
     let observed = compile_native_inputs(&inputs, &repo_root, &object_dir, &profile)?;
     if let Ok(capture_path) = env::var("UQM_DEPENDENCY_CAPTURE") {
@@ -168,28 +167,43 @@ fn link_c_objects(packages: &NativePackages, toolchain: &ToolchainIdentity) -> R
     create_and_validate_archive(&inputs, &validator, &archive_context)
 }
 
-fn validate_active_profile(
-    inputs: &NativeInputManifest,
-    validator: &Validator,
-) -> Result<(), String> {
-    let mut actual_features: Vec<String> = env::vars_os()
+fn active_cargo_features() -> Vec<String> {
+    let mut features: Vec<_> = env::vars_os()
         .filter_map(|(name, _)| name.into_string().ok())
         .filter_map(|name| name.strip_prefix("CARGO_FEATURE_").map(str::to_string))
-        .map(|name| name.to_ascii_lowercase())
+        .map(|name| match name.as_str() {
+            "DEBUG_PROCESS" => "debug-process".into(),
+            _ => name.to_ascii_lowercase(),
+        })
         .collect();
-    actual_features.sort();
-    let mut actual = inputs.production_profile.clone();
-    actual.cargo_features = actual_features;
-    if actual != validator.manifest().accepted_production_profile {
+    features.sort();
+    features
+}
+
+fn validate_active_profile<'a>(
+    inputs: &'a NativeInputManifest,
+    validator: &Validator,
+) -> Result<&'a ProductionProfile, String> {
+    println!("cargo:rerun-if-env-changed=UQM_NATIVE_PROFILE");
+    let selected = env::var("UQM_NATIVE_PROFILE").unwrap_or_else(|_| PRODUCTION_PROFILE_ID.into());
+    let authority = match selected.as_str() {
+        PRODUCTION_PROFILE_ID => {
+            validator
+                .validate_production_profile(&inputs.production_profile)
+                .map_err(|error| error.to_string())?;
+            &inputs.production_profile
+        }
+        LINKED_TEST_PROFILE_ID => &inputs.linked_test_profile,
+        _ => return Err(format!("unknown native profile '{selected}'")),
+    };
+    let actual_features = active_cargo_features();
+    if actual_features != authority.cargo_features {
         return Err(format!(
-            "actual production profile differs: expected {:?}, got {:?}",
-            validator.manifest().accepted_production_profile,
-            actual
+            "active Cargo features differ from '{}' authority: expected {:?}, got {actual_features:?}",
+            authority.id, authority.cargo_features
         ));
     }
-    validator
-        .validate_production_profile(&actual)
-        .map_err(|error| error.to_string())
+    Ok(authority)
 }
 
 fn validate_package_defines(
@@ -271,7 +285,7 @@ fn native_compile_profile(
     root: &Path,
     target: &str,
     toolchain: &ToolchainIdentity,
-    inputs: &NativeInputManifest,
+    authority: &ProductionProfile,
     packages: &NativePackages,
 ) -> Result<NativeCompileProfile, String> {
     let mut ordered_defines = vec![
@@ -280,8 +294,7 @@ fn native_compile_profile(
         "-D__TIME__=\"00:00:00\"".into(),
     ];
     ordered_defines.extend(
-        inputs
-            .production_profile
+        authority
             .defines
             .iter()
             .map(PreprocessorDefine::compiler_argument),
@@ -301,7 +314,7 @@ fn native_compile_profile(
     for include in &ordered_include_roots {
         command_template.extend(["-I".into(), include.clone()]);
     }
-    command_template.extend(inputs.production_profile.compile_flags.iter().cloned());
+    command_template.extend(authority.compile_flags.iter().cloned());
     command_template.extend(DEPENDENCY_FLAGS.iter().map(|value| (*value).into()));
     command_template.extend([
         "-c".into(),
@@ -314,7 +327,7 @@ fn native_compile_profile(
         compiler: toolchain.cc.executable.clone(),
         ordered_defines,
         ordered_include_roots,
-        ordered_compile_flags: inputs.production_profile.compile_flags.clone(),
+        ordered_compile_flags: authority.compile_flags.clone(),
         dependency_flags: DEPENDENCY_FLAGS
             .iter()
             .map(|value| (*value).into())
@@ -327,20 +340,15 @@ fn native_build_evidence(
     root: &Path,
     target: &str,
     toolchain: &ToolchainIdentity,
-    inputs: &NativeInputManifest,
+    authority: &ProductionProfile,
     profile: &NativeCompileProfile,
 ) -> Result<NativeBuildEvidence, String> {
     let epoch = source_date_epoch()?;
-    let mut active_features: Vec<_> = env::vars_os()
-        .filter_map(|(name, _)| name.into_string().ok())
-        .filter_map(|name| name.strip_prefix("CARGO_FEATURE_").map(str::to_string))
-        .map(|name| name.to_ascii_lowercase())
-        .collect();
-    active_features.sort();
-    if active_features != inputs.production_profile.cargo_features {
+    let active_features = active_cargo_features();
+    if active_features != authority.cargo_features {
         return Err(format!(
-            "active semantic Cargo features differ from exact profile: expected {:?}, got {active_features:?}",
-            inputs.production_profile.cargo_features
+            "active semantic Cargo features differ from '{}' profile: expected {:?}, got {active_features:?}",
+            authority.id, authority.cargo_features
         ));
     }
     Ok(NativeBuildEvidence {

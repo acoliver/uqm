@@ -928,7 +928,8 @@ fn reduce_admitted_input(
         (Action::AssertScene(_), ActionPhase::WaitingForInput)
         | (Action::AssertDispatch(_), ActionPhase::WaitingForInput)
         | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
-        | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput) => {
+        | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput)
+        | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
 

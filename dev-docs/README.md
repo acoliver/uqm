@@ -29,6 +29,9 @@ This directory contains the working rules for planning and implementation in Jef
 - [rust/reproducible-build.md](./rust/reproducible-build.md)
   - S2 root commands, tracked native inputs, supported matrix, prerequisites, deterministic artifacts, and clean-checkout replay.
 
+- [rust/s3-linked-test-fixtures.md](./rust/s3-linked-test-fixtures.md)
+  - S3 linked-test profile, gameplay proof profiles, mutation fixtures, teardown supervision, and evidence contracts.
+
 ## Recommended Reading Order
 
 1. `RULES.md`

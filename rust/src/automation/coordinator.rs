@@ -17,7 +17,7 @@
 
 use crate::automation::input_ffi;
 use crate::automation::outcome::TerminalClass;
-use crate::automation::runtime::RuntimeModel;
+use crate::automation::runtime::{FinalizationResult, RuntimeModel};
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
 use crate::automation::scheduler::{
     scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
@@ -32,6 +32,9 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+
+/// Fixed RNG seed applied once when active automation enters gameplay.
+pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 
 // ===========================================================================
 //  Coordinator state (global, single-threaded in RUST_OWNS_MAIN mode)
@@ -77,6 +80,8 @@ struct CoordInner {
     orbit_transition_pending: bool,
     /// Release a semantically injected Select key on the next callback.
     release_semantic_select: bool,
+    /// Whether the deterministic automation RNG seed has been applied.
+    seed_applied: bool,
 }
 
 /// The automation coordinator, holding all live state needed to drive
@@ -152,6 +157,7 @@ impl Coordinator {
                 consumed_planet_menu_generation: 0,
                 release_semantic_select: false,
                 orbit_transition_pending: false,
+                seed_applied: false,
             }),
         };
 
@@ -346,6 +352,19 @@ impl Coordinator {
 
         if inner.terminal_class.is_some() {
             return true;
+        }
+
+        if !inner.seed_applied {
+            let activity = crate::mainloop::ffi::get_current_activity().0 & 0x00ff;
+            if activity != 0 {
+                crate::math::TFB_SeedRandom(AUTOMATION_SEED);
+                inner.seed_applied = true;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!("automation_seed:{AUTOMATION_SEED}"),
+                );
+            }
         }
 
         let released_semantic_select = inner.release_semantic_select;
@@ -844,6 +863,22 @@ impl Coordinator {
                 }
             }
         }
+        if let Some(Action::AssertBattleFrames(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match crate::automation::battle_observer::assert_progress(assertion.minimum) {
+                Ok(actual) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!("battle_frames_verified:count={actual}"),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
 
         false
     }
@@ -1006,79 +1041,48 @@ impl Coordinator {
     //  Finalization
     // -----------------------------------------------------------------------
 
-    /// Finalize the automation run. Writes run_end trace, finalizes the
-    /// runtime model, and writes the teardown receipt.
-    pub fn finalize() {
+    /// Finalize the automation run after production subsystem teardown.
+    ///
+    /// In inactive mode this preserves the game result. Active mode durably
+    /// publishes the ordered trace and teardown receipt before returning the
+    /// terminal-aware process status. Evidence failures are fatal.
+    pub fn finalize(game_result: i32) -> Result<i32, String> {
         let Some(coord) = Self::get() else {
-            return;
+            return Ok(game_result);
         };
-        coord.finalize_inner();
+        coord.finalize_inner(game_result)
     }
 
-    fn finalize_inner(&self) {
-        eprintln!("[automation] finalize_inner: starting");
-        let mut inner = self.inner.lock();
-
-        if inner.finalized {
-            eprintln!("[automation] finalize_inner: already finalized, returning");
-            return;
-        }
-
-        inner.finalized = true;
-
-        // Write run_end trace.
-        self.write_trace(&mut inner, RecordKind::RunEnd);
-        eprintln!(
-            "[automation] finalize_inner: wrote run_end trace, seq={}",
-            inner.trace_seq
-        );
-
-        // Finalize the runtime model.
-        let _ = self.runtime.finalize();
-
-        // Deactivate.
-        self.runtime.deactivate();
-
-        // Flush trace records to file.
-        let trace_path = self.output_root.join("trace.jsonl");
-        drop(inner);
-
-        eprintln!(
-            "[automation] finalize_inner: flushing trace to {}",
-            trace_path.display()
-        );
-        match std::fs::File::create(&trace_path) {
-            Ok(mut file) => {
-                use std::io::Write;
-                let _ = file.write_all(b"");
-                if let Err(e) = self.runtime.commit.publish_all(&mut file) {
-                    eprintln!("[automation] finalize_inner: trace flush error: {e}");
-                }
-                let _ = file.flush();
+    fn finalize_inner(&self, game_result: i32) -> Result<i32, String> {
+        let terminal = {
+            let mut inner = self.inner.lock();
+            if inner.finalized {
+                return Err("automation coordinator finalized more than once".into());
             }
-            Err(e) => {
-                eprintln!("[automation] finalize_inner: FAILED to create trace file: {e}");
-            }
-        }
+            inner.finalized = true;
+            self.write_trace(&mut inner, RecordKind::RunEnd);
+            inner.terminal_class
+        };
 
-        // Write teardown receipt.
-        let terminal = self.inner.lock().terminal_class;
+        validate_runtime_finalization(self.runtime.finalize())?;
+        let status = active_automation_status(terminal, game_result)?;
 
-        eprintln!(
-            "[automation] finalize_inner: writing teardown receipt to {}",
-            self.output_root.display()
-        );
-        match crate::automation::lifecycle::write_teardown_receipt(&self.output_root, terminal, 0) {
-            Ok(result) => {
-                eprintln!(
-                    "[automation] finalize_inner: receipt written to {}",
-                    result.final_path.display()
-                );
-            }
-            Err(e) => {
-                eprintln!("[automation] finalize_inner: FAILED to write receipt: {e}");
-            }
-        }
+        let mut trace = Vec::new();
+        self.runtime
+            .commit
+            .publish_all(&mut trace)
+            .map_err(|error| format!("cannot publish ordered automation trace: {error}"))?;
+        crate::automation::artifact::write_durable(&self.output_root, "trace", "jsonl", &trace)
+            .map_err(|error| format!("cannot durably publish automation trace: {error}"))?;
+
+        crate::automation::lifecycle::write_teardown_receipt(
+            &self.output_root,
+            terminal,
+            game_result,
+        )
+        .map_err(|error| format!("cannot durably publish teardown receipt: {error}"))?;
+
+        Ok(status)
     }
 
     // -----------------------------------------------------------------------
@@ -1238,10 +1242,17 @@ impl Coordinator {
             label,
         );
         inner.trace_seq = inner.trace_seq.saturating_add(1);
-        if let Ok(jsonl) = capture_rec.to_jsonl() {
-            let res = self.runtime.commit.reserve_sequence(capture_rec.sequence);
-            res.commit_record(jsonl);
-        }
+        let jsonl = match capture_rec.to_jsonl() {
+            Ok(jsonl) => jsonl,
+            Err(error) => {
+                return self.capture_failure(
+                    inner,
+                    format!("cannot serialize capture trace record: {error}"),
+                );
+            }
+        };
+        let res = self.runtime.commit.reserve_sequence(capture_rec.sequence);
+        res.commit_record(jsonl);
 
         // Get the logical main surface (screen 0) via the graphics FFI.
         #[cfg(feature = "linked_c_archive")]
@@ -1253,8 +1264,7 @@ impl Coordinator {
             let surface: *mut c_void =
                 unsafe { crate::graphics::ffi::rust_gfx_get_sdl_screen() as *mut c_void };
             if surface.is_null() {
-                eprintln!("[automation] capture: surface is null, skipping PNG");
-                return;
+                return self.capture_failure(inner, "logical SDL surface is null");
             }
 
             // Query surface metadata via ABI-authoritative accessors.
@@ -1272,9 +1282,9 @@ impl Coordinator {
                 a_mask: info.amask,
             };
 
-            if let Err(e) = validate_surface(&meta) {
-                eprintln!("[automation] capture: surface validation failed: {e:?}");
-                return;
+            if let Err(error) = validate_surface(&meta) {
+                return self
+                    .capture_failure(inner, format!("surface validation failed: {error:?}"));
             }
 
             // Compute safe copy length per row.
@@ -1283,34 +1293,26 @@ impl Coordinator {
                 info.pitch,
                 info.bytes_per_pixel,
             ) {
-                Some(r) => r,
-                None => {
-                    eprintln!("[automation] capture: safe_row_copy failed");
-                    return;
-                }
+                Some(row_copy) => row_copy,
+                None => return self.capture_failure(inner, "surface row-copy size is invalid"),
             };
 
             let height_u = match u64::try_from(info.height) {
-                Ok(h) => h,
+                Ok(height) => height,
                 Err(_) => {
-                    eprintln!("[automation] capture: height overflow");
-                    return;
+                    return self.capture_failure(inner, "surface height conversion overflowed");
                 }
             };
 
             let buf_size = match u64::from(row_copy).checked_mul(height_u) {
-                Some(s) => s,
-                None => {
-                    eprintln!("[automation] capture: buffer size overflow");
-                    return;
-                }
+                Some(size) => size,
+                None => return self.capture_failure(inner, "capture buffer size overflowed"),
             };
 
             let buf_size_usize = match usize::try_from(buf_size) {
-                Ok(s) => s,
+                Ok(size) => size,
                 Err(_) => {
-                    eprintln!("[automation] capture: buffer size too large");
-                    return;
+                    return self.capture_failure(inner, "capture buffer does not fit in memory");
                 }
             };
 
@@ -1324,22 +1326,23 @@ impl Coordinator {
                 )
             };
 
-            match copy_result {
-                Ok(()) => {}
-                Err(e) => {
-                    eprintln!("[automation] capture: lock_copy_unlock failed: {e}");
-                    return;
-                }
+            if let Err(error) = copy_result {
+                return self
+                    .capture_failure(inner, format!("surface lock/copy/unlock failed: {error}"));
             }
 
             // Encode PNG using the `image` crate.
             let width_u32 = match u32::try_from(info.width) {
-                Ok(w) => w,
-                Err(_) => return,
+                Ok(width) => width,
+                Err(_) => {
+                    return self.capture_failure(inner, "surface width is not a valid PNG width");
+                }
             };
             let height_u32 = match u32::try_from(info.height) {
-                Ok(h) => h,
-                Err(_) => return,
+                Ok(height) => height,
+                Err(_) => {
+                    return self.capture_failure(inner, "surface height is not a valid PNG height");
+                }
             };
 
             // Swizzle pixel data from SDL surface format to RGBA8.
@@ -1386,24 +1389,22 @@ impl Coordinator {
             }
 
             let rgba_image = match image::RgbaImage::from_raw(width_u32, height_u32, pixel_buf) {
-                Some(img) => img,
+                Some(image) => image,
                 None => {
-                    eprintln!("[automation] capture: RgbaImage::from_raw failed");
-                    return;
+                    return self.capture_failure(inner, "RGBA capture dimensions are inconsistent");
                 }
             };
 
             let mut png_data = Vec::new();
             let encoder = image::codecs::png::PngEncoder::new(&mut png_data);
-            if let Err(e) = image::ImageEncoder::write_image(
+            if let Err(error) = image::ImageEncoder::write_image(
                 encoder,
                 rgba_image.as_raw(),
                 width_u32,
                 height_u32,
                 image::ExtendedColorType::Rgba8,
             ) {
-                eprintln!("[automation] capture: PNG encode failed: {e}");
-                return;
+                return self.capture_failure(inner, format!("PNG encoding failed: {error}"));
             }
 
             // Write the PNG via the durable file helper.
@@ -1417,18 +1418,41 @@ impl Coordinator {
                         png_data.len()
                     );
                 }
-                Err(e) => {
-                    eprintln!("[automation] capture: write_durable failed: {e}");
+                Err(error) => {
+                    self.capture_failure(inner, format!("durable PNG publication failed: {error}"));
                 }
             }
         }
 
         #[cfg(not(feature = "linked_c_archive"))]
         {
-            let _ = (inner, label, gen);
-            eprintln!("[automation] capture: linked_c_archive feature not enabled, skipping PNG");
+            let _ = (label, gen);
+            self.capture_failure(inner, "capture requested without linked_c_archive support");
         }
     }
+
+    fn capture_failure(&self, inner: &mut CoordInner, error: impl std::fmt::Display) {
+        eprintln!("[automation] capture failed: {error}");
+        self.set_terminal(inner, TerminalClass::TraceFailure);
+    }
+}
+
+fn validate_runtime_finalization(result: FinalizationResult) -> Result<(), String> {
+    match result {
+        FinalizationResult::Finalized => Ok(()),
+        other => Err(format!(
+            "automation runtime finalization did not complete: {other:?}"
+        )),
+    }
+}
+
+fn active_automation_status(
+    terminal: Option<TerminalClass>,
+    game_result: i32,
+) -> Result<i32, String> {
+    terminal
+        .map(|class| crate::automation::lifecycle::map_status(Some(class), game_result))
+        .ok_or_else(|| "automation run ended without a terminal outcome".into())
 }
 
 /// Compute the bit shift for a color mask (number of trailing zeros).
@@ -1495,5 +1519,39 @@ mod tests {
     #[test]
     fn map_none_to_cooperative_stop() {
         assert_eq!(map_scheduler_terminal(None), TerminalClass::CooperativeStop);
+    }
+
+    #[test]
+    fn active_status_requires_a_terminal_outcome() {
+        assert!(active_automation_status(None, 0).is_err());
+    }
+
+    #[test]
+    fn active_status_preserves_game_failure_after_success() {
+        assert_eq!(
+            active_automation_status(Some(TerminalClass::Success), 7),
+            Ok(7)
+        );
+    }
+
+    #[test]
+    fn active_status_maps_automation_failure_nonzero() {
+        assert_eq!(
+            active_automation_status(Some(TerminalClass::SemanticMismatch), 0),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn runtime_finalization_rejects_every_nonfinalized_result() {
+        assert!(validate_runtime_finalization(FinalizationResult::Finalized).is_ok());
+        for result in [
+            FinalizationResult::AlreadyFinalized,
+            FinalizationResult::AlreadyFinalizing,
+            FinalizationResult::ShellsStillActive(1),
+            FinalizationResult::DuplicateRunEnd,
+        ] {
+            assert!(validate_runtime_finalization(result).is_err());
+        }
     }
 }

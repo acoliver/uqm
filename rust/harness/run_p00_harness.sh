@@ -3,7 +3,7 @@
 # P00 Linked Harness Probe Script
 #
 # Proves deterministic libuqm_c.a archive construction, force-load ordering,
-# production member extraction, and mutation testing for the 7 source-grounded
+# production member extraction for the 7 source-grounded
 # production symbols required by execution-contract §8.
 #
 # This script compiles and links a standalone C harness against the production
@@ -11,7 +11,7 @@
 #
 # @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §8
 #
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUST_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -128,8 +128,6 @@ LINK_MAP=$(mktemp -t p00_link_map).map
 cat > "${HARNESS_MAIN}" << 'HARNESS_EOF'
 #include <stdio.h>
 extern int p00_harness_verify_symbols(void);
-extern int p00_harness_set_mutation(int);
-extern int p00_harness_get_mutation(void);
 
 int main(void) {
     int count = p00_harness_verify_symbols();
@@ -161,7 +159,6 @@ OS_NAME="$(uname -s)"
 case "${OS_NAME}" in
     Darwin)
         "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
-            -Wl,-undefined,dynamic_lookup \
             -L"${OUT_DIR}" \
             -Wl,-force_load,"${HARNESS_ARCHIVE}" \
             "${C_ARCHIVE}" \

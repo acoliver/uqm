@@ -16,7 +16,7 @@
 //! # Architecture
 //!
 //! The manifest is a checked-in JSON file (`native-provider-manifest.json`)
-//! authorized by immutable ownership ledger v5. Object identities are derived
+//! authorized by immutable ownership ledger v6. Object identities are derived
 //! from tracked canonical sources and exact produced-object names rather than
 //! an ignored assessment-era object tree. The validator checks each source
 //! digest, archive decision, provider, actual archive member, and strict-link
@@ -41,10 +41,10 @@ pub use manifest::{
 };
 pub use native::{
     load_native_dependencies, load_native_inputs, parse_dependency_file, target_key,
-    validate_native_authority, validate_observed_dependencies, NativeDependency,
-    NativeDependencyManifest, NativeInput, NativeInputManifest, PreprocessorDefine,
-    ProductionProfile, NATIVE_COMPILE_COMMAND, NATIVE_DEPENDENCY_SCHEMA, NATIVE_INPUT_SCHEMA,
-    PRODUCTION_PROFILE_ID, SUPPORTED_TARGETS,
+    validate_linked_test_profile, validate_native_authority, validate_observed_dependencies,
+    NativeDependency, NativeDependencyManifest, NativeInput, NativeInputManifest,
+    PreprocessorDefine, ProductionProfile, LINKED_TEST_PROFILE_ID, NATIVE_COMPILE_COMMAND,
+    NATIVE_DEPENDENCY_SCHEMA, NATIVE_INPUT_SCHEMA, PRODUCTION_PROFILE_ID, SUPPORTED_TARGETS,
 };
 pub use path::{canonical_absolute, validate_repo_relative_path};
 pub use report::{
@@ -70,15 +70,15 @@ pub const MANIFEST_RELATIVE_PATH: &str = "ownership/native-provider-manifest.jso
 
 /// The schema version string this validator expects.
 pub const EXPECTED_SCHEMA: &str = "uqm-native-provider-manifest-v2";
-pub const EXPECTED_LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v5";
+pub const EXPECTED_LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v6";
 pub const EXPECTED_ASSESSMENT_COMMIT: &str = "54e1dba5f56e9f20a3aa773d5f151470a8cf0662";
-pub const EXPECTED_LEDGER_RAW_REVISION: &str = "9b0d2a1cced5d0ac3eb73432f765a008053eb81b";
-pub const EXPECTED_LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json";
-pub const EXPECTED_LEDGER_GIST_REVISION: &str = "519aea3f1f27ba6ac6022dfe08e1520e979cbe1c";
+pub const EXPECTED_LEDGER_RAW_REVISION: &str = "8f03fa7844feac162a3759ed768f3f38f75fbf7e";
+pub const EXPECTED_LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json";
+pub const EXPECTED_LEDGER_GIST_REVISION: &str = "d7602e17c4401ed322f60ddfe6bf5e61d4754e24";
 pub const EXPECTED_LEDGER_SHA256: &str =
-    "9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5";
+    "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
-    "cc08f03a890d60f38ad6f2380b679a9978f26fd1a5d8a7a22c1d5dd1187af90e";
+    "a83bbf8475beb2a80798b5e00de5b47ec3c59578533510d5df0dffbd1c9917d5";
 pub const EXPECTED_SCAN_ROOT: &str = "native";
 pub const EXPECTED_OBJECT_COUNT: usize = 338;
 pub const DISPLIST_OBJECT: &str = "native/displist.c.o";

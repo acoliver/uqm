@@ -16,6 +16,9 @@
     {"action": "assert_dispatch", "encounter": 24, "dialogue": 18},
     {"action": "capture", "label": "real-probe-broadcast"},
     {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 9000},
+    {"action": "wait_input_ticks", "count": 60},
+    {"action": "assert_battle_frames", "minimum": 30},
+    {"action": "capture", "label": "real-probe-battle"},
     {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "real-probe-returned-to-flight"},
     {"action": "finish"}

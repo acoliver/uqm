@@ -301,16 +301,7 @@ mod tests {
     }
 
     fn tmpdir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "uqm-p05-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+        tempfile::tempdir().unwrap().keep()
     }
 
     // --- REQ-MODE-003: inactive ---

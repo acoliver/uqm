@@ -444,6 +444,13 @@ pub struct CommunicationResponsesAssertion {
     pub minimum: usize,
 }
 
+/// Assert that the current battle has completed at least `minimum` real frames.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BattleFramesAssertion {
+    pub minimum: u64,
+}
+
 /// Wait for a fresh communication response list before selecting its first entry.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -486,6 +493,7 @@ pub enum Action {
     WaitForDispatch(WaitForDispatchStep),
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
+    AssertBattleFrames(BattleFramesAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
@@ -1282,6 +1290,15 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                     ));
                 }
             }
+            Action::AssertBattleFrames(assertion) => {
+                if assertion.minimum == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "assert_battle_frames: minimum must be greater than zero",
+                    ));
+                }
+            }
             Action::AssertMainMenuTransition(dto_inner) => {
                 let from = parse_menu_item(&dto_inner.from, i, path)?;
                 let to = parse_menu_item(&dto_inner.to, i, path)?;
@@ -1967,6 +1984,26 @@ mod tests {
         assert!(!is_valid_label("a\\b"));
         assert!(!is_valid_label("a..b"));
         assert!(!is_valid_label("a\0b"));
+    }
+
+    #[test]
+    fn every_checked_in_script_parses_and_validates() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let mut paths: Vec<_> = std::fs::read_dir(&scripts)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| {
+                path.extension()
+                    .is_some_and(|extension| extension == "json")
+            })
+            .collect();
+        paths.sort();
+        assert!(!paths.is_empty());
+        for path in paths {
+            let bytes = std::fs::read(&path).unwrap();
+            let parsed = parse_script(&bytes, path.to_string_lossy().into_owned()).unwrap();
+            validate_script(parsed, path.to_string_lossy().into_owned()).unwrap();
+        }
     }
 
     // --- capability contract ---

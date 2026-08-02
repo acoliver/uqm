@@ -43,6 +43,12 @@
 #include "libs/async.h"
 #include "libs/graphics/gfx_common.h"
 #include "libs/log.h"
+
+/* S3 (issue 23) authorized cross-domain correction #12: monotonic
+ * read-only battle-frame observation hook for semantic progress proof.
+ * No battle implementation ownership transfers. */
+extern void rust_battle_frame_reset (void);
+extern void rust_battle_frame_advance (void);
 #include "libs/mathlib.h"
 
 
@@ -347,6 +353,9 @@ DoBattle (BATTLE_STATE *bs)
 	if ((GLOBAL (CurrentActivity) & IN_BATTLE) == 0)
 		return FALSE;
 
+	/* S3 battle-frame observer: monotonic advance at the stable frame seam */
+	rust_battle_frame_advance ();
+
 #ifdef NETPLAY
 	battleFrameCount++;
 #endif
@@ -430,6 +439,9 @@ Battle (BattleFrameCallback *callback)
 		GLOBAL (CurrentActivity) |= IN_BATTLE;
 		battle_counter[0] = CountLinks (&race_q[0]);
 		battle_counter[1] = CountLinks (&race_q[1]);
+
+		/* S3 battle-frame observer: reset at battle start */
+		rust_battle_frame_reset ();
 
 		if (optMeleeScale != TFB_SCALE_STEP)
 			SetGraphicScaleMode (optMeleeScale);

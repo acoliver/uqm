@@ -44,49 +44,38 @@ fi
 echo "PASS: menu.key found at ${CONTENT_DIR}/menu.key"
 echo ""
 
-# --------------------------------------------------------------------------
-# 1. Build the library to produce the archives
-# --------------------------------------------------------------------------
+# Build and consume only artifacts named by canonical production evidence.
+cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
+MANIFEST_JSON="${RUST_DIR}/target/production-artifacts.json"
 
-echo "--- Building library target (produces libuqm_rust.a, libuqm_c.a, libp00_harness_shim.a) ---"
-cargo build --lib 2>&1
-BUILD_EXIT=$?
-if [ ${BUILD_EXIT} -ne 0 ]; then
-    echo "FAIL: cargo build --lib exited ${BUILD_EXIT}"
-    exit 1
-fi
-echo "PASS: library built"
-echo ""
+extract_artifact_path() {
+    local role="$1"
+    python3 - "${MANIFEST_JSON}" "${role}" <<'PYTHON'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as source:
+    manifest = json.load(source)
+for artifact in manifest["artifacts"]:
+    if artifact["role"] == sys.argv[2]:
+        print(artifact["path"])
+        sys.exit(0)
+sys.exit(1)
+PYTHON
+}
 
-# --------------------------------------------------------------------------
-# 2. Locate build artifacts
-# --------------------------------------------------------------------------
-
-MANIFEST=$(find "${RUST_DIR}/target/debug/build" -name "uqm-c-objects.manifest" -type f -print0 2>/dev/null \
-    | xargs -0 ls -t 2>/dev/null | head -1)
-if [ -z "${MANIFEST}" ]; then
-    echo "FAIL: uqm-c-objects.manifest not found"
-    exit 1
-fi
-OUT_DIR="$(dirname "${MANIFEST}")"
-
-C_ARCHIVE="${OUT_DIR}/libuqm_c.a"
+C_ARCHIVE="${REPO_ROOT}/$(extract_artifact_path c_static_archive)"
+RUST_ARCHIVE="${REPO_ROOT}/$(extract_artifact_path rust_static_archive)"
+OUT_DIR="$(dirname "${C_ARCHIVE}")"
 HARNESS_ARCHIVE="${OUT_DIR}/libp00_harness_shim.a"
-RUST_ARCHIVE="${RUST_DIR}/target/debug/libuqm_rust.a"
+CC_PATH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["cc"]["executable"])' "${MANIFEST_JSON}")"
+NM_PATH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["nm"]["executable"])' "${MANIFEST_JSON}")"
+PKG_CONFIG_TOOL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["pkg_config"]["executable"])' "${MANIFEST_JSON}")"
 
-echo "OUT_DIR: ${OUT_DIR}"
-echo "C_ARCHIVE: ${C_ARCHIVE}"
-echo "HARNESS_ARCHIVE: ${HARNESS_ARCHIVE}"
-echo "RUST_ARCHIVE: ${RUST_ARCHIVE}"
-echo ""
-
-for f in "${C_ARCHIVE}" "${HARNESS_ARCHIVE}" "${RUST_ARCHIVE}"; do
-    if [ ! -f "${f}" ]; then
-        echo "FAIL: ${f} not found"
+for file in "${C_ARCHIVE}" "${HARNESS_ARCHIVE}" "${RUST_ARCHIVE}"; do
+    if [ ! -f "${file}" ]; then
+        echo "FAIL: ${file} not found"
         exit 1
     fi
 done
-echo "PASS: all archives present"
 echo ""
 
 # --------------------------------------------------------------------------
@@ -109,7 +98,7 @@ verify_symbol() {
     # Write nm output to temp file to avoid SIGPIPE issues with pipefail + grep -q
     local tmpfile
     tmpfile=$(mktemp)
-    nm -A "${archive}" > "${tmpfile}" 2>/dev/null || true
+    "${NM_PATH}" -A "${archive}" > "${tmpfile}" 2>/dev/null || true
     if grep -q " T _${symbol}\$" "${tmpfile}"; then
         local origin
         origin=$(grep " T _${symbol}\$" "${tmpfile}" | head -1)
@@ -167,8 +156,7 @@ fi
 #   External libraries: -lpng16 -lz -lm -lSDL2 -lobjc
 #   Frameworks: Cocoa CoreAudio AudioToolbox CoreFoundation
 #   Compression: -llzma -lbz2
-cc \
-    -Wl,-undefined,dynamic_lookup \
+"${CC_PATH}" \
     -L"${OUT_DIR}" \
     "${PROBE_OBJ}" \
     -Wl,-force_load,"${HARNESS_ARCHIVE}" \
@@ -177,7 +165,6 @@ cc \
     -lpng16 -lz -lm -lSDL2 -lobjc \
     -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
     -llzma -lbz2 \
-    -L/opt/homebrew/lib -L/opt/homebrew/opt/libpng/lib -L/opt/homebrew/opt/SDL2/lib \
     -Wl,-map,"${LINK_MAP}" \
     -o "${PROBE_BIN}" 2>&1
 
@@ -280,7 +267,7 @@ echo ""
 echo "--- nm evidence for probe binary ---"
 
 for sym in _main _uqm_query_menu_binding _VControl_ParseGesture _InitResourceSystem _LoadResourceIndex _res_IsString _res_GetString _rust_VControl_ParseGesture; do
-    addr=$(nm "${PROBE_BIN}" 2>/dev/null | { grep " T ${sym}\$" || true; } | head -1)
+    addr=$("${NM_PATH}" "${PROBE_BIN}" 2>/dev/null | { grep " T ${sym}\$" || true; } | head -1)
     if [ -n "${addr}" ]; then
         echo "  ${sym} -> ${addr}"
     else
@@ -296,9 +283,9 @@ echo ""
 EVIDENCE_DIR="/tmp/p00-menu-binding-evidence"
 mkdir -p "${EVIDENCE_DIR}"
 cp "${LINK_MAP}" "${EVIDENCE_DIR}/menu-binding-link-map.txt"
-nm -A "${C_ARCHIVE}" > "${EVIDENCE_DIR}/c-archive-nm.txt" 2>/dev/null || true
-nm -A "${RUST_ARCHIVE}" > "${EVIDENCE_DIR}/rust-archive-nm.txt" 2>/dev/null || true
-nm "${PROBE_BIN}" > "${EVIDENCE_DIR}/probe-binary-nm.txt" 2>/dev/null || true
+"${NM_PATH}" -A "${C_ARCHIVE}" > "${EVIDENCE_DIR}/c-archive-nm.txt" 2>/dev/null || true
+"${NM_PATH}" -A "${RUST_ARCHIVE}" > "${EVIDENCE_DIR}/rust-archive-nm.txt" 2>/dev/null || true
+"${NM_PATH}" "${PROBE_BIN}" > "${EVIDENCE_DIR}/probe-binary-nm.txt" 2>/dev/null || true
 echo "${PROBE_OUTPUT}" > "${EVIDENCE_DIR}/probe-output.txt"
 
 echo "=== Menu Binding Probe: ALL CHECKS PASSED ==="

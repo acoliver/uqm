@@ -31,12 +31,12 @@ const C_ARCHIVE_COMMAND: &str =
     "canonical ar rcs <OUT_DIR>/libuqm_c.a <exact manifest-selected native objects>";
 const SIDECAR_COMMAND: &str = "rust/build.rs archive_sidecar_inputs(rust/build/native-inputs.json, rust/ownership/native-provider-manifest.json)";
 const PROVIDER_REPORT_COMMAND: &str = "rust/build.rs uqm_ownership::Validator::generate_report()";
-const LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v5";
+const LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v6";
 const LEDGER_ASSESSMENT_COMMIT: &str = "54e1dba5f56e9f20a3aa773d5f151470a8cf0662";
-const LEDGER_RAW_REVISION: &str = "9b0d2a1cced5d0ac3eb73432f765a008053eb81b";
-const LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json";
-const LEDGER_GIST_REVISION: &str = "519aea3f1f27ba6ac6022dfe08e1520e979cbe1c";
-const LEDGER_SHA256: &str = "9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5";
+const LEDGER_RAW_REVISION: &str = "8f03fa7844feac162a3759ed768f3f38f75fbf7e";
+const LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json";
+const LEDGER_GIST_REVISION: &str = "d7602e17c4401ed322f60ddfe6bf5e61d4754e24";
+const LEDGER_SHA256: &str = "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496";
 const HASH_TABLE_PROVIDER: &str = "rust/src/collections/hash_table.rs";
 const CHAR_HASH_OBJECT: &str = "native/charhashtable.c.o";
 const STRING_HASH_OBJECT: &str = "native/stringhashtable.c.o";
@@ -355,8 +355,14 @@ fn build_profile_args(profile: Profile) -> Vec<String> {
     args
 }
 
+const PURE_TEST_FEATURES: &str = "audio_heart,debug-process";
+const LINKED_TEST_FEATURES: &str = "audio_heart,debug-process,linked_c_archive";
+
 fn test_all(root: &Path) -> Result<(), String> {
     let toolchain = canonical_toolchain(root)?;
+
+    // Phase 1: Broad pure all-feature tests (no native linking required).
+    // This exercises all Rust code paths including debug-process.
     run_command(
         Command::new(&toolchain.cargo.executable)
             .current_dir(root)
@@ -367,8 +373,55 @@ fn test_all(root: &Path) -> Result<(), String> {
                 "rust/Cargo.toml",
                 "--workspace",
                 "--all-targets",
+                "--no-default-features",
+                "--features",
+                PURE_TEST_FEATURES,
             ]),
-        "Cargo test workspace",
+        "Cargo test workspace (pure feature set)",
+    )?;
+
+    // Phase 2: Strict production-linked fixtures through canonical orchestration.
+    // Both targets pass through the same S1 provider/archive/ownership gates.
+    prepare_source_environment(root)?;
+    let linked_toolchain = canonical_toolchain(root)?;
+    prepare_canonical_build(&linked_toolchain)?;
+    let marker = serde_json::to_string(&linked_toolchain)
+        .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
+    run_command(
+        Command::new(&linked_toolchain.cargo.executable)
+            .current_dir(root)
+            .env("UQM_NATIVE_PROFILE", "linked-test")
+            .env("UQM_CANONICAL_TOOLCHAIN", &marker)
+            .args([
+                "build",
+                "--locked",
+                "--manifest-path",
+                "rust/Cargo.toml",
+                "--no-default-features",
+                "--features",
+                LINKED_TEST_FEATURES,
+                "--bin",
+                "uqm",
+            ]),
+        "Cargo build linked-test fixture binary",
+    )?;
+    run_command(
+        Command::new(&linked_toolchain.cargo.executable)
+            .current_dir(root)
+            .env("UQM_NATIVE_PROFILE", "linked-test")
+            .env("UQM_CANONICAL_TOOLCHAIN", marker)
+            .args([
+                "test",
+                "--locked",
+                "--manifest-path",
+                "rust/Cargo.toml",
+                "--no-default-features",
+                "--features",
+                LINKED_TEST_FEATURES,
+                "--test",
+                "linked_provider_fixture",
+            ]),
+        "Cargo test strict linked provider fixture",
     )
 }
 fn prepare_source_environment(root: &Path) -> Result<(), String> {
@@ -683,7 +736,7 @@ fn validate_trend_authority(trend: &Trend) -> Result<(), String> {
         LEDGER_SHA256,
     );
     if actual_ledger != expected_ledger {
-        return Err("native input trend is not pinned to authoritative ownership ledger v5".into());
+        return Err("native input trend is not pinned to authoritative ownership ledger v6".into());
     }
     if trend.infrastructure_delta.rust_hash_table_provider_cutovers != HASH_TABLE_CUTOVERS.len()
         || trend.removed_providers != REMOVED_PROVIDERS
@@ -703,7 +756,7 @@ fn validate_trend_authority(trend: &Trend) -> Result<(), String> {
         })
         .collect();
     if actual_cutovers != HASH_TABLE_CUTOVERS {
-        return Err("native input trend hash-table cutovers differ from ledger v5".into());
+        return Err("native input trend hash-table cutovers differ from ledger v6".into());
     }
     Ok(())
 }
@@ -1449,7 +1502,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn checked_in_trend_pins_ledger_v5_and_both_hash_table_cutovers() {
+    fn checked_in_trend_pins_ledger_v6_and_both_hash_table_cutovers() {
         let bytes = include_bytes!("../../build/native-input-trend.json");
         let mut trend: Trend = serde_json::from_slice(bytes).unwrap();
         validate_trend_authority(&trend).unwrap();
@@ -1457,7 +1510,7 @@ mod tests {
         trend.provider_cutovers[0].canonical_owner = "S2".into();
         assert!(validate_trend_authority(&trend)
             .unwrap_err()
-            .contains("differ from ledger v5"));
+            .contains("differ from ledger v6"));
     }
 
     #[test]

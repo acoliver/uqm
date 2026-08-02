@@ -487,44 +487,24 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i
     }
 }
 
-/// C-callable automation present callback hook.
-///
-/// Called from `TFB_SwapBuffers` after a frame is presented. Feeds the
-/// committed present event (with the current armed capture generation)
-/// to the coordinator's scheduler.
-///
-/// Returns 1 if the game loop should stop, 0 otherwise.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P07
-/// @requirement REQ-FFI-004
+/// Query whether automation has reached a terminal state before rendering.
 #[no_mangle]
 pub extern "C" fn rust_automation_present_callback() -> i32 {
+    with_runtime()
+        .is_some_and(|runtime| runtime.mirror.is_terminal())
+        .into()
+}
+
+/// Commit one frame after the graphics backend has actually presented it.
+#[no_mangle]
+pub extern "C" fn rust_automation_presented_frame() -> i32 {
     if !Coordinator::is_active() {
         return 0;
     }
-
-    // Check terminal — if terminal, return stop.
-    if let Some(rt) = with_runtime() {
-        if rt.mirror.is_terminal() {
-            return 1;
-        }
-    }
-
-    // Read the armed capture generation from the runtime mirror.
-    let gen = if let Some(rt) = with_runtime() {
-        rt.mirror.capture_generation()
-    } else {
-        0
-    };
-
-    if gen > 0 {
-        eprintln!("[automation] present_callback gen={gen}");
-    }
-
-    if Coordinator::process_present(gen) {
-        return 1;
-    }
-    0
+    let generation = with_runtime()
+        .map(|runtime| runtime.mirror.capture_generation())
+        .unwrap_or(0);
+    Coordinator::process_present(generation).into()
 }
 
 // ===========================================================================

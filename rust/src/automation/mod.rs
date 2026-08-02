@@ -21,6 +21,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P01..P05
 
 pub mod artifact;
+pub mod battle_observer;
 pub mod capture;
 pub mod child_session;
 pub mod coordinator;
@@ -48,11 +49,15 @@ pub use capture::{
     safe_row_copy, should_count_present, validate_surface, CaptureCompletion, CaptureMetadata,
     PresentClassification, SurfaceError, SurfaceMetadata,
 };
+#[cfg(unix)]
+pub use child_session::{
+    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionReceipt, StreamKind,
+};
 pub use child_session::{
     ChildSessionModel, HangClassification, ProcessIdentity, ProofResult, ProofType, SessionResult,
     SessionState,
 };
-pub use coordinator::Coordinator;
+pub use coordinator::{Coordinator, AUTOMATION_SEED};
 pub use error::AutomationError;
 pub use input::{
     combine_stops, menu_key_to_index, observe_main_menu_transition, observe_menu_key,

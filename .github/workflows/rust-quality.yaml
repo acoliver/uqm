@@ -37,6 +37,41 @@ jobs:
           if-no-files-found: error
 
 
+  s3-linked-test-fixtures:
+    name: S3 pure and strict linked-test fixtures
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Install production prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libsdl2-dev libpng-dev liblzma-dev libbz2-dev pkg-config
+      - name: Run S3 canonical fixture command
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p rust/target
+          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- test 2>&1 | tee rust/target/s3-test.log
+      - name: Upload S3 fixture evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s3-linked-test-fixtures
+          path: |
+            rust/target/s3-test.log
+            rust/target/debug/build/uqm-*/out/native-build-evidence.json
+            rust/target/debug/build/uqm-*/out/provider-report.json
+            rust/target/debug/build/uqm-*/out/uqm-c-objects.manifest
+          if-no-files-found: error
+
+
   reproducible-build-contract:
     name: Clean checkout root command (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

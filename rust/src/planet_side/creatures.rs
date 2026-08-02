@@ -112,6 +112,27 @@ impl CreatureCatalog {
             hit_points: packed & 0x0f,
         }
     }
+
+    /// Return the raw `(attributes, value_and_hit_points)` byte pair for a
+    /// valid creature index.
+    ///
+    /// This is the narrow read-only Rust-authoritative accessor consumed by
+    /// the S3 DEBUG linked fixture's `calculateBioValue`.
+    ///
+    /// @plan PLAN-20260723-RUNTIME-AUTOMATION S3 (authorized cross-domain correction #9)
+    #[must_use]
+    pub fn raw_lifedata(kind: CreatureKind) -> (u8, u8) {
+        RAW_CREATURE_DATA[usize::from(kind.index())]
+    }
+}
+
+/// Return the biological multiplier used by `calculateBioValue`, or `-1` for
+/// an invalid creature type.
+#[no_mangle]
+pub extern "C" fn rust_creature_bio_value(creature_type: u8) -> i32 {
+    CreatureKind::new(creature_type)
+        .map(|kind| i32::from(CreatureCatalog::raw_lifedata(kind).1 & 0x0f))
+        .unwrap_or(-1)
 }
 
 const HUNT: u8 = 0;
@@ -200,5 +221,19 @@ mod tests {
             assert!(stats.value <= 15);
             assert!(stats.hit_points <= 15);
         }
+    }
+
+    #[test]
+    fn ffi_accessor_matches_calculate_bio_value_semantics() {
+        for index in 0..CREATURE_COUNT as u8 {
+            let packed = CreatureCatalog::raw_lifedata(CreatureKind::new(index).unwrap()).1;
+            assert_eq!(rust_creature_bio_value(index), i32::from(packed & 0x0f));
+        }
+    }
+
+    #[test]
+    fn ffi_accessor_rejects_invalid_indices_unambiguously() {
+        assert_eq!(rust_creature_bio_value(CREATURE_COUNT as u8), -1);
+        assert_eq!(rust_creature_bio_value(u8::MAX), -1);
     }
 }

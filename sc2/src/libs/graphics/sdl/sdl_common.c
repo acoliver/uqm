@@ -277,13 +277,14 @@ TFB_SwapBuffers (int force_full_redraw)
 	static int last_fade_amount = 255, last_transition_amount = 255;
 	static int fade_amount = 255, transition_amount = 255;
 
-	/* Automation present hook — called at the top of every SwapBuffers */
+	/* Automation present check — early terminal exit (no counter increment
+	 * here; the actual presented-frame notification is after postprocess
+	 * so it only fires for genuinely presented frames). */
 	{
 		extern int rust_automation_present_callback (void);
 		int auto_stop = rust_automation_present_callback ();
 		if (auto_stop)
 		{
-			/* Terminal: skip the rest of this frame presentation */
 			return;
 		}
 	}
@@ -338,6 +339,12 @@ TFB_SwapBuffers (int force_full_redraw)
 	}
 
 	graphics_backend->postprocess ();
+
+	{
+		extern int rust_automation_presented_frame (void);
+		if (rust_automation_presented_frame ())
+			return;
+	}
 }
 
 /* Probably ought to clean this away at some point. */

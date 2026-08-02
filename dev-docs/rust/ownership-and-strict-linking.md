@@ -1,12 +1,12 @@
 # Native Ownership and Strict Production Linking
 
 Issue S1/#21 retains provider authority under authoritative immutable ownership
-ledger v5: raw revision `9b0d2a1cced5d0ac3eb73432f765a008053eb81b`,
-gist revision `519aea3f1f27ba6ac6022dfe08e1520e979cbe1c`, SHA-256
-`9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5`,
-schema `uqm-native-ownership-ledger-v5`, and assessment commit
+ledger v6: raw revision `8f03fa7844feac162a3759ed768f3f38f75fbf7e`,
+gist revision `d7602e17c4401ed322f60ddfe6bf5e61d4754e24`, SHA-256
+`ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496`,
+schema `uqm-native-ownership-ledger-v6`, and assessment commit
 `54e1dba5f56e9f20a3aa773d5f151470a8cf0662`. The immutable raw URL is
-<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json>.
+<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json>.
 Validation never fetches the Gist: the checked-in manifest pins the schema, raw
 revision and URL, gist history revision, and content hash. An authenticated
 projection digest covers every ledger-derived object identity field. A ledger
@@ -43,7 +43,7 @@ future tracked-source deletion. S1 deletes no tracked native source. It excludes
 and rejects only `sc2/obj/release/src/uqm/displist.c.o` from production archive
 membership and assigns all ten queue exports solely to the Rust queue.
 
-Ledger v5 additionally authorizes S2 to provide the 24 `CharHashTable_*` and
+Ledger v6 additionally authorizes S2 to provide the 24 `CharHashTable_*` and
 `StringHashTable_*` ABI symbols solely from `rust/src/collections/hash_table.rs`.
 The manifest excludes `native/charhashtable.c.o` and
 `native/stringhashtable.c.o`, and each symbol contract names its one superseded
