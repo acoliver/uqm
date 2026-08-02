@@ -184,7 +184,9 @@ pub fn validate_linked_test_profile(
     let mut expected_features = production.cargo_features.clone();
     expected_features.push("debug-process".into());
     expected_features.sort();
-    if linked.cargo_features != expected_features {
+    let mut linked_features = linked.cargo_features.clone();
+    linked_features.sort();
+    if linked_features != expected_features {
         return Err(format!(
             "linked-test Cargo features must be exactly {expected_features:?}"
         ));
@@ -194,7 +196,10 @@ pub fn validate_linked_test_profile(
         name: "DEBUG".into(),
         value: None,
     });
-    if linked.defines != expected_defines {
+    expected_defines.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut linked_defines = linked.defines.clone();
+    linked_defines.sort_by(|left, right| left.name.cmp(&right.name));
+    if linked_defines != expected_defines {
         return Err("linked-test defines must be exactly production plus DEBUG".into());
     }
     if linked.compile_flags != production.compile_flags {

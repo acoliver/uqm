@@ -76,8 +76,14 @@ PRODUCTION_PACKAGES=(sdl2 libpng liblzma)
 if [ "$(uname -s)" = "Darwin" ]; then
     PRODUCTION_PACKAGES+=(bzip2)
 fi
-PKG_CFLAGS=( $("${PKG_CONFIG_TOOL}" --cflags "${PRODUCTION_PACKAGES[@]}") )
-PKG_LIBS=( $("${PKG_CONFIG_TOOL}" --libs "${PRODUCTION_PACKAGES[@]}") )
+if ! PKG_CFLAGS=( $("${PKG_CONFIG_TOOL}" --cflags "${PRODUCTION_PACKAGES[@]}") ); then
+    echo "FAIL: pkg-config --cflags failed for packages: ${PRODUCTION_PACKAGES[*]}" >&2
+    exit 1
+fi
+if ! PKG_LIBS=( $("${PKG_CONFIG_TOOL}" --libs "${PRODUCTION_PACKAGES[@]}") ); then
+    echo "FAIL: pkg-config --libs failed for packages: ${PRODUCTION_PACKAGES[*]}" >&2
+    exit 1
+fi
 
 for file in "${C_ARCHIVE}" "${HARNESS_ARCHIVE}" "${RUST_ARCHIVE}"; do
     if [ ! -f "${file}" ]; then

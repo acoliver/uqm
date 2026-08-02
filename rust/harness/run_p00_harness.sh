@@ -96,6 +96,13 @@ echo ""
 echo "--- 1. Archive member symbol extraction (nm) ---"
 
 NM_LISTING=$(mktemp -t p00_nm_listing)
+HARNESS_MAIN=""
+LINK_MAP=""
+HARNESS_BIN=""
+cleanup() {
+    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}" "${NM_LISTING}"
+}
+trap cleanup EXIT
 "${NM_PATH}" -A "${C_ARCHIVE}" > "${NM_LISTING}"
 for sym in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do
     member=$(awk -v symbol="${sym}" '$(NF - 1) == "T" && ($NF == symbol || $NF == "_" symbol) { print; exit }' "${NM_LISTING}")
@@ -126,10 +133,6 @@ echo "--- 3. Compile and link harness (force-load order per §8) ---"
 HARNESS_MAIN=$(mktemp -t p00_harness_main).c
 LINK_MAP=$(mktemp -t p00_link_map).map
 HARNESS_BIN=$(mktemp -t p00_harness_bin)
-cleanup() {
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}" "${NM_LISTING}"
-}
-trap cleanup EXIT
 
 cat > "${HARNESS_MAIN}" << 'HARNESS_EOF'
 #include <stdio.h>

@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
     "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
     "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
-    "projection_sha256": "eaf404112cc00b673b21c63ad3061476d613bf30c2859fdfb2d32c74f5c015b4",
+    "projection_sha256": "19342d1ba20cbaca7369c2ac4a9be288b32af67bce4fa1ed20cd9aa4ddb0a7ff",
     "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
@@ -1736,7 +1736,7 @@
       "issue": "BATTLE",
       "canonical_source": "sc2/src/uqm/battle.c",
       "scan_root": "native",
-      "sha256": "153d05dd8363edf26c8aff5f390c03397f17b57e43cfa254cb2a0367f74a00be",
+      "sha256": "99cbce6c7e55fbb6aa3a4ff61d6356b332617fbe182816128b4565d8650d50b0",
       "archive_decision": "include",
       "provider": "native_object:native/battle.c.o",
       "reason": "Transitional C ambient archive member",

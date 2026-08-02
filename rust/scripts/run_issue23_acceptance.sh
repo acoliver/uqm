@@ -17,7 +17,7 @@ preserve_harness_evidence() {
         fi
     done
 }
-trap preserve_harness_evidence EXIT
+trap preserve_harness_evidence EXIT HUP INT TERM
 
 cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- test
 cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- probe

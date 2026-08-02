@@ -408,13 +408,16 @@ BOOLEAN
 Battle (BattleFrameCallback *callback)
 {
 	SIZE num_ships;
+#ifndef NETPLAY
 	DWORD automation_seed;
+#endif
 
 
 #if !(DEMO_MODE || CREATE_JOURNAL)
 	if (LOBYTE (GLOBAL (CurrentActivity)) != SUPER_MELEE) {
 		TFB_SeedRandom (GetTimeCounter ());
 	}
+#ifndef NETPLAY
 	else
 	{
 		automation_seed = rust_automation_seed_value (
@@ -422,6 +425,7 @@ Battle (BattleFrameCallback *callback)
 		if (automation_seed != 0)
 			TFB_SeedRandom (automation_seed);
 	}
+#endif
 #else /* DEMO_MODE */
 	if (BattleSeed == 0)
 		BattleSeed = TFB_Random ();

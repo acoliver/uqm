@@ -133,8 +133,10 @@ pub unsafe extern "C" fn rust_tfb_init_graphics(
 /// Initialize the communication system through its Rust implementation.
 #[no_mangle]
 pub extern "C" fn rust_init_communication() {
-    unsafe {
-        crate::comm::ffi::rust_InitCommunication();
+    let initialized = unsafe { crate::comm::ffi::rust_InitCommunication() };
+    if initialized == 0 {
+        tracing::error!("Communication system initialization failed");
+        std::process::abort();
     }
     tracing::debug!("Communication system initialized");
 }

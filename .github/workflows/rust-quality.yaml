@@ -207,11 +207,12 @@ jobs:
             rust/target/debug/build/uqm-*/out/native-build-evidence.json
             rust/target/debug/build/uqm-*/out/provider-report.json
             rust/target/debug/build/uqm-*/out/uqm-c-objects.manifest
-          if-no-files-found: warn
+          if-no-files-found: error
 
   issue23-macos13-exclusion:
     name: Issue 23 macOS 13 x86_64 runner exclusion
     runs-on: macos-15-intel
+    timeout-minutes: 5
     permissions:
       contents: read
     steps:
