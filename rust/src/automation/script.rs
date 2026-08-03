@@ -503,7 +503,6 @@ pub enum Action {
     AssertBattleFrames(BattleFramesAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
-    SeekCommunicationToEnd,
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
     Finish,
@@ -1331,7 +1330,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                 let to = parse_menu_item(&dto_inner.to, i, path)?;
                 transitions.push(MainMenuTransition::new(from, to));
             }
-            Action::SeekCommunicationToEnd | Action::Finish => {}
+            Action::Finish => {}
         }
     }
 

@@ -78,7 +78,7 @@ pub const EXPECTED_LEDGER_GIST_REVISION: &str = "d7602e17c4401ed322f60ddfe6bf5e6
 pub const EXPECTED_LEDGER_SHA256: &str =
     "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
-    "eaf404112cc00b673b21c63ad3061476d613bf30c2859fdfb2d32c74f5c015b4";
+    "78dc1ba7d0c1f6012211c2d396bd3dba20600712d039a2629542cc432c1fee6b";
 pub const EXPECTED_SCAN_ROOT: &str = "native";
 pub const EXPECTED_OBJECT_COUNT: usize = 338;
 pub const DISPLIST_OBJECT: &str = "native/displist.c.o";

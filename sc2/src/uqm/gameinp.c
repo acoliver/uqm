@@ -43,9 +43,18 @@ extern void ProcessUtilityKeys (void);
  * Automation service/observation hooks. */
 extern int rust_automation_service_do_input (void);
 extern int rust_automation_after_input_update (void);
-extern void rust_automation_set_immediate_menu_key (int index, int value);
+extern int rust_automation_set_immediate_menu_key (int index, int value);
 extern int rust_automation_get_current_menu_key (int index);
 extern int rust_automation_get_pulsed_menu_key (int index);
+int
+c_automation_set_immediate_menu_key (int index, int value)
+{
+	if (index < 0 || index >= NUM_MENU_KEYS)
+		return -1;
+	ImmediateInputState.menu[index] = value != 0;
+	return 0;
+}
+
 #endif
 
 

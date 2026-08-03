@@ -90,6 +90,7 @@ struct CSolarSystemState {
 
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
+    fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
     static mut ImmediateInputState: ControllerInputState;
     static CurrentInputState: ControllerInputState;
     static PulsedInputState: ControllerInputState;
@@ -422,7 +423,7 @@ pub extern "C" fn rust_automation_service_boundary() -> i32 {
 
 /// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`.
 ///
-/// Writes directly to the C global volatile `ImmediateInputState.menu[index]`.
+/// Delegates to the C owner of `ImmediateInputState.menu[index]`.
 /// Returns 0 on success, -1 on invalid index.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
@@ -434,10 +435,7 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
         return -1;
     }
     let _result = setter_set_menu_key(index as u8, value as u8);
-    unsafe {
-        ImmediateInputState.menu[index as usize] = if value != 0 { 1 } else { 0 };
-    }
-    0
+    unsafe { c_automation_set_immediate_menu_key(index, value) }
 }
 
 /// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`

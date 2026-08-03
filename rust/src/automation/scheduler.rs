@@ -206,8 +206,6 @@ pub struct EffectPlan {
     pub arm_capture: Option<CaptureGeneration>,
     /// Complete a capture with this generation.
     pub complete_capture: Option<CaptureGeneration>,
-    /// Seek production communication playback to the end of its current page.
-    pub seek_communication_to_end: bool,
 }
 
 impl EffectPlan {
@@ -221,7 +219,6 @@ impl EffectPlan {
             release_player_key: None,
             arm_capture: None,
             complete_capture: None,
-            seek_communication_to_end: false,
         }
     }
 
@@ -234,7 +231,6 @@ impl EffectPlan {
             && self.release_player_key.is_none()
             && self.arm_capture.is_none()
             && self.complete_capture.is_none()
-            && !self.seek_communication_to_end
     }
 }
 
@@ -960,16 +956,6 @@ fn reduce_admitted_input(
         (Action::AssertActivity(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
-
-        (Action::SeekCommunicationToEnd, ActionPhase::WaitingForInput) => advance_to_next(
-            state,
-            config,
-            sv,
-            EffectPlan {
-                seek_communication_to_end: true,
-                ..EffectPlan::none()
-            },
-        ),
 
         // AssertScene is validated by the runtime coordinator before the
         // reducer advances it. Keeping it callback-bound prevents an earlier
@@ -1747,19 +1733,6 @@ mod tests {
     }
 
     // --- assert_activity advances immediately ---
-
-    #[test]
-    fn seek_communication_to_end_emits_production_effect() {
-        let actions = [Action::SeekCommunicationToEnd, Action::Finish];
-        let transition = scheduler_reduce(
-            &SchedulerState::initial(),
-            &cfg(&actions),
-            SchedulerEvent::AdmittedInput,
-        );
-
-        assert_eq!(transition.new_state.step_index, 1);
-        assert!(transition.effects.seek_communication_to_end);
-    }
 
     #[test]
     fn assert_activity_advances() {

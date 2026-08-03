@@ -274,18 +274,6 @@ pub(super) mod c_bridge {
     }
 }
 
-/// Seek the current production communication page to its end for deterministic automation.
-#[cfg(not(test))]
-pub fn automation_seek_communication_to_end() {
-    extern "C" {
-        fn rust_FastForward_Page();
-    }
-    unsafe { rust_FastForward_Page() }
-}
-
-#[cfg(test)]
-pub fn automation_seek_communication_to_end() {}
-
 #[cfg(not(test))]
 pub mod dinput {
     #![allow(dead_code)]

@@ -1235,14 +1235,6 @@ impl Coordinator {
                 0,
             );
         }
-        if effects.seek_communication_to_end {
-            crate::comm::talk_segue::automation_seek_communication_to_end();
-            self.write_trace_labeled(
-                inner,
-                RecordKind::SemanticAssertion,
-                "communication_page_seeked_to_end".to_owned(),
-            );
-        }
         if let Some(gen) = effects.arm_capture {
             self.runtime.mirror.set_capture_generation(gen.0);
             // Store the capture label from the current action so we can
