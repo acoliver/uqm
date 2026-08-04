@@ -19,6 +19,7 @@ static LAST_SOUND: AtomicU32 = AtomicU32::new(0);
 static TERMINAL: AtomicU32 = AtomicU32::new(0);
 static RETURNED_CREW: AtomicI32 = AtomicI32::new(0);
 static RETURNED_MINERALS: AtomicU32 = AtomicU32::new(0);
+static PHASE: AtomicU32 = AtomicU32::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlanetSideObservation {
@@ -36,6 +37,9 @@ pub struct PlanetSideObservation {
     pub terminal: u32,
     pub returned_crew: i16,
     pub returned_minerals: u16,
+    /// Live [`SessionPhase`], so a stalled trip can be told apart from one that
+    /// never requested takeoff at all. See [`phase_name`].
+    pub phase: u32,
 }
 
 pub fn begin(session: &PlanetSideSession) {
@@ -56,6 +60,7 @@ pub fn begin(session: &PlanetSideSession) {
 }
 
 pub fn frame(session: &PlanetSideSession) {
+    PHASE.store(phase_code(session.phase), Ordering::Release);
     FRAMES.fetch_add(1, Ordering::AcqRel);
     CURRENT_X.store(session.lander.position.x, Ordering::Release);
     CURRENT_Y.store(session.lander.position.y, Ordering::Release);
@@ -97,6 +102,39 @@ pub fn observation() -> PlanetSideObservation {
         terminal: TERMINAL.load(Ordering::Acquire),
         returned_crew: RETURNED_CREW.load(Ordering::Acquire) as i16,
         returned_minerals: RETURNED_MINERALS.load(Ordering::Acquire) as u16,
+        phase: PHASE.load(Ordering::Acquire),
+    }
+}
+
+const fn phase_code(phase: super::session::SessionPhase) -> u32 {
+    use super::session::SessionPhase;
+    match phase {
+        SessionPhase::Warmup => 1,
+        SessionPhase::Launch => 2,
+        SessionPhase::Landing => 3,
+        SessionPhase::Active => 4,
+        SessionPhase::TakingOff => 5,
+        SessionPhase::Explosion => 6,
+        SessionPhase::Return => 7,
+        SessionPhase::Complete => 8,
+        SessionPhase::Aborted => 9,
+    }
+}
+
+/// Human-readable name for an observed phase code.
+#[must_use]
+pub const fn phase_name(code: u32) -> &'static str {
+    match code {
+        1 => "Warmup",
+        2 => "Launch",
+        3 => "Landing",
+        4 => "Active",
+        5 => "TakingOff",
+        6 => "Explosion",
+        7 => "Return",
+        8 => "Complete",
+        9 => "Aborted",
+        _ => "None",
     }
 }
 

@@ -93,6 +93,8 @@ struct CoordInner {
     consumed_communication_completions: u64,
     /// Most recent dispatch generation consumed by a dispatch wait.
     consumed_dispatch_generation: u64,
+    /// Last observed planet-side lifecycle phase, so transitions are traced once.
+    observed_planet_side_phase: u32,
     /// Most recent communication response generation selected semantically.
     consumed_response_generation: u64,
     /// Most recent communication replay generation consumed semantically.
@@ -174,6 +176,7 @@ impl Coordinator {
                 pending_start_scene: PendingStartScene::new(start_scene),
                 consumed_communication_completions,
                 consumed_dispatch_generation: 0,
+                observed_planet_side_phase: 0,
                 consumed_response_generation: 0,
                 consumed_replay_generation: 0,
                 consumed_planet_menu_generation: 0,
@@ -577,6 +580,21 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             let observation = crate::planet_side::telemetry::observation();
+            // Record every lifecycle transition while waiting. Phase changes are
+            // rare, and they show whether a trip that never ends is stuck before
+            // takeoff or stalled inside the takeoff/return animation.
+            if observation.phase != inner.observed_planet_side_phase {
+                inner.observed_planet_side_phase = observation.phase;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_phase:generation={}:phase={}",
+                        observation.generation,
+                        crate::planet_side::telemetry::phase_name(observation.phase)
+                    ),
+                );
+            }
             // The session publishes its terminal code only once it has settled,
             // so an inactive session carrying the expected code is the proof
             // that the trip finished on its own.
