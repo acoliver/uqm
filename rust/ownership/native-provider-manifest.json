@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
     "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
     "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
-    "projection_sha256": "78dc1ba7d0c1f6012211c2d396bd3dba20600712d039a2629542cc432c1fee6b",
+    "projection_sha256": "aff6e0d59cf9445e1018a4a7430b4f6680bc5f31dee79254eee7777dcb3f0f7b",
     "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
@@ -23,7 +23,7 @@
     },
     {
       "canonical_source": "sc2/src/uqm/gameinp.c",
-      "source_sha256": "4a34d7cb5825a977378451fc3a5e70dc020bb4c7fec5cc830bfd764fc13156c3",
+      "source_sha256": "8d820b00ecb71d68639cd42171448f892f0992a9b91b3747511a4665b4359b4e",
       "object_output": "gameinp_rust_main.o",
       "owner": "INPUT",
       "provider": "recompiled_native:sc2/src/uqm/gameinp.c",
@@ -2333,7 +2333,7 @@
       "issue": "INPUT",
       "canonical_source": "sc2/src/uqm/gameinp.c",
       "scan_root": "native",
-      "sha256": "4a34d7cb5825a977378451fc3a5e70dc020bb4c7fec5cc830bfd764fc13156c3",
+      "sha256": "8d820b00ecb71d68639cd42171448f892f0992a9b91b3747511a4665b4359b4e",
       "archive_decision": "exclude_recompiled",
       "provider": "recompiled_native:sc2/src/uqm/gameinp.c",
       "reason": "Recompiled in rust/build.rs with RUST_OWNS_MAIN",

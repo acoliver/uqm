@@ -91,10 +91,9 @@ struct CSolarSystemState {
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
     fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
-    static mut ImmediateInputState: ControllerInputState;
+    fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
     static CurrentInputState: ControllerInputState;
     static PulsedInputState: ControllerInputState;
-    static PlayerControls: [i32; 2];
     #[link_name = "pSolarSysState"]
     static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemState;
     #[link_name = "GlobData"]
@@ -421,9 +420,10 @@ pub extern "C" fn rust_automation_service_boundary() -> i32 {
 //  Bounds-checked production setter (REQ-INJECT-003)
 // ===========================================================================
 
-/// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`.
+/// Set `ImmediateInputState.menu[index]` through its native owner.
 ///
-/// Delegates to the C owner of `ImmediateInputState.menu[index]`.
+/// The C module owns the input state, so it is the single authority for
+/// bounds and normalization; this forwards its verdict unchanged.
 /// Returns 0 on success, -1 on invalid index.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
@@ -431,10 +431,6 @@ pub extern "C" fn rust_automation_service_boundary() -> i32 {
 #[no_mangle]
 #[cfg(feature = "linked_c_archive")]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
-        return -1;
-    }
-    let _result = setter_set_menu_key(index as u8, value as u8);
     unsafe { c_automation_set_immediate_menu_key(index, value) }
 }
 
@@ -446,33 +442,27 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 #[no_mangle]
 #[cfg(not(feature = "linked_c_archive"))]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
+    use crate::automation::input::SetterResult;
+
+    let Ok(index) = u8::try_from(index) else {
         return -1;
+    };
+    match setter_set_menu_key(index, u8::from(value != 0)) {
+        SetterResult::InvalidIndex { .. } => -1,
+        SetterResult::Set { .. } | SetterResult::Cleared { .. } => 0,
     }
-    let _result = setter_set_menu_key(index as u8, value as u8);
-    let _ = value;
-    0
 }
 
 // ===========================================================================
 //  Present hook: called from TFB_SwapBuffers
 // ===========================================================================
 
-/// Set one player-one gameplay control in `ImmediateInputState`.
+/// Set one player-one gameplay control through the native owner of
+/// `ImmediateInputState`, forwarding its verdict unchanged.
 #[no_mangle]
 #[cfg(feature = "linked_c_archive")]
 pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, value: i32) -> i32 {
-    if !(0..7).contains(&index) {
-        return -1;
-    }
-    unsafe {
-        let template = PlayerControls[0] as usize;
-        if template >= 6 {
-            return -1;
-        }
-        ImmediateInputState.key[template][index as usize] = i32::from(value != 0);
-    }
-    0
+    unsafe { c_automation_set_immediate_player_key(index, value) }
 }
 
 #[no_mangle]
@@ -483,6 +473,33 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i
     } else {
         -1
     }
+}
+
+/// Set when the native owner refuses an automation input write.
+static INJECTION_REJECTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Write a menu key, recording any rejection by the native owner.
+pub(crate) fn inject_menu_key(index: i32, value: i32) {
+    if rust_automation_set_immediate_menu_key(index, value) != 0 {
+        INJECTION_REJECTED.store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
+/// Write a player control, recording any rejection by the native owner.
+pub(crate) fn inject_player_key(index: i32, value: i32) {
+    if rust_automation_set_immediate_player_key(index, value) != 0 {
+        INJECTION_REJECTED.store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
+/// True once the native owner has refused an automation input write.
+///
+/// Typed key domains make this unreachable today; it becomes reachable only
+/// if those domains and the native key tables diverge, and the run must fail
+/// rather than continue against input that never landed.
+pub(crate) fn injection_rejected() -> bool {
+    INJECTION_REJECTED.load(std::sync::atomic::Ordering::Acquire)
 }
 
 /// Query whether automation has reached a terminal state before rendering.

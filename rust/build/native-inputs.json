@@ -1615,7 +1615,7 @@
     },
     {
       "source": "sc2/src/uqm/gameinp.c",
-      "source_sha256": "4a34d7cb5825a977378451fc3a5e70dc020bb4c7fec5cc830bfd764fc13156c3",
+      "source_sha256": "8d820b00ecb71d68639cd42171448f892f0992a9b91b3747511a4665b4359b4e",
       "object_output": "gameinp_rust_main.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "INPUT",

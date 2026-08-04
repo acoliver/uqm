@@ -243,7 +243,25 @@ impl Coordinator {
         let Some(coord) = Self::get() else {
             return false;
         };
+        if coord.halt_on_rejected_injection() {
+            return true;
+        }
         coord.process_input_inner()
+    }
+
+    /// Stop the run if the native owner ever refused an input write.
+    ///
+    /// The script's action never reached the game, so continuing would assert
+    /// against state the automation never actually produced.
+    fn halt_on_rejected_injection(&self) -> bool {
+        if !crate::automation::input_ffi::injection_rejected() {
+            return false;
+        }
+        let mut inner = self.inner.lock();
+        if inner.terminal_class.is_none() {
+            self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+        }
+        true
     }
 
     /// Whether the current semantic response action is waiting for NPC speech
@@ -355,7 +373,7 @@ impl Coordinator {
 
         let released_semantic_select = inner.release_semantic_select;
         if released_semantic_select {
-            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+            crate::automation::input_ffi::inject_menu_key(
                 i32::from(crate::automation::script::MenuKey::Select.index()),
                 0,
             );
@@ -465,7 +483,7 @@ impl Coordinator {
             {
                 if ready {
                     crate::comm::ffi::rust_SelectResponseIndex(select.index as i32);
-                    crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                    crate::automation::input_ffi::inject_menu_key(
                         i32::from(crate::automation::script::MenuKey::Select.index()),
                         1,
                     );
@@ -501,7 +519,7 @@ impl Coordinator {
                 && generation > inner.consumed_planet_menu_generation
                 && phase == expected
             {
-                crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                crate::automation::input_ffi::inject_menu_key(
                     i32::from(crate::automation::script::MenuKey::Select.index()),
                     1,
                 );
@@ -1194,7 +1212,7 @@ impl Coordinator {
             (PlayerKey::Right, control.right),
             (PlayerKey::Escape, control.escape),
         ] {
-            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+            crate::automation::input_ffi::inject_player_key(
                 i32::from(key.index()),
                 i32::from(active),
             );
@@ -1211,29 +1229,20 @@ impl Coordinator {
         // Note: `inner` is `&mut` so callers can pass it as mutable.
         if let Some((key, value)) = effects.write_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
-                i32::from(index),
-                i32::from(value),
-            );
+            crate::automation::input_ffi::inject_menu_key(i32::from(index), i32::from(value));
         }
         if let Some(key) = effects.release_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
-                i32::from(index),
-                0,
-            );
+            crate::automation::input_ffi::inject_menu_key(i32::from(index), 0);
         }
         if let Some((key, value)) = effects.write_player_key {
-            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+            crate::automation::input_ffi::inject_player_key(
                 i32::from(key.index()),
                 i32::from(value),
             );
         }
         if let Some(key) = effects.release_player_key {
-            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
-                i32::from(key.index()),
-                0,
-            );
+            crate::automation::input_ffi::inject_player_key(i32::from(key.index()), 0);
         }
         if let Some(gen) = effects.arm_capture {
             self.runtime.mirror.set_capture_generation(gen.0);

@@ -43,15 +43,31 @@ extern void ProcessUtilityKeys (void);
  * Automation service/observation hooks. */
 extern int rust_automation_service_do_input (void);
 extern int rust_automation_after_input_update (void);
-extern int rust_automation_set_immediate_menu_key (int index, int value);
-extern int rust_automation_get_current_menu_key (int index);
-extern int rust_automation_get_pulsed_menu_key (int index);
+/* This module owns ImmediateInputState, so it is the single authority for
+ * bounds and normalization on every automation write into it. */
+int c_automation_set_immediate_menu_key (int index, int value);
+int c_automation_set_immediate_player_key (int index, int value);
+
 int
 c_automation_set_immediate_menu_key (int index, int value)
 {
 	if (index < 0 || index >= NUM_MENU_KEYS)
 		return -1;
 	ImmediateInputState.menu[index] = value != 0;
+	return 0;
+}
+
+int
+c_automation_set_immediate_player_key (int index, int value)
+{
+	int template;
+
+	if (index < 0 || index >= NUM_KEYS)
+		return -1;
+	template = PlayerControls[0];
+	if (template < 0 || template >= NUM_TEMPLATES)
+		return -1;
+	ImmediateInputState.key[template][index] = value != 0;
 	return 0;
 }
 
