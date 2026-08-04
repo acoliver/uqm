@@ -1050,17 +1050,11 @@ pub unsafe extern "C" fn rust_DoCommunication() -> c_int {
             #[allow(clashing_extern_declarations)]
             fn FadeMusic(target_vol: u8, duration: i16) -> std::ffi::c_uint;
         }
-        let skip_replay =
-            crate::automation::coordinator::Coordinator::should_skip_communication_closing_speech();
-        if skip_replay {
-            let _ = crate::sound::trackplayer::jump_track(0);
-        } else {
-            let timeout = FadeMusic(
-                0u8,
-                (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,
-            );
-            super::talk_segue::run_last_replay_bridge(timeout as i32);
-        }
+        let timeout = FadeMusic(
+            0u8,
+            (super::talk_segue::c_bridge::ONE_SECOND_TICKS * 3) as i16,
+        );
+        super::talk_segue::run_last_replay_bridge(timeout as i32);
         return 0;
     }
 
@@ -1437,8 +1431,7 @@ extern "C" {
 /// Ported from C's c_get_alliance_name: returns alliance name phrase text.
 /// Uses CommData.ConversationPhrases + GET_GAME_STATE(NEW_ALLIANCE_NAME).
 #[cfg(not(test))]
-#[allow(dead_code)]
-unsafe fn get_alliance_name(index: c_int) -> *const u8 {
+pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
     let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
     let phrases = std::ptr::addr_of_mut!(CommData.conversation_phrases) as *mut std::ffi::c_void;
     if phrases.is_null() {

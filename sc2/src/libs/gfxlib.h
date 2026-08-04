@@ -375,6 +375,7 @@ extern void font_DrawTracedText (TEXT *pText, Color text, Color trace);
 extern void DrawBatch (PRIMITIVE *pBasePrim, PRIM_LINKS PrimLinks,
 		BATCH_FLAGS BatchFlags);
 extern void BatchGraphics (void);
+extern int GetBatchDepth (void);
 extern void UnbatchGraphics (void);
 extern void FlushGraphics (void);
 extern void ClearDrawable (void);

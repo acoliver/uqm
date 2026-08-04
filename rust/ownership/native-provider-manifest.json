@@ -2,13 +2,13 @@
   "schema": "uqm-native-provider-manifest-v2",
   "description": "Source-derived native provider manifest for strict transitional production linking. Produced objects have exact output identity, tracked canonical source hash, declared command, decision, and sole provider.",
   "generated_from_ledger": {
-    "schema": "uqm-native-ownership-ledger-v5",
+    "schema": "uqm-native-ownership-ledger-v6",
     "assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
-    "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json",
-    "gist_revision": "519aea3f1f27ba6ac6022dfe08e1520e979cbe1c",
-    "sha256": "9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5",
-    "projection_sha256": "cc08f03a890d60f38ad6f2380b679a9978f26fd1a5d8a7a22c1d5dd1187af90e",
-    "raw_revision": "9b0d2a1cced5d0ac3eb73432f765a008053eb81b"
+    "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
+    "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
+    "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
+    "projection_sha256": "ba984e076026cdd5b4cc90c96454bd53fd883d24b6badf7df3b6d971dc980b98",
+    "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
   "recompiled_objects": [
@@ -23,7 +23,7 @@
     },
     {
       "canonical_source": "sc2/src/uqm/gameinp.c",
-      "source_sha256": "0964edf62722f24457d753e0779e5bff15ab714fccfd2f5f2d2403b63500bc23",
+      "source_sha256": "8d820b00ecb71d68639cd42171448f892f0992a9b91b3747511a4665b4359b4e",
       "object_output": "gameinp_rust_main.o",
       "owner": "INPUT",
       "provider": "recompiled_native:sc2/src/uqm/gameinp.c",
@@ -205,7 +205,7 @@
       "issue": "GFX",
       "canonical_source": "sc2/src/libs/graphics/dcqueue.c",
       "scan_root": "native",
-      "sha256": "80532510c57143dc5354d4fceba45ac16a19c5b98d30031adca241a75cd59a50",
+      "sha256": "acfffa5b68b3ff767dbaca10c4e0079a64f274ce921279eb4feaef9ec978deb8",
       "archive_decision": "include",
       "provider": "native_object:native/dcqueue.c.o",
       "reason": "Transitional C ambient archive member",
@@ -265,7 +265,7 @@
       "issue": "GFX",
       "canonical_source": "sc2/src/libs/graphics/gfx_common.c",
       "scan_root": "native",
-      "sha256": "cbfda35b6fcf388e50228e3c25cc0927e87b753020537c92b447fc22c355aab0",
+      "sha256": "a02ab9e5017c26ff68d3854e85abfaecdfb1fa8fb3b584d1ae280f022ab1b623",
       "archive_decision": "include",
       "provider": "native_object:native/gfx_common.c.o",
       "reason": "Transitional C ambient archive member",
@@ -565,7 +565,7 @@
       "issue": "GFX",
       "canonical_source": "sc2/src/libs/graphics/sdl/sdl_common.c",
       "scan_root": "native",
-      "sha256": "6c96b8e66650334096d7d61933af3d3bac10f6d17315c5a7b1cc723229eb52ea",
+      "sha256": "5eb29277453a18b871cb947217e4d4a924fc8a3414ec42927a6bae8abff0a1af",
       "archive_decision": "include",
       "provider": "native_object:native/sdl_common.c.o",
       "reason": "Transitional C ambient archive member",
@@ -1736,7 +1736,7 @@
       "issue": "BATTLE",
       "canonical_source": "sc2/src/uqm/battle.c",
       "scan_root": "native",
-      "sha256": "0eb7ecb8856f346efc1794177245403e8ad51d9e28fe19714310f25741cdd078",
+      "sha256": "153d05dd8363edf26c8aff5f390c03397f17b57e43cfa254cb2a0367f74a00be",
       "archive_decision": "include",
       "provider": "native_object:native/battle.c.o",
       "reason": "Transitional C ambient archive member",
@@ -2333,7 +2333,7 @@
       "issue": "INPUT",
       "canonical_source": "sc2/src/uqm/gameinp.c",
       "scan_root": "native",
-      "sha256": "0964edf62722f24457d753e0779e5bff15ab714fccfd2f5f2d2403b63500bc23",
+      "sha256": "8d820b00ecb71d68639cd42171448f892f0992a9b91b3747511a4665b4359b4e",
       "archive_decision": "exclude_recompiled",
       "provider": "recompiled_native:sc2/src/uqm/gameinp.c",
       "reason": "Recompiled in rust/build.rs with RUST_OWNS_MAIN",
@@ -2679,7 +2679,7 @@
       "issue": "PLANET_GEN",
       "canonical_source": "sc2/src/uqm/planets/generate/gendefault.c",
       "scan_root": "native",
-      "sha256": "6ecdc0c8235e1ce178ba56ae878ea6b05a2590c7a0b4a3debd2103328fe95184",
+      "sha256": "b845cbcc7651f15a1c28f84b788cc332d4561c90225a88e971523238538e095d",
       "archive_decision": "include",
       "provider": "native_object:native/gendefault.c.o",
       "reason": "Transitional C ambient archive member",
@@ -3757,7 +3757,7 @@
       "issue": "MELEE",
       "canonical_source": "sc2/src/uqm/supermelee/melee.c",
       "scan_root": "native",
-      "sha256": "c4381ccc0d3b1e11ff292b4d41ff7644b07d30ec76dcb02ff679b564d7baa7a9",
+      "sha256": "991503519336bf67e2f3296a353664969ac23ddde7ca6cbc9d181c8523d7d765",
       "archive_decision": "include",
       "provider": "native_object:native/melee.c.o",
       "reason": "Transitional C ambient archive member",
@@ -4056,7 +4056,7 @@
       "issue": "LIFECYCLE",
       "canonical_source": "sc2/src/uqm/uqmdebug.c",
       "scan_root": "native",
-      "sha256": "d5d2620fcd2eeb6b7442bfb489fadd72b37cb4a1f590f4f56b40bd6f4e4b3adc",
+      "sha256": "f3b042d932f89dc8447163d969d0e3131b5a706760390a2690a3c7671df16298",
       "archive_decision": "include",
       "provider": "native_object:native/uqmdebug.c.o",
       "reason": "Transitional C ambient archive member",
@@ -4751,6 +4751,165 @@
       {
         "name": "USE_RUST_MAINLOOP",
         "value": "1"
+      }
+    ],
+    "compile_flags": [
+      "-std=gnu99",
+      "-O2",
+      "-fPIC"
+    ]
+  },
+  "linked_test_profile": {
+    "id": "linked-test",
+    "cargo_features": [
+      "audio_heart",
+      "debug-process",
+      "linked_c_archive"
+    ],
+    "defines": [
+      {
+        "name": "GFXMODULE_SDL",
+        "value": null
+      },
+      {
+        "name": "SDL_DIR",
+        "value": "SDL2"
+      },
+      {
+        "name": "_THREAD_SAFE",
+        "value": null
+      },
+      {
+        "name": "USE_INTERNAL_MIKMOD",
+        "value": null
+      },
+      {
+        "name": "OVCODEC_NONE",
+        "value": null
+      },
+      {
+        "name": "NETPLAY",
+        "value": "NETPLAY_FULL"
+      },
+      {
+        "name": "HAVE_JOYSTICK",
+        "value": null
+      },
+      {
+        "name": "HAVE_ZIP",
+        "value": "1"
+      },
+      {
+        "name": "USE_PLATFORM_ACCEL",
+        "value": null
+      },
+      {
+        "name": "THREADLIB_SDL",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_BRIDGE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_FILE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_CLOCK",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_UIO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_OGG",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AUDIO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_COMM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_INPUT",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_VIDEO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_VIDPLAYER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_GFX",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_RESOURCE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MOD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_WAV",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_DUKAUD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AIFF",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_THREADS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MIXER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MEM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_STATE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SHIPS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SUPERMELEE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AUDIO_HEART",
+        "value": null
+      },
+      {
+        "name": "RUST_OWNS_MAIN",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MAINLOOP",
+        "value": "1"
+      },
+      {
+        "name": "DEBUG",
+        "value": null
       }
     ],
     "compile_flags": [

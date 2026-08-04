@@ -16,6 +16,8 @@ pub struct Manifest {
     pub scan_root: String,
     pub accepted_production_profile: ProductionProfile,
     #[serde(default)]
+    pub linked_test_profile: Option<ProductionProfile>,
+    #[serde(default)]
     pub recompiled_objects: Vec<RecompiledObject>,
     #[serde(default)]
     pub symbol_contracts: Vec<SymbolContract>,
@@ -234,6 +236,18 @@ impl Manifest {
                 Some("accepted_production_profile"),
                 detail,
             ));
+        }
+        if let Some(linked) = &self.linked_test_profile {
+            if let Err(detail) = crate::native::validate_linked_test_profile(
+                linked,
+                &self.accepted_production_profile,
+            ) {
+                diagnostics.push(diag(
+                    DiagnosticCode::MalformedManifest,
+                    Some("linked_test_profile"),
+                    detail,
+                ));
+            }
         }
         if self.objects.len() != crate::EXPECTED_OBJECT_COUNT {
             diagnostics.push(diag(
@@ -514,7 +528,7 @@ impl Manifest {
             diagnostics.push(diag(
                 DiagnosticCode::ManifestDrift,
                 Some("no_tracked_native_change"),
-                "declaration differs from ledger v5 S1/S2 provider and source-ownership boundary",
+                "declaration differs from ledger v6 S1/S2 provider and source-ownership boundary",
             ));
         }
         if self

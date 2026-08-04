@@ -85,7 +85,7 @@
     },
     {
       "source": "sc2/src/libs/graphics/dcqueue.c",
-      "source_sha256": "80532510c57143dc5354d4fceba45ac16a19c5b98d30031adca241a75cd59a50",
+      "source_sha256": "acfffa5b68b3ff767dbaca10c4e0079a64f274ce921279eb4feaef9ec978deb8",
       "object_output": "dcqueue.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "GFX",
@@ -130,7 +130,7 @@
     },
     {
       "source": "sc2/src/libs/graphics/gfx_common.c",
-      "source_sha256": "cbfda35b6fcf388e50228e3c25cc0927e87b753020537c92b447fc22c355aab0",
+      "source_sha256": "a02ab9e5017c26ff68d3854e85abfaecdfb1fa8fb3b584d1ae280f022ab1b623",
       "object_output": "gfx_common.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "GFX",
@@ -355,7 +355,7 @@
     },
     {
       "source": "sc2/src/libs/graphics/sdl/sdl_common.c",
-      "source_sha256": "6c96b8e66650334096d7d61933af3d3bac10f6d17315c5a7b1cc723229eb52ea",
+      "source_sha256": "5eb29277453a18b871cb947217e4d4a924fc8a3414ec42927a6bae8abff0a1af",
       "object_output": "sdl_common.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "GFX",
@@ -1192,7 +1192,7 @@
     },
     {
       "source": "sc2/src/uqm/battle.c",
-      "source_sha256": "0eb7ecb8856f346efc1794177245403e8ad51d9e28fe19714310f25741cdd078",
+      "source_sha256": "153d05dd8363edf26c8aff5f390c03397f17b57e43cfa254cb2a0367f74a00be",
       "object_output": "battle.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "BATTLE",
@@ -1615,7 +1615,7 @@
     },
     {
       "source": "sc2/src/uqm/gameinp.c",
-      "source_sha256": "0964edf62722f24457d753e0779e5bff15ab714fccfd2f5f2d2403b63500bc23",
+      "source_sha256": "8d820b00ecb71d68639cd42171448f892f0992a9b91b3747511a4665b4359b4e",
       "object_output": "gameinp_rust_main.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "INPUT",
@@ -1858,7 +1858,7 @@
     },
     {
       "source": "sc2/src/uqm/planets/generate/gendefault.c",
-      "source_sha256": "6ecdc0c8235e1ce178ba56ae878ea6b05a2590c7a0b4a3debd2103328fe95184",
+      "source_sha256": "b845cbcc7651f15a1c28f84b788cc332d4561c90225a88e971523238538e095d",
       "object_output": "gendefault.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "PLANET_GEN",
@@ -2650,7 +2650,7 @@
     },
     {
       "source": "sc2/src/uqm/supermelee/melee.c",
-      "source_sha256": "c4381ccc0d3b1e11ff292b4d41ff7644b07d30ec76dcb02ff679b564d7baa7a9",
+      "source_sha256": "991503519336bf67e2f3296a353664969ac23ddde7ca6cbc9d181c8523d7d765",
       "object_output": "melee.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "MELEE",
@@ -2866,7 +2866,7 @@
     },
     {
       "source": "sc2/src/uqm/uqmdebug.c",
-      "source_sha256": "d5d2620fcd2eeb6b7442bfb489fadd72b37cb4a1f590f4f56b40bd6f4e4b3adc",
+      "source_sha256": "f3b042d932f89dc8447163d969d0e3131b5a706760390a2690a3c7671df16298",
       "object_output": "uqmdebug.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "LIFECYCLE",
@@ -3038,6 +3038,165 @@
       {
         "name": "USE_RUST_MAINLOOP",
         "value": "1"
+      }
+    ],
+    "compile_flags": [
+      "-std=gnu99",
+      "-O2",
+      "-fPIC"
+    ]
+  },
+  "linked_test_profile": {
+    "id": "linked-test",
+    "cargo_features": [
+      "audio_heart",
+      "debug-process",
+      "linked_c_archive"
+    ],
+    "defines": [
+      {
+        "name": "GFXMODULE_SDL",
+        "value": null
+      },
+      {
+        "name": "SDL_DIR",
+        "value": "SDL2"
+      },
+      {
+        "name": "_THREAD_SAFE",
+        "value": null
+      },
+      {
+        "name": "USE_INTERNAL_MIKMOD",
+        "value": null
+      },
+      {
+        "name": "OVCODEC_NONE",
+        "value": null
+      },
+      {
+        "name": "NETPLAY",
+        "value": "NETPLAY_FULL"
+      },
+      {
+        "name": "HAVE_JOYSTICK",
+        "value": null
+      },
+      {
+        "name": "HAVE_ZIP",
+        "value": "1"
+      },
+      {
+        "name": "USE_PLATFORM_ACCEL",
+        "value": null
+      },
+      {
+        "name": "THREADLIB_SDL",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_BRIDGE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_FILE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_CLOCK",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_UIO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_OGG",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AUDIO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_COMM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_INPUT",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_VIDEO",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_VIDPLAYER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_GFX",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_RESOURCE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MOD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_WAV",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_DUKAUD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AIFF",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_THREADS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MIXER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MEM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_STATE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SHIPS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SUPERMELEE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_AUDIO_HEART",
+        "value": null
+      },
+      {
+        "name": "RUST_OWNS_MAIN",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MAINLOOP",
+        "value": "1"
+      },
+      {
+        "name": "DEBUG",
+        "value": null
       }
     ],
     "compile_flags": [

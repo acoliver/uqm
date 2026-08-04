@@ -134,6 +134,8 @@ void generateMineralIndex(const SOLARSYS_STATE *system,
 // Calculate the total value of all bio on a world.
 COUNT calculateBioValue (const SOLARSYS_STATE *system,
 		const PLANET_DESC *world);
+// Expose the DEBUG biological-value consumer for strict linked fixtures.
+int uqm_debug_creature_bio_value (BYTE creature_type);
 // Determine how much of each mineral type is present on a world
 void generateBioIndex(const SOLARSYS_STATE *system,
 		const PLANET_DESC *world, COUNT bio[]);

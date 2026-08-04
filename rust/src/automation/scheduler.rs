@@ -351,6 +351,7 @@ pub fn scheduler_reduce(
             if matches!(
                 current_action,
                 Action::WaitForCommunicationEnd(_)
+                    | Action::WaitForCommunicationReplay(_)
                     | Action::WaitForDispatch(_)
                     | Action::SelectCommunicationResponse(_)
                     | Action::WaitForPlanetSideStart(_)
@@ -852,6 +853,40 @@ fn reduce_admitted_input(
                 effects: EffectPlan::none(),
             }
         }
+        (Action::WaitForCommunicationReplay(wait), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: wait.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForCommunicationReplay(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForCommunicationReplay(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
         // capture: arm once, commit to WaitingCapture.
         (Action::Capture(_), ActionPhase::WaitingForInput) => {
             let new_gen = match state.capture_generation.next() {
@@ -928,7 +963,8 @@ fn reduce_admitted_input(
         (Action::AssertScene(_), ActionPhase::WaitingForInput)
         | (Action::AssertDispatch(_), ActionPhase::WaitingForInput)
         | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
-        | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput) => {
+        | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput)
+        | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
 
@@ -1139,8 +1175,8 @@ mod tests {
     use super::*;
     use crate::automation::script::{
         ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToMoonStep, SetMenuKeyStep,
-        TapMenuKeyStep, TapPlayerKeyStep, WaitForCommunicationEndStep, WaitForDispatchStep,
-        WaitInputTicksStep,
+        TapMenuKeyStep, TapPlayerKeyStep, WaitForCommunicationEndStep,
+        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitInputTicksStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
@@ -1874,6 +1910,32 @@ mod tests {
     }
 
     #[test]
+    fn communication_replay_wait_advances_only_on_condition() {
+        let actions = [
+            Action::WaitForCommunicationReplay(WaitForCommunicationReplayStep { max_ticks: 3 }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 2 }
+        );
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
+
+        assert_eq!(reached.new_state.step_index, 1);
+        assert_eq!(reached.new_state.terminal, None);
+    }
+
+    #[test]
     fn semantic_response_selection_advances_on_condition() {
         let actions = [
             Action::SelectCommunicationResponse(
@@ -1902,6 +1964,34 @@ mod tests {
         );
         assert_eq!(reached.new_state.step_index, 1);
         assert_eq!(reached.new_state.terminal, None);
+    }
+
+    #[test]
+    fn communication_replay_wait_expires_with_semantic_mismatch() {
+        let actions = [Action::WaitForCommunicationReplay(
+            WaitForCommunicationReplayStep { max_ticks: 1 },
+        )];
+        let config = cfg(&actions);
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 0 }
+        );
+
+        for event in [
+            SchedulerEvent::AdmittedInput,
+            SchedulerEvent::ConditionReached,
+        ] {
+            let expired = scheduler_reduce(&waiting.new_state, &config, event);
+            assert_eq!(
+                expired.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch)
+            );
+        }
     }
 
     #[test]

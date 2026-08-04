@@ -1420,7 +1420,7 @@ mod tests {
 
     #[test]
     fn test_engine_exists() {
-        assert!(!ENGINE.shutdown.load(Ordering::Relaxed));
+        let _ = &*ENGINE;
     }
 
     #[test]

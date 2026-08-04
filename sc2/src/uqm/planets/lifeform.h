@@ -66,7 +66,7 @@ typedef struct
 	BYTE Attributes, ValueAndHitPoints;
 } LIFEFORM_DESC;
 
-extern const LIFEFORM_DESC CreatureData[];
+int rust_creature_bio_value (BYTE creature_type);
 
 #if defined(__cplusplus)
 }

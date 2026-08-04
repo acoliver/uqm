@@ -18,7 +18,6 @@
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
 use crate::automation::coordinator::Coordinator;
-use crate::automation::input::setter_set_menu_key;
 use crate::automation::runtime::RuntimeModel;
 
 // ===========================================================================
@@ -83,23 +82,23 @@ struct CSolarSystemState {
     moons: [CPlanetDesc; 4],
     _base: *mut CPlanetDesc,
     orbital: *mut CPlanetDesc,
-    _between_orbital_and_in_orbit: [u8; 256],
-    in_orbit: i32,
-    _tail: [u8; 4],
 }
 
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
-    static mut ImmediateInputState: ControllerInputState;
+    fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
+    fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
     static CurrentInputState: ControllerInputState;
     static PulsedInputState: ControllerInputState;
-    static PlayerControls: [i32; 2];
     #[link_name = "pSolarSysState"]
     static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemState;
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
     #[allow(non_snake_case)]
     fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16;
+    /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
+    #[allow(non_snake_case)]
+    fn playerInPlanetOrbit() -> bool;
     #[link_name = "ScreenWidth"]
     static SCREEN_WIDTH: std::ffi::c_int;
     #[link_name = "ScreenHeight"]
@@ -193,7 +192,15 @@ pub(crate) fn navigation_snapshot(
 
         snapshot.active = 1;
         snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
-        snapshot.in_orbit = i32::from(solar_system.in_orbit != 0);
+        // Ask the game for live orbit state rather than inferring it. The
+        // authoritative flag is `SOLARSYS_STATE::InOrbit`, but it sits behind a
+        // long tail of fields this binding does not model, so it is read
+        // through the exported predicate instead of a guessed offset.
+        // `GLOBAL(in_orbit)` is not usable here: it only encodes orbit state
+        // for save/load. `!InIpFlight` is not usable either: the game clears
+        // `InIpFlight` when entering an encounter as well as an orbit, so it
+        // would report orbit during encounters.
+        snapshot.in_orbit = i32::from(playerInPlanetOrbit());
         snapshot.wait_intersect = solar_system.wait_intersect;
         let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
         let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
@@ -420,9 +427,10 @@ pub extern "C" fn rust_automation_service_boundary() -> i32 {
 //  Bounds-checked production setter (REQ-INJECT-003)
 // ===========================================================================
 
-/// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`.
+/// Set `ImmediateInputState.menu[index]` through its native owner.
 ///
-/// Writes directly to the C global volatile `ImmediateInputState.menu[index]`.
+/// The C module owns the input state, so it is the single authority for
+/// bounds and normalization; this forwards its verdict unchanged.
 /// Returns 0 on success, -1 on invalid index.
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
@@ -430,14 +438,7 @@ pub extern "C" fn rust_automation_service_boundary() -> i32 {
 #[no_mangle]
 #[cfg(feature = "linked_c_archive")]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
-        return -1;
-    }
-    let _result = setter_set_menu_key(index as u8, value as u8);
-    unsafe {
-        ImmediateInputState.menu[index as usize] = if value != 0 { 1 } else { 0 };
-    }
-    0
+    unsafe { c_automation_set_immediate_menu_key(index, value) }
 }
 
 /// C-callable bounds-checked setter for `ImmediateInputState.menu[index]`
@@ -448,33 +449,27 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 #[no_mangle]
 #[cfg(not(feature = "linked_c_archive"))]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    if index < 0 || index >= i32::from(crate::automation::input::NUM_MENU_KEYS) {
+    use crate::automation::input::{setter_set_menu_key, SetterResult};
+
+    let Ok(index) = u8::try_from(index) else {
         return -1;
+    };
+    match setter_set_menu_key(index, u8::from(value != 0)) {
+        SetterResult::InvalidIndex { .. } => -1,
+        SetterResult::Set { .. } | SetterResult::Cleared { .. } => 0,
     }
-    let _result = setter_set_menu_key(index as u8, value as u8);
-    let _ = value;
-    0
 }
 
 // ===========================================================================
 //  Present hook: called from TFB_SwapBuffers
 // ===========================================================================
 
-/// Set one player-one gameplay control in `ImmediateInputState`.
+/// Set one player-one gameplay control through the native owner of
+/// `ImmediateInputState`, forwarding its verdict unchanged.
 #[no_mangle]
 #[cfg(feature = "linked_c_archive")]
 pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, value: i32) -> i32 {
-    if !(0..7).contains(&index) {
-        return -1;
-    }
-    unsafe {
-        let template = PlayerControls[0] as usize;
-        if template >= 6 {
-            return -1;
-        }
-        ImmediateInputState.key[template][index as usize] = i32::from(value != 0);
-    }
-    0
+    unsafe { c_automation_set_immediate_player_key(index, value) }
 }
 
 #[no_mangle]
@@ -487,44 +482,49 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i
     }
 }
 
-/// C-callable automation present callback hook.
+/// Set when the native owner refuses an automation input write.
+static INJECTION_REJECTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Write a menu key, recording any rejection by the native owner.
+pub(crate) fn inject_menu_key(index: i32, value: i32) {
+    if rust_automation_set_immediate_menu_key(index, value) != 0 {
+        INJECTION_REJECTED.store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
+/// Write a player control, recording any rejection by the native owner.
+pub(crate) fn inject_player_key(index: i32, value: i32) {
+    if rust_automation_set_immediate_player_key(index, value) != 0 {
+        INJECTION_REJECTED.store(true, std::sync::atomic::Ordering::Release);
+    }
+}
+
+/// True once the native owner has refused an automation input write.
 ///
-/// Called from `TFB_SwapBuffers` after a frame is presented. Feeds the
-/// committed present event (with the current armed capture generation)
-/// to the coordinator's scheduler.
-///
-/// Returns 1 if the game loop should stop, 0 otherwise.
-///
-/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P07
-/// @requirement REQ-FFI-004
+/// Typed key domains make this unreachable today; it becomes reachable only
+/// if those domains and the native key tables diverge, and the run must fail
+/// rather than continue against input that never landed.
+pub(crate) fn injection_rejected() -> bool {
+    INJECTION_REJECTED.load(std::sync::atomic::Ordering::Acquire)
+}
+
+/// Query whether automation has reached a terminal state before rendering.
 #[no_mangle]
 pub extern "C" fn rust_automation_present_callback() -> i32 {
+    with_runtime()
+        .is_some_and(|runtime| runtime.mirror.is_terminal())
+        .into()
+}
+
+/// Commit one frame after the graphics backend has actually presented it.
+#[no_mangle]
+pub extern "C" fn rust_automation_presented_frame() -> i32 {
     if !Coordinator::is_active() {
         return 0;
     }
-
-    // Check terminal — if terminal, return stop.
-    if let Some(rt) = with_runtime() {
-        if rt.mirror.is_terminal() {
-            return 1;
-        }
-    }
-
-    // Read the armed capture generation from the runtime mirror.
-    let gen = if let Some(rt) = with_runtime() {
-        rt.mirror.capture_generation()
-    } else {
-        0
-    };
-
-    if gen > 0 {
-        eprintln!("[automation] present_callback gen={gen}");
-    }
-
-    if Coordinator::process_present(gen) {
-        return 1;
-    }
-    0
+    let frame = crate::graphics::ffi::take_presented_frame();
+    Coordinator::process_present(frame).into()
 }
 
 // ===========================================================================

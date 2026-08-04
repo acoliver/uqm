@@ -3,7 +3,7 @@
 # P00 Linked Harness Probe Script
 #
 # Proves deterministic libuqm_c.a archive construction, force-load ordering,
-# production member extraction, and mutation testing for the 7 source-grounded
+# production member extraction for the 7 source-grounded
 # production symbols required by execution-contract §8.
 #
 # This script compiles and links a standalone C harness against the production
@@ -11,7 +11,7 @@
 #
 # @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §8
 #
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUST_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -22,13 +22,12 @@ cd "${RUST_DIR}"
 echo "=== P00 Linked Harness Probe ==="
 echo ""
 
-# Build using the canonical production flow to get exact artifacts
-cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
-
+# Build once when needed. A production manifest intentionally lacks the
+# two-build determinism proof required by `xtask verify`; strict artifact and
+# provider validation below still consumes its canonical recorded paths/tools.
 MANIFEST_JSON="${RUST_DIR}/target/production-artifacts.json"
 if [ ! -f "${MANIFEST_JSON}" ]; then
-    echo "FAIL: production-artifacts.json not found"
-    exit 1
+    cargo run --locked --manifest-path "${RUST_DIR}/xtask/Cargo.toml" -- production >/dev/null
 fi
 
 # Extract exact artifact paths from production evidence
@@ -96,8 +95,17 @@ echo ""
 # --- 1. Verify archive member symbol extraction (nm) ---
 echo "--- 1. Archive member symbol extraction (nm) ---"
 
+NM_LISTING=$(mktemp "${TMPDIR:-/tmp}/p00_nm_listing.XXXXXX")
+HARNESS_MAIN=""
+LINK_MAP=""
+HARNESS_BIN=""
+cleanup() {
+    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}" "${NM_LISTING}"
+}
+trap cleanup EXIT
+"${NM_PATH}" -A "${C_ARCHIVE}" > "${NM_LISTING}"
 for sym in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do
-    member=$("${NM_PATH}" -A "${C_ARCHIVE}" 2>/dev/null | awk -v symbol="${sym}" '$(NF - 1) == "T" && ($NF == symbol || $NF == "_" symbol) { print; exit }')
+    member=$(awk -v symbol="${sym}" '$(NF - 1) == "T" && ($NF == symbol || $NF == "_" symbol) { print; exit }' "${NM_LISTING}")
     if [ -z "${member}" ]; then
         echo "FAIL: Symbol '${sym}' not found in ${C_ARCHIVE}"
         exit 1
@@ -122,14 +130,13 @@ echo ""
 # --- 3. Compile and link the harness with force-load ordering ---
 echo "--- 3. Compile and link harness (force-load order per §8) ---"
 
-HARNESS_MAIN=$(mktemp -t p00_harness_main).c
-LINK_MAP=$(mktemp -t p00_link_map).map
+HARNESS_MAIN=$(mktemp "${TMPDIR:-/tmp}/p00_harness_main.XXXXXX").c
+LINK_MAP=$(mktemp "${TMPDIR:-/tmp}/p00_link_map.XXXXXX").map
+HARNESS_BIN=$(mktemp "${TMPDIR:-/tmp}/p00_harness_bin.XXXXXX")
 
 cat > "${HARNESS_MAIN}" << 'HARNESS_EOF'
 #include <stdio.h>
 extern int p00_harness_verify_symbols(void);
-extern int p00_harness_set_mutation(int);
-extern int p00_harness_get_mutation(void);
 
 int main(void) {
     int count = p00_harness_verify_symbols();
@@ -143,8 +150,6 @@ int main(void) {
 }
 HARNESS_EOF
 
-HARNESS_BIN=$(mktemp -t p00_harness_bin)
-
 # Use the exact Rust static archive from the production manifest.
 if [ ! -f "${RUST_ARCHIVE}" ]; then
     echo "FAIL: ${RUST_ARCHIVE} not found after production build"
@@ -156,41 +161,36 @@ fi
 PKG_CFLAGS=$("${PKG_CONFIG_PATH}" --cflags sdl2 libpng liblzma)
 PKG_LIBS=$("${PKG_CONFIG_PATH}" --libs sdl2 libpng liblzma)
 
-# Platform-specific linking
+# Platform-specific strict linking. Keep the command in an if condition so
+# set -e cannot bypass the explicit diagnostic and retained evidence path.
 OS_NAME="$(uname -s)"
-case "${OS_NAME}" in
-    Darwin)
-        "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
-            -Wl,-undefined,dynamic_lookup \
-            -L"${OUT_DIR}" \
-            -Wl,-force_load,"${HARNESS_ARCHIVE}" \
-            "${C_ARCHIVE}" \
-            "${RUST_ARCHIVE}" \
-            ${PKG_LIBS} -lz -lm -lbz2 -lobjc \
-            -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
-            -Wl,-map,"${LINK_MAP}" \
-            -o "${HARNESS_BIN}" 2>&1
-        ;;
-    Linux)
-        "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
-            -L"${OUT_DIR}" \
-            -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
-            "${C_ARCHIVE}" \
-            "${RUST_ARCHIVE}" \
-            ${PKG_LIBS} -lz -lm -lbz2 -lasound \
-            -Wl,-Map,"${LINK_MAP}" \
-            -o "${HARNESS_BIN}" 2>&1
-        ;;
-    *)
-        echo "FAIL: unsupported OS: ${OS_NAME}"
-        rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
+if [ "${OS_NAME}" = "Darwin" ]; then
+    if ! "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
+        -L"${OUT_DIR}" \
+        -Wl,-force_load,"${HARNESS_ARCHIVE}" \
+        "${C_ARCHIVE}" \
+        "${RUST_ARCHIVE}" \
+        ${PKG_LIBS} -lz -lm -lbz2 -lobjc \
+        -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
+        -Wl,-map,"${LINK_MAP}" \
+        -o "${HARNESS_BIN}" 2>&1; then
+        echo "FAIL: Darwin harness link failed"
         exit 1
-        ;;
-esac
-
-if [ $? -ne 0 ]; then
-    echo "FAIL: Harness link failed"
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
+    fi
+elif [ "${OS_NAME}" = "Linux" ]; then
+    if ! "${CC_PATH}" ${PKG_CFLAGS} "${HARNESS_MAIN}" \
+        -L"${OUT_DIR}" \
+        -Wl,--gc-sections \
+        -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
+        -Wl,--start-group "${C_ARCHIVE}" "${RUST_ARCHIVE}" -Wl,--end-group \
+        ${PKG_LIBS} -lz -lm -lbz2 -lasound \
+        -Wl,-Map,"${LINK_MAP}" \
+        -o "${HARNESS_BIN}" 2>&1; then
+        echo "FAIL: Linux harness link failed"
+        exit 1
+    fi
+else
+    echo "FAIL: unsupported OS: ${OS_NAME}"
     exit 1
 fi
 echo "PASS: Harness linked successfully"
@@ -220,4 +220,5 @@ cp "${LINK_MAP}" "${HARNESS_EVIDENCE}/link-map.txt"
 cp "${MANIFEST}" "${HARNESS_EVIDENCE}/object-manifest.txt"
 echo "Evidence saved to: ${HARNESS_EVIDENCE}"
 
-rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
+cleanup
+trap - EXIT

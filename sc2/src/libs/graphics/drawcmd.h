@@ -185,6 +185,8 @@ void TFB_UnbatchGraphics (void);
 
 void TFB_BatchReset (void);
 
+int TFB_GetBatchDepth (void);
+
 void TFB_DrawCommandQueue_Push (TFB_DrawCommand* Command);
 
 int TFB_DrawCommandQueue_Pop (TFB_DrawCommand* Command);

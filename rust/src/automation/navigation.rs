@@ -26,7 +26,9 @@ pub struct NavigationControl {
     pub thrust: bool,
     pub left: bool,
     pub right: bool,
-    pub escape: bool,
+    /// Leave the current orbit. The orbital screen is a menu, not ship
+    /// flight, so this is driven with menu keys rather than a ship control.
+    pub leave_orbit: bool,
 }
 
 /// Display-space radius, squared, within which the flagship is treated as
@@ -42,7 +44,7 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
     }
     if observation.in_orbit {
         return NavigationControl {
-            escape: true,
+            leave_orbit: true,
             ..NavigationControl::default()
         };
     }
@@ -85,7 +87,7 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
         thrust: turn_error <= 2,
         left: clockwise > 8,
         right: clockwise != 0 && clockwise <= 8,
-        escape: false,
+        leave_orbit: false,
     }
 }
 
@@ -127,7 +129,7 @@ pub fn steer_moon_navigation(observation: NavigationObservation) -> NavigationCo
     }
     if observation.in_orbit {
         return NavigationControl {
-            escape: true,
+            leave_orbit: true,
             ..NavigationControl::default()
         };
     }
@@ -170,7 +172,7 @@ fn steering_for_vector(dx: f64, dy: f64, ship_facing: u8, thrust: bool) -> Navig
         thrust: thrust && clockwise == 0,
         left: clockwise > 8,
         right: clockwise != 0 && clockwise <= 8,
-        escape: false,
+        leave_orbit: false,
     }
 }
 
@@ -253,14 +255,14 @@ mod tests {
     }
 
     #[test]
-    fn escape_leaves_current_orbit_before_steering() {
+    fn leaves_current_orbit_before_steering() {
         let mut state = observation(100, 100, 0, 200, 100);
         state.inner_planet = Some(2);
         state.in_orbit = true;
         assert_eq!(
             steer_toward_target(state),
             NavigationControl {
-                escape: true,
+                leave_orbit: true,
                 ..NavigationControl::default()
             }
         );
@@ -356,13 +358,13 @@ mod tests {
     }
 
     #[test]
-    fn moon_controller_escapes_wrong_orbit_before_resuming_navigation() {
+    fn moon_controller_leaves_wrong_orbit_before_resuming_navigation() {
         let mut state = observation(111, 160, 0, 86, 113);
         state.in_orbit = true;
         assert_eq!(
             steer_moon_navigation(state),
             NavigationControl {
-                escape: true,
+                leave_orbit: true,
                 ..NavigationControl::default()
             }
         );

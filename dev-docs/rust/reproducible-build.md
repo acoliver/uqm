@@ -22,19 +22,19 @@ The separately scoped `capture-dependencies` command performs a target-scoped bo
 
 ## Explicit transitional native inputs
 
-This contract is authorized by immutable ownership ledger v5
-(`uqm-native-ownership-ledger-v5`): raw revision
-`9b0d2a1cced5d0ac3eb73432f765a008053eb81b`, gist history revision
-`519aea3f1f27ba6ac6022dfe08e1520e979cbe1c`, and SHA-256
-`9fb0c1458aa7364324a294af4afecb8875e103a4e53abd6297418321a167b0b5`.
+This contract is authorized by immutable ownership ledger v6
+(`uqm-native-ownership-ledger-v6`): raw revision
+`8f03fa7844feac162a3759ed768f3f38f75fbf7e`, gist history revision
+`d7602e17c4401ed322f60ddfe6bf5e61d4754e24`, and SHA-256
+`ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496`.
 The pinned raw URL is
-<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/9b0d2a1cced5d0ac3eb73432f765a008053eb81b/uqm-native-ownership-ledger.json>.
+<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json>.
 Both the provider manifest and native-input trend report encode this identity;
 repository validation does not fetch mutable network state.
 
 `rust/build/native-inputs.json` is the exact source/object/profile authority, bound field-for-field to `rust/ownership/native-provider-manifest.json`; `rust/build/native-dependencies.json` is the hashed tracked transitive header/config/include authority. Each entry declares a git-tracked canonical source, SHA-256, unique output name, producing command, canonical owner, and profile. The root preflight rejects an untracked declaration before build work, and `rust/build.rs` verifies every declaration and compiles all 321 entries into its current Cargo `OUT_DIR`; ignored object trees and stale outputs cannot authorize archive membership. Canonical domain ownership does not transfer to S2.
 
-`rust/build/native-input-trend.json` fixes the current and maximum count at 321, down from 339 assessment objects. The count may only decrease. The tracked native-file delta is zero. Infrastructure deltas are one removed recursive Cargo invocation, one removed ambient-object path, one stale `heap.c.o` provider, two Rust hash-table provider cutovers, and all active hardcoded workstation paths. The report pins ledger v5 and names both cutovers: `native/charhashtable.c.o` to the sole Rust provider with RESOURCE/#22 retaining source-deletion ownership, and `native/stringhashtable.c.o` to the same Rust provider with CORE_NATIVE/#22 retaining source-deletion ownership. `CharHashTable` and `StringHashTable` are Rust-owned C ABI providers in `rust/src/collections/hash_table.rs`; their superseded C objects are excluded from production archive membership. No generic hash-table C template is tracked, embedded, generated, or staged.
+`rust/build/native-input-trend.json` fixes the current and maximum count at 321, down from 339 assessment objects. The count may only decrease. The tracked native-file delta is zero. Infrastructure deltas are one removed recursive Cargo invocation, one removed ambient-object path, one stale `heap.c.o` provider, two Rust hash-table provider cutovers, and all active hardcoded workstation paths. The report pins ledger v6 and names both cutovers: `native/charhashtable.c.o` to the sole Rust provider with RESOURCE/#22 retaining source-deletion ownership, and `native/stringhashtable.c.o` to the same Rust provider with CORE_NATIVE/#22 retaining source-deletion ownership. `CharHashTable` and `StringHashTable` are Rust-owned C ABI providers in `rust/src/collections/hash_table.rs`; their superseded C objects are excluded from production archive membership. No generic hash-table C template is tracked, embedded, generated, or staged.
 
 S1's source-derived provider manifest independently enforces exact archive membership, one provider per internal symbol, duplicate/unassigned rejection, `displist.c.o` exclusion, strict final linking, and provider reports. `heap.c.o` has no source and is absent; `heap.h` remains COLLECTIONS-owned.
 
@@ -72,7 +72,7 @@ Production requires only tracked source plus external prerequisites. It does not
 
 Production native objects are source-derived. The compiler uses canonical absolute paths for the 321 tracked translation units, emits dependency files, and rejects any repository-local dependency outside the active explicit target subset in `rust/build/native-dependencies.json`. Every dependency declaration is tracked and hash-checked; `sc2/config_unix.h` is included. Ambient or ignored `sc2/obj` content never grants authority.
 
-CI proves all declared tuples on official runners and checks `uname -m`: Ubuntu 24.04 x86_64, Ubuntu 24.04 ARM aarch64, macOS 15 Intel x86_64, and macOS 15 Apple Silicon aarch64.
+CI proves all declared build tuples on official runners and checks `uname -m`: Ubuntu 24.04 x86_64, Ubuntu 24.04 ARM aarch64, macOS 15 Intel x86_64, and macOS 15 Apple Silicon aarch64. Issue 23 additionally executes native gameplay acceptance on macOS 14 arm64, the maintained macOS Intel runner, Ubuntu 22.04 x86_64, and `ubuntu-24.04-arm` aarch64. GitHub has retired the requested `macos-13` hosted label, so CI records that tuple as an explicit machine-readable excluded execution rather than claiming a run. Applicable jobs run the production executable rather than treating cross-compilation as runtime evidence, retain typed passing/failing LCARs, and compare two real battle runs from one production artifact.
 
 
 ## Issue #23 boundary

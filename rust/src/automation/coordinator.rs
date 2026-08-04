@@ -17,21 +17,45 @@
 
 use crate::automation::input_ffi;
 use crate::automation::outcome::TerminalClass;
-use crate::automation::runtime::RuntimeModel;
+use crate::automation::runtime::{FinalizationResult, RuntimeModel};
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
 use crate::automation::scheduler::{
     scheduler_reduce, ActionPhase, CaptureGeneration, EffectPlan, SchedulerConfig, SchedulerEvent,
     SchedulerState, TerminalOutcome,
 };
-use crate::automation::script::{Action, ValidatedScript};
-use crate::automation::trace::{RecordKind, TraceRecord};
+use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
+use crate::automation::trace::{
+    ActivityEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
+};
 use crate::automation::watchdog::{
     watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
 };
 use parking_lot::Mutex;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+
+/// Rotating phase for the orbital-exit key sequence.
+static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
+
+/// Menu keys that leave the orbital screen, one admitted callback at a time.
+///
+/// `DoPlanetOrbit` is a menu, not ship flight. `PlanetOrbitMenu` always opens
+/// on the first item (SCAN), and NAVIGATION is the last, so one Up wraps the
+/// cursor straight onto it and Select confirms. `DoMenuChooser` honours Up in
+/// both the PC and 3DO menu layouts. Both keys are pulsed, so each press needs
+/// an intervening release to register as a new press.
+fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
+    match phase % 4 {
+        0 => (true, false),
+        2 => (false, true),
+        _ => (false, false),
+    }
+}
+
+/// Fixed RNG seed applied once when active automation enters gameplay.
+pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 
 // ===========================================================================
 //  Coordinator state (global, single-threaded in RUST_OWNS_MAIN mode)
@@ -71,6 +95,8 @@ struct CoordInner {
     consumed_dispatch_generation: u64,
     /// Most recent communication response generation selected semantically.
     consumed_response_generation: u64,
+    /// Most recent communication replay generation consumed semantically.
+    consumed_replay_generation: u64,
     /// Most recent planet-menu generation selected semantically.
     consumed_planet_menu_generation: u64,
     /// Require one callback after orbit navigation before accepting menu ownership.
@@ -149,6 +175,7 @@ impl Coordinator {
                 consumed_communication_completions,
                 consumed_dispatch_generation: 0,
                 consumed_response_generation: 0,
+                consumed_replay_generation: 0,
                 consumed_planet_menu_generation: 0,
                 release_semantic_select: false,
                 orbit_transition_pending: false,
@@ -235,7 +262,25 @@ impl Coordinator {
         let Some(coord) = Self::get() else {
             return false;
         };
+        if coord.halt_on_rejected_injection() {
+            return true;
+        }
         coord.process_input_inner()
+    }
+
+    /// Stop the run if the native owner ever refused an input write.
+    ///
+    /// The script's action never reached the game, so continuing would assert
+    /// against state the automation never actually produced.
+    fn halt_on_rejected_injection(&self) -> bool {
+        if !crate::automation::input_ffi::injection_rejected() {
+            return false;
+        }
+        let mut inner = self.inner.lock();
+        if inner.terminal_class.is_none() {
+            self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+        }
+        true
     }
 
     /// Whether the current semantic response action is waiting for NPC speech
@@ -286,13 +331,10 @@ impl Coordinator {
             return false;
         };
         let inner = coord.inner.lock();
-        coord
-            .actions
-            .get(inner.sched_state.step_index..)
-            .unwrap_or_default()
-            .iter()
-            .take(SEMANTIC_LOOKAHEAD)
-            .any(|action| matches!(action, Action::WaitForCommunicationEnd(_)))
+        matches!(
+            coord.actions.get(inner.sched_state.step_index),
+            Some(Action::WaitForCommunicationEnd(_))
+        )
     }
 
     /// Advance one scheduler callback at a synchronous boundary and report
@@ -350,7 +392,7 @@ impl Coordinator {
 
         let released_semantic_select = inner.release_semantic_select;
         if released_semantic_select {
-            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+            crate::automation::input_ffi::inject_menu_key(
                 i32::from(crate::automation::script::MenuKey::Select.index()),
                 0,
             );
@@ -407,7 +449,8 @@ impl Coordinator {
             }
         }
 
-        if self.verify_runtime_assertions(&mut inner) {
+        if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
+        {
             return true;
         }
 
@@ -434,6 +477,20 @@ impl Coordinator {
                     ),
                 );
             }
+        } else if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::WaitForCommunicationReplay(_))
+        ) {
+            let (generation, _) =
+                crate::automation::ui_observation::communication_replay_observation();
+            if consume_new_generation(&mut inner.consumed_replay_generation, generation) {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    "communication_replay_active".to_owned(),
+                );
+            }
         } else if let Some(Action::SelectCommunicationResponse(select)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -445,7 +502,7 @@ impl Coordinator {
             {
                 if ready {
                     crate::comm::ffi::rust_SelectResponseIndex(select.index as i32);
-                    crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                    crate::automation::input_ffi::inject_menu_key(
                         i32::from(crate::automation::script::MenuKey::Select.index()),
                         1,
                     );
@@ -481,7 +538,7 @@ impl Coordinator {
                 && generation > inner.consumed_planet_menu_generation
                 && phase == expected
             {
-                crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
+                crate::automation::input_ffi::inject_menu_key(
                     i32::from(crate::automation::script::MenuKey::Select.index()),
                     1,
                 );
@@ -707,7 +764,7 @@ impl Coordinator {
         inner.sched_state = transition.new_state;
 
         // Step 3: Apply effects.
-        self.apply_effects(&mut inner, &transition.effects);
+        self.apply_effects(&mut inner, &transition.effects, None);
 
         // Step 4: Write trace.
         self.write_trace(&mut inner, RecordKind::InputTick);
@@ -731,7 +788,13 @@ impl Coordinator {
                     SchedulerEvent::MenuTransition { to },
                 );
                 inner.sched_state = t2.new_state;
-                self.write_trace(&mut inner, RecordKind::MenuTransition);
+                let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch)
+                {
+                    format!("menu_transition_failed:to={to}")
+                } else {
+                    format!("menu_transition_passed:to={to}")
+                };
+                self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
                 if inner.sched_state.is_terminal() {
                     break;
                 }
@@ -844,8 +907,70 @@ impl Coordinator {
                 }
             }
         }
+        if let Some(Action::AssertBattleFrames(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match crate::automation::battle_observer::assert_progress(assertion.minimum) {
+                Ok(actual) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!("battle_frames_verified:count={actual}"),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
 
         false
+    }
+
+    fn verify_activity_assertion(&self, inner: &mut CoordInner) -> bool {
+        let Some(Action::AssertActivity(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        else {
+            return false;
+        };
+        let word = crate::mainloop::ffi::get_current_activity().0;
+        let evidence = activity_evidence(assertion, word);
+        let passed = evidence.passed;
+        let seq = inner.trace_seq;
+        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            kind: RecordKind::SemanticAssertion,
+            label: Some(if passed {
+                "activity_assertion_passed".into()
+            } else {
+                "activity_assertion_failed".into()
+            }),
+            from: None,
+            to: None,
+            terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: Some(evidence),
+        };
+        let reservation = self.runtime.commit.reserve_sequence(seq);
+        match record.to_jsonl() {
+            Ok(jsonl) => reservation.commit_record(jsonl),
+            Err(_) => {
+                reservation.cancel();
+                self.set_terminal(inner, TerminalClass::TraceFailure);
+                return true;
+            }
+        }
+        if !passed {
+            self.set_terminal(inner, TerminalClass::SemanticMismatch);
+        }
+        !passed
     }
 
     // -----------------------------------------------------------------------
@@ -854,14 +979,17 @@ impl Coordinator {
 
     /// Process a committed present callback. Returns true if the game loop
     /// should stop.
-    pub fn process_present(generation: u64) -> bool {
+    pub fn process_present(frame: Option<crate::automation::capture::PresentedFrame>) -> bool {
         let Some(coord) = Self::get() else {
             return false;
         };
-        coord.process_present_inner(generation)
+        coord.process_present_inner(frame)
     }
 
-    fn process_present_inner(&self, generation: u64) -> bool {
+    fn process_present_inner(
+        &self,
+        frame: Option<crate::automation::capture::PresentedFrame>,
+    ) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
@@ -915,6 +1043,15 @@ impl Coordinator {
             }
         }
 
+        let Some(frame) = frame else {
+            self.capture_failure(&mut inner, "presented-frame evidence is unavailable");
+            return true;
+        };
+        if let Err(error) = frame.validate() {
+            self.capture_failure(&mut inner, error);
+            return true;
+        }
+
         let config = SchedulerConfig {
             actions: &self.actions,
             transitions: &self.transitions,
@@ -923,14 +1060,15 @@ impl Coordinator {
             &inner.sched_state,
             &config,
             SchedulerEvent::CommittedPresent {
-                generation: CaptureGeneration(generation),
+                generation: CaptureGeneration(frame.generation),
             },
         );
         inner.sched_state = transition.new_state;
 
-        self.apply_effects(&mut inner, &transition.effects);
-
-        self.write_trace(&mut inner, RecordKind::Presentation);
+        if self.write_presentation_trace(&mut inner, &frame) {
+            return true;
+        }
+        self.apply_effects(&mut inner, &transition.effects, Some(&frame));
 
         if inner.sched_state.is_terminal() {
             let class = map_scheduler_terminal(inner.sched_state.terminal);
@@ -990,7 +1128,12 @@ impl Coordinator {
             );
             inner.sched_state = transition.new_state;
 
-            self.write_trace(&mut inner, RecordKind::MenuTransition);
+            let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch) {
+                format!("menu_transition_failed:to={to}")
+            } else {
+                format!("menu_transition_passed:to={to}")
+            };
+            self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
 
             if inner.sched_state.is_terminal() {
                 let class = map_scheduler_terminal(inner.sched_state.terminal);
@@ -1006,79 +1149,54 @@ impl Coordinator {
     //  Finalization
     // -----------------------------------------------------------------------
 
-    /// Finalize the automation run. Writes run_end trace, finalizes the
-    /// runtime model, and writes the teardown receipt.
-    pub fn finalize() {
+    /// Finalize the automation run after production subsystem teardown.
+    ///
+    /// In inactive mode this preserves the game result. Active mode durably
+    /// publishes the ordered trace and teardown receipt before returning the
+    /// terminal-aware process status. Evidence failures are fatal.
+    pub fn finalize(game_result: i32) -> Result<i32, String> {
         let Some(coord) = Self::get() else {
-            return;
+            return Ok(game_result);
         };
-        coord.finalize_inner();
+        coord.finalize_inner(game_result)
     }
 
-    fn finalize_inner(&self) {
-        eprintln!("[automation] finalize_inner: starting");
-        let mut inner = self.inner.lock();
-
-        if inner.finalized {
-            eprintln!("[automation] finalize_inner: already finalized, returning");
-            return;
-        }
-
-        inner.finalized = true;
-
-        // Write run_end trace.
-        self.write_trace(&mut inner, RecordKind::RunEnd);
-        eprintln!(
-            "[automation] finalize_inner: wrote run_end trace, seq={}",
-            inner.trace_seq
-        );
-
-        // Finalize the runtime model.
-        let _ = self.runtime.finalize();
-
-        // Deactivate.
-        self.runtime.deactivate();
-
-        // Flush trace records to file.
-        let trace_path = self.output_root.join("trace.jsonl");
-        drop(inner);
-
-        eprintln!(
-            "[automation] finalize_inner: flushing trace to {}",
-            trace_path.display()
-        );
-        match std::fs::File::create(&trace_path) {
-            Ok(mut file) => {
-                use std::io::Write;
-                let _ = file.write_all(b"");
-                if let Err(e) = self.runtime.commit.publish_all(&mut file) {
-                    eprintln!("[automation] finalize_inner: trace flush error: {e}");
-                }
-                let _ = file.flush();
+    fn finalize_inner(&self, game_result: i32) -> Result<i32, String> {
+        let terminal = {
+            let mut inner = self.inner.lock();
+            if inner.finalized {
+                return Err("automation coordinator finalized more than once".into());
             }
-            Err(e) => {
-                eprintln!("[automation] finalize_inner: FAILED to create trace file: {e}");
-            }
-        }
+            inner.finalized = true;
+            self.write_trace(&mut inner, RecordKind::RunEnd);
+            inner.terminal_class
+        };
 
-        // Write teardown receipt.
-        let terminal = self.inner.lock().terminal_class;
+        validate_runtime_finalization(self.runtime.finalize())?;
+        let status = active_automation_status(terminal, game_result)?;
 
-        eprintln!(
-            "[automation] finalize_inner: writing teardown receipt to {}",
-            self.output_root.display()
-        );
-        match crate::automation::lifecycle::write_teardown_receipt(&self.output_root, terminal, 0) {
-            Ok(result) => {
-                eprintln!(
-                    "[automation] finalize_inner: receipt written to {}",
-                    result.final_path.display()
-                );
-            }
-            Err(e) => {
-                eprintln!("[automation] finalize_inner: FAILED to write receipt: {e}");
-            }
-        }
+        let mut trace = Vec::new();
+        self.runtime
+            .commit
+            .publish_all(&mut trace)
+            .map_err(|error| format!("cannot publish ordered automation trace: {error}"))?;
+        crate::automation::artifact::write_durable(&self.output_root, "trace", "jsonl", &trace)
+            .map_err(|error| format!("cannot durably publish automation trace: {error}"))?;
+
+        let teardown = crate::automation::lifecycle::TeardownReceipt {
+            schema: "uqm-teardown-v1".into(),
+            terminal,
+            game_status: game_result,
+            process_status: status,
+            runtime_finalized: true,
+            runtime_deactivated: !self.runtime.mirror.is_active(),
+            callbacks_quiescent: !self.runtime.can_write(),
+            trace_durable: true,
+        };
+        crate::automation::lifecycle::write_teardown_receipt(&self.output_root, &teardown)
+            .map_err(|error| format!("cannot durably publish teardown receipt: {error}"))?;
+
+        Ok(status)
     }
 
     // -----------------------------------------------------------------------
@@ -1105,15 +1223,27 @@ impl Coordinator {
     }
 
     fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) {
-        use crate::automation::script::PlayerKey;
+        use crate::automation::script::{MenuKey, PlayerKey};
 
         for (key, active) in [
             (PlayerKey::Thrust, control.thrust),
             (PlayerKey::Left, control.left),
             (PlayerKey::Right, control.right),
-            (PlayerKey::Escape, control.escape),
         ] {
-            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+            crate::automation::input_ffi::inject_player_key(
+                i32::from(key.index()),
+                i32::from(active),
+            );
+        }
+
+        let (up, select) = if control.leave_orbit {
+            orbit_exit_menu_keys(ORBIT_EXIT_PHASE.fetch_add(1, Ordering::AcqRel))
+        } else {
+            ORBIT_EXIT_PHASE.store(0, Ordering::Release);
+            (false, false)
+        };
+        for (key, active) in [(MenuKey::Up, up), (MenuKey::Select, select)] {
+            crate::automation::input_ffi::inject_menu_key(
                 i32::from(key.index()),
                 i32::from(active),
             );
@@ -1121,33 +1251,29 @@ impl Coordinator {
     }
 
     /// Apply planned effects from the scheduler reducer.
-    fn apply_effects(&self, inner: &mut CoordInner, effects: &EffectPlan) {
+    fn apply_effects(
+        &self,
+        inner: &mut CoordInner,
+        effects: &EffectPlan,
+        frame: Option<&crate::automation::capture::PresentedFrame>,
+    ) {
         // Note: `inner` is `&mut` so callers can pass it as mutable.
         if let Some((key, value)) = effects.write_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
-                i32::from(index),
-                i32::from(value),
-            );
+            crate::automation::input_ffi::inject_menu_key(i32::from(index), i32::from(value));
         }
         if let Some(key) = effects.release_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            crate::automation::input_ffi::rust_automation_set_immediate_menu_key(
-                i32::from(index),
-                0,
-            );
+            crate::automation::input_ffi::inject_menu_key(i32::from(index), 0);
         }
         if let Some((key, value)) = effects.write_player_key {
-            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
+            crate::automation::input_ffi::inject_player_key(
                 i32::from(key.index()),
                 i32::from(value),
             );
         }
         if let Some(key) = effects.release_player_key {
-            crate::automation::input_ffi::rust_automation_set_immediate_player_key(
-                i32::from(key.index()),
-                0,
-            );
+            crate::automation::input_ffi::inject_player_key(i32::from(key.index()), 0);
         }
         if let Some(gen) = effects.arm_capture {
             self.runtime.mirror.set_capture_generation(gen.0);
@@ -1159,13 +1285,14 @@ impl Coordinator {
         }
         if let Some(gen) = effects.complete_capture {
             self.runtime.mirror.clear_capture_generation();
-            // Capture generation matched — read the SDL surface and write
-            // a PNG artifact.
             let label = inner
                 .armed_capture_label
                 .take()
                 .unwrap_or_else(|| format!("capture_gen{}", gen.0));
-            self.capture_surface(inner, &label, gen);
+            match frame {
+                Some(frame) => self.capture_presented_frame(inner, &label, gen, frame),
+                None => self.capture_failure(inner, "capture completed without a presented frame"),
+            }
         }
     }
 
@@ -1186,6 +1313,9 @@ impl Coordinator {
             from: None,
             to: None,
             terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
@@ -1211,6 +1341,9 @@ impl Coordinator {
             from: None,
             to: None,
             terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
@@ -1219,226 +1352,170 @@ impl Coordinator {
         }
     }
 
-    /// Capture the logical main SDL surface (screen 0) and write a PNG
-    /// artifact via the durable file helper.
-    ///
-    /// This is called when the scheduler reports `complete_capture` —
-    /// the present callback has fired with the correct generation,
-    /// meaning the surface is in a consistent state for reading.
-    ///
-    /// The capture uses the ABI-authoritative SDL surface accessors
-    /// (REQ-SHOT-002), the shared lock-copy-unlock helper (REQ-SHOT-003),
-    /// and writes a durable PNG file (REQ-SHOT-004/005).
-    fn capture_surface(&self, inner: &mut CoordInner, label: &str, gen: CaptureGeneration) {
-        // Write a capture trace record.
-        let capture_rec = crate::automation::capture::capture_trace_record(
+    fn write_presentation_trace(
+        &self,
+        inner: &mut CoordInner,
+        frame: &crate::automation::capture::PresentedFrame,
+    ) -> bool {
+        let seq = inner.trace_seq;
+        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            kind: RecordKind::Presentation,
+            label: None,
+            from: None,
+            to: None,
+            terminal_reason: None,
+            seed_application: None,
+            presentation: Some(frame.presentation_evidence()),
+            activity: None,
+        };
+        let reservation = self.runtime.commit.reserve_sequence(seq);
+        match record.to_jsonl() {
+            Ok(jsonl) => {
+                reservation.commit_record(jsonl);
+                false
+            }
+            Err(error) => {
+                reservation.cancel();
+                self.capture_failure(inner, format!("cannot serialize presentation: {error}"));
+                true
+            }
+        }
+    }
+
+    fn capture_presented_frame(
+        &self,
+        inner: &mut CoordInner,
+        label: &str,
+        generation: CaptureGeneration,
+        frame: &crate::automation::capture::PresentedFrame,
+    ) {
+        if frame.generation != generation.0 {
+            return self.capture_failure(inner, "presented-frame generation mismatch");
+        }
+        let png_data = match frame.encode_png() {
+            Ok(png) => png,
+            Err(error) => return self.capture_failure(inner, error),
+        };
+        let capture_dir = self.output_root.join("captures");
+        if let Err(error) =
+            crate::automation::artifact::write_durable(&capture_dir, label, "png", &png_data)
+        {
+            return self.capture_failure(inner, format!("durable PNG publication failed: {error}"));
+        }
+
+        let mut record = crate::automation::capture::capture_trace_record(
             inner.trace_seq,
             self.started_at.elapsed().as_millis() as u64,
-            gen,
+            generation,
             label,
         );
+        record.run = 1;
+        record.input_seen = inner.input_seen;
+        record.present_seen = inner.present_seen;
+        record.presentation = Some(frame.presentation_evidence());
         inner.trace_seq = inner.trace_seq.saturating_add(1);
-        if let Ok(jsonl) = capture_rec.to_jsonl() {
-            let res = self.runtime.commit.reserve_sequence(capture_rec.sequence);
-            res.commit_record(jsonl);
-        }
-
-        // Get the logical main surface (screen 0) via the graphics FFI.
-        #[cfg(feature = "linked_c_archive")]
-        {
-            use crate::automation::capture::{validate_surface, SurfaceMetadata};
-            use std::ffi::c_void;
-
-            // Get the SDL surface pointer from the Rust graphics subsystem.
-            let surface: *mut c_void =
-                unsafe { crate::graphics::ffi::rust_gfx_get_sdl_screen() as *mut c_void };
-            if surface.is_null() {
-                eprintln!("[automation] capture: surface is null, skipping PNG");
-                return;
-            }
-
-            // Query surface metadata via ABI-authoritative accessors.
-            let info = unsafe { crate::graphics::sdl_capture::query_surface_info(surface) };
-
-            let meta = SurfaceMetadata {
-                width: info.width,
-                height: info.height,
-                pitch: info.pitch,
-                bpp: info.bpp,
-                bytes_per_pixel: info.bytes_per_pixel,
-                r_mask: info.rmask,
-                g_mask: info.gmask,
-                b_mask: info.bmask,
-                a_mask: info.amask,
-            };
-
-            if let Err(e) = validate_surface(&meta) {
-                eprintln!("[automation] capture: surface validation failed: {e:?}");
-                return;
-            }
-
-            // Compute safe copy length per row.
-            let row_copy = match crate::automation::capture::safe_row_copy(
-                info.width,
-                info.pitch,
-                info.bytes_per_pixel,
-            ) {
-                Some(r) => r,
-                None => {
-                    eprintln!("[automation] capture: safe_row_copy failed");
-                    return;
-                }
-            };
-
-            let height_u = match u64::try_from(info.height) {
-                Ok(h) => h,
-                Err(_) => {
-                    eprintln!("[automation] capture: height overflow");
-                    return;
-                }
-            };
-
-            let buf_size = match u64::from(row_copy).checked_mul(height_u) {
-                Some(s) => s,
-                None => {
-                    eprintln!("[automation] capture: buffer size overflow");
-                    return;
-                }
-            };
-
-            let buf_size_usize = match usize::try_from(buf_size) {
-                Ok(s) => s,
-                Err(_) => {
-                    eprintln!("[automation] capture: buffer size too large");
-                    return;
-                }
-            };
-
-            // Allocate pixel buffer and copy via shared lock-copy-unlock.
-            let mut pixel_buf = vec![0u8; buf_size_usize];
-            let copy_result = unsafe {
-                crate::graphics::sdl_capture::lock_copy_unlock(
-                    surface,
-                    pixel_buf.as_mut_ptr(),
-                    buf_size_usize,
-                )
-            };
-
-            match copy_result {
-                Ok(()) => {}
-                Err(e) => {
-                    eprintln!("[automation] capture: lock_copy_unlock failed: {e}");
-                    return;
-                }
-            }
-
-            // Encode PNG using the `image` crate.
-            let width_u32 = match u32::try_from(info.width) {
-                Ok(w) => w,
-                Err(_) => return,
-            };
-            let height_u32 = match u32::try_from(info.height) {
-                Ok(h) => h,
-                Err(_) => return,
-            };
-
-            // Swizzle pixel data from SDL surface format to RGBA8.
-            // SDL on macOS typically uses [pad, R, G, B] (ARGB) or [B, G, R, pad]
-            // depending on the surface format. Use the masks to determine the
-            // actual layout and convert to standard [R, G, B, A] for PNG encoding.
-            let r_mask = info.rmask;
-            let g_mask = info.gmask;
-            let b_mask = info.bmask;
-            let a_mask = info.amask;
-
-            // Determine byte positions from masks (for 32-bit surfaces).
-            let r_shift = mask_to_shift(r_mask);
-            let g_shift = mask_to_shift(g_mask);
-            let b_shift = mask_to_shift(b_mask);
-            let a_shift = mask_to_shift(a_mask);
-
-            for chunk in pixel_buf.chunks_exact_mut(4) {
-                let pixel = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-                let r = if r_mask != 0 {
-                    ((pixel & r_mask) >> r_shift) as u8
-                } else {
-                    0
-                };
-                let g = if g_mask != 0 {
-                    ((pixel & g_mask) >> g_shift) as u8
-                } else {
-                    0
-                };
-                let b = if b_mask != 0 {
-                    ((pixel & b_mask) >> b_shift) as u8
-                } else {
-                    0
-                };
-                let a = if a_mask != 0 {
-                    ((pixel & a_mask) >> a_shift) as u8
-                } else {
-                    255
-                };
-                chunk[0] = r;
-                chunk[1] = g;
-                chunk[2] = b;
-                chunk[3] = a;
-            }
-
-            let rgba_image = match image::RgbaImage::from_raw(width_u32, height_u32, pixel_buf) {
-                Some(img) => img,
-                None => {
-                    eprintln!("[automation] capture: RgbaImage::from_raw failed");
-                    return;
-                }
-            };
-
-            let mut png_data = Vec::new();
-            let encoder = image::codecs::png::PngEncoder::new(&mut png_data);
-            if let Err(e) = image::ImageEncoder::write_image(
-                encoder,
-                rgba_image.as_raw(),
-                width_u32,
-                height_u32,
-                image::ExtendedColorType::Rgba8,
-            ) {
-                eprintln!("[automation] capture: PNG encode failed: {e}");
-                return;
-            }
-
-            // Write the PNG via the durable file helper.
-            let capture_dir = self.output_root.join("captures");
-            match crate::automation::artifact::write_durable(&capture_dir, label, "png", &png_data)
-            {
-                Ok(result) => {
-                    eprintln!(
-                        "[automation] capture: wrote {} ({} bytes)",
-                        result.final_path.display(),
-                        png_data.len()
-                    );
-                }
-                Err(e) => {
-                    eprintln!("[automation] capture: write_durable failed: {e}");
-                }
+        let reservation = self.runtime.commit.reserve_sequence(record.sequence);
+        match record.to_jsonl() {
+            Ok(jsonl) => reservation.commit_record(jsonl),
+            Err(error) => {
+                reservation.cancel();
+                self.capture_failure(
+                    inner,
+                    format!("cannot serialize capture trace record: {error}"),
+                );
             }
         }
+    }
 
-        #[cfg(not(feature = "linked_c_archive"))]
-        {
-            let _ = (inner, label, gen);
-            eprintln!("[automation] capture: linked_c_archive feature not enabled, skipping PNG");
-        }
+    fn capture_failure(&self, inner: &mut CoordInner, error: impl std::fmt::Display) {
+        eprintln!("[automation] capture failed: {error}");
+        self.set_terminal(inner, TerminalClass::TraceFailure);
     }
 }
 
-/// Compute the bit shift for a color mask (number of trailing zeros).
-#[cfg(feature = "linked_c_archive")]
-fn mask_to_shift(mask: u32) -> u32 {
-    if mask == 0 {
-        0
-    } else {
-        mask.trailing_zeros()
+fn activity_evidence(assertion: &ActivityAssertion, word: u16) -> ActivityEvidence {
+    ActivityEvidence {
+        word,
+        mask: assertion.mask,
+        equals: assertion.equals,
+        passed: word & assertion.mask == assertion.equals,
     }
+}
+
+/// Return the deterministic seed for an automation-owned RNG boundary, while
+/// preserving the caller's wall-clock seed when automation is inactive.
+#[no_mangle]
+pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 {
+    let Some(domain) = SeedDomain::from_ffi(domain) else {
+        return fallback;
+    };
+    let Some(coord) = Coordinator::get() else {
+        return fallback;
+    };
+    let mut inner = coord.inner.lock();
+    let seq = inner.trace_seq;
+    inner.trace_seq = inner.trace_seq.saturating_add(1);
+    let record = TraceRecord {
+        schema: TraceRecord::SCHEMA,
+        run: 1,
+        sequence: seq,
+        input_seen: inner.input_seen,
+        present_seen: inner.present_seen,
+        elapsed_ms: coord.started_at.elapsed().as_millis() as u64,
+        kind: RecordKind::SeedApplication,
+        label: None,
+        from: None,
+        to: None,
+        terminal_reason: None,
+        seed_application: Some(SeedApplication {
+            domain,
+            seed: AUTOMATION_SEED,
+        }),
+        presentation: None,
+        activity: None,
+    };
+    let reservation = coord.runtime.commit.reserve_sequence(seq);
+    match record.to_jsonl() {
+        Ok(jsonl) => reservation.commit_record(jsonl),
+        Err(_) => {
+            reservation.cancel();
+            coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
+        }
+    }
+    AUTOMATION_SEED
+}
+
+fn validate_runtime_finalization(result: FinalizationResult) -> Result<(), String> {
+    match result {
+        FinalizationResult::Finalized => Ok(()),
+        other => Err(format!(
+            "automation runtime finalization did not complete: {other:?}"
+        )),
+    }
+}
+
+fn active_automation_status(
+    terminal: Option<TerminalClass>,
+    game_result: i32,
+) -> Result<i32, String> {
+    terminal
+        .map(|class| crate::automation::lifecycle::map_status(Some(class), game_result))
+        .ok_or_else(|| "automation run ended without a terminal outcome".into())
+}
+
+fn consume_new_generation(consumed: &mut u64, observed: u64) -> bool {
+    if observed <= *consumed {
+        return false;
+    }
+    *consumed = observed;
+    true
 }
 
 /// Map a scheduler TerminalOutcome to a TerminalClass for the runtime mirror.
@@ -1464,8 +1541,49 @@ mod tests {
     use super::*;
 
     #[test]
+    fn replay_generation_is_consumed_once_and_retains_early_events() {
+        let mut consumed = 0;
+        assert!(consume_new_generation(&mut consumed, 1));
+        assert_eq!(consumed, 1);
+        assert!(!consume_new_generation(&mut consumed, 1));
+        assert!(consume_new_generation(&mut consumed, 2));
+        assert_eq!(consumed, 2);
+    }
+
+    #[test]
     fn coordinator_not_active_by_default() {
         assert!(!Coordinator::is_active());
+    }
+
+    #[test]
+    fn activity_evidence_uses_the_complete_activity_word() {
+        let assertion = ActivityAssertion {
+            mask: 0x02ff,
+            equals: 0x0200,
+        };
+        let passed = activity_evidence(&assertion, 0x1200);
+        assert!(passed.passed);
+        assert_eq!(passed.word, 0x1200);
+
+        let failed = activity_evidence(&assertion, 0x0000);
+        assert!(!failed.passed);
+        assert_eq!(failed.mask, 0x02ff);
+        assert_eq!(failed.equals, 0x0200);
+    }
+
+    #[test]
+    fn capture_trace_is_bound_to_the_active_run_and_callback_counts() {
+        let generation = CaptureGeneration(3);
+        let mut record =
+            crate::automation::capture::capture_trace_record(11, 25, generation, "capture");
+        record.run = 1;
+        record.input_seen = 7;
+        record.present_seen = 9;
+
+        assert_eq!(record.run, 1);
+        assert_eq!(record.sequence, 11);
+        assert_eq!(record.input_seen, 7);
+        assert_eq!(record.present_seen, 9);
     }
 
     #[test]
@@ -1495,5 +1613,85 @@ mod tests {
     #[test]
     fn map_none_to_cooperative_stop() {
         assert_eq!(map_scheduler_terminal(None), TerminalClass::CooperativeStop);
+    }
+
+    #[test]
+    fn active_status_requires_a_terminal_outcome() {
+        assert!(active_automation_status(None, 0).is_err());
+    }
+
+    #[test]
+    fn active_status_preserves_game_failure_after_success() {
+        assert_eq!(
+            active_automation_status(Some(TerminalClass::Success), 7),
+            Ok(7)
+        );
+    }
+
+    #[test]
+    fn active_status_maps_automation_failure_nonzero() {
+        assert_eq!(
+            active_automation_status(Some(TerminalClass::SemanticMismatch), 0),
+            Ok(1)
+        );
+    }
+
+    #[test]
+    fn runtime_finalization_rejects_every_nonfinalized_result() {
+        assert!(validate_runtime_finalization(FinalizationResult::Finalized).is_ok());
+        for result in [
+            FinalizationResult::AlreadyFinalized,
+            FinalizationResult::AlreadyFinalizing,
+            FinalizationResult::ShellsStillActive(1),
+            FinalizationResult::DuplicateRunEnd,
+        ] {
+            assert!(validate_runtime_finalization(result).is_err());
+        }
+    }
+
+    #[test]
+    fn orbit_exit_presses_up_then_select_with_a_release_between_them() {
+        // `DoMenuChooser` only sees a new press when the pulsed key was
+        // released on an intervening callback, so the sequence must be
+        // press-Up, release, press-Select, release.
+        assert_eq!(orbit_exit_menu_keys(0), (true, false));
+        assert_eq!(orbit_exit_menu_keys(1), (false, false));
+        assert_eq!(orbit_exit_menu_keys(2), (false, true));
+        assert_eq!(orbit_exit_menu_keys(3), (false, false));
+    }
+
+    #[test]
+    fn orbit_exit_never_presses_both_keys_on_one_callback() {
+        for phase in 0..64 {
+            let (up, select) = orbit_exit_menu_keys(phase);
+            assert!(
+                !(up && select),
+                "phase {phase} pressed Up and Select together"
+            );
+        }
+    }
+
+    #[test]
+    fn orbit_exit_sequence_repeats_so_a_missed_press_is_retried() {
+        for phase in 0..64 {
+            assert_eq!(
+                orbit_exit_menu_keys(phase),
+                orbit_exit_menu_keys(phase + 4),
+                "phase {phase} did not repeat with period four"
+            );
+        }
+    }
+
+    #[test]
+    fn orbit_exit_phase_restarts_at_the_up_press_after_a_reset() {
+        // `set_navigation_controls` stores zero whenever `leave_orbit` is
+        // false, so the next orbit exit must begin with the Up press again
+        // rather than resuming mid-sequence.
+        let phase = ORBIT_EXIT_PHASE.load(Ordering::Acquire);
+        assert_eq!(
+            orbit_exit_menu_keys(phase.wrapping_sub(phase)),
+            (true, false)
+        );
+        assert_eq!(orbit_exit_menu_keys(0), (true, false));
     }
 }

@@ -7,6 +7,8 @@ static COMMUNICATION_RESPONSE_COUNT: AtomicUsize = AtomicUsize::new(0);
 static COMMUNICATION_RESPONSE_GENERATION: AtomicU64 = AtomicU64::new(0);
 static COMMUNICATION_RESPONSES_READY: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_ACTIVE: AtomicBool = AtomicBool::new(false);
+static COMMUNICATION_REPLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
+static COMMUNICATION_REPLAY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PLANET_MENU_PHASE: AtomicUsize = AtomicUsize::new(0);
 static PLANET_MENU_GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -105,6 +107,23 @@ pub fn communication_lifecycle() -> (bool, u64) {
     )
 }
 
+/// Record entry to or exit from replaying the most recent alien phrase.
+pub fn observe_communication_replay(active: bool) {
+    let previous = COMMUNICATION_REPLAY_ACTIVE.swap(active, Ordering::AcqRel);
+    if active && !previous {
+        COMMUNICATION_REPLAY_GENERATION.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+/// Return the replay generation and whether phrase playback remains active.
+#[must_use]
+pub fn communication_replay_observation() -> (u64, bool) {
+    (
+        COMMUNICATION_REPLAY_GENERATION.load(Ordering::Acquire),
+        COMMUNICATION_REPLAY_ACTIVE.load(Ordering::Acquire),
+    )
+}
+
 /// C ABI observer used by the production response-list renderer.
 #[no_mangle]
 pub extern "C" fn rust_automation_observe_communication_responses(count: u32) {
@@ -190,5 +209,19 @@ mod tests {
         assert_eq!(communication_lifecycle(), (true, before));
         complete_communication();
         assert_eq!(communication_lifecycle(), (false, before + 1));
+    }
+
+    #[test]
+    fn communication_replay_observation_tracks_generations_and_activity() {
+        observe_communication_replay(false);
+        let (before, active) = communication_replay_observation();
+        assert!(!active);
+
+        observe_communication_replay(true);
+        assert_eq!(communication_replay_observation(), (before + 1, true));
+        observe_communication_replay(true);
+        assert_eq!(communication_replay_observation(), (before + 1, true));
+        observe_communication_replay(false);
+        assert_eq!(communication_replay_observation(), (before + 1, false));
     }
 }

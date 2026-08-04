@@ -18,16 +18,36 @@ It:
    and dialogue conversation 18 (`URQUAN`).
 7. Captures the rendered conversation.
 
-Run from `rust/`:
+Build from a clean full-commit checkout, then run through the exact-child
+supervisor from the repository root:
 
 ```sh
-pkill -x uqm 2>/dev/null || true
-SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy \
-  perl -e 'alarm 120; exec @ARGV' \
-  ./target/release/uqm \
-  --automation-script=scripts/real-sol-autopilot.json \
-  --automation-output=/tmp/uqm-real-sol-autopilot
+cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production
+cargo run --locked --manifest-path rust/Cargo.toml \
+  --no-default-features --features audio_heart,debug-process \
+  --bin uqm-gameplay-proof -- run \
+  . rust/target/production-artifacts.json \
+  rust/scripts/real-sol-autopilot.json /tmp/uqm-real-sol-autopilot
+cargo run --locked --manifest-path rust/Cargo.toml \
+  --no-default-features --features audio_heart,debug-process \
+  --bin uqm-gameplay-proof -- validate \
+  /tmp/uqm-real-sol-autopilot/lcar-v1.json
 ```
+
+The supervisor launches the exact production executable recorded by the clean
+artifact manifest, drains bounded stdout/stderr concurrently, records the
+PID/start/executable identity, reaps only that child, verifies no matching
+orphan remains, and retains content-addressed LCAR evidence. The offline
+validator rehashes the executable, script, content/config inputs, trace,
+captures, logs, and teardown receipt.
+
+`battle-v1.json` is the production battle proof. It enters Super Melee through
+the normal menu path, asserts the full activity word has the `SUPER_MELEE` base
+and `IN_BATTLE` flag, selects the human combatant through player-one weapon
+input, waits for real combat, captures the exact composited frame committed by
+the renderer, and requires at least 30 monotonic observations from the real
+production battle loop. The observer counts completed battle-loop frames; it
+does not claim combat elapsed time, animation frames, or unique pixel output.
 
 Successful trace evidence includes:
 

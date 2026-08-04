@@ -16,6 +16,14 @@
 use super::response::ResponseFunc;
 use super::state::CommState;
 
+fn communication_background_volume(background: u8, using_speech: i32) -> u8 {
+    if using_speech != 0 {
+        background / 2
+    } else {
+        background
+    }
+}
+
 // ============================================================================
 // Wait-track sentinel
 // ============================================================================
@@ -299,12 +307,49 @@ pub mod dinput {
         ended: c_int,
     }
 
+    /// Tracks whether a menu key has been released since it last acted.
+    ///
+    /// A key still held when a nested `DoInput` loop is entered keeps
+    /// producing repeat pulses inside that loop. Without this latch the loop
+    /// reads those repeats as fresh presses, re-triggering its action and
+    /// resetting its timeout indefinitely.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct FreshPressLatch {
+        armed: c_int,
+    }
+
+    impl FreshPressLatch {
+        /// Arm only when the key is already up; an inherited hold must be
+        /// released before it can act.
+        fn entering(key: c_int) -> Self {
+            Self {
+                armed: (unsafe { c_bridge::current_menu_key(key) } == 0) as c_int,
+            }
+        }
+
+        /// Report a fresh press, re-arming whenever the key is released.
+        fn pressed(&mut self, key: c_int) -> bool {
+            if unsafe { c_bridge::current_menu_key(key) } == 0 {
+                self.armed = 1;
+                return false;
+            }
+            if self.armed != 0 && unsafe { c_bridge::pulsed_menu_key(key) } != 0 {
+                self.armed = 0;
+                return true;
+            }
+            false
+        }
+    }
+
     // DoInput-compatible last-replay state struct
     #[repr(C)]
     struct LastReplayStateDInput {
         input_func: unsafe extern "C" fn(*mut LastReplayStateDInput) -> c_int,
         next_time: u32,
         time_out: u32,
+        cancel: FreshPressLatch,
+        left: FreshPressLatch,
     }
 
     // DoInput callback for talk segue (replaces c_DoTalkSegue)
@@ -402,7 +447,7 @@ pub mod dinput {
         };
 
         if wait_track == 0 {
-            // Rewind mode
+            crate::automation::ui_observation::observe_communication_replay(true);
         } else if unsafe { c_bridge::PlayingTrack() } == 0 {
             unsafe { c_bridge::PlayTrack() };
         }
@@ -410,6 +455,9 @@ pub mod dinput {
         unsafe {
             SetMenuSounds(MENU_SOUND_NONE as u16, MENU_SOUND_NONE as u16);
             DoInput(&mut ts as *mut _ as *mut c_void, 0);
+        }
+        if wait_track == 0 {
+            crate::automation::ui_observation::observe_communication_replay(false);
         }
         unsafe { c_bridge::comm_ClearSubtitles() };
 
@@ -442,19 +490,34 @@ pub mod dinput {
         }
 
         let won_last_battle = (activity & 0xFF) == 5; // WON_LAST_BATTLE
-        if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_CANCEL) } != 0 && !won_last_battle {
+
+        // Both latches advance every callback so neither goes stale while the
+        // other acts.
+        let cancel_pressed = lrs.cancel.pressed(KEY_MENU_CANCEL);
+        let left_pressed = lrs.left.pressed(KEY_MENU_LEFT);
+
+        if cancel_pressed && !won_last_battle {
             let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
-            let vol = if speech != 0 {
-                c_bridge::music_volume::BACKGROUND as u8 / 2
-            } else {
-                c_bridge::music_volume::BACKGROUND as u8
-            };
-            c_bridge::FadeMusic(vol, c_bridge::ONE_SECOND_TICKS as i16);
+            c_bridge::FadeMusic(
+                super::communication_background_volume(
+                    crate::sound::types::NORMAL_VOLUME as u8,
+                    speech,
+                ),
+                c_bridge::ONE_SECOND_TICKS as i16,
+            );
             super::super::response_ui::select_conversation_summary_production();
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
-        } else if unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0 {
-            super::super::response_ui::select_conversation_summary_production();
+        } else if left_pressed {
+            let speech = unsafe { *std::ptr::addr_of_mut!(usingSpeech) };
+            c_bridge::FadeMusic(
+                super::communication_background_volume(
+                    crate::sound::types::NORMAL_VOLUME as u8,
+                    speech,
+                ),
+                c_bridge::ONE_SECOND_TICKS as i16,
+            );
+            run_talk_segue_dinput(0);
             lrs.time_out = c_bridge::FadeMusic(0, (c_bridge::ONE_SECOND_TICKS * 2) as i16)
                 + (c_bridge::ONE_SECOND_TICKS as u32) / 60;
         }
@@ -473,6 +536,8 @@ pub mod dinput {
             input_func: do_last_replay_cb,
             next_time: 0,
             time_out: timeout as u32 + (c_bridge::ONE_SECOND_TICKS as u32) / 60,
+            cancel: FreshPressLatch::entering(KEY_MENU_CANCEL),
+            left: FreshPressLatch::entering(KEY_MENU_LEFT),
         };
         unsafe {
             DoInput(&mut lrs as *mut _ as *mut c_void, 0);
@@ -2454,7 +2519,49 @@ mod tests {
     }
 
     #[test]
-    fn test_waiting_automation_skips_unbounded_closing_replay() {
+    fn communication_background_volume_matches_speech_mode() {
+        assert_eq!(
+            super::communication_background_volume(crate::sound::types::NORMAL_VOLUME as u8, 0),
+            160
+        );
+        assert_eq!(
+            super::communication_background_volume(crate::sound::types::NORMAL_VOLUME as u8, 1),
+            80
+        );
+    }
+
+    /// A key still held when the last-replay loop is entered must not be read
+    /// as a fresh press. Both acting keys need the latch: each one resets the
+    /// loop timeout, so either can stall the loop indefinitely on repeats.
+    #[test]
+    fn test_last_replay_requires_a_fresh_press_on_every_acting_key() {
+        let source = include_str!("talk_segue.rs");
+        let body = extract_fn_body(source, "fn do_last_replay_cb")
+            .expect("do_last_replay_cb must be in talk_segue.rs");
+
+        for key in ["KEY_MENU_CANCEL", "KEY_MENU_LEFT"] {
+            assert!(
+                body.contains(&format!(".pressed({key})")),
+                "last replay must consume {key} through the fresh-press latch"
+            );
+            assert!(
+                !body.contains(&format!("pulsed_menu_key({key})")),
+                "last replay must not act on a raw {key} pulse, which repeats while held"
+            );
+        }
+
+        let entry = extract_fn_body(source, "fn run_last_replay_dinput")
+            .expect("run_last_replay_dinput must be in talk_segue.rs");
+        for key in ["KEY_MENU_CANCEL", "KEY_MENU_LEFT"] {
+            assert!(
+                entry.contains(&format!("FreshPressLatch::entering({key})")),
+                "entering the loop must disarm an inherited {key} hold"
+            );
+        }
+    }
+
+    #[test]
+    fn test_no_response_path_runs_production_last_replay() {
         let source = include_str!("ffi.rs");
         let fn_body = extract_fn_body(source, "fn rust_DoCommunication")
             .expect("rust_DoCommunication must be in ffi.rs");
@@ -2463,8 +2570,12 @@ mod tests {
             .nth(1)
             .expect("rust_DoCommunication must contain the no-response branch");
         assert!(
-            no_response_branch.contains("Coordinator::should_skip_communication_closing_speech()"),
-            "automation waiting for communication end must not block inside the closing speech replay"
+            no_response_branch.contains("run_last_replay_bridge(timeout as i32)"),
+            "no-response communication must exercise the production last-replay input loop"
+        );
+        assert!(
+            !no_response_branch.contains("should_skip_communication_closing_speech"),
+            "automation must not bypass the production last-replay input loop"
         );
     }
     // ---- Test 9 ------------------------------------------------------------

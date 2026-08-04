@@ -264,19 +264,9 @@ impl IdentityMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
-    fn tmpdir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "uqm-p03-id-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    fn tmpdir() -> std::path::PathBuf {
+        tempfile::tempdir().unwrap().keep()
     }
 
     // --- SHA-256 primitives ---

@@ -38,6 +38,7 @@
 #include "libs/mathlib.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <errno.h>
 
 
@@ -1055,6 +1056,12 @@ dumpWorld (FILE *out, const PLANET_DESC *world)
 			calculateMineralValue (pSolarSysState, world));
 }
 
+int
+uqm_debug_creature_bio_value (BYTE creature_type)
+{
+	return rust_creature_bio_value (creature_type);
+}
+
 COUNT
 calculateBioValue (const SOLARSYS_STATE *system, const PLANET_DESC *world)
 {
@@ -1070,10 +1077,13 @@ calculateBioValue (const SOLARSYS_STATE *system, const PLANET_DESC *world)
 	result = 0;
 	for (i = 0; i < numBio; i++)
 	{
+		int value;
 		NODE_INFO info;
 		callGenerateForScanType (system, world, i, BIOLOGICAL_SCAN, &info);
-		result += BIO_CREDIT_VALUE *
-				LONIBBLE (CreatureData[info.type].ValueAndHitPoints);
+		value = rust_creature_bio_value (info.type);
+		if (value < 0)
+			abort ();
+		result += BIO_CREDIT_VALUE * value;
 	}
 	return result;
 }

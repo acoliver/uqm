@@ -114,6 +114,10 @@ struct RustGraphicsState {
     height: u32,
     /// Fullscreen state
     fullscreen: bool,
+    /// Last immutable renderer readback published at the presentation boundary.
+    presented_frame: Option<crate::automation::capture::PresentedFrame>,
+    /// Number of frames actually presented by this backend instance.
+    presentation_count: u64,
 }
 
 static RUST_GFX: GraphicsStateCell = GraphicsStateCell(UnsafeCell::new(None));
@@ -334,6 +338,8 @@ pub unsafe extern "C" fn rust_gfx_init(
         width: width as u32,
         height: height as u32,
         fullscreen,
+        presented_frame: None,
+        presentation_count: 0,
     };
 
     // Configure soft scaling when requested (HQ2x or xBRZ)
@@ -495,13 +501,10 @@ pub unsafe extern "C" fn rust_gfx_preprocess(
 /// @plan PLAN-20260223-GFX-FULL-PORT.P03, PLAN-20260223-GFX-FULL-PORT.P05
 /// @requirement REQ-POST-010, REQ-POST-020, REQ-INV-010
 ///
-/// Per REQ-POST-020 / REQ-INV-010, the end-state for postprocess is
-/// present-only (no texture creation, no surface upload, no canvas.copy).
-/// The upload/scaling logic below is retained until ScreenLayer (P08)
-/// takes over compositing; removing it now would produce a black screen.
-/// @plan remove upload/scaling block in P08 once ScreenLayer composites.
-// PANIC-FREE: if-let guard for uninitialized state. All SDL operations use
-// if-let/let-discard patterns. NonZeroU32 and Pixmap use match with early return.
+/// Per REQ-POST-020 / REQ-INV-010, postprocess presents the canvas already
+/// composited by ScreenLayer/ColorLayer. Active automation reads that exact
+/// canvas before presenting it and publishes the immutable readback afterward.
+// PANIC-FREE: if-let guard for uninitialized state; SDL readback is fallible.
 ///
 /// # Safety
 ///
@@ -509,122 +512,44 @@ pub unsafe extern "C" fn rust_gfx_preprocess(
 #[no_mangle]
 pub unsafe extern "C" fn rust_gfx_postprocess() {
     if let Some(state) = get_gfx_state() {
-        // @plan P08: Remove this texture upload block once ScreenLayer composites.
-        let texture_creator = state.canvas.texture_creator();
+        state.presentation_count = state.presentation_count.saturating_add(1);
 
-        let use_soft_scaler = state.scaled_buffers[0].is_some();
-        let factor = scale_factor_from_flags(state.flags).unwrap_or(1) as usize;
-        let tex_w = if use_soft_scaler {
-            SCREEN_WIDTH * factor as u32
-        } else {
-            SCREEN_WIDTH
-        };
-        let tex_h = if use_soft_scaler {
-            SCREEN_HEIGHT * factor as u32
-        } else {
-            SCREEN_HEIGHT
-        };
-
-        if let Ok(mut texture) =
-            texture_creator.create_texture_streaming(PixelFormatEnum::RGBX8888, tex_w, tex_h)
-        {
-            let src_surface = state.surfaces[0];
-            let mut uploaded = false;
-
-            if use_soft_scaler {
-                let using_xbrz = (state.flags & ((1 << 8) | (1 << 9))) != 0;
-                if using_xbrz {
-                    if !state.xbrz_logged {
-                        rust_bridge_log_msg(&format!("RUST_GFX: xBRZ scaler active ({}x)", factor));
-                        state.xbrz_logged = true;
+        if crate::automation::Coordinator::is_active() {
+            let generation = crate::automation::input_ffi::get_runtime()
+                .map(|runtime| runtime.mirror.capture_generation());
+            match state
+                .canvas
+                .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)
+            {
+                Ok(mut rgba) => {
+                    for pixel in rgba.chunks_exact_mut(4) {
+                        pixel[3] = u8::MAX;
                     }
-                } else if !state.hq2x_logged {
-                    rust_bridge_log_msg("RUST_GFX: HQ2x scaler active");
-                    state.hq2x_logged = true;
+                    state.presented_frame =
+                        generation.map(|generation| crate::automation::capture::PresentedFrame {
+                            count: state.presentation_count,
+                            generation,
+                            width: state.width,
+                            height: state.height,
+                            rgba,
+                        });
                 }
-                if let Some(buffer) = state.scaled_buffers[0].as_mut() {
-                    if !src_surface.is_null() {
-                        unsafe {
-                            let surf = &*src_surface;
-                            if !surf.pixels.is_null() && surf.pitch > 0 {
-                                let src_pitch = surf.pitch as usize;
-                                let src_w = SCREEN_WIDTH as usize;
-                                let src_h = SCREEN_HEIGHT as usize;
-                                let src_bytes = std::slice::from_raw_parts(
-                                    surf.pixels as *const u8,
-                                    src_pitch * src_h,
-                                );
-
-                                let nz_one = match std::num::NonZeroU32::new(1) {
-                                    Some(v) => v,
-                                    None => return, // unreachable: 1 != 0
-                                };
-                                let mut pixmap = match Pixmap::new(
-                                    nz_one,
-                                    SCREEN_WIDTH,
-                                    SCREEN_HEIGHT,
-                                    PixmapFormat::Rgba32,
-                                ) {
-                                    Ok(p) => p,
-                                    Err(_) => return,
-                                };
-
-                                convert_rgbx_to_rgba(
-                                    src_bytes,
-                                    pixmap.data_mut(),
-                                    src_w,
-                                    src_h,
-                                    src_pitch,
-                                );
-
-                                if using_xbrz {
-                                    let scaled_bytes =
-                                        scale_rgba(pixmap.data(), src_w, src_h, factor);
-                                    let dst_w = src_w * factor;
-                                    let dst_h = src_h * factor;
-                                    let dst_stride = dst_w * 4;
-
-                                    convert_rgba_to_rgbx(&scaled_bytes, buffer, dst_w, dst_h);
-
-                                    let _ = texture.update(None, buffer, dst_stride);
-                                    uploaded = true;
-                                } else {
-                                    let params = ScaleParams::new(512, RustScaleMode::Hq2x);
-                                    if let Ok(scaled) = state.hq2x.scale(&pixmap, params) {
-                                        let dst_w = src_w * 2;
-                                        let dst_h = src_h * 2;
-                                        let dst_stride = dst_w * 4;
-
-                                        convert_rgba_to_rgbx(scaled.data(), buffer, dst_w, dst_h);
-
-                                        let _ = texture.update(None, buffer, dst_stride);
-                                        uploaded = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                Err(error) => {
+                    state.presented_frame = None;
+                    rust_bridge_log_msg(&format!(
+                        "RUST_GFX_POSTPROCESS: presented-frame readback failed: {error}"
+                    ));
                 }
             }
-
-            if !uploaded && !src_surface.is_null() {
-                unsafe {
-                    let surf = &*src_surface;
-                    if !surf.pixels.is_null() && surf.pitch > 0 {
-                        let pitch = surf.pitch as usize;
-                        let total_size = pitch * SCREEN_HEIGHT as usize;
-                        let pixel_data =
-                            std::slice::from_raw_parts(surf.pixels as *const u8, total_size);
-                        let _ = texture.update(None, pixel_data, pitch);
-                    }
-                }
-            }
-
-            let _ = state.canvas.copy(&texture, None, None);
         }
 
         state.canvas.present();
     }
+}
+
+/// Take the immutable readback associated with the most recent actual present.
+pub(crate) fn take_presented_frame() -> Option<crate::automation::capture::PresentedFrame> {
+    get_gfx_state().and_then(|state| state.presented_frame.take())
 }
 
 /// Upload transition screen — intentional no-op.

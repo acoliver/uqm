@@ -14,6 +14,7 @@ use crate::validate::hex_sha256;
 pub const NATIVE_INPUT_SCHEMA: &str = "uqm-native-inputs-v2";
 pub const NATIVE_DEPENDENCY_SCHEMA: &str = "uqm-native-dependencies-v2";
 pub const PRODUCTION_PROFILE_ID: &str = "production";
+pub const LINKED_TEST_PROFILE_ID: &str = "linked-test";
 pub const NATIVE_COMPILE_COMMAND: &str = "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>";
 pub const SUPPORTED_TARGETS: [&str; 4] = [
     "linux-aarch64",
@@ -51,6 +52,7 @@ pub struct NativeInputManifest {
     #[serde(default)]
     pub description: String,
     pub production_profile: ProductionProfile,
+    pub linked_test_profile: ProductionProfile,
     pub inputs: Vec<NativeInput>,
 }
 
@@ -108,9 +110,15 @@ pub fn validate_native_authority(
     providers: &Manifest,
 ) -> Result<(), String> {
     validate_profile(&inputs.production_profile)?;
+    validate_linked_test_profile(&inputs.linked_test_profile, &inputs.production_profile)?;
     if providers.accepted_production_profile != inputs.production_profile {
         return Err(
             "provider production profile does not exactly equal native-input authority".into(),
+        );
+    }
+    if providers.linked_test_profile.as_ref() != Some(&inputs.linked_test_profile) {
+        return Err(
+            "provider linked-test profile does not exactly equal native-input authority".into(),
         );
     }
     validate_inputs(root, inputs)?;
@@ -151,6 +159,54 @@ pub fn validate_profile(profile: &ProductionProfile) -> Result<(), String> {
     }
     let mut names = BTreeSet::new();
     for define in &profile.defines {
+        validate_define(define)?;
+        if !names.insert(define.name.as_str()) {
+            return Err(format!(
+                "duplicate or contradictory preprocessor define: {}",
+                define.name
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Validate the separately selected S3 linked-test native profile.
+pub fn validate_linked_test_profile(
+    linked: &ProductionProfile,
+    production: &ProductionProfile,
+) -> Result<(), String> {
+    if linked.id != LINKED_TEST_PROFILE_ID {
+        return Err(format!(
+            "linked-test profile id must be '{LINKED_TEST_PROFILE_ID}', got '{}'",
+            linked.id
+        ));
+    }
+    let mut expected_features = production.cargo_features.clone();
+    expected_features.push("debug-process".into());
+    expected_features.sort();
+    let mut linked_features = linked.cargo_features.clone();
+    linked_features.sort();
+    if linked_features != expected_features {
+        return Err(format!(
+            "linked-test Cargo features must be exactly {expected_features:?}"
+        ));
+    }
+    let mut expected_defines = production.defines.clone();
+    expected_defines.push(PreprocessorDefine {
+        name: "DEBUG".into(),
+        value: None,
+    });
+    expected_defines.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut linked_defines = linked.defines.clone();
+    linked_defines.sort_by(|left, right| left.name.cmp(&right.name));
+    if linked_defines != expected_defines {
+        return Err("linked-test defines must be exactly production plus DEBUG".into());
+    }
+    if linked.compile_flags != production.compile_flags {
+        return Err("linked-test compile flags must exactly match production".into());
+    }
+    let mut names = BTreeSet::new();
+    for define in &linked.defines {
         validate_define(define)?;
         if !names.insert(define.name.as_str()) {
             return Err(format!(
@@ -617,6 +673,21 @@ mod tests {
             schema: NATIVE_INPUT_SCHEMA.into(),
             description: String::new(),
             production_profile: profile(),
+            linked_test_profile: ProductionProfile {
+                id: LINKED_TEST_PROFILE_ID.into(),
+                cargo_features: vec!["audio_heart".into(), "debug-process".into()],
+                defines: vec![
+                    PreprocessorDefine {
+                        name: "ONE".into(),
+                        value: None,
+                    },
+                    PreprocessorDefine {
+                        name: "DEBUG".into(),
+                        value: None,
+                    },
+                ],
+                compile_flags: vec!["-std=gnu99".into(), "-O2".into(), "-fPIC".into()],
+            },
             inputs: Vec::new(),
         };
         let dependencies = NativeDependencyManifest {

@@ -154,7 +154,7 @@
     },
     {
       "path": "sc2/src/libs/gfxlib.h",
-      "sha256": "4d2ce346e76f5b9c9c4e43b7f8fd36f874f4deebac4a1c9832cb422fbaf34534",
+      "sha256": "44929f3d97cdb6a794ff2a8d9a848cae67c9e94d7afa793ee0cf816d81a95b58",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
@@ -214,7 +214,7 @@
     },
     {
       "path": "sc2/src/libs/graphics/drawcmd.h",
-      "sha256": "33686a554524425d27fb82b1782ce8f8726115262ccc47c2ed6cb138e13f5b8e",
+      "sha256": "37db47708a9668118f41383ad31ae724082b02d668968cdd8194d2bb4142b042",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
@@ -2484,7 +2484,7 @@
     },
     {
       "path": "sc2/src/uqm/planets/lifeform.h",
-      "sha256": "29f7ab2a8b1c9e675b91cf583b01d283ce604bba1f2da68bdbac77a769a1da64",
+      "sha256": "58107a1b4ae1796276b2fab655d5da1e81458092bb63dc12af2b3aba9332853c",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
@@ -3924,7 +3924,7 @@
     },
     {
       "path": "sc2/src/uqm/uqmdebug.h",
-      "sha256": "455a5f8a666396a378c27f25baed0a4d08a4a3e0f9893281af333ae2884d47f7",
+      "sha256": "f11bf7873faa9a42879a44317d5c80cd6740d791db0030094e84f05619c4e81b",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",

@@ -55,7 +55,16 @@ TFB_WaitForSpace (int requested_slots)
 	old_depth = GetRecursiveMutexDepth (DCQ_Mutex);
 	for (i = 0; i < old_depth; i++)
 		UnlockRecursiveMutex (DCQ_Mutex);
+#ifdef RUST_OWNS_MAIN
+	// Single-threaded mode: this thread is also the renderer, so there is no
+	// other thread left to drain the queue and broadcast RenderingCond.
+	// Waiting here would deadlock permanently, so drain the queue inline.
+	// The swap is skipped because this is a mid-frame continuity break, not
+	// a completed frame.
+	TFB_FlushGraphicsEx (TRUE);
+#else
 	WaitCondVar (RenderingCond);
+#endif
 	for (i = 0; i < old_depth; i++)
 		LockRecursiveMutex (DCQ_Mutex);
 	log_add (log_Debug, "DCQ clear (Size = %d, FullSize = %d).  Continuing.",
@@ -117,6 +126,21 @@ TFB_UnbatchGraphics (void)
 	}
 	Synchronize_DCQ ();
 	UnlockRecursiveMutex (DCQ_Mutex);
+}
+
+// Report how many batch levels are currently held.  Callers that have to
+// release the batch around a nested input loop use this to restore exactly
+// the depth they found, instead of assuming a particular depth.
+int
+TFB_GetBatchDepth (void)
+{
+	int depth;
+
+	LockRecursiveMutex (DCQ_Mutex);
+	depth = DrawCommandQueue.Batching;
+	UnlockRecursiveMutex (DCQ_Mutex);
+
+	return depth;
 }
 
 // Cancel all pending batch operations, making them unbatched.  This will

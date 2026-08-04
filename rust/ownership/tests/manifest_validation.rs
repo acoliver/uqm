@@ -26,7 +26,7 @@ fn manifest() -> Manifest {
 }
 
 #[test]
-fn checked_in_manifest_has_exact_v5_source_identity_and_inventory() {
+fn checked_in_manifest_has_exact_v6_source_identity_and_inventory() {
     let manifest = manifest();
     manifest.validate_self().unwrap();
     assert_eq!(
@@ -71,7 +71,7 @@ fn checked_in_manifest_has_exact_v5_source_identity_and_inventory() {
 }
 
 #[test]
-fn ledger_v5_projection_remains_the_source_identity_after_authorized_provider_cutovers() {
+fn ledger_v6_projection_remains_the_source_identity_after_authorized_provider_cutovers() {
     let manifest = manifest();
     assert_eq!(
         manifest.generated_from_ledger.projection_sha256,

@@ -2,8 +2,8 @@
   "version": 1,
   "name": "real-sol-probe-completion",
   "budgets": {
-    "max_input_ticks": 12000,
-    "max_presentations": 12000,
+    "max_input_ticks": 14000,
+    "max_presentations": 14000,
     "max_wallclock_seconds": 300
   },
   "steps": [
@@ -15,6 +15,11 @@
     {"action": "wait_input_ticks", "count": 200},
     {"action": "assert_dispatch", "encounter": 24, "dialogue": 18},
     {"action": "capture", "label": "real-probe-broadcast"},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 3},
+    {"action": "wait_input_ticks", "count": 2},
+    {"action": "tap_menu_key", "key": "left", "value": 1, "hold": 1, "settle": 3},
+    {"action": "wait_for_communication_replay", "max_ticks": 600},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 3},
     {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 9000},
     {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "real-probe-returned-to-flight"},
