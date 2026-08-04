@@ -96,6 +96,9 @@ extern "C" {
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
     #[allow(non_snake_case)]
     fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16;
+    /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
+    #[allow(non_snake_case)]
+    fn playerInPlanetOrbit() -> bool;
     #[link_name = "ScreenWidth"]
     static SCREEN_WIDTH: std::ffi::c_int;
     #[link_name = "ScreenHeight"]
@@ -189,11 +192,15 @@ pub(crate) fn navigation_snapshot(
 
         snapshot.active = 1;
         snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
-        // SOLARSYS_STATE carries no orbit flag, and `GLOBAL(in_orbit)` only
-        // preserves orbit state across save/load. `InIpFlight` is the live
-        // signal: the game clears it exactly when the flagship leaves
-        // interplanetary flight to commit to an orbit.
-        snapshot.in_orbit = i32::from(solar_system.in_ip_flight == 0);
+        // Ask the game for live orbit state rather than inferring it. The
+        // authoritative flag is `SOLARSYS_STATE::InOrbit`, but it sits behind a
+        // long tail of fields this binding does not model, so it is read
+        // through the exported predicate instead of a guessed offset.
+        // `GLOBAL(in_orbit)` is not usable here: it only encodes orbit state
+        // for save/load. `!InIpFlight` is not usable either: the game clears
+        // `InIpFlight` when entering an encounter as well as an orbit, so it
+        // would report orbit during encounters.
+        snapshot.in_orbit = i32::from(playerInPlanetOrbit());
         snapshot.wait_intersect = solar_system.wait_intersect;
         let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
         let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();

@@ -39,8 +39,10 @@
     {"action": "wait_input_ticks", "count": 600},
     {"action": "capture", "label": "moonbase-after-report"},
     {"action": "tap_player_key", "key": "escape", "value": 1, "hold": 4, "settle": 900},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "back-in-luna-orbit"},
     {"action": "wait_input_ticks", "count": 2000},
+    {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "orbit-still-presenting"},
     {"action": "finish"}
   ]

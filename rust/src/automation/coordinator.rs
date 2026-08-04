@@ -34,6 +34,7 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 /// Rotating phase for the orbital-exit key sequence.
 static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
@@ -52,7 +53,6 @@ fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
         _ => (false, false),
     }
 }
-use std::time::{Duration, Instant};
 
 /// Fixed RNG seed applied once when active automation enters gameplay.
 pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
@@ -1647,5 +1647,51 @@ mod tests {
         ] {
             assert!(validate_runtime_finalization(result).is_err());
         }
+    }
+
+    #[test]
+    fn orbit_exit_presses_up_then_select_with_a_release_between_them() {
+        // `DoMenuChooser` only sees a new press when the pulsed key was
+        // released on an intervening callback, so the sequence must be
+        // press-Up, release, press-Select, release.
+        assert_eq!(orbit_exit_menu_keys(0), (true, false));
+        assert_eq!(orbit_exit_menu_keys(1), (false, false));
+        assert_eq!(orbit_exit_menu_keys(2), (false, true));
+        assert_eq!(orbit_exit_menu_keys(3), (false, false));
+    }
+
+    #[test]
+    fn orbit_exit_never_presses_both_keys_on_one_callback() {
+        for phase in 0..64 {
+            let (up, select) = orbit_exit_menu_keys(phase);
+            assert!(
+                !(up && select),
+                "phase {phase} pressed Up and Select together"
+            );
+        }
+    }
+
+    #[test]
+    fn orbit_exit_sequence_repeats_so_a_missed_press_is_retried() {
+        for phase in 0..64 {
+            assert_eq!(
+                orbit_exit_menu_keys(phase),
+                orbit_exit_menu_keys(phase + 4),
+                "phase {phase} did not repeat with period four"
+            );
+        }
+    }
+
+    #[test]
+    fn orbit_exit_phase_restarts_at_the_up_press_after_a_reset() {
+        // `set_navigation_controls` stores zero whenever `leave_orbit` is
+        // false, so the next orbit exit must begin with the Up press again
+        // rather than resuming mid-sequence.
+        let phase = ORBIT_EXIT_PHASE.load(Ordering::Acquire);
+        assert_eq!(
+            orbit_exit_menu_keys(phase.wrapping_sub(phase)),
+            (true, false)
+        );
+        assert_eq!(orbit_exit_menu_keys(0), (true, false));
     }
 }
