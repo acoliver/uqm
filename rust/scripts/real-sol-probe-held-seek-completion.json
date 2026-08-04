@@ -15,9 +15,11 @@
     {"action": "wait_input_ticks", "count": 200},
     {"action": "assert_dispatch", "encounter": 24, "dialogue": 18},
     {"action": "capture", "label": "real-probe-held-seek-broadcast"},
-    {"action": "tap_menu_key", "key": "right", "value": 0, "hold": 2, "settle": 2},
-    {"action": "tap_menu_key", "key": "right", "value": 1, "hold": 45, "settle": 2},
+    {"action": "set_menu_key", "key": "left", "value": 1},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 2, "settle": 4},
     {"action": "wait_for_communication_end", "minimum_completions": 1, "max_ticks": 5000},
+    {"action": "set_menu_key", "key": "left", "value": 0},
     {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "real-probe-held-seek-returned-to-flight"},
     {"action": "finish"}
