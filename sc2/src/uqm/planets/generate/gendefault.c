@@ -234,9 +234,24 @@ GenerateDefault_generateRuins (const SOLARSYS_STATE *solarSys,
 static inline void
 runLanderReport (void)
 {
-	UnbatchGraphics ();
+	// The discovery report runs its own input loop and has to present frames
+	// while it is up, so every batch level the caller is holding must be
+	// released for its duration and restored afterwards. Releasing and
+	// re-acquiring exactly one level instead would leak a batch level
+	// whenever the caller holds none: UnbatchGraphics() is a no-op at depth
+	// zero while BatchGraphics() always increments. A leaked level stalls the
+	// draw command queue permanently, because Synchronize_DCQ only publishes
+	// queued commands while Batching is zero.
+	int depth = GetBatchDepth ();
+	int i;
+
+	for (i = 0; i < depth; ++i)
+		UnbatchGraphics ();
+
 	DoDiscoveryReport (MenuSounds);
-	BatchGraphics ();
+
+	for (i = 0; i < depth; ++i)
+		BatchGraphics ();
 }
 
 bool

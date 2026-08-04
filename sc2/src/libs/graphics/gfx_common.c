@@ -95,6 +95,15 @@ UnbatchGraphics (void)
 	TFB_UnbatchGraphics ();
 }
 
+/* Reports the number of batch levels currently held, so that code which has
+   to release the batch around a nested input loop can restore exactly the
+   depth it found. */
+int
+GetBatchDepth (void)
+{
+	return TFB_GetBatchDepth ();
+}
+
 /* Sleeps this thread until all Draw Commands queued by that thread have
    been processed. */
 

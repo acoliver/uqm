@@ -107,21 +107,22 @@ pub struct CGlobData {
 /// Layout verified via C offsetof. Total size 512 bytes.
 #[repr(C)]
 pub struct CGameState {
-    pub glob_flags: u8,              // offset 0
-    pub crew_cost: u8,               // offset 1
-    pub fuel_cost: u8,               // offset 2
-    pub module_cost: [u8; 20],       // offset 3, NUM_MODULES=20
-    pub element_worth: [u8; 8],      // offset 23, NUM_ELEMENT_CATEGORIES=8
-    _display_array_pad: u8,          // offset 31, align PRIMITIVE* to 32
-    _display_array: *mut c_void,     // offset 32, PRIMITIVE*
-    pub current_activity: u16,       // offset 40 (verified)
-    _current_activity_pad: [u8; 6],  // align CLOCK_STATE to offset 48
-    _clock_state: [u8; 48],          // offset 48, CLOCK_STATE
-    _autopilot: [u8; 4],             // offset 96, POINT
-    _ip_location: [u8; 4],           // offset 100, POINT
-    pub ship_stamp: CStamp,          // offset 104, STAMP
-    _ship_facing: u16,               // offset 120, UWORD
-    _ip_planet: u8,                  // offset 122, BYTE
+    pub glob_flags: u8,             // offset 0
+    pub crew_cost: u8,              // offset 1
+    pub fuel_cost: u8,              // offset 2
+    pub module_cost: [u8; 20],      // offset 3, NUM_MODULES=20
+    pub element_worth: [u8; 8],     // offset 23, NUM_ELEMENT_CATEGORIES=8
+    _display_array_pad: u8,         // offset 31, align PRIMITIVE* to 32
+    _display_array: *mut c_void,    // offset 32, PRIMITIVE*
+    pub current_activity: u16,      // offset 40 (verified)
+    _current_activity_pad: [u8; 6], // align CLOCK_STATE to offset 48
+    _clock_state: [u8; 48],         // offset 48, CLOCK_STATE
+    _autopilot: [u8; 4],            // offset 96, POINT
+    _ip_location: [u8; 4],          // offset 100, POINT
+    pub ship_stamp: CStamp,         // offset 104, STAMP
+    _ship_facing: u16,              // offset 120, UWORD
+    _ip_planet: u8,                 // offset 122, BYTE
+    // `GLOBAL(in_orbit)`: save/load-only orbit encoding, not live orbit state.
     _in_orbit: u8,                   // offset 123, BYTE
     pub _velocity: [u8; 18],         // offset 124, VELOCITY_DESC
     _velocity_pad: [u8; 2],          // align BattleGroupRef to offset 144

@@ -37,6 +37,7 @@ run_proof menu "${SCRIPT_DIR}/main-menu-v1.json"
 run_proof communication-held-seek "${SCRIPT_DIR}/real-sol-probe-held-seek-completion.json"
 run_proof communication-replay "${SCRIPT_DIR}/real-sol-probe-completion.json"
 run_proof planetside "${SCRIPT_DIR}/real-sol-rust-planetside-smoke.json"
+run_proof luna-moonbase-departure "${SCRIPT_DIR}/real-sol-luna-moonbase-departure.json"
 run_proof battle-first "${SCRIPT_DIR}/battle-v1.json"
 run_proof battle-second "${SCRIPT_DIR}/battle-v1.json"
 "${PROOF_BIN}" compare-battle \

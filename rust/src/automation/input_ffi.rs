@@ -18,7 +18,6 @@
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
 use crate::automation::coordinator::Coordinator;
-use crate::automation::input::setter_set_menu_key;
 use crate::automation::runtime::RuntimeModel;
 
 // ===========================================================================
@@ -83,9 +82,6 @@ struct CSolarSystemState {
     moons: [CPlanetDesc; 4],
     _base: *mut CPlanetDesc,
     orbital: *mut CPlanetDesc,
-    _between_orbital_and_in_orbit: [u8; 256],
-    in_orbit: i32,
-    _tail: [u8; 4],
 }
 
 #[cfg(feature = "linked_c_archive")]
@@ -193,7 +189,11 @@ pub(crate) fn navigation_snapshot(
 
         snapshot.active = 1;
         snapshot.in_ip_flight = i32::from(solar_system.in_ip_flight != 0);
-        snapshot.in_orbit = i32::from(solar_system.in_orbit != 0);
+        // SOLARSYS_STATE carries no orbit flag, and `GLOBAL(in_orbit)` only
+        // preserves orbit state across save/load. `InIpFlight` is the live
+        // signal: the game clears it exactly when the flagship leaves
+        // interplanetary flight to commit to an orbit.
+        snapshot.in_orbit = i32::from(solar_system.in_ip_flight == 0);
         snapshot.wait_intersect = solar_system.wait_intersect;
         let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
         let ship_stamp = std::ptr::addr_of!((*game_state).ship_stamp).read();
@@ -442,7 +442,7 @@ pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32)
 #[no_mangle]
 #[cfg(not(feature = "linked_c_archive"))]
 pub extern "C" fn rust_automation_set_immediate_menu_key(index: i32, value: i32) -> i32 {
-    use crate::automation::input::SetterResult;
+    use crate::automation::input::{setter_set_menu_key, SetterResult};
 
     let Ok(index) = u8::try_from(index) else {
         return -1;

@@ -85,7 +85,7 @@
     },
     {
       "source": "sc2/src/libs/graphics/dcqueue.c",
-      "source_sha256": "80532510c57143dc5354d4fceba45ac16a19c5b98d30031adca241a75cd59a50",
+      "source_sha256": "acfffa5b68b3ff767dbaca10c4e0079a64f274ce921279eb4feaef9ec978deb8",
       "object_output": "dcqueue.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "GFX",
@@ -130,7 +130,7 @@
     },
     {
       "source": "sc2/src/libs/graphics/gfx_common.c",
-      "source_sha256": "cbfda35b6fcf388e50228e3c25cc0927e87b753020537c92b447fc22c355aab0",
+      "source_sha256": "a02ab9e5017c26ff68d3854e85abfaecdfb1fa8fb3b584d1ae280f022ab1b623",
       "object_output": "gfx_common.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "GFX",
@@ -1858,7 +1858,7 @@
     },
     {
       "source": "sc2/src/uqm/planets/generate/gendefault.c",
-      "source_sha256": "6ecdc0c8235e1ce178ba56ae878ea6b05a2590c7a0b4a3debd2103328fe95184",
+      "source_sha256": "b845cbcc7651f15a1c28f84b788cc332d4561c90225a88e971523238538e095d",
       "object_output": "gendefault.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "PLANET_GEN",

@@ -32,7 +32,26 @@ use crate::automation::watchdog::{
 };
 use parking_lot::Mutex;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+
+/// Rotating phase for the orbital-exit key sequence.
+static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
+
+/// Menu keys that leave the orbital screen, one admitted callback at a time.
+///
+/// `DoPlanetOrbit` is a menu, not ship flight. `PlanetOrbitMenu` always opens
+/// on the first item (SCAN), and NAVIGATION is the last, so one Up wraps the
+/// cursor straight onto it and Select confirms. `DoMenuChooser` honours Up in
+/// both the PC and 3DO menu layouts. Both keys are pulsed, so each press needs
+/// an intervening release to register as a new press.
+fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
+    match phase % 4 {
+        0 => (true, false),
+        2 => (false, true),
+        _ => (false, false),
+    }
+}
 use std::time::{Duration, Instant};
 
 /// Fixed RNG seed applied once when active automation enters gameplay.
@@ -1204,15 +1223,27 @@ impl Coordinator {
     }
 
     fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) {
-        use crate::automation::script::PlayerKey;
+        use crate::automation::script::{MenuKey, PlayerKey};
 
         for (key, active) in [
             (PlayerKey::Thrust, control.thrust),
             (PlayerKey::Left, control.left),
             (PlayerKey::Right, control.right),
-            (PlayerKey::Escape, control.escape),
         ] {
             crate::automation::input_ffi::inject_player_key(
+                i32::from(key.index()),
+                i32::from(active),
+            );
+        }
+
+        let (up, select) = if control.leave_orbit {
+            orbit_exit_menu_keys(ORBIT_EXIT_PHASE.fetch_add(1, Ordering::AcqRel))
+        } else {
+            ORBIT_EXIT_PHASE.store(0, Ordering::Release);
+            (false, false)
+        };
+        for (key, active) in [(MenuKey::Up, up), (MenuKey::Select, select)] {
+            crate::automation::input_ffi::inject_menu_key(
                 i32::from(key.index()),
                 i32::from(active),
             );

@@ -154,7 +154,7 @@
     },
     {
       "path": "sc2/src/libs/gfxlib.h",
-      "sha256": "4d2ce346e76f5b9c9c4e43b7f8fd36f874f4deebac4a1c9832cb422fbaf34534",
+      "sha256": "44929f3d97cdb6a794ff2a8d9a848cae67c9e94d7afa793ee0cf816d81a95b58",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
@@ -214,7 +214,7 @@
     },
     {
       "path": "sc2/src/libs/graphics/drawcmd.h",
-      "sha256": "33686a554524425d27fb82b1782ce8f8726115262ccc47c2ed6cb138e13f5b8e",
+      "sha256": "37db47708a9668118f41383ad31ae724082b02d668968cdd8194d2bb4142b042",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
