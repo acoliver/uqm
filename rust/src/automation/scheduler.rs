@@ -355,6 +355,7 @@ pub fn scheduler_reduce(
                     | Action::WaitForDispatch(_)
                     | Action::SelectCommunicationResponse(_)
                     | Action::WaitForPlanetSideStart(_)
+                    | Action::WaitForPlanetSideEnd(_)
                     | Action::SelectPlanetMenu(_)
             ) {
                 match state.phase {
@@ -741,6 +742,38 @@ fn reduce_admitted_input(
             }
         }
         (Action::WaitForPlanetSideStart(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForPlanetSideEnd(wait), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingCondition {
+                    remaining: wait.max_ticks.saturating_sub(1),
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::WaitForPlanetSideEnd(_), ActionPhase::WaitingCondition { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForPlanetSideEnd(_), ActionPhase::WaitingCondition { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::WaitingCondition {

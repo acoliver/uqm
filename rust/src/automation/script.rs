@@ -391,6 +391,58 @@ pub struct WaitForPlanetSideStartStep {
     pub max_ticks: u64,
 }
 
+/// How a PlanetSide session ended, mirroring `SessionOutcome`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanetSideOutcomeName {
+    Returned,
+    Destroyed,
+    Aborted,
+}
+
+impl PlanetSideOutcomeName {
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "returned" => Some(Self::Returned),
+            "destroyed" => Some(Self::Destroyed),
+            "aborted" => Some(Self::Aborted),
+            _ => None,
+        }
+    }
+
+    /// Terminal code recorded by `planet_side::telemetry::finish`.
+    #[must_use]
+    pub const fn terminal_code(self) -> u32 {
+        match self {
+            Self::Returned => 1,
+            Self::Destroyed => 2,
+            Self::Aborted => 3,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PlanetSideOutcomeName {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Self::from_name(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown planet-side outcome '{raw}', expected returned, destroyed or aborted"
+            ))
+        })
+    }
+}
+
+/// Wait until the active Rust PlanetSide session settles with `outcome`.
+///
+/// This is the oracle for behaviour that must complete without further input,
+/// such as a pickup callback that requests takeoff.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForPlanetSideEndStep {
+    pub outcome: PlanetSideOutcomeName,
+    pub max_ticks: u64,
+}
+
 /// Select once when the requested production planet-menu phase is active.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -492,6 +544,7 @@ pub enum Action {
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
+    WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
@@ -1235,6 +1288,24 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         ),
                     })?;
             }
+            Action::WaitForPlanetSideEnd(wait) => {
+                if wait.max_ticks == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_for_planet_side_end max_ticks must be positive",
+                    ));
+                }
+                required_input_callbacks = required_input_callbacks
+                    .checked_add(wait.max_ticks.saturating_sub(1))
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required input ticks overflow at step {i}: max_ticks={}",
+                            wait.max_ticks
+                        ),
+                    })?;
+            }
             Action::SelectPlanetMenu(select) => {
                 if select.max_ticks == 0 {
                     return Err(AutomationError::step(
@@ -1693,6 +1764,49 @@ mod tests {
     }
 
     // --- REQ-SCRIPT-002: closed versioned root, positive budgets ---
+
+    #[test]
+    fn accepts_wait_for_planet_side_end_with_each_outcome() {
+        for (name, expected) in [
+            ("returned", PlanetSideOutcomeName::Returned),
+            ("destroyed", PlanetSideOutcomeName::Destroyed),
+            ("aborted", PlanetSideOutcomeName::Aborted),
+        ] {
+            let txt = format!(
+                r#"{{"version":1,"name":"x","budgets":{{"max_input_ticks":50,"max_presentations":10,"max_wallclock_seconds":10}},"steps":[{{"action":"wait_for_planet_side_end","outcome":"{name}","max_ticks":10}},{{"action":"finish"}}]}}"#
+            );
+            let doc = parse_script(txt.as_bytes(), p()).unwrap();
+            let script = validate_script(doc, p()).unwrap();
+            assert_eq!(
+                script.steps()[0],
+                Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+                    outcome: expected,
+                    max_ticks: 10
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_planet_side_outcome() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":50,"max_presentations":10,"max_wallclock_seconds":10},"steps":[{"action":"wait_for_planet_side_end","outcome":"exploded","max_ticks":10},{"action":"finish"}]}"#;
+        assert!(parse_script(txt.as_bytes(), p()).is_err());
+    }
+
+    #[test]
+    fn rejects_zero_max_ticks_for_planet_side_end() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":50,"max_presentations":10,"max_wallclock_seconds":10},"steps":[{"action":"wait_for_planet_side_end","outcome":"returned","max_ticks":0},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        assert!(validate_script(doc, p()).is_err());
+    }
+
+    #[test]
+    fn planet_side_outcome_terminal_codes_match_the_telemetry_contract() {
+        // planet_side::telemetry::finish stores these codes.
+        assert_eq!(PlanetSideOutcomeName::Returned.terminal_code(), 1);
+        assert_eq!(PlanetSideOutcomeName::Destroyed.terminal_code(), 2);
+        assert_eq!(PlanetSideOutcomeName::Aborted.terminal_code(), 3);
+    }
 
     #[test]
     fn rejects_zero_input_budget() {

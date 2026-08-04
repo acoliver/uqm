@@ -376,6 +376,37 @@ mod tests {
     use crate::planet_side::hazards::HazardKind;
     use crate::planet_side::model::{CrewCount, LanderUpgrades, SurfacePoint};
 
+    /// Stands in for a selected-system `pickupEnergy` callback that requests
+    /// takeoff, the way `GenerateSol_pickupEnergy` does for Luna's moon base.
+    #[derive(Default)]
+    struct TakeoffRequestingGenerator;
+
+    impl SurfaceGenerator for TakeoffRequestingGenerator {
+        fn node_count(
+            &mut self,
+            _scan: super::super::generation::ScanType,
+        ) -> Result<u8, AdapterError> {
+            Ok(0)
+        }
+
+        fn generate(
+            &mut self,
+            _scan: super::super::generation::ScanType,
+            _node: super::super::generation::ScanNodeId,
+        ) -> Result<super::super::generation::GeneratedNode, AdapterError> {
+            Err(AdapterError::new("unexpected_generate"))
+        }
+
+        fn pickup(
+            &mut self,
+            _scan: super::super::generation::ScanType,
+            _node: super::super::generation::ScanNodeId,
+        ) -> Result<bool, AdapterError> {
+            super::super::special_effects::SetLanderTakeoff();
+            Ok(true)
+        }
+    }
+
     #[derive(Default)]
     struct Generator;
 
@@ -714,7 +745,62 @@ mod tests {
         // No hazard spawns because chances are all zero.
         assert!(
             result.hazard_spawns.is_empty(),
-            "no hazards should spawn with zero chances"
+            "no hazard should spawn with zero chances"
+        );
+    }
+
+    #[test]
+    fn energy_pickup_reports_the_takeoff_its_callback_requested() {
+        // Luna's moon base is an energy node whose selected-system callback
+        // calls SetLanderTakeoff() before returning "picked up". The adapter
+        // must surface that request, otherwise the lander never lifts off.
+        let mut world = SurfaceWorld::new();
+        let id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::EnergyNode { node: 0 },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        });
+        let mut masks = SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap();
+        masks.insert_entity(id, solid());
+        let surface =
+            super::super::assembly::share_surface(super::super::assembly::SurfaceAssembly {
+                world,
+                generated: vec![super::super::generation::GeneratedEntity {
+                    entity: id,
+                    scan: super::super::generation::ScanType::Energy,
+                    node: super::super::generation::ScanNodeId::new(0).unwrap(),
+                }],
+                frames: super::super::graphics_adapter::SurfaceFrameRegistry::default(),
+                masks,
+            });
+        let mut adapter = SurfaceCollisionAdapter {
+            surface,
+            random: Random {
+                values: Default::default(),
+                calls: 0,
+            },
+            generator: TakeoffRequestingGenerator,
+            persistence: ScanPersistence::default(),
+            world_visuals: TestWorldVisuals,
+            earthquake_frame_count: 13,
+            lava_frame_count: 7,
+        };
+
+        let contacts = adapter.contacts(&lander()).unwrap();
+        let [contact] = contacts.as_slice() else {
+            panic!("expected exactly one energy contact");
+        };
+        let effects = adapter
+            .commit(
+                *contact,
+                &CollisionOutcome::EnergyPickupRequested { node: 0 },
+                12,
+            )
+            .unwrap();
+
+        assert!(
+            effects.takeoff_requested,
+            "takeoff requested by the pickup callback must reach the session"
         );
     }
 }

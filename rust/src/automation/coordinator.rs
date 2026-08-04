@@ -573,6 +573,27 @@ impl Coordinator {
                     ),
                 );
             }
+        } else if let Some(Action::WaitForPlanetSideEnd(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let observation = crate::planet_side::telemetry::observation();
+            // The session publishes its terminal code only once it has settled,
+            // so an inactive session carrying the expected code is the proof
+            // that the trip finished on its own.
+            if !observation.active && observation.terminal == wait.outcome.terminal_code() {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_completed:generation={}:outcome={:?}:crew={}:minerals={}",
+                        observation.generation,
+                        wait.outcome,
+                        observation.returned_crew,
+                        observation.returned_minerals
+                    ),
+                );
+            }
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
