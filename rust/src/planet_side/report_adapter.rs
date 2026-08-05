@@ -39,8 +39,6 @@ impl CffiDiscoveryReport {
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
     static MenuSounds: *mut c_void;
-    fn UnbatchGraphics();
-    fn BatchGraphics();
     fn DoDiscoveryReport(readout_sounds: *mut c_void);
     fn SetRelStringTableIndex(string: *mut c_void, offset: i16) -> *mut c_void;
     fn GetStringTableIndex(string: *mut c_void) -> u16;
@@ -57,9 +55,12 @@ impl DiscoveryReportPort for CffiDiscoveryReport {
                 return Ok(false);
             }
 
-            UnbatchGraphics();
+            // No batch dance here. The report presents frames from its own
+            // input loop, so it must run unbatched, and Rust PlanetSide never
+            // holds an ambient batch across a callback. Releasing and
+            // re-acquiring one level was an assumption of the retired native
+            // lander loop and leaked a level against a Rust caller.
             DoDiscoveryReport(MenuSounds);
-            BatchGraphics();
 
             match disposition {
                 ReportDisposition::Once => destroy_and_clear(self.discovery_string, string),
