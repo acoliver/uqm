@@ -37,7 +37,6 @@
     {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 2, "settle": 30},
     {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 2, "settle": 30},
     {"action": "wait_input_ticks", "count": 600},
-    {"action": "capture", "label": "moonbase-after-report"},
     {"action": "wait_for_planet_side_end", "outcome": "returned", "max_ticks": 6000},
     {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "orbit-after-auto-takeoff", "expect_change": true},
@@ -47,7 +46,6 @@
     {"action": "assert_activity", "mask": 255, "equals": 4},
     {"action": "capture", "label": "after-leaving-luna-orbit", "expect_change": true},
     {"action": "wait_input_ticks", "count": 400},
-    {"action": "capture", "label": "interplanetary-settled"},
     {"action": "finish"}
   ]
 }
