@@ -207,35 +207,8 @@ where
     }
 
     match session.phase {
-        SessionPhase::Return => {
-            if session.advance_return() {
-                let outcome = session.settle();
-                if let SessionOutcome::Returned(delta) | SessionOutcome::LanderDestroyed(delta) =
-                    &outcome
-                {
-                    adapters.ship.apply(delta)?;
-                }
-                adapters.clock.sleep_until(deadline)?;
-                return Ok(RuntimeStep::Complete(outcome));
-            }
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
-        SessionPhase::Explosion => {
-            if session.advance_explosion() {
-                let outcome = session.settle();
-                if let SessionOutcome::LanderDestroyed(delta) = &outcome {
-                    adapters.ship.apply(delta)?;
-                }
-                render_lifecycle(session, adapters)?;
-                adapters.clock.sleep_until(deadline)?;
-                return Ok(RuntimeStep::Complete(outcome));
-            }
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
+        SessionPhase::Return => return run_return_frame(session, adapters, deadline),
+        SessionPhase::Explosion => return run_explosion_frame(session, adapters, deadline),
         SessionPhase::Active | SessionPhase::Complete | SessionPhase::Aborted => {}
         SessionPhase::Warmup
         | SessionPhase::Launch
@@ -249,45 +222,185 @@ where
         session.phase
     );
 
+    if let Some(step) = run_lander_simulation(session, adapters, deadline)? {
+        return Ok(step);
+    }
+
+    if let Some(step) = step_surface_world(session, adapters, deadline)? {
+        return Ok(step);
+    }
+
+    if let Some(step) = resolve_lander_contacts(session, adapters, deadline)? {
+        return Ok(step);
+    }
+
+    render_active_frame(session, adapters, deadline)
+}
+
+/// Present the lifecycle graphic and wait out the frame.
+///
+/// Every path that keeps the session alive without settling ends this way, so
+/// the ordering of render before sleep lives in one place.
+fn continue_after_lifecycle<I, C, G, A, K, S>(
+    session: &PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<RuntimeStep, RuntimeError>
+where
+    G: PlanetSideGraphics,
+    K: PlanetSideClock,
+{
+    render_lifecycle(session, adapters)?;
+    adapters.clock.sleep_until(deadline)?;
+    Ok(RuntimeStep::Continue)
+}
+
+/// Begin the destruction sequence once the last crew member dies.
+fn begin_explosion<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+) -> Result<(), RuntimeError>
+where
+    A: PlanetSideAudio,
+{
+    session.phase = SessionPhase::Explosion;
+    session.animation.reset();
+    adapters.audio.play(SoundCue::Destroyed)?;
+    Ok(())
+}
+
+/// Advance the return ascent, settling the trip once the animation completes.
+fn run_return_frame<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<RuntimeStep, RuntimeError>
+where
+    G: PlanetSideGraphics,
+    K: PlanetSideClock,
+    S: ShipStatusPort,
+{
+    if !session.advance_return() {
+        return continue_after_lifecycle(session, adapters, deadline);
+    }
+
+    let outcome = session.settle();
+    if let SessionOutcome::Returned(delta) | SessionOutcome::LanderDestroyed(delta) = &outcome {
+        adapters.ship.apply(delta)?;
+    }
+    adapters.clock.sleep_until(deadline)?;
+    Ok(RuntimeStep::Complete(outcome))
+}
+
+/// Advance the destruction animation, settling once it completes.
+fn run_explosion_frame<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<RuntimeStep, RuntimeError>
+where
+    G: PlanetSideGraphics,
+    K: PlanetSideClock,
+    S: ShipStatusPort,
+{
+    if !session.advance_explosion() {
+        return continue_after_lifecycle(session, adapters, deadline);
+    }
+
+    let outcome = session.settle();
+    if let SessionOutcome::LanderDestroyed(delta) = &outcome {
+        adapters.ship.apply(delta)?;
+    }
+    render_lifecycle(session, adapters)?;
+    adapters.clock.sleep_until(deadline)?;
+    Ok(RuntimeStep::Complete(outcome))
+}
+
+/// Poll the player and advance the lander for one gameplay tick.
+///
+/// Returns `Some` when the tick ends the frame, either by aborting the trip or
+/// by entering the takeoff animation.
+fn run_lander_simulation<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<Option<RuntimeStep>, RuntimeError>
+where
+    I: PlanetSideInput,
+    C: PlanetSideCollision,
+    G: PlanetSideGraphics,
+    A: PlanetSideAudio,
+    K: PlanetSideClock,
+{
     let input = adapters.input.poll()?;
 
     match simulation::tick(&mut session.lander, input) {
         TickResult::Aborted => {
             session.abort();
-            return Ok(RuntimeStep::Complete(SessionOutcome::Aborted));
+            Ok(Some(RuntimeStep::Complete(SessionOutcome::Aborted)))
         }
         TickResult::Takeoff => {
             // Enter the takeoff animation without settling. Settlement happens
             // only after the TakingOff → Return sequence completes.
             session.request_takeoff();
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
+            continue_after_lifecycle(session, adapters, deadline).map(Some)
         }
         TickResult::Continue(effects) => {
-            execute_simulation_effects(&mut adapters.collision, &mut adapters.audio, effects)?
+            execute_simulation_effects(&mut adapters.collision, &mut adapters.audio, effects)?;
+            Ok(None)
         }
     }
+}
 
-    // Step the surface world: creature AI, shot movement, hazard spawning.
+/// Step creature AI, shots and hazards, applying any lightning casualties.
+///
+/// Returns `Some` when the casualties destroy the lander and end the frame.
+fn step_surface_world<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<Option<RuntimeStep>, RuntimeError>
+where
+    C: PlanetSideCollision,
+    G: PlanetSideGraphics,
+    A: PlanetSideAudio,
+    K: PlanetSideClock,
+{
     let world_result = adapters
         .collision
         .step_world(&session.lander, session.hazard_chances)?;
     adapters
         .collision
         .apply_world_step(&world_result, &mut adapters.audio)?;
-    if world_result.lightning_kills > 0 {
-        session.lander.crew.lose(world_result.lightning_kills);
-        if session.lander.crew.get() == 0 {
-            session.phase = SessionPhase::Explosion;
-            session.animation.reset();
-            adapters.audio.play(SoundCue::Destroyed)?;
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
-        }
+
+    if world_result.lightning_kills == 0 {
+        return Ok(None);
     }
 
+    session.lander.crew.lose(world_result.lightning_kills);
+    if session.lander.crew.get() > 0 {
+        return Ok(None);
+    }
+
+    begin_explosion(session, adapters)?;
+    continue_after_lifecycle(session, adapters, deadline).map(Some)
+}
+
+/// Resolve every contact the lander made this frame.
+///
+/// Returns `Some` when a contact ends the frame, either by requesting takeoff
+/// (a special pickup) or by destroying the lander.
+fn resolve_lander_contacts<I, C, G, A, K, S>(
+    session: &mut PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<Option<RuntimeStep>, RuntimeError>
+where
+    C: PlanetSideCollision,
+    G: PlanetSideGraphics,
+    A: PlanetSideAudio,
+    K: PlanetSideClock,
+{
     for contact in adapters.collision.contacts(&session.lander)? {
         let outcome = resolve_lander_collision(
             &mut CollisionState {
@@ -304,24 +417,32 @@ where
             .collision
             .commit(contact, &outcome, session.lander.crew.get())?;
         session.lander.crew.lose(effects.crew_killed);
+
         if effects.takeoff_requested {
             session.request_takeoff();
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
+            return continue_after_lifecycle(session, adapters, deadline).map(Some);
         }
         if session.lander.crew.get() == 0 {
-            session.phase = SessionPhase::Explosion;
-            session.animation.reset();
-            adapters.audio.play(SoundCue::Destroyed)?;
-            render_lifecycle(session, adapters)?;
-            adapters.clock.sleep_until(deadline)?;
-            return Ok(RuntimeStep::Continue);
+            begin_explosion(session, adapters)?;
+            return continue_after_lifecycle(session, adapters, deadline).map(Some);
         }
     }
+    Ok(None)
+}
 
-    // Active gameplay frame: render with current cargo meters so the life
-    // meter visibly fills on every pickup.
+/// Present an ordinary gameplay frame.
+///
+/// The cargo meters are rendered from current levels so the life meter visibly
+/// fills on every pickup.
+fn render_active_frame<I, C, G, A, K, S>(
+    session: &PlanetSideSession,
+    adapters: &mut RuntimeAdapters<I, C, G, A, K, S>,
+    deadline: Tick,
+) -> Result<RuntimeStep, RuntimeError>
+where
+    G: PlanetSideGraphics,
+    K: PlanetSideClock,
+{
     adapters.graphics.render(&RenderSnapshot {
         phase: session.phase,
         lander: session.lander.clone(),
@@ -1076,6 +1197,99 @@ mod tests {
         assert_eq!(
             adapters.collision.world_steps, 3,
             "world must advance once per active frame"
+        );
+    }
+
+    // --- Focused tests for the units extracted from run_frame ---
+
+    #[test]
+    fn begin_explosion_sets_the_phase_resets_the_animation_and_sounds_once() {
+        let mut session = session();
+        session.animation.advance(99);
+        let mut adapters = RuntimeAdapters {
+            input: Input(FrameInput::default()),
+            collision: Collisions(vec![]),
+            graphics: Graphics::default(),
+            audio: Audio::default(),
+            clock: Clock::default(),
+            ship: Ship::default(),
+        };
+
+        begin_explosion(&mut session, &mut adapters).expect("explosion starts");
+
+        assert_eq!(session.phase, SessionPhase::Explosion);
+        assert_eq!(session.animation.frame(), 0, "animation restarts from zero");
+        assert_eq!(adapters.audio.0, [SoundCue::Destroyed]);
+    }
+
+    #[test]
+    fn continue_after_lifecycle_renders_before_sleeping() {
+        let mut session = session();
+        session.phase = SessionPhase::Return;
+        let mut adapters = RuntimeAdapters {
+            input: Input(FrameInput::default()),
+            collision: Collisions(vec![]),
+            graphics: Graphics::default(),
+            audio: Audio::default(),
+            clock: Clock::default(),
+            ship: Ship::default(),
+        };
+
+        let step = continue_after_lifecycle(&session, &mut adapters, Tick(7));
+
+        assert_eq!(step, Ok(RuntimeStep::Continue));
+        assert_eq!(adapters.graphics.0.len(), 1, "the frame is presented");
+        assert_eq!(
+            adapters.clock.slept,
+            [Tick(7)],
+            "the frame waits out its deadline after presenting"
+        );
+    }
+
+    #[test]
+    fn step_surface_world_reports_no_early_exit_while_crew_survive() {
+        let mut session = session();
+        let mut adapters = RuntimeAdapters {
+            input: Input(FrameInput::default()),
+            collision: Collisions(vec![]),
+            graphics: Graphics::default(),
+            audio: Audio::default(),
+            clock: Clock::default(),
+            ship: Ship::default(),
+        };
+
+        let early = step_surface_world(&mut session, &mut adapters, Tick(1)).expect("world steps");
+
+        assert_eq!(early, None, "a survivable frame continues to contacts");
+        assert_ne!(session.phase, SessionPhase::Explosion);
+    }
+
+    #[test]
+    fn run_lander_simulation_reports_an_abort_without_presenting_a_frame() {
+        let mut session = session();
+        let mut adapters = RuntimeAdapters {
+            input: Input(FrameInput {
+                abort: true,
+                ..FrameInput::default()
+            }),
+            collision: Collisions(vec![]),
+            graphics: Graphics::default(),
+            audio: Audio::default(),
+            clock: Clock::default(),
+            ship: Ship::default(),
+        };
+
+        let early =
+            run_lander_simulation(&mut session, &mut adapters, Tick(3)).expect("simulation ticks");
+
+        assert_eq!(
+            early,
+            Some(RuntimeStep::Complete(SessionOutcome::Aborted)),
+            "aborting ends the trip immediately"
+        );
+        assert!(
+            adapters.graphics.0.is_empty(),
+            "an aborted frame presents nothing"
         );
     }
 }
