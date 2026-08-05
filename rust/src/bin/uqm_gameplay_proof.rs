@@ -808,6 +808,7 @@ fn validate_trace_and_captures(root: &Path, require_success: bool) -> Result<(),
     let mut present_count = 0_usize;
     let mut semantic_count = 0_usize;
     let mut traced_captures = BTreeSet::new();
+    let mut ordered_capture_labels: Vec<String> = Vec::new();
     for (sequence, record) in records.iter().enumerate() {
         if record.schema != TraceRecord::SCHEMA
             || record.run != 1
@@ -827,6 +828,7 @@ fn validate_trace_and_captures(root: &Path, require_success: bool) -> Result<(),
             validate_presentation(record)?;
             let label = capture_base(record)?;
             traced_captures.insert(format!("run/captures/{label}.png"));
+            ordered_capture_labels.push(label);
         }
     }
     if require_success && (present_count == 0 || semantic_count == 0 || traced_captures.is_empty())
@@ -836,6 +838,57 @@ fn validate_trace_and_captures(root: &Path, require_success: bool) -> Result<(),
     let actual_captures = collect_capture_paths(root)?;
     if traced_captures != actual_captures {
         return Err("capture trace records do not correlate exactly with PNG artifacts".into());
+    }
+    if require_success {
+        validate_captures_differ(root, &ordered_capture_labels)?;
+    }
+    Ok(())
+}
+
+/// Reject a passing run where a capture marked `expect_change` is identical to
+/// the one before it.
+///
+/// A frozen screen still completes captures and still records presentations, so
+/// without this a proof passes while the player sees the previous frame. Only
+/// captures the script marks are checked, because a legitimately static screen
+/// sampled twice produces identical pixels.
+fn validate_captures_differ(root: &Path, ordered_labels: &[String]) -> Result<(), String> {
+    let script: serde_json::Value = read_json_value(&root.join("snapshots/script.json"))?;
+    let expecting: BTreeSet<&str> = script
+        .get("steps")
+        .and_then(serde_json::Value::as_array)
+        .map(|steps| {
+            steps
+                .iter()
+                .filter(|step| {
+                    step.get("expect_change")
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true)
+                })
+                .filter_map(|step| step.get("label").and_then(serde_json::Value::as_str))
+                .collect()
+        })
+        .unwrap_or_default();
+    if expecting.is_empty() {
+        return Ok(());
+    }
+
+    let mut previous: Option<(String, String)> = None;
+    for label in ordered_labels {
+        let relative = format!("run/captures/{label}.png");
+        let digest = hash_file(&root.join(&relative))?;
+        if expecting.contains(label.as_str()) {
+            if let Some((previous_label, previous_digest)) = &previous {
+                if *previous_digest == digest {
+                    return Err(format!(
+                        "capture {label} is byte-identical to {previous_label}, so the screen \
+                         never changed across a transition the script expected to be visible; \
+                         the run presented no new frame"
+                    ));
+                }
+            }
+        }
+        previous = Some((label.clone(), digest));
     }
     Ok(())
 }
