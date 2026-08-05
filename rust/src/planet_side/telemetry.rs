@@ -58,11 +58,15 @@ pub struct PlanetSideObservation {
     /// Live `SessionPhase` code, so a stalled trip can be told apart from one
     /// that never requested takeoff at all. See [`phase_name`].
     pub phase: u32,
+    /// Graphics batch levels Rust had to restore after a native callback during
+    /// this trip. Any non-zero value is a defect in the callback.
+    pub batch_depth_corrections: u64,
 }
 
 pub fn begin(session: &PlanetSideSession) {
     GENERATION.fetch_add(1, Ordering::AcqRel);
     PHASE.store(phase_code(session.phase), Ordering::Release);
+    BATCH_DEPTH_CORRECTIONS.store(0, Ordering::Relaxed);
     FRAMES.store(0, Ordering::Release);
     START_X.store(session.lander.position.x, Ordering::Release);
     START_Y.store(session.lander.position.y, Ordering::Release);
@@ -124,6 +128,7 @@ pub fn observation() -> PlanetSideObservation {
         returned_crew: RETURNED_CREW.load(Ordering::Acquire) as i16,
         returned_minerals: RETURNED_MINERALS.load(Ordering::Acquire) as u16,
         phase: PHASE.load(Ordering::Acquire),
+        batch_depth_corrections: BATCH_DEPTH_CORRECTIONS.load(Ordering::Relaxed),
     }
 }
 
@@ -160,16 +165,13 @@ pub const fn phase_name(code: u32) -> &'static str {
 }
 
 /// Record that a transitional callback left the graphics batch depth changed
-/// and Rust had to restore it. A non-zero count means some native callback
-/// still assumes the retired lander loop's ambient batch.
+/// and Rust had to restore it. A non-zero count for a trip means some native
+/// callback still assumes the retired lander loop's ambient batch.
+///
+/// This is an independent diagnostic counter, so it needs no ordering relative
+/// to the lifecycle fields published around it.
 pub fn batch_depth_corrected(levels: i32) {
-    BATCH_DEPTH_CORRECTIONS.fetch_add(levels.unsigned_abs().into(), Ordering::AcqRel);
-}
-
-/// Total graphics batch levels Rust has had to correct this run.
-#[must_use]
-pub fn batch_depth_corrections() -> u64 {
-    BATCH_DEPTH_CORRECTIONS.load(Ordering::Acquire)
+    BATCH_DEPTH_CORRECTIONS.fetch_add(levels.unsigned_abs().into(), Ordering::Relaxed);
 }
 
 pub fn adapter_failure(operation: &'static str) {

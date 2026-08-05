@@ -148,9 +148,11 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
             // rather than trusting the callback to leave it untouched.
             let solar_system = self.solar_system;
             let world = self.world;
-            super::batch_guard::preserving_batch_depth("surface_generator_pickup_batch", || {
-                // SAFETY: borrowed current-system pointers validated at
-                // construction; the callback runs synchronously on this thread.
+            super::batch_guard::calling_native_unbatched("surface_generator_pickup_batch", || {
+                // SAFETY: the outer PlanetSide ABI contract guarantees these
+                // borrowed current-system pointers are valid, correctly typed
+                // and exclusively ours for the duration of the call; the
+                // callback runs synchronously on this thread.
                 unsafe {
                     callPickupForScanType(solar_system, world, u16::from(node.get()), scan as u8)
                 }
