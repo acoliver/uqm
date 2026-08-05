@@ -288,13 +288,19 @@ mod tests {
     }
 
     fn tmpdir() -> std::path::PathBuf {
+        // A timestamp alone is not unique: the clock is coarse enough that two
+        // tests running in parallel can read the same value, share a directory,
+        // and then the second receipt write fails because write_durable refuses
+        // to overwrite. Add a counter so each test gets its own directory.
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
-            "uqm-p05-lifecycle-{}-{}",
+            "uqm-p05-lifecycle-{}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
