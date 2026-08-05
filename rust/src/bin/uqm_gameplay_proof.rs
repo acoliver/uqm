@@ -1548,7 +1548,9 @@ fn battle_evidence_digest(
 fn run_deterministic_negative_fixtures() -> Result<(), String> {
     #[cfg(test)]
     {
-        return Ok(());
+        // Recursing into cargo from inside the very tests this spawns would
+        // never terminate.
+        Ok(())
     }
     #[cfg(not(test))]
     {

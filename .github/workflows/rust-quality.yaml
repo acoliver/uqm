@@ -263,7 +263,10 @@ jobs:
       - name: Run clippy
         run: |
           cd rust
-          cargo clippy -- -D warnings
+          # --all-targets so tests, benches and examples are linted too, not
+          # just the library. Without it, lint failures can sit in test code
+          # indefinitely.
+          cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check complexity
         run: |
