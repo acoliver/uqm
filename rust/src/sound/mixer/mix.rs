@@ -271,7 +271,7 @@ fn get_next_sample(
 ///
 /// This is the main mixing function called by the audio callback.
 pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
-    let Some((chansize, channels)) = mixer_output_format() else {
+    let Some((chansize, channels, mixer_freq)) = mixer_output_format() else {
         // Not initialized - output silence
         for byte in stream.iter_mut() {
             *byte = 0;
@@ -290,8 +290,14 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
     let mut left = true;
 
     while stream_idx < stream.len() {
-        let fullsamp =
-            accumulate_playing_sources(&sources, left, chansize, mixer_sampsize, channels);
+        let fullsamp = accumulate_playing_sources(
+            &sources,
+            left,
+            chansize,
+            mixer_sampsize,
+            channels,
+            mixer_freq,
+        );
 
         put_sample_int(
             stream,
@@ -311,7 +317,10 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
 }
 
 /// Report the output format, or `None` when the mixer is not initialized.
-fn mixer_output_format() -> Option<(u32, u32)> {
+///
+/// The frequency is returned with it so the mixing loop does not have to
+/// re-lock MIXER_STATE once per source per sample.
+fn mixer_output_format() -> Option<(u32, u32, u32)> {
     let state = MIXER_STATE.lock();
 
     let Some(ref s) = *state else {
@@ -334,7 +343,7 @@ fn mixer_output_format() -> Option<(u32, u32)> {
         );
     }
 
-    Some((chansize, channels))
+    Some((chansize, channels, freq))
 }
 
 /// Occasional snapshot of the source pool, for diagnosing silence.
@@ -365,6 +374,7 @@ fn accumulate_playing_sources(
     chansize: u32,
     mixer_sampsize: u32,
     channels: u32,
+    mixer_freq: u32,
 ) -> f32 {
     let mut fullsamp: f32 = 0.0;
 
@@ -395,7 +405,14 @@ fn accumulate_playing_sources(
             continue;
         }
 
-        let sample = next_source_sample(&mut src_guard, &buf_guard, left, chansize, channels);
+        let sample = next_source_sample(
+            &mut src_guard,
+            &buf_guard,
+            left,
+            chansize,
+            channels,
+            mixer_freq,
+        );
 
         // Cache sample for mono->stereo duplication
         if left || buf_guard.org_channels != 1 {
@@ -423,6 +440,7 @@ fn next_source_sample(
     left: bool,
     chansize: u32,
     channels: u32,
+    mixer_freq: u32,
 ) -> f32 {
     let buf_org_channels = buf_guard.org_channels;
 
@@ -440,7 +458,6 @@ fn next_source_sample(
     let buf_sampsize = buf_guard.sampsize;
     let buf_high = buf_guard.high;
     let buf_low = buf_guard.low;
-    let mixer_freq = crate::sound::mixer::mix::mixer_get_frequency();
 
     log_music_buffer_once(buf_guard, chansize, channels, mixer_freq);
 
