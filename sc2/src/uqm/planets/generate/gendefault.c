@@ -234,24 +234,13 @@ GenerateDefault_generateRuins (const SOLARSYS_STATE *solarSys,
 static inline void
 runLanderReport (void)
 {
-	// The discovery report runs its own input loop and has to present frames
-	// while it is up, so every batch level the caller is holding must be
-	// released for its duration and restored afterwards. Releasing and
-	// re-acquiring exactly one level instead would leak a batch level
-	// whenever the caller holds none: UnbatchGraphics() is a no-op at depth
-	// zero while BatchGraphics() always increments. A leaked level stalls the
-	// draw command queue permanently, because Synchronize_DCQ only publishes
-	// queued commands while Batching is zero.
-	int depth = GetBatchDepth ();
-	int i;
-
-	for (i = 0; i < depth; ++i)
-		UnbatchGraphics ();
-
+	// The report runs its own input loop and must present frames while it is
+	// up, so it cannot run underneath a held graphics batch. It no longer
+	// releases and re-acquires one here: that only balanced for the retired
+	// native lander loop, which kept an outer batch open across the surface
+	// frame. Rust PlanetSide owns the surface loop now, holds no ambient
+	// batch, and restores the depth around this callback itself.
 	DoDiscoveryReport (MenuSounds);
-
-	for (i = 0; i < depth; ++i)
-		BatchGraphics ();
 }
 
 bool

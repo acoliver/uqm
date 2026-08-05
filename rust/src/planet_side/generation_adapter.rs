@@ -141,13 +141,20 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
 
     fn pickup(&mut self, scan: ScanType, node: ScanNodeId) -> Result<bool, AdapterError> {
         #[cfg(feature = "linked_c_archive")]
-        unsafe {
-            Ok(callPickupForScanType(
-                self.solar_system,
-                self.world,
-                u16::from(node.get()),
-                scan as u8,
-            ))
+        {
+            // A pickup callback may present a discovery report, and the native
+            // report helpers were written for the retired lander loop's ambient
+            // batch. Rust holds no such batch, so it owns restoring the depth
+            // rather than trusting the callback to leave it untouched.
+            let solar_system = self.solar_system;
+            let world = self.world;
+            super::batch_guard::preserving_batch_depth("surface_generator_pickup_batch", || {
+                // SAFETY: borrowed current-system pointers validated at
+                // construction; the callback runs synchronously on this thread.
+                unsafe {
+                    callPickupForScanType(solar_system, world, u16::from(node.get()), scan as u8)
+                }
+            })
         }
         #[cfg(not(feature = "linked_c_archive"))]
         {

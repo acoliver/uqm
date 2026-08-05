@@ -36,6 +36,8 @@ static TERMINAL: AtomicU32 = AtomicU32::new(0);
 static RETURNED_CREW: AtomicI32 = AtomicI32::new(0);
 static RETURNED_MINERALS: AtomicU32 = AtomicU32::new(0);
 static PHASE: AtomicU32 = AtomicU32::new(0);
+/// Graphics batch levels Rust has had to restore after a native callback.
+static BATCH_DEPTH_CORRECTIONS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlanetSideObservation {
@@ -155,6 +157,19 @@ pub const fn phase_name(code: u32) -> &'static str {
         9 => "Aborted",
         _ => "None",
     }
+}
+
+/// Record that a transitional callback left the graphics batch depth changed
+/// and Rust had to restore it. A non-zero count means some native callback
+/// still assumes the retired lander loop's ambient batch.
+pub fn batch_depth_corrected(levels: i32) {
+    BATCH_DEPTH_CORRECTIONS.fetch_add(levels.unsigned_abs().into(), Ordering::AcqRel);
+}
+
+/// Total graphics batch levels Rust has had to correct this run.
+#[must_use]
+pub fn batch_depth_corrections() -> u64 {
+    BATCH_DEPTH_CORRECTIONS.load(Ordering::Acquire)
 }
 
 pub fn adapter_failure(operation: &'static str) {

@@ -228,6 +228,9 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             assets: &assets,
             last_scan_position: None,
         };
+        // The orbit/scan menu underneath stays resident, so silence its
+        // navigation sounds for the trip. Restored on every exit path by Drop.
+        let _menu_silence = super::menu_sounds::MenuSoundSilence::acquire();
         super::telemetry::begin(&session);
         let adapters = RuntimeAdapters {
             input: CffiPlanetSideInput,

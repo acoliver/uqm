@@ -6,6 +6,7 @@
 pub mod adapters;
 pub mod assembly;
 pub mod assets;
+pub mod batch_guard;
 pub mod cargo;
 pub mod collision;
 pub mod collision_adapter;
@@ -21,6 +22,7 @@ pub mod hazards;
 pub mod init_lander;
 pub mod lifecycle;
 pub mod mask_adapter;
+pub mod menu_sounds;
 pub mod model;
 pub mod orbit_music;
 pub mod orbit_scan;

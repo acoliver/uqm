@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
     "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
     "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
-    "projection_sha256": "ba984e076026cdd5b4cc90c96454bd53fd883d24b6badf7df3b6d971dc980b98",
+    "projection_sha256": "bad95726d1ee70794a7d5e9d9ee46af736bd86d469ac13c790727371f4442d71",
     "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
@@ -2679,7 +2679,7 @@
       "issue": "PLANET_GEN",
       "canonical_source": "sc2/src/uqm/planets/generate/gendefault.c",
       "scan_root": "native",
-      "sha256": "b845cbcc7651f15a1c28f84b788cc332d4561c90225a88e971523238538e095d",
+      "sha256": "be5d0175f5a193b48e4cd17869a4a09dfaacca2791ca0ec1f07c8602ca014910",
       "archive_decision": "include",
       "provider": "native_object:native/gendefault.c.o",
       "reason": "Transitional C ambient archive member",
