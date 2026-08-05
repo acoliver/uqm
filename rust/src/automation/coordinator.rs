@@ -36,6 +36,42 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+/// Outcome of servicing a planet-side wait for one input callback.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct PlanetSideWaitResult {
+    /// Whether the wait's condition is now satisfied.
+    reached: bool,
+    /// Trace labels to record for this callback.
+    labels: Vec<String>,
+}
+
+impl PlanetSideWaitResult {
+    fn pending() -> Self {
+        Self::default()
+    }
+
+    fn reached(label: String) -> Self {
+        Self {
+            reached: true,
+            labels: vec![label],
+        }
+    }
+}
+
+/// Whether a settled trip satisfies a wait bound to `awaited`.
+///
+/// The wait must be bound to a started trip, that exact trip must be the one
+/// being observed, it must have settled, and its terminal code must match.
+fn planet_side_wait_satisfied(
+    awaited: Option<u64>,
+    observation: &crate::planet_side::telemetry::PlanetSideObservation,
+    outcome: crate::automation::script::PlanetSideOutcomeName,
+) -> bool {
+    awaited == Some(observation.generation)
+        && !observation.active
+        && observation.terminal == outcome.terminal_code()
+}
+
 /// Rotating phase for the orbital-exit key sequence.
 static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
 
@@ -93,8 +129,13 @@ struct CoordInner {
     consumed_communication_completions: u64,
     /// Most recent dispatch generation consumed by a dispatch wait.
     consumed_dispatch_generation: u64,
-    /// Last observed planet-side lifecycle phase, so transitions are traced once.
-    observed_planet_side_phase: u32,
+    /// Last observed planet-side (generation, phase), so transitions are traced
+    /// once each without swallowing a repeated phase in a later trip.
+    observed_planet_side_phase: Option<(u64, u32)>,
+    /// Generation latched by `wait_for_planet_side_start`, which
+    /// `wait_for_planet_side_end` must match so a settled earlier trip cannot
+    /// satisfy a later wait.
+    awaited_planet_side_generation: Option<u64>,
     /// Most recent communication response generation selected semantically.
     consumed_response_generation: u64,
     /// Most recent communication replay generation consumed semantically.
@@ -176,7 +217,8 @@ impl Coordinator {
                 pending_start_scene: PendingStartScene::new(start_scene),
                 consumed_communication_completions,
                 consumed_dispatch_generation: 0,
-                observed_planet_side_phase: 0,
+                observed_planet_side_phase: None,
+                awaited_planet_side_generation: None,
                 consumed_response_generation: 0,
                 consumed_replay_generation: 0,
                 consumed_planet_menu_generation: 0,
@@ -557,61 +599,8 @@ impl Coordinator {
                     ),
                 );
             }
-        } else if matches!(
-            self.actions.get(inner.sched_state.step_index),
-            Some(Action::WaitForPlanetSideStart(_))
-        ) {
-            let observation = crate::planet_side::telemetry::observation();
-            if observation.active {
-                scheduler_event = SchedulerEvent::ConditionReached;
-                self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "planet_side_started:generation={}:crew={}:position={},{}",
-                        observation.generation,
-                        observation.start_crew,
-                        observation.start_x,
-                        observation.start_y
-                    ),
-                );
-            }
-        } else if let Some(Action::WaitForPlanetSideEnd(wait)) =
-            self.actions.get(inner.sched_state.step_index)
-        {
-            let observation = crate::planet_side::telemetry::observation();
-            // Record every lifecycle transition while waiting. Phase changes are
-            // rare, and they show whether a trip that never ends is stuck before
-            // takeoff or stalled inside the takeoff/return animation.
-            if observation.phase != inner.observed_planet_side_phase {
-                inner.observed_planet_side_phase = observation.phase;
-                self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "planet_side_phase:generation={}:phase={}",
-                        observation.generation,
-                        crate::planet_side::telemetry::phase_name(observation.phase)
-                    ),
-                );
-            }
-            // The session publishes its terminal code only once it has settled,
-            // so an inactive session carrying the expected code is the proof
-            // that the trip finished on its own.
-            if !observation.active && observation.terminal == wait.outcome.terminal_code() {
-                scheduler_event = SchedulerEvent::ConditionReached;
-                self.write_trace_labeled(
-                    &mut inner,
-                    RecordKind::SemanticAssertion,
-                    format!(
-                        "planet_side_completed:generation={}:outcome={:?}:crew={}:minerals={}",
-                        observation.generation,
-                        wait.outcome,
-                        observation.returned_crew,
-                        observation.returned_minerals
-                    ),
-                );
-            }
+        } else if let Some(result) = self.service_planet_side_wait(&mut inner) {
+            scheduler_event = self.record_planet_side_result(&mut inner, result, scheduler_event);
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -1261,6 +1250,95 @@ impl Coordinator {
         }
     }
 
+    /// Service whichever planet-side wait is the current action.
+    ///
+    /// Returns `None` when the current action is not a planet-side wait, so the
+    /// caller can fall through to the remaining action handlers.
+    fn service_planet_side_wait(&self, inner: &mut CoordInner) -> Option<PlanetSideWaitResult> {
+        match self.actions.get(inner.sched_state.step_index) {
+            Some(Action::WaitForPlanetSideStart(_)) => Some(self.observe_planet_side_start(inner)),
+            Some(Action::WaitForPlanetSideEnd(wait)) => {
+                Some(self.observe_planet_side_end(inner, wait.outcome))
+            }
+            _ => None,
+        }
+    }
+
+    /// Record a serviced planet-side wait, returning the scheduler event to use.
+    fn record_planet_side_result(
+        &self,
+        inner: &mut CoordInner,
+        result: PlanetSideWaitResult,
+        current: SchedulerEvent,
+    ) -> SchedulerEvent {
+        for label in result.labels {
+            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+        }
+        if result.reached {
+            SchedulerEvent::ConditionReached
+        } else {
+            current
+        }
+    }
+
+    /// Latch the generation of a newly started planet-side trip.
+    fn observe_planet_side_start(&self, inner: &mut CoordInner) -> PlanetSideWaitResult {
+        let observation = crate::planet_side::telemetry::observation();
+        if !observation.active {
+            return PlanetSideWaitResult::pending();
+        }
+        inner.awaited_planet_side_generation = Some(observation.generation);
+        inner.observed_planet_side_phase = None;
+        PlanetSideWaitResult::reached(format!(
+            "planet_side_started:generation={}:crew={}:position={},{}",
+            observation.generation,
+            observation.start_crew,
+            observation.start_x,
+            observation.start_y
+        ))
+    }
+
+    /// Accept the settled outcome of the trip this wait is bound to, tracing
+    /// every lifecycle transition seen along the way.
+    ///
+    /// A trip publishes its terminal code only once it has settled, and that
+    /// code stays resident afterwards. Matching on the latched generation is
+    /// therefore required: without it a later wait would immediately consume an
+    /// earlier trip's result. Transitions are rare, so recording each one shows
+    /// whether a trip that never ends is stuck before takeoff or stalled in the
+    /// takeoff animation. Deduplication is keyed by generation as well as phase
+    /// so the same phase in a later trip is not swallowed.
+    fn observe_planet_side_end(
+        &self,
+        inner: &mut CoordInner,
+        outcome: crate::automation::script::PlanetSideOutcomeName,
+    ) -> PlanetSideWaitResult {
+        let observation = crate::planet_side::telemetry::observation();
+        let mut result = PlanetSideWaitResult::pending();
+
+        let seen = (observation.generation, observation.phase);
+        if inner.observed_planet_side_phase != Some(seen) {
+            inner.observed_planet_side_phase = Some(seen);
+            result.labels.push(format!(
+                "planet_side_phase:generation={}:phase={}",
+                observation.generation,
+                crate::planet_side::telemetry::phase_name(observation.phase)
+            ));
+        }
+
+        if !planet_side_wait_satisfied(inner.awaited_planet_side_generation, &observation, outcome)
+        {
+            return result;
+        }
+        inner.awaited_planet_side_generation = None;
+        result.reached = true;
+        result.labels.push(format!(
+            "planet_side_completed:generation={}:outcome={outcome:?}:crew={}:minerals={}",
+            observation.generation, observation.returned_crew, observation.returned_minerals
+        ));
+        result
+    }
+
     fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) {
         use crate::automation::script::{MenuKey, PlayerKey};
 
@@ -1686,6 +1764,95 @@ mod tests {
         ] {
             assert!(validate_runtime_finalization(result).is_err());
         }
+    }
+
+    fn settled(
+        generation: u64,
+        terminal: u32,
+    ) -> crate::planet_side::telemetry::PlanetSideObservation {
+        crate::planet_side::telemetry::PlanetSideObservation {
+            generation,
+            active: false,
+            terminal,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn planet_side_wait_accepts_only_the_trip_it_is_bound_to() {
+        let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
+        let code = outcome.terminal_code();
+        assert!(planet_side_wait_satisfied(
+            Some(2),
+            &settled(2, code),
+            outcome
+        ));
+    }
+
+    #[test]
+    fn planet_side_wait_rejects_a_trip_that_is_still_running() {
+        let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
+        let mut observation = settled(2, outcome.terminal_code());
+        observation.active = true;
+        assert!(!planet_side_wait_satisfied(Some(2), &observation, outcome));
+    }
+
+    #[test]
+    fn planet_side_wait_rejects_an_earlier_settled_trip() {
+        // The terminal code stays resident after a trip settles, so a wait must
+        // not be satisfied by the previous trip's result.
+        let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
+        let code = outcome.terminal_code();
+        assert!(!planet_side_wait_satisfied(
+            Some(3),
+            &settled(2, code),
+            outcome
+        ));
+    }
+
+    #[test]
+    fn planet_side_wait_requires_a_started_trip() {
+        let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
+        let code = outcome.terminal_code();
+        assert!(!planet_side_wait_satisfied(
+            None,
+            &settled(1, code),
+            outcome
+        ));
+    }
+
+    #[test]
+    fn planet_side_wait_rejects_a_different_outcome() {
+        use crate::automation::script::PlanetSideOutcomeName;
+        let destroyed = PlanetSideOutcomeName::Destroyed.terminal_code();
+        assert!(!planet_side_wait_satisfied(
+            Some(1),
+            &settled(1, destroyed),
+            PlanetSideOutcomeName::Returned
+        ));
+        assert!(planet_side_wait_satisfied(
+            Some(1),
+            &settled(1, destroyed),
+            PlanetSideOutcomeName::Destroyed
+        ));
+    }
+
+    #[test]
+    fn planet_side_wait_is_consumed_once() {
+        let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
+        let code = outcome.terminal_code();
+        let mut awaited = Some(1);
+        assert!(planet_side_wait_satisfied(
+            awaited,
+            &settled(1, code),
+            outcome
+        ));
+        awaited = None; // the coordinator clears the latch on acceptance
+        assert!(!planet_side_wait_satisfied(
+            awaited,
+            &settled(1, code),
+            outcome
+        ));
     }
 
     #[test]

@@ -1884,6 +1884,73 @@ mod tests {
     }
 
     #[test]
+    fn planet_side_end_advances_only_when_the_session_settles() {
+        use crate::automation::script::{PlanetSideOutcomeName, WaitForPlanetSideEndStep};
+        let actions = [
+            Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+                outcome: PlanetSideOutcomeName::Returned,
+                max_ticks: 3,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+
+        let started = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            started.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 2 }
+        );
+
+        // Ticking while the session is still running must not advance the step.
+        let waiting = scheduler_reduce(&started.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(waiting.new_state.step_index, 0);
+        assert_eq!(
+            waiting.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 1 }
+        );
+
+        // The coordinator reports the settled session as a reached condition.
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
+        assert_eq!(reached.new_state.step_index, 1);
+        assert_eq!(reached.new_state.terminal, None);
+    }
+
+    #[test]
+    fn planet_side_end_budget_exhaustion_is_terminal() {
+        use crate::automation::script::{PlanetSideOutcomeName, WaitForPlanetSideEndStep};
+        let actions = [Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+            outcome: PlanetSideOutcomeName::Returned,
+            max_ticks: 1,
+        })];
+        let config = cfg(&actions);
+
+        let started = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(
+            started.new_state.phase,
+            ActionPhase::WaitingCondition { remaining: 0 }
+        );
+
+        let expired = scheduler_reduce(&started.new_state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch),
+            "a trip that never settles must fail the proof"
+        );
+    }
+
+    #[test]
     fn moon_navigation_budget_exhaustion_is_terminal() {
         let actions = [Action::NavigateToMoon(NavigateToMoonStep {
             planet: 2,

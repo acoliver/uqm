@@ -413,10 +413,11 @@ impl PlanetSideOutcomeName {
     /// Terminal code recorded by `planet_side::telemetry::finish`.
     #[must_use]
     pub const fn terminal_code(self) -> u32 {
+        use crate::planet_side::telemetry::terminal;
         match self {
-            Self::Returned => 1,
-            Self::Destroyed => 2,
-            Self::Aborted => 3,
+            Self::Returned => terminal::RETURNED,
+            Self::Destroyed => terminal::DESTROYED,
+            Self::Aborted => terminal::ABORTED,
         }
     }
 }
@@ -1801,11 +1802,23 @@ mod tests {
     }
 
     #[test]
-    fn planet_side_outcome_terminal_codes_match_the_telemetry_contract() {
-        // planet_side::telemetry::finish stores these codes.
-        assert_eq!(PlanetSideOutcomeName::Returned.terminal_code(), 1);
-        assert_eq!(PlanetSideOutcomeName::Destroyed.terminal_code(), 2);
-        assert_eq!(PlanetSideOutcomeName::Aborted.terminal_code(), 3);
+    fn planet_side_outcome_terminal_codes_are_distinct_and_never_running() {
+        use crate::planet_side::telemetry::terminal;
+        let codes = [
+            PlanetSideOutcomeName::Returned.terminal_code(),
+            PlanetSideOutcomeName::Destroyed.terminal_code(),
+            PlanetSideOutcomeName::Aborted.terminal_code(),
+        ];
+        for (i, code) in codes.iter().enumerate() {
+            assert_ne!(
+                *code,
+                terminal::RUNNING,
+                "a waitable outcome must never match a running session"
+            );
+            for other in &codes[i + 1..] {
+                assert_ne!(code, other, "outcome codes must be distinct");
+            }
+        }
     }
 
     #[test]
