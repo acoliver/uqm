@@ -257,9 +257,17 @@ extern "C" fn exit_conversation(r: u32) {
 
 /// ArilouHome callback
 extern "C" fn arilou_home(r: u32) {
-    let mut last_stack: usize = 0;
-    let mut p_str: [u32; 4] = [0; 4];
+    let last_stack = arilou_home_react(r);
+    let p_str = arilou_home_response_slots();
+    arilou_home_offer_responses(&p_str, last_stack);
+}
 
+/// React to the player's chosen phrase.
+///
+/// Returns the response slot the player just used, so it can be offered first
+/// next time.
+fn arilou_home_react(r: u32) -> usize {
+    let mut last_stack: usize = 0;
     if r == CONFUSED_BY_HELLO {
         npc_phrase(CONFUSED_RESPONSE);
     } else if r == HAPPY_BY_HELLO {
@@ -330,7 +338,14 @@ extern "C" fn arilou_home(r: u32) {
         set_gs("PORTAL_SPAWNER", 1);
         set_gs("PORTAL_SPAWNER_ON_SHIP", 1);
     }
+    last_stack
+}
 
+/// Choose which phrase occupies each of the four response slots.
+///
+/// A zero slot is offered nothing.
+fn arilou_home_response_slots() -> [u32; 4] {
+    let mut p_str: [u32; 4] = [0; 4];
     // Build response list based on game state
     match get_gs("ARILOU_STACK_1") {
         0 => p_str[0] = WHAT_ABOUT_WAR,
@@ -366,7 +381,11 @@ extern "C" fn arilou_home(r: u32) {
     } else if get_gs("ARILOU_STACK_4") == 0 {
         p_str[3] = WHAT_ABOUT_TPET;
     }
+    p_str
+}
 
+/// Offer the built response list, most recently used slot first.
+fn arilou_home_offer_responses(p_str: &[u32; 4], last_stack: usize) {
     // Add responses — last stack first, then the rest
     if p_str[last_stack] != 0 {
         response(p_str[last_stack], arilou_home);
