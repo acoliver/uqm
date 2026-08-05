@@ -20,10 +20,14 @@ static GLOBAL_STATE_FILES: Mutex<Option<StateFileManager>> = Mutex::new(None);
 /// No safety requirements; marked unsafe for C ABI compatibility.
 #[no_mangle]
 pub unsafe extern "C" fn rust_init_game_state() {
+    // Always start from zero. The sole caller, InitGlobData, memsets the C
+    // shadow and calls this to match; Rust holds the authoritative copy. Only
+    // creating the state when absent left a second New Game in the same process
+    // carrying every bit of the first, so the game believed the Ur-Quan probe
+    // had already been met and the moon base already taken. Loading a save
+    // restores over this afterwards, so resetting here is safe.
     let mut global = GLOBAL_GAME_STATE.lock().unwrap();
-    if global.is_none() {
-        *global = Some(GameState::new());
-    }
+    *global = Some(GameState::new());
 
     let mut files = GLOBAL_STATE_FILES.lock().unwrap();
     if files.is_none() {
@@ -752,6 +756,58 @@ mod tests {
 
             let guard = GLOBAL_GAME_STATE.lock().unwrap();
             assert!(guard.is_some());
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn starting_a_second_game_does_not_inherit_the_first_games_state() {
+        // InitGlobData memsets the C shadow and calls this to match, so a New
+        // Game after finishing one must not remember what the player already
+        // did. Leaving the bits set makes the Ur-Quan probe never appear and
+        // the moon base never generate, because the game believes both are
+        // already done.
+        unsafe {
+            rust_init_game_state();
+            rust_set_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char, 1);
+            rust_set_game_state(c"MOONBASE_ON_SHIP".as_ptr() as *const c_char, 1);
+            assert_eq!(
+                rust_get_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char),
+                1
+            );
+
+            rust_init_game_state();
+
+            assert_eq!(
+                rust_get_game_state(c"MOONBASE_DESTROYED".as_ptr() as *const c_char),
+                0,
+                "a new game must start with the moon base intact"
+            );
+            assert_eq!(
+                rust_get_game_state(c"MOONBASE_ON_SHIP".as_ptr() as *const c_char),
+                0
+            );
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn a_new_game_clears_every_state_bit() {
+        unsafe {
+            rust_init_game_state();
+            for start in (0..super::super::game_state::NUM_GAME_STATE_BITS - 8).step_by(8) {
+                rust_set_game_state_bits(start as c_int, start as c_int + 7, 0xFF);
+            }
+
+            rust_init_game_state();
+
+            for start in (0..super::super::game_state::NUM_GAME_STATE_BITS - 8).step_by(8) {
+                assert_eq!(
+                    rust_get_game_state_bits(start as c_int, start as c_int + 7),
+                    0,
+                    "bit range starting at {start} survived a new game"
+                );
+            }
         }
     }
 
