@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
     "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
     "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
-    "projection_sha256": "bad95726d1ee70794a7d5e9d9ee46af736bd86d469ac13c790727371f4442d71",
+    "projection_sha256": "ae8b261908df48bbd9a51cec0100a8a3cbd7af5c567080ab89d27532aa3a73f3",
     "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
@@ -2487,7 +2487,7 @@
       "issue": "PERSISTENCE",
       "canonical_source": "sc2/src/uqm/load_legacy.c",
       "scan_root": "native",
-      "sha256": "1f3a48c60701fd069cfc6f2658cc9771e3e9ad5c9083ac00e9ab726839146dca",
+      "sha256": "cd4ed5a3f5bbcc56d63acae262a8d7b0a01c3bf0042a02e6b320db02cf5fc777",
       "archive_decision": "include",
       "provider": "native_object:native/load_legacy.c.o",
       "reason": "Transitional C ambient archive member",

@@ -793,22 +793,52 @@ mod tests {
     #[test]
     #[serial]
     fn a_new_game_clears_every_state_bit() {
+        use super::super::game_state::NUM_GAME_STATE_BITS;
+
+        // Every bit, including the partial trailing byte. The last six bits
+        // belong to SAMATRA_GRPOFFS3, so stopping at the last whole byte would
+        // let a reset regression confined to them pass unnoticed.
+        let ranges: Vec<(c_int, c_int, c_uchar)> = (0..NUM_GAME_STATE_BITS)
+            .step_by(8)
+            .map(|start| {
+                let end = (start + 7).min(NUM_GAME_STATE_BITS - 1);
+                let width = end - start + 1;
+                let full = if width == 8 {
+                    0xFF
+                } else {
+                    // set_state_bits_raw rejects a value wider than the field.
+                    ((1u16 << width) - 1) as u8
+                };
+                (start as c_int, end as c_int, full)
+            })
+            .collect();
+
         unsafe {
             rust_init_game_state();
-            for start in (0..super::super::game_state::NUM_GAME_STATE_BITS - 8).step_by(8) {
-                rust_set_game_state_bits(start as c_int, start as c_int + 7, 0xFF);
+            for (start, end, value) in &ranges {
+                rust_set_game_state_bits(*start, *end, *value);
+                assert_eq!(
+                    rust_get_game_state_bits(*start, *end),
+                    *value,
+                    "bit range {start}..={end} did not accept its value"
+                );
             }
 
             rust_init_game_state();
 
-            for start in (0..super::super::game_state::NUM_GAME_STATE_BITS - 8).step_by(8) {
+            for (start, end, _) in &ranges {
                 assert_eq!(
-                    rust_get_game_state_bits(start as c_int, start as c_int + 7),
+                    rust_get_game_state_bits(*start, *end),
                     0,
-                    "bit range starting at {start} survived a new game"
+                    "bit range {start}..={end} survived a new game"
                 );
             }
         }
+        assert_eq!(
+            ranges.last().map(|(_, end, _)| *end),
+            Some(NUM_GAME_STATE_BITS as c_int - 1),
+            "the final state bit must be covered"
+        );
     }
 
     #[test]

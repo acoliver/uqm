@@ -30,6 +30,9 @@
 #include "state.h"
 #include "grpinfo.h"
 
+/* Rust owns the authoritative game state; the C array is a shadow. */
+extern void rust_restore_game_state_from_bytes (const BYTE *bytes, size_t size);
+
 #include "libs/tasklib.h"
 #include "libs/log.h"
 #include "libs/misc.h"
@@ -531,6 +534,11 @@ LoadGameState (GAME_STATE *GSPtr, DECODE_REF fh)
 
 	cread_a8  (fh, oldstate, LEGACY_GAMESTATE_SIZE);
 	InterpretLegacyGameState (GSPtr->GameState, oldstate);
+	/* The converted array is only the shadow; Rust holds the authoritative
+	 * game state. Without this the whole legacy save would load with blank
+	 * story flags, because nothing else republishes the conversion. */
+	rust_restore_game_state_from_bytes (GSPtr->GameState,
+			sizeof (GSPtr->GameState));
 
 	cread_8  (fh, NULL); /* GAME_STATE alignment padding */
 }
