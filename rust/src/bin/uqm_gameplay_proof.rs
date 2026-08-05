@@ -837,6 +837,30 @@ fn validate_trace_and_captures(root: &Path, require_success: bool) -> Result<(),
     if traced_captures != actual_captures {
         return Err("capture trace records do not correlate exactly with PNG artifacts".into());
     }
+    if require_success {
+        validate_captures_differ(root, &actual_captures)?;
+    }
+    Ok(())
+}
+
+/// Reject a passing run whose screen never changed between two capture points.
+///
+/// A script captures at distinct moments because it expects distinct screens.
+/// Identical pixels mean the game stopped presenting, which is what a stranded
+/// draw queue looks like: state advances while the player keeps seeing the last
+/// frame. Without this, such a run still records presentations and semantic
+/// assertions and reads as a pass.
+fn validate_captures_differ(root: &Path, captures: &BTreeSet<String>) -> Result<(), String> {
+    let mut digests: BTreeMap<String, String> = BTreeMap::new();
+    for relative in captures {
+        let digest = hash_file(&root.join(relative))?;
+        if let Some(previous) = digests.insert(digest, relative.clone()) {
+            return Err(format!(
+                "captures {previous} and {relative} are byte-identical, so the screen never \
+                 changed between them; the run presented no new frame"
+            ));
+        }
+    }
     Ok(())
 }
 
