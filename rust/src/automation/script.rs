@@ -341,6 +341,15 @@ pub struct TapPlayerKeyStep {
 #[serde(deny_unknown_fields)]
 pub struct CaptureStep {
     pub label: String,
+    /// Require this capture to differ from the previous one.
+    ///
+    /// Set it wherever the script has just driven a visible transition. A frozen
+    /// screen still completes a capture and still records presentations, so
+    /// without this a proof can pass while the player sees the previous frame.
+    /// It is off by default because a legitimately static screen, such as an
+    /// idle menu sampled twice, produces identical pixels.
+    #[serde(default)]
+    pub expect_change: bool,
 }
 
 /// An `assert_activity` step: assert the live activity word satisfies

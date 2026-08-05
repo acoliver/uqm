@@ -1508,6 +1508,7 @@ mod tests {
         let actions = [
             Action::Capture(CaptureStep {
                 label: "shot".into(),
+                expect_change: false,
             }),
             Action::Finish,
         ];
@@ -1542,9 +1543,11 @@ mod tests {
         let actions = [
             Action::Capture(CaptureStep {
                 label: "shot1".into(),
+                expect_change: false,
             }),
             Action::Capture(CaptureStep {
                 label: "shot2".into(),
+                expect_change: false,
             }),
             Action::Finish,
         ];
@@ -1599,6 +1602,7 @@ mod tests {
         let actions = [
             Action::Capture(CaptureStep {
                 label: "shot".into(),
+                expect_change: false,
             }),
             Action::Finish,
         ];
@@ -1623,6 +1627,7 @@ mod tests {
         let actions = [
             Action::Capture(CaptureStep {
                 label: "shot".into(),
+                expect_change: false,
             }),
             Action::Finish,
         ];
@@ -1647,6 +1652,7 @@ mod tests {
         let actions = [
             Action::Capture(CaptureStep {
                 label: "shot".into(),
+                expect_change: false,
             }),
             Action::Finish,
         ];
@@ -1812,6 +1818,7 @@ mod tests {
         let actions = [
             Action::Capture(CaptureStep {
                 label: "shot".into(),
+                expect_change: false,
             }),
             Action::Finish,
         ];
