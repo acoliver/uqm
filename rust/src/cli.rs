@@ -146,6 +146,10 @@ impl Cli {
         self.merge_audio(&mut opts)?;
         self.merge_content(&mut opts);
         self.merge_presentation(&mut opts)?;
+        // Applied last because that is where it sat before this was grouped,
+        // and when several arguments are malformed the first parse failure is
+        // the one the player is told about.
+        self.merge_sound_driver(&mut opts)?;
         Ok(opts)
     }
 
@@ -207,11 +211,19 @@ impl Cli {
         if let Some(ref quality) = self.audioquality {
             opts.sound_quality = Some(Self::parse_audio_quality(quality)?);
         }
-        if let Some(ref sound) = self.sound {
-            opts.sound_driver = Some(Self::parse_sound_driver(sound)?);
-        }
         if self.stereosfx {
             opts.stereo_sfx = Some(true);
+        }
+        Ok(())
+    }
+
+    /// Apply the sound driver choice.
+    ///
+    /// Separate from the rest of the audio arguments only to keep the order in
+    /// which arguments are validated identical to before they were grouped.
+    fn merge_sound_driver(&self, opts: &mut Options) -> Result<()> {
+        if let Some(ref sound) = self.sound {
+            opts.sound_driver = Some(Self::parse_sound_driver(sound)?);
         }
         Ok(())
     }
@@ -402,5 +414,33 @@ mod tests {
 
         let result = cli.merge_into_options(Options::default());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn the_first_malformed_argument_is_the_one_reported() {
+        // Arguments are validated in a fixed order, so a player who mistypes
+        // several of them is told about the earliest one every time rather
+        // than whichever group happens to be checked first.
+        let cli = Cli {
+            intro: Some("nonsense".to_string()),
+            sound: Some("nonsense".to_string()),
+            ..Default::default()
+        };
+
+        let error = cli
+            .merge_into_options(Options::default())
+            .expect_err("both arguments are invalid");
+        let message = format!("{error:#}");
+
+        assert!(
+            message.contains("Invalid choice"),
+            "the sound driver is validated after the presentation choices, so \
+             the intro error should surface first; got: {message}"
+        );
+        assert!(
+            !message.contains("Invalid sound driver"),
+            "the later sound-driver failure must not mask the intro failure; \
+             got: {message}"
+        );
     }
 }
