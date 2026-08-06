@@ -1,4 +1,4 @@
-# Development Rules for LLxprt Contributors (Rust)
+# Development Rules for UQM Rust Port Contributors
 
 This document is the operational rulebook for contributors and LLM agents.
 

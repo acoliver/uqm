@@ -1,6 +1,6 @@
 # Dev Docs Index
 
-This directory contains the working rules for planning and implementation in Jefe.
+This directory contains the working rules for planning and implementation in the UQM Rust port.
 
 ## Documents
 

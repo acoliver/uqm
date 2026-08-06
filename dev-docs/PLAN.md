@@ -1,4 +1,4 @@
-#  Autonomous Plan-Creation Guide for LLxprt Workers (Rust)
+# Autonomous Plan-Creation Guide for the UQM Rust Port
 
 This guide defines how to create reliable implementation plans for this repository.
 
