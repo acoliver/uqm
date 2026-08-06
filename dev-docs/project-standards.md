@@ -1,197 +1,217 @@
-# Jefe Project Standards
+# UQM Rust Port Standards
 
-This document defines mandatory development standards for Jefe.
+Mandatory development standards for this repository.
 
-Audience:
-- human contributors,
-- LLM contributors,
-- reviewers.
+Audience: human contributors, LLM contributors, reviewers.
 
 These standards are normative. "Must" and "must not" are requirements.
 
 ---
 
-## 1) Core Engineering Principles
+## 1) What this project is
 
-1. Keep architecture modular and boundary-respecting.
-2. Prefer strong typing and explicit domain modeling over shortcuts.
-3. Keep runtime behavior deterministic and testable.
-4. Optimize for maintainability over cleverness.
-5. Treat lint/test/docs as part of the feature, not optional polish.
+This repository is porting The Ur-Quan Masters from C to Rust, subsystem by
+subsystem. Two facts follow from that and shape everything below.
 
----
+**The end state is zero first-party native code.** No C, C++, Objective-C,
+assembly, implementation-bearing headers, generated native source, helper or
+test native source, or internal migration ABI. Retained C is transitional and
+is being deleted, not maintained. Adding C to solve a problem moves the project
+backwards; port the subsystem instead.
 
-## 2) Architectural Discipline
-
-Contributors must respect module ownership:
-
-- UI modules render state and capture intent.
-- App state/event modules own state transitions.
-- Runtime orchestration modules own tmux/PTY behavior.
-- Persistence modules own file I/O and schema handling.
-- Theme modules own theme parsing/selection/fallback logic.
-
-Do not move side effects into presentational UI components.
-Do not bypass state/event contracts with ad-hoc mutation.
+**External libraries are the exception, and they are governed.** Only entries in
+`rust/ownership/external-native-allowlist.json` may be linked. Each carries a
+licence, provenance, security owner, update policy and the targets it applies
+to. Vendoring or patching any of them is forbidden, because a patched copy is
+first-party native code again. `build.rs` derives what it links from that file
+and fails on an entry that does not declare its policy.
 
 ---
 
-## 3) Rust Language Standards
+## 2) Core engineering principles
 
-## Safety and correctness
-- `unsafe` is forbidden unless explicitly approved and isolated.
-- Production paths must not rely on panic-driven control flow.
-- Use `Result`/`Option` and typed error propagation.
+1. Fail fast. Prefer an invariant that reports a violation over a fallback that
+   hides it.
+2. Keep runtime behaviour deterministic and reproducible, because the evidence
+   contract depends on replay.
+3. Prefer strong typing and explicit domain modelling over shortcuts.
+4. Optimise for maintainability over cleverness.
+5. Treat lint, tests and docs as part of the change, not optional polish.
 
-## Strong typing
-- Do not introduce weak/dynamic types where enums/structs are appropriate.
-- Do not use stringly-typed status or event channels when typed enums exist.
-- Public module APIs must have explicit types and clear contracts.
+### Fail fast, specifically
 
-## Error handling
-- No `unwrap`/`expect` in production paths.
-- If an error is recoverable, handle it explicitly.
-- If unrecoverable for a user action, return context-rich typed errors.
+Defensive layers that hedge against possible upstream bugs are an antipattern
+here: they make the code hard to reason about and hide real defects. Do not add
+guards, fallbacks or swallowed errors to work around a suspected bug. Find the
+bug.
 
-## Documentation
-- Public structs/enums/functions in core modules must have clear doc comments.
-- Update docs when contracts/behavior change.
-
----
-
-## 4) Linting and Complexity Rules (Mandatory)
-
-Jefe follows strict lint/complexity enforcement consistent with toy build standards.
-
-Contributors must keep project lint config active and respected.
-
-## Required lint posture
-- `cargo clippy` must pass with project-configured strictness.
-- Rust lint configuration in `Cargo.toml` must not be weakened.
-- Clippy thresholds in `clippy.toml` must not be raised casually.
-
-## Current complexity guardrails
-- Cognitive complexity threshold: 15
-- Function lines threshold: 60
-- Function argument threshold: 6
-- Type complexity threshold: 250
-- Struct bool field cap guidance: 3
-
-## Explicit prohibitions
-- Do not disable lints globally.
-- Do not add blanket `#[allow(...)]` at module/file scope to silence debt.
-- Do not merge code that passes only by muting warnings.
-
-If a local `#[allow]` is unavoidable:
-1. scope it to the smallest possible item,
-2. explain why in code,
-3. reference a tracking issue.
+The exception is genuinely external input whose shape this program cannot
+control: third-party data formats, network I/O, operating-system variance and
+untrusted content parsing. Defensive handling is correct there.
 
 ---
 
-## 5) Formatting and Style
+## 3) Ownership discipline
 
-- `rustfmt` config is mandatory.
-- Formatting changes should be separate from logic changes when possible.
-- Follow existing naming conventions and module organization.
-- Keep functions focused; extract helpers when complexity grows.
+Exactly one implementation owns each subsystem. A domain that has been cut over
+to Rust must not retain a native fallback, a dormant parallel Rust path, a
+feature-disabled replacement or a duplicate authority.
 
----
+The same rule applies to configuration. Which transitional paths are active is
+decided in one place; a second place that can also decide is a duplicate
+authority even when the two currently agree.
 
-## 6) Testing Standards
-
-## Minimum requirement per change
-Every meaningful change must include or update tests that verify behavior.
-
-## Test layers
-- Unit tests for pure logic (state transitions, parsing, normalization).
-- Integration tests for module boundaries (runtime orchestration, persistence contracts).
-- Regression tests for bug fixes.
-
-## Test behavior standards
-- Tests must verify externally meaningful behavior.
-- Tests must be deterministic and non-flaky.
-- Avoid over-mocking core logic; prefer realistic data shape coverage.
-
-## Required validation commands
-At minimum before merge:
-- `cargo check`
-- `cargo test`
-- `cargo clippy` (project-configured strict mode)
+When a subsystem is cut over, the superseded provider, bridge, object and build
+entry, generated binding and ownership flag are removed in the same change.
 
 ---
 
-## 7) Persistence Standards
+## 4) Rust language standards
 
-Jefe v1 persistence is file-based only:
-- `settings.toml`
-- `state.json`
+### Safety and correctness
 
-Standards:
-- schemas are versioned,
-- parse/validate before apply,
-- writes are atomic,
-- malformed files fail safely with clear operator feedback.
+`unsafe` is unavoidable at the C boundary and is therefore permitted only there.
+Every `unsafe` block must be confined to an FFI or adapter module, must be as
+small as the operation requires, and must carry a comment stating what makes it
+sound. Do not spread `unsafe` into logic modules; wrap the boundary and keep the
+rest safe.
 
-SQLite is out of scope for v1 and must not be introduced as hidden fallback.
+Production paths must not rely on panic-driven control flow. Use `Result` and
+`Option` with typed error propagation.
 
----
+### Strong typing
 
-## 8) Theme and UX Standards
+- Do not use weak or stringly-typed values where an enum or struct fits.
+- Public module APIs must have explicit types and stated contracts.
+- Struct layouts mirrored from C must state which C type they mirror, and any
+  offset assumption must be justified against the C definition rather than
+  guessed. A wrong offset reads unrelated memory and can appear to work.
 
-- Green Screen is default and fallback theme.
-- No bright/light default palettes.
-- Theme behavior must stay consistent across all UI surfaces.
-- Terminal focus/unfocus semantics must remain explicit and predictable.
+### Error handling
 
----
+- No `unwrap` or `expect` in production paths. Tests may use them.
+- Recoverable errors are handled explicitly.
+- Unrecoverable ones return context-rich typed errors.
+- Poisoned-lock `unwrap` is acceptable where continuing would use corrupt state:
+  that is failing fast, not sloppiness.
 
-## 9) Runtime Orchestration Standards
+### Documentation
 
-- Preserve stable agent/session identity mapping.
-- Keep kill/relaunch semantics agent-scoped.
-- Relaunch must respect saved profile/mode behavior.
-- Runtime failure handling must not crash the app process.
-
-Jefe should provide orchestration diagnostics only; deep runtime logs belong to `llxprt`.
-
----
-
-## 10) LLM Contributor Rules
-
-LLM-generated code must follow all rules above plus:
-
-1. Do not invent alternate architecture patterns that violate module boundaries.
-2. Do not silently drop strictness to make builds pass.
-3. Do not replace typed models with generic maps/strings.
-4. Do not add TODO-only stubs in production paths.
-5. Do not ship speculative abstractions without active usage.
-
-LLM outputs must include:
-- explicit scope of change,
-- tests added/updated,
-- constraints/assumptions noted.
+- Public items in core modules carry doc comments.
+- Comments explain why, not what.
+- Update documentation when a contract changes.
 
 ---
 
-## 11) Review and Merge Quality Bar
+## 5) Lint, complexity and security gates
 
-A change is mergeable only when all are true:
+These gates are enforced in CI by `.github/workflows/rust-quality.yaml`. They
+may be tightened. They must not be weakened.
 
-1. Behavior aligns with functional/technical specs.
-2. Module boundaries remain intact.
-3. Lint, complexity, and formatting standards pass.
-4. Tests cover the change and pass.
-5. Documentation is updated when contracts change.
-6. No prohibited patterns were introduced.
+| Gate | Command |
+|---|---|
+| Formatting | `cargo fmt --all --check` |
+| Lints | `cargo clippy --workspace --all-targets -- -D warnings` |
+| Complexity | `lizard -C 40 -w` over tracked source, excluding generated build output |
+| Advisories | `cargo audit --deny warnings` |
+
+Notes that matter:
+
+- Clippy runs over **all targets**. A lint failure in test or binary code counts.
+- Complexity is measured over tracked production and test source. Generated
+  build output is excluded because vendored code must not decide whether this
+  gate passes; no first-party source may be excluded.
+- `cargo audit` without `--deny warnings` exits zero on unsound, unmaintained
+  and yanked crates. The flag is what makes the gate a gate.
+
+### Explicit prohibitions
+
+- Do not disable lints globally or add file- or module-scope `allow` to silence
+  debt.
+- Do not raise a complexity or size threshold to make code fit. Split the code.
+- Do not add suppression directives to obtain a green result.
+- Do not exclude first-party source from any gate.
+
+If a local `allow` is genuinely unavoidable: scope it to the smallest item,
+explain why in the code, and reference a tracking issue.
 
 ---
 
-## 12) Non-Negotiable "Do Not" Summary
+## 6) Testing standards
 
-- Do not disable lints.
-- Do not use weak typing for core contracts.
-- Do not use `unwrap`/`expect` in production paths.
-- Do not bypass architecture boundaries.
-- Do not introduce SQLite in v1.
-- Do not default to bright/light themes.
+Every meaningful change includes or updates tests that verify behaviour.
+
+**A test must be able to fail.** Before relying on a new test, confirm it fails
+against the defect it describes. A test that passes both before and after a fix
+proves nothing and is worse than none, because it looks like coverage.
+
+Layers:
+
+- Unit tests for pure logic.
+- Property or fixture tests where input space is large.
+- Production-linked integration tests across FFI boundaries, covering
+  initialisation, normal behaviour, errors at external boundaries, restart and
+  reentry, and teardown.
+
+Tests must verify externally meaningful behaviour, must be deterministic, and
+must not depend on execution order or on a shared temporary path that another
+test could occupy.
+
+---
+
+## 7) Proof and evidence standards
+
+Compilation and unit tests are not evidence that the game works.
+
+- Gameplay behaviour is proven by the automation harness against the real built
+  executable, with semantic assertions correlated to presented frames.
+- A screenshot must come from the actual presented window when the claim is
+  about what a player sees. The harness `capture` action reads the game's
+  internal draw surface, which cannot show a present or swap defect, so it
+  cannot support that claim on its own.
+- Evidence tooling must refuse to emit a result it cannot stand behind. A
+  capture step that cannot capture must report a failure rather than save
+  something misleading.
+- Prose stating that something was tested is not evidence.
+
+---
+
+## 8) LLM contributor rules
+
+All rules above apply, plus:
+
+1. Do not silently reduce strictness to make a build pass.
+2. Do not report success from an exit code alone; inspect the artefact that the
+   claim rests on.
+3. Do not narrow an accepted scope without amending the issue first. Discovery
+   is not permission to downscope.
+4. Do not add TODO-only stubs or speculative abstractions in production paths.
+5. State what was verified and what was not. An honest gap is acceptable; an
+   unstated one is not.
+
+---
+
+## 9) Review and merge bar
+
+A change is mergeable only when all of the following hold:
+
+1. Behaviour matches the accepted scope.
+2. Exactly one implementation owns each affected subsystem.
+3. Every gate in section 5 passes without suppression or threshold change.
+4. Tests cover the change, and any regression test has been shown to fail
+   without the fix.
+5. Documentation is updated where a contract changed.
+6. Evidence meets section 7 for any behavioural claim.
+
+---
+
+## 10) Non-negotiable summary
+
+- Do not add first-party native code.
+- Do not link an external library that is not in the allowlist, and do not
+  vendor or patch one that is.
+- Do not disable or weaken a lint, complexity, security or visual gate.
+- Do not use `unwrap` or `expect` in production paths.
+- Do not use `unsafe` outside an FFI or adapter boundary.
+- Do not leave a fallback, dormant path or duplicate authority behind a cutover.
+- Do not present internal-buffer captures as proof of what a player sees.

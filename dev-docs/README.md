@@ -1,6 +1,6 @@
 # Dev Docs Index
 
-This directory contains the working rules for planning and implementation in Jefe.
+This directory contains the working rules for planning and implementation in the UQM Rust port.
 
 ## Documents
 
@@ -31,6 +31,12 @@ This directory contains the working rules for planning and implementation in Jef
 
 - [rust/s3-linked-test-fixtures.md](./rust/s3-linked-test-fixtures.md)
   - S3 linked-test profile, gameplay proof profiles, mutation fixtures, teardown supervision, and evidence contracts.
+
+- [rust/lcar-v1-schema.md](./rust/lcar-v1-schema.md)
+  - The evidence contract: manifest fields, provenance, process and teardown receipts, artifact inventory, failure contracts, and how the validator is proven to reject bad proof.
+
+- [rust/glossary.md](./rust/glossary.md)
+  - What provider, authority, adapter, bridge, fallback, generated, vendored, supported, presented frame, complete cutover and retirement mean here.
 
 ## Recommended Reading Order
 

@@ -1,4 +1,4 @@
-# Subagent Coordination Guide (Rust / Jefe)
+# Subagent Coordination Guide (UQM Rust Port)
 
 This document explains how the coordinator should execute multi-phase plans using subagents.
 

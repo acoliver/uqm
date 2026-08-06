@@ -46,16 +46,24 @@ pub extern "C" fn TFB_Random() -> u32 {
     new
 }
 
+/// Coerce a requested seed into the generator's valid range.
+///
+/// Zero is not a usable Park-Miller seed and a value above the modulus is
+/// reduced into range, matching the C generator.
+fn coerce_seed(new_seed: u32) -> u32 {
+    if new_seed == 0 {
+        1
+    } else if new_seed > M {
+        new_seed - M
+    } else {
+        new_seed
+    }
+}
+
 /// C: `DWORD TFB_SeedRandom(DWORD new_seed)`
 #[no_mangle]
 pub extern "C" fn TFB_SeedRandom(new_seed: u32) -> u32 {
-    let mut s = new_seed;
-    if s == 0 {
-        s = 1;
-    } else if s > M {
-        s -= M;
-    }
-    SEED.swap(s, std::sync::atomic::Ordering::Relaxed)
+    SEED.swap(coerce_seed(new_seed), std::sync::atomic::Ordering::Relaxed)
 }
 
 // ---------------------------------------------------------------------------
@@ -329,29 +337,36 @@ mod tests {
         assert_eq!(park_miller(12345), 207482415);
     }
 
+    /// The seed tests assert on the coercion itself rather than on the global.
+    ///
+    /// TFB_Random loads, advances and stores SEED, so any test running beside
+    /// these could change it between the swap and a separate read, which made
+    /// the old assertions fail at random under a full parallel run.
     #[test]
-    fn test_tfb_seed_random_returns_old() {
-        let old = TFB_SeedRandom(42);
-        let now = SEED.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(now, 42);
-        // Restore
-        TFB_SeedRandom(old);
+    fn seed_in_range_is_used_unchanged() {
+        assert_eq!(coerce_seed(42), 42);
+        assert_eq!(coerce_seed(M), M);
     }
 
     #[test]
-    fn test_tfb_seed_random_coerces_zero() {
-        let old = TFB_SeedRandom(0);
-        let now = SEED.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(now, 1);
-        TFB_SeedRandom(old);
+    fn zero_seed_is_coerced_to_one() {
+        assert_eq!(coerce_seed(0), 1);
     }
 
     #[test]
-    fn test_tfb_seed_random_coerces_overflow() {
-        let old = TFB_SeedRandom(M + 100);
-        let now = SEED.load(std::sync::atomic::Ordering::Relaxed);
-        assert_eq!(now, 100);
-        TFB_SeedRandom(old);
+    fn seed_above_the_modulus_wraps_into_range() {
+        assert_eq!(coerce_seed(M + 100), 100);
+        assert_eq!(coerce_seed(M + 1), 1);
+    }
+
+    #[test]
+    fn seeding_returns_the_previous_seed_and_installs_the_new_one() {
+        // Exercises the global path once, without asserting a value another
+        // test could have changed: the swap's own return is authoritative.
+        let restore = TFB_SeedRandom(12345);
+        let previous = TFB_SeedRandom(999);
+        assert_eq!(previous, 12345, "swap returns exactly what it replaced");
+        TFB_SeedRandom(restore);
     }
 
     #[test]
