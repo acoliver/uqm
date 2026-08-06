@@ -286,7 +286,11 @@ jobs:
       - name: Security audit
         run: |
           cd rust
-          cargo audit
+          # --deny warnings, because plain `cargo audit` exits 0 on unsound,
+          # unmaintained and yanked crates. Without it the job reports
+          # "N allowed warnings found" and passes, which is how an unsound
+          # dependency sat in the tree unnoticed.
+          cargo audit --deny warnings
 
       - name: Validate workflows
         uses: rhysd/actionlint@v1.7.7
