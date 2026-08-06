@@ -45,17 +45,25 @@ pub enum RecordKind {
 pub enum SeedDomain {
     SuperMeleeMenu,
     SuperMeleeBattle,
+    /// The generator seeding that happens when a new game starts.
+    ///
+    /// Without this the campaign seeds itself from the wall clock, so nothing
+    /// outside Super Melee replays: two runs of the same script at the same
+    /// commit produce different planet surfaces.
+    NewGame,
 }
 
 impl SeedDomain {
     pub const SUPER_MELEE_MENU_ID: u32 = 1;
     pub const SUPER_MELEE_BATTLE_ID: u32 = 2;
+    pub const NEW_GAME_ID: u32 = 3;
 
     #[must_use]
     pub fn from_ffi(value: u32) -> Option<Self> {
         match value {
             Self::SUPER_MELEE_MENU_ID => Some(Self::SuperMeleeMenu),
             Self::SUPER_MELEE_BATTLE_ID => Some(Self::SuperMeleeBattle),
+            Self::NEW_GAME_ID => Some(Self::NewGame),
             _ => None,
         }
     }
@@ -504,8 +512,13 @@ mod tests {
     fn seed_domains_are_strict_and_repeated_applications_remain_distinct() {
         assert_eq!(SeedDomain::from_ffi(1), Some(SeedDomain::SuperMeleeMenu));
         assert_eq!(SeedDomain::from_ffi(2), Some(SeedDomain::SuperMeleeBattle));
+        assert_eq!(SeedDomain::from_ffi(3), Some(SeedDomain::NewGame));
+        // Still strict: an id nobody has defined is not silently accepted,
+        // because a mistyped domain would otherwise seed nothing and leave the
+        // run reproducible only by luck.
         assert_eq!(SeedDomain::from_ffi(0), None);
-        assert_eq!(SeedDomain::from_ffi(3), None);
+        assert_eq!(SeedDomain::from_ffi(4), None);
+        assert_eq!(SeedDomain::from_ffi(u32::MAX), None);
 
         let first = SeedApplication {
             domain: SeedDomain::SuperMeleeBattle,

@@ -18,6 +18,11 @@
 
 #include "restart.h"
 
+/* Automation supplies a fixed seed so a proof replays; outside automation
+ * this returns the fallback and the clock is used as before. */
+extern DWORD rust_automation_seed_value (DWORD domain, DWORD fallback);
+#define RUST_AUTOMATION_SEED_NEW_GAME 3
+
 #include "colors.h"
 #include "controls.h"
 #include "credits.h"
@@ -343,7 +348,16 @@ RestartMenu (MENU_STATE *pMS)
 	SleepThreadUntil (TimeOut);
 	FlushColorXForms ();
 
-	SeedRandomNumbers ();
+	{	/* A new campaign seeds the generator. Left to itself that is the wall
+		 * clock, which makes planet surfaces differ between two runs of the
+		 * same proof and stops a capture digest meaning anything. */
+		DWORD automation_seed = rust_automation_seed_value (
+				RUST_AUTOMATION_SEED_NEW_GAME, 0);
+		if (automation_seed != 0)
+			TFB_SeedRandom (automation_seed);
+		else
+			SeedRandomNumbers ();
+	}
 
 	return (LOBYTE (GLOBAL (CurrentActivity)) != SUPER_MELEE);
 }
