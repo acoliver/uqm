@@ -711,3 +711,81 @@ mod tests {
         validate_observed_dependencies(&observed, &inputs, &dependencies, "macos-aarch64").unwrap();
     }
 }
+
+#[cfg(test)]
+mod external_native_allowlist_tests {
+    use serde_json::Value;
+
+    const ALLOWLIST: &str = include_str!("../external-native-allowlist.json");
+
+    fn document() -> Value {
+        serde_json::from_str(ALLOWLIST).expect("the allowlist is valid JSON")
+    }
+
+    /// Every external native dependency has to carry its policy, because the
+    /// build derives what it may link from this file. An entry missing any of
+    /// these fields is one nobody has taken responsibility for.
+    #[test]
+    fn every_external_dependency_declares_its_policy() {
+        let document = document();
+        let required = ["license", "provenance", "security_owner", "update_policy"];
+
+        for group in ["packages", "direct_libraries", "frameworks"] {
+            let entries = document
+                .get(group)
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("allowlist group {group} is missing"));
+            assert!(!entries.is_empty(), "allowlist group {group} is empty");
+
+            for entry in entries {
+                let id = entry
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_else(|| panic!("an entry in {group} has no id"));
+                for field in required {
+                    let value = entry.get(field).and_then(Value::as_str);
+                    assert!(
+                        value.is_some_and(|text| !text.trim().is_empty()),
+                        "{group} entry {id} does not declare {field}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The packages the build discovers through pkg-config additionally need a
+    /// target list, since the build selects per target from it.
+    #[test]
+    fn pkg_config_packages_declare_their_targets() {
+        let document = document();
+        let packages = document
+            .get("packages")
+            .and_then(Value::as_array)
+            .expect("packages array");
+
+        for package in packages {
+            let id = package.get("id").and_then(Value::as_str).expect("id");
+            assert!(
+                package.get("pkg_config").and_then(Value::as_str).is_some(),
+                "package {id} does not declare a pkg_config name"
+            );
+            let targets = package
+                .get("targets")
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("package {id} does not declare targets"));
+            assert!(!targets.is_empty(), "package {id} declares no targets");
+        }
+    }
+
+    /// Vendoring or patching an external dependency would make it first-party
+    /// native code, which this port is trying to reach zero of.
+    #[test]
+    fn the_allowlist_states_the_local_modification_ban() {
+        let document = document();
+        let ban = document
+            .get("local_modification_ban")
+            .and_then(Value::as_str)
+            .expect("the allowlist states its local modification ban");
+        assert!(!ban.trim().is_empty());
+    }
+}

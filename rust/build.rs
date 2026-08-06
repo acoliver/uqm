@@ -19,9 +19,65 @@ use uqm_ownership::{
 const DEPENDENCY_AUTHORITY: &str = "build/native-dependencies.json";
 const INPUT_AUTHORITY: &str = "build/native-inputs.json";
 const PROVIDER_AUTHORITY: &str = "ownership/native-provider-manifest.json";
+const EXTERNAL_NATIVE_ALLOWLIST: &str = "ownership/external-native-allowlist.json";
 const SDL_PACKAGE: [&str; 1] = ["sdl2"];
-const COMMON_PRODUCTION_PACKAGES: [&str; 2] = ["libpng", "liblzma"];
-const MACOS_PRODUCTION_PACKAGES: [&str; 3] = ["libpng", "liblzma", "bzip2"];
+
+/// Every external native package the build is permitted to link, keyed by the
+/// target it applies to.
+///
+/// Derived from the allowlist rather than written out here, so a package that
+/// is not documented with a license, provenance, security owner and update
+/// policy cannot be linked at all.
+fn allowlisted_packages(target_os: &str) -> Result<Vec<String>, String> {
+    let path = Path::new(EXTERNAL_NATIVE_ALLOWLIST);
+    let text = fs::read_to_string(path)
+        .map_err(|error| format!("read {EXTERNAL_NATIVE_ALLOWLIST}: {error}"))?;
+    let document: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|error| format!("parse {EXTERNAL_NATIVE_ALLOWLIST}: {error}"))?;
+
+    let packages = document
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} has no packages array"))?;
+
+    let mut selected = Vec::new();
+    for package in packages {
+        let id = package
+            .get("pkg_config")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} entry lacks pkg_config"))?;
+        for required in ["license", "provenance", "security_owner", "update_policy"] {
+            if package
+                .get(required)
+                .and_then(serde_json::Value::as_str)
+                .is_none()
+            {
+                return Err(format!(
+                    "{EXTERNAL_NATIVE_ALLOWLIST} entry {id} lacks {required}"
+                ));
+            }
+        }
+        let applies = package
+            .get("targets")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} entry {id} lacks targets"))?
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .any(|target| target.starts_with(target_os));
+        if applies && id != "sdl2" {
+            selected.push(id.to_owned());
+        }
+    }
+
+    if selected.is_empty() {
+        return Err(format!(
+            "{EXTERNAL_NATIVE_ALLOWLIST} allows no packages for target OS {target_os}"
+        ));
+    }
+    selected.sort();
+    selected.dedup();
+    Ok(selected)
+}
 
 fn main() {
     if let Err(error) = run() {
@@ -35,6 +91,7 @@ fn run() -> Result<(), String> {
     let toolchain = resolve_toolchain(Path::new("."), &target)?;
     apply_toolchain_environment(&toolchain);
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
+    println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     compile_local_helpers();
     let mut packages = discover_packages(&SDL_PACKAGE)?;
@@ -42,13 +99,13 @@ fn run() -> Result<(), String> {
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
         reject_noncanonical_build_flags(&toolchain)?;
         validate_toolchain_marker(&toolchain)?;
-        let production_packages = if target_os == "macos" {
-            &MACOS_PRODUCTION_PACKAGES[..]
-        } else {
+        if target_os != "macos" {
             println!("cargo:rustc-link-lib=bz2");
-            &COMMON_PRODUCTION_PACKAGES[..]
-        };
-        packages.extend(discover_packages(production_packages)?);
+        }
+        let production_packages = allowlisted_packages(&target_os)?;
+        let production_packages: Vec<&str> =
+            production_packages.iter().map(String::as_str).collect();
+        packages.extend(discover_packages(&production_packages)?);
         link_c_objects(&packages, &toolchain)?;
     } else {
         emit_package_links(&packages, &target_os);

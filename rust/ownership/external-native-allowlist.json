@@ -1,0 +1,141 @@
+{
+  "schema": "uqm-external-native-allowlist-v1",
+  "description": "Every external native library the production build is permitted to link. The end state for this repository is zero first-party native code; these entries are operating-system and third-party libraries that are consumed, never vendored or modified. build.rs derives its pkg-config package list from this file, so an entry that is not here cannot be linked.",
+  "local_modification_ban": "No entry may be vendored into this repository, patched, or forked. If an upstream fix is required it is taken from a released upstream version and the pinned version range here is updated in the same change.",
+  "packages": [
+    {
+      "id": "sdl2",
+      "pkg_config": "sdl2",
+      "purpose": "Window, renderer, input and audio device backend.",
+      "license": "Zlib",
+      "provenance": "https://github.com/libsdl-org/SDL",
+      "security_owner": "graphics",
+      "update_policy": "Track the distribution-provided 2.x series. Review release notes for CVEs affecting video, events or audio before raising the floor.",
+      "toolchain_impact": "Provides include paths, link paths and libraries through pkg-config. Also consumed by the sdl2 Rust crate, which publishes DEP_SDL2_INCLUDE for binding generation.",
+      "targets": [
+        "macos-aarch64",
+        "macos-x86_64",
+        "linux-aarch64",
+        "linux-x86_64"
+      ]
+    },
+    {
+      "id": "libpng",
+      "pkg_config": "libpng",
+      "purpose": "PNG decoding for retained native content loading.",
+      "license": "libpng-2.0",
+      "provenance": "http://www.libpng.org/pub/png/libpng.html",
+      "security_owner": "content",
+      "update_policy": "Security-critical: PNG decoders parse untrusted content files. Apply upstream security releases promptly.",
+      "toolchain_impact": "pkg-config include and link flags only.",
+      "targets": [
+        "macos-aarch64",
+        "macos-x86_64",
+        "linux-aarch64",
+        "linux-x86_64"
+      ]
+    },
+    {
+      "id": "liblzma",
+      "pkg_config": "liblzma",
+      "purpose": "LZMA decompression for packaged content archives.",
+      "license": "0BSD",
+      "provenance": "https://tukaani.org/xz/",
+      "security_owner": "content",
+      "update_policy": "Security-critical: decompresses packaged content. Verify upstream provenance explicitly, as this project was the subject of a supply-chain compromise in 2024 (CVE-2024-3094); only distribution-signed builds are acceptable.",
+      "toolchain_impact": "pkg-config include and link flags only.",
+      "targets": [
+        "macos-aarch64",
+        "macos-x86_64",
+        "linux-aarch64",
+        "linux-x86_64"
+      ]
+    },
+    {
+      "id": "bzip2",
+      "pkg_config": "bzip2",
+      "purpose": "bzip2 decompression for packaged content archives.",
+      "license": "bzip2-1.0.6",
+      "provenance": "https://sourceware.org/bzip2/",
+      "security_owner": "content",
+      "update_policy": "Security-critical: decompresses packaged content. Apply upstream security releases promptly.",
+      "toolchain_impact": "pkg-config include and link flags on macOS. On Linux the library is linked directly rather than discovered through pkg-config.",
+      "targets": [
+        "macos-aarch64",
+        "macos-x86_64"
+      ]
+    }
+  ],
+  "direct_libraries": [
+    {
+      "id": "z",
+      "purpose": "zlib decompression, required by libpng and by packaged content.",
+      "license": "Zlib",
+      "provenance": "https://zlib.net/",
+      "security_owner": "content",
+      "update_policy": "Security-critical: parses untrusted compressed data. Apply upstream security releases promptly.",
+      "toolchain_impact": "Linked by name from the platform library path."
+    },
+    {
+      "id": "m",
+      "purpose": "Platform mathematics library.",
+      "license": "platform-c-library",
+      "provenance": "Operating system C library.",
+      "security_owner": "platform",
+      "update_policy": "Supplied and patched by the operating system; not independently pinned.",
+      "toolchain_impact": "Linked by name from the platform library path."
+    },
+    {
+      "id": "bz2",
+      "purpose": "bzip2 decompression on targets where it is linked directly rather than discovered through pkg-config.",
+      "license": "bzip2-1.0.6",
+      "provenance": "https://sourceware.org/bzip2/",
+      "security_owner": "content",
+      "update_policy": "Security-critical: decompresses packaged content. Apply upstream security releases promptly.",
+      "toolchain_impact": "Linked by name from the platform library path."
+    },
+    {
+      "id": "objc",
+      "purpose": "Objective-C runtime required to link against macOS frameworks.",
+      "license": "platform-c-library",
+      "provenance": "Apple platform runtime.",
+      "security_owner": "platform",
+      "update_policy": "Supplied and patched by the operating system; not independently pinned.",
+      "toolchain_impact": "macOS only."
+    }
+  ],
+  "frameworks": [
+    {
+      "id": "Cocoa",
+      "purpose": "macOS windowing and application lifecycle, required by SDL.",
+      "license": "platform-framework",
+      "provenance": "Apple platform SDK.",
+      "security_owner": "platform",
+      "update_policy": "Supplied and patched by the operating system; not independently pinned."
+    },
+    {
+      "id": "CoreAudio",
+      "purpose": "macOS audio device access.",
+      "license": "platform-framework",
+      "provenance": "Apple platform SDK.",
+      "security_owner": "platform",
+      "update_policy": "Supplied and patched by the operating system; not independently pinned."
+    },
+    {
+      "id": "AudioToolbox",
+      "purpose": "macOS audio unit and format services.",
+      "license": "platform-framework",
+      "provenance": "Apple platform SDK.",
+      "security_owner": "platform",
+      "update_policy": "Supplied and patched by the operating system; not independently pinned."
+    },
+    {
+      "id": "CoreFoundation",
+      "purpose": "macOS base types required by the frameworks above.",
+      "license": "platform-framework",
+      "provenance": "Apple platform SDK.",
+      "security_owner": "platform",
+      "update_policy": "Supplied and patched by the operating system; not independently pinned."
+    }
+  ]
+}
