@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json",
     "gist_revision": "d7602e17c4401ed322f60ddfe6bf5e61d4754e24",
     "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496",
-    "projection_sha256": "ae8b261908df48bbd9a51cec0100a8a3cbd7af5c567080ab89d27532aa3a73f3",
+    "projection_sha256": "107169fb8c7f63899c8a13f99d9fdba02c69bb08761d0d1207d24b5bb2c3b37c",
     "raw_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e"
   },
   "scan_root": "native",
@@ -3146,7 +3146,7 @@
       "issue": "RUNTIME",
       "canonical_source": "sc2/src/uqm/restart.c",
       "scan_root": "native",
-      "sha256": "989cfe2c3869786394c46c55e26ab71a4d56993f6046284977bd3d6c5ea05b1d",
+      "sha256": "f1bab5775ee716fedd3ed490346544fc6b5949bf2e3eced084c80d9d9e5ce18c",
       "archive_decision": "include",
       "provider": "native_object:native/restart.c.o",
       "reason": "Transitional C ambient archive member",

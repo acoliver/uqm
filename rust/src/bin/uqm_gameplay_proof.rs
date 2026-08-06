@@ -1524,6 +1524,9 @@ fn battle_evidence_digest(
                 match seed.domain {
                     SeedDomain::SuperMeleeMenu => menu_seed_seen = true,
                     SeedDomain::SuperMeleeBattle => battle_seed_seen = true,
+                    // Campaign seeding, not part of the battle boundary
+                    // evidence this comparison is about.
+                    SeedDomain::NewGame => {}
                 }
             }
             normalized.push(record);
