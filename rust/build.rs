@@ -19,9 +19,87 @@ use uqm_ownership::{
 const DEPENDENCY_AUTHORITY: &str = "build/native-dependencies.json";
 const INPUT_AUTHORITY: &str = "build/native-inputs.json";
 const PROVIDER_AUTHORITY: &str = "ownership/native-provider-manifest.json";
+const EXTERNAL_NATIVE_ALLOWLIST: &str = "ownership/external-native-allowlist.json";
 const SDL_PACKAGE: [&str; 1] = ["sdl2"];
-const COMMON_PRODUCTION_PACKAGES: [&str; 2] = ["libpng", "liblzma"];
-const MACOS_PRODUCTION_PACKAGES: [&str; 3] = ["libpng", "liblzma", "bzip2"];
+
+/// Read one group of the external native allowlist for the target being built.
+///
+/// Every entry must carry its policy, and every target must be a non-empty
+/// string: an entry that matches nothing would silently drop a library from the
+/// link line, which is the failure this allowlist exists to prevent.
+fn allowlisted(group: &str, target_os: &str) -> Result<Vec<String>, String> {
+    let path = Path::new(EXTERNAL_NATIVE_ALLOWLIST);
+    let text = fs::read_to_string(path)
+        .map_err(|error| format!("read {EXTERNAL_NATIVE_ALLOWLIST}: {error}"))?;
+    let document: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|error| format!("parse {EXTERNAL_NATIVE_ALLOWLIST}: {error}"))?;
+
+    let entries = document
+        .get(group)
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} has no {group} array"))?;
+
+    let mut selected = Vec::new();
+    for entry in entries {
+        let id = entry
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("{EXTERNAL_NATIVE_ALLOWLIST} {group} entry lacks id"))?;
+        for required in ["license", "provenance", "security_owner", "update_policy"] {
+            if entry
+                .get(required)
+                .and_then(serde_json::Value::as_str)
+                .is_none_or(str::is_empty)
+            {
+                return Err(format!(
+                    "{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} lacks {required}"
+                ));
+            }
+        }
+
+        let targets = entry
+            .get("targets")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| {
+                format!("{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} lacks targets")
+            })?;
+        if targets.is_empty() {
+            return Err(format!(
+                "{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} lists no targets"
+            ));
+        }
+
+        let mut applies = false;
+        for target in targets {
+            let target = target
+                .as_str()
+                .filter(|text| !text.is_empty())
+                .ok_or_else(|| {
+                    format!("{EXTERNAL_NATIVE_ALLOWLIST} {group} entry {id} has a malformed target")
+                })?;
+            if target.starts_with(target_os) {
+                applies = true;
+            }
+        }
+
+        if applies {
+            let name = match group {
+                "packages" => entry
+                    .get("pkg_config")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or_else(|| {
+                        format!("{EXTERNAL_NATIVE_ALLOWLIST} package {id} lacks pkg_config")
+                    })?,
+                _ => id,
+            };
+            selected.push(name.to_owned());
+        }
+    }
+
+    selected.sort();
+    selected.dedup();
+    Ok(selected)
+}
 
 fn main() {
     if let Err(error) = run() {
@@ -35,6 +113,7 @@ fn run() -> Result<(), String> {
     let toolchain = resolve_toolchain(Path::new("."), &target)?;
     apply_toolchain_environment(&toolchain);
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
+    println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     compile_local_helpers();
     let mut packages = discover_packages(&SDL_PACKAGE)?;
@@ -42,16 +121,23 @@ fn run() -> Result<(), String> {
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
         reject_noncanonical_build_flags(&toolchain)?;
         validate_toolchain_marker(&toolchain)?;
-        let production_packages = if target_os == "macos" {
-            &MACOS_PRODUCTION_PACKAGES[..]
-        } else {
-            println!("cargo:rustc-link-lib=bz2");
-            &COMMON_PRODUCTION_PACKAGES[..]
-        };
-        packages.extend(discover_packages(production_packages)?);
+        let production_packages = allowlisted("packages", &target_os)?;
+        let production_packages: Vec<&str> = production_packages
+            .iter()
+            .map(String::as_str)
+            .filter(|package| !SDL_PACKAGE.contains(package))
+            .collect();
+        if production_packages.is_empty() {
+            return Err(format!(
+                "{EXTERNAL_NATIVE_ALLOWLIST} allows no packages for target OS {target_os}"
+            ));
+        }
+        packages.extend(discover_packages(&production_packages)?);
+        emit_allowlisted_platform_links(&target_os)?;
         link_c_objects(&packages, &toolchain)?;
     } else {
-        emit_package_links(&packages, &target_os);
+        emit_package_links(&packages);
+        emit_allowlisted_platform_links(&target_os)?;
     }
     compile_p00_harness(&toolchain)?;
     Ok(())
@@ -483,7 +569,7 @@ fn create_and_validate_archive(
         .map_err(|error| error.to_string())?;
     write_provider_report(validator, context.out_dir)?;
     emit_archive_link(context.target_os, context.out_dir, &archive)?;
-    emit_package_links(context.packages, context.target_os);
+    emit_package_links(context.packages);
     Ok(())
 }
 
@@ -535,7 +621,7 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
     Ok(())
 }
 
-fn emit_package_links(packages: &NativePackages, target_os: &str) {
+fn emit_package_links(packages: &NativePackages) {
     for path in &packages.link_paths {
         println!("cargo:rustc-link-search=native={}", path.display());
     }
@@ -548,18 +634,23 @@ fn emit_package_links(packages: &NativePackages, target_os: &str) {
     for library in &packages.libraries {
         println!("cargo:rustc-link-lib={library}");
     }
-    for library in ["z", "m"] {
-        println!("cargo:rustc-link-lib={library}");
-    }
     for framework in &packages.frameworks {
         println!("cargo:rustc-link-lib=framework={framework}");
     }
-    if target_os == "macos" {
-        println!("cargo:rustc-link-lib=objc");
-        for framework in ["Cocoa", "CoreAudio", "AudioToolbox", "CoreFoundation"] {
-            println!("cargo:rustc-link-lib=framework={framework}");
-        }
+}
+
+/// Link the libraries and frameworks the allowlist permits for this target.
+///
+/// These are named rather than discovered through pkg-config, so the allowlist
+/// is the only place that decides whether they are linked at all.
+fn emit_allowlisted_platform_links(target_os: &str) -> Result<(), String> {
+    for library in allowlisted("direct_libraries", target_os)? {
+        println!("cargo:rustc-link-lib={library}");
     }
+    for framework in allowlisted("frameworks", target_os)? {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+    Ok(())
 }
 
 fn generate_hash_abi_bindings() -> Result<(), String> {
