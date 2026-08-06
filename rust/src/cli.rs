@@ -141,11 +141,23 @@ pub struct Cli {
 impl Cli {
     /// Merge CLI arguments into the options struct
     pub fn merge_into_options(&self, mut opts: Options) -> Result<Options> {
-        // Override with command line arguments
+        // Command line arguments override the configuration file.
+        self.merge_display(&mut opts)?;
+        self.merge_audio(&mut opts)?;
+        self.merge_content(&mut opts);
+        self.merge_presentation(&mut opts)?;
+        // Applied last because that is where it sat before this was grouped,
+        // and when several arguments are malformed the first parse failure is
+        // the one the player is told about.
+        self.merge_sound_driver(&mut opts)?;
+        Ok(opts)
+    }
+
+    /// Apply window, renderer and scaling arguments.
+    fn merge_display(&self, opts: &mut Options) -> Result<()> {
         if let Some(ref res) = self.res {
             opts.resolution = Some(parse_resolution(res).context("Invalid resolution format")?);
         }
-
         if self.fullscreen {
             opts.fullscreen = Some(true);
         }
@@ -161,111 +173,109 @@ impl Cli {
         if self.keepaspectratio {
             opts.keep_aspect_ratio = Some(true);
         }
-
         if let Some(ref scale) = self.scale {
             opts.scaler = Some(Self::parse_scale(scale)?);
         }
-
         if let Some(ref zoom) = self.meleezoom {
             opts.melee_scale = Some(Self::parse_melee_zoom(zoom)?);
         }
-
         if self.scanlines {
             opts.scanlines = Some(true);
         }
-
         if self.fps {
             opts.show_fps = Some(true);
         }
-
         if let Some(ref gamma) = self.gamma {
             opts.gamma = Some(parse_gamma(gamma)?);
         }
-
-        if let Some(ref config_dir) = self.configdir {
-            opts.config_dir = Some(config_dir.clone());
+        if let Some(ref renderer) = self.renderer {
+            opts.graphics_backend = Some(renderer.clone());
         }
+        Ok(())
+    }
 
-        if let Some(ref content_dir) = self.contentdir {
-            opts.content_dir = Some(content_dir.clone());
-        }
-
+    /// Apply volume, quality and driver arguments.
+    fn merge_audio(&self, opts: &mut Options) -> Result<()> {
         if let Some(ref vol) = self.musicvol {
             let int_vol: i32 = vol.parse().context("Invalid music volume")?;
             opts.music_volume = Some(parse_volume(int_vol));
         }
-
         if let Some(ref vol) = self.sfxvol {
             let int_vol: i32 = vol.parse().context("Invalid SFX volume")?;
             opts.sfx_volume = Some(parse_volume(int_vol));
         }
-
         if let Some(ref vol) = self.speechvol {
             let int_vol: i32 = vol.parse().context("Invalid speech volume")?;
             opts.speech_volume = Some(parse_volume(int_vol));
         }
-
         if let Some(ref quality) = self.audioquality {
             opts.sound_quality = Some(Self::parse_audio_quality(quality)?);
         }
-
-        if self.nosubtitles {
-            opts.subtitles = Some(false);
-        }
-
-        if let Some(ref log_file) = self.logfile {
-            opts.log_file = Some(log_file.clone());
-        }
-
-        if let Some(ref intro) = self.intro {
-            opts.which_intro = Some(Self::parse_choice(intro)?);
-        }
-
-        if let Some(ref cscan) = self.cscan {
-            opts.which_coarse_scan = Some(Self::parse_choice(cscan)?);
-        }
-
-        if let Some(ref menu) = self.menu {
-            opts.which_menu = Some(Self::parse_choice(menu)?);
-        }
-
-        if let Some(ref font) = self.font {
-            opts.which_fonts = Some(Self::parse_choice(font)?);
-        }
-
-        if let Some(ref shield) = self.shield {
-            opts.which_shield = Some(Self::parse_choice(shield)?);
-        }
-
-        if let Some(ref scroll) = self.scroll {
-            opts.smooth_scroll = Some(Self::parse_choice(scroll)?);
-        }
-
-        if let Some(ref sound) = self.sound {
-            opts.sound_driver = Some(Self::parse_sound_driver(sound)?);
-        }
-
         if self.stereosfx {
             opts.stereo_sfx = Some(true);
         }
+        Ok(())
+    }
 
+    /// Apply the sound driver choice.
+    ///
+    /// Separate from the rest of the audio arguments only to keep the order in
+    /// which arguments are validated identical to before they were grouped.
+    fn merge_sound_driver(&self, opts: &mut Options) -> Result<()> {
+        if let Some(ref sound) = self.sound {
+            opts.sound_driver = Some(Self::parse_sound_driver(sound)?);
+        }
+        Ok(())
+    }
+
+    /// Apply directory, add-on and logging arguments.
+    ///
+    /// These are plain paths, so none of them can fail to parse.
+    fn merge_content(&self, opts: &mut Options) {
+        if let Some(ref config_dir) = self.configdir {
+            opts.config_dir = Some(config_dir.clone());
+        }
+        if let Some(ref content_dir) = self.contentdir {
+            opts.content_dir = Some(content_dir.clone());
+        }
+        if let Some(ref log_file) = self.logfile {
+            opts.log_file = Some(log_file.clone());
+        }
         if !self.addon.is_empty() {
             opts.addons = self.addon.clone();
         }
-
         if let Some(ref addon_dir) = self.addondir {
             opts.addon_dir = Some(addon_dir.clone());
         }
-
         if self.safe {
             opts.safe_mode = Some(true);
         }
+    }
 
-        if let Some(ref renderer) = self.renderer {
-            opts.graphics_backend = Some(renderer.clone());
+    /// Apply the 3DO/PC presentation choices and subtitles.
+    fn merge_presentation(&self, opts: &mut Options) -> Result<()> {
+        if self.nosubtitles {
+            opts.subtitles = Some(false);
         }
-
-        Ok(opts)
+        if let Some(ref intro) = self.intro {
+            opts.which_intro = Some(Self::parse_choice(intro)?);
+        }
+        if let Some(ref cscan) = self.cscan {
+            opts.which_coarse_scan = Some(Self::parse_choice(cscan)?);
+        }
+        if let Some(ref menu) = self.menu {
+            opts.which_menu = Some(Self::parse_choice(menu)?);
+        }
+        if let Some(ref font) = self.font {
+            opts.which_fonts = Some(Self::parse_choice(font)?);
+        }
+        if let Some(ref shield) = self.shield {
+            opts.which_shield = Some(Self::parse_choice(shield)?);
+        }
+        if let Some(ref scroll) = self.scroll {
+            opts.smooth_scroll = Some(Self::parse_choice(scroll)?);
+        }
+        Ok(())
     }
 
     fn parse_scale(s: &str) -> Result<Scaler> {
@@ -404,5 +414,33 @@ mod tests {
 
         let result = cli.merge_into_options(Options::default());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn the_first_malformed_argument_is_the_one_reported() {
+        // Arguments are validated in a fixed order, so a player who mistypes
+        // several of them is told about the earliest one every time rather
+        // than whichever group happens to be checked first.
+        let cli = Cli {
+            intro: Some("nonsense".to_string()),
+            sound: Some("nonsense".to_string()),
+            ..Default::default()
+        };
+
+        let error = cli
+            .merge_into_options(Options::default())
+            .expect_err("both arguments are invalid");
+        let message = format!("{error:#}");
+
+        assert!(
+            message.contains("Invalid choice"),
+            "the sound driver is validated after the presentation choices, so \
+             the intro error should surface first; got: {message}"
+        );
+        assert!(
+            !message.contains("Invalid sound driver"),
+            "the later sound-driver failure must not mask the intro failure; \
+             got: {message}"
+        );
     }
 }

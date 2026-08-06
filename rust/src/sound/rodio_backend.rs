@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, Sink, Source};
+use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
 
 use crate::bridge_log::rust_bridge_log_msg;
 
@@ -286,10 +286,22 @@ fn play_source(
     src.samples_consumed = 0;
 }
 
+/// Audio device state owned by the audio thread.
+struct AudioThreadState {
+    sources: HashMap<AudioObject, SourceState>,
+    buffers: HashMap<AudioObject, BufferData>,
+}
+
+/// Whether the audio thread should keep serving commands.
+#[derive(Debug, PartialEq, Eq)]
+enum AudioLoop {
+    Continue,
+    Stop,
+}
+
 fn audio_thread_main(rx: Receiver<AudioCmd>) {
     rust_bridge_log_msg("RODIO_BACKEND: audio thread starting");
 
-    // Initialize audio output
     let (stream, stream_handle) = match OutputStream::try_default() {
         Ok(s) => s,
         Err(e) => {
@@ -301,265 +313,355 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
     // Keep stream alive
     let _stream = stream;
 
-    let mut sources: HashMap<AudioObject, SourceState> = HashMap::new();
-    let mut buffers: HashMap<AudioObject, BufferData> = HashMap::new();
+    let mut state = AudioThreadState {
+        sources: HashMap::new(),
+        buffers: HashMap::new(),
+    };
 
     rust_bridge_log_msg("RODIO_BACKEND: audio thread ready");
 
     loop {
-        match rx.recv() {
-            Ok(cmd) => match cmd {
-                AudioCmd::GenSources(n, response) => {
-                    let mut ids = Vec::with_capacity(n as usize);
-                    for _ in 0..n {
-                        let id = NEXT_OBJECT_ID.fetch_add(1, Ordering::Relaxed);
-                        sources.insert(id, SourceState::new());
-                        ids.push(id);
-                    }
-                    let _ = response.send(ids);
-                }
-
-                AudioCmd::DeleteSources(ids) => {
-                    for id in ids {
-                        if let Some(mut src) = sources.remove(&id) {
-                            if let Some(sink) = src.sink.take() {
-                                sink.stop();
-                            }
-                        }
-                    }
-                }
-
-                AudioCmd::SourceSetInt(id, prop, value) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        match prop {
-                            AUDIO_LOOPING => src.looping = value != 0,
-                            AUDIO_BUFFER => {
-                                // Queue a single buffer (for non-streaming playback)
-                                src.queued_buffers.clear();
-                                src.processed_buffers.clear();
-                                src.total_samples_queued = 0;
-                                if value != 0 {
-                                    let buf_id = value as AudioObject;
-                                    let samples = if let Some(buf) = buffers.get(&buf_id) {
-                                        src.sample_rate = buf.frequency;
-                                        buf.samples.len() / buf.channels as usize
-                                    } else {
-                                        0
-                                    };
-                                    src.queued_buffers.push(QueuedBuffer {
-                                        id: buf_id,
-                                        samples,
-                                    });
-                                    src.total_samples_queued = samples;
-                                    src.samples_consumed = 0;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                AudioCmd::SourceSetFloat(id, prop, value) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        if prop == AUDIO_GAIN {
-                            src.gain = value;
-                            if let Some(ref sink) = src.sink {
-                                sink.set_volume(value);
-                            }
-                        }
-                    }
-                }
-
-                AudioCmd::SourceGetInt(id, prop, response) => {
-                    let _ = response.send(source_int_value(&mut sources, id, prop));
-                }
-
-                AudioCmd::SourcePlay(id) => {
-                    play_source(&mut sources, &buffers, &stream_handle, id);
-                }
-
-                AudioCmd::SourcePause(id) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        if let Some(ref sink) = src.sink {
-                            sink.pause();
-                        }
-                        src.state = AUDIO_PAUSED;
-                        if src.play_start_time.is_some() {
-                            // Accumulate played samples up to pause point
-                            src.samples_played_before_pause = src.samples_played();
-                            src.play_start_time = None;
-                        }
-                    }
-                }
-
-                AudioCmd::SourceStop(id) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        if let Some(sink) = src.sink.take() {
-                            sink.stop();
-                        }
-                        // Move queued to processed
-                        while let Some(buf) = src.queued_buffers.pop() {
-                            src.processed_buffers.push(buf.id);
-                        }
-                        src.state = AUDIO_STOPPED;
-                        src.play_start_time = None;
-                        src.samples_played_before_pause = 0;
-                        src.total_samples_queued = 0;
-                        src.samples_consumed = 0;
-                    }
-                }
-
-                AudioCmd::SourceRewind(id) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        if let Some(sink) = src.sink.take() {
-                            sink.stop();
-                        }
-                        src.state = AUDIO_INITIAL;
-                    }
-                }
-
-                AudioCmd::SourceQueueBuffers(id, buf_ids) => {
-                    if let Some(src) = sources.get_mut(&id) {
-                        for buf_id in buf_ids {
-                            let samples_in_buf = if let Some(buf) = buffers.get(&buf_id) {
-                                // Set sample rate from first buffer
-                                if src.sample_rate == 0 {
-                                    src.sample_rate = buf.frequency;
-                                }
-
-                                // If source is playing, append to sink
-                                if src.state == AUDIO_PLAYING {
-                                    if let Some(ref sink) = src.sink {
-                                        let source = SamplesBuffer::new(
-                                            buf.channels,
-                                            buf.frequency,
-                                            buf.samples.clone(),
-                                        );
-                                        sink.append(source);
-                                    }
-                                }
-                                // samples per channel
-                                buf.samples.len() / buf.channels as usize
-                            } else {
-                                0
-                            };
-
-                            src.total_samples_queued += samples_in_buf;
-                            src.queued_buffers.push(QueuedBuffer {
-                                id: buf_id,
-                                samples: samples_in_buf,
-                            });
-                        }
-                    }
-                }
-
-                AudioCmd::SourceUnqueueBuffers(id, n, response) => {
-                    let mut unqueued = Vec::new();
-                    if let Some(src) = sources.get_mut(&id) {
-                        for _ in 0..n {
-                            if let Some(buf_id) = src.processed_buffers.pop() {
-                                unqueued.push(buf_id);
-                            }
-                        }
-                    }
-                    let _ = response.send(unqueued);
-                }
-
-                AudioCmd::GenBuffers(n, response) => {
-                    let mut ids = Vec::with_capacity(n as usize);
-                    for _ in 0..n {
-                        let id = NEXT_OBJECT_ID.fetch_add(1, Ordering::Relaxed);
-                        buffers.insert(
-                            id,
-                            BufferData {
-                                format: 0,
-                                frequency: 0,
-                                samples: Vec::new(),
-                                channels: 1,
-                                size: 0,
-                            },
-                        );
-                        ids.push(id);
-                    }
-                    let _ = response.send(ids);
-                }
-
-                AudioCmd::DeleteBuffers(ids) => {
-                    for id in ids {
-                        buffers.remove(&id);
-                    }
-                }
-
-                AudioCmd::BufferData(id, format, data, freq) => {
-                    if let Some(buf) = buffers.get_mut(&id) {
-                        buf.format = format;
-                        buf.frequency = freq;
-                        buf.size = data.len() as u32;
-
-                        // Determine channels and convert to i16
-                        let (channels, bits) = match format {
-                            AUDIO_FORMAT_MONO8 => (1u16, 8u16),
-                            AUDIO_FORMAT_STEREO8 => (2, 8),
-                            AUDIO_FORMAT_MONO16 => (1, 16),
-                            AUDIO_FORMAT_STEREO16 => (2, 16),
-                            _ => (1, 16), // Default
-                        };
-                        buf.channels = channels;
-
-                        // Convert to i16 samples
-                        buf.samples = if bits == 16 {
-                            data.chunks_exact(2)
-                                .map(|c| i16::from_le_bytes([c[0], c[1]]))
-                                .collect()
-                        } else {
-                            // 8-bit unsigned to 16-bit signed
-                            data.iter().map(|&b| ((b as i16) - 128) * 256).collect()
-                        };
-                    }
-                }
-
-                AudioCmd::BufferGetInt(id, prop, response) => {
-                    let value = if let Some(buf) = buffers.get(&id) {
-                        match prop {
-                            AUDIO_FREQUENCY => buf.frequency as i32,
-                            AUDIO_BITS => {
-                                if buf.format == AUDIO_FORMAT_MONO8
-                                    || buf.format == AUDIO_FORMAT_STEREO8
-                                {
-                                    8
-                                } else {
-                                    16
-                                }
-                            }
-                            AUDIO_CHANNELS => buf.channels as i32,
-                            AUDIO_SIZE => buf.size as i32,
-                            _ => 0,
-                        }
-                    } else {
-                        0
-                    };
-                    let _ = response.send(value as AudioIntVal);
-                }
-
-                AudioCmd::Shutdown => {
-                    rust_bridge_log_msg("RODIO_BACKEND: shutting down");
-                    // Stop all sources
-                    for (_, mut src) in sources.drain() {
-                        if let Some(sink) = src.sink.take() {
-                            sink.stop();
-                        }
-                    }
-                    break;
-                }
-            },
-            Err(_) => {
-                rust_bridge_log_msg("RODIO_BACKEND: channel closed");
-                break;
-            }
+        let Ok(cmd) = rx.recv() else {
+            rust_bridge_log_msg("RODIO_BACKEND: channel closed");
+            break;
+        };
+        if handle_audio_cmd(&mut state, &stream_handle, cmd) == AudioLoop::Stop {
+            break;
         }
     }
 
     rust_bridge_log_msg("RODIO_BACKEND: audio thread exited");
+}
+
+/// Serve one command, reporting whether the thread should keep running.
+fn handle_audio_cmd(
+    state: &mut AudioThreadState,
+    stream_handle: &OutputStreamHandle,
+    cmd: AudioCmd,
+) -> AudioLoop {
+    match cmd {
+        AudioCmd::GenSources(n, response) => {
+            let _ = response.send(gen_sources(&mut state.sources, n));
+        }
+        AudioCmd::DeleteSources(ids) => delete_sources(&mut state.sources, ids),
+        AudioCmd::SourceSetInt(id, prop, value) => {
+            source_set_int(&mut state.sources, &state.buffers, id, prop, value);
+        }
+        AudioCmd::SourceSetFloat(id, prop, value) => {
+            source_set_float(&mut state.sources, id, prop, value);
+        }
+        AudioCmd::SourceGetInt(id, prop, response) => {
+            let _ = response.send(source_int_value(&mut state.sources, id, prop));
+        }
+        AudioCmd::SourcePlay(id) => {
+            play_source(&mut state.sources, &state.buffers, stream_handle, id);
+        }
+        AudioCmd::SourcePause(id) => source_pause(&mut state.sources, id),
+        AudioCmd::SourceStop(id) => source_stop(&mut state.sources, id),
+        AudioCmd::SourceRewind(id) => source_rewind(&mut state.sources, id),
+        AudioCmd::SourceQueueBuffers(id, buf_ids) => {
+            source_queue_buffers(&mut state.sources, &state.buffers, id, buf_ids);
+        }
+        AudioCmd::SourceUnqueueBuffers(id, n, response) => {
+            let _ = response.send(source_unqueue_buffers(&mut state.sources, id, n));
+        }
+        AudioCmd::GenBuffers(n, response) => {
+            let _ = response.send(gen_buffers(&mut state.buffers, n));
+        }
+        AudioCmd::DeleteBuffers(ids) => {
+            for id in ids {
+                state.buffers.remove(&id);
+            }
+        }
+        AudioCmd::BufferData(id, format, data, freq) => {
+            fill_buffer(&mut state.buffers, id, format, &data, freq);
+        }
+        AudioCmd::BufferGetInt(id, prop, response) => {
+            let _ = response.send(buffer_int_value(&state.buffers, id, prop));
+        }
+        AudioCmd::Shutdown => {
+            rust_bridge_log_msg("RODIO_BACKEND: shutting down");
+            for (_, mut src) in state.sources.drain() {
+                if let Some(sink) = src.sink.take() {
+                    sink.stop();
+                }
+            }
+            return AudioLoop::Stop;
+        }
+    }
+    AudioLoop::Continue
+}
+
+/// Allocate `n` source ids.
+fn gen_sources(sources: &mut HashMap<AudioObject, SourceState>, n: u32) -> Vec<AudioObject> {
+    let mut ids = Vec::with_capacity(n as usize);
+    for _ in 0..n {
+        let id = NEXT_OBJECT_ID.fetch_add(1, Ordering::Relaxed);
+        sources.insert(id, SourceState::new());
+        ids.push(id);
+    }
+    ids
+}
+
+/// Stop and forget the given sources.
+fn delete_sources(sources: &mut HashMap<AudioObject, SourceState>, ids: Vec<AudioObject>) {
+    for id in ids {
+        if let Some(mut src) = sources.remove(&id) {
+            if let Some(sink) = src.sink.take() {
+                sink.stop();
+            }
+        }
+    }
+}
+
+/// Apply an integer source property.
+fn source_set_int(
+    sources: &mut HashMap<AudioObject, SourceState>,
+    buffers: &HashMap<AudioObject, BufferData>,
+    id: AudioObject,
+    prop: i32,
+    value: AudioIntVal,
+) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    match prop {
+        AUDIO_LOOPING => src.looping = value != 0,
+        AUDIO_BUFFER => attach_single_buffer(src, buffers, value),
+        _ => {}
+    }
+}
+
+/// Queue exactly one buffer, replacing anything already queued.
+///
+/// This is the non-streaming playback path.
+fn attach_single_buffer(
+    src: &mut SourceState,
+    buffers: &HashMap<AudioObject, BufferData>,
+    value: AudioIntVal,
+) {
+    src.queued_buffers.clear();
+    src.processed_buffers.clear();
+    src.total_samples_queued = 0;
+    if value == 0 {
+        return;
+    }
+
+    let buf_id = value as AudioObject;
+    let samples = if let Some(buf) = buffers.get(&buf_id) {
+        src.sample_rate = buf.frequency;
+        buf.samples.len() / buf.channels as usize
+    } else {
+        0
+    };
+    src.queued_buffers.push(QueuedBuffer {
+        id: buf_id,
+        samples,
+    });
+    src.total_samples_queued = samples;
+    src.samples_consumed = 0;
+}
+
+/// Apply a float source property.
+fn source_set_float(
+    sources: &mut HashMap<AudioObject, SourceState>,
+    id: AudioObject,
+    prop: i32,
+    value: f32,
+) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    if prop == AUDIO_GAIN {
+        src.gain = value;
+        if let Some(ref sink) = src.sink {
+            sink.set_volume(value);
+        }
+    }
+}
+
+/// Pause a source, banking the samples played so far.
+fn source_pause(sources: &mut HashMap<AudioObject, SourceState>, id: AudioObject) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    if let Some(ref sink) = src.sink {
+        sink.pause();
+    }
+    src.state = AUDIO_PAUSED;
+    if src.play_start_time.is_some() {
+        src.samples_played_before_pause = src.samples_played();
+        src.play_start_time = None;
+    }
+}
+
+/// Stop a source and retire every queued buffer.
+fn source_stop(sources: &mut HashMap<AudioObject, SourceState>, id: AudioObject) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    if let Some(sink) = src.sink.take() {
+        sink.stop();
+    }
+    while let Some(buf) = src.queued_buffers.pop() {
+        src.processed_buffers.push(buf.id);
+    }
+    src.state = AUDIO_STOPPED;
+    src.play_start_time = None;
+    src.samples_played_before_pause = 0;
+    src.total_samples_queued = 0;
+    src.samples_consumed = 0;
+}
+
+/// Return a source to its initial state.
+fn source_rewind(sources: &mut HashMap<AudioObject, SourceState>, id: AudioObject) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    if let Some(sink) = src.sink.take() {
+        sink.stop();
+    }
+    src.state = AUDIO_INITIAL;
+}
+
+/// Append buffers to a source, feeding the sink directly when already playing.
+fn source_queue_buffers(
+    sources: &mut HashMap<AudioObject, SourceState>,
+    buffers: &HashMap<AudioObject, BufferData>,
+    id: AudioObject,
+    buf_ids: Vec<AudioObject>,
+) {
+    let Some(src) = sources.get_mut(&id) else {
+        return;
+    };
+    for buf_id in buf_ids {
+        let samples_in_buf = queue_one_buffer(src, buffers, buf_id);
+        src.total_samples_queued += samples_in_buf;
+        src.queued_buffers.push(QueuedBuffer {
+            id: buf_id,
+            samples: samples_in_buf,
+        });
+    }
+}
+
+/// Queue a single buffer, returning its length in samples per channel.
+fn queue_one_buffer(
+    src: &mut SourceState,
+    buffers: &HashMap<AudioObject, BufferData>,
+    buf_id: AudioObject,
+) -> usize {
+    let Some(buf) = buffers.get(&buf_id) else {
+        return 0;
+    };
+    if src.sample_rate == 0 {
+        src.sample_rate = buf.frequency;
+    }
+    if src.state == AUDIO_PLAYING {
+        if let Some(ref sink) = src.sink {
+            sink.append(SamplesBuffer::new(
+                buf.channels,
+                buf.frequency,
+                buf.samples.clone(),
+            ));
+        }
+    }
+    buf.samples.len() / buf.channels as usize
+}
+
+/// Reclaim up to `n` processed buffers.
+fn source_unqueue_buffers(
+    sources: &mut HashMap<AudioObject, SourceState>,
+    id: AudioObject,
+    n: u32,
+) -> Vec<AudioObject> {
+    let mut unqueued = Vec::new();
+    if let Some(src) = sources.get_mut(&id) {
+        for _ in 0..n {
+            if let Some(buf_id) = src.processed_buffers.pop() {
+                unqueued.push(buf_id);
+            }
+        }
+    }
+    unqueued
+}
+
+/// Allocate `n` empty buffers.
+fn gen_buffers(buffers: &mut HashMap<AudioObject, BufferData>, n: u32) -> Vec<AudioObject> {
+    let mut ids = Vec::with_capacity(n as usize);
+    for _ in 0..n {
+        let id = NEXT_OBJECT_ID.fetch_add(1, Ordering::Relaxed);
+        buffers.insert(
+            id,
+            BufferData {
+                format: 0,
+                frequency: 0,
+                samples: Vec::new(),
+                channels: 1,
+                size: 0,
+            },
+        );
+        ids.push(id);
+    }
+    ids
+}
+
+/// Decode PCM bytes into a buffer's i16 samples.
+fn fill_buffer(
+    buffers: &mut HashMap<AudioObject, BufferData>,
+    id: AudioObject,
+    format: u32,
+    data: &[u8],
+    freq: u32,
+) {
+    let Some(buf) = buffers.get_mut(&id) else {
+        return;
+    };
+    buf.format = format;
+    buf.frequency = freq;
+    buf.size = data.len() as u32;
+
+    let (channels, bits) = match format {
+        AUDIO_FORMAT_MONO8 => (1u16, 8u16),
+        AUDIO_FORMAT_STEREO8 => (2, 8),
+        AUDIO_FORMAT_MONO16 => (1, 16),
+        AUDIO_FORMAT_STEREO16 => (2, 16),
+        _ => (1, 16),
+    };
+    buf.channels = channels;
+
+    buf.samples = if bits == 16 {
+        data.chunks_exact(2)
+            .map(|c| i16::from_le_bytes([c[0], c[1]]))
+            .collect()
+    } else {
+        // 8-bit unsigned to 16-bit signed
+        data.iter().map(|&b| ((b as i16) - 128) * 256).collect()
+    };
+}
+
+/// Read an integer buffer property.
+fn buffer_int_value(
+    buffers: &HashMap<AudioObject, BufferData>,
+    id: AudioObject,
+    prop: i32,
+) -> AudioIntVal {
+    let Some(buf) = buffers.get(&id) else {
+        return 0;
+    };
+    let value = match prop {
+        AUDIO_FREQUENCY => buf.frequency as i32,
+        AUDIO_BITS => {
+            if buf.format == AUDIO_FORMAT_MONO8 || buf.format == AUDIO_FORMAT_STEREO8 {
+                8
+            } else {
+                16
+            }
+        }
+        AUDIO_CHANNELS => buf.channels as i32,
+        AUDIO_SIZE => buf.size as i32,
+        _ => 0,
+    };
+    value as AudioIntVal
 }
 
 // =============================================================================
@@ -911,5 +1013,112 @@ pub unsafe extern "C" fn rust_audio_get_source_f(_src: AudioObject, _prop: i32, 
     }
     unsafe {
         *out = 1.0; // Default gain
+    }
+}
+
+#[cfg(test)]
+mod audio_command_tests {
+    use super::*;
+
+    fn buffer_map() -> HashMap<AudioObject, BufferData> {
+        let mut buffers = HashMap::new();
+        buffers.insert(
+            1,
+            BufferData {
+                format: 0,
+                frequency: 0,
+                samples: Vec::new(),
+                channels: 1,
+                size: 0,
+            },
+        );
+        buffers
+    }
+
+    #[test]
+    fn sixteen_bit_data_is_decoded_little_endian() {
+        let mut buffers = buffer_map();
+
+        fill_buffer(&mut buffers, 1, AUDIO_FORMAT_STEREO16, &[1, 0, 0, 1], 22050);
+
+        let buf = &buffers[&1];
+        assert_eq!(buf.samples, [1, 256]);
+        assert_eq!(buf.channels, 2);
+        assert_eq!(buf.frequency, 22050);
+        assert_eq!(buf.size, 4);
+    }
+
+    #[test]
+    fn eight_bit_data_is_recentred_and_scaled() {
+        let mut buffers = buffer_map();
+
+        fill_buffer(&mut buffers, 1, AUDIO_FORMAT_MONO8, &[128, 129, 127], 11025);
+
+        // 8-bit is unsigned with silence at 128.
+        assert_eq!(buffers[&1].samples, [0, 256, -256]);
+        assert_eq!(buffers[&1].channels, 1);
+    }
+
+    #[test]
+    fn filling_an_unknown_buffer_is_ignored() {
+        let mut buffers = buffer_map();
+
+        fill_buffer(&mut buffers, 99, AUDIO_FORMAT_MONO16, &[1, 0], 8000);
+
+        assert!(
+            buffers[&1].samples.is_empty(),
+            "the real buffer is untouched"
+        );
+        assert!(!buffers.contains_key(&99), "no buffer is invented");
+    }
+
+    #[test]
+    fn buffer_properties_report_bit_depth_from_the_format() {
+        let mut buffers = buffer_map();
+        fill_buffer(&mut buffers, 1, AUDIO_FORMAT_STEREO8, &[128, 128], 8000);
+
+        assert_eq!(buffer_int_value(&buffers, 1, AUDIO_BITS), 8);
+        assert_eq!(buffer_int_value(&buffers, 1, AUDIO_CHANNELS), 2);
+        assert_eq!(buffer_int_value(&buffers, 1, AUDIO_FREQUENCY), 8000);
+        assert_eq!(buffer_int_value(&buffers, 1, AUDIO_SIZE), 2);
+        assert_eq!(buffer_int_value(&buffers, 99, AUDIO_BITS), 0);
+    }
+
+    #[test]
+    fn generated_source_and_buffer_ids_are_unique() {
+        let mut sources = HashMap::new();
+        let mut buffers = HashMap::new();
+
+        let source_ids = gen_sources(&mut sources, 3);
+        let buffer_ids = gen_buffers(&mut buffers, 3);
+
+        let mut all: Vec<AudioObject> = source_ids
+            .iter()
+            .chain(buffer_ids.iter())
+            .copied()
+            .collect();
+        all.sort_unstable();
+        let unique = {
+            let mut u = all.clone();
+            u.dedup();
+            u
+        };
+        assert_eq!(all, unique, "ids must never collide");
+        assert_eq!(sources.len(), 3);
+        assert_eq!(buffers.len(), 3);
+    }
+
+    #[test]
+    fn unqueue_returns_only_what_was_processed() {
+        let mut sources = HashMap::new();
+        let ids = gen_sources(&mut sources, 1);
+        let id = ids[0];
+        sources.get_mut(&id).unwrap().processed_buffers = vec![7, 8];
+
+        let taken = source_unqueue_buffers(&mut sources, id, 5);
+
+        assert_eq!(taken.len(), 2, "only processed buffers come back");
+        assert!(sources[&id].processed_buffers.is_empty());
+        assert!(source_unqueue_buffers(&mut sources, 999, 1).is_empty());
     }
 }

@@ -263,11 +263,25 @@ jobs:
       - name: Run clippy
         run: |
           cd rust
-          cargo clippy -- -D warnings
+          # --all-targets so tests, benches and examples are linted too, not
+          # just the library. Without it, lint failures can sit in test code
+          # indefinitely.
+          cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check complexity
         run: |
-          lizard -C 50 -w rust/ -x "*.c" -x "*.h"
+          # Every tracked Rust production and test source. rust/ as a whole is
+          # not scanned because it contains rust/target, which is generated
+          # build output: scanning it wastes time and lets vendored code decide
+          # whether this gate passes.
+          lizard -C 40 -w -x "*.c" -x "*.h" \
+            rust/src \
+            rust/tests \
+            rust/xtask \
+            rust/ownership \
+            rust/harness \
+            rust/probes \
+            rust/examples
 
       - name: Security audit
         run: |

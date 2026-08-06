@@ -428,79 +428,16 @@ impl Coordinator {
         false
     }
 
-    fn process_input_inner(&self) -> bool {
-        let mut inner = self.inner.lock();
-
-        if inner.terminal_class.is_some() {
-            return true;
-        }
-
-        let released_semantic_select = inner.release_semantic_select;
-        if released_semantic_select {
-            crate::automation::input_ffi::inject_menu_key(
-                i32::from(crate::automation::script::MenuKey::Select.index()),
-                0,
-            );
-            inner.release_semantic_select = false;
-        }
-        let orbit_transition_pending = inner.orbit_transition_pending;
-        inner.orbit_transition_pending = false;
-
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.started_at);
-
-        // Step 1: Watchdog check.
-        let entry = WatchdogEntry {
-            kind: CallbackKind::Input,
-            input_seen: inner.input_seen,
-            present_seen: inner.present_seen,
-            elapsed,
-            clock: ClockSample {
-                started_at: self.started_at,
-                last_observed: inner.last_observed,
-                now,
-            },
-        };
-
-        let wd_result = watchdog_reduce(&entry, &self.watchdog_limits);
-        inner.last_observed = now;
-
-        // Update counters from watchdog result (post-increment values).
-        inner.input_seen = wd_result.candidate_input_seen;
-        inner.present_seen = wd_result.candidate_present_seen;
-
-        match wd_result.outcome {
-            WatchdogOutcome::Admit => {}
-            WatchdogOutcome::InputCounterOverflow
-            | WatchdogOutcome::PresentationCounterOverflow => {
-                self.set_terminal(&mut inner, TerminalClass::CounterOverflow);
-                return true;
-            }
-            WatchdogOutcome::InputTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::InputTimeout);
-                return true;
-            }
-            WatchdogOutcome::PresentationTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::PresentationTimeout);
-                return true;
-            }
-            WatchdogOutcome::WallTimeout => {
-                self.set_terminal(&mut inner, TerminalClass::WallTimeout);
-                return true;
-            }
-            WatchdogOutcome::ClockRegression => {
-                self.set_terminal(&mut inner, TerminalClass::ClockRegression);
-                return true;
-            }
-        }
-
-        if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
-        {
-            return true;
-        }
-
-        // Step 2: Feed to scheduler. Runtime waits are satisfied only by
-        // observed production state, never by injected input.
+    /// Service whichever semantic wait the current step is blocked on.
+    ///
+    /// Each wait observes real production state and only then reports that its
+    /// condition was reached; injected input never satisfies a wait.
+    fn service_semantic_waits(
+        &self,
+        inner: &mut CoordInner,
+        released_semantic_select: bool,
+        orbit_transition_pending: bool,
+    ) -> SchedulerEvent {
         let mut scheduler_event = SchedulerEvent::AdmittedInput;
         if let Some(Action::WaitForCommunicationEnd(wait)) =
             self.actions.get(inner.sched_state.step_index)
@@ -514,7 +451,7 @@ impl Coordinator {
                 inner.consumed_communication_completions = completions;
                 scheduler_event = SchedulerEvent::ConditionReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     format!(
                         "communication_completed:count={completions}:minimum={}",
@@ -531,7 +468,7 @@ impl Coordinator {
             if consume_new_generation(&mut inner.consumed_replay_generation, generation) {
                 scheduler_event = SchedulerEvent::ConditionReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     "communication_replay_active".to_owned(),
                 );
@@ -555,7 +492,7 @@ impl Coordinator {
                     inner.consumed_response_generation = generation;
                     scheduler_event = SchedulerEvent::ConditionReached;
                     self.write_trace_labeled(
-                        &mut inner,
+                        inner,
                         RecordKind::SemanticAssertion,
                         format!(
                             "communication_response_selected:generation={generation}:count={count}:index={}",
@@ -591,7 +528,7 @@ impl Coordinator {
                 inner.consumed_planet_menu_generation = generation;
                 scheduler_event = SchedulerEvent::ConditionReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     format!(
                         "planet_menu_selected:generation={generation}:phase={:?}",
@@ -599,8 +536,8 @@ impl Coordinator {
                     ),
                 );
             }
-        } else if let Some(result) = self.service_planet_side_wait(&mut inner) {
-            scheduler_event = self.record_planet_side_result(&mut inner, result, scheduler_event);
+        } else if let Some(result) = self.service_planet_side_wait(inner) {
+            scheduler_event = self.record_planet_side_result(inner, result, scheduler_event);
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -612,7 +549,7 @@ impl Coordinator {
                 inner.consumed_dispatch_generation = generation;
                 scheduler_event = SchedulerEvent::ConditionReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     format!(
                         "dispatch_observed:generation={generation}:encounter={}:dialogue={}",
@@ -621,9 +558,16 @@ impl Coordinator {
                 );
             }
         }
+        scheduler_event
+    }
 
-        // Navigation actions derive real player controls from the live
-        // solar-system state before UpdateInputState.
+    /// Derive real player controls for whichever navigation the current step
+    /// is running, and report arrival.
+    fn service_navigation(
+        &self,
+        inner: &mut CoordInner,
+        mut scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
         if let Some(Action::NavigateToPlanet(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -655,7 +599,7 @@ impl Coordinator {
                 );
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     format!("navigation_reached:planet={}", navigation.planet),
                 );
@@ -696,7 +640,7 @@ impl Coordinator {
                 inner.orbit_transition_pending = true;
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     format!("orbit_reached:planet={}", navigation.planet),
                 );
@@ -743,7 +687,7 @@ impl Coordinator {
             if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
                 if remaining % 250 == 0 {
                     self.write_trace_labeled(
-                        &mut inner,
+                        inner,
                         RecordKind::SemanticAssertion,
                         format!(
                             "moon_navigation_state:remaining={remaining}:active={}:in_ip_flight={}:in_orbit={}:wait_intersect={}:inner={}:moon={}:ship={},{}:target={},{}:orbital_data={}:target_data={}",
@@ -769,7 +713,7 @@ impl Coordinator {
                 );
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
-                    &mut inner,
+                    inner,
                     RecordKind::SemanticAssertion,
                     format!(
                         "navigation_reached:planet={}:moon={}:orbital_data={}:target_data={}",
@@ -783,23 +727,11 @@ impl Coordinator {
                 Self::set_navigation_controls(control);
             }
         }
+        scheduler_event
+    }
 
-        let config = SchedulerConfig {
-            actions: &self.actions,
-            transitions: &self.transitions,
-        };
-        let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
-        inner.sched_state = transition.new_state;
-
-        // Step 3: Apply effects.
-        self.apply_effects(&mut inner, &transition.effects, None);
-
-        // Step 4: Write trace.
-        self.write_trace(&mut inner, RecordKind::InputTick);
-
-        // Step 4b: If the scheduler just entered WaitingSemantic, replay
-        // any pending menu transitions that arrived before the scheduler
-        // was ready.
+    /// Replay menu transitions that arrived before the scheduler was ready.
+    fn replay_pending_transitions(&self, inner: &mut CoordInner) {
         if inner.sched_state.phase == crate::automation::scheduler::ActionPhase::WaitingSemantic
             && !inner.pending_transitions.is_empty()
         {
@@ -822,12 +754,91 @@ impl Coordinator {
                 } else {
                     format!("menu_transition_passed:to={to}")
                 };
-                self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
+                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
                 if inner.sched_state.is_terminal() {
                     break;
                 }
             }
         }
+    }
+
+    fn process_input_inner(&self) -> bool {
+        let mut inner = self.inner.lock();
+
+        if inner.terminal_class.is_some() {
+            return true;
+        }
+
+        let released_semantic_select = inner.release_semantic_select;
+        if released_semantic_select {
+            crate::automation::input_ffi::inject_menu_key(
+                i32::from(crate::automation::script::MenuKey::Select.index()),
+                0,
+            );
+            inner.release_semantic_select = false;
+        }
+        let orbit_transition_pending = inner.orbit_transition_pending;
+        inner.orbit_transition_pending = false;
+
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.started_at);
+
+        // Step 1: Watchdog check.
+        let entry = WatchdogEntry {
+            kind: CallbackKind::Input,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed,
+            clock: ClockSample {
+                started_at: self.started_at,
+                last_observed: inner.last_observed,
+                now,
+            },
+        };
+
+        let wd_result = watchdog_reduce(&entry, &self.watchdog_limits);
+        inner.last_observed = now;
+
+        // Update counters from watchdog result (post-increment values).
+        inner.input_seen = wd_result.candidate_input_seen;
+        inner.present_seen = wd_result.candidate_present_seen;
+
+        if let Some(class) = watchdog_terminal_class(wd_result.outcome) {
+            self.set_terminal(&mut inner, class);
+            return true;
+        }
+
+        if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
+        {
+            return true;
+        }
+
+        // Step 2: Feed to scheduler. Runtime waits are satisfied only by
+        // observed production state, never by injected input.
+        let mut scheduler_event = self.service_semantic_waits(
+            &mut inner,
+            released_semantic_select,
+            orbit_transition_pending,
+        );
+
+        scheduler_event = self.service_navigation(&mut inner, scheduler_event);
+
+        let config = SchedulerConfig {
+            actions: &self.actions,
+            transitions: &self.transitions,
+        };
+        let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
+        inner.sched_state = transition.new_state;
+
+        // Step 3: Apply effects.
+        self.apply_effects(&mut inner, &transition.effects, None);
+
+        // Step 4: Write trace.
+        self.write_trace(&mut inner, RecordKind::InputTick);
+
+        // Step 4b: Replay menu transitions that arrived before the scheduler
+        // was ready for them.
+        self.replay_pending_transitions(&mut inner);
 
         // Step 5: Check terminal.
         if inner.sched_state.is_terminal() {
@@ -1636,6 +1647,22 @@ fn consume_new_generation(consumed: &mut u64, observed: u64) -> bool {
 }
 
 /// Map a scheduler TerminalOutcome to a TerminalClass for the runtime mirror.
+/// Map a watchdog outcome to the terminal class it ends the run with.
+///
+/// `None` means the callback is admitted and the run continues.
+fn watchdog_terminal_class(outcome: WatchdogOutcome) -> Option<TerminalClass> {
+    match outcome {
+        WatchdogOutcome::Admit => None,
+        WatchdogOutcome::InputCounterOverflow | WatchdogOutcome::PresentationCounterOverflow => {
+            Some(TerminalClass::CounterOverflow)
+        }
+        WatchdogOutcome::InputTimeout => Some(TerminalClass::InputTimeout),
+        WatchdogOutcome::PresentationTimeout => Some(TerminalClass::PresentationTimeout),
+        WatchdogOutcome::WallTimeout => Some(TerminalClass::WallTimeout),
+        WatchdogOutcome::ClockRegression => Some(TerminalClass::ClockRegression),
+    }
+}
+
 fn map_scheduler_terminal(terminal: Option<TerminalOutcome>) -> TerminalClass {
     match terminal {
         Some(TerminalOutcome::FinishComplete) => TerminalClass::Success,
@@ -1899,5 +1926,35 @@ mod tests {
             (true, false)
         );
         assert_eq!(orbit_exit_menu_keys(0), (true, false));
+    }
+
+    #[test]
+    fn every_watchdog_outcome_maps_to_its_terminal_class() {
+        use super::watchdog_terminal_class;
+        assert_eq!(watchdog_terminal_class(WatchdogOutcome::Admit), None);
+        assert_eq!(
+            watchdog_terminal_class(WatchdogOutcome::InputCounterOverflow),
+            Some(TerminalClass::CounterOverflow)
+        );
+        assert_eq!(
+            watchdog_terminal_class(WatchdogOutcome::PresentationCounterOverflow),
+            Some(TerminalClass::CounterOverflow)
+        );
+        assert_eq!(
+            watchdog_terminal_class(WatchdogOutcome::InputTimeout),
+            Some(TerminalClass::InputTimeout)
+        );
+        assert_eq!(
+            watchdog_terminal_class(WatchdogOutcome::PresentationTimeout),
+            Some(TerminalClass::PresentationTimeout)
+        );
+        assert_eq!(
+            watchdog_terminal_class(WatchdogOutcome::WallTimeout),
+            Some(TerminalClass::WallTimeout)
+        );
+        assert_eq!(
+            watchdog_terminal_class(WatchdogOutcome::ClockRegression),
+            Some(TerminalClass::ClockRegression)
+        );
     }
 }

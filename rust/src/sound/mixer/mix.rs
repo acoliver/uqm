@@ -5,6 +5,7 @@
 //! This module provides the core mixing functionality that combines multiple
 //! audio sources into a single output stream.
 
+use crate::sound::mixer::buffer::MixerBuffer;
 use crate::sound::mixer::resample::{
     put_sample_int, resample_cubic, resample_linear, resample_nearest,
 };
@@ -270,42 +271,83 @@ fn get_next_sample(
 ///
 /// This is the main mixing function called by the audio callback.
 pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
+    let Some((chansize, channels, mixer_freq)) = mixer_output_format() else {
+        // Not initialized - output silence
+        for byte in stream.iter_mut() {
+            *byte = 0;
+        }
+        return Ok(());
+    };
+
+    // Get all sources ONCE at the start (like C code does with its mutex)
+    let sources = crate::sound::mixer::source::get_all_sources();
+    log_mix_diagnostics(&sources);
+
+    // mixer_sampsize is the size of one complete sample (all channels)
+    let mixer_sampsize = chansize * channels;
+
+    let mut stream_idx = 0;
+    let mut left = true;
+
+    while stream_idx < stream.len() {
+        let fullsamp = accumulate_playing_sources(
+            &sources,
+            left,
+            chansize,
+            mixer_sampsize,
+            channels,
+            mixer_freq,
+        );
+
+        put_sample_int(
+            stream,
+            stream_idx,
+            chansize,
+            clip_sample(fullsamp, chansize),
+        );
+        stream_idx += chansize as usize;
+
+        // Update left/right flag for stereo
+        if channels == 2 {
+            left = !left;
+        }
+    }
+
+    Ok(())
+}
+
+/// Report the output format, or `None` when the mixer is not initialized.
+///
+/// The frequency is returned with it so the mixing loop does not have to
+/// re-lock MIXER_STATE once per source per sample.
+fn mixer_output_format() -> Option<(u32, u32, u32)> {
     let state = MIXER_STATE.lock();
 
-    if state.is_none() {
-        // Not initialized - output silence
+    let Some(ref s) = *state else {
         static NONE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = NONE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if n < 3 || n.is_multiple_of(10000) {
             eprintln!("[MIXER_MIX] state=None (not initialized!), call #{}", n);
         }
-        for byte in stream.iter_mut() {
-            *byte = 0;
-        }
-        return Ok(());
-    }
-    let chansize = state.as_ref().unwrap().chansize;
-    let channels = state.as_ref().unwrap().channels;
+        return None;
+    };
 
-    {
-        static SOME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = SOME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if n < 3 {
-            eprintln!(
-                "[MIXER_MIX] state=Some, freq={}, chansize={}, channels={}",
-                state.as_ref().unwrap().freq,
-                chansize,
-                channels
-            );
-        }
+    let (chansize, channels, freq) = (s.chansize, s.channels, s.freq);
+
+    static SOME_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SOME_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if n < 3 {
+        eprintln!(
+            "[MIXER_MIX] state=Some, freq={}, chansize={}, channels={}",
+            freq, chansize, channels
+        );
     }
 
-    drop(state);
+    Some((chansize, channels, freq))
+}
 
-    // Get all sources ONCE at the start (like C code does with its mutex)
-    let sources = crate::sound::mixer::source::get_all_sources();
-
-    // One-time diagnostic: what sources are in the pool and their states?
+/// Occasional snapshot of the source pool, for diagnosing silence.
+fn log_mix_diagnostics(sources: &[(usize, Arc<Mutex<MixerSource>>)]) {
     static MIX_DIAG_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let mix_n = MIX_DIAG_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     if mix_n < 3 || mix_n.is_multiple_of(10000) {
@@ -323,188 +365,211 @@ pub fn mixer_mix_channels(stream: &mut [u8]) -> Result<(), MixerError> {
             states
         ));
     }
+}
 
-    // mixer_sampsize is the size of one complete sample (all channels)
-    let mixer_sampsize = chansize * channels;
+/// Sum one output sample from every playing source.
+fn accumulate_playing_sources(
+    sources: &[(usize, Arc<Mutex<MixerSource>>)],
+    left: bool,
+    chansize: u32,
+    mixer_sampsize: u32,
+    channels: u32,
+    mixer_freq: u32,
+) -> f32 {
+    let mut fullsamp: f32 = 0.0;
 
-    let mut stream_idx = 0;
-    let mut left = true;
+    for (_handle, source) in sources {
+        // The C mixer holds its src/buf/active locks for the whole callback.
+        // Skipping a source because we failed to lock it causes periodic dropouts
+        // (heard as crackle), which are much more obvious on bass.
+        let mut src_guard = source.lock();
 
-    while stream_idx < stream.len() {
-        let mut fullsamp: f32 = 0.0;
-
-        // Mix all playing sources
-        for (_handle, source) in &sources {
-            // The C mixer holds its src/buf/active locks for the whole callback.
-            // Skipping a source because we failed to lock it causes periodic dropouts
-            // (heard as crackle), which are much more obvious on bass.
-            let mut src_guard = source.lock();
-
-            if src_guard.state != (SourceState::Playing as u32) {
-                continue;
-            }
-
-            // Get next buffer handle
-            let buf_handle = match src_guard.next_queued {
-                Some(h) => h,
-                None => {
-                    // No buffer queued - stop playback
-                    src_guard.state = SourceState::Stopped as u32;
-                    continue;
-                }
-            };
-
-            // Get buffer
-            let buffer = match crate::sound::mixer::buffer::mixer_get_buffer(buf_handle) {
-                Some(b) => b,
-                None => continue,
-            };
-
-            let mut buf_guard = buffer.lock();
-
-            if buf_guard.data.is_none() || buf_guard.size == 0 {
-                continue;
-            }
-
-            let buf_org_channels = buf_guard.org_channels;
-            let buf_org_freq = buf_guard.org_freq;
-            let buf_size = buf_guard.size;
-            let buf_sampsize = buf_guard.sampsize;
-            let buf_high = buf_guard.high;
-            let buf_low = buf_guard.low;
-            let mixer_freq = crate::sound::mixer::mix::mixer_get_frequency();
-
-            // Debug: log first time we see music buffer (44100 Hz stereo)
-            static LOGGED_MUSIC: std::sync::atomic::AtomicBool =
-                std::sync::atomic::AtomicBool::new(false);
-            if buf_org_freq == 44100
-                && buf_org_channels == 2
-                && !LOGGED_MUSIC.load(std::sync::atomic::Ordering::Relaxed)
-            {
-                LOGGED_MUSIC.store(true, std::sync::atomic::Ordering::Relaxed);
-                if let Some(ref data) = buf_guard.data {
-                    crate::bridge_log::rust_bridge_log_msg(&format!(
-                        "MUSIC_BUF_DEBUG: org_freq={} org_chans={} chansize={} sampsize={} size={} data.len={} high={} low={} mixer_freq={} mixer_chans={}",
-                        buf_org_freq, buf_org_channels, chansize, buf_sampsize, buf_size, data.len(), buf_high, buf_low, mixer_freq, channels
-                    ));
-                }
-            }
-
-            // Handle mono source on right channel - just use cached sample
-            let sample = if !left && buf_org_channels == 1 {
-                src_guard.sample_cache
-            } else if let Some(ref data) = buf_guard.data {
-                // Capture pos BEFORE any modifications
-                let pos_before = src_guard.pos as usize;
-
-                // Determine resampling mode
-                let same_freq = mixer_freq == buf_org_freq;
-
-                if same_freq {
-                    // ResampleNone (C):
-                    //   d0 = data + pos;
-                    //   pos += mixer_chansize;
-                    //   (void)left;
-                    //   return sample(d0);
-                    //
-                    // This intentionally ignores `left` and simply walks forward by one
-                    // channel each call. The outer mixer alternates left/right, so for
-                    // interleaved stereo [L][R][L][R] this naturally yields L0, R0, L1, R1...
-                    let read_offset = pos_before;
-
-                    let s = if read_offset + 1 < data.len() && read_offset + 1 < buf_size as usize {
-                        i16::from_le_bytes([data[read_offset], data[read_offset + 1]])
-                    } else {
-                        0
-                    };
-
-                    src_guard.pos += chansize;
-
-                    s as f32 * src_guard.gain
-                } else {
-                    // ResampleNearest: d0 = data + pos; d0 += SourceAdvance(left); return sample(d0)
-                    let return_offset = if buf_org_channels == 2 && channels == 2 {
-                        if left {
-                            0usize
-                        } else {
-                            src_guard.pos += buf_high;
-                            src_guard.count += buf_low;
-                            if src_guard.count > 0xFFFF {
-                                src_guard.count -= 0xFFFF;
-                                src_guard.pos += buf_sampsize;
-                            }
-                            chansize as usize
-                        }
-                    } else {
-                        src_guard.pos += buf_high;
-                        src_guard.count += buf_low;
-                        if src_guard.count > 0xFFFF {
-                            src_guard.count -= 0xFFFF;
-                            src_guard.pos += buf_sampsize;
-                        }
-                        0usize
-                    };
-
-                    let read_offset = pos_before + return_offset;
-
-                    let s = if read_offset + 1 < data.len() && read_offset < buf_size as usize {
-                        i16::from_le_bytes([data[read_offset], data[read_offset + 1]])
-                    } else {
-                        0
-                    };
-
-                    s as f32 * src_guard.gain
-                }
-            } else {
-                0.0
-            };
-
-            // Cache sample for mono->stereo duplication
-            if left || buf_org_channels != 1 {
-                src_guard.sample_cache = sample;
-            }
-
-            fullsamp += sample;
-
-            // Update buffer state / exhaustion logic (matches mixer.c 1047-1060)
-            if src_guard.pos < buf_size || (left && buf_sampsize != mixer_sampsize) {
-                buf_guard.state = BufferState::Playing as u32;
-            } else {
-                // buffer exhausted, go next
-                static EXHAUST_COUNT: std::sync::atomic::AtomicU64 =
-                    std::sync::atomic::AtomicU64::new(0);
-                let ec = EXHAUST_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                if ec < 20 {
-                    eprintln!("[MIXER_EXHAUST#{}] handle={} pos={} buf_size={} left={} buf_sampsize={} mixer_sampsize={} buf_org_chans={} processed_count={}", ec, _handle, src_guard.pos, buf_size, left, buf_sampsize, mixer_sampsize, buf_org_channels, src_guard.processed_count);
-                }
-                buf_guard.state = BufferState::Processed as u32;
-                src_guard.pos = 0;
-                src_guard.prev_queued = src_guard.next_queued;
-                src_guard.next_queued = buf_guard.next;
-                src_guard.processed_count += 1;
-            }
+        if src_guard.state != (SourceState::Playing as u32) {
+            continue;
         }
 
-        // Clip the sample
-        let clipped = if chansize == 2 {
-            // 16-bit clipping
-            fullsamp.clamp(SINT16_MIN, SINT16_MAX)
-        } else {
-            // 8-bit clipping
-            fullsamp.clamp(SINT8_MIN, SINT8_MAX)
+        // Get next buffer handle
+        let Some(buf_handle) = src_guard.next_queued else {
+            // No buffer queued - stop playback
+            src_guard.state = SourceState::Stopped as u32;
+            continue;
         };
 
-        // Write to output stream
-        put_sample_int(stream, stream_idx, chansize, clipped as i32);
-        stream_idx += chansize as usize;
+        let Some(buffer) = crate::sound::mixer::buffer::mixer_get_buffer(buf_handle) else {
+            continue;
+        };
 
-        // Update left/right flag for stereo
-        if channels == 2 {
-            left = !left;
+        let mut buf_guard = buffer.lock();
+
+        if buf_guard.data.is_none() || buf_guard.size == 0 {
+            continue;
         }
+
+        let sample = next_source_sample(
+            &mut src_guard,
+            &buf_guard,
+            left,
+            chansize,
+            channels,
+            mixer_freq,
+        );
+
+        // Cache sample for mono->stereo duplication
+        if left || buf_guard.org_channels != 1 {
+            src_guard.sample_cache = sample;
+        }
+
+        fullsamp += sample;
+
+        retire_buffer_if_exhausted(
+            *_handle,
+            &mut src_guard,
+            &mut buf_guard,
+            left,
+            mixer_sampsize,
+        );
     }
 
-    Ok(())
+    fullsamp
+}
+
+/// Read the next sample for one source, advancing its position.
+fn next_source_sample(
+    src_guard: &mut MixerSource,
+    buf_guard: &MixerBuffer,
+    left: bool,
+    chansize: u32,
+    channels: u32,
+    mixer_freq: u32,
+) -> f32 {
+    let buf_org_channels = buf_guard.org_channels;
+
+    // Handle mono source on right channel - just use cached sample
+    if !left && buf_org_channels == 1 {
+        return src_guard.sample_cache;
+    }
+
+    let Some(ref data) = buf_guard.data else {
+        return 0.0;
+    };
+
+    let buf_org_freq = buf_guard.org_freq;
+    let buf_size = buf_guard.size;
+    let buf_sampsize = buf_guard.sampsize;
+    let buf_high = buf_guard.high;
+    let buf_low = buf_guard.low;
+
+    log_music_buffer_once(buf_guard, chansize, channels, mixer_freq);
+
+    // Capture pos BEFORE any modifications
+    let pos_before = src_guard.pos as usize;
+
+    if mixer_freq == buf_org_freq {
+        // ResampleNone (C):
+        //   d0 = data + pos;
+        //   pos += mixer_chansize;
+        //   (void)left;
+        //   return sample(d0);
+        //
+        // This intentionally ignores `left` and simply walks forward by one
+        // channel each call. The outer mixer alternates left/right, so for
+        // interleaved stereo [L][R][L][R] this naturally yields L0, R0, L1, R1...
+        let s = if pos_before + 1 < data.len() && pos_before + 1 < buf_size as usize {
+            i16::from_le_bytes([data[pos_before], data[pos_before + 1]])
+        } else {
+            0
+        };
+
+        src_guard.pos += chansize;
+
+        return s as f32 * src_guard.gain;
+    }
+
+    // ResampleNearest: d0 = data + pos; d0 += SourceAdvance(left); return sample(d0)
+    let return_offset = if buf_org_channels == 2 && channels == 2 && left {
+        0usize
+    } else {
+        let extra = if buf_org_channels == 2 && channels == 2 {
+            chansize as usize
+        } else {
+            0usize
+        };
+        src_guard.pos += buf_high;
+        src_guard.count += buf_low;
+        if src_guard.count > 0xFFFF {
+            src_guard.count -= 0xFFFF;
+            src_guard.pos += buf_sampsize;
+        }
+        extra
+    };
+
+    let read_offset = pos_before + return_offset;
+
+    let s = if read_offset + 1 < data.len() && read_offset < buf_size as usize {
+        i16::from_le_bytes([data[read_offset], data[read_offset + 1]])
+    } else {
+        0
+    };
+
+    s as f32 * src_guard.gain
+}
+
+/// One-time note when the first 44.1kHz stereo music buffer is seen.
+fn log_music_buffer_once(buf_guard: &MixerBuffer, chansize: u32, channels: u32, mixer_freq: u32) {
+    static LOGGED_MUSIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if buf_guard.org_freq == 44100
+        && buf_guard.org_channels == 2
+        && !LOGGED_MUSIC.load(std::sync::atomic::Ordering::Relaxed)
+    {
+        LOGGED_MUSIC.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(ref data) = buf_guard.data {
+            crate::bridge_log::rust_bridge_log_msg(&format!(
+                "MUSIC_BUF_DEBUG: org_freq={} org_chans={} chansize={} sampsize={} size={} data.len={} high={} low={} mixer_freq={} mixer_chans={}",
+                buf_guard.org_freq, buf_guard.org_channels, chansize, buf_guard.sampsize,
+                buf_guard.size, data.len(), buf_guard.high, buf_guard.low, mixer_freq, channels
+            ));
+        }
+    }
+}
+
+/// Advance to the next queued buffer once this one is spent.
+///
+/// Matches the exhaustion logic at mixer.c 1047-1060.
+fn retire_buffer_if_exhausted(
+    handle: usize,
+    src_guard: &mut MixerSource,
+    buf_guard: &mut MixerBuffer,
+    left: bool,
+    mixer_sampsize: u32,
+) {
+    let buf_size = buf_guard.size;
+    let buf_sampsize = buf_guard.sampsize;
+
+    if src_guard.pos < buf_size || (left && buf_sampsize != mixer_sampsize) {
+        buf_guard.state = BufferState::Playing as u32;
+        return;
+    }
+
+    static EXHAUST_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let ec = EXHAUST_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    if ec < 20 {
+        eprintln!("[MIXER_EXHAUST#{}] handle={} pos={} buf_size={} left={} buf_sampsize={} mixer_sampsize={} buf_org_chans={} processed_count={}", ec, handle, src_guard.pos, buf_size, left, buf_sampsize, mixer_sampsize, buf_guard.org_channels, src_guard.processed_count);
+    }
+    buf_guard.state = BufferState::Processed as u32;
+    src_guard.pos = 0;
+    src_guard.prev_queued = src_guard.next_queued;
+    src_guard.next_queued = buf_guard.next;
+    src_guard.processed_count += 1;
+}
+
+/// Clip an accumulated sample to the output word size.
+fn clip_sample(fullsamp: f32, chansize: u32) -> i32 {
+    let clipped = if chansize == 2 {
+        fullsamp.clamp(SINT16_MIN, SINT16_MAX)
+    } else {
+        fullsamp.clamp(SINT8_MIN, SINT8_MAX)
+    };
+    clipped as i32
 }
 
 /// Fake mixing - only process buffer and source states without actual mixing
