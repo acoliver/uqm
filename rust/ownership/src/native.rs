@@ -827,3 +827,63 @@ mod external_native_allowlist_tests {
         assert!(!ban.trim().is_empty());
     }
 }
+
+#[cfg(test)]
+mod configuration_authority_tests {
+    use std::collections::BTreeSet;
+
+    const NATIVE_INPUTS: &str = include_str!("../../build/native-inputs.json");
+    const CONFIG_HEADER: &str = include_str!("../../../sc2/config_unix.h");
+
+    fn use_rust_flags(text: &str) -> BTreeSet<String> {
+        let mut flags = BTreeSet::new();
+        let bytes = text.as_bytes();
+        let needle = b"USE_RUST_";
+        let mut index = 0;
+        while index + needle.len() <= bytes.len() {
+            if &bytes[index..index + needle.len()] == needle {
+                let start = index;
+                let mut end = index + needle.len();
+                while end < bytes.len() && (bytes[end].is_ascii_uppercase() || bytes[end] == b'_') {
+                    end += 1;
+                }
+                flags.insert(text[start..end].to_owned());
+                index = end;
+            } else {
+                index += 1;
+            }
+        }
+        flags
+    }
+
+    /// The production profile and the C configuration header must agree on
+    /// which transitional paths are active.
+    ///
+    /// Both reach the compiler: the profile as `-D` arguments and the header
+    /// through `#include`. When they disagree the effective set is their union,
+    /// so a flag can be switched on in a place the build authority cannot see,
+    /// and nothing reports it. That is a duplicate authority over which
+    /// implementation actually runs.
+    #[test]
+    fn the_build_authority_and_the_config_header_agree_on_active_paths() {
+        let document: serde_json::Value =
+            serde_json::from_str(NATIVE_INPUTS).expect("native inputs parse");
+        let profile = document
+            .get("production_profile")
+            .and_then(|profile| profile.get("defines"))
+            .expect("production profile defines");
+
+        let authority = use_rust_flags(&profile.to_string());
+        let header = use_rust_flags(CONFIG_HEADER);
+
+        let only_authority: Vec<_> = authority.difference(&header).cloned().collect();
+        let only_header: Vec<_> = header.difference(&authority).cloned().collect();
+
+        assert!(
+            only_authority.is_empty() && only_header.is_empty(),
+            "the build authority and sc2/config_unix.h disagree about which \
+             transitional paths are active.\n  only in the build authority: {only_authority:?}\
+             \n  only in the config header: {only_header:?}"
+        );
+    }
+}

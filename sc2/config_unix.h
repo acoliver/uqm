@@ -125,4 +125,7 @@
 /* Defined if using Rust SuperMelee team/setup logic */
 #define USE_RUST_SUPERMELEE
 #define USE_RUST_RESTART
+#define USE_RUST_MAINLOOP
+#define USE_RUST_OGG
+#define USE_RUST_SHIPS
 

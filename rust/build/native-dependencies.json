@@ -4,7 +4,7 @@
   "dependencies": [
     {
       "path": "sc2/config_unix.h",
-      "sha256": "1dc53206103a8eab15df02b90c746a4037b65f2a1fc54656f9622131da5e29d5",
+      "sha256": "733f627914b7973f61a51c2a904e325f9222630df38f68806bb6f06c612ca082",
       "targets": [
         "linux-aarch64",
         "linux-x86_64",
