@@ -753,10 +753,52 @@ mod external_native_allowlist_tests {
         }
     }
 
-    /// The packages the build discovers through pkg-config additionally need a
-    /// target list, since the build selects per target from it.
+    /// Every entry needs targets the build can actually match. An empty list,
+    /// or an empty or non-string target, would silently drop the library from
+    /// the link line instead of failing.
     #[test]
-    fn pkg_config_packages_declare_their_targets() {
+    fn every_entry_declares_targets_the_build_can_match() {
+        let document = document();
+        let known = [
+            "macos-aarch64",
+            "macos-x86_64",
+            "linux-aarch64",
+            "linux-x86_64",
+        ];
+
+        for group in ["packages", "direct_libraries", "frameworks"] {
+            let entries = document
+                .get(group)
+                .and_then(Value::as_array)
+                .unwrap_or_else(|| panic!("allowlist group {group} is missing"));
+
+            for entry in entries {
+                let id = entry.get("id").and_then(Value::as_str).expect("id");
+                let targets = entry
+                    .get("targets")
+                    .and_then(Value::as_array)
+                    .unwrap_or_else(|| panic!("{group} entry {id} does not declare targets"));
+                assert!(
+                    !targets.is_empty(),
+                    "{group} entry {id} declares no targets"
+                );
+
+                for target in targets {
+                    let target = target.as_str().unwrap_or_else(|| {
+                        panic!("{group} entry {id} has a target that is not a string")
+                    });
+                    assert!(
+                        known.contains(&target),
+                        "{group} entry {id} names an unknown target {target}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// pkg-config packages are discovered by name, so that name has to be there.
+    #[test]
+    fn pkg_config_packages_name_their_package() {
         let document = document();
         let packages = document
             .get("packages")
@@ -765,15 +807,11 @@ mod external_native_allowlist_tests {
 
         for package in packages {
             let id = package.get("id").and_then(Value::as_str).expect("id");
+            let name = package.get("pkg_config").and_then(Value::as_str);
             assert!(
-                package.get("pkg_config").and_then(Value::as_str).is_some(),
+                name.is_some_and(|text| !text.trim().is_empty()),
                 "package {id} does not declare a pkg_config name"
             );
-            let targets = package
-                .get("targets")
-                .and_then(Value::as_array)
-                .unwrap_or_else(|| panic!("package {id} does not declare targets"));
-            assert!(!targets.is_empty(), "package {id} declares no targets");
         }
     }
 
