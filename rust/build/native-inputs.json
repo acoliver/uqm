@@ -3059,28 +3059,12 @@
     ],
     "defines": [
       {
+        "name": "DEBUG",
+        "value": null
+      },
+      {
         "name": "GFXMODULE_SDL",
         "value": null
-      },
-      {
-        "name": "SDL_DIR",
-        "value": "SDL2"
-      },
-      {
-        "name": "_THREAD_SAFE",
-        "value": null
-      },
-      {
-        "name": "USE_INTERNAL_MIKMOD",
-        "value": null
-      },
-      {
-        "name": "OVCODEC_NONE",
-        "value": null
-      },
-      {
-        "name": "NETPLAY",
-        "value": "NETPLAY_FULL"
       },
       {
         "name": "HAVE_JOYSTICK",
@@ -3091,31 +3075,35 @@
         "value": "1"
       },
       {
-        "name": "USE_PLATFORM_ACCEL",
+        "name": "NETPLAY",
+        "value": "NETPLAY_FULL"
+      },
+      {
+        "name": "OVCODEC_NONE",
         "value": null
+      },
+      {
+        "name": "RUST_OWNS_MAIN",
+        "value": null
+      },
+      {
+        "name": "SDL_DIR",
+        "value": "SDL2"
       },
       {
         "name": "THREADLIB_SDL",
         "value": null
       },
       {
-        "name": "USE_RUST_BRIDGE",
+        "name": "USE_INTERNAL_MIKMOD",
         "value": null
       },
       {
-        "name": "USE_RUST_FILE",
+        "name": "USE_PLATFORM_ACCEL",
         "value": null
       },
       {
-        "name": "USE_RUST_CLOCK",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_UIO",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_OGG",
+        "name": "USE_RUST_AIFF",
         "value": null
       },
       {
@@ -3123,11 +3111,83 @@
         "value": null
       },
       {
+        "name": "USE_RUST_AUDIO_HEART",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_BRIDGE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_CLOCK",
+        "value": null
+      },
+      {
         "name": "USE_RUST_COMM",
         "value": null
       },
       {
+        "name": "USE_RUST_DUKAUD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_FILE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_GFX",
+        "value": null
+      },
+      {
         "name": "USE_RUST_INPUT",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MAINLOOP",
+        "value": "1"
+      },
+      {
+        "name": "USE_RUST_MEM",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MIXER",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_MOD",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_OGG",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_RESOURCE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_RESTART",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SHIPS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_STATE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_SUPERMELEE",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_THREADS",
+        "value": null
+      },
+      {
+        "name": "USE_RUST_UIO",
         "value": null
       },
       {
@@ -3139,67 +3199,11 @@
         "value": null
       },
       {
-        "name": "USE_RUST_GFX",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_RESOURCE",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_MOD",
-        "value": null
-      },
-      {
         "name": "USE_RUST_WAV",
         "value": null
       },
       {
-        "name": "USE_RUST_DUKAUD",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_AIFF",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_THREADS",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_MIXER",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_MEM",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_STATE",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_SHIPS",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_SUPERMELEE",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_AUDIO_HEART",
-        "value": null
-      },
-      {
-        "name": "RUST_OWNS_MAIN",
-        "value": null
-      },
-      {
-        "name": "USE_RUST_MAINLOOP",
-        "value": "1"
-      },
-      {
-        "name": "DEBUG",
+        "name": "_THREAD_SAFE",
         "value": null
       }
     ],
