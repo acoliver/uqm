@@ -512,8 +512,13 @@ mod tests {
     fn seed_domains_are_strict_and_repeated_applications_remain_distinct() {
         assert_eq!(SeedDomain::from_ffi(1), Some(SeedDomain::SuperMeleeMenu));
         assert_eq!(SeedDomain::from_ffi(2), Some(SeedDomain::SuperMeleeBattle));
+        assert_eq!(SeedDomain::from_ffi(3), Some(SeedDomain::NewGame));
+        // Still strict: an id nobody has defined is not silently accepted,
+        // because a mistyped domain would otherwise seed nothing and leave the
+        // run reproducible only by luck.
         assert_eq!(SeedDomain::from_ffi(0), None);
-        assert_eq!(SeedDomain::from_ffi(3), None);
+        assert_eq!(SeedDomain::from_ffi(4), None);
+        assert_eq!(SeedDomain::from_ffi(u32::MAX), None);
 
         let first = SeedApplication {
             domain: SeedDomain::SuperMeleeBattle,
