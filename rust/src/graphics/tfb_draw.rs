@@ -253,7 +253,7 @@ fn paletted_to_rgba(canvas: &Canvas) -> Result<Canvas, CanvasError> {
     let transparent = canvas.transparent_index();
     let src_pixels = canvas.pixels();
     rgba.with_pixels_mut(|dst_pixels| {
-        for (index, chunk) in dst_pixels.chunks_exact_mut(4).enumerate() {
+        for (index, chunk) in dst_pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let idx = src_pixels.get(index).copied().unwrap_or(0) as usize;
             let mut color = palette[idx];
             if Some(idx as u8) == transparent {
@@ -276,7 +276,7 @@ fn rgba_to_paletted(canvas: &Canvas, palette: [Color; 256]) -> Result<Canvas, Ca
     let mut paletted = Canvas::new_paletted(extent.width, extent.height, palette);
     let src_pixels = canvas.pixels();
     paletted.with_pixels_mut(|dst_pixels| {
-        for (idx, chunk) in src_pixels.chunks_exact(4).enumerate() {
+        for (idx, chunk) in src_pixels.as_chunks::<4>().0.iter().enumerate() {
             let mut best_index = 0usize;
             let mut best_score = i32::MAX;
             for (palette_index, color) in palette.iter().enumerate() {

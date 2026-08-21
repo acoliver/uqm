@@ -175,7 +175,9 @@ impl VideoScaler {
         // Convert bytes back to u32 RGBA
         let dst_bytes = self.dst_image.buffer();
         let dst_pixels: Vec<u32> = dst_bytes
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|chunk| {
                 let r = chunk[0] as u32;
                 let g = chunk[1] as u32;

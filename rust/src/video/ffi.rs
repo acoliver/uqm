@@ -865,7 +865,7 @@ pub unsafe extern "C" fn rust_present_video_to_window(
         let mut upload_buffer: Vec<u8>;
         let upload_slice = if stride as usize == (width as usize * 4) {
             upload_buffer = Vec::with_capacity(frame_len);
-            let pixels = frame_slice.chunks_exact(4);
+            let pixels = frame_slice.as_chunks::<4>().0;
             for px in pixels {
                 let r = px[0];
                 let g = px[1];
@@ -879,7 +879,7 @@ pub unsafe extern "C" fn rust_present_video_to_window(
                 let row_start = row * stride as usize;
                 let row_end = row_start + (width as usize * 4);
                 let row_slice = &frame_slice[row_start..row_end];
-                for px in row_slice.chunks_exact(4) {
+                for px in row_slice.as_chunks::<4>().0 {
                     let r = px[0];
                     let g = px[1];
                     let b = px[2];

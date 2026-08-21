@@ -270,9 +270,7 @@ impl SdlDriver {
     fn cleanup(&mut self) {
         log::info!("Cleaning up SDL2 driver");
 
-        for buffer in &mut self.pixel_buffers {
-            *buffer = None;
-        }
+        self.pixel_buffers.fill(None);
 
         self.canvas = None;
         self.window = None;

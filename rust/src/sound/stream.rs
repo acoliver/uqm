@@ -885,7 +885,7 @@ impl MixerPumpSource {
 
         // Convert raw bytes to i16 samples
         self.buf.clear();
-        for chunk in raw.chunks_exact(2) {
+        for chunk in raw.as_chunks::<2>().0 {
             self.buf.push(i16::from_le_bytes([chunk[0], chunk[1]]));
         }
         self.pos = 0;

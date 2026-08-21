@@ -123,7 +123,7 @@ impl OpenGlDriver {
         let buffer_size = (LOGICAL_WIDTH * LOGICAL_HEIGHT * 4) as usize;
         for surface in &mut self.surfaces {
             let mut buffer = vec![0u8; buffer_size];
-            for pixel in buffer.chunks_exact_mut(4) {
+            for pixel in buffer.as_chunks_mut::<4>().0 {
                 pixel[3] = 255;
             }
             *surface = Some(buffer);
@@ -389,9 +389,7 @@ impl OpenGlDriver {
             self.shader_program = 0;
         }
 
-        for surface in &mut self.surfaces {
-            *surface = None;
-        }
+        self.surfaces.fill(None);
 
         self.gl_context = None;
         self.window = None;

@@ -371,15 +371,17 @@ pub mod dinput {
         }
 
         // Seek input
-        let left;
-        let right;
-        if c_bridge::optSmoothScroll == OPT_PC {
-            left = unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0;
-            right = unsafe { c_bridge::pulsed_menu_key(KEY_MENU_RIGHT) } != 0;
+        let (left, right) = if c_bridge::optSmoothScroll == OPT_PC {
+            (
+                unsafe { c_bridge::pulsed_menu_key(KEY_MENU_LEFT) } != 0,
+                unsafe { c_bridge::pulsed_menu_key(KEY_MENU_RIGHT) } != 0,
+            )
         } else {
-            left = unsafe { c_bridge::current_menu_key(KEY_MENU_LEFT) } != 0;
-            right = unsafe { c_bridge::current_menu_key(KEY_MENU_RIGHT) } != 0;
-        }
+            (
+                unsafe { c_bridge::current_menu_key(KEY_MENU_LEFT) } != 0,
+                unsafe { c_bridge::current_menu_key(KEY_MENU_RIGHT) } != 0,
+            )
+        };
 
         if right {
             super::set_slider_image_frame(3);

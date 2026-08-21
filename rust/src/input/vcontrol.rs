@@ -109,9 +109,7 @@ impl VControl {
 
         // Clear all bindings
         self.keyboard.clear();
-        for joy in &mut self.joysticks {
-            *joy = None;
-        }
+        self.joysticks.fill(None);
 
         self.initialized = false;
     }
