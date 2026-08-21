@@ -326,6 +326,7 @@ mod tests {
 
     #[test]
     fn collision_verdict_counters_reset_and_sample() {
+        let _guard = exclusive();
         let session = dummy();
         begin(&session);
         assert_eq!(observation().mineral_pickups, 0);
