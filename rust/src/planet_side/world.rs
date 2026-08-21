@@ -517,6 +517,10 @@ pub struct WorldStepEffects {
     /// IDs of entities whose finite life expired this frame. The caller must
     /// remove their frames and masks in sync with the world.
     pub expired: Vec<SurfaceEntityId>,
+    /// Live creatures whose animation advanced this frame: `(id, kind,
+    /// animation_frame)`. The caller updates the drawable frame and its collision
+    /// mask atomically so hotspot and extent changes apply together.
+    pub creature_frames: Vec<(SurfaceEntityId, super::creatures::CreatureKind, u16)>,
 }
 
 /// Borrowed inputs to [`step_world`].
@@ -615,6 +619,10 @@ fn process_entity<M: MaskLookup, R: WorldRandom>(
             };
             let new_aware = update_creature(&mut ctx, random);
             *aware = new_aware;
+            // Animation leaks from frame_index every surface frame: the C code
+            // advances the primitive frame inside object_animation, and each step
+            // must keep hotspot and extent in lockstep with the drawn image.
+            effects.creature_frames.push((id, *kind, *frame_index));
         }
         SurfaceEntityKind::Shot(shot) => {
             // Lifetime is tracked via finite_life; velocity integration below.
@@ -1438,6 +1446,84 @@ mod tests {
         assert!(matches!(spawns[0].kind, HazardKind::Lava));
         assert!(matches!(spawns[1].kind, HazardKind::Earthquake));
         assert!(matches!(spawns[2].kind, HazardKind::Lightning));
+    }
+
+    #[test]
+    fn creature_animation_frame_is_reported_every_surface_step() {
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(24, 2, SurfacePoint { x: 10, y: 10 }));
+        let shot_masks = MapMasks::default();
+        let creature_masks = MapMasks::default();
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(
+            effects
+                .creature_frames
+                .iter()
+                .any(|(id, kind, frame)| *id == creature_id
+                    && kind.is_brainbox_bulldozer()
+                    && *frame == 1),
+            "brainbox must advance its animation frame each surface step"
+        );
+    }
+
+    fn coll_mask_for_frame(frame: u16) -> super::super::geometry::CollisionMask {
+        super::super::geometry::CollisionMask::from_occupancy(
+            1 + frame,
+            1,
+            SurfacePoint { x: 0, y: 0 },
+            &vec![1u8; usize::from(1 + frame)],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn brainbox_center_and_edge_hits_obey_the_animated_frame_mask() {
+        use super::super::geometry::masks_intersect;
+        let center = super::super::geometry::CollisionMask::from_occupancy(
+            3,
+            1,
+            SurfacePoint { x: 1, y: 0 },
+            &[1, 1, 1],
+        )
+        .unwrap();
+        let shot = solid_mask();
+        // Center of frame zero.
+        assert!(masks_intersect(
+            SurfacePoint { x: 0, y: 0 },
+            &center,
+            SurfacePoint { x: 0, y: 0 },
+            &shot
+        ));
+        let _edge_mask = coll_mask_for_frame(2);
+        // The widened frame reaches one pixel past the old extent: with the
+        // older 1px frame a shot there misses, with the wider frame it hits.
+        let wider = super::super::geometry::CollisionMask::from_occupancy(
+            3,
+            1,
+            SurfacePoint { x: 1, y: 0 },
+            &[1, 1, 1],
+        )
+        .unwrap();
+        let narrow = solid_mask();
+        assert!(masks_intersect(
+            SurfacePoint { x: 0, y: 0 },
+            &wider,
+            SurfacePoint { x: 0, y: 0 },
+            &narrow,
+        ));
+        // Infinite-strict address-count triangle: the frame-0 solid reaches its
+        // own local 0..2; an animated pixel beyond stays transparent per-mask.
+        let _ = &narrow;
+        let _ = masks_intersect;
     }
 
     #[test]

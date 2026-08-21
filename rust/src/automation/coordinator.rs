@@ -962,6 +962,47 @@ impl Coordinator {
                 }
             }
         }
+        if let Some(Action::AssertPlanetSideCollisions(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let observation = crate::planet_side::telemetry::observation();
+            let actual = (
+                observation.mineral_pickups,
+                observation.creature_hits,
+                observation.seam_hits,
+            );
+            let floors = (
+                assertion.mineral_pickups,
+                assertion.creature_hits,
+                assertion.seam_hits,
+            );
+            if actual.0 >= floors.0 && actual.1 >= floors.1 && actual.2 >= floors.2 {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_collisions_verified:mineral={}:creature_hits={}:seam={}",
+                        actual.0, actual.1, actual.2
+                    ),
+                );
+            } else {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_collisions_failed:mineral={}≥{}:creature_hits={}≥{}:seam={}≥{}",
+                        actual.0,
+                        assertion.mineral_pickups,
+                        actual.1,
+                        assertion.creature_hits,
+                        actual.2,
+                        assertion.seam_hits
+                    ),
+                );
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                return true;
+            }
+        }
 
         false
     }

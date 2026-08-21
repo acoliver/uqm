@@ -3,14 +3,14 @@
 use std::collections::HashMap;
 
 use super::assembly::{
-    insert_surface_entity, remove_surface_entity, transform_creature_to_canned, SharedSurface,
-    SurfaceAssembly, WorldVisualPort,
+    advance_creature_animation_frame, insert_surface_entity, remove_surface_entity,
+    transform_creature_to_canned, SharedSurface, SurfaceAssembly, WorldVisualPort,
 };
 use super::collision::{CollisionOutcome, CollisionRolls, LanderCollision};
 use super::creatures::CreatureCatalog;
 use super::entities::{SurfaceEntity, SurfaceEntityId, SurfaceEntityKind};
 use super::generation::{persist_pickup, ScanPersistence, SurfaceGenerator};
-use super::geometry::{masks_intersect, CollisionMask};
+use super::geometry::{masks_intersect, masks_intersect_wrapped, CollisionMask};
 use super::hazards::{HazardKind, SoundCue};
 use super::model::SurfacePoint;
 use super::runtime::{AdapterError, CollisionContact, PlanetSideCollision, WorldStepResult};
@@ -124,8 +124,18 @@ where
             let Some(entity_mask) = surface.masks.entities.get(&id) else {
                 continue;
             };
-            if !masks_intersect(lander.position, lander_mask, entity.position, entity_mask) {
+            let wrapped = masks_intersect_wrapped(
+                lander.position,
+                lander_mask,
+                entity.position,
+                entity_mask,
+                super::world::WORLD_WIDTH,
+            );
+            if !wrapped {
                 continue;
+            }
+            if !masks_intersect(lander.position, lander_mask, entity.position, entity_mask) {
+                super::telemetry::seam_hit();
             }
             let Some(collision) = classify(&entity.kind) else {
                 continue;
@@ -149,6 +159,18 @@ where
         let Some(entity_id) = contact.entity else {
             return Ok(SpecialPickupEffects::default());
         };
+        if matches!(
+            contact.collision,
+            LanderCollision::Mineral { .. } | LanderCollision::CannedBiological { .. }
+        ) && !matches!(outcome, CollisionOutcome::Cargo { .. })
+        {
+            // Not a pickup (full hold); nothing is collected.
+        } else if matches!(
+            contact.collision,
+            LanderCollision::Mineral { .. } | LanderCollision::CannedBiological { .. }
+        ) {
+            super::telemetry::mineral_pickup();
+        }
         let generated = {
             let surface = self.surface.borrow();
             surface
@@ -251,8 +273,12 @@ where
         result: &WorldStepResult,
         audio: &mut impl super::runtime::PlanetSideAudio,
     ) -> Result<(), AdapterError> {
-        // Play world sounds in source order.
+        // Play world sounds in source order. Every LanderHits cue is a
+        // stun-bolt that connected with a live creature on a presented frame.
         for cue in &result.effects.sounds {
+            if matches!(cue, super::hazards::SoundCue::LanderHits) {
+                super::telemetry::creature_hit();
+            }
             audio.play(*cue)?;
         }
 
@@ -275,6 +301,17 @@ where
                 *entity_id,
                 *value,
                 visual,
+            )?;
+        }
+
+        // Advance every creature's animation frame atomically: frame + mask.
+        for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
+            advance_creature_animation_frame(
+                &mut self.surface.borrow_mut(),
+                *entity_id,
+                *kind,
+                *animation_frame,
+                &mut self.world_visuals,
             )?;
         }
 
@@ -312,9 +349,11 @@ where
 
 fn classify(kind: &SurfaceEntityKind) -> Option<LanderCollision> {
     match kind {
-        SurfaceEntityKind::MineralNode { category, amount } => Some(LanderCollision::Mineral {
+        SurfaceEntityKind::MineralNode {
+            category, quantity, ..
+        } => Some(LanderCollision::Mineral {
             category: *category,
-            amount: *amount,
+            amount: *quantity,
         }),
         SurfaceEntityKind::EnergyNode { node } => Some(LanderCollision::Energy { node: *node }),
         SurfaceEntityKind::LiveCreature { kind, .. } => Some(LanderCollision::LiveCreature {
@@ -495,6 +534,20 @@ mod tests {
                 mask: solid(),
             })
         }
+
+        fn creature_animation_visual(
+            &mut self,
+            _kind: super::super::creatures::CreatureKind,
+            animation_frame: u16,
+        ) -> Result<EntityVisual, AdapterError> {
+            Ok(EntityVisual {
+                frame: SurfaceFrame {
+                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    index: animation_frame,
+                },
+                mask: solid(),
+            })
+        }
     }
 
     #[test]
@@ -590,7 +643,8 @@ mod tests {
         let registered = world.insert(SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: 0,
-                amount: 1,
+                size: 1,
+                quantity: 1,
             },
             position: SurfacePoint::default(),
             finite_life: None,
@@ -598,7 +652,8 @@ mod tests {
         world.insert(SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: 1,
-                amount: 2,
+                size: 2,
+                quantity: 2,
             },
             position: SurfacePoint::default(),
             finite_life: None,

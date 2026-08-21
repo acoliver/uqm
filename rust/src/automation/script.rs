@@ -513,6 +513,24 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// Assert the live PlanetSide collision verdicts on presented frames.
+///
+/// Each counter is a floor: the lander must have collected at least
+/// `mineral_pickups` mineral deposits, landed at least `creature_hits`
+/// stun-bolt impacts on live creatures, and connected at least `seam_hits`
+/// collisions that only resolved across the wrapped horizontal seam. All three
+/// defaults to zero, so a script asserts exactly the semantics it runs.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PlanetSideCollisionAssertion {
+    #[serde(default)]
+    pub mineral_pickups: u64,
+    #[serde(default)]
+    pub creature_hits: u64,
+    #[serde(default)]
+    pub seam_hits: u64,
+}
+
 /// Wait for a fresh communication response list before selecting its first entry.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -564,6 +582,7 @@ pub enum Action {
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertBattleFrames(BattleFramesAssertion),
+    AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
@@ -1406,6 +1425,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                     ));
                 }
             }
+            Action::AssertPlanetSideCollisions(_) => {}
             Action::AssertMainMenuTransition(dto_inner) => {
                 let from = parse_menu_item(&dto_inner.from, i, path)?;
                 let to = parse_menu_item(&dto_inner.to, i, path)?;

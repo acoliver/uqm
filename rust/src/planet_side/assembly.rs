@@ -46,6 +46,17 @@ pub trait WorldVisualPort {
         &mut self,
         kind: super::hazards::HazardKind,
     ) -> Result<EntityVisual, AdapterError>;
+
+    /// Visual for the creature animation frame `animation_frame`.
+    ///
+    /// Every animation step updates the drawable frame and its hotspot-adjusted
+    /// collision mask at once, so per-frame extents (Brainbox Bulldozer) are
+    /// never drawn or hit-tested from a stale frame.
+    fn creature_animation_visual(
+        &mut self,
+        kind: super::creatures::CreatureKind,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError>;
 }
 
 /// Complete Rust ownership assembled before the active frame loop starts.
@@ -144,6 +155,24 @@ pub fn transform_creature_to_canned(
     Ok(())
 }
 
+/// Advance a live creature to its new animation frame, replacing the drawable
+/// frame and the hotspot-adjusted collision mask in the same instant.
+pub fn advance_creature_animation_frame(
+    assembly: &mut SurfaceAssembly,
+    entity: SurfaceEntityId,
+    kind: super::creatures::CreatureKind,
+    animation_frame: u16,
+    visual: &mut impl WorldVisualPort,
+) -> Result<(), AdapterError> {
+    if animation_frame == 0 {
+        return Ok(());
+    }
+    let selected = visual.creature_animation_visual(kind, animation_frame)?;
+    assembly.frames.insert(entity, selected.frame);
+    assembly.masks.insert_entity(entity, selected.mask);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -164,7 +193,8 @@ mod tests {
                 position: SurfacePoint { x: 4, y: 8 },
                 kind: GeneratedNodeKind::Mineral {
                     category: 2,
-                    amount: 3,
+                    gross_size: 1,
+                    fine_quantity: 3,
                 },
             })
         }

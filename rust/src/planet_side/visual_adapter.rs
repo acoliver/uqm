@@ -102,20 +102,13 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
         entity: &SurfaceEntity,
     ) -> Result<EntityVisual, AdapterError> {
         let (base, index) = match entity.kind {
-            SurfaceEntityKind::MineralNode { category, amount } => {
+            SurfaceEntityKind::MineralNode { category, size, .. } => {
                 let category =
                     u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
                 if category >= 8 {
                     return Err(AdapterError::new("mineral_category"));
                 }
-                (
-                    self.misc_data,
-                    MINERAL_FRAME_BASE
-                        + category * MINERAL_FRAMES_PER_CATEGORY
-                        + amount
-                            .saturating_add(2)
-                            .min(MINERAL_FRAMES_PER_CATEGORY - 1),
-                )
+                (self.misc_data, mineral_frame_index(category, size))
             }
             SurfaceEntityKind::EnergyNode { .. } => {
                 if self.energy.is_null() {
@@ -143,6 +136,15 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             mask,
         })
     }
+}
+
+/// Select the surface mineral frame index: category cluster offset by the
+/// gross deposit size.  The fine collectible quantity never participates.
+#[must_use]
+fn mineral_frame_index(category: u16, size: u16) -> u16 {
+    MINERAL_FRAME_BASE
+        + category * MINERAL_FRAMES_PER_CATEGORY
+        + size.min(MINERAL_FRAMES_PER_CATEGORY - 1)
 }
 
 /// Production visual port for dynamically-spawned world entities.
@@ -237,6 +239,29 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
             mask,
         })
     }
+
+    fn creature_animation_visual(
+        &mut self,
+        kind: super::creatures::CreatureKind,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError> {
+        let base = self.surface_visuals.life_frame(kind.index())?;
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, animation_frame) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("creature_animation_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame {
+                base,
+                index: animation_frame,
+            },
+            mask,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -248,6 +273,35 @@ mod tests {
 
     fn pointer(value: usize) -> *mut c_void {
         value as *mut c_void
+    }
+
+    #[test]
+    fn mineral_frame_uses_category_plus_gross_size_only() {
+        assert_eq!(mineral_frame_index(0, 0), MINERAL_FRAME_BASE);
+        assert_eq!(
+            mineral_frame_index(1, 0),
+            MINERAL_FRAME_BASE + MINERAL_FRAMES_PER_CATEGORY
+        );
+        assert_eq!(
+            mineral_frame_index(1, 2),
+            MINERAL_FRAME_BASE + MINERAL_FRAMES_PER_CATEGORY + 2
+        );
+        // Different fine quantities must not change the selected frame.
+        assert_eq!(mineral_frame_index(2, 1), mineral_frame_index(2, 1));
+    }
+
+    #[test]
+    fn fine_quantity_never_selects_the_frame() {
+        // The issue: Rust used to fold fine quantity into the frame index.  A
+        // size-0 deposit with quantity 99 and size-2 with quantity 0 must keep
+        // their distinct category+size frames regardless of quantity.
+        assert_eq!(
+            mineral_frame_index(3, 0),
+            MINERAL_FRAME_BASE + 3 * MINERAL_FRAMES_PER_CATEGORY
+        );
+        let with_quantity = mineral_frame_index(3, 0);
+        let _ = with_quantity;
+        assert_eq!(mineral_frame_index(3, 2), with_quantity + 2);
     }
 
     #[test]
@@ -294,7 +348,8 @@ mod tests {
         let entity = SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: 8,
-                amount: 1,
+                size: 2,
+                quantity: 1,
             },
             position: SurfacePoint::default(),
             finite_life: None,

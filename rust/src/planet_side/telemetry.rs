@@ -38,6 +38,12 @@ static RETURNED_MINERALS: AtomicU32 = AtomicU32::new(0);
 static PHASE: AtomicU32 = AtomicU32::new(0);
 /// Graphics batch levels Rust has had to restore after a native callback.
 static BATCH_DEPTH_CORRECTIONS: AtomicU64 = AtomicU64::new(0);
+/// Mineral deposits collected on a generated node (presented frames).
+static MINERAL_PICKUPS: AtomicU64 = AtomicU64::new(0);
+/// Stun-bolt impacts that landed on a live creature (presented frames).
+static CREATURE_HITS: AtomicU64 = AtomicU64::new(0);
+/// Collisions that only connected across the wrapped horizontal seam.
+static SEAM_HITS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlanetSideObservation {
@@ -61,12 +67,21 @@ pub struct PlanetSideObservation {
     /// Graphics batch levels Rust had to restore after a native callback during
     /// this trip. Any non-zero value is a defect in the callback.
     pub batch_depth_corrections: u64,
+    /// Mineral deposits collected while surface frames were presented.
+    pub mineral_pickups: u64,
+    /// Stun-bolt impacts on live creatures while surface frames were presented.
+    pub creature_hits: u64,
+    /// Collisions that connected only across the wrapped horizontal seam.
+    pub seam_hits: u64,
 }
 
 pub fn begin(session: &PlanetSideSession) {
     GENERATION.fetch_add(1, Ordering::AcqRel);
     PHASE.store(phase_code(session.phase), Ordering::Release);
     BATCH_DEPTH_CORRECTIONS.store(0, Ordering::Relaxed);
+    MINERAL_PICKUPS.store(0, Ordering::Release);
+    CREATURE_HITS.store(0, Ordering::Release);
+    SEAM_HITS.store(0, Ordering::Release);
     FRAMES.store(0, Ordering::Release);
     START_X.store(session.lander.position.x, Ordering::Release);
     START_Y.store(session.lander.position.y, Ordering::Release);
@@ -129,6 +144,9 @@ pub fn observation() -> PlanetSideObservation {
         returned_minerals: RETURNED_MINERALS.load(Ordering::Acquire) as u16,
         phase: PHASE.load(Ordering::Acquire),
         batch_depth_corrections: BATCH_DEPTH_CORRECTIONS.load(Ordering::Relaxed),
+        mineral_pickups: MINERAL_PICKUPS.load(Ordering::Acquire),
+        creature_hits: CREATURE_HITS.load(Ordering::Acquire),
+        seam_hits: SEAM_HITS.load(Ordering::Acquire),
     }
 }
 
@@ -172,6 +190,21 @@ pub const fn phase_name(code: u32) -> &'static str {
 /// to the lifecycle fields published around it.
 pub fn batch_depth_corrected(levels: i32) {
     BATCH_DEPTH_CORRECTIONS.fetch_add(levels.unsigned_abs().into(), Ordering::Relaxed);
+}
+
+/// Record a collected mineral deposit.
+pub fn mineral_pickup() {
+    MINERAL_PICKUPS.fetch_add(1, Ordering::AcqRel);
+}
+
+/// Record a stun-bolt hit on a live creature.
+pub fn creature_hit() {
+    CREATURE_HITS.fetch_add(1, Ordering::AcqRel);
+}
+
+/// Record a collision that connected only across the wrapped seam.
+pub fn seam_hit() {
+    SEAM_HITS.fetch_add(1, Ordering::AcqRel);
 }
 
 pub fn adapter_failure(operation: &'static str) {
@@ -289,5 +322,32 @@ mod tests {
             );
         }
         assert_eq!(phase_name(u32::MAX), "None");
+    }
+
+    #[test]
+    fn collision_verdict_counters_reset_and_sample() {
+        let session = dummy();
+        begin(&session);
+        assert_eq!(observation().mineral_pickups, 0);
+        mineral_pickup();
+        creature_hit();
+        seam_hit();
+        let obs = observation();
+        assert_eq!(
+            (obs.mineral_pickups, obs.creature_hits, obs.seam_hits),
+            (1, 1, 1)
+        );
+        finish(&SessionOutcome::Aborted);
+    }
+    fn dummy() -> PlanetSideSession {
+        PlanetSideSession::new(
+            crate::planet_side::simulation::LanderState::new(
+                crate::planet_side::model::SurfacePoint { x: 0, y: 0 },
+                0,
+                crate::planet_side::model::CrewCount::new(1),
+                crate::planet_side::model::LanderUpgrades::default(),
+            ),
+            crate::planet_side::cargo::MineralCargo::new(50, 0, false),
+        )
     }
 }

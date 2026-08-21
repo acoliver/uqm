@@ -19,7 +19,11 @@ pub struct SurfaceEntityId {
 pub enum SurfaceEntityKind {
     MineralNode {
         category: usize,
-        amount: u16,
+        /// Gross deposit size from the low density byte; this is the image
+        /// size and therefore the collision footprint.
+        size: u16,
+        /// Fine collectible quantity from the high density byte.
+        quantity: u16,
     },
     EnergyNode {
         node: u8,
@@ -180,11 +184,12 @@ impl SurfaceWorld {
 mod tests {
     use super::*;
 
-    fn mineral(amount: u16) -> SurfaceEntity {
+    fn mineral(size: u16, quantity: u16) -> SurfaceEntity {
         SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
                 category: 0,
-                amount,
+                size,
+                quantity,
             },
             position: SurfacePoint::default(),
             finite_life: None,
@@ -194,24 +199,24 @@ mod tests {
     #[test]
     fn stale_id_cannot_access_reused_slot() {
         let mut world = SurfaceWorld::new();
-        let old = world.insert(mineral(1));
+        let old = world.insert(mineral(1, 1));
         assert!(world.remove(old).is_some());
-        let new = world.insert(mineral(2));
+        let new = world.insert(mineral(2, 2));
         assert_eq!(old.slot, new.slot);
         assert_ne!(old.generation, new.generation);
         assert!(world.get(old).is_none());
         assert!(matches!(
             world.get(new).map(|entity| &entity.kind),
-            Some(SurfaceEntityKind::MineralNode { amount: 2, .. })
+            Some(SurfaceEntityKind::MineralNode { quantity: 2, .. })
         ));
     }
 
     #[test]
     fn iteration_preserves_insertion_order_after_removal() {
         let mut world = SurfaceWorld::new();
-        let one = world.insert(mineral(1));
-        let two = world.insert(mineral(2));
-        let three = world.insert(mineral(3));
+        let one = world.insert(mineral(1, 1));
+        let two = world.insert(mineral(2, 2));
+        let three = world.insert(mineral(3, 3));
         world.remove(two);
         assert_eq!(
             world.iter().map(|(id, _)| id).collect::<Vec<_>>(),
@@ -222,7 +227,7 @@ mod tests {
     #[test]
     fn finite_lifetimes_expire_without_touching_persistent_nodes() {
         let mut world = SurfaceWorld::new();
-        let persistent = world.insert(mineral(1));
+        let persistent = world.insert(mineral(1, 1));
         let temporary = world.insert(SurfaceEntity {
             kind: SurfaceEntityKind::Explosion,
             position: SurfacePoint::default(),

@@ -104,7 +104,8 @@ impl ScanPersistence {
 pub enum GeneratedNodeKind {
     Mineral {
         category: usize,
-        amount: u16,
+        gross_size: u16,
+        fine_quantity: u16,
     },
     Energy,
     Biological {
@@ -162,9 +163,15 @@ pub fn populate_surface(
             }
             let data = generator.generate(scan, node)?;
             let kind = match data.kind {
-                GeneratedNodeKind::Mineral { category, amount } => {
-                    SurfaceEntityKind::MineralNode { category, amount }
-                }
+                GeneratedNodeKind::Mineral {
+                    category,
+                    gross_size,
+                    fine_quantity,
+                } => SurfaceEntityKind::MineralNode {
+                    category,
+                    size: gross_size,
+                    quantity: fine_quantity,
+                },
                 GeneratedNodeKind::Energy => SurfaceEntityKind::EnergyNode { node: raw_node },
                 GeneratedNodeKind::Biological {
                     creature,
@@ -227,7 +234,8 @@ mod tests {
             let kind = match scan {
                 ScanType::Mineral => GeneratedNodeKind::Mineral {
                     category: 3,
-                    amount: 5,
+                    gross_size: 2,
+                    fine_quantity: 5,
                 },
                 ScanType::Energy => GeneratedNodeKind::Energy,
                 ScanType::Biological => GeneratedNodeKind::Biological {
@@ -257,6 +265,27 @@ mod tests {
             ScanNodeId::new(32),
             Err(GenerationError::NodeOutOfRange(32))
         );
+    }
+
+    #[test]
+    fn population_keeps_gross_size_and_fine_quantity_typed() {
+        let mut generator = Generator::default();
+        let mut world = SurfaceWorld::new();
+        let generated =
+            populate_surface(&mut generator, ScanPersistence::default(), &mut world).unwrap();
+        let mineral = generated
+            .iter()
+            .find(|g| g.scan == ScanType::Mineral)
+            .unwrap();
+        let SurfaceEntityKind::MineralNode {
+            category,
+            size,
+            quantity,
+        } = &world.get(mineral.entity).unwrap().kind
+        else {
+            panic!("expected mineral");
+        };
+        assert_eq!((*category, *size, *quantity), (3, 2, 5));
     }
 
     #[test]
