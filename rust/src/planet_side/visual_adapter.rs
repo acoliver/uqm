@@ -264,6 +264,26 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
     }
 }
 
+impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
+    for CffiWorldVisuals<'_, A>
+{
+    fn mineral_visual(
+        &mut self,
+        generated: super::generation::GeneratedEntity,
+        entity: &super::entities::SurfaceEntity,
+    ) -> Result<EntityVisual, AdapterError> {
+        super::assembly::SurfaceVisualPort::visual_for(self.surface_visuals, generated, entity)
+    }
+
+    fn creature_visual(
+        &mut self,
+        kind: CreatureKind,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError> {
+        WorldVisualPort::creature_animation_visual(self, kind, animation_frame)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

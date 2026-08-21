@@ -174,6 +174,7 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
     use super::session::SessionOutcome;
     use super::session_factory::create_production_session;
     use super::visual_adapter::CffiSurfaceVisuals;
+    use super::visual_adapter::CffiWorldVisuals;
 
     let context = unsafe { &mut *context };
     if context.solar_system.is_null()
@@ -212,6 +213,15 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             context.temperature,
         ));
         let world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
+        let gate = if crate::automation::Coordinator::is_active() {
+            super::automation_fixture::AutomationGate::Active
+        } else {
+            super::automation_fixture::AutomationGate::Inactive
+        };
+        let fixture = super::automation_fixture::PlanetSideFixture::for_collision_parity(
+            session.lander.position,
+        );
+        fixture.install(gate, &session, &surface, &mut world_visuals)?;
         let collision = SurfaceCollisionAdapter {
             surface: surface.clone(),
             random: CffiGameplayRandom,
