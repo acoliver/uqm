@@ -1,0 +1,5 @@
+SHOT_OK name=game-options rect=320,30,1280,992
+SHOT_OK name=in-game-quit-selected rect=320,30,1280,992
+SHOT_OK name=in-game-quit-confirm-yes rect=320,30,1280,992
+SHOT_FAILED name=returned-title-menu reason=no_window bounds=62:78: execution error: System Events got an error: Can’t get window 1 of process "uqm". Invalid index. (-1719)
+SHOT_FAILED name=title-quit-selected reason=no_uqm_process

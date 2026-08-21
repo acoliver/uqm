@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "name": "save-diagnostic",
+  "budgets": {
+    "max_input_ticks": 1000,
+    "max_presentations": 1000,
+    "max_wallclock_seconds": 120
+  },
+  "steps": [
+    {"action": "wait_input_ticks", "count": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
+    {"action": "wait_input_ticks", "count": 30},
+    {"action": "tap_menu_key", "key": "cancel", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "up", "value": 1, "hold": 1, "settle": 10},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 10},
+    {"action": "capture", "label": "options"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 10},
+    {"action": "capture", "label": "save-list"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 10},
+    {"action": "capture", "label": "after-slot-select"},
+    {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 1, "settle": 10},
+    {"action": "capture", "label": "after-name-confirm"},
+    {"action": "finish"}
+  ]
+}
