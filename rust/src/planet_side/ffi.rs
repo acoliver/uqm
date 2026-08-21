@@ -212,20 +212,27 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             context.temperature,
         ));
         let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
-        // The issue #162 fixture is optional. Only an explicit request from an
-        // active automation coordinator installs arranged entities; a session with
-        // no request runs the normal generated PlanetSide session unchanged, and a
-        // request that reaches run_session outside an active coordinator fails
-        // fast through install with the typed error.
-        if crate::automation::Coordinator::is_active() {
-            super::automation_fixture::session_fixture_request(true, session.lander.position)
-                .expect("an active fixture request is always present")
-                .install(
-                    super::automation_fixture::automation_gate(true),
-                    &session,
-                    &surface,
-                    &mut world_visuals,
-                )?;
+        // The issue #162 fixture is optional and explicitly requested.  Only the
+        // `setup_planet_side_collision_fixture` script action queues the
+        // request (the coordinator invokes
+        // [`super::automation_fixture::coordinator_queues_fixture_request`]
+        // when that action executes), so active automation with no such action runs
+        // the normal generated PlanetSide session unchanged.  The request is
+        // delivered exactly once per run_session, and install fails fast unless
+        // this session is under an active automation coordinator.  The gate and
+        // the install error are the sole outside-session protection; there is no
+        // polling fallback.
+        let fixture_request =
+            super::automation_fixture::tap_planet_side_fixture_request(session.lander.position);
+        if let Some(fixture) = fixture_request {
+            fixture.install(
+                super::automation_fixture::automation_gate(
+                    crate::automation::coordinator::Coordinator::is_active(),
+                ),
+                &session,
+                &surface,
+                &mut world_visuals,
+            )?;
         }
         let collision = SurfaceCollisionAdapter {
             surface: surface.clone(),

@@ -18,6 +18,7 @@
 //! itself never calls a telemetry increment and never declares a collision.
 
 use crate::battle::velocity::VelocityDesc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::assembly::{EntityVisual, SharedSurface};
 use super::creatures::CreatureKind;
@@ -30,7 +31,7 @@ use super::world::WORLD_WIDTH;
 
 /// Automation gate that mirrors the live Rust PlanetSide controller.
 ///
-/// Production binds this to [`crate::automation::Coordinator::is_active`]
+/// Production binds this to [`Coordinator::is_active`]
 /// before install; the tests bind it directly so the accepted and rejected
 /// paths stay deterministic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +142,37 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
         AutomationGate::Active
     } else {
         AutomationGate::Inactive
+    }
+}
+
+/// Queue the single PlanetSide fixture request for the next active session.
+///
+/// This is invoked only by the automation coordinator when the
+/// `setup_planet_side_collision_fixture` script action executes, so that
+/// action is the sole authority for requesting the fixture.  It is a flag
+/// request, not a batch: active automation that never executes that action preserves
+/// the generated PlanetSide session unchanged.
+pub fn queue_planet_side_fixture_request() {
+    FIXTURE_REQUESTED.store(true, Ordering::SeqCst);
+}
+
+static FIXTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Make the script action the sole authority for the fixture.
+///
+/// The coordinator invokes this when the active
+/// `setup_planet_side_collision_fixture` script action executes, and only then
+/// is the one-shot fixture request queued.  An active coordinator with no such
+/// action never touches it, so every other PlanetSide automation script keeps the
+/// generated world unchanged.
+pub fn coordinator_queues_fixture_request() {
+    queue_planet_side_fixture_request();
+}
+pub fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
+    if FIXTURE_REQUESTED.swap(false, Ordering::SeqCst) {
+        Some(PlanetSideFixture::for_collision_parity(position))
+    } else {
+        None
     }
 }
 
@@ -607,36 +639,93 @@ mod tests {
     }
 
     #[test]
-    fn active_automation_session_without_a_fixture_request_runs_the_generated_session_unchanged() {
-        // An active coordinator that did not request the fixture still yields
-        // `None`, so the session runs the normal generated PlanetSide world and
-        // only an explicit `Some` request is ever installed.
+    fn queue_is_consumed_exactly_once_by_one_tap() {
         let anchor = SurfacePoint { x: 50, y: 80 };
-        let fixture = session_fixture_request(false, anchor);
+        let first = tap_planet_side_fixture_request(anchor);
         assert!(
-            fixture.is_none(),
-            "no fixture request in the active session"
+            first.is_none(),
+            "no queue, no request without the script action"
+        );
+        queue_planet_side_fixture_request();
+        let delivered = tap_planet_side_fixture_request(anchor);
+        assert!(delivered.is_some(), "the queued request is delivered once");
+        let after = tap_planet_side_fixture_request(anchor);
+        assert!(
+            after.is_none(),
+            "the request is not reinstalled by a later trip"
         );
         let session = session_at(anchor);
         let surface = share_empty();
-        assert!(
-            surface.borrow().world.is_empty(),
-            "the generated session is unchanged before install"
+        delivered
+            .as_ref()
+            .expect("delivered")
+            .install(
+                AutomationGate::Active,
+                &session,
+                &surface,
+                &mut TestFixturePort,
+            )
+            .unwrap();
+        let delivered = delivered.expect("delivered");
+        assert_eq!(
+            surface.borrow().generated.len(),
+            delivered.minerals.len() + delivered.brainboxes.len(),
+            "the delivered fixture installs its arranged entities"
         );
-        if let Some(fixture) = fixture {
+    }
+
+    #[test]
+    fn telemetry_stays_zero_after_install() {
+        // Setup itself never increments a verdict counter: the counters move
+        // only when production steps resolve a pickup, a stun-bolt, or a seam
+        // collision, so a setup that only arranges keeps telemetry at the baseline.
+        let anchor = SurfacePoint { x: 50, y: 80 };
+        let session = session_at(anchor);
+        let surface = share_empty();
+        let fixture = PlanetSideFixture::new()
+            .with_mineral(2, 3, 5, anchor)
+            .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor);
+        crate::planet_side::telemetry::begin(&session);
+        let before = crate::planet_side::telemetry::observation();
+        fixture
+            .install(
+                AutomationGate::Active,
+                &session,
+                &surface,
+                &mut TestFixturePort,
+            )
+            .unwrap();
+        let after = crate::planet_side::telemetry::observation();
+        assert_eq!(after, before, "install changes no telemetry counter");
+    }
+
+    #[test]
+    fn coordinator_queue_is_the_sole_authority_and_never_installs_by_activity() {
+        // `coordinator_queues_fixture_request` is called only by the script
+        // action.  A coordinator that never executed it never queues.
+        coordinator_queues_fixture_request();
+        let anchor = SurfacePoint { x: 10, y: 20 };
+        let requested = tap_planet_side_fixture_request(anchor);
+        assert!(requested.is_some(), "the action queues exactly one request");
+        assert!(
+            tap_planet_side_fixture_request(anchor).is_none(),
+            "the queued request is consumed once"
+        );
+        let session = session_at(anchor);
+        let surface = share_empty();
+        if let Some(fixture) = requested {
             fixture
                 .install(
-                    automation_gate(true),
+                    AutomationGate::Inactive,
                     &session,
                     &surface,
                     &mut TestFixturePort,
                 )
-                .unwrap();
-            panic!("a session without a request must not install");
+                .expect_err("outside an active session the installed request fails fast");
         }
         assert!(
             surface.borrow().world.is_empty(),
-            "the unchanged session now owns only its generated entities"
+            "rejection must not install a single entity"
         );
     }
 
