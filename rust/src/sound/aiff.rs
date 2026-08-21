@@ -1640,7 +1640,7 @@ mod tests {
         let n = dec.decode(&mut buf).unwrap();
         assert_eq!(n, 20);
         // v = (0 * 0) << 1 = 0, even byte so no delta → all zeros
-        for chunk in buf[..20].chunks_exact(2) {
+        for chunk in buf[..20].as_chunks::<2>().0 {
             let sample = i16::from_ne_bytes([chunk[0], chunk[1]]);
             assert_eq!(sample, 0);
         }

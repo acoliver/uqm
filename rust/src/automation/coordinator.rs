@@ -739,7 +739,7 @@ impl Coordinator {
                 actions: &self.actions,
                 transitions: &self.transitions,
             };
-            let pending: Vec<u8> = inner.pending_transitions.drain(..).collect();
+            let pending: Vec<u8> = std::mem::take(&mut inner.pending_transitions);
             for to in pending {
                 eprintln!("[automation] replaying pending menu_transition to={}", to);
                 let t2 = scheduler_reduce(
@@ -1155,7 +1155,7 @@ impl Coordinator {
         }
 
         // Process pending transitions first.
-        let mut to_process: Vec<u8> = inner.pending_transitions.drain(..).collect();
+        let mut to_process: Vec<u8> = std::mem::take(&mut inner.pending_transitions);
         to_process.push(to_index);
 
         for to in to_process {

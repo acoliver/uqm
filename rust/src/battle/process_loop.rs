@@ -956,13 +956,12 @@ pub fn calc_view(
         dy = dy.clamp(-ORG_JUMP_Y, ORG_JUMP_Y);
     }
 
-    let view_state;
-    if *current_zoom_out == next_reduction {
-        view_state = if dx == 0 && dy == 0 && !is_hq_space {
+    let view_state = if *current_zoom_out == next_reduction {
+        if dx == 0 && dy == 0 && !is_hq_space {
             ViewState::Stable
         } else {
             ViewState::Scroll
-        };
+        }
     } else {
         match zoom_mode {
             ZoomMode::Step => {
@@ -989,8 +988,8 @@ pub fn calc_view(
             }
         }
         *current_zoom_out = next_reduction;
-        view_state = ViewState::Change;
-    }
+        ViewState::Change
+    };
 
     (view_state, dx, dy)
 }

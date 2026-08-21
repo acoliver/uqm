@@ -522,7 +522,7 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
                 .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)
             {
                 Ok(mut rgba) => {
-                    for pixel in rgba.chunks_exact_mut(4) {
+                    for pixel in rgba.as_chunks_mut::<4>().0 {
                         pixel[3] = u8::MAX;
                     }
                     state.presented_frame =
