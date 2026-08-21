@@ -443,9 +443,7 @@ impl Inner {
     }
 
     fn clear(&mut self) {
-        for slot in &mut self.buffer {
-            *slot = None;
-        }
+        self.buffer.fill(None);
         self.front = 0;
         self.back = 0;
         self.insertion_point = 0;

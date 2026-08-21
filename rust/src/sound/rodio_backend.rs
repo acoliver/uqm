@@ -630,7 +630,9 @@ fn fill_buffer(
     buf.channels = channels;
 
     buf.samples = if bits == 16 {
-        data.chunks_exact(2)
+        data.as_chunks::<2>()
+            .0
+            .iter()
             .map(|c| i16::from_le_bytes([c[0], c[1]]))
             .collect()
     } else {
