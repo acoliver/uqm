@@ -109,7 +109,7 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                     }
                     GeneratedNodeKind::Mineral {
                         category: usize::from(*Elements.add(usize::from(info.node_type)) & 0x07),
-                        gross_size: usize::from(info.density & 0xFF & 0x07),
+                        gross_size: info.density & 0x07,
                         fine_quantity: info.density >> 8,
                     }
                 }

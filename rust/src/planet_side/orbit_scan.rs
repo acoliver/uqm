@@ -123,15 +123,18 @@ mod production {
         primitive.stamp.origin = CPoint::default();
 
         match generated.kind {
-            super::super::generation::GeneratedNodeKind::Mineral { category, amount } => {
+            super::super::generation::GeneratedNodeKind::Mineral {
+                category,
+                gross_size,
+                fine_quantity,
+            } => {
                 element.turn_wait = category as u8;
-                element.mass_points = amount as u8;
+                element.mass_points = fine_quantity as u8;
                 element.current.frame = SetAbsFrameIndex(
                     MiscDataFrame,
                     MINERAL_FRAME_BASE + category as u16 * MINERAL_FRAMES_PER_CATEGORY,
                 );
-                element.next.frame =
-                    SetRelFrameIndex(element.current.frame, i16::from(amount as u8) + 1);
+                element.next.frame = SetRelFrameIndex(element.current.frame, gross_size as i16 + 1);
                 primitive.stamp.frame = IncFrameIndex(element.next.frame);
             }
             super::super::generation::GeneratedNodeKind::Energy => {
