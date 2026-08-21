@@ -222,8 +222,15 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
         // this session is under an active automation coordinator.  The gate and
         // the install error are the sole outside-session protection; there is no
         // polling fallback.
-        let fixture_request =
-            super::automation_fixture::tap_planet_side_fixture_request(session.lander.position);
+        //
+        // Checking `Coordinator::is_active()` happens before tapping: ordinary
+        // gameplay never consumes or fails from a stale queue.  A request left
+        // pending because no active owner tapped it stays queued.
+        let fixture_request = if crate::automation::coordinator::Coordinator::is_active() {
+            super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
+        } else {
+            None
+        };
         if let Some(fixture) = fixture_request {
             fixture.install(
                 super::automation_fixture::automation_gate(

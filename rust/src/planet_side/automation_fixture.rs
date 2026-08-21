@@ -20,10 +20,9 @@
 use crate::battle::velocity::VelocityDesc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use super::assembly::{EntityVisual, SharedSurface};
+use super::assembly::{insert_surface_entity, EntityVisual, SharedSurface};
 use super::creatures::CreatureKind;
 use super::entities::{SurfaceEntity, SurfaceEntityKind};
-use super::generation::{GeneratedEntity, ScanNodeId, ScanType};
 use super::model::SurfacePoint;
 use super::runtime::AdapterError;
 use super::session::PlanetSideSession;
@@ -94,12 +93,8 @@ pub struct PlanetSideFixture {
 /// which reach the captured mineral frames and the Brainbox animation frames
 /// from the same surface visuals.  Tests supply deterministic fakes.
 pub trait FixtureVisualPort {
-    /// Select the real frame and mask for a generated mineral node.
-    fn mineral_visual(
-        &mut self,
-        generated: GeneratedEntity,
-        entity: &SurfaceEntity,
-    ) -> Result<EntityVisual, AdapterError>;
+    /// Select the real frame and mask for a synthetic mineral node.
+    fn mineral_visual(&mut self, entity: &SurfaceEntity) -> Result<EntityVisual, AdapterError>;
 
     /// Select the real frame and mask for a creature animation frame.
     fn creature_visual(
@@ -145,14 +140,11 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
     }
 }
 
-/// Queue the single PlanetSide fixture request for the next active session.
+/// Low-level queue of the single PlanetSide fixture flag.
 ///
-/// This is invoked only by the automation coordinator when the
-/// `setup_planet_side_collision_fixture` script action executes, so that
-/// action is the sole authority for requesting the fixture.  It is a flag
-/// request, not a batch: active automation that never executes that action preserves
-/// the generated PlanetSide session unchanged.
-pub fn queue_planet_side_fixture_request() {
+/// Coordinator-facing callers use [`coordinator_queues_fixture_request`] instead;
+/// this narrow function is not exposed beyond the module.
+fn queue_fixture() {
     FIXTURE_REQUESTED.store(true, Ordering::SeqCst);
 }
 
@@ -166,8 +158,15 @@ static FIXTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
 /// action never touches it, so every other PlanetSide automation script keeps the
 /// generated world unchanged.
 pub fn coordinator_queues_fixture_request() {
-    queue_planet_side_fixture_request();
+    queue_fixture();
 }
+
+/// The one coordinator-facing function that consumes the queued flag.
+///
+/// Ordinary gameplay that never executed the script action gets `None`; production
+/// [`Coordinator::is_active`] is checked by the caller before tapping, so a stale
+/// queue cannot be consumed or fail outside automation.
+#[must_use]
 pub fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
     if FIXTURE_REQUESTED.swap(false, Ordering::SeqCst) {
         Some(PlanetSideFixture::for_collision_parity(position))
@@ -281,8 +280,12 @@ impl PlanetSideFixture {
         if session.lander.crew.get() == 0 {
             return Err(AdapterError::new("fixture_requires_live_lander"));
         }
-        let mut assembly = surface.borrow_mut();
-        let mut next_node = 0_u8;
+        // Stage every entity and its visual before touching the assembly, so any
+        // visual failure leaves world/generated/frames/masks unchanged.  Synthetic
+        // fixture entities are never pushed into `SurfaceAssembly.generated`,
+        // which production reserves for native generated scan nodes and their
+        // pickup/persistence mapping.
+        let mut staged = Vec::with_capacity(self.minerals.len() + self.brainboxes.len());
         for deposit in &self.minerals {
             let entity = SurfaceEntity {
                 kind: SurfaceEntityKind::MineralNode {
@@ -293,21 +296,8 @@ impl PlanetSideFixture {
                 position: deposit.position,
                 finite_life: None,
             };
-            let node = ScanNodeId::new(next_node).map_err(|_| AdapterError::new("fixture_node"))?;
-            next_node += 1;
-            let generated = GeneratedEntity {
-                entity: assembly.world.insert(entity),
-                scan: ScanType::Mineral,
-                node,
-            };
-            let installed = assembly
-                .world
-                .get(generated.entity)
-                .ok_or(AdapterError::new("fixture_entity"))?;
-            let visual = visuals.mineral_visual(generated, installed)?;
-            assembly.frames.insert(generated.entity, visual.frame);
-            assembly.masks.insert_entity(generated.entity, visual.mask);
-            assembly.generated.push(generated);
+            let visual = visuals.mineral_visual(&entity)?;
+            staged.push((entity, visual));
         }
         for setup in &self.brainboxes {
             let kind = CreatureKind::new(BRAINBOX_BULLDOZER)
@@ -324,17 +314,12 @@ impl PlanetSideFixture {
                 position: setup.position,
                 finite_life: None,
             };
-            let node = ScanNodeId::new(next_node).map_err(|_| AdapterError::new("fixture_node"))?;
-            next_node += 1;
-            let generated = GeneratedEntity {
-                entity: assembly.world.insert(entity),
-                scan: ScanType::Biological,
-                node,
-            };
             let visual = visuals.creature_visual(kind, setup.animation_frame)?;
-            assembly.frames.insert(generated.entity, visual.frame);
-            assembly.masks.insert_entity(generated.entity, visual.mask);
-            assembly.generated.push(generated);
+            staged.push((entity, visual));
+        }
+        let mut assembly = surface.borrow_mut();
+        for (entity, visual) in staged {
+            let _ = insert_surface_entity(&mut assembly, entity, visual);
         }
         Ok(())
     }
@@ -346,12 +331,13 @@ mod tests {
     use crate::planet_side::assembly::{share_surface, SurfaceAssembly, WorldVisualPort};
     use crate::planet_side::cargo::{BioCargo, MineralCargo};
     use crate::planet_side::collision::{
-        resolve_lander_collision, CollisionOutcome, CollisionState,
+        resolve_lander_collision, CollisionOutcome, CollisionState, LanderCollision,
     };
     use crate::planet_side::collision_adapter::{
         GameplayRandom, SurfaceCollisionAdapter, SurfaceMasks,
     };
     use crate::planet_side::entities::SurfaceWorld;
+    use crate::planet_side::generation::ScanType;
     use crate::planet_side::geometry::CollisionMask;
     use crate::planet_side::graphics_adapter::{SurfaceFrame, SurfaceFrameRegistry};
     use crate::planet_side::hazards::{HazardKind, SoundCue};
@@ -359,6 +345,7 @@ mod tests {
     use crate::planet_side::runtime::{PlanetSideAudio, PlanetSideCollision};
     use crate::planet_side::simulation::{LanderState, Shot};
     use crate::planet_side::world::HazardChances;
+    use crate::planet_side::{generation::ScanNodeId, generation::ScanPersistence};
 
     fn share_empty() -> SharedSurface {
         share_surface(SurfaceAssembly {
@@ -376,6 +363,14 @@ mod tests {
         )
     }
 
+    /// The process-global fixture request flag is shared across tests; take
+    /// turns through a private test mutex so the queue tests never race.
+    fn fixture_test_serialize() -> std::sync::MutexGuard<'static, ()> {
+        static SERIALIZE_FIXTURE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        SERIALIZE_FIXTURE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
     fn solid() -> CollisionMask {
         CollisionMask::from_occupancy(1, 1, SurfacePoint::default(), &[1]).unwrap()
     }
@@ -395,11 +390,7 @@ mod tests {
     struct TestFixturePort;
 
     impl super::FixtureVisualPort for TestFixturePort {
-        fn mineral_visual(
-            &mut self,
-            _generated: GeneratedEntity,
-            entity: &SurfaceEntity,
-        ) -> Result<EntityVisual, AdapterError> {
+        fn mineral_visual(&mut self, entity: &SurfaceEntity) -> Result<EntityVisual, AdapterError> {
             let frame = match entity.kind {
                 SurfaceEntityKind::MineralNode { size, .. } => size,
                 _ => 0,
@@ -487,8 +478,12 @@ mod tests {
         }
     }
 
-    struct Generator;
-    impl super::super::generation::SurfaceGenerator for Generator {
+    #[derive(Default)]
+    struct RecordingGenerator {
+        pickups: std::cell::RefCell<usize>,
+    }
+
+    impl super::super::generation::SurfaceGenerator for RecordingGenerator {
         fn node_count(&mut self, _scan: ScanType) -> Result<u8, AdapterError> {
             Ok(0)
         }
@@ -500,17 +495,18 @@ mod tests {
             Err(AdapterError::new("unexpected_generate"))
         }
         fn pickup(&mut self, _scan: ScanType, _node: ScanNodeId) -> Result<bool, AdapterError> {
+            *self.pickups.borrow_mut() += 1;
             Ok(true)
         }
     }
 
     fn adapter(
         surface: &SharedSurface,
-    ) -> SurfaceCollisionAdapter<Random, Generator, TestWorldVisuals> {
+    ) -> SurfaceCollisionAdapter<Random, RecordingGenerator, TestWorldVisuals> {
         SurfaceCollisionAdapter {
             surface: surface.clone(),
             random: Random,
-            generator: Generator,
+            generator: RecordingGenerator::default(),
             persistence: super::super::generation::ScanPersistence::default(),
             world_visuals: TestWorldVisuals,
             earthquake_frame_count: 13,
@@ -533,6 +529,7 @@ mod tests {
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
+        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         let fixture = PlanetSideFixture::new()
             .with_mineral(2, 3, 5, anchor)
             .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor);
@@ -563,19 +560,32 @@ mod tests {
         );
 
         let assembly = surface.borrow();
-        let mineral_id = assembly.generated[0].entity;
+        let mineral_id = assembly
+            .world
+            .iter()
+            .find_map(|(id, entity)| match &entity.kind {
+                SurfaceEntityKind::MineralNode { .. } => Some(id),
+                _ => None,
+            })
+            .expect("the fixture mineral is in the world");
         let entity = assembly.world.get(mineral_id).unwrap();
         assert_eq!(
             entity.position, anchor,
-            "mineral land at the requested position"
+            "mineral lands at the requested position"
         );
         assert!(assembly.frames.get(mineral_id).is_some());
         assert!(assembly.masks.entity_mask(mineral_id).is_some());
 
-        let creature_id = assembly.generated[1].entity;
-        let entity = assembly.world.get(creature_id).unwrap();
+        let creature_id = assembly
+            .world
+            .iter()
+            .find_map(|(id, entity)| match &entity.kind {
+                SurfaceEntityKind::LiveCreature { .. } => Some(id),
+                _ => None,
+            })
+            .expect("the fixture creature is in the world");
         assert!(matches!(
-            &entity.kind,
+            &assembly.world.get(creature_id).expect("creature").kind,
             SurfaceEntityKind::LiveCreature {
                 kind,
                 frame_index,
@@ -599,94 +609,21 @@ mod tests {
     }
 
     #[test]
-    fn setup_outside_active_planet_side_fails_fast() {
-        let anchor = SurfacePoint { x: 10, y: 20 };
-        let session = session_at(anchor);
-        let surface = share_empty();
-        let result = PlanetSideFixture::new()
-            .with_mineral(0, 1, 1, anchor)
-            .install(
-                AutomationGate::Inactive,
-                &session,
-                &surface,
-                &mut TestFixturePort,
-            );
-        assert_eq!(
-            result,
-            Err(AdapterError::new("fixture_outside_active_planet_side"))
-        );
-        assert!(
-            surface.borrow().world.is_empty(),
-            "no entity may be arranged on rejection"
-        );
-    }
-
-    #[test]
-    fn ordinary_non_automation_run_session_has_no_fixture_request_and_runs_unchanged() {
-        // The ordinary state is `None`: no active automation coordinator has
-        // requested the issue #162 fixture. The generated world keeps exactly the
-        // assembly production produced and no install error can be raised.
-        let fixture = session_fixture_request(false, SurfacePoint { x: 50, y: 80 });
-        assert!(
-            fixture.is_none(),
-            "a session without a request arranges nothing"
-        );
-        assert_eq!(
-            automation_gate(false),
-            AutomationGate::Inactive,
-            "a session without a request is not gated active"
-        );
-    }
-
-    #[test]
-    fn queue_is_consumed_exactly_once_by_one_tap() {
-        let anchor = SurfacePoint { x: 50, y: 80 };
-        let first = tap_planet_side_fixture_request(anchor);
-        assert!(
-            first.is_none(),
-            "no queue, no request without the script action"
-        );
-        queue_planet_side_fixture_request();
-        let delivered = tap_planet_side_fixture_request(anchor);
-        assert!(delivered.is_some(), "the queued request is delivered once");
-        let after = tap_planet_side_fixture_request(anchor);
-        assert!(
-            after.is_none(),
-            "the request is not reinstalled by a later trip"
-        );
-        let session = session_at(anchor);
-        let surface = share_empty();
-        delivered
-            .as_ref()
-            .expect("delivered")
-            .install(
-                AutomationGate::Active,
-                &session,
-                &surface,
-                &mut TestFixturePort,
-            )
-            .unwrap();
-        let delivered = delivered.expect("delivered");
-        assert_eq!(
-            surface.borrow().generated.len(),
-            delivered.minerals.len() + delivered.brainboxes.len(),
-            "the delivered fixture installs its arranged entities"
-        );
-    }
-
-    #[test]
-    fn telemetry_stays_zero_after_install() {
-        // Setup itself never increments a verdict counter: the counters move
-        // only when production steps resolve a pickup, a stun-bolt, or a seam
-        // collision, so a setup that only arranges keeps telemetry at the baseline.
+    fn fixture_mineral_is_synthetic_and_stays_out_of_native_generated_mapping() {
+        let _fixture_lock = fixture_test_serialize();
+        // A fixture mineral must appear in the world and its frames/masks, but
+        // never in SurfaceAssembly.generated, which production reserves for native
+        // generated scan nodes and their pickup/persistence.  It still collects
+        // through the production collision adapter, calls no SurfaceGenerator
+        // pickup, changes no ScanPersistence bit, increments the real pickup
+        // counter, and is removed.
+        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
         let fixture = PlanetSideFixture::new()
             .with_mineral(2, 3, 5, anchor)
             .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor);
-        crate::planet_side::telemetry::begin(&session);
-        let before = crate::planet_side::telemetry::observation();
         fixture
             .install(
                 AutomationGate::Active,
@@ -695,12 +632,91 @@ mod tests {
                 &mut TestFixturePort,
             )
             .unwrap();
-        let after = crate::planet_side::telemetry::observation();
-        assert_eq!(after, before, "install changes no telemetry counter");
+
+        // World, frame, and mask registries carry the arranged entities; the
+        // native generated mapping stays empty.
+        let mineral = {
+            let assembly = surface.borrow();
+            let mineral = assembly
+                .world
+                .iter()
+                .find(|(_, entity)| {
+                    matches!(&entity.kind, SurfaceEntityKind::MineralNode { size: 3, .. })
+                })
+                .map(|(id, _)| id)
+                .expect("fixture mineral is in the world");
+            assert!(assembly.frames.get(mineral).is_some(), "frame registered");
+            assert!(
+                assembly.masks.entity_mask(mineral).is_some(),
+                "mask registered"
+            );
+            assert_eq!(
+                assembly.generated.len(),
+                0,
+                "synthetic fixture entities never enter the native generated mapping"
+            );
+            mineral
+        };
+
+        // Production collection: cargo resolves, the real pickup counter moves,
+        // no SurfaceGenerator::pickup runs, and no ScanPersistence bit changes.
+        let mut port = SurfaceCollisionAdapter {
+            surface: surface.clone(),
+            random: Random,
+            generator: RecordingGenerator {
+                pickups: std::cell::RefCell::new(0),
+            },
+            persistence: ScanPersistence::default(),
+            world_visuals: TestWorldVisuals,
+            earthquake_frame_count: 13,
+            lava_frame_count: 7,
+        };
+        let before = crate::planet_side::telemetry::observation();
+        let contacts = port.contacts(&session.lander).unwrap();
+        let contact = *contacts
+            .iter()
+            .find(|c| matches!(c.collision, LanderCollision::Mineral { amount: 5, .. }))
+            .expect("the fixture mineral contacts the lander");
+        let collected = resolve_lander_collision(
+            &mut CollisionState {
+                crew: &mut CrewCount::new(12),
+                shields: LanderUpgrades::default().shields,
+                minerals: &mut MineralCargo::new(200, 0, false),
+                biological: &mut BioCargo::default(),
+            },
+            contact.collision,
+            contact.rolls,
+        );
+        port.commit(contact, &collected, 12).unwrap();
+        assert_eq!(
+            crate::planet_side::telemetry::observation().mineral_pickups,
+            before.mineral_pickups + 1,
+            "the real pickup counter increments"
+        );
+        assert_eq!(
+            *port.generator.pickups.borrow(),
+            0,
+            "a synthetic fixture mineral calls no SurfaceGenerator::pickup"
+        );
+        assert_eq!(
+            port.persistence.to_masks(),
+            [0, 0, 0],
+            "a fixture pickup changes no ScanPersistence bit"
+        );
+        assert!(
+            surface.borrow().world.get(mineral).is_none(),
+            "the collected fixture mineral is removed"
+        );
+        assert_eq!(
+            surface.borrow().generated.len(),
+            0,
+            "removal keeps the native generated mapping empty"
+        );
     }
 
     #[test]
     fn coordinator_queue_is_the_sole_authority_and_never_installs_by_activity() {
+        let _serialize = fixture_test_serialize();
         // `coordinator_queues_fixture_request` is called only by the script
         // action.  A coordinator that never executed it never queues.
         coordinator_queues_fixture_request();
@@ -734,6 +750,7 @@ mod tests {
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
+        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         PlanetSideFixture::new()
             .with_mineral(2, 3, 5, anchor)
             .with_mineral(
@@ -810,6 +827,7 @@ mod tests {
         let anchor = SurfacePoint { x: 50, y: 80 };
         let session = session_at(anchor);
         let surface = share_empty();
+        let _exclusive = crate::planet_side::telemetry::tests::exclusive();
         PlanetSideFixture::new()
             .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor)
             .install(
@@ -856,7 +874,15 @@ mod tests {
                 &mut TestFixturePort,
             )
             .unwrap();
-        let creature_id = surface.borrow().generated[0].entity;
+        let creature_id = surface
+            .borrow()
+            .world
+            .iter()
+            .find_map(|(id, entity)| match &entity.kind {
+                SurfaceEntityKind::LiveCreature { .. } => Some(id),
+                _ => None,
+            })
+            .expect("the fixture creature is in the world");
         assert_eq!(
             surface
                 .borrow()

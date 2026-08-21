@@ -269,10 +269,42 @@ impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
 {
     fn mineral_visual(
         &mut self,
-        generated: super::generation::GeneratedEntity,
         entity: &super::entities::SurfaceEntity,
     ) -> Result<EntityVisual, AdapterError> {
-        super::assembly::SurfaceVisualPort::visual_for(self.surface_visuals, generated, entity)
+        // Synthetic fixture minerals carry only the typed SurfaceEntity (never a
+        // GeneratedEntity): the frame/mask selection is identical to the production
+        // generated-node path, including the category bound.
+        let (category, size) = match &entity.kind {
+            super::entities::SurfaceEntityKind::MineralNode { category, size, .. } => {
+                (*category, *size)
+            }
+            _ => return Err(AdapterError::new("fixture_mineral_visual")),
+        };
+        let category =
+            u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
+        if category >= 8 {
+            return Err(AdapterError::new("mineral_category"));
+        }
+        let frame_index = mineral_frame_index(category, size);
+        let base = self.surface_visuals.misc_data;
+        if base.is_null() {
+            return Err(AdapterError::new("surface_frame_missing"));
+        }
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, frame_index) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("surface_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame {
+                base,
+                index: frame_index,
+            },
+            mask,
+        })
     }
 
     fn creature_visual(

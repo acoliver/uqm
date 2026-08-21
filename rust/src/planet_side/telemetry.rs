@@ -237,7 +237,7 @@ const fn sound_code(cue: SoundCue) -> u32 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::planet_side::cargo::MineralCargo;
     use crate::planet_side::model::{CrewCount, LanderUpgrades, SurfacePoint};
@@ -246,9 +246,9 @@ mod tests {
 
     /// These observations are process-global, and the module contract is that
     /// one thread owns them, so the tests take turns rather than racing.
-    static SERIALIZE: Mutex<()> = Mutex::new(());
+    pub(crate) static SERIALIZE: Mutex<()> = Mutex::new(());
 
-    fn exclusive() -> MutexGuard<'static, ()> {
+    pub(crate) fn exclusive() -> MutexGuard<'static, ()> {
         SERIALIZE
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
