@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "name": "comm-encounter-v1-visual-pause",
+  "budgets": {
+    "max_input_ticks": 10000,
+    "max_presentations": 10000,
+    "max_wallclock_seconds": 600
+  },
+  "steps": [
+    {
+      "action": "wait_input_ticks",
+      "count": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 3,
+      "settle": 15
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 20
+    },
+    {
+      "action": "assert_activity",
+      "mask": 255,
+      "equals": 4
+    },
+    {
+      "action": "navigate_to_planet",
+      "planet": 2,
+      "max_ticks": 1800
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 200
+    },
+    {
+      "action": "assert_dispatch",
+      "encounter": 24,
+      "dialogue": 18
+    },
+    {
+      "action": "capture",
+      "label": "real-probe-broadcast"
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 120
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}

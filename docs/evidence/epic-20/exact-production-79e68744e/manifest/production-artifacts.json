@@ -1,0 +1,1613 @@
+{
+  "schema": "uqm-deterministic-artifacts-v4",
+  "git_head": "79e68744e7ab2515760887bda0e05b850dc85e16",
+  "tracked_worktree": {
+    "file_count": 17025,
+    "sha256": "96f722aee8922e2a6f951e8eb5db89dce358fea7a8b91c707f9bdec1f10bfcb1"
+  },
+  "dirty": false,
+  "toolchain": {
+    "target": "aarch64-apple-darwin",
+    "rustc": {
+      "executable": "/Users/acoliver/.cargo/bin/rustc",
+      "version": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6",
+      "sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1",
+      "effective_args": []
+    },
+    "cargo": {
+      "executable": "/Users/acoliver/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+      "version": "cargo 1.97.1 (c980f4866 2026-06-30)\nrelease: 1.97.1\ncommit-hash: c980f4866141969fab6254a680546a277789d6f0\ncommit-date: 2026-06-30\nhost: aarch64-apple-darwin\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.7.1 (sys:0.4.88+curl-8.20.0 system ssl:(SecureTransport) LibreSSL/3.3.6)\nssl: OpenSSL 3.6.2 7 Apr 2026\nos: Mac OS 26.4.0 [64-bit]",
+      "sha256": "7672ead309d505577c018fff2cafb3433601f073e38cbe87359ac1f7b944bbf5",
+      "effective_args": []
+    },
+    "cc": {
+      "executable": "/usr/bin/cc",
+      "version": "Apple clang version 17.0.0 (clang-1700.6.3.2)\nTarget: arm64-apple-darwin25.4.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+      "effective_args": []
+    },
+    "ar": {
+      "executable": "/usr/bin/ar",
+      "version": "Apple clang version 17.0.0 (clang-1700.6.3.2)\nTarget: arm64-apple-darwin25.4.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+      "effective_args": []
+    },
+    "nm": {
+      "executable": "/usr/bin/nm",
+      "version": "llvm-nm, compatible with GNU nm\nApple LLVM version 17.0.0\n  Optimized build.",
+      "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+      "effective_args": []
+    },
+    "pkg_config": {
+      "executable": "/opt/homebrew/bin/pkg-config",
+      "version": "2.5.1",
+      "sha256": "a819e53e8eb8017661e5d686ae8e63102239d1b9c2b7e75988fc8d565fe3ad53",
+      "effective_args": []
+    },
+    "linker": {
+      "executable": "/usr/bin/cc",
+      "version": "Apple clang version 17.0.0 (clang-1700.6.3.2)\nTarget: arm64-apple-darwin25.4.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+      "effective_args": []
+    }
+  },
+  "source_date_epoch": 1786015297,
+  "native_build": {
+    "schema": "uqm-native-build-evidence-v1",
+    "source_date_epoch": 1786015297,
+    "build_date": "Aug  6 2026",
+    "target": "macos-aarch64",
+    "active_features": [
+      "audio_heart",
+      "linked_c_archive"
+    ],
+    "toolchain": {
+      "target": "aarch64-apple-darwin",
+      "rustc": {
+        "executable": "/Users/acoliver/.cargo/bin/rustc",
+        "version": "rustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.6",
+        "sha256": "aeb4105778ca1bd3c6b0e75768f581c656633cd51368fa61289b6a71696ac7e1",
+        "effective_args": []
+      },
+      "cargo": {
+        "executable": "/Users/acoliver/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+        "version": "cargo 1.97.1 (c980f4866 2026-06-30)\nrelease: 1.97.1\ncommit-hash: c980f4866141969fab6254a680546a277789d6f0\ncommit-date: 2026-06-30\nhost: aarch64-apple-darwin\nlibgit2: 1.9.2 (sys:0.20.4 vendored)\nlibcurl: 8.7.1 (sys:0.4.88+curl-8.20.0 system ssl:(SecureTransport) LibreSSL/3.3.6)\nssl: OpenSSL 3.6.2 7 Apr 2026\nos: Mac OS 26.4.0 [64-bit]",
+        "sha256": "7672ead309d505577c018fff2cafb3433601f073e38cbe87359ac1f7b944bbf5",
+        "effective_args": []
+      },
+      "cc": {
+        "executable": "/usr/bin/cc",
+        "version": "Apple clang version 17.0.0 (clang-1700.6.3.2)\nTarget: arm64-apple-darwin25.4.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+        "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+        "effective_args": []
+      },
+      "ar": {
+        "executable": "/usr/bin/ar",
+        "version": "Apple clang version 17.0.0 (clang-1700.6.3.2)\nTarget: arm64-apple-darwin25.4.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+        "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+        "effective_args": []
+      },
+      "nm": {
+        "executable": "/usr/bin/nm",
+        "version": "llvm-nm, compatible with GNU nm\nApple LLVM version 17.0.0\n  Optimized build.",
+        "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+        "effective_args": []
+      },
+      "pkg_config": {
+        "executable": "/opt/homebrew/bin/pkg-config",
+        "version": "2.5.1",
+        "sha256": "a819e53e8eb8017661e5d686ae8e63102239d1b9c2b7e75988fc8d565fe3ad53",
+        "effective_args": []
+      },
+      "linker": {
+        "executable": "/usr/bin/cc",
+        "version": "Apple clang version 17.0.0 (clang-1700.6.3.2)\nTarget: arm64-apple-darwin25.4.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+        "sha256": "12bed4523661307059b879b9b54e77a73176e9d27d27a0e40363271d8f0668ba",
+        "effective_args": []
+      }
+    },
+    "packages": [
+      {
+        "name": "sdl2",
+        "version": "2.32.10",
+        "cflags": [
+          "-I/opt/homebrew/include",
+          "-I/opt/homebrew/include/SDL2",
+          "-D_THREAD_SAFE"
+        ],
+        "libs": [
+          "-L/opt/homebrew/lib",
+          "-lSDL2"
+        ]
+      },
+      {
+        "name": "libpng",
+        "version": "1.6.58",
+        "cflags": [
+          "-I/opt/homebrew/opt/libpng/include/libpng16"
+        ],
+        "libs": [
+          "-L/opt/homebrew/opt/libpng/lib",
+          "-lpng16"
+        ]
+      },
+      {
+        "name": "liblzma",
+        "version": "5.8.3",
+        "cflags": [
+          "-I/opt/homebrew/Cellar/xz/5.8.3/include"
+        ],
+        "libs": [
+          "-L/opt/homebrew/Cellar/xz/5.8.3/lib",
+          "-llzma"
+        ]
+      },
+      {
+        "name": "bzip2",
+        "version": "1.0.8",
+        "cflags": [],
+        "libs": [
+          "-lbz2"
+        ]
+      }
+    ],
+    "compile_profile": {
+      "target": "macos-aarch64",
+      "compiler": "/usr/bin/cc",
+      "ordered_defines": [
+        "-DUQM_BUILD_DATE=\"Aug  6 2026\"",
+        "-D__DATE__=UQM_BUILD_DATE",
+        "-D__TIME__=\"00:00:00\"",
+        "-DGFXMODULE_SDL",
+        "-DHAVE_JOYSTICK",
+        "-DHAVE_ZIP=1",
+        "-DNETPLAY=NETPLAY_FULL",
+        "-DOVCODEC_NONE",
+        "-DRUST_OWNS_MAIN",
+        "-DSDL_DIR=SDL2",
+        "-DTHREADLIB_SDL",
+        "-DUSE_INTERNAL_MIKMOD",
+        "-DUSE_PLATFORM_ACCEL",
+        "-DUSE_RUST_AIFF",
+        "-DUSE_RUST_AUDIO",
+        "-DUSE_RUST_AUDIO_HEART",
+        "-DUSE_RUST_BRIDGE",
+        "-DUSE_RUST_CLOCK",
+        "-DUSE_RUST_COMM",
+        "-DUSE_RUST_DUKAUD",
+        "-DUSE_RUST_FILE",
+        "-DUSE_RUST_GFX",
+        "-DUSE_RUST_INPUT",
+        "-DUSE_RUST_MAINLOOP=1",
+        "-DUSE_RUST_MEM",
+        "-DUSE_RUST_MIXER",
+        "-DUSE_RUST_MOD",
+        "-DUSE_RUST_OGG",
+        "-DUSE_RUST_RESOURCE",
+        "-DUSE_RUST_RESTART",
+        "-DUSE_RUST_SHIPS",
+        "-DUSE_RUST_STATE",
+        "-DUSE_RUST_SUPERMELEE",
+        "-DUSE_RUST_THREADS",
+        "-DUSE_RUST_UIO",
+        "-DUSE_RUST_VIDEO",
+        "-DUSE_RUST_VIDPLAYER",
+        "-DUSE_RUST_WAV",
+        "-D_THREAD_SAFE"
+      ],
+      "ordered_include_roots": [
+        "/opt/homebrew/Cellar/xz/5.8.3/include",
+        "/opt/homebrew/include",
+        "/opt/homebrew/include/SDL2",
+        "/opt/homebrew/opt/libpng/include/libpng16",
+        "/Volumes/XS1000/acoliver/projects/uqm/tmp/verify-build/sc2",
+        "/Volumes/XS1000/acoliver/projects/uqm/tmp/verify-build/sc2/src",
+        "/Volumes/XS1000/acoliver/projects/uqm/tmp/verify-build/sc2/src/libs/uio"
+      ],
+      "ordered_compile_flags": [
+        "-std=gnu99",
+        "-O2",
+        "-fPIC"
+      ],
+      "dependency_flags": [
+        "-MMD",
+        "-MF",
+        "<depfile>"
+      ],
+      "command_template": [
+        "/usr/bin/cc",
+        "-DUQM_BUILD_DATE=\"Aug  6 2026\"",
+        "-D__DATE__=UQM_BUILD_DATE",
+        "-D__TIME__=\"00:00:00\"",
+        "-DGFXMODULE_SDL",
+        "-DHAVE_JOYSTICK",
+        "-DHAVE_ZIP=1",
+        "-DNETPLAY=NETPLAY_FULL",
+        "-DOVCODEC_NONE",
+        "-DRUST_OWNS_MAIN",
+        "-DSDL_DIR=SDL2",
+        "-DTHREADLIB_SDL",
+        "-DUSE_INTERNAL_MIKMOD",
+        "-DUSE_PLATFORM_ACCEL",
+        "-DUSE_RUST_AIFF",
+        "-DUSE_RUST_AUDIO",
+        "-DUSE_RUST_AUDIO_HEART",
+        "-DUSE_RUST_BRIDGE",
+        "-DUSE_RUST_CLOCK",
+        "-DUSE_RUST_COMM",
+        "-DUSE_RUST_DUKAUD",
+        "-DUSE_RUST_FILE",
+        "-DUSE_RUST_GFX",
+        "-DUSE_RUST_INPUT",
+        "-DUSE_RUST_MAINLOOP=1",
+        "-DUSE_RUST_MEM",
+        "-DUSE_RUST_MIXER",
+        "-DUSE_RUST_MOD",
+        "-DUSE_RUST_OGG",
+        "-DUSE_RUST_RESOURCE",
+        "-DUSE_RUST_RESTART",
+        "-DUSE_RUST_SHIPS",
+        "-DUSE_RUST_STATE",
+        "-DUSE_RUST_SUPERMELEE",
+        "-DUSE_RUST_THREADS",
+        "-DUSE_RUST_UIO",
+        "-DUSE_RUST_VIDEO",
+        "-DUSE_RUST_VIDPLAYER",
+        "-DUSE_RUST_WAV",
+        "-D_THREAD_SAFE",
+        "-I",
+        "/opt/homebrew/Cellar/xz/5.8.3/include",
+        "-I",
+        "/opt/homebrew/include",
+        "-I",
+        "/opt/homebrew/include/SDL2",
+        "-I",
+        "/opt/homebrew/opt/libpng/include/libpng16",
+        "-I",
+        "/Volumes/XS1000/acoliver/projects/uqm/tmp/verify-build/sc2",
+        "-I",
+        "/Volumes/XS1000/acoliver/projects/uqm/tmp/verify-build/sc2/src",
+        "-I",
+        "/Volumes/XS1000/acoliver/projects/uqm/tmp/verify-build/sc2/src/libs/uio",
+        "-std=gnu99",
+        "-O2",
+        "-fPIC",
+        "-MMD",
+        "-MF",
+        "<depfile>",
+        "-c",
+        "<canonical-source>",
+        "-o",
+        "<object-output>"
+      ]
+    },
+    "build_environment": {
+      "AR": "/usr/bin/ar",
+      "CARGO": "/Users/acoliver/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+      "CARGO_BUILD_JOBS": "1",
+      "CC": "/usr/bin/cc",
+      "CFLAGS": "",
+      "LDFLAGS": "",
+      "LINKER": "/usr/bin/cc",
+      "NM": "/usr/bin/nm",
+      "PKG_CONFIG": "/opt/homebrew/bin/pkg-config",
+      "RUSTC": "/Users/acoliver/.cargo/bin/rustc",
+      "RUSTFLAGS": "",
+      "SOURCE_DATE_EPOCH": "1786015297",
+      "ZERO_AR_DATE": "1"
+    }
+  },
+  "command": "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production",
+  "target": "aarch64-apple-darwin",
+  "profile": "release",
+  "features": [
+    "audio_heart",
+    "linked_c_archive"
+  ],
+  "cargo_feature_graph": [
+    {
+      "name": "adler2",
+      "version": "2.0.1",
+      "features": []
+    },
+    {
+      "name": "aes",
+      "version": "0.8.4",
+      "features": []
+    },
+    {
+      "name": "aho-corasick",
+      "version": "1.1.4",
+      "features": [
+        "perf-literal",
+        "std"
+      ]
+    },
+    {
+      "name": "anstream",
+      "version": "1.0.0",
+      "features": [
+        "auto",
+        "default",
+        "wincon"
+      ]
+    },
+    {
+      "name": "anstyle",
+      "version": "1.0.14",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "anstyle-parse",
+      "version": "1.0.0",
+      "features": [
+        "default",
+        "utf8"
+      ]
+    },
+    {
+      "name": "anstyle-query",
+      "version": "1.1.5",
+      "features": []
+    },
+    {
+      "name": "anyhow",
+      "version": "1.0.104",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "autocfg",
+      "version": "1.5.1",
+      "features": []
+    },
+    {
+      "name": "bindgen",
+      "version": "0.70.1",
+      "features": [
+        "default",
+        "logging",
+        "prettyplease",
+        "runtime"
+      ]
+    },
+    {
+      "name": "bindgen",
+      "version": "0.72.1",
+      "features": [
+        "runtime"
+      ]
+    },
+    {
+      "name": "bitflags",
+      "version": "1.3.2",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "bitflags",
+      "version": "2.13.1",
+      "features": []
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.10.4",
+      "features": []
+    },
+    {
+      "name": "bumpalo",
+      "version": "3.20.3",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "bytemuck",
+      "version": "1.25.2",
+      "features": [
+        "extern_crate_alloc",
+        "must_cast"
+      ]
+    },
+    {
+      "name": "byteorder",
+      "version": "1.5.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "byteorder-lite",
+      "version": "0.1.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "bzip2",
+      "version": "0.5.2",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "bzip2-sys",
+      "version": "0.1.13+1.0.8",
+      "features": []
+    },
+    {
+      "name": "cc",
+      "version": "1.4.0",
+      "features": [
+        "parallel"
+      ]
+    },
+    {
+      "name": "cexpr",
+      "version": "0.6.0",
+      "features": []
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.4",
+      "features": []
+    },
+    {
+      "name": "cipher",
+      "version": "0.4.4",
+      "features": []
+    },
+    {
+      "name": "clang-sys",
+      "version": "1.9.1",
+      "features": [
+        "clang_10_0",
+        "clang_11_0",
+        "clang_3_5",
+        "clang_3_6",
+        "clang_3_7",
+        "clang_3_8",
+        "clang_3_9",
+        "clang_4_0",
+        "clang_5_0",
+        "clang_6_0",
+        "clang_7_0",
+        "clang_8_0",
+        "clang_9_0",
+        "libloading",
+        "runtime"
+      ]
+    },
+    {
+      "name": "clap",
+      "version": "4.6.4",
+      "features": [
+        "color",
+        "default",
+        "derive",
+        "error-context",
+        "help",
+        "std",
+        "suggestions",
+        "usage"
+      ]
+    },
+    {
+      "name": "clap_builder",
+      "version": "4.6.2",
+      "features": [
+        "color",
+        "error-context",
+        "help",
+        "std",
+        "suggestions",
+        "usage"
+      ]
+    },
+    {
+      "name": "clap_derive",
+      "version": "4.6.4",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "clap_lex",
+      "version": "1.1.0",
+      "features": []
+    },
+    {
+      "name": "colorchoice",
+      "version": "1.0.5",
+      "features": []
+    },
+    {
+      "name": "constant_time_eq",
+      "version": "0.3.1",
+      "features": []
+    },
+    {
+      "name": "core-foundation-sys",
+      "version": "0.8.7",
+      "features": [
+        "default",
+        "link"
+      ]
+    },
+    {
+      "name": "coreaudio-rs",
+      "version": "0.11.3",
+      "features": [
+        "audio_unit",
+        "core_audio"
+      ]
+    },
+    {
+      "name": "coreaudio-sys",
+      "version": "0.2.18",
+      "features": [
+        "audio_unit",
+        "core_audio"
+      ]
+    },
+    {
+      "name": "cpal",
+      "version": "0.15.3",
+      "features": []
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "features": []
+    },
+    {
+      "name": "crc",
+      "version": "3.4.0",
+      "features": []
+    },
+    {
+      "name": "crc-catalog",
+      "version": "2.5.0",
+      "features": []
+    },
+    {
+      "name": "crc32fast",
+      "version": "1.5.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "crossbeam",
+      "version": "0.8.4",
+      "features": [
+        "alloc",
+        "crossbeam-channel",
+        "crossbeam-deque",
+        "crossbeam-epoch",
+        "crossbeam-queue",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "crossbeam-channel",
+      "version": "0.5.16",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "crossbeam-deque",
+      "version": "0.8.7",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "crossbeam-epoch",
+      "version": "0.9.20",
+      "features": [
+        "alloc",
+        "std"
+      ]
+    },
+    {
+      "name": "crossbeam-queue",
+      "version": "0.3.13",
+      "features": [
+        "alloc",
+        "std"
+      ]
+    },
+    {
+      "name": "crossbeam-utils",
+      "version": "0.8.22",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "dasp_sample",
+      "version": "0.11.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "deflate64",
+      "version": "0.1.12",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "deranged",
+      "version": "0.5.8",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "digest",
+      "version": "0.10.7",
+      "features": [
+        "alloc",
+        "block-buffer",
+        "core-api",
+        "default",
+        "mac",
+        "std",
+        "subtle"
+      ]
+    },
+    {
+      "name": "displaydoc",
+      "version": "0.2.7",
+      "features": []
+    },
+    {
+      "name": "document-features",
+      "version": "0.2.12",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "either",
+      "version": "1.17.0",
+      "features": []
+    },
+    {
+      "name": "equivalent",
+      "version": "1.0.2",
+      "features": []
+    },
+    {
+      "name": "fast_image_resize",
+      "version": "5.5.0",
+      "features": [
+        "only_u8x4"
+      ]
+    },
+    {
+      "name": "fdeflate",
+      "version": "0.3.7",
+      "features": []
+    },
+    {
+      "name": "find-msvc-tools",
+      "version": "0.1.9",
+      "features": []
+    },
+    {
+      "name": "flate2",
+      "version": "1.1.9",
+      "features": [
+        "any_impl",
+        "default",
+        "miniz_oxide",
+        "rust_backend"
+      ]
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7",
+      "features": [
+        "more_lengths"
+      ]
+    },
+    {
+      "name": "getrandom",
+      "version": "0.3.4",
+      "features": [
+        "std",
+        "wasm_js"
+      ]
+    },
+    {
+      "name": "gl",
+      "version": "0.14.0",
+      "features": []
+    },
+    {
+      "name": "gl_generator",
+      "version": "0.14.0",
+      "features": []
+    },
+    {
+      "name": "glob",
+      "version": "0.3.4",
+      "features": []
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.17.1",
+      "features": []
+    },
+    {
+      "name": "heck",
+      "version": "0.5.0",
+      "features": []
+    },
+    {
+      "name": "hmac",
+      "version": "0.12.1",
+      "features": [
+        "reset"
+      ]
+    },
+    {
+      "name": "hound",
+      "version": "3.5.1",
+      "features": []
+    },
+    {
+      "name": "image",
+      "version": "0.25.10",
+      "features": [
+        "png"
+      ]
+    },
+    {
+      "name": "indexmap",
+      "version": "2.14.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "inout",
+      "version": "0.1.4",
+      "features": []
+    },
+    {
+      "name": "is_terminal_polyfill",
+      "version": "1.70.2",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "itertools",
+      "version": "0.13.0",
+      "features": []
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "features": []
+    },
+    {
+      "name": "jobserver",
+      "version": "0.1.35",
+      "features": []
+    },
+    {
+      "name": "khronos_api",
+      "version": "3.1.0",
+      "features": []
+    },
+    {
+      "name": "lazy_static",
+      "version": "1.5.0",
+      "features": []
+    },
+    {
+      "name": "lewton",
+      "version": "0.10.2",
+      "features": [
+        "default",
+        "ogg"
+      ]
+    },
+    {
+      "name": "libc",
+      "version": "0.2.189",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "libloading",
+      "version": "0.8.9",
+      "features": []
+    },
+    {
+      "name": "litrs",
+      "version": "1.0.0",
+      "features": []
+    },
+    {
+      "name": "lock_api",
+      "version": "0.4.14",
+      "features": [
+        "atomic_usize",
+        "default"
+      ]
+    },
+    {
+      "name": "log",
+      "version": "0.4.33",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "lzma-rs",
+      "version": "0.3.0",
+      "features": [
+        "stream"
+      ]
+    },
+    {
+      "name": "lzma-sys",
+      "version": "0.1.20",
+      "features": []
+    },
+    {
+      "name": "mach2",
+      "version": "0.4.3",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "matchers",
+      "version": "0.2.0",
+      "features": []
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "memoffset",
+      "version": "0.9.1",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "minimal-lexical",
+      "version": "0.2.1",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.8.9",
+      "features": [
+        "default",
+        "simd",
+        "simd-adler32",
+        "with-alloc"
+      ]
+    },
+    {
+      "name": "mod_player",
+      "version": "0.1.4",
+      "features": []
+    },
+    {
+      "name": "moxcms",
+      "version": "0.8.1",
+      "features": [
+        "avx",
+        "avx_luts",
+        "avx_shaper_fixed_point_paths",
+        "avx_shaper_paths",
+        "default",
+        "lut",
+        "neon",
+        "neon_luts",
+        "neon_shaper_fixed_point_paths",
+        "neon_shaper_paths",
+        "sse",
+        "sse_luts",
+        "sse_shaper_fixed_point_paths",
+        "sse_shaper_paths"
+      ]
+    },
+    {
+      "name": "nom",
+      "version": "7.1.3",
+      "features": [
+        "alloc",
+        "std"
+      ]
+    },
+    {
+      "name": "nu-ansi-term",
+      "version": "0.50.3",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "num-conv",
+      "version": "0.2.2",
+      "features": []
+    },
+    {
+      "name": "num-traits",
+      "version": "0.2.19",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "ogg",
+      "version": "0.8.0",
+      "features": []
+    },
+    {
+      "name": "ogg",
+      "version": "0.9.2",
+      "features": []
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "features": [
+        "alloc",
+        "default",
+        "race",
+        "std"
+      ]
+    },
+    {
+      "name": "parking_lot",
+      "version": "0.12.5",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "parking_lot_core",
+      "version": "0.9.12",
+      "features": []
+    },
+    {
+      "name": "pbkdf2",
+      "version": "0.12.2",
+      "features": [
+        "default",
+        "hmac"
+      ]
+    },
+    {
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "features": []
+    },
+    {
+      "name": "pkg-config",
+      "version": "0.3.33",
+      "features": []
+    },
+    {
+      "name": "png",
+      "version": "0.18.1",
+      "features": []
+    },
+    {
+      "name": "portable-atomic",
+      "version": "1.14.0",
+      "features": [
+        "default",
+        "fallback"
+      ]
+    },
+    {
+      "name": "powerfmt",
+      "version": "0.2.0",
+      "features": []
+    },
+    {
+      "name": "prettyplease",
+      "version": "0.2.37",
+      "features": [
+        "verbatim"
+      ]
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "features": [
+        "default",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "pxfm",
+      "version": "0.1.30",
+      "features": []
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "features": [
+        "default",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "rayon",
+      "version": "1.12.0",
+      "features": []
+    },
+    {
+      "name": "rayon-core",
+      "version": "1.13.0",
+      "features": []
+    },
+    {
+      "name": "regex",
+      "version": "1.13.1",
+      "features": [
+        "default",
+        "perf",
+        "perf-backtrack",
+        "perf-cache",
+        "perf-dfa",
+        "perf-inline",
+        "perf-literal",
+        "perf-onepass",
+        "std",
+        "unicode",
+        "unicode-age",
+        "unicode-bool",
+        "unicode-case",
+        "unicode-gencat",
+        "unicode-perl",
+        "unicode-script",
+        "unicode-segment"
+      ]
+    },
+    {
+      "name": "regex-automata",
+      "version": "0.4.16",
+      "features": [
+        "alloc",
+        "dfa-build",
+        "dfa-onepass",
+        "dfa-search",
+        "hybrid",
+        "meta",
+        "nfa-backtrack",
+        "nfa-pikevm",
+        "nfa-thompson",
+        "perf-inline",
+        "perf-literal",
+        "perf-literal-multisubstring",
+        "perf-literal-substring",
+        "std",
+        "syntax",
+        "unicode",
+        "unicode-age",
+        "unicode-bool",
+        "unicode-case",
+        "unicode-gencat",
+        "unicode-perl",
+        "unicode-script",
+        "unicode-segment",
+        "unicode-word-boundary"
+      ]
+    },
+    {
+      "name": "regex-syntax",
+      "version": "0.8.11",
+      "features": [
+        "default",
+        "std",
+        "unicode",
+        "unicode-age",
+        "unicode-bool",
+        "unicode-case",
+        "unicode-gencat",
+        "unicode-perl",
+        "unicode-script",
+        "unicode-segment"
+      ]
+    },
+    {
+      "name": "rodio",
+      "version": "0.19.0",
+      "features": [
+        "hound",
+        "lewton",
+        "vorbis",
+        "wav"
+      ]
+    },
+    {
+      "name": "rustc-hash",
+      "version": "1.1.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "rustc-hash",
+      "version": "2.1.3",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "scopeguard",
+      "version": "1.2.0",
+      "features": []
+    },
+    {
+      "name": "sdl2",
+      "version": "0.37.0",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "sdl2-sys",
+      "version": "0.37.0",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "features": [
+        "default",
+        "derive",
+        "serde_derive",
+        "std"
+      ]
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.229",
+      "features": [
+        "result",
+        "std"
+      ]
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.151",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "sha1",
+      "version": "0.10.7",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "sha2",
+      "version": "0.10.9",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "sharded-slab",
+      "version": "0.1.7",
+      "features": []
+    },
+    {
+      "name": "shlex",
+      "version": "1.3.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "shlex",
+      "version": "2.0.1",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "simd-adler32",
+      "version": "0.3.10",
+      "features": [
+        "const-generics",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "smallvec",
+      "version": "1.15.2",
+      "features": []
+    },
+    {
+      "name": "strsim",
+      "version": "0.11.1",
+      "features": []
+    },
+    {
+      "name": "subtle",
+      "version": "2.6.1",
+      "features": []
+    },
+    {
+      "name": "syn",
+      "version": "2.0.119",
+      "features": [
+        "clone-impls",
+        "default",
+        "derive",
+        "extra-traits",
+        "full",
+        "parsing",
+        "printing",
+        "proc-macro",
+        "visit",
+        "visit-mut"
+      ]
+    },
+    {
+      "name": "syn",
+      "version": "3.0.3",
+      "features": [
+        "clone-impls",
+        "default",
+        "derive",
+        "full",
+        "parsing",
+        "printing",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "thiserror",
+      "version": "1.0.69",
+      "features": []
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.19",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "1.0.69",
+      "features": []
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "2.0.19",
+      "features": []
+    },
+    {
+      "name": "thread_local",
+      "version": "1.1.10",
+      "features": []
+    },
+    {
+      "name": "time",
+      "version": "0.3.54",
+      "features": [
+        "alloc",
+        "std"
+      ]
+    },
+    {
+      "name": "time-core",
+      "version": "0.1.9",
+      "features": []
+    },
+    {
+      "name": "tinyvec",
+      "version": "1.12.0",
+      "features": [
+        "alloc",
+        "default",
+        "tinyvec_macros"
+      ]
+    },
+    {
+      "name": "tinyvec_macros",
+      "version": "0.1.1",
+      "features": []
+    },
+    {
+      "name": "tracing",
+      "version": "0.1.44",
+      "features": [
+        "attributes",
+        "default",
+        "std",
+        "tracing-attributes"
+      ]
+    },
+    {
+      "name": "tracing-attributes",
+      "version": "0.1.31",
+      "features": []
+    },
+    {
+      "name": "tracing-core",
+      "version": "0.1.36",
+      "features": [
+        "default",
+        "once_cell",
+        "std"
+      ]
+    },
+    {
+      "name": "tracing-log",
+      "version": "0.2.0",
+      "features": [
+        "log-tracer",
+        "std"
+      ]
+    },
+    {
+      "name": "tracing-subscriber",
+      "version": "0.3.23",
+      "features": [
+        "alloc",
+        "ansi",
+        "default",
+        "env-filter",
+        "fmt",
+        "matchers",
+        "nu-ansi-term",
+        "once_cell",
+        "registry",
+        "sharded-slab",
+        "smallvec",
+        "std",
+        "thread_local",
+        "tracing",
+        "tracing-log"
+      ]
+    },
+    {
+      "name": "typenum",
+      "version": "1.20.1",
+      "features": []
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.24",
+      "features": []
+    },
+    {
+      "name": "uqm",
+      "version": "0.8.0",
+      "features": [
+        "audio_heart",
+        "linked_c_archive"
+      ]
+    },
+    {
+      "name": "uqm-ownership",
+      "version": "0.8.0",
+      "features": []
+    },
+    {
+      "name": "utf8parse",
+      "version": "0.2.2",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "version-compare",
+      "version": "0.1.1",
+      "features": []
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "features": []
+    },
+    {
+      "name": "xbrz-rs",
+      "version": "0.1.0",
+      "features": []
+    },
+    {
+      "name": "xml-rs",
+      "version": "0.8.28",
+      "features": []
+    },
+    {
+      "name": "xz2",
+      "version": "0.1.7",
+      "features": []
+    },
+    {
+      "name": "zeroize",
+      "version": "1.9.0",
+      "features": [
+        "alloc",
+        "default",
+        "zeroize_derive"
+      ]
+    },
+    {
+      "name": "zeroize_derive",
+      "version": "1.5.0",
+      "features": []
+    },
+    {
+      "name": "zip",
+      "version": "2.4.2",
+      "features": [
+        "_deflate-any",
+        "aes",
+        "aes-crypto",
+        "bzip2",
+        "constant_time_eq",
+        "default",
+        "deflate",
+        "deflate-flate2",
+        "deflate-zopfli",
+        "deflate64",
+        "flate2",
+        "getrandom",
+        "hmac",
+        "lzma",
+        "lzma-rs",
+        "pbkdf2",
+        "sha1",
+        "time",
+        "xz",
+        "zeroize",
+        "zopfli",
+        "zstd"
+      ]
+    },
+    {
+      "name": "zmij",
+      "version": "1.0.23",
+      "features": []
+    },
+    {
+      "name": "zopfli",
+      "version": "0.8.3",
+      "features": [
+        "default",
+        "gzip",
+        "std",
+        "zlib"
+      ]
+    },
+    {
+      "name": "zstd",
+      "version": "0.13.3",
+      "features": []
+    },
+    {
+      "name": "zstd-safe",
+      "version": "7.2.4",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "zstd-sys",
+      "version": "2.0.16+zstd.1.5.7",
+      "features": [
+        "std"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "role": "executable",
+      "path": "rust/target/release/uqm",
+      "media_type": "application/x-executable",
+      "producing_command": "cargo build --locked --manifest-path rust/Cargo.toml --release --no-default-features --features audio_heart,linked_c_archive --bin uqm",
+      "byte_length": 6285536,
+      "sha256": "735261cb49a6fe4fa7a9d83b3ce7a54d5c33037c4baf3e76ae3308607b48c659"
+    },
+    {
+      "role": "rust_static_archive",
+      "path": "rust/target/release/deps/libuqm_rust-804ae15f32260557.a",
+      "media_type": "application/x-archive",
+      "producing_command": "cargo build --locked --manifest-path rust/Cargo.toml --release --no-default-features --features audio_heart,linked_c_archive --bin uqm",
+      "byte_length": 32487848,
+      "sha256": "c033c96b150ae39ed9ed17b042bfb7310620f5fcf38cb65830b3a207c0a5da29"
+    },
+    {
+      "role": "c_static_archive",
+      "path": "rust/target/release/build/uqm-8929e874af4db672/out/libuqm_c.a",
+      "media_type": "application/x-archive",
+      "producing_command": "canonical ar rcs <OUT_DIR>/libuqm_c.a <exact manifest-selected native objects>",
+      "byte_length": 2478040,
+      "sha256": "18bcd4716378706560fbec47cd0c3f6a0a75f8fdc60198e33fcbf0b8c5fc62a9"
+    },
+    {
+      "role": "object_sidecar",
+      "path": "rust/target/release/build/uqm-8929e874af4db672/out/uqm-c-objects.manifest",
+      "media_type": "text/plain",
+      "producing_command": "rust/build.rs archive_sidecar_inputs(rust/build/native-inputs.json, rust/ownership/native-provider-manifest.json)",
+      "byte_length": 6168,
+      "sha256": "9c48cdb5fe9708ec79819c7c488ec89e82dfc76c20859e0c47d9efd321f51b3c"
+    },
+    {
+      "role": "provider_report",
+      "path": "rust/target/release/build/uqm-8929e874af4db672/out/provider-report.json",
+      "media_type": "application/json",
+      "producing_command": "rust/build.rs uqm_ownership::Validator::generate_report()",
+      "byte_length": 73791,
+      "sha256": "1f81bb67fdfb2145a8b2c364832e501b2b8aef67de7673d90d1801f6e6b3d3f1"
+    }
+  ]
+}
