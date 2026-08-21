@@ -108,6 +108,42 @@ pub trait FixtureVisualPort {
     ) -> Result<EntityVisual, AdapterError>;
 }
 
+/// The optional issue #162 fixture request for a `run_session`.
+///
+/// `None` is the ordinary state: no active automation coordinator has
+/// requested the fixture, so the run_session executes the normal generated
+/// PlanetSide session unchanged. `Some` is an explicit request that
+/// [`PlanetSideFixture::install`] consumes; install fails fast with the typed
+/// error unless the session is running under an active coordinator. The two
+/// states are distinct: a session without a request never installs and never
+/// fails, while an explicit request outside an active session is always rejected.
+///
+/// Production binds the request to
+/// [`crate::automation::Coordinator::is_active`]; the regression tests bind it
+/// directly so an active session with no request is exercised deterministically.
+#[must_use]
+pub fn session_fixture_request(
+    requested: bool,
+    position: SurfacePoint,
+) -> Option<PlanetSideFixture> {
+    if requested {
+        Some(PlanetSideFixture::for_collision_parity(position))
+    } else {
+        None
+    }
+}
+
+/// The automation gate a run_session carries: active when the live
+/// coordinator is driving the session, otherwise rejected.
+#[must_use]
+pub const fn automation_gate(active: bool) -> AutomationGate {
+    if active {
+        AutomationGate::Active
+    } else {
+        AutomationGate::Inactive
+    }
+}
+
 impl PlanetSideFixture {
     /// An empty fixture request.
     #[must_use]
@@ -550,6 +586,57 @@ mod tests {
         assert!(
             surface.borrow().world.is_empty(),
             "no entity may be arranged on rejection"
+        );
+    }
+
+    #[test]
+    fn ordinary_non_automation_run_session_has_no_fixture_request_and_runs_unchanged() {
+        // The ordinary state is `None`: no active automation coordinator has
+        // requested the issue #162 fixture. The generated world keeps exactly the
+        // assembly production produced and no install error can be raised.
+        let fixture = session_fixture_request(false, SurfacePoint { x: 50, y: 80 });
+        assert!(
+            fixture.is_none(),
+            "a session without a request arranges nothing"
+        );
+        assert_eq!(
+            automation_gate(false),
+            AutomationGate::Inactive,
+            "a session without a request is not gated active"
+        );
+    }
+
+    #[test]
+    fn active_automation_session_without_a_fixture_request_runs_the_generated_session_unchanged() {
+        // An active coordinator that did not request the fixture still yields
+        // `None`, so the session runs the normal generated PlanetSide world and
+        // only an explicit `Some` request is ever installed.
+        let anchor = SurfacePoint { x: 50, y: 80 };
+        let fixture = session_fixture_request(false, anchor);
+        assert!(
+            fixture.is_none(),
+            "no fixture request in the active session"
+        );
+        let session = session_at(anchor);
+        let surface = share_empty();
+        assert!(
+            surface.borrow().world.is_empty(),
+            "the generated session is unchanged before install"
+        );
+        if let Some(fixture) = fixture {
+            fixture
+                .install(
+                    automation_gate(true),
+                    &session,
+                    &surface,
+                    &mut TestFixturePort,
+                )
+                .unwrap();
+            panic!("a session without a request must not install");
+        }
+        assert!(
+            surface.borrow().world.is_empty(),
+            "the unchanged session now owns only its generated entities"
         );
     }
 

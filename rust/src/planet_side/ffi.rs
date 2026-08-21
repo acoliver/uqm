@@ -174,7 +174,6 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
     use super::session::SessionOutcome;
     use super::session_factory::create_production_session;
     use super::visual_adapter::CffiSurfaceVisuals;
-    use super::visual_adapter::CffiWorldVisuals;
 
     let context = unsafe { &mut *context };
     if context.solar_system.is_null()
@@ -212,16 +211,22 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             context.weather_rating,
             context.temperature,
         ));
-        let world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
-        let gate = if crate::automation::Coordinator::is_active() {
-            super::automation_fixture::AutomationGate::Active
-        } else {
-            super::automation_fixture::AutomationGate::Inactive
-        };
-        let fixture = super::automation_fixture::PlanetSideFixture::for_collision_parity(
-            session.lander.position,
-        );
-        fixture.install(gate, &session, &surface, &mut world_visuals)?;
+        let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
+        // The issue #162 fixture is optional. Only an explicit request from an
+        // active automation coordinator installs arranged entities; a session with
+        // no request runs the normal generated PlanetSide session unchanged, and a
+        // request that reaches run_session outside an active coordinator fails
+        // fast through install with the typed error.
+        if crate::automation::Coordinator::is_active() {
+            super::automation_fixture::session_fixture_request(true, session.lander.position)
+                .expect("an active fixture request is always present")
+                .install(
+                    super::automation_fixture::automation_gate(true),
+                    &session,
+                    &surface,
+                    &mut world_visuals,
+                )?;
+        }
         let collision = SurfaceCollisionAdapter {
             surface: surface.clone(),
             random: CffiGameplayRandom,
