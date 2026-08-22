@@ -6,6 +6,7 @@ use super::assembly::{
     advance_creature_animation_frame, insert_surface_entity, remove_surface_entity,
     transform_creature_to_canned, SharedSurface, SurfaceAssembly, WorldVisualPort,
 };
+use super::cargo::CargoPickup;
 use super::collision::{CollisionOutcome, CollisionRolls, LanderCollision};
 use super::creatures::CreatureCatalog;
 use super::entities::{SurfaceEntity, SurfaceEntityId, SurfaceEntityKind};
@@ -141,12 +142,12 @@ where
             if !wrapped {
                 continue;
             }
-            if !masks_intersect(lander.position, lander_mask, entity.position, entity_mask) {
-                super::telemetry::seam_hit();
-            }
             let Some(collision) = classify(&entity.kind) else {
                 continue;
             };
+            if !masks_intersect(lander.position, lander_mask, entity.position, entity_mask) {
+                super::telemetry::seam_hit();
+            }
             let rolls = rolls_for(&mut self.random, collision);
             contacts.push(CollisionContact {
                 entity: Some(id),
@@ -166,17 +167,17 @@ where
         let Some(entity_id) = contact.entity else {
             return Ok(SpecialPickupEffects::default());
         };
-        if matches!(
-            contact.collision,
-            LanderCollision::Mineral { .. } | LanderCollision::CannedBiological { .. }
-        ) && !matches!(outcome, CollisionOutcome::Cargo { .. })
+        // Count a mineral pickup only when a deposit was actually collected:
+        // canned biological cargo, a full hold, and zero-amount outcomes are
+        // not mineral pickups.
+        if let CollisionOutcome::Cargo {
+            pickup: CargoPickup::Collected { amount, .. },
+            ..
+        } = outcome
         {
-            // Not a pickup (full hold); nothing is collected.
-        } else if matches!(
-            contact.collision,
-            LanderCollision::Mineral { .. } | LanderCollision::CannedBiological { .. }
-        ) {
-            super::telemetry::mineral_pickup();
+            if matches!(contact.collision, LanderCollision::Mineral { .. }) && *amount > 0 {
+                super::telemetry::mineral_pickup();
+            }
         }
         let generated = {
             let surface = self.surface.borrow();
@@ -512,6 +513,43 @@ mod tests {
 
     /// Test visual port that returns a solid 1×1 mask and dangling frame pointer.
     struct TestWorldVisuals;
+
+    /// The telemetry counters are process-global; each test takes the trip mutex.
+    fn telemetry_guard() -> std::sync::MutexGuard<'static, ()> {
+        super::super::telemetry::tests::exclusive()
+    }
+
+    /// A shared surface with one entity registered in all its registries.
+    fn shared_surface_with_entity(entity: SurfaceEntity) -> SharedSurface {
+        let mut world = SurfaceWorld::new();
+        let id = world.insert(entity);
+        let mut masks = SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap();
+        masks.insert_entity(id, solid());
+        super::super::assembly::share_surface(super::super::assembly::SurfaceAssembly {
+            world,
+            generated: Vec::new(),
+            frames: super::super::graphics_adapter::SurfaceFrameRegistry::default(),
+            masks,
+        })
+    }
+
+    /// A collision adapter whose world has a single registered entity.
+    fn test_adapter(
+        surface: SharedSurface,
+    ) -> SurfaceCollisionAdapter<Random, Generator, TestWorldVisuals> {
+        SurfaceCollisionAdapter {
+            surface,
+            random: Random {
+                values: Default::default(),
+                calls: 0,
+            },
+            generator: Generator,
+            persistence: ScanPersistence::default(),
+            world_visuals: TestWorldVisuals,
+            earthquake_frame_count: 13,
+            lava_frame_count: 7,
+        }
+    }
 
     impl WorldVisualPort for TestWorldVisuals {
         fn shot_visual(&mut self, _facing: u8) -> Result<EntityVisual, AdapterError> {
@@ -868,6 +906,165 @@ mod tests {
         assert!(
             effects.takeoff_requested,
             "takeoff requested by the pickup callback must reach the session"
+        );
+    }
+
+    #[test]
+    fn commit_counts_a_collected_mineral_pickup() {
+        let _guard = telemetry_guard();
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category: 0,
+                size: 1,
+                quantity: 4,
+            },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        });
+        let mut adapter = test_adapter(surface);
+        let contacts = adapter.contacts(&lander()).unwrap();
+        let [contact] = contacts.as_slice() else {
+            panic!("expected exactly one mineral contact");
+        };
+        let outcome = CollisionOutcome::Cargo {
+            pickup: CargoPickup::Collected {
+                amount: 4,
+                complete: true,
+            },
+            remove_node: false,
+        };
+        let before = crate::planet_side::telemetry::observation();
+        adapter.commit(*contact, &outcome, 12).unwrap();
+        assert_eq!(
+            crate::planet_side::telemetry::observation().mineral_pickups,
+            before.mineral_pickups + 1,
+            "a collected mineral increments the pickup counter"
+        );
+    }
+
+    #[test]
+    fn commit_skips_full_or_zero_mineral_pickups() {
+        let _guard = telemetry_guard();
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category: 0,
+                size: 1,
+                quantity: 0,
+            },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        });
+        let mut adapter = test_adapter(surface);
+        let contacts = adapter.contacts(&lander()).unwrap();
+        let [contact] = contacts.as_slice() else {
+            panic!("expected exactly one mineral contact");
+        };
+        for outcome in [
+            CollisionOutcome::Cargo {
+                pickup: CargoPickup::Full,
+                remove_node: false,
+            },
+            CollisionOutcome::Cargo {
+                pickup: CargoPickup::Collected {
+                    amount: 0,
+                    complete: true,
+                },
+                remove_node: false,
+            },
+        ] {
+            let before = crate::planet_side::telemetry::observation();
+            adapter.commit(*contact, &outcome, 12).unwrap();
+            assert_eq!(
+                crate::planet_side::telemetry::observation().mineral_pickups,
+                before.mineral_pickups,
+                "a full or zero pickup is not a collected mineral"
+            );
+        }
+    }
+
+    #[test]
+    fn commit_does_not_count_canned_biological_cargo() {
+        let _guard = telemetry_guard();
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind: SurfaceEntityKind::CannedCreature { value: 7 },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        });
+        let mut adapter = test_adapter(surface);
+        let contacts = adapter.contacts(&lander()).unwrap();
+        let [contact] = contacts.as_slice() else {
+            panic!("expected exactly one canned-biological contact");
+        };
+        let outcome = CollisionOutcome::Cargo {
+            pickup: CargoPickup::Collected {
+                amount: 7,
+                complete: true,
+            },
+            remove_node: false,
+        };
+        let before = crate::planet_side::telemetry::observation();
+        adapter.commit(*contact, &outcome, 12).unwrap();
+        assert_eq!(
+            crate::planet_side::telemetry::observation().mineral_pickups,
+            before.mineral_pickups,
+            "biological cargo is not a mineral pickup"
+        );
+    }
+
+    #[test]
+    fn contacts_does_not_count_wrapped_overlap_of_an_unclassifiable_entity() {
+        let _guard = telemetry_guard();
+        // A shot overlaps the lander only through a wrapped copy; because a
+        // shot is unclassifiable it must not count as a seam hit.
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(super::super::simulation::Shot {
+                position: SurfacePoint { x: 4, y: 0 },
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint {
+                x: super::super::world::WORLD_WIDTH,
+                y: 0,
+            },
+            finite_life: Some(12),
+        });
+        let mut adapter = test_adapter(surface);
+        let before = crate::planet_side::telemetry::observation();
+        let contacts = adapter.contacts(&lander()).unwrap();
+        assert!(contacts.is_empty(), "shots never produce a lander contact");
+        assert_eq!(
+            crate::planet_side::telemetry::observation().seam_hits,
+            before.seam_hits,
+            "an unclassified wrapped overlap must not count as a seam hit"
+        );
+    }
+
+    #[test]
+    fn contacts_counts_the_wrapped_overlap_of_a_classified_entity() {
+        let _guard = telemetry_guard();
+        // The deposit's raw position touches only across the seam.
+        let surface = shared_surface_with_entity(SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category: 3,
+                size: 1,
+                quantity: 4,
+            },
+            position: SurfacePoint {
+                x: super::super::world::WORLD_WIDTH,
+                y: 0,
+            },
+            finite_life: None,
+        });
+        let mut adapter = test_adapter(surface);
+        let before = crate::planet_side::telemetry::observation();
+        let contacts = adapter.contacts(&lander()).unwrap();
+        assert_eq!(contacts.len(), 1, "the wrapped copy of a mineral connects");
+        assert_eq!(
+            crate::planet_side::telemetry::observation().seam_hits,
+            before.seam_hits + 1,
+            "a classified wrapped-only contact counts as a seam hit"
         );
     }
 }
