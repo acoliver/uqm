@@ -815,29 +815,21 @@ mod tests {
         // same single Active observation; a second gate read could differ, which is
         // exactly the two-observation split this change removes.
         let tap = |position| tap_planet_side_fixture_request(position);
-        let active = tap(anchor).is_some();
+        let active = automation_gate(true);
+        let fixture =
+            tap(anchor).expect("the active observation finds the one-shot request still queued");
+        assert_eq!(
+            fixture,
+            PlanetSideFixture::for_collision_parity(anchor),
+            "the tapped request is the standard issue #162 layout"
+        );
         assert_eq!(
             tap(anchor),
             None,
             "the single observation taps at most one request"
         );
-        assert!(
-            active,
-            "the active observation finds the one-shot request still queued"
-        );
-        let fixture = PlanetSideFixture::for_collision_parity(anchor);
-        assert_eq!(
-            fixture,
-            PlanetSideFixture::for_collision_parity(anchor),
-            "the pending request is the standard issue #162 layout"
-        );
         fixture
-            .install(
-                automation_gate(active),
-                &session,
-                &surface,
-                &mut TestFixturePort,
-            )
+            .install(active, &session, &surface, &mut TestFixturePort)
             .expect("active gate accepts the installed request");
         assert!(
             !surface.borrow().world.is_empty(),

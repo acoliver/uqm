@@ -725,7 +725,8 @@ fn check_shot_creature_collision<M: MaskLookup>(
             None => continue,
         };
         // The lander-vs-entity loop uses the wrapped form so a shot whose drawn
-        // image crosses the horizontal seam connects exactly where it is rendered.
+        // image crosses the horizontal seam connects at the ring copy that is
+        // actually rendered.
         if !masks_intersect_wrapped(
             shot_position,
             shot_mask,
@@ -1784,12 +1785,14 @@ mod tests {
 
     /// Every animation frame the brainbox can show must have its own declared extent
     /// and hotspot, and each opaque pixel inside that extent must collide while a
-    /// pixel one past the declared box stays a miss.  The frame mask is registered
-    /// via the ordinary production world/assembly collision path, and the bolt is a
-    /// 1×1 shot mask, so a hit is a genuine overlap of two independent pixel
-    /// masks in `step_world`, never a helper compared to itself.
+    /// bolt just right of the frame's right extent and one just below the bottom
+    /// extent both fall outside the mask's bounding box and stay a miss. The frame
+    /// mask is registered via the ordinary production world/assembly collision path,
+    /// and the bolt is a 1x1 shot mask, so a hit is a genuine overlap of
+    /// two independent pixel masks in `step_world`, never a helper compared to
+    /// itself.
     #[test]
-    fn brainbox_accept_center_edge_hit_and_transparent_miss_on_every_lifey_frame() {
+    fn brainbox_accept_center_edge_hit_and_right_below_extent_miss_on_every_lifey_frame() {
         for frame in 0..=3u16 {
             let (width, height, hotspot) = brainbox_extents(frame);
             let center = tile_pixel(width, height, hotspot, width / 2, height / 2);
@@ -1816,8 +1819,9 @@ mod tests {
                 !hit.landed_shot.is_empty(),
                 "edge-pixel hit on frame {frame}"
             );
-            // One column past the declared box and one row below it show no
-            // drawn pixel, so a bolt there is a clean miss.
+            // One column past the right extent and one row below the bottom extent
+            // fall outside the mask's bounding box entirely, so a bolt there is
+            // a clean miss.
             let right = tile_pixel(width, height, hotspot, width / 2, height / 2);
             let hit = step_shot_into_creature(
                 &right.mask,
@@ -1828,7 +1832,7 @@ mod tests {
             );
             assert!(
                 hit.landed_shot.is_empty(),
-                "extent-past miss on frame {frame}"
+                "right-of-extent miss on frame {frame}"
             );
             let below = tile_pixel(width, height, hotspot, width / 2, height / 2);
             let hit = step_shot_into_creature(

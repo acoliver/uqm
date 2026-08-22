@@ -261,9 +261,24 @@ mod tests {
         ));
     }
 
+    /// Synthetic lifey.ani extent table for the four Brainbox Bulldozer frames,
+    /// shared by the visual port and the rollover assertions: `(width, height,
+    /// hotspot_x, hotspot_y)`. Frame 0 is the widest/shortest; frame 3 is
+    /// the narrowest/tallest.
+    const BRAINBOX_EXTENTS: [(u16, u16, i32, i32); 4] = [
+        (15, 5, 7, 4),
+        (11, 7, 5, 6),
+        (11, 12, 5, 11),
+        (9, 14, 4, 13),
+    ];
+
+    fn brainbox_extent(frame: u16) -> (u16, u16, SurfacePoint) {
+        let (width, height, x, y) = BRAINBOX_EXTENTS[usize::from(frame)];
+        (width, height, SurfacePoint { x, y })
+    }
+
     /// Visual selection that models the four Brainbox Bulldozer (lifey.ani)
-    /// frames. Frame 0 is the widest/shortest mask; frame 3 is the
-    /// narrowest/tallest.
+    /// frames against the shared [`BRAINBOX_EXTENTS`] table.
     struct BrainboxVisuals;
 
     impl WorldVisualPort for BrainboxVisuals {
@@ -290,20 +305,11 @@ mod tests {
             _kind: super::super::creatures::CreatureKind,
             animation_frame: u16,
         ) -> Result<EntityVisual, AdapterError> {
-            let (width, height, hotspot) = match animation_frame {
-                0 => (15, 5, (7, 4)),
-                1 => (11, 7, (5, 6)),
-                2 => (11, 12, (5, 11)),
-                3 => (9, 14, (4, 13)),
-                _ => return Err(AdapterError::new("invalid_animation_frame")),
-            };
+            let (width, height, hotspot) = brainbox_extent(animation_frame);
             let mask = CollisionMask::from_occupancy(
                 width,
                 height,
-                SurfacePoint {
-                    x: hotspot.0,
-                    y: hotspot.1,
-                },
+                hotspot,
                 &vec![1; usize::from(width) * usize::from(height)],
             )
             .unwrap();
@@ -359,20 +365,11 @@ mod tests {
                 assembly.frames.get(id).map(|entry| entry.index),
                 Some(frame)
             );
-            let (width, height, hotspot) = match frame {
-                0 => (15, 5, (7, 4)),
-                1 => (11, 7, (5, 6)),
-                2 => (11, 12, (5, 11)),
-                3 => (9, 14, (4, 13)),
-                _ => unreachable!(),
-            };
+            let (width, height, hotspot) = brainbox_extent(frame);
             let expected = CollisionMask::from_occupancy(
                 width,
                 height,
-                SurfacePoint {
-                    x: hotspot.0,
-                    y: hotspot.1,
-                },
+                hotspot,
                 &vec![1; usize::from(width) * usize::from(height)],
             )
             .unwrap();

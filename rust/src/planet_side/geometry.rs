@@ -284,26 +284,34 @@ mod tests {
     }
 
     #[test]
-    fn wide_deposit_crossing_seam_collides_from_the_other_side() {
+    fn wide_deposit_hotspot_left_of_origin_crosses_seam_only_wrapped() {
+        // A 3px opaque deposit with hotspot (2,0) parked at raw x=0 spans
+        // ring pixels {-2, -1, 0}: its raw extent ends one pixel left of the
+        // lander at x=99, so raw coordinates alone never overlap.  Only the
+        // +WORLD copy reaches the right edge and closes the seam, and the same
+        // hit holds with the argument order reversed.
         let lander = mask(1, 1, &[1]);
-        let deposit = mask(3, 1, &[1; 3]);
-        // Land on the left edge; a deposit whose own raw x is already on the
-        // left but whose right-hand neighbor copy crosses from W-1 also hits.
+        let deposit =
+            CollisionMask::from_occupancy(3, 1, SurfacePoint { x: 2, y: 0 }, &[1; 3]).unwrap();
+        assert!(!masks_intersect(
+            SurfacePoint { x: 0, y: 0 },
+            &deposit,
+            SurfacePoint { x: 99, y: 0 },
+            &lander
+        ));
         assert!(masks_intersect_wrapped(
             SurfacePoint { x: 99, y: 0 },
             &lander,
-            SurfacePoint { x: 99, y: 0 },
+            SurfacePoint { x: 0, y: 0 },
             &deposit,
             100,
         ));
-        // Lander at the right edge; the deposit ring copy from the left wraps
-        // across the seam to {W-2, W-1} and overlaps.
-        let edge_lander = mask(1, 1, &[1]);
+        // Opposite argument order still collides at the same drawn pixel.
         assert!(masks_intersect_wrapped(
+            SurfacePoint { x: 0, y: 0 },
+            &deposit,
             SurfacePoint { x: 99, y: 0 },
-            &edge_lander,
-            SurfacePoint { x: 98, y: 0 },
-            &mask(3, 1, &[1; 3]),
+            &lander,
             100,
         ));
     }
