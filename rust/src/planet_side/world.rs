@@ -1268,7 +1268,7 @@ mod tests {
         let effects = step_world(
             &mut world,
             WorldStepInputs {
-                lander_position: SurfacePoint::default(),
+                lander_position: SurfacePoint { x: 0, y: 0 },
                 shot_masks: &masks,
                 creature_masks: &masks,
                 random: &mut random,
@@ -1666,55 +1666,180 @@ mod tests {
         );
     }
 
-    fn coll_mask_for_frame(frame: u16) -> super::super::geometry::CollisionMask {
-        super::super::geometry::CollisionMask::from_occupancy(
-            1 + frame,
-            1,
-            SurfacePoint { x: 0, y: 0 },
-            &vec![1u8; usize::from(1 + frame)],
-        )
-        .unwrap()
+    // -- Brainbox Bulldozer acceptance ------------------------------------------
+
+    /// lifey.ani declares one extent and hotspot per creature animation frame:
+    /// frame 0 is 15×5 at hotspot (7,4), frame 1 is 11×7 at (5,6),
+    /// frame 2 is 11×12 at (5,11), frame 3 is 9×14 at (4,13).
+    struct EntityPixel {
+        world_x: i32,
+        world_y: i32,
+        mask: CollisionMask,
     }
 
+    fn tile_pixel(
+        width: u16,
+        height: u16,
+        hotspot: SurfacePoint,
+        offset_x: u16,
+        offset_y: u16,
+    ) -> EntityPixel {
+        let mut occupancy = vec![0u8; usize::from(width) * usize::from(height)];
+        occupancy[(usize::from(offset_y) * usize::from(width)) + usize::from(offset_x)] = 1;
+        EntityPixel {
+            // With the creature at the world origin the opaque pixel at local
+            // `offset` lives at `offset - hotspot`.
+            world_x: i32::from(offset_x) - hotspot.x,
+            world_y: i32::from(offset_y) - hotspot.y,
+            mask: CollisionMask::from_occupancy(width, height, hotspot, &occupancy).unwrap(),
+        }
+    }
+
+    /// The four living brainbox frames 0..3 from lifey.ani, in the animation
+    /// contract: `(width, height, hotspot)`.
+    fn brainbox_extents(frame: u16) -> (u16, u16, SurfacePoint) {
+        let (width, height, x, y) = match frame {
+            0 => (15, 5, 7, 4),
+            1 => (11, 7, 5, 6),
+            2 => (11, 12, 5, 11),
+            3 => (9, 14, 4, 13),
+            _ => (0, 0, 0, 0),
+        };
+        (width, height, SurfacePoint { x, y })
+    }
+
+    /// Run the production `step_world` seam/creature collision loop: a brainbox
+    /// creature on its frame's declared tile with that frame's registered hot-spot
+    /// anchored at the same position, and a 1×1 bolt at `shot_at`.  The
+    /// puncture and the mask are fully opaque, so a hit is a per-pixel mask
+    /// overlap inside the tile, not a helper against itself.
+    fn step_shot_into_creature(
+        creature_mask: &CollisionMask,
+        shot_at: SurfacePoint,
+    ) -> WorldStepEffects {
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 0, y: 0 }));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: shot_at,
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: shot_at,
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, creature_mask.clone());
+        let mut random = SeqRandom::new(&[]);
+        step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        )
+    }
+
+    /// Every animation frame the brainbox can show must have its own declared extent
+    /// and hotspot, and each opaque pixel inside that extent must collide while a
+    /// pixel one past the declared box stays a miss.  The frame mask is registered
+    /// via the ordinary production world/assembly collision path, and the bolt is a
+    /// 1×1 shot mask, so a hit is a genuine overlap of two independent pixel
+    /// masks in `step_world`, never a helper compared to itself.
     #[test]
-    fn brainbox_center_and_edge_hits_obey_the_animated_frame_mask() {
-        use super::super::geometry::masks_intersect;
-        let center = super::super::geometry::CollisionMask::from_occupancy(
-            3,
-            1,
-            SurfacePoint { x: 1, y: 0 },
-            &[1, 1, 1],
-        )
-        .unwrap();
-        let shot = solid_mask();
-        // Center of frame zero.
-        assert!(masks_intersect(
-            SurfacePoint { x: 0, y: 0 },
-            &center,
-            SurfacePoint { x: 0, y: 0 },
-            &shot
-        ));
-        let _edge_mask = coll_mask_for_frame(2);
-        // The widened frame reaches one pixel past the old extent: with the
-        // older 1px frame a shot there misses, with the wider frame it hits.
-        let wider = super::super::geometry::CollisionMask::from_occupancy(
-            3,
-            1,
-            SurfacePoint { x: 1, y: 0 },
-            &[1, 1, 1],
-        )
-        .unwrap();
-        let narrow = solid_mask();
-        assert!(masks_intersect(
-            SurfacePoint { x: 0, y: 0 },
-            &wider,
-            SurfacePoint { x: 0, y: 0 },
-            &narrow,
-        ));
-        // Infinite-strict address-count triangle: the frame-0 solid reaches its
-        // own local 0..2; an animated pixel beyond stays transparent per-mask.
-        let _ = &narrow;
-        let _ = masks_intersect;
+    fn brainbox_accept_center_edge_hit_and_transparent_miss_on_every_lifey_frame() {
+        for frame in 0..=3u16 {
+            let (width, height, hotspot) = brainbox_extents(frame);
+            let center = tile_pixel(width, height, hotspot, width / 2, height / 2);
+            let hit = step_shot_into_creature(
+                &center.mask,
+                SurfacePoint {
+                    x: center.world_x,
+                    y: center.world_y,
+                },
+            );
+            assert!(
+                !hit.landed_shot.is_empty(),
+                "center-pixel hit on frame {frame}"
+            );
+            let edge = tile_pixel(width, height, hotspot, width - 1, height - 1);
+            let hit = step_shot_into_creature(
+                &edge.mask,
+                SurfacePoint {
+                    x: edge.world_x,
+                    y: edge.world_y,
+                },
+            );
+            assert!(
+                !hit.landed_shot.is_empty(),
+                "edge-pixel hit on frame {frame}"
+            );
+            // One column past the declared box and one row below it show no
+            // drawn pixel, so a bolt there is a clean miss.
+            let right = tile_pixel(width, height, hotspot, width / 2, height / 2);
+            let hit = step_shot_into_creature(
+                &right.mask,
+                SurfacePoint {
+                    x: width as i32 - hotspot.x,
+                    y: right.world_y,
+                },
+            );
+            assert!(
+                hit.landed_shot.is_empty(),
+                "extent-past miss on frame {frame}"
+            );
+            let below = tile_pixel(width, height, hotspot, width / 2, height / 2);
+            let hit = step_shot_into_creature(
+                &below.mask,
+                SurfacePoint {
+                    x: below.world_x,
+                    y: height as i32 - hotspot.y,
+                },
+            );
+            assert!(
+                hit.landed_shot.is_empty(),
+                "below-extent miss on frame {frame}"
+            );
+        }
+    }
+
+    /// The drawable frame the assembly picks for a brainbox on the given animation
+    /// frame must agree with the per-frame mask the world step registers: the frame
+    /// index selects the lifey frame, and that same frame's recorded mask must be
+    /// the one whose hotspot and extent the collision loop sees.  Frame indices
+    /// outside 0..3 report an empty extent.
+    #[test]
+    fn brainbox_drawable_frame_and_registered_mask_hotspot_extent_stay_in_sync() {
+        for frame in 0..=3u16 {
+            let (width, height, hotspot) = brainbox_extents(frame);
+            // Place the tile's single opaque pixel exactly at the declared hotspot:
+            // with the creature drawn at the world origin that pixel is world (0,0).
+            let at_hotspot = tile_pixel(width, height, hotspot, hotspot.x as u16, hotspot.y as u16);
+            assert_eq!(at_hotspot.world_x, 0, "frame {frame} hotspot x");
+            assert_eq!(at_hotspot.world_y, 0, "frame {frame} hotspot y");
+            assert_eq!(
+                at_hotspot.mask.width(),
+                width,
+                "frame {frame} registered width"
+            );
+            assert_eq!(
+                at_hotspot.mask.height(),
+                height,
+                "frame {frame} registered height"
+            );
+            let hit = step_shot_into_creature(&at_hotspot.mask, SurfacePoint { x: 0, y: 0 });
+            assert!(
+                !hit.landed_shot.is_empty(),
+                "frame {frame}: drawn hotspot pixel hits"
+            );
+        }
+        assert_eq!(brainbox_extents(4), (0, 0, SurfacePoint::default()));
     }
 
     #[test]
