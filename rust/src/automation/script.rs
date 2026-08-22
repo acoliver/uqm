@@ -1434,7 +1434,18 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                     ));
                 }
             }
-            Action::AssertPlanetSideCollisions(_) => {}
+            Action::AssertPlanetSideCollisions(assertion) => {
+                if assertion.mineral_pickups == 0
+                    && assertion.creature_hits == 0
+                    && assertion.seam_hits == 0
+                {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "assert_planet_side_collisions: at least one of mineral_pickups, creature_hits, seam_hits must be positive",
+                    ));
+                }
+            }
             Action::AssertMainMenuTransition(dto_inner) => {
                 let from = parse_menu_item(&dto_inner.from, i, path)?;
                 let to = parse_menu_item(&dto_inner.to, i, path)?;
@@ -1992,6 +2003,36 @@ mod tests {
         let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_activity","mask":61440,"equals":0},{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         assert!(validate_script(doc, p()).is_ok());
+    }
+
+    #[test]
+    fn rejects_planet_side_collision_assertion_all_zero() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_planet_side_collisions","mineral_pickups":0,"creature_hits":0,"seam_hits":0},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let err = validate_script(doc, p()).unwrap_err();
+        assert!(matches!(err, AutomationError::Step { step: 0, .. }));
+        let msg = format!("{err}");
+        assert!(msg.contains("at least one"));
+        assert!(msg.contains("mineral_pickups"));
+        assert_eq!(err.step_index(), Some(0));
+    }
+
+    #[test]
+    fn accepts_planet_side_collision_assertion_with_one_positive() {
+        for action in [
+            r#"{"action":"assert_planet_side_collisions","mineral_pickups":1}"#,
+            r#"{"action":"assert_planet_side_collisions","creature_hits":1}"#,
+            r#"{"action":"assert_planet_side_collisions","seam_hits":1}"#,
+        ] {
+            let txt = format!(
+                "{{\"version\":1,\"name\":\"x\",\"budgets\":{{\"max_input_ticks\":3,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
+            );
+            let doc = parse_script(txt.as_bytes(), p()).unwrap();
+            assert!(
+                validate_script(doc, p()).is_ok(),
+                "a single positive collision counter must be accepted: {action}"
+            );
+        }
     }
 
     #[test]

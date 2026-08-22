@@ -830,7 +830,9 @@ impl Coordinator {
         if matches!(
             self.actions.get(inner.sched_state.step_index),
             Some(Action::SetupPlanetSideCollisionFixture(_))
-        ) {
+        ) && inner.sched_state.phase == ActionPhase::WaitingForInput
+            && scheduler_event == SchedulerEvent::AdmittedInput
+        {
             match crate::planet_side::automation_fixture::coordinator_queues_fixture_request() {
                 Ok(()) => {
                     self.write_trace_labeled(
