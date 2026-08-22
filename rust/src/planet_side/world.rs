@@ -15,7 +15,7 @@ use crate::battle::battle_types::{
 
 use super::creatures::{CreatureBehavior, CreatureCatalog, CreatureKind, CreatureSpeed};
 use super::entities::{SurfaceEntity, SurfaceEntityId, SurfaceEntityKind, SurfaceWorld};
-use super::geometry::{masks_intersect, CollisionMask};
+use super::geometry::{masks_intersect_wrapped, CollisionMask};
 use super::hazards::{hazard_chance, thermal_hazard_rating, HazardKind};
 use super::model::SurfacePoint;
 use super::simulation::Shot;
@@ -724,7 +724,15 @@ fn check_shot_creature_collision<M: MaskLookup>(
             Some(e) => e.position,
             None => continue,
         };
-        if !masks_intersect(shot_position, shot_mask, creature_position, creature_mask) {
+        // The lander-vs-entity loop uses the wrapped form so a shot whose drawn
+        // image crosses the horizontal seam connects exactly where it is rendered.
+        if !masks_intersect_wrapped(
+            shot_position,
+            shot_mask,
+            creature_position,
+            creature_mask,
+            WORLD_WIDTH,
+        ) {
             continue;
         }
 
@@ -1358,6 +1366,181 @@ mod tests {
         assert!(effects
             .sounds
             .contains(&super::super::hazards::SoundCue::LifeformCanned));
+    }
+
+    /// Build a 2px-wide opaque mask centered so its second pixel is the `x + 1`
+    /// ring pixel. Same shape idea as the seam-straddling fixture deposits.
+    fn two_px_mask() -> CollisionMask {
+        CollisionMask::from_occupancy(2, 1, SurfacePoint::default(), &[1, 1]).unwrap()
+    }
+
+    #[test]
+    fn shot_hits_creature_across_seam_from_the_right() {
+        // The shot sits on the left of the seam (ring pixel 0).  A 2px
+        // creature whose own raw x is the right edge straddles ring pixels
+        // {W-1, 0}, so its ring-0 pixel is the drawn image that crosses the
+        // seam.  Raw coordinates alone are a full ring apart; only the wrapped
+        // ring copy makes them overlap.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(
+            0,
+            1,
+            SurfacePoint {
+                x: WORLD_WIDTH - 1,
+                y: 0,
+            },
+        ));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, two_px_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(effects.landed_shot.contains(&creature_id));
+        assert_eq!(effects.canned, vec![(creature_id, 1)]);
+    }
+
+    #[test]
+    fn shot_hits_creature_across_seam_from_the_left() {
+        // Mirror image of the other seam test: the shot is fired from the ring
+        // pixel at the right edge (W-1) and the creature's raw x is ring 0.
+        // Its right-hand wrapped copy reaches back across the seam to the bolt.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(0, 1, SurfacePoint { x: 0, y: 0 }));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint {
+                    x: WORLD_WIDTH - 1,
+                    y: 0,
+                },
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint {
+                x: WORLD_WIDTH - 1,
+                y: 0,
+            },
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, two_px_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, solid_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(effects.landed_shot.contains(&creature_id));
+        assert_eq!(effects.canned, vec![(creature_id, 1)]);
+    }
+
+    #[test]
+    fn same_raw_displacement_misses_when_it_does_not_cross_the_seam() {
+        // A 2px creature at {W-2, W-1} keeps a full-ring raw displacement
+        // from the shot but no ring copy overlaps it: a miss proves the seam
+        // tests above react to the seam, not to the raw offset.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(0, 1, SurfacePoint { x: 966, y: 0 }));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint { x: 0, y: 0 },
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint { x: 0, y: 0 },
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, two_px_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(effects.landed_shot.is_empty());
+        assert!(effects.canned.is_empty());
+    }
+
+    #[test]
+    fn exact_half_world_shot_creature_offset_stays_a_tie() {
+        // A shot and creature separated by exactly half the world stay a tie: folding
+        // either side keeps them half a ring apart, so the seam never closes the gap.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(
+            0,
+            1,
+            SurfacePoint {
+                x: WORLD_WIDTH / 2,
+                y: 0,
+            },
+        ));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, two_px_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(effects.landed_shot.is_empty());
+        assert!(effects.canned.is_empty());
     }
 
     #[test]
