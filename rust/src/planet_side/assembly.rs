@@ -260,4 +260,122 @@ mod tests {
             })
         ));
     }
+
+    /// Visual selection that models the four Brainbox Bulldozer (lifey.ani)
+    /// frames. Frame 0 is the narrowest mask; frame 3 is the tallest.
+    struct BrainboxVisuals;
+
+    impl WorldVisualPort for BrainboxVisuals {
+        fn shot_visual(&mut self, _facing: u8) -> Result<EntityVisual, AdapterError> {
+            Err(AdapterError::new("unused_in_creature_animation_test"))
+        }
+
+        fn canned_creature_visual(
+            &mut self,
+            _kind: super::super::creatures::CreatureKind,
+        ) -> Result<EntityVisual, AdapterError> {
+            Err(AdapterError::new("unused_in_creature_animation_test"))
+        }
+
+        fn hazard_visual(
+            &mut self,
+            _kind: super::super::hazards::HazardKind,
+        ) -> Result<EntityVisual, AdapterError> {
+            Err(AdapterError::new("unused_in_creature_animation_test"))
+        }
+
+        fn creature_animation_visual(
+            &mut self,
+            _kind: super::super::creatures::CreatureKind,
+            animation_frame: u16,
+        ) -> Result<EntityVisual, AdapterError> {
+            let (width, height, hotspot) = match animation_frame {
+                0 => (15, 5, (7, 4)),
+                1 => (11, 7, (5, 6)),
+                2 => (11, 12, (5, 11)),
+                3 => (9, 14, (4, 13)),
+                _ => return Err(AdapterError::new("invalid_animation_frame")),
+            };
+            let mask = CollisionMask::from_occupancy(
+                width,
+                height,
+                SurfacePoint {
+                    x: hotspot.0,
+                    y: hotspot.1,
+                },
+                &vec![1; usize::from(width) * usize::from(height)],
+            )
+            .unwrap();
+            Ok(EntityVisual {
+                frame: SurfaceFrame {
+                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    index: animation_frame,
+                },
+                mask,
+            })
+        }
+    }
+
+    #[test]
+    fn brainbox_animation_frame_3_rollover_updates_frame_and_mask_together() {
+        let mut assembly = SurfaceAssembly {
+            world: SurfaceWorld::new(),
+            generated: Vec::new(),
+            frames: SurfaceFrameRegistry::default(),
+            masks: SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap(),
+        };
+        let kind = super::super::creatures::CreatureKind::new(24).unwrap();
+        let id = insert_surface_entity(
+            &mut assembly,
+            SurfaceEntity {
+                kind: super::super::entities::SurfaceEntityKind::LiveCreature {
+                    kind,
+                    hit_points: 1,
+                    aware: false,
+                    velocity: crate::battle::velocity::VelocityDesc::default(),
+                    thrust_wait: 0,
+                    frame_index: 0,
+                },
+                position: SurfacePoint::default(),
+                finite_life: None,
+            },
+            EntityVisual {
+                frame: SurfaceFrame {
+                    base: std::ptr::NonNull::<u8>::dangling().as_ptr().cast(),
+                    index: 0,
+                },
+                mask: solid(),
+            },
+        );
+
+        let mut visuals = BrainboxVisuals;
+        // Advancing 3 -> 0 exercises the four-frame rollover of the Brainbox
+        // Bulldozer animation; every step must update the drawable frame and the
+        // hotspot-adjusted collision mask together.
+        for frame in [0, 1, 2, 3, 0] {
+            advance_creature_animation_frame(&mut assembly, id, kind, frame, &mut visuals).unwrap();
+            assert_eq!(
+                assembly.frames.get(id).map(|entry| entry.index),
+                Some(frame)
+            );
+            let (width, height, hotspot) = match frame {
+                0 => (15, 5, (7, 4)),
+                1 => (11, 7, (5, 6)),
+                2 => (11, 12, (5, 11)),
+                3 => (9, 14, (4, 13)),
+                _ => unreachable!(),
+            };
+            let expected = CollisionMask::from_occupancy(
+                width,
+                height,
+                SurfacePoint {
+                    x: hotspot.0,
+                    y: hotspot.1,
+                },
+                &vec![1; usize::from(width) * usize::from(height)],
+            )
+            .unwrap();
+            assert_eq!(assembly.masks.entity_mask(id), Some(&expected));
+        }
+    }
 }
