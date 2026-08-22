@@ -724,9 +724,9 @@ fn check_shot_creature_collision<M: MaskLookup>(
             Some(e) => e.position,
             None => continue,
         };
-        // The lander-vs-entity loop uses the wrapped form so a shot whose drawn
-        // image crosses the horizontal seam connects at the ring copy that is
-        // actually rendered.
+        // This shot-vs-creature loop uses the wrapped form, like the
+        // lander-vs-entity loop, so a shot whose drawn image crosses the
+        // horizontal seam connects at the ring copy that is actually rendered.
         if !masks_intersect_wrapped(
             shot_position,
             shot_mask,
