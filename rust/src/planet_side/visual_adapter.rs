@@ -103,12 +103,7 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
     ) -> Result<EntityVisual, AdapterError> {
         let (base, index) = match entity.kind {
             SurfaceEntityKind::MineralNode { category, size, .. } => {
-                let category =
-                    u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
-                if category >= 8 {
-                    return Err(AdapterError::new("mineral_category"));
-                }
-                (self.misc_data, mineral_frame_index(category, size))
+                (self.misc_data, mineral_visual_frame(category, size)?)
             }
             SurfaceEntityKind::EnergyNode { .. } => {
                 if self.energy.is_null() {
@@ -138,13 +133,18 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
     }
 }
 
-/// Select the surface mineral frame index: category cluster offset by the
-/// gross deposit size.  The fine collectible quantity never participates.
-#[must_use]
-fn mineral_frame_index(category: u16, size: u16) -> u16 {
-    MINERAL_FRAME_BASE
+/// Select the surface mineral frame: the category cluster offset by the gross
+/// deposit size.  The fine collectible quantity never participates.  Shared by
+/// the generated-node path and the fixture mineral path so category validation
+/// and frame selection cannot drift.
+fn mineral_visual_frame(category: usize, size: u16) -> Result<u16, AdapterError> {
+    let category = u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
+    if category >= 8 {
+        return Err(AdapterError::new("mineral_category"));
+    }
+    Ok(MINERAL_FRAME_BASE
         + category * MINERAL_FRAMES_PER_CATEGORY
-        + size.min(MINERAL_FRAMES_PER_CATEGORY - 1)
+        + size.min(MINERAL_FRAMES_PER_CATEGORY - 1))
 }
 
 /// Production visual port for dynamically-spawned world entities.
@@ -280,12 +280,7 @@ impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
             }
             _ => return Err(AdapterError::new("fixture_mineral_visual")),
         };
-        let category =
-            u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
-        if category >= 8 {
-            return Err(AdapterError::new("mineral_category"));
-        }
-        let frame_index = mineral_frame_index(category, size);
+        let frame_index = mineral_visual_frame(category, size)?;
         let base = self.surface_visuals.misc_data;
         if base.is_null() {
             return Err(AdapterError::new("surface_frame_missing"));
@@ -319,41 +314,82 @@ impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planet_side::entities::{SurfaceEntity, SurfaceWorld};
-    use crate::planet_side::generation::ScanNodeId;
+    use crate::planet_side::entities::{SurfaceEntity, SurfaceEntityKind, SurfaceWorld};
+    use crate::planet_side::generation::{GeneratedEntity, ScanNodeId, ScanType};
     use crate::planet_side::model::SurfacePoint;
 
     fn pointer(value: usize) -> *mut c_void {
         value as *mut c_void
     }
 
-    #[test]
-    fn mineral_frame_uses_category_plus_gross_size_only() {
-        assert_eq!(mineral_frame_index(0, 0), MINERAL_FRAME_BASE);
-        assert_eq!(
-            mineral_frame_index(1, 0),
-            MINERAL_FRAME_BASE + MINERAL_FRAMES_PER_CATEGORY
-        );
-        assert_eq!(
-            mineral_frame_index(1, 2),
-            MINERAL_FRAME_BASE + MINERAL_FRAMES_PER_CATEGORY + 2
-        );
-        // Different fine quantities must not change the selected frame.
-        assert_eq!(mineral_frame_index(2, 1), mineral_frame_index(2, 1));
+    /// The production mineral kind → frame index via the shared helper, as the
+    /// `SurfaceVisualPort::visual_for` match arm computes it for a typed entity.
+    fn mineral_visual_frame_from_mineral(kind: SurfaceEntityKind) -> Result<u16, AdapterError> {
+        match kind {
+            SurfaceEntityKind::MineralNode { category, size, .. } => {
+                mineral_visual_frame(category, size)
+            }
+            _ => unreachable!("mineral entity kind only"),
+        }
+    }
+
+    const MINERAL_CATEGORY_COUNT: usize = 8;
+    const MINERAL_GROSS_SIZE_COUNT: u16 = 3;
+    const MINERAL_FINE_DENSITY_MAX: u16 = 255;
+
+    fn mineral_entity(category: usize, size: u16, quantity: u16) -> SurfaceEntity {
+        SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category,
+                size,
+                quantity,
+            },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        }
     }
 
     #[test]
-    fn fine_quantity_never_selects_the_frame() {
-        // The issue: Rust used to fold fine quantity into the frame index.  A
-        // size-0 deposit with quantity 99 and size-2 with quantity 0 must keep
-        // their distinct category+size frames regardless of quantity.
-        assert_eq!(
-            mineral_frame_index(3, 0),
-            MINERAL_FRAME_BASE + 3 * MINERAL_FRAMES_PER_CATEGORY
-        );
-        let with_quantity = mineral_frame_index(3, 0);
-        let _ = with_quantity;
-        assert_eq!(mineral_frame_index(3, 2), with_quantity + 2);
+    fn mineral_matrix_fine_quantity_never_selects_the_frame() {
+        // Full matrix over every valid category (0..7), every UQM-generated
+        // gross size (0..2 from surface.c), and every representable fine
+        // density byte (0..=255).  Typed MineralNode entities differ only in
+        // fine quantity: the selected frame must be identical for all fine
+        // values, and each gross size must select its category-relative frame.
+        // The expected frame comes from the category cluster formula itself, so
+        // the assertion is not a helper-to-itself comparison.
+        for category in 0..MINERAL_CATEGORY_COUNT {
+            for size in 0..MINERAL_GROSS_SIZE_COUNT {
+                let expected =
+                    MINERAL_FRAME_BASE + category as u16 * MINERAL_FRAMES_PER_CATEGORY + size;
+                for fine in 0..=MINERAL_FINE_DENSITY_MAX {
+                    assert_eq!(
+                        mineral_visual_frame_from_mineral(
+                            mineral_entity(category, size, fine).kind
+                        ),
+                        Ok(expected)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_mineral_category_is_rejected_through_shared_helper() {
+        for category in MINERAL_CATEGORY_COUNT..2 * MINERAL_CATEGORY_COUNT {
+            assert!(matches!(
+                mineral_visual_frame(category, 2),
+                Err(AdapterError {
+                    operation: "mineral_category"
+                })
+            ));
+            assert!(matches!(
+                mineral_visual_frame_from_mineral(mineral_entity(category, 2, 1).kind),
+                Err(AdapterError {
+                    operation: "mineral_category"
+                })
+            ));
+        }
     }
 
     #[test]
@@ -396,10 +432,12 @@ mod tests {
 
     #[test]
     fn invalid_mineral_category_is_rejected_before_mask_extraction() {
+        // The production entry point rejects an invalid category through the shared
+        // helper before any frame or mask work, using a typed entity.
         let mut visuals = CffiSurfaceVisuals::new(pointer(1), pointer(2), [pointer(3); 3]).unwrap();
         let entity = SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
-                category: 8,
+                category: MINERAL_CATEGORY_COUNT,
                 size: 2,
                 quantity: 1,
             },
