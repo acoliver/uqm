@@ -77,6 +77,13 @@ impl SurfaceFrameRegistry {
         self.frames.get(&entity).copied()
     }
 
+    /// Number of registered frames.
+    #[must_use]
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.frames.len()
+    }
+
     pub fn advance_hazard_frames(&mut self, world: &super::entities::SurfaceWorld) {
         for (id, entity) in world.iter() {
             let Some(frame) = self.frames.get_mut(&id) else {

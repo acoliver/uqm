@@ -140,14 +140,6 @@ pub const fn automation_gate(active: bool) -> AutomationGate {
     }
 }
 
-/// Low-level queue of the single PlanetSide fixture flag.
-///
-/// Coordinator-facing callers use [`coordinator_queues_fixture_request`] instead;
-/// this narrow function is not exposed beyond the module.
-fn queue_fixture() {
-    FIXTURE_REQUESTED.store(true, Ordering::SeqCst);
-}
-
 static FIXTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 /// Make the script action the sole authority for the fixture.
@@ -157,8 +149,24 @@ static FIXTURE_REQUESTED: AtomicBool = AtomicBool::new(false);
 /// is the one-shot fixture request queued.  An active coordinator with no such
 /// action never touches it, so every other PlanetSide automation script keeps the
 /// generated world unchanged.
-pub fn coordinator_queues_fixture_request() {
-    queue_fixture();
+///
+/// The action is explicit and one-shot: a second queue while a request is still
+/// pending fails fast with a typed error rather than succeeding idempotently.  The
+/// coordinator maps that failure to a semantic mismatch so a duplicate never leaks a
+/// second fixture install.
+///
+/// # Errors
+///
+/// Returns an [`AdapterError`] when a fixture request is already pending.
+pub(crate) fn coordinator_queues_fixture_request() -> Result<(), AdapterError> {
+    if FIXTURE_REQUESTED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        Err(AdapterError::new("fixture_request_already_pending"))
+    } else {
+        Ok(())
+    }
 }
 
 /// The one coordinator-facing function that consumes the queued flag.
@@ -166,13 +174,22 @@ pub fn coordinator_queues_fixture_request() {
 /// Ordinary gameplay that never executed the script action gets `None`; production
 /// [`Coordinator::is_active`] is checked by the caller before tapping, so a stale
 /// queue cannot be consumed or fail outside automation.
+#[cfg(any(test, feature = "linked_c_archive"))]
 #[must_use]
-pub fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
+pub(crate) fn tap_planet_side_fixture_request(position: SurfacePoint) -> Option<PlanetSideFixture> {
     if FIXTURE_REQUESTED.swap(false, Ordering::SeqCst) {
         Some(PlanetSideFixture::for_collision_parity(position))
     } else {
         None
     }
+}
+
+/// The one coordinator-facing function that clears a queued but unconsumed fixture.
+///
+/// The coordinator clears any pending request at its single finalization path so
+/// the one-shot queue cannot leak into a later script.
+pub(crate) fn clear_pending_fixture_request() {
+    FIXTURE_REQUESTED.store(false, Ordering::SeqCst);
 }
 
 impl PlanetSideFixture {
@@ -422,6 +439,32 @@ mod tests {
     /// World-level fake underlying the production collision adapter.
     struct TestWorldVisuals;
 
+    /// A fixture visual port that accepts exactly one selection, then fails.
+    struct PortSucceedsThenFails;
+
+    impl FixtureVisualPort for PortSucceedsThenFails {
+        fn mineral_visual(
+            &mut self,
+            _entity: &SurfaceEntity,
+        ) -> Result<EntityVisual, AdapterError> {
+            Ok(EntityVisual {
+                frame: SurfaceFrame {
+                    base: std::ptr::null_mut(),
+                    index: 0,
+                },
+                mask: solid(),
+            })
+        }
+
+        fn creature_visual(
+            &mut self,
+            _kind: CreatureKind,
+            _animation_frame: u16,
+        ) -> Result<EntityVisual, AdapterError> {
+            Err(AdapterError::new("second_visual_fails"))
+        }
+    }
+
     impl WorldVisualPort for TestWorldVisuals {
         fn shot_visual(&mut self, facing: u8) -> Result<EntityVisual, AdapterError> {
             Ok(EntityVisual {
@@ -610,7 +653,7 @@ mod tests {
 
     #[test]
     fn fixture_mineral_is_synthetic_and_stays_out_of_native_generated_mapping() {
-        let _fixture_lock = fixture_test_serialize();
+        let _serialize = fixture_test_serialize();
         // A fixture mineral must appear in the world and its frames/masks, but
         // never in SurfaceAssembly.generated, which production reserves for native
         // generated scan nodes and their pickup/persistence.  It still collects
@@ -717,15 +760,19 @@ mod tests {
     #[test]
     fn coordinator_queue_is_the_sole_authority_and_never_installs_by_activity() {
         let _serialize = fixture_test_serialize();
+        clear_pending_fixture_request();
         // `coordinator_queues_fixture_request` is called only by the script
         // action.  A coordinator that never executed it never queues.
-        coordinator_queues_fixture_request();
+        coordinator_queues_fixture_request().unwrap();
+        // A second queue while the request is still pending is a fail-fast
+        // duplicate, never an idempotent success.
+        coordinator_queues_fixture_request().expect_err("a duplicate pending fixture is rejected");
         let anchor = SurfacePoint { x: 10, y: 20 };
         let requested = tap_planet_side_fixture_request(anchor);
         assert!(requested.is_some(), "the action queues exactly one request");
         assert!(
             tap_planet_side_fixture_request(anchor).is_none(),
-            "the queued request is consumed once"
+            "the queued request is consumed once, and no second remains"
         );
         let session = session_at(anchor);
         let surface = share_empty();
@@ -742,6 +789,76 @@ mod tests {
         assert!(
             surface.borrow().world.is_empty(),
             "rejection must not install a single entity"
+        );
+        clear_pending_fixture_request();
+    }
+
+    #[test]
+    fn clear_removes_an_unconsumed_request() {
+        let _serialize = fixture_test_serialize();
+        clear_pending_fixture_request();
+        // A queued but never-consumed fixture must not survive a clear: the
+        // coordinator finalization clears any pending request so the one-shot
+        // queue cannot leak into a later script.
+        coordinator_queues_fixture_request().unwrap();
+        clear_pending_fixture_request();
+        let anchor = SurfacePoint { x: 10, y: 20 };
+        assert!(
+            tap_planet_side_fixture_request(anchor).is_none(),
+            "clearing removes the unconsumed request"
+        );
+        assert!(
+            coordinator_queues_fixture_request().is_ok(),
+            "after a clear a fresh queue is accepted"
+        );
+        clear_pending_fixture_request();
+    }
+
+    #[test]
+    fn fixture_install_failure_leaves_world_generated_frames_masks_unchanged() {
+        // A transactional install must not mutate any registry when a visual
+        // selection fails mid-layout.  Here the visual port accepts the first
+        // item (the mineral), then fails on the next (the creature), so a
+        // partial install must leave world length, generated length, frame count,
+        // and entity-mask count exactly as they were — the staging happens
+        // before the assembly borrow, and a failure aborts the whole batch.
+        let _fixture_lock = fixture_test_serialize();
+        let anchor = SurfacePoint { x: 50, y: 80 };
+        let session = session_at(anchor);
+        let surface = share_empty();
+        let mut failing = PortSucceedsThenFails;
+        let fixture = PlanetSideFixture::new()
+            .with_mineral(2, 3, 5, anchor)
+            .with_brainbox(1, BRAINBOX_SETUP_FRAME, anchor);
+        let before_world = surface.borrow().world.len();
+        let before_generated = surface.borrow().generated.len();
+        let before_frames = surface.borrow().frames.len();
+
+        let error = fixture
+            .install(AutomationGate::Active, &session, &surface, &mut failing)
+            .expect_err("the creature visual is the second staged item and fails");
+
+        assert_eq!(error, AdapterError::new("second_visual_fails"));
+        let assembly = surface.borrow();
+        assert_eq!(
+            assembly.world.len(),
+            before_world,
+            "no entity from a failed install may enter the world"
+        );
+        assert_eq!(
+            assembly.generated.len(),
+            before_generated,
+            "no entity from a failed install may enter the generated mapping"
+        );
+        assert_eq!(
+            assembly.frames.len(),
+            before_frames,
+            "no frame may be registered by a failed install"
+        );
+        assert_eq!(
+            assembly.masks.len(),
+            0,
+            "no entity mask may be registered by a failed install"
         );
     }
 

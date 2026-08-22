@@ -554,6 +554,14 @@ pub struct WaitForCommunicationReplayStep {
     pub max_ticks: u64,
 }
 
+/// The no-payload step for the explicit PlanetSide collision fixture action.
+///
+/// Kept as an empty struct with `deny_unknown_fields` so an extra JSON field
+/// on the action is rejected, not silently ignored.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SetupPlanetSideCollisionFixtureStep {}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -587,6 +595,7 @@ pub enum Action {
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
+    SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
     Finish,
 }
 
@@ -1431,6 +1440,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                 let to = parse_menu_item(&dto_inner.to, i, path)?;
                 transitions.push(MainMenuTransition::new(from, to));
             }
+            Action::SetupPlanetSideCollisionFixture(_) => {}
             Action::Finish => {}
         }
     }
@@ -1891,6 +1901,28 @@ mod tests {
     // --- REQ-SCRIPT-003: closed action enum ---
 
     #[test]
+    fn accepts_setup_planet_side_collision_fixture_action() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let parsed = parse_script(txt.as_bytes(), p()).unwrap();
+        let doc = validate_script(parsed, p()).unwrap();
+        assert!(matches!(
+            doc.steps()[0],
+            Action::SetupPlanetSideCollisionFixture(_)
+        ));
+    }
+
+    #[test]
+    fn setup_planet_side_collision_fixture_denies_unknown_fields() {
+        // The action is a unit: no payload fields are allowed.
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture","duplicate":1},{"action":"finish"}]}"#;
+        let err = parse_script(txt.as_bytes(), p()).unwrap_err();
+        assert!(
+            matches!(err, AutomationError::UnknownField { .. }),
+            "a payload field on the unit fixture action must be an unknown field: {err}"
+        );
+    }
+
+    #[test]
     fn rejects_unknown_action_tag() {
         let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"teleport"},{"action":"finish"}]}"#;
         let err = parse_script(txt.as_bytes(), p()).unwrap_err();
@@ -2191,6 +2223,34 @@ mod tests {
             let parsed = parse_script(&bytes, path.to_string_lossy().into_owned()).unwrap();
             validate_script(parsed, path.to_string_lossy().into_owned()).unwrap();
         }
+    }
+
+    #[test]
+    fn setup_planet_side_collision_fixture_parses_and_validates_explicitly() {
+        let txt = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":36000,"max_presentations":36000,"max_wallclock_seconds":900},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let validated = validate_script(doc, p()).unwrap();
+        assert!(matches!(
+            validated.steps()[0],
+            Action::SetupPlanetSideCollisionFixture(_)
+        ));
+    }
+
+    #[test]
+    fn setup_planet_side_collision_fixture_still_needs_exactly_one_input_callback() {
+        // Every action already counts one input callback, so the one-shot
+        // fixture action counts exactly one on top of the base `finish`.
+        // With this fixture action and the final finish, required admitted
+        // input callbacks are 1 (fixture) + 1 (finish) and the
+        // inclusive max_input_ticks must be at least 3.
+        let too_tight = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let too_tight = parse_script(too_tight.as_bytes(), p()).unwrap();
+        assert!(validate_script(too_tight, p()).is_err());
+
+        // max_input_ticks=3 admits two callbacks, exactly enough.
+        let roomy = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let roomy = validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(roomy.steps().len(), 2);
     }
 
     // --- capability contract ---

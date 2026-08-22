@@ -1002,6 +1002,12 @@ fn reduce_admitted_input(
             advance_to_next(state, config, sv, EffectPlan::none())
         }
 
+        // SetupPlanetSideCollisionFixture: the coordinator queues the
+        // one-shot fixture before the reducer advances it.
+        (Action::SetupPlanetSideCollisionFixture(_), ActionPhase::WaitingForInput) => {
+            advance_to_next(state, config, sv, EffectPlan::none())
+        }
+
         // Finish: terminal success. Consumes the input callback.
         (Action::Finish, ActionPhase::WaitingForInput) => SchedulerTransition {
             new_state: SchedulerState {
@@ -1784,6 +1790,32 @@ mod tests {
         let state = SchedulerState::initial();
         let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
         assert_eq!(t.new_state.step_index, 1);
+    }
+
+    // --- setup_planet_side_collision_fixture: one callback, one step ---
+
+    #[test]
+    fn setup_planet_side_collision_fixture_advances_exactly_one_step_from_waiting_for_input() {
+        // The fixture action is callback-bound and one-shot: a single admitted
+        // input moves it to the next action; a second input naturally falls
+        // through to the following action, never re-queues the fixture.
+        let actions = [
+            Action::SetupPlanetSideCollisionFixture(
+                crate::automation::script::SetupPlanetSideCollisionFixtureStep {},
+            ),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let state = SchedulerState::initial();
+        assert_eq!(state.phase, ActionPhase::WaitingForInput);
+        let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            t.new_state.step_index, 1,
+            "exactly one callback advances the fixture step"
+        );
+        assert_eq!(t.new_state.phase, ActionPhase::WaitingForInput);
+        assert_eq!(t.new_state.terminal, None);
+        assert!(t.effects.is_empty());
     }
 
     // --- State version increments ---

@@ -66,6 +66,13 @@ impl SurfaceMasks {
         self.entities.remove(&entity);
     }
 
+    /// Number of registered entity masks.
+    #[must_use]
+    #[cfg(test)]
+    pub(crate) fn len(&self) -> usize {
+        self.entities.len()
+    }
+
     /// Return the collision mask for the given entity, if registered.
     #[must_use]
     pub fn entity_mask(&self, entity: SurfaceEntityId) -> Option<&CollisionMask> {
