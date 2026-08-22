@@ -187,7 +187,8 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
 
     let result = (|| {
         let assets = super::init_lander::borrowed_assets()?;
-        let mut generator = CffiSurfaceGenerator::new(context.solar_system, context.world)?;
+        let mut generator =
+            CffiSurfaceGenerator::for_planet_side(context.solar_system, context.world)?;
         let mut visuals = CffiSurfaceVisuals::new(
             context.misc_data_frame,
             context.energy_frame,

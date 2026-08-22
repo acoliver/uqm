@@ -67,7 +67,12 @@ mod production {
             return;
         }
         let persistence = ScanPersistence::from_masks((*solar).retrieval_masks);
-        let Ok(mut generator) = CffiSurfaceGenerator::new(solar.cast(), (*solar).orbital) else {
+        // Orbit-scan rendering only builds the display list; the returned
+        // biological initial frame is a deterministic placeholder that the scan never
+        // reads, so it must not consume the gameplay random stream.
+        let Ok(mut generator) =
+            CffiSurfaceGenerator::for_orbit_scan(solar.cast(), (*solar).orbital)
+        else {
             return;
         };
 
