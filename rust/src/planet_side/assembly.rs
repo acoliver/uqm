@@ -262,7 +262,8 @@ mod tests {
     }
 
     /// Visual selection that models the four Brainbox Bulldozer (lifey.ani)
-    /// frames. Frame 0 is the narrowest mask; frame 3 is the tallest.
+    /// frames. Frame 0 is the widest/shortest mask; frame 3 is the
+    /// narrowest/tallest.
     struct BrainboxVisuals;
 
     impl WorldVisualPort for BrainboxVisuals {

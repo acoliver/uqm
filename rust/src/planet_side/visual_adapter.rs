@@ -113,10 +113,13 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             }
             // Select the drawable life frame (and therefore its collision mask)
             // from the typed entity frame, never a hardcoded zero.  The
-            // lifecycle frame is normalized to the 0..3 life animation.
+            // lifecycle frame is normalized to the four-frame life animation.
             SurfaceEntityKind::LiveCreature {
                 kind, frame_index, ..
-            } => (self.life_frame(kind.index())?, frame_index % 4),
+            } => (
+                self.life_frame(kind.index())?,
+                life_animation_frame(frame_index),
+            ),
             _ => return Err(AdapterError::new("generated_visual_kind")),
         };
         if generated.scan == ScanType::Energy && base.is_null() {
@@ -136,6 +139,15 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             mask,
         })
     }
+}
+
+/// Normalize the creature lifecycle frame to the four-frame life animation (like
+/// `lifea.ani`..`lifez.ani`) that the visual port selects for a live
+/// creature.  The stored frame_index advances one step per world step; once it
+/// reaches 4 the animation wraps back to frame 0 (4 -> 0), and any other
+/// cycle value maps onto its 0..3 slot.
+fn life_animation_frame(frame_index: u16) -> u16 {
+    frame_index % 4
 }
 
 /// Select the surface mineral frame: the category cluster offset by the gross
@@ -405,6 +417,19 @@ mod tests {
                 operation: "misc_data_frame"
             })
         ));
+    }
+
+    #[test]
+    fn life_animation_frame_normalizes_typed_frames_to_the_four_frame_contract() {
+        // The stored lifecycle frame_index driven by one world step per frame is
+        // normalized to the 0..3 life animation: 0..=3 pass through, and the
+        // rollover 4..=7 cycle values wrap back (4 -> 0 .. 7 -> 3).
+        for frame_index in 0..=3 {
+            assert_eq!(life_animation_frame(frame_index), frame_index);
+        }
+        for frame_index in 4..=7 {
+            assert_eq!(life_animation_frame(frame_index), frame_index % 4);
+        }
     }
 
     #[test]

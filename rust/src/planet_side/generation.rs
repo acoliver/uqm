@@ -275,6 +275,61 @@ mod tests {
         );
     }
 
+    /// Tiny generator emitting one biological node on a caller-chosen initial life
+    /// frame, so initial-frame propagation is tested in isolation.
+    struct BioOnlyGenerator {
+        initial_frame: u8,
+    }
+
+    impl SurfaceGenerator for BioOnlyGenerator {
+        fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
+            Ok(u8::from(scan == ScanType::Biological))
+        }
+
+        fn generate(
+            &mut self,
+            scan: ScanType,
+            node: ScanNodeId,
+        ) -> Result<GeneratedNode, AdapterError> {
+            Ok(GeneratedNode {
+                position: SurfacePoint {
+                    x: i32::from(node.get()),
+                    y: 0,
+                },
+                kind: if scan == ScanType::Biological {
+                    GeneratedNodeKind::Biological {
+                        creature: CreatureKind::new(0).ok_or(AdapterError::new("creature"))?,
+                        hit_points: 1,
+                        initial_frame: self.initial_frame,
+                    }
+                } else {
+                    GeneratedNodeKind::Energy
+                },
+            })
+        }
+
+        fn pickup(&mut self, _scan: ScanType, _node: ScanNodeId) -> Result<bool, AdapterError> {
+            Ok(true)
+        }
+    }
+
+    #[test]
+    fn biological_initial_frame_propagates_into_entity_unchanged() {
+        for initial_frame in 0..3 {
+            let mut generator = BioOnlyGenerator { initial_frame };
+            let mut world = SurfaceWorld::new();
+            let generated =
+                populate_surface(&mut generator, ScanPersistence::default(), &mut world).unwrap();
+            let entity = generated.first().unwrap().entity;
+            let SurfaceEntityKind::LiveCreature { frame_index, .. } =
+                &world.get(entity).unwrap().kind
+            else {
+                panic!("expected live creature");
+            };
+            assert_eq!(*frame_index, u16::from(initial_frame));
+        }
+    }
+
     #[test]
     fn population_keeps_gross_size_and_fine_quantity_typed() {
         let mut generator = Generator::default();
