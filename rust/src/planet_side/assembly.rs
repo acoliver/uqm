@@ -164,9 +164,6 @@ pub fn advance_creature_animation_frame(
     animation_frame: u16,
     visual: &mut impl WorldVisualPort,
 ) -> Result<(), AdapterError> {
-    if animation_frame == 0 {
-        return Ok(());
-    }
     let selected = visual.creature_animation_visual(kind, animation_frame)?;
     assembly.frames.insert(entity, selected.frame);
     assembly.masks.insert_entity(entity, selected.mask);

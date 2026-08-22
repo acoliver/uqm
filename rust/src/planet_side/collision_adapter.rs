@@ -282,11 +282,16 @@ where
     ) -> Result<(), AdapterError> {
         // Play world sounds in source order. Every LanderHits cue is a
         // stun-bolt that connected with a live creature on a presented frame.
+        //
+        // The world-step carries an explicit hit verdict, so a hit on an
+        // already-full slot (AnyCanned) does not double the prior lander-hit
+        // when two bolts pass in the same frame.  Count each non-full verdict
+        // once; the sound is played per cue as the C control does.
         for cue in &result.effects.sounds {
-            if matches!(cue, super::hazards::SoundCue::LanderHits) {
-                super::telemetry::creature_hit();
-            }
             audio.play(*cue)?;
+        }
+        for _ in &result.effects.landed_shot {
+            super::telemetry::creature_hit();
         }
 
         // Transform canned creatures: swap live creature → canned creature and

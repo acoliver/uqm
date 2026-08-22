@@ -521,6 +521,11 @@ pub struct WorldStepEffects {
     /// animation_frame)`. The caller updates the drawable frame and its collision
     /// mask atomically so hotspot and extent changes apply together.
     pub creature_frames: Vec<(SurfaceEntityId, super::creatures::CreatureKind, u16)>,
+    /// IDs of creatures to which this world step gave a landed shot verdict:
+    /// one verdict per firing that changed a creature this frame: one `Stunned`,
+    /// canned, or destroyed, excluding a bolt that only passed over an
+    /// already-canned creature.
+    pub landed_shot: Vec<SurfaceEntityId>,
 }
 
 /// Borrowed inputs to [`step_world`].
@@ -740,6 +745,9 @@ fn check_shot_creature_collision<M: MaskLookup>(
 
         let outcome = apply_shot_hit(*kind, hit_points, velocity, thrust_wait, aware, shot_facing);
         effects.sounds.push(super::hazards::SoundCue::LanderHits);
+        if !matches!(outcome, ShotCreatureOutcome::AlreadyCanned) {
+            effects.landed_shot.push(creature_id);
+        }
         match outcome {
             ShotCreatureOutcome::AlreadyCanned => {}
             ShotCreatureOutcome::Stunned => {}
