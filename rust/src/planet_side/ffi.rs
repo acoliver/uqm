@@ -223,19 +223,21 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
         // the install error are the sole outside-session protection; there is no
         // polling fallback.
         //
-        // Checking `Coordinator::is_active()` happens before tapping: ordinary
-        // gameplay never consumes or fails from a stale queue.  A request left
+        // `Coordinator::is_active()` is sampled exactly once, before tapping.
+        // That single observation decides both whether the request is consumed and
+        // which [`AutomationGate`] the install receives, so a request cannot be
+        // consumed under one observation and installed under another.  Ordinary
+        // gameplay never consumes or fails from a stale queue: a request left
         // pending because no active owner tapped it stays queued.
-        let fixture_request = if crate::automation::coordinator::Coordinator::is_active() {
+        let automation_active = crate::automation::coordinator::Coordinator::is_active();
+        let fixture_request = if automation_active {
             super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
         } else {
             None
         };
         if let Some(fixture) = fixture_request {
             fixture.install(
-                super::automation_fixture::automation_gate(
-                    crate::automation::coordinator::Coordinator::is_active(),
-                ),
+                super::automation_fixture::automation_gate(automation_active),
                 &session,
                 &surface,
                 &mut world_visuals,

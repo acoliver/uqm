@@ -769,6 +769,89 @@ mod tests {
     }
 
     #[test]
+    fn one_observation_decides_both_the_tap_and_the_install_gate() {
+        // run_session samples `Coordinator::is_active()` exactly once before
+        // tapping and derives both the tap and the install gate from that same
+        // observation.  Mirror that contract: an inactive observation must not
+        // consume the queued request, and the request must survive for a later
+        // active observation.  Tap under the active observation directly — the
+        // inactive observation's job is only to not consume — and install under
+        // that same active observation, never re-reading the gate.
+        let _serialize = fixture_test_serialize();
+        clear_pending_fixture_request();
+        coordinator_queues_fixture_request().unwrap();
+        let anchor = SurfacePoint { x: 10, y: 20 };
+        let inactive = false;
+        let session = session_at(anchor);
+        let surface = share_empty();
+
+        let fixture_request = if inactive {
+            tap_planet_side_fixture_request(anchor)
+        } else {
+            None
+        };
+        assert!(
+            fixture_request.is_none(),
+            "an inactive observation taps nothing"
+        );
+        if let Some(fixture) = fixture_request {
+            fixture
+                .install(
+                    automation_gate(inactive),
+                    &session,
+                    &surface,
+                    &mut TestFixturePort,
+                )
+                .expect_err("inactive gate rejects the installed request");
+        }
+        assert!(
+            surface.borrow().world.is_empty(),
+            "nothing is installed while inactive"
+        );
+
+        // The same one-shot request is still queued: the inactive
+        // observation must not have consumed it, so the active observation can tap
+        // and install it under Active.  run_session derives the gate from that
+        // same single Active observation; a second gate read could differ, which is
+        // exactly the two-observation split this change removes.
+        let tap = |position| tap_planet_side_fixture_request(position);
+        let active = tap(anchor).is_some();
+        assert_eq!(
+            tap(anchor),
+            None,
+            "the single observation taps at most one request"
+        );
+        assert!(
+            active,
+            "the active observation finds the one-shot request still queued"
+        );
+        let fixture = PlanetSideFixture::for_collision_parity(anchor);
+        assert_eq!(
+            fixture,
+            PlanetSideFixture::for_collision_parity(anchor),
+            "the pending request is the standard issue #162 layout"
+        );
+        fixture
+            .install(
+                automation_gate(active),
+                &session,
+                &surface,
+                &mut TestFixturePort,
+            )
+            .expect("active gate accepts the installed request");
+        assert!(
+            !surface.borrow().world.is_empty(),
+            "the active observation installs the fixture"
+        );
+        assert_eq!(
+            tap(anchor),
+            None,
+            "the single request was consumed exactly once"
+        );
+        clear_pending_fixture_request();
+    }
+
+    #[test]
     fn clear_removes_an_unconsumed_request() {
         let _serialize = fixture_test_serialize();
         clear_pending_fixture_request();
