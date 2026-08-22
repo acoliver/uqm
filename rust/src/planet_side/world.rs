@@ -1377,13 +1377,13 @@ mod tests {
     #[test]
     fn shot_hits_creature_across_seam_from_the_right() {
         // The shot sits on the left of the seam (ring pixel 0).  A 2px
-        // creature whose own raw x is the right edge straddles ring pixels
-        // {W-1, 0}, so its ring-0 pixel is the drawn image that crosses the
-        // seam.  Raw coordinates alone are a full ring apart; only the wrapped
-        // ring copy makes them overlap.
+        // Brainbox Bulldozer whose own raw x is the right edge straddles ring
+        // pixels {W-1, 0}, so its ring-0 pixel is the drawn image that
+        // crosses the seam.  Raw coordinates alone are a full ring apart; only the
+        // wrapped ring copy makes them overlap.
         let mut world = SurfaceWorld::new();
         let creature_id = world.insert(live_creature(
-            0,
+            24,
             1,
             SurfacePoint {
                 x: WORLD_WIDTH - 1,
@@ -1416,17 +1416,28 @@ mod tests {
                 random: &mut random,
             },
         );
-        assert!(effects.landed_shot.contains(&creature_id));
-        assert_eq!(effects.canned, vec![(creature_id, 1)]);
+        assert_eq!(
+            effects.landed_shot,
+            [creature_id],
+            "seam hit from the right must land one shot verdict"
+        );
+        assert!(
+            effects.expired.contains(&creature_id),
+            "seam hit must destroy the HP1 Brainbox"
+        );
+        assert!(
+            effects.canned.is_empty(),
+            "Brainbox destruction is never cargo"
+        );
     }
 
     #[test]
     fn shot_hits_creature_across_seam_from_the_left() {
         // Mirror image of the other seam test: the shot is fired from the ring
-        // pixel at the right edge (W-1) and the creature's raw x is ring 0.
+        // pixel at the right edge (W-1) and the Brainbox raw x is ring 0.
         // Its right-hand wrapped copy reaches back across the seam to the bolt.
         let mut world = SurfaceWorld::new();
-        let creature_id = world.insert(live_creature(0, 1, SurfacePoint { x: 0, y: 0 }));
+        let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 0, y: 0 }));
         let shot_id = world.insert(SurfaceEntity {
             kind: SurfaceEntityKind::Shot(Shot {
                 position: SurfacePoint {
@@ -1459,17 +1470,28 @@ mod tests {
                 random: &mut random,
             },
         );
-        assert!(effects.landed_shot.contains(&creature_id));
-        assert_eq!(effects.canned, vec![(creature_id, 1)]);
+        assert_eq!(
+            effects.landed_shot,
+            [creature_id],
+            "seam hit from the left must land one shot verdict"
+        );
+        assert!(
+            effects.expired.contains(&creature_id),
+            "seam hit must destroy the HP1 Brainbox"
+        );
+        assert!(
+            effects.canned.is_empty(),
+            "Brainbox destruction is never cargo"
+        );
     }
 
     #[test]
     fn same_raw_displacement_misses_when_it_does_not_cross_the_seam() {
-        // A 2px creature at {W-2, W-1} keeps a full-ring raw displacement
+        // A 2px Brainbox at {W-2, W-1} keeps a full-ring raw displacement
         // from the shot but no ring copy overlaps it: a miss proves the seam
         // tests above react to the seam, not to the raw offset.
         let mut world = SurfaceWorld::new();
-        let creature_id = world.insert(live_creature(0, 1, SurfacePoint { x: 966, y: 0 }));
+        let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 966, y: 0 }));
         let shot_id = world.insert(SurfaceEntity {
             kind: SurfaceEntityKind::Shot(Shot {
                 position: SurfacePoint { x: 0, y: 0 },
@@ -1496,17 +1518,24 @@ mod tests {
                 random: &mut random,
             },
         );
-        assert!(effects.landed_shot.is_empty());
+        assert!(
+            effects.landed_shot.is_empty(),
+            "full-ring displacement cannot land through the seam"
+        );
+        assert!(
+            effects.expired.is_empty(),
+            "a miss must not destroy the Brainbox"
+        );
         assert!(effects.canned.is_empty());
     }
 
     #[test]
     fn exact_half_world_shot_creature_offset_stays_a_tie() {
-        // A shot and creature separated by exactly half the world stay a tie: folding
+        // A bolt and Brainbox separated by exactly half the world stay a tie: folding
         // either side keeps them half a ring apart, so the seam never closes the gap.
         let mut world = SurfaceWorld::new();
         let creature_id = world.insert(live_creature(
-            0,
+            24,
             1,
             SurfacePoint {
                 x: WORLD_WIDTH / 2,
@@ -1539,7 +1568,14 @@ mod tests {
                 random: &mut random,
             },
         );
-        assert!(effects.landed_shot.is_empty());
+        assert!(
+            effects.landed_shot.is_empty(),
+            "exact half-world offset must stay a miss"
+        );
+        assert!(
+            effects.expired.is_empty(),
+            "the tie must not destroy the Brainbox"
+        );
         assert!(effects.canned.is_empty());
     }
 
@@ -1855,5 +1891,104 @@ mod tests {
         assert!(decrement_shot_life(&mut shot));
         assert!(!decrement_shot_life(&mut shot));
         assert_eq!(shot.life, 0);
+    }
+
+    #[test]
+    fn sequential_bolts_damage_then_destroy_a_brainbox_through_step_world() {
+        let mut world = SurfaceWorld::new();
+        let brainbox_id = world.insert(live_creature(24, 2, SurfacePoint { x: 0, y: 0 }));
+        let first_shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 1,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(1),
+        });
+
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(first_shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(brainbox_id, solid_mask());
+        let mut random = SeqRandom::new(&[]);
+
+        // First bolt overlaps the registered mask and lands on the HP2 Brainbox.
+        let first_effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert_eq!(
+            first_effects.landed_shot,
+            [brainbox_id],
+            "first independent bolt must land on the HP2 Brainbox"
+        );
+        assert!(
+            first_effects.canned.is_empty(),
+            "surviving Brainbox damage is stun, not cargo"
+        );
+        assert!(
+            !first_effects.expired.contains(&brainbox_id),
+            "first bolt must leave the Brainbox alive"
+        );
+        let brainbox = world.get(brainbox_id).unwrap();
+        let hp = match &brainbox.kind {
+            SurfaceEntityKind::LiveCreature { hit_points, .. } => *hit_points,
+            other => panic!("expected live Brainbox, got {other:?}"),
+        };
+        assert_eq!(hp, 1, "first landed shot drops the Brainbox to HP1");
+        // `step_world` expires the spent bolt via `advance_lifetimes`, which is
+        // the normal per-frame world cleanup for a life-1 entity.
+        assert!(
+            !world.ids().contains(&first_shot_id),
+            "the first bolt was removed by normal test-world lifetime cleanup"
+        );
+
+        // Second independent bolt destroys the surviving HP1 Brainbox.
+        let second_shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 1,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(1),
+        });
+        let mut second_masks = MapMasks::default();
+        second_masks.0.insert(second_shot_id, solid_mask());
+        let mut creature_masks2 = MapMasks::default();
+        creature_masks2.0.insert(brainbox_id, solid_mask());
+
+        let second_effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &second_masks,
+                creature_masks: &creature_masks2,
+                random: &mut random,
+            },
+        );
+        assert_eq!(
+            second_effects.landed_shot,
+            [brainbox_id],
+            "second independent bolt must land on the HP1 Brainbox"
+        );
+        assert!(
+            second_effects.expired.contains(&brainbox_id),
+            "second landed shot destroys the Brainbox through the production path"
+        );
+        assert!(
+            second_effects.canned.is_empty(),
+            "Brainbox destruction never produces cargo"
+        );
     }
 }
