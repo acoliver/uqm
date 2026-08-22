@@ -111,7 +111,12 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
                 }
                 (self.energy, 0)
             }
-            SurfaceEntityKind::LiveCreature { kind, .. } => (self.life_frame(kind.index())?, 0),
+            // Select the drawable life frame (and therefore its collision mask)
+            // from the typed entity frame, never a hardcoded zero.  The
+            // lifecycle frame is normalized to the 0..3 life animation.
+            SurfaceEntityKind::LiveCreature {
+                kind, frame_index, ..
+            } => (self.life_frame(kind.index())?, frame_index % 4),
             _ => return Err(AdapterError::new("generated_visual_kind")),
         };
         if generated.scan == ScanType::Energy && base.is_null() {

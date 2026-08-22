@@ -119,9 +119,16 @@ impl SurfaceGenerator for CffiSurfaceGenerator {
                         .map_err(|_| AdapterError::new("creature_type"))?;
                     let creature = CreatureKind::new(creature_index)
                         .ok_or(AdapterError::new("creature_type"))?;
+                    // The legacy `generateBioNode` stamps each freshly generated
+                    // creature on a random 0..3 frame of the 4-frame life
+                    // animation.  Consume exactly one random value here, at the
+                    // same semantic point as the legacy node generation, and never
+                    // for mineral or energy nodes.
+                    let initial_frame = (crate::math::TFB_Random() % 4) as u8;
                     GeneratedNodeKind::Biological {
                         creature,
                         hit_points: CreatureCatalog::stats(creature).hit_points,
+                        initial_frame,
                     }
                 }
             };

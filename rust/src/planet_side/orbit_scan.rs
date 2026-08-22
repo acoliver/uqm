@@ -148,6 +148,7 @@ mod production {
             super::super::generation::GeneratedNodeKind::Biological {
                 creature,
                 hit_points,
+                ..
             } => {
                 element.current.frame = SetAbsFrameIndex(MiscDataFrame, 0);
                 element.next.frame =

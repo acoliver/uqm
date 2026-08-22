@@ -111,6 +111,12 @@ pub enum GeneratedNodeKind {
     Biological {
         creature: CreatureKind,
         hit_points: u8,
+        /// Normalized 0..3 index into the 4-frame life animation, chosen at
+        /// node-generation time, mirroring the legacy `generateBioNode` stamp
+        /// `SetAbsFrameIndex(life_form, (COUNT)TFB_Random())` on the 4-frame
+        /// `lifea.ani`..`lifez.ani`.  The first world step then advances this
+        /// frame ordinarily (N -> N + 1).
+        initial_frame: u8,
     },
 }
 
@@ -176,13 +182,14 @@ pub fn populate_surface(
                 GeneratedNodeKind::Biological {
                     creature,
                     hit_points,
+                    initial_frame,
                 } => SurfaceEntityKind::LiveCreature {
                     kind: creature,
                     hit_points,
                     aware: false,
                     velocity: VelocityDesc::new(),
                     thrust_wait: 0,
-                    frame_index: 0,
+                    frame_index: u16::from(initial_frame),
                 },
             };
             let entity = world.insert(SurfaceEntity {
@@ -241,6 +248,7 @@ mod tests {
                 ScanType::Biological => GeneratedNodeKind::Biological {
                     creature: CreatureKind::new(0).ok_or(AdapterError::new("creature"))?,
                     hit_points: 1,
+                    initial_frame: 2,
                 },
             };
             Ok(GeneratedNode {

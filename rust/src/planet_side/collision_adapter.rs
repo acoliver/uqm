@@ -610,7 +610,7 @@ mod tests {
                 aware: false,
                 velocity: crate::battle::velocity::VelocityDesc::new(),
                 thrust_wait: 0,
-                frame_index: 0,
+                frame_index: 1,
             },
             position: SurfacePoint::default(),
             finite_life: None,
