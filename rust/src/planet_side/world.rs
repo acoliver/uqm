@@ -15,7 +15,7 @@ use crate::battle::battle_types::{
 
 use super::creatures::{CreatureBehavior, CreatureCatalog, CreatureKind, CreatureSpeed};
 use super::entities::{SurfaceEntity, SurfaceEntityId, SurfaceEntityKind, SurfaceWorld};
-use super::geometry::{masks_intersect, CollisionMask};
+use super::geometry::{masks_intersect_wrapped, CollisionMask};
 use super::hazards::{hazard_chance, thermal_hazard_rating, HazardKind};
 use super::model::SurfacePoint;
 use super::simulation::Shot;
@@ -517,6 +517,15 @@ pub struct WorldStepEffects {
     /// IDs of entities whose finite life expired this frame. The caller must
     /// remove their frames and masks in sync with the world.
     pub expired: Vec<SurfaceEntityId>,
+    /// Live creatures whose animation advanced this frame: `(id, kind,
+    /// animation_frame)`. The caller updates the drawable frame and its collision
+    /// mask atomically so hotspot and extent changes apply together.
+    pub creature_frames: Vec<(SurfaceEntityId, super::creatures::CreatureKind, u16)>,
+    /// IDs of creatures to which this world step gave a landed shot verdict:
+    /// one verdict per firing that changed a creature this frame: one `Stunned`,
+    /// canned, or destroyed, excluding a bolt that only passed over an
+    /// already-canned creature.
+    pub landed_shot: Vec<SurfaceEntityId>,
 }
 
 /// Borrowed inputs to [`step_world`].
@@ -615,6 +624,10 @@ fn process_entity<M: MaskLookup, R: WorldRandom>(
             };
             let new_aware = update_creature(&mut ctx, random);
             *aware = new_aware;
+            // Animation leaks from frame_index every surface frame: the C code
+            // advances the primitive frame inside object_animation, and each step
+            // must keep hotspot and extent in lockstep with the drawn image.
+            effects.creature_frames.push((id, *kind, *frame_index));
         }
         SurfaceEntityKind::Shot(shot) => {
             // Lifetime is tracked via finite_life; velocity integration below.
@@ -711,7 +724,16 @@ fn check_shot_creature_collision<M: MaskLookup>(
             Some(e) => e.position,
             None => continue,
         };
-        if !masks_intersect(shot_position, shot_mask, creature_position, creature_mask) {
+        // This shot-vs-creature loop uses the wrapped form, like the
+        // lander-vs-entity loop, so a shot whose drawn image crosses the
+        // horizontal seam connects at the ring copy that is actually rendered.
+        if !masks_intersect_wrapped(
+            shot_position,
+            shot_mask,
+            creature_position,
+            creature_mask,
+            WORLD_WIDTH,
+        ) {
             continue;
         }
 
@@ -732,6 +754,9 @@ fn check_shot_creature_collision<M: MaskLookup>(
 
         let outcome = apply_shot_hit(*kind, hit_points, velocity, thrust_wait, aware, shot_facing);
         effects.sounds.push(super::hazards::SoundCue::LanderHits);
+        if !matches!(outcome, ShotCreatureOutcome::AlreadyCanned) {
+            effects.landed_shot.push(creature_id);
+        }
         match outcome {
             ShotCreatureOutcome::AlreadyCanned => {}
             ShotCreatureOutcome::Stunned => {}
@@ -1244,7 +1269,7 @@ mod tests {
         let effects = step_world(
             &mut world,
             WorldStepInputs {
-                lander_position: SurfacePoint::default(),
+                lander_position: SurfacePoint { x: 0, y: 0 },
                 shot_masks: &masks,
                 creature_masks: &masks,
                 random: &mut random,
@@ -1344,6 +1369,217 @@ mod tests {
             .contains(&super::super::hazards::SoundCue::LifeformCanned));
     }
 
+    /// Build a 2px-wide opaque mask centered so its second pixel is the `x + 1`
+    /// ring pixel. Same shape idea as the seam-straddling fixture deposits.
+    fn two_px_mask() -> CollisionMask {
+        CollisionMask::from_occupancy(2, 1, SurfacePoint::default(), &[1, 1]).unwrap()
+    }
+
+    #[test]
+    fn shot_hits_creature_across_seam_from_the_right() {
+        // The shot sits on the left of the seam (ring pixel 0).  A 2px
+        // Brainbox Bulldozer whose own raw x is the right edge straddles ring
+        // pixels {W-1, 0}, so its ring-0 pixel is the drawn image that
+        // crosses the seam.  Raw coordinates alone are a full ring apart; only the
+        // wrapped ring copy makes them overlap.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(
+            24,
+            1,
+            SurfacePoint {
+                x: WORLD_WIDTH - 1,
+                y: 0,
+            },
+        ));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, two_px_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert_eq!(
+            effects.landed_shot,
+            [creature_id],
+            "seam hit from the right must land one shot verdict"
+        );
+        assert!(
+            effects.expired.contains(&creature_id),
+            "seam hit must destroy the HP1 Brainbox"
+        );
+        assert!(
+            effects.canned.is_empty(),
+            "Brainbox destruction is never cargo"
+        );
+    }
+
+    #[test]
+    fn shot_hits_creature_across_seam_from_the_left() {
+        // Mirror image of the other seam test: the shot is fired from the ring
+        // pixel at the right edge (W-1) and the Brainbox raw x is ring 0.
+        // Its right-hand wrapped copy reaches back across the seam to the bolt.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 0, y: 0 }));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint {
+                    x: WORLD_WIDTH - 1,
+                    y: 0,
+                },
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint {
+                x: WORLD_WIDTH - 1,
+                y: 0,
+            },
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, two_px_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, solid_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert_eq!(
+            effects.landed_shot,
+            [creature_id],
+            "seam hit from the left must land one shot verdict"
+        );
+        assert!(
+            effects.expired.contains(&creature_id),
+            "seam hit must destroy the HP1 Brainbox"
+        );
+        assert!(
+            effects.canned.is_empty(),
+            "Brainbox destruction is never cargo"
+        );
+    }
+
+    #[test]
+    fn same_raw_displacement_misses_when_it_does_not_cross_the_seam() {
+        // A 2px Brainbox at {W-2, W-1} keeps a full-ring raw displacement
+        // from the shot but no ring copy overlaps it: a miss proves the seam
+        // tests above react to the seam, not to the raw offset.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 966, y: 0 }));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint { x: 0, y: 0 },
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint { x: 0, y: 0 },
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, two_px_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(
+            effects.landed_shot.is_empty(),
+            "full-ring displacement cannot land through the seam"
+        );
+        assert!(
+            effects.expired.is_empty(),
+            "a miss must not destroy the Brainbox"
+        );
+        assert!(effects.canned.is_empty());
+    }
+
+    #[test]
+    fn exact_half_world_shot_creature_offset_stays_a_tie() {
+        // A bolt and Brainbox separated by exactly half the world stay a tie: folding
+        // either side keeps them half a ring apart, so the seam never closes the gap.
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(
+            24,
+            1,
+            SurfacePoint {
+                x: WORLD_WIDTH / 2,
+                y: 0,
+            },
+        ));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, two_px_mask());
+
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(
+            effects.landed_shot.is_empty(),
+            "exact half-world offset must stay a miss"
+        );
+        assert!(
+            effects.expired.is_empty(),
+            "the tie must not destroy the Brainbox"
+        );
+        assert!(effects.canned.is_empty());
+    }
+
     #[test]
     fn step_world_wraps_creature_x_at_world_edge() {
         let mut world = SurfaceWorld::new();
@@ -1441,6 +1677,212 @@ mod tests {
     }
 
     #[test]
+    fn creature_animation_frame_is_reported_every_surface_step() {
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(24, 2, SurfacePoint { x: 10, y: 10 }));
+        let shot_masks = MapMasks::default();
+        let creature_masks = MapMasks::default();
+        let mut random = SeqRandom::new(&[]);
+        let effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert!(
+            effects
+                .creature_frames
+                .iter()
+                .any(|(id, kind, frame)| *id == creature_id
+                    && kind.is_brainbox_bulldozer()
+                    && *frame == 1),
+            "brainbox must advance its animation frame each surface step"
+        );
+    }
+
+    // -- Brainbox Bulldozer acceptance ------------------------------------------
+
+    /// lifey.ani declares one extent and hotspot per creature animation frame:
+    /// frame 0 is 15×5 at hotspot (7,4), frame 1 is 11×7 at (5,6),
+    /// frame 2 is 11×12 at (5,11), frame 3 is 9×14 at (4,13).
+    struct EntityPixel {
+        world_x: i32,
+        world_y: i32,
+        mask: CollisionMask,
+    }
+
+    fn tile_pixel(
+        width: u16,
+        height: u16,
+        hotspot: SurfacePoint,
+        offset_x: u16,
+        offset_y: u16,
+    ) -> EntityPixel {
+        let mut occupancy = vec![0u8; usize::from(width) * usize::from(height)];
+        occupancy[(usize::from(offset_y) * usize::from(width)) + usize::from(offset_x)] = 1;
+        EntityPixel {
+            // With the creature at the world origin the opaque pixel at local
+            // `offset` lives at `offset - hotspot`.
+            world_x: i32::from(offset_x) - hotspot.x,
+            world_y: i32::from(offset_y) - hotspot.y,
+            mask: CollisionMask::from_occupancy(width, height, hotspot, &occupancy).unwrap(),
+        }
+    }
+
+    /// The four living brainbox frames 0..3 from lifey.ani, in the animation
+    /// contract: `(width, height, hotspot)`.
+    fn brainbox_extents(frame: u16) -> (u16, u16, SurfacePoint) {
+        let (width, height, x, y) = match frame {
+            0 => (15, 5, 7, 4),
+            1 => (11, 7, 5, 6),
+            2 => (11, 12, 5, 11),
+            3 => (9, 14, 4, 13),
+            _ => (0, 0, 0, 0),
+        };
+        (width, height, SurfacePoint { x, y })
+    }
+
+    /// Run the production `step_world` seam/creature collision loop: a brainbox
+    /// creature on its frame's declared tile with that frame's registered hot-spot
+    /// anchored at the same position, and a 1×1 bolt at `shot_at`.  The
+    /// puncture and the mask are fully opaque, so a hit is a per-pixel mask
+    /// overlap inside the tile, not a helper against itself.
+    fn step_shot_into_creature(
+        creature_mask: &CollisionMask,
+        shot_at: SurfacePoint,
+    ) -> WorldStepEffects {
+        let mut world = SurfaceWorld::new();
+        let creature_id = world.insert(live_creature(24, 1, SurfacePoint { x: 0, y: 0 }));
+        let shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: shot_at,
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            }),
+            position: shot_at,
+            finite_life: Some(12),
+        });
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(creature_id, creature_mask.clone());
+        let mut random = SeqRandom::new(&[]);
+        step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        )
+    }
+
+    /// Every animation frame the brainbox can show must have its own declared extent
+    /// and hotspot, and each opaque pixel inside that extent must collide while a
+    /// bolt just right of the frame's right extent and one just below the bottom
+    /// extent both fall outside the mask's bounding box and stay a miss. The frame
+    /// mask is registered via the ordinary production world/assembly collision path,
+    /// and the bolt is a 1x1 shot mask, so a hit is a genuine overlap of
+    /// two independent pixel masks in `step_world`, never a helper compared to
+    /// itself.
+    #[test]
+    fn brainbox_accept_center_edge_hit_and_right_below_extent_miss_on_every_lifey_frame() {
+        for frame in 0..=3u16 {
+            let (width, height, hotspot) = brainbox_extents(frame);
+            let center = tile_pixel(width, height, hotspot, width / 2, height / 2);
+            let hit = step_shot_into_creature(
+                &center.mask,
+                SurfacePoint {
+                    x: center.world_x,
+                    y: center.world_y,
+                },
+            );
+            assert!(
+                !hit.landed_shot.is_empty(),
+                "center-pixel hit on frame {frame}"
+            );
+            let edge = tile_pixel(width, height, hotspot, width - 1, height - 1);
+            let hit = step_shot_into_creature(
+                &edge.mask,
+                SurfacePoint {
+                    x: edge.world_x,
+                    y: edge.world_y,
+                },
+            );
+            assert!(
+                !hit.landed_shot.is_empty(),
+                "edge-pixel hit on frame {frame}"
+            );
+            // One column past the right extent and one row below the bottom extent
+            // fall outside the mask's bounding box entirely, so a bolt there is
+            // a clean miss.
+            let right = tile_pixel(width, height, hotspot, width / 2, height / 2);
+            let hit = step_shot_into_creature(
+                &right.mask,
+                SurfacePoint {
+                    x: width as i32 - hotspot.x,
+                    y: right.world_y,
+                },
+            );
+            assert!(
+                hit.landed_shot.is_empty(),
+                "right-of-extent miss on frame {frame}"
+            );
+            let below = tile_pixel(width, height, hotspot, width / 2, height / 2);
+            let hit = step_shot_into_creature(
+                &below.mask,
+                SurfacePoint {
+                    x: below.world_x,
+                    y: height as i32 - hotspot.y,
+                },
+            );
+            assert!(
+                hit.landed_shot.is_empty(),
+                "below-extent miss on frame {frame}"
+            );
+        }
+    }
+
+    /// The drawable frame the assembly picks for a brainbox on the given animation
+    /// frame must agree with the per-frame mask the world step registers: the frame
+    /// index selects the lifey frame, and that same frame's recorded mask must be
+    /// the one whose hotspot and extent the collision loop sees.  Frame indices
+    /// outside 0..3 report an empty extent.
+    #[test]
+    fn brainbox_drawable_frame_and_registered_mask_hotspot_extent_stay_in_sync() {
+        for frame in 0..=3u16 {
+            let (width, height, hotspot) = brainbox_extents(frame);
+            // Place the tile's single opaque pixel exactly at the declared hotspot:
+            // with the creature drawn at the world origin that pixel is world (0,0).
+            let at_hotspot = tile_pixel(width, height, hotspot, hotspot.x as u16, hotspot.y as u16);
+            assert_eq!(at_hotspot.world_x, 0, "frame {frame} hotspot x");
+            assert_eq!(at_hotspot.world_y, 0, "frame {frame} hotspot y");
+            assert_eq!(
+                at_hotspot.mask.width(),
+                width,
+                "frame {frame} registered width"
+            );
+            assert_eq!(
+                at_hotspot.mask.height(),
+                height,
+                "frame {frame} registered height"
+            );
+            let hit = step_shot_into_creature(&at_hotspot.mask, SurfacePoint { x: 0, y: 0 });
+            assert!(
+                !hit.landed_shot.is_empty(),
+                "frame {frame}: drawn hotspot pixel hits"
+            );
+        }
+        assert_eq!(brainbox_extents(4), (0, 0, SurfacePoint::default()));
+    }
+
+    #[test]
     fn shot_life_decrement_returns_alive_until_zero() {
         let mut shot = Shot {
             position: SurfacePoint::default(),
@@ -1453,5 +1895,104 @@ mod tests {
         assert!(decrement_shot_life(&mut shot));
         assert!(!decrement_shot_life(&mut shot));
         assert_eq!(shot.life, 0);
+    }
+
+    #[test]
+    fn sequential_bolts_damage_then_destroy_a_brainbox_through_step_world() {
+        let mut world = SurfaceWorld::new();
+        let brainbox_id = world.insert(live_creature(24, 2, SurfacePoint { x: 0, y: 0 }));
+        let first_shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 1,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(1),
+        });
+
+        let mut shot_masks = MapMasks::default();
+        shot_masks.0.insert(first_shot_id, solid_mask());
+        let mut creature_masks = MapMasks::default();
+        creature_masks.0.insert(brainbox_id, solid_mask());
+        let mut random = SeqRandom::new(&[]);
+
+        // First bolt overlaps the registered mask and lands on the HP2 Brainbox.
+        let first_effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &shot_masks,
+                creature_masks: &creature_masks,
+                random: &mut random,
+            },
+        );
+        assert_eq!(
+            first_effects.landed_shot,
+            [brainbox_id],
+            "first independent bolt must land on the HP2 Brainbox"
+        );
+        assert!(
+            first_effects.canned.is_empty(),
+            "surviving Brainbox damage is stun, not cargo"
+        );
+        assert!(
+            !first_effects.expired.contains(&brainbox_id),
+            "first bolt must leave the Brainbox alive"
+        );
+        let brainbox = world.get(brainbox_id).unwrap();
+        let hp = match &brainbox.kind {
+            SurfaceEntityKind::LiveCreature { hit_points, .. } => *hit_points,
+            other => panic!("expected live Brainbox, got {other:?}"),
+        };
+        assert_eq!(hp, 1, "first landed shot drops the Brainbox to HP1");
+        // `step_world` expires the spent bolt via `advance_lifetimes`, which is
+        // the normal per-frame world cleanup for a life-1 entity.
+        assert!(
+            !world.ids().contains(&first_shot_id),
+            "the first bolt was removed by normal test-world lifetime cleanup"
+        );
+
+        // Second independent bolt destroys the surviving HP1 Brainbox.
+        let second_shot_id = world.insert(SurfaceEntity {
+            kind: SurfaceEntityKind::Shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 1,
+            }),
+            position: SurfacePoint::default(),
+            finite_life: Some(1),
+        });
+        let mut second_masks = MapMasks::default();
+        second_masks.0.insert(second_shot_id, solid_mask());
+        let mut creature_masks2 = MapMasks::default();
+        creature_masks2.0.insert(brainbox_id, solid_mask());
+
+        let second_effects = step_world(
+            &mut world,
+            WorldStepInputs {
+                lander_position: SurfacePoint::default(),
+                shot_masks: &second_masks,
+                creature_masks: &creature_masks2,
+                random: &mut random,
+            },
+        );
+        assert_eq!(
+            second_effects.landed_shot,
+            [brainbox_id],
+            "second independent bolt must land on the HP1 Brainbox"
+        );
+        assert!(
+            second_effects.expired.contains(&brainbox_id),
+            "second landed shot destroys the Brainbox through the production path"
+        );
+        assert!(
+            second_effects.canned.is_empty(),
+            "Brainbox destruction never produces cargo"
+        );
     }
 }

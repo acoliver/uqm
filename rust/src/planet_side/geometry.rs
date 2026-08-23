@@ -154,6 +154,46 @@ pub fn masks_intersect(
     false
 }
 
+#[must_use]
+pub fn masks_intersect_wrapped(
+    left_position: SurfacePoint,
+    left: &CollisionMask,
+    right_position: SurfacePoint,
+    right: &CollisionMask,
+    world_width: i32,
+) -> bool {
+    // BuildObjectList offsets every entity by the shortest wrapped horizontal
+    // displacement, so an overlap that visibly crosses the seam collides exactly
+    // where it is drawn.  Raw world coordinates alone miss it.
+    for right_x in [
+        right_position.x,
+        right_position.x - world_width,
+        right_position.x + world_width,
+    ] {
+        for left_x in [
+            left_position.x,
+            left_position.x - world_width,
+            left_position.x + world_width,
+        ] {
+            if masks_intersect(
+                SurfacePoint {
+                    x: left_x,
+                    y: left_position.y,
+                },
+                left,
+                SurfacePoint {
+                    x: right_x,
+                    y: right_position.y,
+                },
+                right,
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -221,6 +261,62 @@ mod tests {
     }
 
     #[test]
+    fn wide_deposit_crossing_right_seam_collides_with_lander_near_left() {
+        // A 3px deposit at world right edge covers ring pixels {W-1, 0, 1}.
+        // The lander at world x=1 sits on ring pixel 1: visible overlap.
+        let lander = mask(1, 1, &[1]);
+        let deposit = mask(3, 1, &[1; 3]);
+        assert!(masks_intersect_wrapped(
+            SurfacePoint { x: 1, y: 0 },
+            &lander,
+            SurfacePoint { x: 99, y: 0 },
+            &deposit,
+            100,
+        ));
+        // Opposite argument order still collides at the same drawn pixel.
+        assert!(masks_intersect_wrapped(
+            SurfacePoint { x: 99, y: 0 },
+            &deposit,
+            SurfacePoint { x: 1, y: 0 },
+            &lander,
+            100,
+        ));
+    }
+
+    #[test]
+    fn wide_deposit_hotspot_left_of_origin_crosses_seam_only_wrapped() {
+        // A 3px opaque deposit with hotspot (2,0) parked at raw x=0 spans
+        // ring pixels {-2, -1, 0}: its raw extent ends one pixel left of the
+        // lander at x=99, so raw coordinates alone never overlap.  Only the
+        // +WORLD copy reaches the right edge and closes the seam, and the same
+        // hit holds with the argument order reversed.
+        let lander = mask(1, 1, &[1]);
+        let deposit =
+            CollisionMask::from_occupancy(3, 1, SurfacePoint { x: 2, y: 0 }, &[1; 3]).unwrap();
+        assert!(!masks_intersect(
+            SurfacePoint { x: 0, y: 0 },
+            &deposit,
+            SurfacePoint { x: 99, y: 0 },
+            &lander
+        ));
+        assert!(masks_intersect_wrapped(
+            SurfacePoint { x: 99, y: 0 },
+            &lander,
+            SurfacePoint { x: 0, y: 0 },
+            &deposit,
+            100,
+        ));
+        // Opposite argument order still collides at the same drawn pixel.
+        assert!(masks_intersect_wrapped(
+            SurfacePoint { x: 0, y: 0 },
+            &deposit,
+            SurfacePoint { x: 99, y: 0 },
+            &lander,
+            100,
+        ));
+    }
+
+    #[test]
     fn rgba_canvas_uses_alpha_for_occupancy() {
         let mut canvas = Canvas::new_rgba(2, 1);
         canvas
@@ -234,6 +330,7 @@ mod tests {
     }
 
     #[test]
+
     fn image_extraction_preserves_hotspot() {
         let image = TFImage::new_rgba(1, 1);
         image.set_normal_hot_spot(crate::graphics::tfb_draw::HotSpot::new(2, 3));

@@ -102,20 +102,8 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
         entity: &SurfaceEntity,
     ) -> Result<EntityVisual, AdapterError> {
         let (base, index) = match entity.kind {
-            SurfaceEntityKind::MineralNode { category, amount } => {
-                let category =
-                    u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
-                if category >= 8 {
-                    return Err(AdapterError::new("mineral_category"));
-                }
-                (
-                    self.misc_data,
-                    MINERAL_FRAME_BASE
-                        + category * MINERAL_FRAMES_PER_CATEGORY
-                        + amount
-                            .saturating_add(2)
-                            .min(MINERAL_FRAMES_PER_CATEGORY - 1),
-                )
+            SurfaceEntityKind::MineralNode { category, size, .. } => {
+                (self.misc_data, mineral_visual_frame(category, size)?)
             }
             SurfaceEntityKind::EnergyNode { .. } => {
                 if self.energy.is_null() {
@@ -123,7 +111,15 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
                 }
                 (self.energy, 0)
             }
-            SurfaceEntityKind::LiveCreature { kind, .. } => (self.life_frame(kind.index())?, 0),
+            // Select the drawable life frame (and therefore its collision mask)
+            // from the typed entity frame, never a hardcoded zero.  The
+            // lifecycle frame is normalized to the four-frame life animation.
+            SurfaceEntityKind::LiveCreature {
+                kind, frame_index, ..
+            } => (
+                self.life_frame(kind.index())?,
+                life_animation_frame(frame_index),
+            ),
             _ => return Err(AdapterError::new("generated_visual_kind")),
         };
         if generated.scan == ScanType::Energy && base.is_null() {
@@ -143,6 +139,29 @@ impl SurfaceVisualPort for CffiSurfaceVisuals {
             mask,
         })
     }
+}
+
+/// Normalize the creature lifecycle frame to the four-frame life animation (like
+/// `lifea.ani`..`lifez.ani`) that the visual port selects for a live
+/// creature.  The stored frame_index advances one step per world step; once it
+/// reaches 4 the animation wraps back to frame 0 (4 -> 0), and any other
+/// cycle value maps onto its 0..3 slot.
+fn life_animation_frame(frame_index: u16) -> u16 {
+    frame_index % 4
+}
+
+/// Select the surface mineral frame: the category cluster offset by the gross
+/// deposit size.  The fine collectible quantity never participates.  Shared by
+/// the generated-node path and the fixture mineral path so category validation
+/// and frame selection cannot drift.
+fn mineral_visual_frame(category: usize, size: u16) -> Result<u16, AdapterError> {
+    let category = u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
+    if category >= 8 {
+        return Err(AdapterError::new("mineral_category"));
+    }
+    Ok(MINERAL_FRAME_BASE
+        + category * MINERAL_FRAMES_PER_CATEGORY
+        + size.min(MINERAL_FRAMES_PER_CATEGORY - 1))
 }
 
 /// Production visual port for dynamically-spawned world entities.
@@ -237,17 +256,157 @@ impl<A: PlanetSideAssetAccess> WorldVisualPort for CffiWorldVisuals<'_, A> {
             mask,
         })
     }
+
+    fn creature_animation_visual(
+        &mut self,
+        kind: super::creatures::CreatureKind,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError> {
+        let base = self.surface_visuals.life_frame(kind.index())?;
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, animation_frame) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("creature_animation_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame {
+                base,
+                index: animation_frame,
+            },
+            mask,
+        })
+    }
+}
+
+impl<A: PlanetSideAssetAccess> super::automation_fixture::FixtureVisualPort
+    for CffiWorldVisuals<'_, A>
+{
+    fn mineral_visual(
+        &mut self,
+        entity: &super::entities::SurfaceEntity,
+    ) -> Result<EntityVisual, AdapterError> {
+        // Synthetic fixture minerals carry only the typed SurfaceEntity (never a
+        // GeneratedEntity): the frame/mask selection is identical to the production
+        // generated-node path, including the category bound.
+        let (category, size) = match &entity.kind {
+            super::entities::SurfaceEntityKind::MineralNode { category, size, .. } => {
+                (*category, *size)
+            }
+            _ => return Err(AdapterError::new("fixture_mineral_visual")),
+        };
+        let frame_index = mineral_visual_frame(category, size)?;
+        let base = self.surface_visuals.misc_data;
+        if base.is_null() {
+            return Err(AdapterError::new("surface_frame_missing"));
+        }
+        #[cfg(feature = "linked_c_archive")]
+        let selected = unsafe { SetAbsFrameIndex(base, frame_index) };
+        #[cfg(not(feature = "linked_c_archive"))]
+        let selected = base;
+        if selected.is_null() {
+            return Err(AdapterError::new("surface_frame_missing"));
+        }
+        let mask = unsafe { extract_frame_mask(selected)? };
+        Ok(EntityVisual {
+            frame: SurfaceFrame {
+                base,
+                index: frame_index,
+            },
+            mask,
+        })
+    }
+
+    fn creature_visual(
+        &mut self,
+        kind: CreatureKind,
+        animation_frame: u16,
+    ) -> Result<EntityVisual, AdapterError> {
+        WorldVisualPort::creature_animation_visual(self, kind, animation_frame)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planet_side::entities::{SurfaceEntity, SurfaceWorld};
-    use crate::planet_side::generation::ScanNodeId;
+    use crate::planet_side::entities::{SurfaceEntity, SurfaceEntityKind, SurfaceWorld};
+    use crate::planet_side::generation::{GeneratedEntity, ScanNodeId, ScanType};
     use crate::planet_side::model::SurfacePoint;
 
     fn pointer(value: usize) -> *mut c_void {
         value as *mut c_void
+    }
+
+    /// The production mineral kind → frame index via the shared helper, as the
+    /// `SurfaceVisualPort::visual_for` match arm computes it for a typed entity.
+    fn mineral_visual_frame_from_mineral(kind: SurfaceEntityKind) -> Result<u16, AdapterError> {
+        match kind {
+            SurfaceEntityKind::MineralNode { category, size, .. } => {
+                mineral_visual_frame(category, size)
+            }
+            _ => unreachable!("mineral entity kind only"),
+        }
+    }
+
+    const MINERAL_CATEGORY_COUNT: usize = 8;
+    const MINERAL_GROSS_SIZE_COUNT: u16 = 3;
+    const MINERAL_FINE_DENSITY_MAX: u16 = 255;
+
+    fn mineral_entity(category: usize, size: u16, quantity: u16) -> SurfaceEntity {
+        SurfaceEntity {
+            kind: SurfaceEntityKind::MineralNode {
+                category,
+                size,
+                quantity,
+            },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        }
+    }
+
+    #[test]
+    fn mineral_matrix_fine_quantity_never_selects_the_frame() {
+        // Full matrix over every valid category (0..7), every UQM-generated
+        // gross size (0..2 from surface.c), and every representable fine
+        // density byte (0..=255).  Typed MineralNode entities differ only in
+        // fine quantity: the selected frame must be identical for all fine
+        // values, and each gross size must select its category-relative frame.
+        // The expected frame comes from the category cluster formula itself, so
+        // the assertion is not a helper-to-itself comparison.
+        for category in 0..MINERAL_CATEGORY_COUNT {
+            for size in 0..MINERAL_GROSS_SIZE_COUNT {
+                let expected =
+                    MINERAL_FRAME_BASE + category as u16 * MINERAL_FRAMES_PER_CATEGORY + size;
+                for fine in 0..=MINERAL_FINE_DENSITY_MAX {
+                    assert_eq!(
+                        mineral_visual_frame_from_mineral(
+                            mineral_entity(category, size, fine).kind
+                        ),
+                        Ok(expected)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_mineral_category_is_rejected_through_shared_helper() {
+        for category in MINERAL_CATEGORY_COUNT..2 * MINERAL_CATEGORY_COUNT {
+            assert!(matches!(
+                mineral_visual_frame(category, 2),
+                Err(AdapterError {
+                    operation: "mineral_category"
+                })
+            ));
+            assert!(matches!(
+                mineral_visual_frame_from_mineral(mineral_entity(category, 2, 1).kind),
+                Err(AdapterError {
+                    operation: "mineral_category"
+                })
+            ));
+        }
     }
 
     #[test]
@@ -258,6 +417,19 @@ mod tests {
                 operation: "misc_data_frame"
             })
         ));
+    }
+
+    #[test]
+    fn life_animation_frame_normalizes_typed_frames_to_the_four_frame_contract() {
+        // The stored lifecycle frame_index driven by one world step per frame is
+        // normalized to the 0..3 life animation: 0..=3 pass through, and the
+        // rollover 4..=7 cycle values wrap back (4 -> 0 .. 7 -> 3).
+        for frame_index in 0..=3 {
+            assert_eq!(life_animation_frame(frame_index), frame_index);
+        }
+        for frame_index in 4..=7 {
+            assert_eq!(life_animation_frame(frame_index), frame_index % 4);
+        }
     }
 
     #[test]
@@ -290,11 +462,14 @@ mod tests {
 
     #[test]
     fn invalid_mineral_category_is_rejected_before_mask_extraction() {
+        // The production entry point rejects an invalid category through the shared
+        // helper before any frame or mask work, using a typed entity.
         let mut visuals = CffiSurfaceVisuals::new(pointer(1), pointer(2), [pointer(3); 3]).unwrap();
         let entity = SurfaceEntity {
             kind: SurfaceEntityKind::MineralNode {
-                category: 8,
-                amount: 1,
+                category: MINERAL_CATEGORY_COUNT,
+                size: 2,
+                quantity: 1,
             },
             position: SurfacePoint::default(),
             finite_life: None,

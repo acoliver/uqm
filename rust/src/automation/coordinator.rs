@@ -823,6 +823,39 @@ impl Coordinator {
 
         scheduler_event = self.service_navigation(&mut inner, scheduler_event);
 
+        // The setup_planet_side_collision_fixture action is explicit and
+        // one-shot: only the current action queues, only once.  A duplicate
+        // while a request is still pending is a fail-fast semantic
+        // mismatch instead of an idempotent success.
+        if matches!(
+            self.actions.get(inner.sched_state.step_index),
+            Some(Action::SetupPlanetSideCollisionFixture(_))
+        ) && inner.sched_state.phase == ActionPhase::WaitingForInput
+            && scheduler_event == SchedulerEvent::AdmittedInput
+        {
+            match crate::planet_side::automation_fixture::coordinator_queues_fixture_request() {
+                Ok(()) => {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        "planet_side_collision_fixture_queued".to_string(),
+                    );
+                }
+                Err(error) => {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        format!(
+                            "planet_side_collision_fixture_duplicate:{}",
+                            error.operation
+                        ),
+                    );
+                    self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
         let config = SchedulerConfig {
             actions: &self.actions,
             transitions: &self.transitions,
@@ -960,6 +993,47 @@ impl Coordinator {
                     self.set_terminal(inner, TerminalClass::SemanticMismatch);
                     return true;
                 }
+            }
+        }
+        if let Some(Action::AssertPlanetSideCollisions(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let observation = crate::planet_side::telemetry::observation();
+            let actual = (
+                observation.mineral_pickups,
+                observation.creature_hits,
+                observation.seam_hits,
+            );
+            let floors = (
+                assertion.mineral_pickups,
+                assertion.creature_hits,
+                assertion.seam_hits,
+            );
+            if actual.0 >= floors.0 && actual.1 >= floors.1 && actual.2 >= floors.2 {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_collisions_verified:mineral={}:creature_hits={}:seam={}",
+                        actual.0, actual.1, actual.2
+                    ),
+                );
+            } else {
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "planet_side_collisions_failed:mineral={}≥{}:creature_hits={}≥{}:seam={}≥{}",
+                        actual.0,
+                        assertion.mineral_pickups,
+                        actual.1,
+                        assertion.creature_hits,
+                        actual.2,
+                        assertion.seam_hits
+                    ),
+                );
+                self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                return true;
             }
         }
 
@@ -1201,6 +1275,11 @@ impl Coordinator {
     }
 
     fn finalize_inner(&self, game_result: i32) -> Result<i32, String> {
+        // Clear any pending fixture request before runtime finalization:
+        // the single fixture is one-shot per script, so an unconsumed queue
+        // must never leak into another script.
+        crate::planet_side::automation_fixture::clear_pending_fixture_request();
+
         let terminal = {
             let mut inner = self.inner.lock();
             if inner.finalized {

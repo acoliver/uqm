@@ -187,7 +187,8 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
 
     let result = (|| {
         let assets = super::init_lander::borrowed_assets()?;
-        let mut generator = CffiSurfaceGenerator::new(context.solar_system, context.world)?;
+        let mut generator =
+            CffiSurfaceGenerator::for_planet_side(context.solar_system, context.world)?;
         let mut visuals = CffiSurfaceVisuals::new(
             context.misc_data_frame,
             context.energy_frame,
@@ -211,7 +212,38 @@ unsafe fn run_session(context: *mut PlanetSideRunContext) -> PlanetSideReply {
             context.weather_rating,
             context.temperature,
         ));
-        let world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
+        let mut world_visuals = super::visual_adapter::CffiWorldVisuals::new(&assets, &mut visuals);
+        // The issue #162 fixture is optional and explicitly requested.  Only the
+        // `setup_planet_side_collision_fixture` script action queues the
+        // request (the coordinator invokes
+        // [`super::automation_fixture::coordinator_queues_fixture_request`]
+        // when that action executes), so active automation with no such action runs
+        // the normal generated PlanetSide session unchanged.  The request is
+        // delivered exactly once per run_session, and install fails fast unless
+        // this session is under an active automation coordinator.  The gate and
+        // the install error are the sole outside-session protection; there is no
+        // polling fallback.
+        //
+        // `Coordinator::is_active()` is sampled exactly once, before tapping.
+        // That single observation decides both whether the request is consumed and
+        // which [`AutomationGate`] the install receives, so a request cannot be
+        // consumed under one observation and installed under another.  Ordinary
+        // gameplay never consumes or fails from a stale queue: a request left
+        // pending because no active owner tapped it stays queued.
+        let automation_active = crate::automation::coordinator::Coordinator::is_active();
+        let fixture_request = if automation_active {
+            super::automation_fixture::tap_planet_side_fixture_request(session.lander.position)
+        } else {
+            None
+        };
+        if let Some(fixture) = fixture_request {
+            fixture.install(
+                super::automation_fixture::automation_gate(automation_active),
+                &session,
+                &surface,
+                &mut world_visuals,
+            )?;
+        }
         let collision = SurfaceCollisionAdapter {
             surface: surface.clone(),
             random: CffiGameplayRandom,

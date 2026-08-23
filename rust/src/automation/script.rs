@@ -513,6 +513,24 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// Assert the live PlanetSide collision verdicts on presented frames.
+///
+/// Each counter is a floor: the lander must have collected at least
+/// `mineral_pickups` mineral deposits, landed at least `creature_hits`
+/// stun-bolt impacts on live creatures, and connected at least `seam_hits`
+/// collisions that only resolved across the wrapped horizontal seam. All three
+/// defaults to zero, so a script asserts exactly the semantics it runs.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PlanetSideCollisionAssertion {
+    #[serde(default)]
+    pub mineral_pickups: u64,
+    #[serde(default)]
+    pub creature_hits: u64,
+    #[serde(default)]
+    pub seam_hits: u64,
+}
+
 /// Wait for a fresh communication response list before selecting its first entry.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -535,6 +553,14 @@ pub struct WaitForCommunicationEndStep {
 pub struct WaitForCommunicationReplayStep {
     pub max_ticks: u64,
 }
+
+/// The no-payload step for the explicit PlanetSide collision fixture action.
+///
+/// Kept as an empty struct with `deny_unknown_fields` so an extra JSON field
+/// on the action is rejected, not silently ignored.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SetupPlanetSideCollisionFixtureStep {}
 
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
@@ -564,10 +590,12 @@ pub enum Action {
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertBattleFrames(BattleFramesAssertion),
+    AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
+    SetupPlanetSideCollisionFixture(SetupPlanetSideCollisionFixtureStep),
     Finish,
 }
 
@@ -1406,11 +1434,24 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                     ));
                 }
             }
+            Action::AssertPlanetSideCollisions(assertion) => {
+                if assertion.mineral_pickups == 0
+                    && assertion.creature_hits == 0
+                    && assertion.seam_hits == 0
+                {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "assert_planet_side_collisions: at least one of mineral_pickups, creature_hits, seam_hits must be positive",
+                    ));
+                }
+            }
             Action::AssertMainMenuTransition(dto_inner) => {
                 let from = parse_menu_item(&dto_inner.from, i, path)?;
                 let to = parse_menu_item(&dto_inner.to, i, path)?;
                 transitions.push(MainMenuTransition::new(from, to));
             }
+            Action::SetupPlanetSideCollisionFixture(_) => {}
             Action::Finish => {}
         }
     }
@@ -1871,6 +1912,28 @@ mod tests {
     // --- REQ-SCRIPT-003: closed action enum ---
 
     #[test]
+    fn accepts_setup_planet_side_collision_fixture_action() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let parsed = parse_script(txt.as_bytes(), p()).unwrap();
+        let doc = validate_script(parsed, p()).unwrap();
+        assert!(matches!(
+            doc.steps()[0],
+            Action::SetupPlanetSideCollisionFixture(_)
+        ));
+    }
+
+    #[test]
+    fn setup_planet_side_collision_fixture_denies_unknown_fields() {
+        // The action is a unit: no payload fields are allowed.
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture","duplicate":1},{"action":"finish"}]}"#;
+        let err = parse_script(txt.as_bytes(), p()).unwrap_err();
+        assert!(
+            matches!(err, AutomationError::UnknownField { .. }),
+            "a payload field on the unit fixture action must be an unknown field: {err}"
+        );
+    }
+
+    #[test]
     fn rejects_unknown_action_tag() {
         let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"teleport"},{"action":"finish"}]}"#;
         let err = parse_script(txt.as_bytes(), p()).unwrap_err();
@@ -1940,6 +2003,36 @@ mod tests {
         let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_activity","mask":61440,"equals":0},{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         assert!(validate_script(doc, p()).is_ok());
+    }
+
+    #[test]
+    fn rejects_planet_side_collision_assertion_all_zero() {
+        let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_planet_side_collisions","mineral_pickups":0,"creature_hits":0,"seam_hits":0},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let err = validate_script(doc, p()).unwrap_err();
+        assert!(matches!(err, AutomationError::Step { step: 0, .. }));
+        let msg = format!("{err}");
+        assert!(msg.contains("at least one"));
+        assert!(msg.contains("mineral_pickups"));
+        assert_eq!(err.step_index(), Some(0));
+    }
+
+    #[test]
+    fn accepts_planet_side_collision_assertion_with_one_positive() {
+        for action in [
+            r#"{"action":"assert_planet_side_collisions","mineral_pickups":1}"#,
+            r#"{"action":"assert_planet_side_collisions","creature_hits":1}"#,
+            r#"{"action":"assert_planet_side_collisions","seam_hits":1}"#,
+        ] {
+            let txt = format!(
+                "{{\"version\":1,\"name\":\"x\",\"budgets\":{{\"max_input_ticks\":3,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
+            );
+            let doc = parse_script(txt.as_bytes(), p()).unwrap();
+            assert!(
+                validate_script(doc, p()).is_ok(),
+                "a single positive collision counter must be accepted: {action}"
+            );
+        }
     }
 
     #[test]
@@ -2171,6 +2264,34 @@ mod tests {
             let parsed = parse_script(&bytes, path.to_string_lossy().into_owned()).unwrap();
             validate_script(parsed, path.to_string_lossy().into_owned()).unwrap();
         }
+    }
+
+    #[test]
+    fn setup_planet_side_collision_fixture_parses_and_validates_explicitly() {
+        let txt = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":36000,"max_presentations":36000,"max_wallclock_seconds":900},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let validated = validate_script(doc, p()).unwrap();
+        assert!(matches!(
+            validated.steps()[0],
+            Action::SetupPlanetSideCollisionFixture(_)
+        ));
+    }
+
+    #[test]
+    fn setup_planet_side_collision_fixture_still_needs_exactly_one_input_callback() {
+        // Every action already counts one input callback, so the one-shot
+        // fixture action counts exactly one on top of the base `finish`.
+        // With this fixture action and the final finish, required admitted
+        // input callbacks are 1 (fixture) + 1 (finish) and the
+        // inclusive max_input_ticks must be at least 3.
+        let too_tight = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let too_tight = parse_script(too_tight.as_bytes(), p()).unwrap();
+        assert!(validate_script(too_tight, p()).is_err());
+
+        // max_input_ticks=3 admits two callbacks, exactly enough.
+        let roomy = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
+        let roomy = validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(roomy.steps().len(), 2);
     }
 
     // --- capability contract ---

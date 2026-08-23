@@ -82,9 +82,10 @@ pub use script::{
     MenuKey, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
     PlanetSideOutcomeName, PlayerKey, RootDocument, SceneAssertion, ScriptStep,
     SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep, SetPlayerKeyStep,
-    TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript, WaitForCommunicationEndStep,
-    WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
-    WaitForPlanetSideStartStep, WaitInputTicksStep, CAPABILITY_REQUIRED_FLAGS,
+    SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
+    WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
+    WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
+    CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{PresentationEvidence, RecordKind, SeedDomain, TraceRecord};

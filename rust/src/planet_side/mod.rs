@@ -6,6 +6,7 @@
 pub mod adapters;
 pub mod assembly;
 pub mod assets;
+pub mod automation_fixture;
 pub mod batch_guard;
 pub mod cargo;
 pub mod collision;

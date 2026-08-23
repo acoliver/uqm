@@ -104,12 +104,19 @@ impl ScanPersistence {
 pub enum GeneratedNodeKind {
     Mineral {
         category: usize,
-        amount: u16,
+        gross_size: u16,
+        fine_quantity: u16,
     },
     Energy,
     Biological {
         creature: CreatureKind,
         hit_points: u8,
+        /// Normalized 0..3 index into the 4-frame life animation, chosen at
+        /// node-generation time, mirroring the legacy `generateBioNode` stamp
+        /// `SetAbsFrameIndex(life_form, (COUNT)TFB_Random())` on the 4-frame
+        /// `lifea.ani`..`lifez.ani`.  The first world step then advances this
+        /// frame ordinarily (N -> N + 1).
+        initial_frame: u8,
     },
 }
 
@@ -162,20 +169,27 @@ pub fn populate_surface(
             }
             let data = generator.generate(scan, node)?;
             let kind = match data.kind {
-                GeneratedNodeKind::Mineral { category, amount } => {
-                    SurfaceEntityKind::MineralNode { category, amount }
-                }
+                GeneratedNodeKind::Mineral {
+                    category,
+                    gross_size,
+                    fine_quantity,
+                } => SurfaceEntityKind::MineralNode {
+                    category,
+                    size: gross_size,
+                    quantity: fine_quantity,
+                },
                 GeneratedNodeKind::Energy => SurfaceEntityKind::EnergyNode { node: raw_node },
                 GeneratedNodeKind::Biological {
                     creature,
                     hit_points,
+                    initial_frame,
                 } => SurfaceEntityKind::LiveCreature {
                     kind: creature,
                     hit_points,
                     aware: false,
                     velocity: VelocityDesc::new(),
                     thrust_wait: 0,
-                    frame_index: 0,
+                    frame_index: u16::from(initial_frame),
                 },
             };
             let entity = world.insert(SurfaceEntity {
@@ -227,12 +241,14 @@ mod tests {
             let kind = match scan {
                 ScanType::Mineral => GeneratedNodeKind::Mineral {
                     category: 3,
-                    amount: 5,
+                    gross_size: 2,
+                    fine_quantity: 5,
                 },
                 ScanType::Energy => GeneratedNodeKind::Energy,
                 ScanType::Biological => GeneratedNodeKind::Biological {
                     creature: CreatureKind::new(0).ok_or(AdapterError::new("creature"))?,
                     hit_points: 1,
+                    initial_frame: 2,
                 },
             };
             Ok(GeneratedNode {
@@ -257,6 +273,82 @@ mod tests {
             ScanNodeId::new(32),
             Err(GenerationError::NodeOutOfRange(32))
         );
+    }
+
+    /// Tiny generator emitting one biological node on a caller-chosen initial life
+    /// frame, so initial-frame propagation is tested in isolation.
+    struct BioOnlyGenerator {
+        initial_frame: u8,
+    }
+
+    impl SurfaceGenerator for BioOnlyGenerator {
+        fn node_count(&mut self, scan: ScanType) -> Result<u8, AdapterError> {
+            Ok(u8::from(scan == ScanType::Biological))
+        }
+
+        fn generate(
+            &mut self,
+            scan: ScanType,
+            node: ScanNodeId,
+        ) -> Result<GeneratedNode, AdapterError> {
+            Ok(GeneratedNode {
+                position: SurfacePoint {
+                    x: i32::from(node.get()),
+                    y: 0,
+                },
+                kind: if scan == ScanType::Biological {
+                    GeneratedNodeKind::Biological {
+                        creature: CreatureKind::new(0).ok_or(AdapterError::new("creature"))?,
+                        hit_points: 1,
+                        initial_frame: self.initial_frame,
+                    }
+                } else {
+                    GeneratedNodeKind::Energy
+                },
+            })
+        }
+
+        fn pickup(&mut self, _scan: ScanType, _node: ScanNodeId) -> Result<bool, AdapterError> {
+            Ok(true)
+        }
+    }
+
+    #[test]
+    fn biological_initial_frame_propagates_into_entity_unchanged() {
+        for initial_frame in 0..3 {
+            let mut generator = BioOnlyGenerator { initial_frame };
+            let mut world = SurfaceWorld::new();
+            let generated =
+                populate_surface(&mut generator, ScanPersistence::default(), &mut world).unwrap();
+            let entity = generated.first().unwrap().entity;
+            let SurfaceEntityKind::LiveCreature { frame_index, .. } =
+                &world.get(entity).unwrap().kind
+            else {
+                panic!("expected live creature");
+            };
+            assert_eq!(*frame_index, u16::from(initial_frame));
+        }
+    }
+
+    #[test]
+    fn population_keeps_gross_size_and_fine_quantity_typed() {
+        let mut generator = Generator::default();
+        let mut world = SurfaceWorld::new();
+        let generated =
+            populate_surface(&mut generator, ScanPersistence::default(), &mut world).unwrap();
+        let mineral = generated
+            .iter()
+            .find(|g| g.scan == ScanType::Mineral)
+            .unwrap();
+        let SurfaceEntityKind::MineralNode {
+            category,
+            size,
+            quantity,
+        } = &world.get(mineral.entity).unwrap().kind
+        else {
+            panic!("expected mineral");
+        };
+        assert_eq!((*category, *size, *quantity), (3, 2, 5));
     }
 
     #[test]

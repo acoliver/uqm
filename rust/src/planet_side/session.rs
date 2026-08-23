@@ -35,6 +35,14 @@ pub enum SessionPhase {
     Aborted,
 }
 
+impl SessionPhase {
+    /// A trip is done once it has settled or aborted.
+    #[must_use]
+    pub const fn is_terminal(self) -> bool {
+        matches!(self, SessionPhase::Complete | SessionPhase::Aborted)
+    }
+}
+
 /// Ship values captured before dispatch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShipStatus {
@@ -414,5 +422,11 @@ mod tests {
         // Additional pickup accumulates.
         trip.minerals.collect(1, 5);
         assert_eq!(trip.minerals.level(), 15);
+    }
+    #[test]
+    fn terminal_phases_exclude_active() {
+        assert!(SessionPhase::Complete.is_terminal());
+        assert!(SessionPhase::Aborted.is_terminal());
+        assert!(!SessionPhase::Active.is_terminal());
     }
 }
