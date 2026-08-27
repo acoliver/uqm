@@ -4462,6 +4462,16 @@ with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
      mock.patch.object(module, "process_identity", return_value={"zombie": False}):
     assert module.reap_known_descendants(tracker, 7) == {}
 assert tracker.tracked == {42: "start"}
+
+tracker = module.DescendantTracker(7, 7, 1, True)
+snapshot = {
+    7: {"ppid": 1, "pgid": 7, "start": "leader", "zombie": False},
+    42: {"ppid": 1, "pgid": 42, "start": "zombie", "zombie": True},
+    43: {"ppid": 1, "pgid": 43, "start": "live", "zombie": False},
+}
+with mock.patch.object(module, "process_snapshot", return_value=snapshot):
+    tracker.refresh()
+assert tracker.tracked == {43: "live"}
 "#;
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")

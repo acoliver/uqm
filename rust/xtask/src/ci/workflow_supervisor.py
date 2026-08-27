@@ -524,9 +524,9 @@ class DescendantTracker:
             info = snapshot.get(pid)
             if info is None or info["start"] != start:
                 continue
-            if info["zombie"] and sys.platform == "darwin":
-                # A Darwin zombie has already exited; it cannot be reaped by
-                # this supervisor because it is not our child, so it is
+            if info["zombie"]:
+                # A zombie has exited and cannot execute. A waitable Linux
+                # descendant is reaped separately; a non-waitable zombie is
                 # terminal for containment purposes.
                 continue
             tracked[pid] = start
@@ -548,7 +548,7 @@ class DescendantTracker:
                 if info["ppid"] == current and pid not in reachable
             )
         for pid in reachable:
-            if pid != self.leader:
+            if pid != self.leader and not snapshot[pid]["zombie"]:
                 tracked[pid] = snapshot[pid]["start"]
         self.tracked = tracked
         self.observed.update(tracked)
