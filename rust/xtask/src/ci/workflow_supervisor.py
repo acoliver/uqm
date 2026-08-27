@@ -495,7 +495,13 @@ def group_members(group):
 
 
 def group_clear(group, leader):
-    return all(member == leader for member in group_members(group))
+    for member in group_members(group):
+        if member == leader:
+            continue
+        info = process_identity(member)
+        if info is not None and not info["zombie"]:
+            return False
+    return True
 
 
 class DescendantTracker:

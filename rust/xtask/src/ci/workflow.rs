@@ -4472,6 +4472,13 @@ snapshot = {
 with mock.patch.object(module, "process_snapshot", return_value=snapshot):
     tracker.refresh()
 assert tracker.tracked == {43: "live"}
+
+with mock.patch.object(module, "group_members", return_value=[7, 42, 43]), \
+     mock.patch.object(module, "process_identity", side_effect=[{"zombie": True}, None]):
+    assert module.group_clear(7, 7)
+with mock.patch.object(module, "group_members", return_value=[7, 43]), \
+     mock.patch.object(module, "process_identity", return_value={"zombie": False}):
+    assert not module.group_clear(7, 7)
 "#;
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
