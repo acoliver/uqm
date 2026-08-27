@@ -28,7 +28,7 @@ use super::CiError;
 pub const WORKFLOW_FILE: &str = ".github/workflows/rust-quality.yaml";
 pub const VALIDATION_SCHEMA: &str = "uqm-s4-workflow-validation-v1";
 const TOOL_INSTALL_RUN_SHA256: &str =
-    "73724cf80f86c83d272f8744c4ab0c2aa44250ae8dbe628fd53d3dacdf3438c9";
+    "1f3b4825368694a2ad4260977ab4663f00331d757287e567b65fb5fffa1ecba8";
 
 const FORBIDDEN_COMMANDS: [&str; 8] = [
     "cargo fmt",
@@ -450,6 +450,7 @@ fn valid_tool_install_step(step: &Yaml) -> bool {
                     ".cargo_llvm_cov.integrity_identity",
                     "install_verified_cargo_tool cargo-llvm-cov",
                     "https://crates.io/api/v1/crates/${name}/${version}/download",
+                    "--user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)'",
                     "--max-filesize \"${member_limit}\"",
                     "shasum -a 256 -c -",
                     "not (member.isdir() or member.isfile())",

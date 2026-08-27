@@ -1049,12 +1049,13 @@ fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<Produc
         "--message-format=json-render-diagnostics",
     ]
     .map(str::to_string);
-    let output = ci::exec::run_captured_with_limits(
+    let output = ci::exec::run_captured_with_bound_environment(
         root,
         &toolchain.cargo.executable,
         &arguments,
-        &environment,
         authority.supervision.builtin_limits(),
+        true,
+        |_| Ok(environment),
     );
     eprint!("{}", String::from_utf8_lossy(&output.stderr));
     if !output.completed_under_supervision()
