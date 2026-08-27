@@ -680,6 +680,9 @@ def reap_known_descendants(tracker, leader):
         try:
             observed, status = os.waitpid(pid, os.WNOHANG)
         except ChildProcessError:
+            info = process_identity(pid)
+            if info is None or info["zombie"]:
+                tracker.tracked.pop(pid, None)
             continue
         if observed == pid:
             reaped[pid] = os.waitstatus_to_exitcode(status)

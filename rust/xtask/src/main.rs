@@ -1008,9 +1008,33 @@ fn clean_release_dir(release_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn production_subprocess_environment(
+    toolchain: &ToolchainIdentity,
+) -> Result<Vec<(String, String)>, String> {
+    let marker = serde_json::to_string(toolchain)
+        .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?;
+    let target = toolchain.target.replace('-', "_").to_ascii_uppercase();
+    Ok(vec![
+        ("CARGO_BUILD_JOBS".into(), "1".into()),
+        ("UQM_CANONICAL_TOOLCHAIN".into(), marker),
+        ("CC".into(), toolchain.cc.executable.clone()),
+        ("AR".into(), toolchain.ar.executable.clone()),
+        ("NM".into(), toolchain.nm.executable.clone()),
+        ("PKG_CONFIG".into(), toolchain.pkg_config.executable.clone()),
+        ("RUSTC".into(), toolchain.rustc.executable.clone()),
+        ("CARGO".into(), toolchain.cargo.executable.clone()),
+        ("RUSTC_LINKER".into(), toolchain.linker.executable.clone()),
+        (
+            format!("CARGO_TARGET_{target}_LINKER"),
+            toolchain.linker.executable.clone(),
+        ),
+    ])
+}
+
 fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<ProductionPaths, String> {
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
+    let environment = production_subprocess_environment(toolchain)?;
     let arguments = [
         "build",
         "--locked",
@@ -1029,7 +1053,7 @@ fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<Produc
         root,
         &toolchain.cargo.executable,
         &arguments,
-        &[("CARGO_BUILD_JOBS".to_string(), "1".to_string())],
+        &environment,
         authority.supervision.builtin_limits(),
     );
     eprint!("{}", String::from_utf8_lossy(&output.stderr));
@@ -2477,6 +2501,50 @@ mod tests {
         .is_err());
         assert!(
             read_manifest_artifact(root.path(), &artifact("rust/target/linked-leaf"), 64,).is_err()
+        );
+    }
+
+    #[test]
+    fn production_subprocess_receives_exact_toolchain_environment() {
+        fn tool(executable: &str) -> uqm_ownership::ToolIdentity {
+            uqm_ownership::ToolIdentity {
+                executable: executable.into(),
+                version: "test-version".into(),
+                sha256: "0".repeat(64),
+                effective_args: Vec::new(),
+            }
+        }
+
+        let toolchain = ToolchainIdentity {
+            target: "aarch64-unknown-linux-gnu".into(),
+            rustc: tool("/tools/rustc"),
+            cargo: tool("/tools/cargo"),
+            cc: tool("/tools/cc"),
+            ar: tool("/tools/ar"),
+            nm: tool("/tools/nm"),
+            pkg_config: tool("/tools/pkg-config"),
+            linker: tool("/tools/linker"),
+        };
+        let environment = production_subprocess_environment(&toolchain).unwrap();
+        let environment = BTreeMap::from_iter(environment);
+
+        assert_eq!(environment.len(), 10);
+        assert_eq!(environment["CARGO_BUILD_JOBS"], "1");
+        assert_eq!(environment["CC"], "/tools/cc");
+        assert_eq!(environment["AR"], "/tools/ar");
+        assert_eq!(environment["NM"], "/tools/nm");
+        assert_eq!(environment["PKG_CONFIG"], "/tools/pkg-config");
+        assert_eq!(environment["RUSTC"], "/tools/rustc");
+        assert_eq!(environment["CARGO"], "/tools/cargo");
+        assert_eq!(environment["RUSTC_LINKER"], "/tools/linker");
+        assert_eq!(
+            environment["CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER"],
+            "/tools/linker"
+        );
+        assert_eq!(
+            serde_json::from_str::<ToolchainIdentity>(&environment["UQM_CANONICAL_TOOLCHAIN"])
+                .unwrap(),
+            toolchain
         );
     }
 

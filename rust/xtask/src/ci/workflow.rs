@@ -4440,6 +4440,28 @@ assert tracker.refreshes == 1
 
 next_refresh = module.refresh_tracker_if_due(tracker, 0.1, next_refresh)
 assert tracker.refreshes == 2 and abs(next_refresh - 0.15) < 1e-9
+
+class ReapTracker:
+    def __init__(self):
+        self.tracked = {42: "start"}
+
+tracker = ReapTracker()
+with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
+     mock.patch.object(module, "process_identity", return_value={"zombie": True}):
+    assert module.reap_known_descendants(tracker, 7) == {}
+assert tracker.tracked == {}
+
+tracker = ReapTracker()
+with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
+     mock.patch.object(module, "process_identity", return_value=None):
+    assert module.reap_known_descendants(tracker, 7) == {}
+assert tracker.tracked == {}
+
+tracker = ReapTracker()
+with mock.patch.object(module.os, "waitpid", side_effect=ChildProcessError()), \
+     mock.patch.object(module, "process_identity", return_value={"zombie": False}):
+    assert module.reap_known_descendants(tracker, 7) == {}
+assert tracker.tracked == {42: "start"}
 "#;
         let status = std::process::Command::new("python3")
             .env("PYTHONDONTWRITEBYTECODE", "1")
