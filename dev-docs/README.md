@@ -32,6 +32,9 @@ This directory contains the working rules for planning and implementation in the
 - [rust/s3-linked-test-fixtures.md](./rust/s3-linked-test-fixtures.md)
   - S3 linked-test profile, gameplay proof profiles, mutation fixtures, teardown supervision, and evidence contracts.
 
+- [rust/ci-gates.md](./rust/ci-gates.md)
+  - S4 clean-checkout gate authority, matrix consumption, empty-cache execution, mutations, and evidence replay.
+
 - [rust/lcar-v1-schema.md](./rust/lcar-v1-schema.md)
   - The evidence contract: manifest fields, provenance, process and teardown receipts, artifact inventory, failure contracts, and how the validator is proven to reject bad proof.
 

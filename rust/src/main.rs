@@ -68,10 +68,24 @@ fn main() {
 
     match uqm_rust::automation::setup_automation(&auto_opts, &caps) {
         Ok(Some(setup)) => {
+            #[cfg(feature = "debug-process")]
+            if let Some(config) = parsed.native_window_proof.as_deref() {
+                if let Err(error) = uqm_rust::automation::activate_native_window_proof(
+                    std::path::Path::new(config),
+                    &setup.output_root,
+                ) {
+                    eprintln!("Native-window proof setup failed: {error}");
+                    exit(1);
+                }
+            }
             // Active automation validated — initialize the coordinator.
             uqm_rust::automation::Coordinator::init(setup.script, setup.output_root);
         }
         Ok(None) => {
+            if parsed.native_window_proof.is_some() {
+                eprintln!("Native-window proof requires active automation.");
+                exit(1);
+            }
             // Inactive — proceed normally
         }
         Err(e) => {
@@ -124,6 +138,8 @@ fn print_usage() {
     println!("  --safe (start in safe mode)");
     println!("  --automation-script=FILE   (enable runtime automation)");
     println!("  --automation-output=DIR    (automation output directory)");
+    #[cfg(feature = "debug-process")]
+    println!("  --native-window-proof=FILE (proof-only native-window configuration)");
     println!("The following can take '3do' or 'pc':");
     println!("  -i, --intro   : Intro/ending version (default 3do)");
     println!("  --cscan       : coarse-scan display (default 3do)");

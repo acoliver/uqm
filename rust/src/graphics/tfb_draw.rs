@@ -1409,6 +1409,102 @@ pub fn draw_scaled_image(
     copy_canvas(canvas, &source_canvas, draw_x, draw_y, 0, 0, -1, -1)
 }
 
+fn filled_image_canvas(source: &Canvas, fill_color: Color) -> Result<Canvas, CanvasError> {
+    let source = ensure_canvas_truecolor(source)?;
+    let extent = source.extent();
+    let source_pixels = source.pixels();
+    let mut filled = Canvas::new(extent, CanvasFormat::rgba());
+
+    filled.with_pixels_mut(|filled_pixels| {
+        for (source_pixel, filled_pixel) in source_pixels
+            .chunks_exact(4)
+            .zip(filled_pixels.chunks_exact_mut(4))
+        {
+            let source_alpha = source_pixel[3] as u16;
+            if source_alpha == 0 {
+                continue;
+            }
+            filled_pixel[0] = fill_color.r;
+            filled_pixel[1] = fill_color.g;
+            filled_pixel[2] = fill_color.b;
+            filled_pixel[3] = ((source_alpha * fill_color.a as u16) / 255) as u8;
+        }
+    })?;
+
+    Ok(filled)
+}
+
+fn alpha_blit_rgba(
+    destination: &mut Canvas,
+    source: &Canvas,
+    x: i32,
+    y: i32,
+) -> Result<(), CanvasError> {
+    check_canvas(destination)?;
+    check_canvas(source)?;
+    if source.format() != CanvasFormat::rgba() {
+        return Err(CanvasError::FormatMismatch);
+    }
+    let destination_format = destination.format();
+    if !matches!(
+        destination_format.kind,
+        CanvasPixelFormat::Rgb | CanvasPixelFormat::Rgba
+    ) {
+        return Err(CanvasError::FormatMismatch);
+    }
+
+    let destination_extent = destination.extent();
+    let source_extent = source.extent();
+    let destination_bpp = destination_format.bytes_per_pixel as usize;
+    let source_pixels = source.pixels();
+    let scissor = destination.scissor();
+
+    destination.with_pixels_mut(|destination_pixels| {
+        for source_y in 0..source_extent.height {
+            let destination_y = y + source_y;
+            if destination_y < 0 || destination_y >= destination_extent.height {
+                continue;
+            }
+            for source_x in 0..source_extent.width {
+                let destination_x = x + source_x;
+                if destination_x < 0
+                    || destination_x >= destination_extent.width
+                    || scissor.rect.is_some_and(|rect| {
+                        destination_x < rect.corner.x
+                            || destination_y < rect.corner.y
+                            || destination_x >= rect.corner.x + rect.extent.width
+                            || destination_y >= rect.corner.y + rect.extent.height
+                    })
+                {
+                    continue;
+                }
+
+                let source_offset = ((source_y * source_extent.width + source_x) as usize) * 4;
+                let source_alpha = source_pixels[source_offset + 3] as u16;
+                if source_alpha == 0 {
+                    continue;
+                }
+                let destination_offset = ((destination_y * destination_extent.width + destination_x)
+                    as usize)
+                    * destination_bpp;
+                let inverse_alpha = 255 - source_alpha;
+                for channel in 0..3 {
+                    destination_pixels[destination_offset + channel] =
+                        ((source_pixels[source_offset + channel] as u16 * source_alpha
+                            + destination_pixels[destination_offset + channel] as u16
+                                * inverse_alpha)
+                            / 255) as u8;
+                }
+                if destination_format.has_alpha {
+                    let destination_alpha = destination_pixels[destination_offset + 3] as u16;
+                    destination_pixels[destination_offset + 3] =
+                        (source_alpha + destination_alpha * inverse_alpha / 255) as u8;
+                }
+            }
+        }
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn draw_filled_image(
     canvas: &mut Canvas,
@@ -1425,43 +1521,19 @@ pub fn draw_filled_image(
     let active_image = image.current_frame();
     let active_image_ref = active_image.as_deref().unwrap_or(image);
 
-    let source = active_image_ref.normal().ok_or_else(|| {
-        CanvasError::InvalidOperation("TFImage has no primary canvas".to_string())
-    })?;
-    let source = ensure_canvas_truecolor(&source)?;
-
-    let extent = if draw_scale == 256 {
-        source.extent()
+    let source = if draw_scale == 256 {
+        active_image_ref.normal().ok_or_else(|| {
+            CanvasError::InvalidOperation("TFImage has no primary canvas".to_string())
+        })?
     } else {
-        scaled_extent_for_canvas(
-            &source,
-            active_image_ref.normal_hot_spot(),
-            draw_scale,
-            scale_mode,
-        )?
+        rescale_image(active_image_ref, draw_scale, scale_mode)?
     };
-
-    let mut filled = Canvas::new(extent, CanvasFormat::rgba());
-    fill_rect(
-        &mut filled,
-        0,
-        0,
-        extent.width - 1,
-        extent.height - 1,
-        fill_color,
-    )?;
-
-    if draw_scale == 256 {
-        copy_canvas(&mut filled, &source, 0, 0, 0, 0, -1, -1)?;
-    } else {
-        let scaled = rescale_image(active_image_ref, draw_scale, scale_mode)?;
-        copy_canvas(&mut filled, &scaled, 0, 0, 0, 0, -1, -1)?;
-    }
+    let filled = filled_image_canvas(&source, fill_color)?;
 
     active_image_ref.set_filled(Some(filled.clone()));
     let draw_x = x - active_image_ref.normal_hot_spot().x;
     let draw_y = y - active_image_ref.normal_hot_spot().y;
-    copy_canvas(canvas, &filled, draw_x, draw_y, 0, 0, -1, -1)
+    alpha_blit_rgba(canvas, &filled, draw_x, draw_y)
 }
 
 /// canvas at the specified position. The image has a hot spot offset
@@ -3311,6 +3383,80 @@ mod tests {
             "Right side (alpha=128) should have more red than left side (alpha=64)"
         );
     }
+}
+
+#[test]
+fn test_draw_filled_image_uses_source_alpha_mask() {
+    let mut destination = Canvas::new_rgba(6, 6);
+    fill_rect(&mut destination, 0, 0, 5, 5, Color::rgb(255, 255, 255)).unwrap();
+
+    let mut source = Canvas::new_rgba(3, 3);
+    source
+        .with_pixels_mut(|pixels| {
+            let opaque = (3 + 1) * 4;
+            pixels[opaque..opaque + 4].copy_from_slice(&[255, 0, 0, 255]);
+            let translucent = (3 + 2) * 4;
+            pixels[translucent..translucent + 4].copy_from_slice(&[255, 0, 0, 128]);
+        })
+        .unwrap();
+    let image = TFImage::new(source);
+
+    draw_filled_image(
+        &mut destination,
+        &image,
+        1,
+        1,
+        Color::rgb(0, 0, 255),
+        0,
+        ScaleMode::Nearest,
+        0,
+    )
+    .unwrap();
+
+    let pixels = destination.pixels();
+    let pixel = |x: usize, y: usize| -> &[u8] {
+        let offset = (y * 6 + x) * 4;
+        &pixels[offset..offset + 4]
+    };
+    assert_eq!(pixel(1, 1), &[255, 255, 255, 255]);
+    assert_eq!(pixel(2, 2), &[0, 0, 255, 255]);
+    assert_eq!(pixel(3, 2), &[127, 127, 255, 255]);
+
+    let filled = image.filled().unwrap();
+    let filled_pixels = filled.pixels();
+    assert_eq!(&filled_pixels[0..4], &[0, 0, 0, 0]);
+    assert_eq!(&filled_pixels[16..20], &[0, 0, 255, 255]);
+}
+
+#[test]
+fn test_draw_filled_image_repeated_scaling_does_not_grow() {
+    let mut destination = Canvas::new_rgba(12, 6);
+    let mut source = Canvas::new_rgba(2, 2);
+    fill_rect(&mut source, 0, 0, 1, 1, Color::rgb(255, 0, 0)).unwrap();
+    let image = TFImage::new(source);
+
+    for x in [1, 6] {
+        draw_filled_image(
+            &mut destination,
+            &image,
+            x,
+            1,
+            Color::rgb(0, 255, 0),
+            512,
+            ScaleMode::Nearest,
+            0,
+        )
+        .unwrap();
+    }
+
+    assert_eq!(image.extent(), Some(Extent::new(2, 2)));
+    assert_eq!(image.filled().unwrap().extent(), Extent::new(4, 4));
+    let green_pixels = destination
+        .pixels()
+        .chunks_exact(4)
+        .filter(|pixel| *pixel == [0, 255, 0, 255])
+        .count();
+    assert_eq!(green_pixels, 32);
 }
 
 #[test]

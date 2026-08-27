@@ -30,6 +30,8 @@ pub mod identity;
 pub mod input;
 pub mod input_ffi;
 pub mod lifecycle;
+#[cfg(feature = "debug-process")]
+pub mod native_window;
 pub mod navigation;
 pub mod outcome;
 pub mod proof;
@@ -69,6 +71,26 @@ pub use lifecycle::{
     check_terminal_guard, map_status, reassert_abort_if_terminal, run_lifecycle, GameLifecycle,
     LifecycleResult, TeardownReceipt,
 };
+#[cfg(feature = "debug-process")]
+pub use native_window::{
+    acknowledge_native_window_state, activate_native_window_proof, active_native_window_config,
+    capture_native_window, native_acceptance_failure_inventory, native_acceptance_inventory,
+    observe_native_window, publish_native_window_state, read_native_window_state,
+    validate_native_acceptance_bundle, validate_native_acceptance_failure_bundle,
+    validate_native_acceptance_setup_failure_bundle, validate_native_window_bundle,
+    validate_native_window_receipt, ActiveNativeWindowConfig, NativeAcceptanceFailureManifest,
+    NativeAcceptanceManifest, NativeAcceptanceSetupFailureContract,
+    NativeAcceptanceSetupFailureManifest, NativeChildCleanupReceipt, NativeLinkedBuildReceipt,
+    NativeProcessIdentity, NativeRetainedInput, NativeScreenshot, NativeScreenshotStage,
+    NativeWindowAck, NativeWindowAckPublisher, NativeWindowBinding, NativeWindowBounds,
+    NativeWindowChildState, NativeWindowConfigFile, NativeWindowObservation,
+    NativeWindowObserverError, NativeWindowProof, NativeWindowProofError, NativeWindowPublication,
+    NativeWindowReceipt, NativeWindowSemanticSnapshot, NativeWindowStateReader,
+    ObservedNativeWindow, NATIVE_ACCEPTANCE_FAILURE_SCHEMA, NATIVE_ACCEPTANCE_SCHEMA,
+    NATIVE_ACCEPTANCE_SETUP_FAILURE_SCHEMA, NATIVE_LINKED_BUILD_RECEIPT_SCHEMA,
+    NATIVE_WINDOW_ACK_SCHEMA, NATIVE_WINDOW_CONFIG_SCHEMA, NATIVE_WINDOW_RECEIPT_SCHEMA,
+    NATIVE_WINDOW_STATE_SCHEMA,
+};
 pub use outcome::TerminalClass;
 pub use proof::{
     counter_paths_are_distinct, inactive_teardown_is_distinct, teardown_is_distinct,
@@ -85,7 +107,7 @@ pub use script::{
     SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
     WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
     WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
-    CAPABILITY_REQUIRED_FLAGS,
+    WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{PresentationEvidence, RecordKind, SeedDomain, TraceRecord};

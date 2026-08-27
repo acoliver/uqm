@@ -26,7 +26,7 @@ fn manifest() -> Manifest {
 }
 
 #[test]
-fn checked_in_manifest_has_exact_v6_source_identity_and_inventory() {
+fn checked_in_manifest_has_exact_v7_source_identity_and_inventory() {
     let manifest = manifest();
     manifest.validate_self().unwrap();
     assert_eq!(
@@ -71,7 +71,7 @@ fn checked_in_manifest_has_exact_v6_source_identity_and_inventory() {
 }
 
 #[test]
-fn ledger_v6_projection_remains_the_source_identity_after_authorized_provider_cutovers() {
+fn ledger_v7_projection_remains_the_source_identity_after_authorized_provider_cutovers() {
     let manifest = manifest();
     assert_eq!(
         manifest.generated_from_ledger.projection_sha256,
@@ -206,9 +206,11 @@ fn production_archive_is_explicitly_feature_gated() {
         std::fs::read_to_string(root.join("rust/ownership/verify-production.sh")).unwrap();
 
     assert!(build_script.contains("env::var_os(\"CARGO_FEATURE_LINKED_C_ARCHIVE\")"));
-    assert!(verifier.contains("production-artifacts.json"));
-    assert!(verifier.contains("xtask/Cargo.toml\" -- verify"));
+    assert!(verifier.contains("UQM_CI_SOURCE_ROOT"));
+    assert!(verifier.contains("UQM_CI_CONTROLLER_EXECUTABLE"));
+    assert!(verifier.contains("\"${UQM_CI_CONTROLLER_EXECUTABLE}\" __ci-verify"));
+    assert!(verifier.contains("\"${UQM_CI_CONTROLLER_EXECUTABLE}\" __ci-ownership-production"));
     assert!(!verifier.contains("python3"));
-    assert!(verifier.contains("rust_static_archive"));
-    assert!(verifier.contains("c_static_archive"));
+    assert!(!verifier.contains("xtask/Cargo.toml"));
+    assert!(!verifier.contains("production-artifacts.json"));
 }

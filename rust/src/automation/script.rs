@@ -513,6 +513,13 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// Wait for exactly `count` committed presentation callbacks.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitPresentationsStep {
+    pub count: u64,
+}
+
 /// Assert the live PlanetSide collision verdicts on presented frames.
 ///
 /// Each counter is a floor: the lander must have collected at least
@@ -572,6 +579,7 @@ pub struct SetupPlanetSideCollisionFixtureStep {}
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     WaitInputTicks(WaitInputTicksStep),
+    WaitPresentations(WaitPresentationsStep),
     SetMenuKey(SetMenuKeyStep),
     TapMenuKey(TapMenuKeyStep),
     SetPlayerKey(SetPlayerKeyStep),
@@ -1073,7 +1081,7 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
     // Per-step validation.
     let mut transitions = Vec::new();
     let mut required_input_callbacks: u64 = 0;
-    let required_presentations: u64 = 0;
+    let mut required_presentations: u64 = 0;
     for (i, step) in steps.iter().enumerate() {
         // Every action consumes at least one admitted input callback, including
         // immediate assertions, capture arming, and the final Finish action.
@@ -1093,6 +1101,24 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
                         reason: format!(
                             "required input ticks overflow at step {i}: count={}",
                             w.count
+                        ),
+                    })?;
+            }
+            Action::WaitPresentations(wait) => {
+                if wait.count == 0 {
+                    return Err(AutomationError::step(
+                        path,
+                        i,
+                        "wait_presentations count must be positive",
+                    ));
+                }
+                required_presentations = required_presentations
+                    .checked_add(wait.count)
+                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
+                        path: path.to_string(),
+                        reason: format!(
+                            "required presentations overflow at step {i}: count={}",
+                            wait.count
                         ),
                     })?;
             }
@@ -2087,6 +2113,24 @@ mod tests {
     }
 
     #[test]
+    fn wait_presentations_requires_positive_count_and_inclusive_budget() {
+        let zero = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":3,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":0},{"action":"finish"}]}"#;
+        let doc = parse_script(zero.as_bytes(), p()).unwrap();
+        assert!(format!("{}", validate_script(doc, p()).unwrap_err())
+            .contains("wait_presentations count must be positive"));
+
+        let too_tight = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":2,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":2},{"action":"finish"}]}"#;
+        let doc = parse_script(too_tight.as_bytes(), p()).unwrap();
+        let error = validate_script(doc, p()).unwrap_err();
+        assert!(matches!(error, AutomationError::InsufficientBudget { .. }));
+        assert!(format!("{error}").contains("max_presentations"));
+
+        let boundary = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":3,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":2},{"action":"finish"}]}"#;
+        let doc = parse_script(boundary.as_bytes(), p()).unwrap();
+        assert!(validate_script(doc, p()).is_ok());
+    }
+
+    #[test]
     fn rejects_tap_total_exceeding_inclusive_max() {
         // tap hold=3 settle=2 needs max >= 6 (5+1). Set max=5 -> reject.
         let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":5,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"tap_menu_key","key":"down","value":1,"hold":3,"settle":2},{"action":"finish"}]}"#;
@@ -2095,6 +2139,30 @@ mod tests {
             validate_script(doc, p()).unwrap_err(),
             AutomationError::InsufficientBudget { .. }
         ));
+    }
+
+    #[test]
+    fn linked_playable_script_requires_300_sustained_input_ticks_and_battle_frames() {
+        let bytes = include_bytes!("../../scripts/linked-playable-v1.json");
+        let document = parse_script(bytes, "rust/scripts/linked-playable-v1.json").unwrap();
+        let script = validate_script(document, "rust/scripts/linked-playable-v1.json").unwrap();
+        assert!(script.budgets.max_presentations >= 301);
+        assert!(script.steps.iter().any(|action| {
+            matches!(
+                action,
+                Action::TapPlayerKey(TapPlayerKeyStep {
+                    key: PlayerKey::Right,
+                    hold: 300,
+                    ..
+                })
+            )
+        }));
+        assert!(script.steps.iter().any(|action| {
+            matches!(
+                action,
+                Action::AssertBattleFrames(BattleFramesAssertion { minimum: 300 })
+            )
+        }));
     }
 
     #[test]

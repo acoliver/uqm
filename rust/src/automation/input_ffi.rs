@@ -19,6 +19,8 @@
 
 use crate::automation::coordinator::Coordinator;
 use crate::automation::runtime::RuntimeModel;
+#[cfg(feature = "linked_c_archive")]
+use crate::c_bindings::controller_input::{CurrentInputState, PulsedInputState};
 
 // ===========================================================================
 //  C global input state — FFI access to ImmediateInputState.menu[]
@@ -45,15 +47,6 @@ pub(crate) struct NavigationSnapshot {
     pub(crate) velocity_y: i32,
     pub(crate) view_center_x: i32,
     pub(crate) view_center_y: i32,
-}
-
-/// The C `CONTROLLER_INPUT_STATE` struct, used only when linking against
-/// the real C archive.
-#[cfg(feature = "linked_c_archive")]
-#[repr(C)]
-struct ControllerInputState {
-    key: [[i32; 7]; 6],
-    menu: [i32; 24],
 }
 
 #[cfg(feature = "linked_c_archive")]
@@ -88,8 +81,6 @@ struct CSolarSystemState {
 extern "C" {
     fn c_automation_set_immediate_menu_key(index: i32, value: i32) -> i32;
     fn c_automation_set_immediate_player_key(index: i32, value: i32) -> i32;
-    static CurrentInputState: ControllerInputState;
-    static PulsedInputState: ControllerInputState;
     #[link_name = "pSolarSysState"]
     static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemState;
     #[link_name = "GlobData"]
@@ -409,8 +400,9 @@ pub extern "C" fn rust_automation_after_input_update() -> i32 {
         return 1; // Terminal: stop the DoInput loop.
     }
 
-    // Step 3: Observation only — no additional scheduler processing.
-    0
+    // Step 3: Commit the scripted player-input observation at the exact
+    // production boundary that follows UpdateInputState.
+    Coordinator::process_player_input_observation().into()
 }
 
 /// Advance active automation at non-`DoInput` main-thread boundaries.

@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 
-ROOT=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+: "${UQM_CI_SOURCE_ROOT:?UQM_CI_SOURCE_ROOT must be supplied by the trusted controller}"
+: "${UQM_CI_CONTROLLER_EXECUTABLE:?UQM_CI_CONTROLLER_EXECUTABLE must name the staged base controller}"
+ROOT="$UQM_CI_SOURCE_ROOT"
 FIXTURES="$ROOT/rust/ownership/fixtures"
 OUT="$ROOT/rust/target/ownership-strict-link-fixture"
 
@@ -25,9 +27,4 @@ printf '' > "$OUT/empty-provider.rs"
 rustc --edition 2021 --crate-name fixture_c --crate-type staticlib \
     "$OUT/empty-provider.rs" -o "$OUT/libfixture_c.a"
 
-AR_PATH=$(command -v ar)
-NM_PATH=$(command -v nm)
-cargo run --quiet --manifest-path "$ROOT/rust/ownership/Cargo.toml" -- \
-    "$ROOT" symbol-artifacts "$OUT/libfixture_rust.a" "$OUT/libfixture_c.a" "$OUT/uqm-fixture" \
-    "$AR_PATH" "$NM_PATH" > "$OUT/ownership-fixture-report.json"
-printf 'focused strict-link fixture verified: %s\n' "$OUT"
+"$UQM_CI_CONTROLLER_EXECUTABLE" __ci-ownership-fixture

@@ -79,6 +79,11 @@ path = "src/main.rs"
 required-features = ["linked_c_archive"]
 
 [[bin]]
+name = "uqm-native-acceptance"
+path = "src/bin/uqm-native-acceptance.rs"
+required-features = ["debug-process"]
+
+[[bin]]
 name = "p00_probes"
 path = "probes/p00_probes.rs"
 

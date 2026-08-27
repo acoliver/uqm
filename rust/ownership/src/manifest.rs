@@ -528,7 +528,7 @@ impl Manifest {
             diagnostics.push(diag(
                 DiagnosticCode::ManifestDrift,
                 Some("no_tracked_native_change"),
-                "declaration differs from ledger v6 S1/S2 provider and source-ownership boundary",
+                "declaration differs from ledger v7 S1/S2 provider and source-ownership boundary",
             ));
         }
         if self

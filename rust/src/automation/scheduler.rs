@@ -95,6 +95,8 @@ pub enum ActionPhase {
     WaitingForInput,
     /// Waiting for `remaining` admitted input callbacks (wait_input_ticks).
     WaitCounting { remaining: u64 },
+    /// Waiting for `remaining` committed presentation callbacks.
+    WaitingPresentations { remaining: u64 },
     /// Tap is holding: planning held value each admitted input.
     TapHolding { remaining: u64 },
     /// Tap just released; needs one more admitted input to begin settling.
@@ -127,6 +129,8 @@ pub enum TerminalOutcome {
     StateVersionOverflow,
     /// Capture generation overflow (REQ-SCHED-003 checked arithmetic).
     CaptureGenerationOverflow,
+    /// The step index or action phase cannot occur in a valid scheduler run.
+    InvalidState,
 }
 
 /// The scheduler's state: current step index, within-action phase, state
@@ -206,6 +210,8 @@ pub struct EffectPlan {
     pub arm_capture: Option<CaptureGeneration>,
     /// Complete a capture with this generation.
     pub complete_capture: Option<CaptureGeneration>,
+    /// Complete a committed-presentation wait with this requested count.
+    pub complete_presentation_wait: Option<u64>,
 }
 
 impl EffectPlan {
@@ -219,6 +225,7 @@ impl EffectPlan {
             release_player_key: None,
             arm_capture: None,
             complete_capture: None,
+            complete_presentation_wait: None,
         }
     }
 
@@ -231,6 +238,7 @@ impl EffectPlan {
             && self.release_player_key.is_none()
             && self.arm_capture.is_none()
             && self.complete_capture.is_none()
+            && self.complete_presentation_wait.is_none()
     }
 }
 
@@ -269,6 +277,51 @@ pub struct SchedulerConfig<'a> {
 /// Terminal state is absorbing: the reducer returns the same state with no
 /// effects.
 ///
+fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
+    match action {
+        Action::WaitInputTicks(_) => matches!(
+            phase,
+            ActionPhase::WaitingForInput | ActionPhase::WaitCounting { .. }
+        ),
+        Action::WaitPresentations(_) => matches!(
+            phase,
+            ActionPhase::WaitingForInput | ActionPhase::WaitingPresentations { .. }
+        ),
+        Action::TapMenuKey(_) | Action::TapPlayerKey(_) => matches!(
+            phase,
+            ActionPhase::WaitingForInput
+                | ActionPhase::TapHolding { .. }
+                | ActionPhase::TapReleasePending
+                | ActionPhase::TapSettling { .. }
+        ),
+        Action::NavigateToPlanet(_) | Action::NavigateToMoon(_) | Action::NavigateToOrbit(_) => {
+            matches!(
+                phase,
+                ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
+            )
+        }
+        Action::WaitForPlanetSideStart(_)
+        | Action::WaitForPlanetSideEnd(_)
+        | Action::SelectPlanetMenu(_)
+        | Action::WaitForDispatch(_)
+        | Action::SelectCommunicationResponse(_)
+        | Action::WaitForCommunicationEnd(_)
+        | Action::WaitForCommunicationReplay(_) => matches!(
+            phase,
+            ActionPhase::WaitingForInput | ActionPhase::WaitingCondition { .. }
+        ),
+        Action::Capture(_) => matches!(
+            phase,
+            ActionPhase::WaitingForInput | ActionPhase::WaitingCapture { .. }
+        ),
+        Action::AssertMainMenuTransition(_) => matches!(
+            phase,
+            ActionPhase::WaitingForInput | ActionPhase::WaitingSemantic
+        ),
+        _ => phase == ActionPhase::WaitingForInput,
+    }
+}
+
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P02
 /// @requirement REQ-SCHED-001, REQ-SCHED-002, REQ-DET-001
 #[must_use]
@@ -300,16 +353,26 @@ pub fn scheduler_reduce(
         }
     };
 
-    // Get the current action. If we've run past the end, treat as terminal.
     let Some(current_action) = config.actions.get(state.step_index) else {
         return SchedulerTransition {
             new_state: SchedulerState {
-                terminal: Some(TerminalOutcome::FinishComplete),
+                terminal: Some(TerminalOutcome::InvalidState),
+                state_version: sv,
                 ..*state
             },
             effects: EffectPlan::none(),
         };
     };
+    if !valid_action_phase(current_action, state.phase) {
+        return SchedulerTransition {
+            new_state: SchedulerState {
+                terminal: Some(TerminalOutcome::InvalidState),
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        };
+    }
 
     match event {
         SchedulerEvent::AdmittedInput => reduce_admitted_input(state, config, current_action, sv),
@@ -433,6 +496,28 @@ fn reduce_admitted_input(
         // WaitCounting(1): consume last, advance.
         (Action::WaitInputTicks(_w), ActionPhase::WaitCounting { remaining: 1 }) => {
             advance_to_next(state, config, sv, EffectPlan::none())
+        }
+
+        // A presentation wait is armed by one input callback and advances only
+        // on committed presentations.
+        (Action::WaitPresentations(wait), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                phase: ActionPhase::WaitingPresentations {
+                    remaining: wait.count,
+                },
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::WaitPresentations(_), ActionPhase::WaitingPresentations { .. }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
         }
 
         // set_menu_key: plan one owned-key write, advance on commit.
@@ -1018,19 +1103,10 @@ fn reduce_admitted_input(
             effects: EffectPlan::none(),
         },
 
-        // Finish in any other phase: also terminal (safety net).
-        (Action::Finish, _) => SchedulerTransition {
-            new_state: SchedulerState {
-                terminal: Some(TerminalOutcome::FinishComplete),
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
-
-        // Fallback: preserve state, no effects (shouldn't reach here in valid scripts).
+        // Any event/action pair not handled above is impossible for this phase.
         _ => SchedulerTransition {
             new_state: SchedulerState {
+                terminal: Some(TerminalOutcome::InvalidState),
                 state_version: sv,
                 ..*state
             },
@@ -1047,7 +1123,41 @@ fn reduce_committed_present(
     action: &Action,
     sv: u64,
 ) -> SchedulerTransition {
-    // Only WaitingCapture consumes presents.
+    if let (Action::WaitPresentations(wait), ActionPhase::WaitingPresentations { remaining }) =
+        (action, state.phase)
+    {
+        return match remaining {
+            1 => advance_to_next(
+                state,
+                config,
+                sv,
+                EffectPlan {
+                    complete_presentation_wait: Some(wait.count),
+                    ..EffectPlan::none()
+                },
+            ),
+            2.. => SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingPresentations {
+                        remaining: remaining - 1,
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            },
+            0 => SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            },
+        };
+    }
+
+    // Only WaitingCapture consumes other presents.
     if let ActionPhase::WaitingCapture {
         generation: pending,
     } = state.phase
@@ -1217,6 +1327,7 @@ mod tests {
         ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToMoonStep, SetMenuKeyStep,
         TapMenuKeyStep, TapPlayerKeyStep, WaitForCommunicationEndStep,
         WaitForCommunicationReplayStep, WaitForDispatchStep, WaitInputTicksStep,
+        WaitPresentationsStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
@@ -1271,6 +1382,102 @@ mod tests {
         // Second input: count reaches 0, advance
         let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
         assert_eq!(t.new_state.step_index, 1); // advanced
+    }
+    #[test]
+    fn wait_presentations_counts_only_committed_presents() {
+        let actions = [
+            Action::WaitPresentations(WaitPresentationsStep { count: 2 }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+
+        let armed = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            armed.new_state.phase,
+            ActionPhase::WaitingPresentations { remaining: 2 }
+        );
+        state = armed.new_state;
+
+        let unrelated_input = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            unrelated_input.new_state.phase,
+            ActionPhase::WaitingPresentations { remaining: 2 }
+        );
+        state = unrelated_input.new_state;
+
+        let first = scheduler_reduce(
+            &state,
+            &config,
+            SchedulerEvent::CommittedPresent {
+                generation: CaptureGeneration(0),
+            },
+        );
+        assert_eq!(
+            first.new_state.phase,
+            ActionPhase::WaitingPresentations { remaining: 1 }
+        );
+        assert!(first.effects.is_empty());
+        state = first.new_state;
+
+        let second = scheduler_reduce(
+            &state,
+            &config,
+            SchedulerEvent::CommittedPresent {
+                generation: CaptureGeneration(0),
+            },
+        );
+        assert_eq!(second.new_state.step_index, 1);
+        assert_eq!(second.effects.complete_presentation_wait, Some(2));
+    }
+
+    #[test]
+    fn wait_presentations_honors_native_acceptance_boundaries() {
+        for count in [1, 120, 300] {
+            let actions = [
+                Action::WaitPresentations(WaitPresentationsStep { count }),
+                Action::Finish,
+            ];
+            let config = cfg(&actions);
+            let mut state = scheduler_reduce(
+                &SchedulerState::initial(),
+                &config,
+                SchedulerEvent::AdmittedInput,
+            )
+            .new_state;
+
+            for presentation in 1..count {
+                let transition = scheduler_reduce(
+                    &state,
+                    &config,
+                    SchedulerEvent::CommittedPresent {
+                        generation: CaptureGeneration(presentation),
+                    },
+                );
+                assert_eq!(transition.new_state.step_index, 0);
+                assert_eq!(
+                    transition.new_state.phase,
+                    ActionPhase::WaitingPresentations {
+                        remaining: count - presentation,
+                    }
+                );
+                assert_eq!(transition.effects.complete_presentation_wait, None);
+                state = transition.new_state;
+            }
+
+            let final_presentation = scheduler_reduce(
+                &state,
+                &config,
+                SchedulerEvent::CommittedPresent {
+                    generation: CaptureGeneration(count),
+                },
+            );
+            assert_eq!(final_presentation.new_state.step_index, 1);
+            assert_eq!(
+                final_presentation.effects.complete_presentation_wait,
+                Some(count)
+            );
+        }
     }
 
     // --- set_menu_key ---
@@ -1756,6 +1963,56 @@ mod tests {
         assert_eq!(t.new_state.terminal, Some(TerminalOutcome::FinishComplete));
     }
 
+    #[test]
+    fn out_of_range_step_is_invalid_state() {
+        let actions = [Action::Finish];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        state.step_index = actions.len();
+        let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            transition.new_state.terminal,
+            Some(TerminalOutcome::InvalidState)
+        );
+        assert!(transition.effects.is_empty());
+    }
+
+    #[test]
+    fn finish_outside_waiting_for_input_is_invalid_state() {
+        let actions = [Action::Finish];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        state.phase = ActionPhase::TapHolding { remaining: 1 };
+        let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            transition.new_state.terminal,
+            Some(TerminalOutcome::InvalidState)
+        );
+    }
+
+    #[test]
+    fn action_phase_mismatch_is_invalid_and_absorbing() {
+        let actions = [Action::WaitInputTicks(WaitInputTicksStep { count: 1 })];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        state.phase = ActionPhase::WaitingCapture {
+            generation: CaptureGeneration(1),
+        };
+        let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            transition.new_state.terminal,
+            Some(TerminalOutcome::InvalidState)
+        );
+        let absorbed = scheduler_reduce(
+            &transition.new_state,
+            &config,
+            SchedulerEvent::CommittedPresent {
+                generation: CaptureGeneration(0),
+            },
+        );
+        assert_eq!(absorbed.new_state, transition.new_state);
+        assert!(absorbed.effects.is_empty());
+    }
     // --- Multiple inputs without presents ---
 
     #[test]

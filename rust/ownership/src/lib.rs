@@ -16,7 +16,7 @@
 //! # Architecture
 //!
 //! The manifest is a checked-in JSON file (`native-provider-manifest.json`)
-//! authorized by immutable ownership ledger v6. Object identities are derived
+//! authorized by immutable ownership ledger v7. Object identities are derived
 //! from tracked canonical sources and exact produced-object names rather than
 //! an ignored assessment-era object tree. The validator checks each source
 //! digest, archive decision, provider, actual archive member, and strict-link
@@ -70,13 +70,13 @@ pub const MANIFEST_RELATIVE_PATH: &str = "ownership/native-provider-manifest.jso
 
 /// The schema version string this validator expects.
 pub const EXPECTED_SCHEMA: &str = "uqm-native-provider-manifest-v2";
-pub const EXPECTED_LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v6";
+pub const EXPECTED_LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v7";
 pub const EXPECTED_ASSESSMENT_COMMIT: &str = "54e1dba5f56e9f20a3aa773d5f151470a8cf0662";
-pub const EXPECTED_LEDGER_RAW_REVISION: &str = "8f03fa7844feac162a3759ed768f3f38f75fbf7e";
-pub const EXPECTED_LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json";
-pub const EXPECTED_LEDGER_GIST_REVISION: &str = "d7602e17c4401ed322f60ddfe6bf5e61d4754e24";
+pub const EXPECTED_LEDGER_RAW_REVISION: &str = "d35f6156bff0b202306cca57d517f800234951df";
+pub const EXPECTED_LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json";
+pub const EXPECTED_LEDGER_GIST_REVISION: &str = "46eb961886e2aefe8b2085a3af4b1afbc5e82a77";
 pub const EXPECTED_LEDGER_SHA256: &str =
-    "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496";
+    "d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
     "107169fb8c7f63899c8a13f99d9fdba02c69bb08761d0d1207d24b5bb2c3b37c";
 pub const EXPECTED_SCAN_ROOT: &str = "native";

@@ -3,6 +3,10 @@
 use super::runtime::{AdapterError, PlanetSideClock, PlanetSideInput, ShipStatusPort, Tick};
 use super::session::{ShipDelta, ShipStatus};
 use super::simulation::FrameInput;
+#[cfg(feature = "linked_c_archive")]
+use crate::c_bindings::controller_input::{CurrentInputState, CONTROL_TEMPLATE_NUM_TEMPLATES};
+#[cfg(feature = "linked_c_archive")]
+use crate::c_bindings::player_control_template;
 
 #[cfg(feature = "linked_c_archive")]
 const KEY_UP: usize = 0;
@@ -17,11 +21,7 @@ const KEY_SPECIAL: usize = 5;
 #[cfg(feature = "linked_c_archive")]
 const KEY_ESCAPE: usize = 6;
 #[cfg(feature = "linked_c_archive")]
-const NUM_KEYS: usize = 7;
-#[cfg(feature = "linked_c_archive")]
-const NUM_TEMPLATES: usize = 6;
-#[cfg(feature = "linked_c_archive")]
-const NUM_MENU_KEYS: usize = 24;
+const NUM_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
 
 /// Input adapter reading the resolved player-one control template.
 pub struct CffiPlanetSideInput;
@@ -49,16 +49,7 @@ impl PlanetSideInput for CffiPlanetSideInput {
 }
 
 #[cfg(feature = "linked_c_archive")]
-#[repr(C)]
-struct ControllerInputState {
-    key: [[i32; NUM_KEYS]; NUM_TEMPLATES],
-    menu: [i32; NUM_MENU_KEYS],
-}
-
-#[cfg(feature = "linked_c_archive")]
 extern "C" {
-    static CurrentInputState: ControllerInputState;
-    static PlayerControls: [i32; 2];
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
     fn GetTimeCounter() -> u32;
@@ -75,11 +66,13 @@ fn read_player_one_input() -> FrameInput {
     // The game loop updates these globals synchronously before invoking the
     // active input callback, so one snapshot cannot race another game tick.
     unsafe {
-        let template = PlayerControls[0];
-        if !(0..NUM_TEMPLATES as i32).contains(&template) {
+        let Some(template) = player_control_template(0).map(|template| template as usize) else {
+            return FrameInput::default();
+        };
+        if template >= NUM_TEMPLATES {
             return FrameInput::default();
         }
-        let key = &CurrentInputState.key[template as usize];
+        let key = &CurrentInputState.key[template];
         FrameInput {
             turn_left: key[KEY_LEFT] != 0,
             turn_right: key[KEY_RIGHT] != 0,

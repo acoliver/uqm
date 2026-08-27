@@ -32,6 +32,8 @@ const TFB_SCALE_STEP: c_int = 1;
 const OPT_PC: c_int = 2;
 const OPT_3DO: c_int = 1;
 
+pub const DEFAULT_RESOLUTION_WIDTH: c_int = 1280;
+pub const DEFAULT_RESOLUTION_HEIGHT: c_int = 960;
 // ===========================================================================
 //  Parsed options — accessible from C via FFI
 // ===========================================================================
@@ -102,6 +104,7 @@ pub struct ParsedOptions {
     /// None when not supplied. When both are Some, automation is active.
     pub automation_script: Option<String>,
     pub automation_output: Option<String>,
+    pub native_window_proof: Option<String>,
 }
 
 impl Default for ParsedOptions {
@@ -139,13 +142,14 @@ impl Default for ParsedOptions {
             music_volume_scale: 1.0,
             sfx_volume_scale: 1.0,
             speech_volume_scale: 1.0,
-            resolution_width: 1280,
-            resolution_height: 960,
+            resolution_width: DEFAULT_RESOLUTION_WIDTH,
+            resolution_height: DEFAULT_RESOLUTION_HEIGHT,
             player1_control: None,
             player2_control: None,
             parse_error: false,
             automation_script: None,
             automation_output: None,
+            native_window_proof: None,
         }
     }
 }
@@ -171,7 +175,7 @@ pub fn parsed() -> &'static ParsedOptions {
 // ===========================================================================
 
 fn build_command() -> Command {
-    Command::new("uqm")
+    let command = Command::new("uqm")
         .about("The Ur-Quan Masters")
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -388,7 +392,18 @@ fn build_command() -> Command {
                 .long("automation-output")
                 .value_name("DIR")
                 .help("Path to automation output directory"),
+        );
+    #[cfg(feature = "debug-process")]
+    {
+        command.arg(
+            Arg::new("native-window-proof")
+                .long("native-window-proof")
+                .value_name("FILE")
+                .help("Path to proof-only native-window configuration"),
         )
+    }
+    #[cfg(not(feature = "debug-process"))]
+    command
 }
 
 // ===========================================================================
@@ -653,6 +668,10 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
     }
     if let Some(v) = matches.get_one::<String>("automation-output") {
         opts.automation_output = Some(v.clone());
+    }
+    #[cfg(feature = "debug-process")]
+    if let Some(v) = matches.get_one::<String>("native-window-proof") {
+        opts.native_window_proof = Some(v.clone());
     }
 
     // Addons (can be specified multiple times)
@@ -1014,8 +1033,10 @@ mod tests {
         assert!(opts.keep_aspect_ratio);
         assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ3);
         assert_eq!(opts.sound_driver, AUDIO_DRIVER_MIXSDL);
-        assert_eq!(opts.resolution_width, 1280);
-        assert_eq!(opts.resolution_height, 960);
+        assert_eq!(DEFAULT_RESOLUTION_WIDTH, 1280);
+        assert_eq!(DEFAULT_RESOLUTION_HEIGHT, 960);
+        assert_eq!(opts.resolution_width, DEFAULT_RESOLUTION_WIDTH);
+        assert_eq!(opts.resolution_height, DEFAULT_RESOLUTION_HEIGHT);
     }
 
     #[test]
@@ -1217,6 +1238,21 @@ mod tests {
         assert_eq!(opts.which_menu, OPT_3DO);
         apply_config_value(&mut opts, "smoothmelee", "BOOLEAN:true");
         assert_eq!(opts.melee_scale, TFB_SCALE_TRILINEAR);
+    }
+
+    #[cfg(feature = "debug-process")]
+    #[test]
+    fn native_window_proof_option_is_parsed() {
+        let opts = parse(&[
+            "uqm",
+            "--automation-script=/tmp/script.json",
+            "--native-window-proof=/tmp/native-proof.json",
+        ]);
+        assert_eq!(opts.automation_script.as_deref(), Some("/tmp/script.json"));
+        assert_eq!(
+            opts.native_window_proof.as_deref(),
+            Some("/tmp/native-proof.json")
+        );
     }
 
     #[test]

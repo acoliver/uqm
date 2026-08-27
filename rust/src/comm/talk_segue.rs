@@ -64,6 +64,9 @@ pub(super) mod c_bridge {
 
 #[cfg(not(test))]
 pub(super) mod c_bridge {
+    use crate::c_bindings::controller_input::{
+        CurrentInputState, PulsedInputState, CONTROLLER_INPUT_STATE as ControllerInputState,
+    };
     use crate::comm::locdata::COMM_DATA;
     use std::ffi::{c_int, c_uint, c_void};
 
@@ -124,15 +127,7 @@ pub(super) mod c_bridge {
         pub fn UnbatchGraphics();
     }
 
-    #[repr(C)]
-    struct ControllerInputState {
-        key: [[i32; 7]; 6],
-        menu: [i32; 24],
-    }
-
     extern "C" {
-        static mut PulsedInputState: ControllerInputState;
-        static CurrentInputState: ControllerInputState;
         static mut LastActivity: u32;
         pub static optSmoothScroll: c_int;
     }
