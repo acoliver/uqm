@@ -198,7 +198,7 @@ pub unsafe extern "C" fn raw_descriptor(
     let c_str = CStr::from_ptr(src);
     let bytes = c_str.to_bytes();
     let copy_len = bytes.len().min((size - 1) as usize);
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.cast::<u8>(), copy_len);
     *buf.add(copy_len) = 0;
 }
 
@@ -218,7 +218,7 @@ pub unsafe extern "C" fn int_to_string(resdata: *mut ResourceData, buf: *mut c_c
     let formatted = format!("{}", value);
     let bytes = formatted.as_bytes();
     let copy_len = bytes.len().min((size - 1) as usize);
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.cast::<u8>(), copy_len);
     *buf.add(copy_len) = 0;
 }
 
@@ -241,7 +241,7 @@ pub unsafe extern "C" fn boolean_to_string(
     let s = if (*resdata).num != 0 { "true" } else { "false" };
     let bytes = s.as_bytes();
     let copy_len = bytes.len().min((size - 1) as usize);
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.cast::<u8>(), copy_len);
     *buf.add(copy_len) = 0;
 }
 
@@ -269,7 +269,7 @@ pub unsafe extern "C" fn color_to_string(
     let formatted = serialize_color(r, g, b, a);
     let bytes = formatted.as_bytes();
     let copy_len = bytes.len().min((size - 1) as usize);
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), buf.cast::<u8>(), copy_len);
     *buf.add(copy_len) = 0;
 }
 

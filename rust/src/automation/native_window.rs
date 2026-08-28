@@ -1469,6 +1469,7 @@ pub fn capture_native_window(
     decode_png_bounded(&bytes, contract.capture_budget_bytes)
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn decode_png_bounded(bytes: &[u8], budget: u64) -> Result<(), NativeWindowObserverError> {
     if budget == 0 || bytes.len() as u64 > budget {
         return Err(NativeWindowObserverError::OutputLimit {

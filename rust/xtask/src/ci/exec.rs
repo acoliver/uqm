@@ -672,81 +672,91 @@ fn macos_process_matches_uid(info: &libc::proc_bsdinfo, uid: u32) -> bool {
 
 #[cfg(target_os = "macos")]
 fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
-    const PROC_ALL_PIDS: u32 = 1;
+    const PROC_UID_ONLY: u32 = 4;
+    const PROC_RUID_ONLY: u32 = 5;
 
     let uid = uid
         .parse::<u32>()
         .map_err(|error| format!("invalid dedicated containment uid: {error}"))?;
-    for _ in 0..3 {
-        // SAFETY: a null buffer requests the required size.
-        let required = unsafe { libc::proc_listpids(PROC_ALL_PIDS, 0, std::ptr::null_mut(), 0) };
-        if required < 0 {
-            return Err(format!(
-                "cannot inspect processes for dedicated uid {uid}: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        let slots = usize::try_from(required)
-            .ok()
-            .and_then(|bytes| bytes.checked_div(std::mem::size_of::<libc::pid_t>()))
-            .and_then(|count| count.checked_add(16))
-            .ok_or_else(|| "process count overflow".to_string())?;
-        let mut pids = vec![0 as libc::pid_t; slots];
-        let bytes = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>())
-            .map_err(|_| "process buffer does not fit c_int".to_string())?;
-        // SAFETY: pids is writable for bytes bytes.
-        let written =
-            unsafe { libc::proc_listpids(PROC_ALL_PIDS, 0, pids.as_mut_ptr().cast(), bytes) };
-        if written < 0 {
-            return Err(format!(
-                "cannot inspect processes for dedicated uid {uid}: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        if written < bytes {
-            let count = usize::try_from(written)
-                .ok()
-                .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
-                .ok_or_else(|| "invalid process-list byte count".to_string())?;
-            for pid in pids[..count].iter().copied().filter(|pid| *pid > 0) {
-                let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-                let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
-                    .map_err(|_| "macOS process-info size does not fit c_int".to_string())?;
-                // SAFETY: info is writable for expected bytes and pid came from proc_listpids.
-                let observed = unsafe {
-                    libc::proc_pidinfo(
-                        pid,
-                        libc::PROC_PIDTBSDINFO,
-                        0,
-                        info.as_mut_ptr().cast(),
-                        expected,
-                    )
-                };
-                if observed == 0 {
-                    // SAFETY: signal zero checks existence without delivering a signal.
-                    if unsafe { libc::kill(pid, 0) } < 0
-                        && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
-                    {
-                        continue;
-                    }
-                    return Err(format!(
-                        "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned no data"
-                    ));
-                }
-                if observed != expected {
-                    return Err(format!(
-                        "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned {observed} bytes, expected {expected}"
-                    ));
-                }
-                // SAFETY: proc_pidinfo initialized the complete structure.
-                if macos_process_matches_uid(unsafe { &info.assume_init() }, uid) {
-                    return Ok(false);
-                }
+    for selector in [PROC_UID_ONLY, PROC_RUID_ONLY] {
+        let mut inspected = false;
+        for _ in 0..3 {
+            // SAFETY: a null buffer requests the required size.
+            let required = unsafe { libc::proc_listpids(selector, uid, std::ptr::null_mut(), 0) };
+            if required < 0 {
+                return Err(format!(
+                    "cannot inspect processes for dedicated uid {uid}: {}",
+                    std::io::Error::last_os_error()
+                ));
             }
-            return Ok(true);
+            let slots = usize::try_from(required)
+                .ok()
+                .and_then(|bytes| bytes.checked_div(std::mem::size_of::<libc::pid_t>()))
+                .and_then(|count| count.checked_add(16))
+                .ok_or_else(|| "process count overflow".to_string())?;
+            let mut pids = vec![0 as libc::pid_t; slots];
+            let bytes = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>())
+                .map_err(|_| "process buffer does not fit c_int".to_string())?;
+            // SAFETY: pids is writable for bytes bytes.
+            let written =
+                unsafe { libc::proc_listpids(selector, uid, pids.as_mut_ptr().cast(), bytes) };
+            if written < 0 {
+                return Err(format!(
+                    "cannot inspect processes for dedicated uid {uid}: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+            if written < bytes {
+                let count = usize::try_from(written)
+                    .ok()
+                    .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
+                    .ok_or_else(|| "invalid process-list byte count".to_string())?;
+                for pid in pids[..count].iter().copied().filter(|pid| *pid > 0) {
+                    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+                    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
+                        .map_err(|_| "macOS process-info size does not fit c_int".to_string())?;
+                    // SAFETY: info is writable for expected bytes and pid came from proc_listpids.
+                    let observed = unsafe {
+                        libc::proc_pidinfo(
+                            pid,
+                            libc::PROC_PIDTBSDINFO,
+                            0,
+                            info.as_mut_ptr().cast(),
+                            expected,
+                        )
+                    };
+                    if observed == 0 {
+                        // SAFETY: signal zero checks existence without delivering a signal.
+                        if unsafe { libc::kill(pid, 0) } < 0
+                            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+                        {
+                            continue;
+                        }
+                        return Err(format!(
+                            "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned no data"
+                        ));
+                    }
+                    if observed != expected {
+                        return Err(format!(
+                            "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned {observed} bytes, expected {expected}"
+                        ));
+                    }
+                    // SAFETY: proc_pidinfo initialized the complete structure.
+                    if macos_process_matches_uid(unsafe { &info.assume_init() }, uid) {
+                        return Ok(false);
+                    }
+                }
+                inspected = true;
+                break;
+            }
+        }
+        if !inspected {
+            return Err(format!(
+                "process membership changed during every dedicated uid {uid} selector {selector} inspection"
+            ));
         }
     }
-    Err("process membership changed during every dedicated uid inspection".to_string())
+    Ok(true)
 }
 
 #[cfg(target_os = "linux")]

@@ -357,7 +357,7 @@ pub fn prepare_content_dir(
     let path_len = c_path.as_bytes().len();
     unsafe {
         let dst = std::ptr::addr_of_mut!(baseContentPath) as *mut u8;
-        std::ptr::copy_nonoverlapping(c_path.as_ptr() as *const u8, dst, path_len);
+        std::ptr::copy_nonoverlapping(c_path.as_ptr().cast::<u8>(), dst, path_len);
         // Null-terminate at path_len (at most PATH_MAX - 1)
         if path_len < PATH_MAX {
             *dst.add(path_len) = 0;
