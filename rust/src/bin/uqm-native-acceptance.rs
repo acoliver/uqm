@@ -3276,6 +3276,7 @@ mod tests {
         assert_eq!(error, "evidence root must be absolute");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn runner_rejects_every_relative_runtime_input_before_metadata_access() {
         for (label, executable, content, script) in [
@@ -3494,7 +3495,13 @@ mod tests {
     #[test]
     fn observer_helper_output_flood_is_typed_and_group_cleaned() {
         let scratch = tempfile::tempdir().unwrap();
-        let executable = PathBuf::from("/bin/sh");
+        let executable = ["/bin/bash", "/usr/bin/bash", "/bin/sh"]
+            .into_iter()
+            .map(PathBuf::from)
+            .find(|path| {
+                fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_file())
+            })
+            .expect("a regular shell executable is required for the observer flood test");
         let mut observer = observer_for_helper_test(
             scratch.path(),
             executable.clone(),

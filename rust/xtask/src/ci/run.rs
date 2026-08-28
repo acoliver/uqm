@@ -990,7 +990,7 @@ pub(super) fn trusted_control_plane_script(
     }
 }
 
-fn trusted_controller_command(command: &[String]) -> Option<&'static str> {
+pub(super) fn trusted_controller_command(command: &[String]) -> Option<&'static str> {
     match command {
         [cargo, run, locked, manifest, path, separator, command]
             if cargo == "cargo"

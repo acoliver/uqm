@@ -564,13 +564,7 @@ fn test_all(root: &Path, run_native_acceptance: bool) -> Result<(), String> {
     prepare_canonical_build(&toolchain)?;
     let marker = serde_json::to_string(&toolchain)
         .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
-    let linked_build_proof = build_linked_test_proof(
-        root,
-        &toolchain.cargo.executable,
-        &toolchain.linker.executable,
-        &marker,
-        cargo_target.as_deref(),
-    )?;
+    let linked_build_proof = build_linked_test_proof(root, &toolchain, cargo_target.as_deref())?;
     let linked_arguments = cargo_args_with_target(
         [
             "test",
@@ -625,27 +619,20 @@ fn native_test(root: &Path) -> Result<(), String> {
         .map_err(|error| format!("prepare canonical native-test toolchain: {error}"))?;
     prepare_source_environment(root)?;
     prepare_canonical_build(&toolchain)?;
-    let marker = serde_json::to_string(&toolchain)
-        .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
-    let linked_build_proof = build_linked_test_proof(
-        root,
-        &toolchain.cargo.executable,
-        &toolchain.linker.executable,
-        &marker,
-        cargo_target.as_deref(),
-    )?;
+    let linked_build_proof = build_linked_test_proof(root, &toolchain, cargo_target.as_deref())?;
     run_native_window_acceptance(root, &linked_build_proof)
 }
 
 fn build_linked_test_proof(
     root: &Path,
-    cargo: &str,
-    linker: &str,
-    marker: &str,
+    toolchain: &ToolchainIdentity,
     cargo_target: Option<&Path>,
 ) -> Result<LinkedBuildProof, String> {
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
+    let environment = linked_build_subprocess_environment(toolchain)?;
+    let marker = serde_json::to_string(toolchain)
+        .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
     let mut arguments = [
         "build",
         "--locked",
@@ -672,17 +659,11 @@ fn build_linked_test_proof(
     }
     let output = ci::exec::run_captured_with_bound_environment(
         root,
-        cargo,
+        &toolchain.cargo.executable,
         &arguments,
         authority.supervision.builtin_limits(),
         true,
-        |_| {
-            Ok(vec![
-                ("UQM_NATIVE_PROFILE".to_string(), "linked-test".to_string()),
-                ("UQM_CANONICAL_TOOLCHAIN".to_string(), marker.to_string()),
-                ("RUSTC_LINKER".to_string(), linker.to_string()),
-            ])
-        },
+        |_| Ok(environment),
     );
     eprint!("{}", String::from_utf8_lossy(&output.stderr));
     if !output.completed_under_supervision()
@@ -772,7 +753,7 @@ fn build_linked_test_proof(
     let receipt = NativeLinkedBuildReceipt {
         schema: NATIVE_LINKED_BUILD_RECEIPT_SCHEMA.to_string(),
         source_sha,
-        cargo_command: std::iter::once(cargo.to_string())
+        cargo_command: std::iter::once(toolchain.cargo.executable.clone())
             .chain(arguments)
             .collect(),
         native_profile: "linked-test".to_string(),
@@ -1073,6 +1054,14 @@ fn canonical_toolchain_subprocess_environment(
             toolchain.linker.executable.clone(),
         ),
     ])
+}
+
+fn linked_build_subprocess_environment(
+    toolchain: &ToolchainIdentity,
+) -> Result<Vec<(String, String)>, String> {
+    let mut environment = canonical_toolchain_subprocess_environment(toolchain)?;
+    environment.push(("UQM_NATIVE_PROFILE".into(), "linked-test".into()));
+    Ok(environment)
 }
 
 fn production_subprocess_environment(
@@ -2687,6 +2676,13 @@ mod tests {
                 .unwrap(),
             toolchain
         );
+
+        let linked_environment =
+            BTreeMap::from_iter(linked_build_subprocess_environment(&toolchain).unwrap());
+        let mut expected_linked_environment = environment;
+        expected_linked_environment.remove("CARGO_BUILD_JOBS");
+        expected_linked_environment.insert("UQM_NATIVE_PROFILE".into(), "linked-test".into());
+        assert_eq!(linked_environment, expected_linked_environment);
     }
 
     #[test]

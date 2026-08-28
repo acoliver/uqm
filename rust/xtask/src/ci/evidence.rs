@@ -2966,6 +2966,15 @@ fn valid_step_execution_provenance(
     else {
         return false;
     };
+    if let Some(hidden_command) = super::run::trusted_controller_command(expected_command) {
+        return matches!(
+            effective_command.as_slice(),
+            [program, command]
+                if Path::new(program).is_absolute() && command == hidden_command
+        ) && receipt
+            .get("staged_script_sha256")
+            .is_some_and(serde_json::Value::is_null);
+    }
     match super::run::trusted_control_plane_script(expected_command) {
         Some((script_name, script_bytes)) => {
             effective_command.len() == expected_command.len()
@@ -10843,6 +10852,15 @@ mod tests {
     }
 
     fn fixture_execution_provenance(command: &[String]) -> (Vec<String>, Option<String>) {
+        if let Some(hidden_command) = super::super::run::trusted_controller_command(command) {
+            return (
+                vec![
+                    "/tmp/trusted-control-plane/uqm-controller".into(),
+                    hidden_command.into(),
+                ],
+                None,
+            );
+        }
         match super::super::run::trusted_control_plane_script(command) {
             Some((script_name, script_bytes)) => (
                 vec![
@@ -10930,6 +10948,42 @@ mod tests {
             }),
         ] {
             assert!(!valid_step_execution_provenance(&mutant, &embedded));
+        }
+
+        let controller = [
+            "cargo",
+            "run",
+            "--locked",
+            "--manifest-path",
+            "rust/xtask/Cargo.toml",
+            "--",
+            "test",
+        ]
+        .map(str::to_string);
+        let hidden = serde_json::json!({
+            "effective_command": ["/tmp/uqm-controller", "__ci-test"],
+            "staged_script_sha256": null,
+        });
+        assert!(valid_step_execution_provenance(&hidden, &controller));
+        for mutant in [
+            serde_json::json!({
+                "effective_command": controller,
+                "staged_script_sha256": null,
+            }),
+            serde_json::json!({
+                "effective_command": ["/tmp/uqm-controller", "__ci-native-test"],
+                "staged_script_sha256": null,
+            }),
+            serde_json::json!({
+                "effective_command": ["uqm-controller", "__ci-test"],
+                "staged_script_sha256": null,
+            }),
+            serde_json::json!({
+                "effective_command": ["/tmp/uqm-controller", "__ci-test"],
+                "staged_script_sha256": "0".repeat(64),
+            }),
+        ] {
+            assert!(!valid_step_execution_provenance(&mutant, &controller));
         }
 
         let ordinary = vec!["cargo".to_string(), "check".to_string()];
@@ -16109,6 +16163,25 @@ mod tests {
             },
             entries,
         }
+    }
+
+    #[test]
+    fn failed_process_replay_accepts_exact_trusted_hidden_controller_routes() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let bundle = tempfile::tempdir().unwrap();
+        let index = failed_process_fixture(bundle.path(), gate, 1);
+
+        assert_eq!(
+            validate_failed_process_receipts(
+                bundle.path(),
+                &index,
+                gate,
+                index.first_failed_contract.as_deref().unwrap(),
+            ),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
