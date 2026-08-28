@@ -297,6 +297,10 @@ fn identity_from_file(
     })
 }
 
+fn tool_requires_retained_source(program: &str) -> bool {
+    matches!(program, "cargo" | "git")
+}
+
 fn observe_tool(
     root: &Path,
     name: &str,
@@ -313,7 +317,7 @@ fn observe_tool(
         program,
         arguments,
         limits,
-        program == "git",
+        tool_requires_retained_source(program),
         |_| Ok(Vec::new()),
     );
     let executable_identity = output.executable_identity.clone();
@@ -324,7 +328,10 @@ fn observe_tool(
     } else {
         stdout.trim()
     };
-    let version_passed = output.completed_under_supervision()
+    let completed_under_supervision = output.completed_under_supervision();
+    let execution_error = (!completed_under_supervision)
+        .then(|| format!("supervision: {}", output.failure_detail(program)));
+    let version_passed = completed_under_supervision
         && output
             .exit_code
             .is_some_and(|code| accepted_exit_codes.contains(&code))
@@ -341,7 +348,7 @@ fn observe_tool(
         stderr,
         exit_code: output.exit_code,
         signal: output.signal,
-        launch_error: output.launch_error.or(output.supervision_error),
+        launch_error: execution_error,
     }
 }
 
@@ -538,6 +545,13 @@ fn is_hex_lower(value: &str, length: usize) -> bool {
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn path_dependent_tools_retain_the_resolved_path() {
+        assert!(tool_requires_retained_source("cargo"));
+        assert!(tool_requires_retained_source("git"));
+        assert!(!tool_requires_retained_source("rustc"));
+    }
 
     #[test]
     fn resolved_executable_launches_the_opened_file_after_path_replacement() {

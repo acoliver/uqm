@@ -3104,20 +3104,29 @@ fn validate_tool_receipt(
         let spawned = launch_error.is_some_and(|value| value.is_null())
             && ((valid_exit && signal_value.is_some_and(|value| value.is_null()))
                 || (exit_value.is_some_and(|value| value.is_null()) && valid_signal));
+        let execution_error = launch_error
+            .and_then(|value| value.as_str())
+            .is_some_and(|error| !error.is_empty());
         let launch_failed = exit_value.is_some_and(|value| value.is_null())
             && signal_value.is_some_and(|value| value.is_null())
-            && launch_error
-                .and_then(|value| value.as_str())
-                .is_some_and(|error| !error.is_empty())
+            && execution_error
             && stdout == Some("")
             && stderr == Some("");
+        let supervised_execution_failed = launch_error
+            .and_then(|value| value.as_str())
+            .is_some_and(|error| error.starts_with("supervision: "))
+            && ((valid_exit && signal_value.is_some_and(|value| value.is_null()))
+                || (exit_value.is_some_and(|value| value.is_null()) && valid_signal));
         let semantic_pass = identity_valid
             && spawned
             && exit_code
                 .and_then(|code| i32::try_from(code).ok())
                 .is_some_and(|code| accepted_exit_codes.contains(&code))
             && observed_prefix;
-        if passed != Some(semantic_pass) || observed.is_none() || (!spawned && !launch_failed) {
+        if passed != Some(semantic_pass)
+            || observed.is_none()
+            || (!spawned && !launch_failed && !supervised_execution_failed)
+        {
             contracts.push(format!("evidence.preflight.tools.{name}.result"));
         }
         if passed == Some(false) {
@@ -15365,6 +15374,48 @@ mod tests {
                 "{contract}: {contracts:?}"
             );
         }
+    }
+
+    #[test]
+    fn tool_receipt_retains_supervised_execution_failure() {
+        let bundle = tempfile::tempdir().unwrap();
+        let mut index = preflight_failure_bundle(bundle.path(), "tools.preflight");
+        let entry = index
+            .entries
+            .iter()
+            .find(|entry| entry.role == "preflight.tools")
+            .unwrap();
+        let mut report: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle.path().join(&entry.path)).unwrap()).unwrap();
+        let failed = report["observations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|observation| observation["passed"] == serde_json::json!(false))
+            .unwrap();
+        let expected_prefix = failed["expected_output_prefix"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        failed["stdout"] = serde_json::json!(format!("{expected_prefix}fixture"));
+        failed["exit_code"] = serde_json::json!(0);
+        failed["launch_error"] = serde_json::json!(
+            "supervision: subprocess cargo left descendants in its owned process group"
+        );
+        rewrite_bundle_entry(
+            bundle.path(),
+            &mut index.entries,
+            "preflight.tools",
+            &serde_json::to_vec(&report).unwrap(),
+        );
+
+        let contracts = production_contracts(bundle.path(), &index);
+        assert!(
+            !contracts
+                .iter()
+                .any(|contract| contract.ends_with(".result")),
+            "{contracts:?}"
+        );
     }
 
     #[test]

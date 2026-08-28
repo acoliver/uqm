@@ -976,6 +976,11 @@ fn trusted_controller_command(command: &[String]) -> Option<&'static str> {
     }
 }
 
+fn process_command_requires_retained_source(command: &[String]) -> bool {
+    command.first().is_some_and(|program| program == "cargo")
+        || trusted_controller_command(command).is_some()
+}
+
 fn trusted_staging_parent_from(
     evidence_root: &Path,
     configured: Option<std::ffi::OsString>,
@@ -1354,6 +1359,7 @@ fn execute_process_gate(
                 env_overrides.push(("UQM_CI_NATIVE_CONTENT_ROOT".into(), content_root));
             }
         }
+        let execute_retained_source = process_command_requires_retained_source(&step.command);
         let (effective_command, trusted_script_directory, staged_script_sha256) =
             stage_trusted_control_plane_script(
                 &step.command,
@@ -1393,12 +1399,13 @@ fn execute_process_gate(
                 )
             })?;
         }
-        let captured = run_captured(
+        let captured = super::exec::run_captured_with_bound_environment(
             &session.root.join(&step.cwd),
             &effective_command[0],
             &effective_command[1..],
-            &env_overrides,
             session.authority.supervision.limits(step.timeout_seconds),
+            execute_retained_source,
+            |_| Ok(env_overrides),
         );
         write_captured(
             session,
@@ -2450,6 +2457,15 @@ mod tests {
         ] {
             assert!(!command.contains(&"--target-dir"));
         }
+    }
+
+    #[test]
+    fn cargo_processes_retain_the_resolved_path() {
+        let cargo = ["cargo".to_string(), "check".to_string()];
+        let shell = ["bash".to_string(), "script.sh".to_string()];
+
+        assert!(process_command_requires_retained_source(&cargo));
+        assert!(!process_command_requires_retained_source(&shell));
     }
 
     #[test]

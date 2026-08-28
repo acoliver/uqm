@@ -152,7 +152,9 @@ fn validate_toolchain_marker(actual: &ToolchainIdentity) -> Result<(), String> {
     let expected: ToolchainIdentity = serde_json::from_str(&marker)
         .map_err(|error| format!("invalid UQM_CANONICAL_TOOLCHAIN marker: {error}"))?;
     if &expected != actual {
-        return Err("build.rs effective toolchain differs from canonical xtask selection".into());
+        return Err(format!(
+            "build.rs effective toolchain differs from canonical xtask selection: expected {expected:?}; actual {actual:?}"
+        ));
     }
     Ok(())
 }
