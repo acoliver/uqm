@@ -403,6 +403,51 @@ fn configure_process_group(
 fn configure_process_group(_command: &mut Command, _registration_timeout: Duration) {}
 
 #[cfg(target_os = "macos")]
+fn macos_process_is_terminal(pid: i32) -> Result<bool, String> {
+    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
+        .map_err(|_| "macOS process-info size does not fit c_int".to_string())?;
+    // SAFETY: info is writable for expected bytes and the pid came from proc_listpids.
+    let written = unsafe {
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info.as_mut_ptr().cast(),
+            expected,
+        )
+    };
+    if written == expected {
+        // SAFETY: proc_pidinfo initialized the complete structure.
+        let info = unsafe { info.assume_init() };
+        return Ok(info.pbi_status == libc::SZOMB);
+    }
+    if written == 0 {
+        let output = Command::new("/bin/ps")
+            .args(["-o", "state=", "-p", &pid.to_string()])
+            .output()
+            .map_err(|error| format!("cannot inspect process {pid} state with ps: {error}"))?;
+        if output.status.success() {
+            let state = std::str::from_utf8(&output.stdout)
+                .map_err(|error| format!("process {pid} state is not UTF-8: {error}"))?
+                .trim();
+            if let Some(state) = state.as_bytes().first() {
+                return Ok(*state == b'Z');
+            }
+        }
+        // SAFETY: signal zero checks existence without delivering a signal.
+        if unsafe { libc::kill(pid, 0) } < 0
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+        {
+            return Ok(true);
+        }
+    }
+    Err(format!(
+        "cannot inspect process {pid} from its process-group membership: proc_pidinfo returned {written} bytes, expected {expected}"
+    ))
+}
+
+#[cfg(target_os = "macos")]
 fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, String> {
     const PROC_PGRP_ONLY: u32 = 2;
     for _ in 0..3 {
@@ -449,9 +494,16 @@ fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, 
                 .ok()
                 .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
                 .ok_or_else(|| "invalid process-group byte count".to_string())?;
-            return Ok(pids[..count]
+            for pid in pids[..count]
                 .iter()
-                .any(|pid| *pid > 0 && !ignored.contains(pid)));
+                .copied()
+                .filter(|pid| *pid > 0 && !ignored.contains(pid))
+            {
+                if !macos_process_is_terminal(pid)? {
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
         }
     }
     Err("process-group membership changed during every inspection".to_string())
@@ -2693,6 +2745,47 @@ mod tests {
             0o550
         );
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_process_inspection_distinguishes_live_terminal_and_vanished() {
+        assert!(!macos_process_is_terminal(std::process::id() as i32).unwrap());
+
+        // SAFETY: the child exits immediately without touching shared process state.
+        let child = unsafe { libc::fork() };
+        assert!(
+            child >= 0,
+            "fork failed: {}",
+            std::io::Error::last_os_error()
+        );
+        if child == 0 {
+            // SAFETY: _exit terminates the forked child without running Rust destructors.
+            unsafe { libc::_exit(0) };
+        }
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let terminal = loop {
+            match macos_process_is_terminal(child) {
+                Ok(true) => break true,
+                Ok(false) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Ok(false) => break false,
+                Err(error) => {
+                    // SAFETY: child is this process's direct child.
+                    unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) };
+                    panic!("{error}");
+                }
+            }
+        };
+        // SAFETY: child is this process's direct child.
+        assert_eq!(
+            unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) },
+            child
+        );
+        assert!(terminal, "exited child was not classified as terminal");
+        assert!(macos_process_is_terminal(i32::MAX).unwrap());
     }
 
     #[cfg(target_os = "linux")]

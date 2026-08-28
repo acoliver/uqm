@@ -253,7 +253,7 @@ fn executable_staging_directory() -> Result<tempfile::TempDir, String> {
         .prefix("uqm-executable-")
         .tempdir_in(&root)
         .map_err(|error| format!("cannot create executable staging directory: {error}"))?;
-    fs::set_permissions(staging.path(), fs::Permissions::from_mode(0o750))
+    fs::set_permissions(staging.path(), fs::Permissions::from_mode(0o755))
         .map_err(|error| format!("cannot permit executable staging directory: {error}"))?;
     Ok(staging)
 }
@@ -551,7 +551,7 @@ mod tests {
         fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
         let mut resolved = resolve_executable(program.to_str().unwrap(), 1024).unwrap();
         let staging = resolved._staging.as_ref().unwrap();
-        assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o750);
+        assert_eq!(staging.path().metadata().unwrap().mode() & 0o777, 0o755);
         assert_eq!(
             staging.path().parent().unwrap(),
             Path::new("/var/tmp").canonicalize().unwrap()

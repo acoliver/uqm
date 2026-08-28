@@ -78,7 +78,7 @@
       "installation_integrity": "cargo-registry-sha256",
       "integrity_identity": "16e82b1e8f78af1aadf7cd98535a8ea0bbc20452f93c28e03788cfc92ef600a8",
       "version_command": ["cargo", "audit", "--version"],
-      "expected_output_prefix": "cargo-audit 0.21.2"
+      "expected_output_prefix": "cargo-audit-audit 0.21.2"
     },
     "cargo_llvm_cov": {
       "version": "0.6.16",
