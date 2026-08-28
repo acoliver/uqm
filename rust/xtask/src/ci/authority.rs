@@ -719,8 +719,6 @@ impl Authority {
         crate::prepare_source_environment(&root)?;
         let toolchain = crate::canonical_toolchain(&root)?;
         crate::prepare_canonical_build(&toolchain)?;
-        let marker = serde_json::to_string(&toolchain)
-            .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?;
         let mut vars = vec![
             (
                 "SOURCE_DATE_EPOCH".into(),
@@ -728,14 +726,10 @@ impl Authority {
             ),
             ("UQM_BUILD_DATE".into(), crate::source_date(&root)?),
             ("UQM_NATIVE_PROFILE".into(), "linked-test".into()),
-            ("UQM_CANONICAL_TOOLCHAIN".into(), marker),
         ];
-        vars.push(("CC".into(), toolchain.cc.executable.clone()));
-        vars.push(("AR".into(), toolchain.ar.executable.clone()));
-        vars.push(("NM".into(), toolchain.nm.executable.clone()));
-        vars.push(("PKG_CONFIG".into(), toolchain.pkg_config.executable.clone()));
-        vars.push(("RUSTC".into(), toolchain.rustc.executable.clone()));
-        vars.push(("CARGO".into(), toolchain.cargo.executable.clone()));
+        vars.extend(crate::canonical_toolchain_subprocess_environment(
+            &toolchain,
+        )?);
         Ok(vars)
     }
 }

@@ -597,22 +597,6 @@ fn privileged_uid_pkill_command(uid: &str, signal: i32, selector: &str) -> Resul
     Ok(command)
 }
 
-#[cfg(target_os = "macos")]
-fn uid_pgrep_command(uid: &str, selector: &str) -> Result<Command, String> {
-    if !matches!(selector, "-U" | "-u") {
-        return Err(format!("unsupported UID inspection selector {selector}"));
-    }
-    let mut command = Command::new("/usr/bin/pgrep");
-    command
-        .args([selector, uid])
-        .env_clear()
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    Ok(command)
-}
-
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn run_uid_process_command(
     mut command: Command,
@@ -670,16 +654,6 @@ fn run_privileged_uid_pkill(uid: &str, signal: i32, selector: &str) -> Result<bo
     )
 }
 
-#[cfg(target_os = "macos")]
-fn run_uid_pgrep(uid: &str, selector: &str) -> Result<bool, String> {
-    run_uid_process_command(
-        uid_pgrep_command(uid, selector)?,
-        "UID process inspection",
-        uid,
-        selector,
-    )
-}
-
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn privileged_uid_cleanup(uid: &str, signal: i32) -> Result<(), String> {
     let mut first_error = None;
@@ -692,13 +666,87 @@ fn privileged_uid_cleanup(uid: &str, signal: i32) -> Result<(), String> {
 }
 
 #[cfg(target_os = "macos")]
+fn macos_process_matches_uid(info: &libc::proc_bsdinfo, uid: u32) -> bool {
+    info.pbi_status != libc::SZOMB && (info.pbi_uid == uid || info.pbi_ruid == uid)
+}
+
+#[cfg(target_os = "macos")]
 fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
-    for selector in ["-U", "-u"] {
-        if run_uid_pgrep(uid, selector)? {
-            return Ok(false);
+    const PROC_ALL_PIDS: u32 = 1;
+
+    let uid = uid
+        .parse::<u32>()
+        .map_err(|error| format!("invalid dedicated containment uid: {error}"))?;
+    for _ in 0..3 {
+        // SAFETY: a null buffer requests the required size.
+        let required = unsafe { libc::proc_listpids(PROC_ALL_PIDS, 0, std::ptr::null_mut(), 0) };
+        if required < 0 {
+            return Err(format!(
+                "cannot inspect processes for dedicated uid {uid}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let slots = usize::try_from(required)
+            .ok()
+            .and_then(|bytes| bytes.checked_div(std::mem::size_of::<libc::pid_t>()))
+            .and_then(|count| count.checked_add(16))
+            .ok_or_else(|| "process count overflow".to_string())?;
+        let mut pids = vec![0 as libc::pid_t; slots];
+        let bytes = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>())
+            .map_err(|_| "process buffer does not fit c_int".to_string())?;
+        // SAFETY: pids is writable for bytes bytes.
+        let written =
+            unsafe { libc::proc_listpids(PROC_ALL_PIDS, 0, pids.as_mut_ptr().cast(), bytes) };
+        if written < 0 {
+            return Err(format!(
+                "cannot inspect processes for dedicated uid {uid}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if written < bytes {
+            let count = usize::try_from(written)
+                .ok()
+                .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
+                .ok_or_else(|| "invalid process-list byte count".to_string())?;
+            for pid in pids[..count].iter().copied().filter(|pid| *pid > 0) {
+                let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+                let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
+                    .map_err(|_| "macOS process-info size does not fit c_int".to_string())?;
+                // SAFETY: info is writable for expected bytes and pid came from proc_listpids.
+                let observed = unsafe {
+                    libc::proc_pidinfo(
+                        pid,
+                        libc::PROC_PIDTBSDINFO,
+                        0,
+                        info.as_mut_ptr().cast(),
+                        expected,
+                    )
+                };
+                if observed == 0 {
+                    // SAFETY: signal zero checks existence without delivering a signal.
+                    if unsafe { libc::kill(pid, 0) } < 0
+                        && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+                    {
+                        continue;
+                    }
+                    return Err(format!(
+                        "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned no data"
+                    ));
+                }
+                if observed != expected {
+                    return Err(format!(
+                        "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned {observed} bytes, expected {expected}"
+                    ));
+                }
+                // SAFETY: proc_pidinfo initialized the complete structure.
+                if macos_process_matches_uid(unsafe { &info.assume_init() }, uid) {
+                    return Ok(false);
+                }
+            }
+            return Ok(true);
         }
     }
-    Ok(true)
+    Err("process membership changed during every dedicated uid inspection".to_string())
 }
 
 #[cfg(target_os = "linux")]
@@ -2805,6 +2853,27 @@ mod tests {
         assert!(macos_process_is_terminal(i32::MAX).unwrap());
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_uid_inspection_ignores_terminal_processes() {
+        // SAFETY: every byte pattern is valid for this C process-info structure.
+        let mut info = unsafe { std::mem::zeroed::<libc::proc_bsdinfo>() };
+        info.pbi_uid = 48001;
+        info.pbi_ruid = 48002;
+
+        assert!(macos_process_matches_uid(&info, 48001));
+        assert!(macos_process_matches_uid(&info, 48002));
+        assert!(!macos_process_matches_uid(&info, 48003));
+
+        info.pbi_status = libc::SZOMB;
+        assert!(!macos_process_matches_uid(&info, 48001));
+        assert!(!macos_process_matches_uid(&info, 48002));
+
+        // SAFETY: getuid has no preconditions.
+        let current_uid = unsafe { libc::getuid() };
+        assert!(!privileged_uid_is_empty(&current_uid.to_string()).unwrap());
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn linux_process_inspection_distinguishes_terminal_processes_and_uids() {
@@ -2980,25 +3049,11 @@ mod tests {
                         .collect::<Vec<_>>(),
                     ["-n", "/usr/bin/pkill", signal_argument, selector, "59999"]
                 );
-                #[cfg(target_os = "macos")]
-                {
-                    let inspection = uid_pgrep_command("59999", selector).unwrap();
-                    assert_eq!(inspection.get_program(), "/usr/bin/pgrep");
-                    assert_eq!(
-                        inspection
-                            .get_args()
-                            .map(|argument| argument.to_string_lossy().into_owned())
-                            .collect::<Vec<_>>(),
-                        [selector, "59999"]
-                    );
-                }
             }
         }
         assert!(privileged_uid_pkill_command("59999", 0, "-U").is_err());
         assert!(privileged_uid_pkill_command("59999", libc::SIGINT, "-U").is_err());
         assert!(privileged_uid_pkill_command("59999", libc::SIGTERM, "--uid").is_err());
-        #[cfg(target_os = "macos")]
-        assert!(uid_pgrep_command("59999", "--uid").is_err());
     }
 
     #[test]
@@ -3515,12 +3570,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn short_lived_descendant_settles_without_false_cleanup_failure() {
+        let mut settlement_limits = limits();
+        settlement_limits.timeout = Duration::from_secs(1);
+        settlement_limits.termination_grace = Duration::from_millis(250);
         let captured = run_captured_with_limits(
             Path::new("."),
             "sh",
             &["-c".into(), "(sleep 0.05) &".into()],
             &[],
-            limits(),
+            settlement_limits,
         );
         assert!(captured.succeeded(), "{captured:?}");
         assert_eq!(captured.termination_reason, "none");

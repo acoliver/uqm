@@ -172,6 +172,11 @@ impl ResolvedExecutable {
     }
 }
 
+fn staged_executable_mode(source_mode: u32) -> u32 {
+    let owner_read_execute = source_mode & 0o500;
+    owner_read_execute | (owner_read_execute >> 3) | (owner_read_execute >> 6)
+}
+
 pub(crate) fn resolve_executable(
     program: &str,
     executable_limit: u64,
@@ -213,7 +218,7 @@ pub(crate) fn resolve_executable(
         .canonicalize()
         .map_err(|error| format!("cannot resolve executable staging directory: {error}"))?;
     let execution_path = staging_path.join(execution_name);
-    let staged_mode = (source_identity.mode | ((source_identity.mode & 0o500) >> 3)) & !0o6020;
+    let staged_mode = staged_executable_mode(source_identity.mode);
     let mut output = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -636,6 +641,15 @@ mod tests {
     }
 
     #[test]
+    fn staged_executable_mode_is_cross_uid_and_immutable() {
+        assert_eq!(staged_executable_mode(0o755), 0o555);
+        assert_eq!(staged_executable_mode(0o750), 0o555);
+        assert_eq!(staged_executable_mode(0o550), 0o555);
+        assert_eq!(staged_executable_mode(0o700), 0o555);
+        assert_eq!(staged_executable_mode(0o6755), 0o555);
+    }
+
+    #[test]
     fn resolved_executable_launches_the_opened_file_after_path_replacement() {
         let temp = tempfile::tempdir().unwrap();
         let program = temp.path().join("tool");
@@ -662,7 +676,7 @@ mod tests {
                 .unwrap()
                 .mode()
                 & 0o777,
-            0o750
+            0o555
         );
 
         let captured = super::super::exec::run_captured_with_limits(

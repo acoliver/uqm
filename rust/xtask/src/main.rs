@@ -1008,14 +1008,13 @@ fn clean_release_dir(release_dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn production_subprocess_environment(
+fn canonical_toolchain_subprocess_environment(
     toolchain: &ToolchainIdentity,
 ) -> Result<Vec<(String, String)>, String> {
     let marker = serde_json::to_string(toolchain)
         .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?;
     let target = toolchain.target.replace('-', "_").to_ascii_uppercase();
     Ok(vec![
-        ("CARGO_BUILD_JOBS".into(), "1".into()),
         ("UQM_CANONICAL_TOOLCHAIN".into(), marker),
         ("CC".into(), toolchain.cc.executable.clone()),
         ("AR".into(), toolchain.ar.executable.clone()),
@@ -1029,6 +1028,14 @@ fn production_subprocess_environment(
             toolchain.linker.executable.clone(),
         ),
     ])
+}
+
+fn production_subprocess_environment(
+    toolchain: &ToolchainIdentity,
+) -> Result<Vec<(String, String)>, String> {
+    let mut environment = vec![("CARGO_BUILD_JOBS".into(), "1".into())];
+    environment.extend(canonical_toolchain_subprocess_environment(toolchain)?);
+    Ok(environment)
 }
 
 fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<ProductionPaths, String> {

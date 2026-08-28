@@ -978,7 +978,7 @@ fn trusted_controller_command(command: &[String]) -> Option<&'static str> {
 
 fn process_command_requires_retained_source(command: &[String]) -> bool {
     command.first().is_some_and(|program| program == "cargo")
-        || trusted_controller_command(command).is_some()
+        && trusted_controller_command(command).is_none()
 }
 
 fn trusted_staging_parent_from(
@@ -2460,11 +2460,22 @@ mod tests {
     }
 
     #[test]
-    fn cargo_processes_retain_the_resolved_path() {
+    fn only_unreplaced_cargo_processes_retain_the_resolved_path() {
         let cargo = ["cargo".to_string(), "check".to_string()];
+        let controller = [
+            "cargo".to_string(),
+            "run".to_string(),
+            "--locked".to_string(),
+            "--manifest-path".to_string(),
+            "rust/xtask/Cargo.toml".to_string(),
+            "--".to_string(),
+            "test".to_string(),
+        ];
         let shell = ["bash".to_string(), "script.sh".to_string()];
 
         assert!(process_command_requires_retained_source(&cargo));
+        assert_eq!(trusted_controller_command(&controller), Some("__ci-test"));
+        assert!(!process_command_requires_retained_source(&controller));
         assert!(!process_command_requires_retained_source(&shell));
     }
 
