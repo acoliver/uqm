@@ -2337,6 +2337,23 @@ fn run_command(command: &mut Command, label: &str) -> Result<(), String> {
     }
 }
 
+fn retained_source_mode(
+    program: &str,
+    environment: &[(String, String)],
+) -> Result<(bool, bool), String> {
+    let canonical_cargo = environment
+        .iter()
+        .find(|(name, _)| name == "UQM_CANONICAL_TOOLCHAIN")
+        .map(|(_, marker)| {
+            serde_json::from_str::<ToolchainIdentity>(marker)
+                .map(|toolchain| toolchain.cargo.executable == program)
+                .map_err(|error| format!("invalid canonical toolchain marker: {error}"))
+        })
+        .transpose()?
+        .unwrap_or(false);
+    Ok((program == "git" || canonical_cargo, canonical_cargo))
+}
+
 fn run_bounded_command(command: &Command, label: &str) -> Result<ci::exec::Captured, String> {
     let root = repository_root()?;
     let authority = ci::load_authority(&root)?;
@@ -2378,16 +2395,8 @@ fn run_bounded_command(command: &Command, label: &str) -> Result<ci::exec::Captu
             environment.push(("UQM_CANONICAL_TOOLCHAIN".into(), marker));
         }
     }
-    let execute_retained_source = environment
-        .iter()
-        .find(|(name, _)| name == "UQM_CANONICAL_TOOLCHAIN")
-        .map(|(_, marker)| {
-            serde_json::from_str::<ToolchainIdentity>(marker)
-                .map(|toolchain| toolchain.cargo.executable == program)
-                .map_err(|error| format!("invalid canonical toolchain marker: {error}"))
-        })
-        .transpose()?
-        .unwrap_or(false);
+    let (execute_retained_source, is_canonical_cargo) =
+        retained_source_mode(program, &environment)?;
     Ok(ci::exec::run_captured_with_bound_environment(
         &working_directory,
         program,
@@ -2396,7 +2405,7 @@ fn run_bounded_command(command: &Command, label: &str) -> Result<ci::exec::Captu
         execute_retained_source,
         |execution_path| {
             let mut environment = environment;
-            if execute_retained_source {
+            if is_canonical_cargo {
                 let position = environment
                     .iter()
                     .position(|(name, _)| name == "UQM_CANONICAL_TOOLCHAIN")
@@ -2655,6 +2664,12 @@ mod tests {
                 std::ffi::OsStr::new("safe.directory=/checkout"),
             ]
         );
+    }
+
+    #[test]
+    fn git_commands_retain_path_dependent_executable_semantics() {
+        assert_eq!(retained_source_mode("git", &[]).unwrap(), (true, false));
+        assert_eq!(retained_source_mode("rustc", &[]).unwrap(), (false, false));
     }
 
     #[test]

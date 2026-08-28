@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::authority::Authority;
-use super::exec::{run_captured_with_limits, Captured};
+use super::exec::{run_captured_with_bound_environment, Captured};
 use crate::hex_sha256;
 
 const SCHEMA: &str = "uqm-s4-zero-native-delta-v1";
@@ -326,12 +326,13 @@ fn supervised_git(
     .into_iter()
     .chain(arguments.iter().cloned())
     .collect();
-    let captured = run_captured_with_limits(
+    let captured = run_captured_with_bound_environment(
         root,
         "git",
         &arguments,
-        &[],
         authority.supervision.builtin_limits(),
+        true,
+        |_| Ok(Vec::new()),
     );
     if !captured.completed_under_supervision()
         || captured.signal.is_some()

@@ -234,6 +234,8 @@ const MONITOR_GRACE_MS_ENV: &str = "UQM_CI_MONITOR_GRACE_MS";
 const MONITOR_DEDICATED_UID_ENV: &str = "UQM_CI_MONITOR_DEDICATED_UID";
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const PRIVILEGED_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const CONTAINMENT_ESCAPE_PROBE_TIMEOUT: Duration = Duration::from_secs(120);
 #[cfg(unix)]
 pub const CONTAINMENT_MONITOR_COMMAND: &str = "__ci-containment-monitor";
 
@@ -2466,7 +2468,7 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
         &helper_executable.to_string_lossy(),
         &arguments,
         Limits {
-            timeout: Duration::from_secs(5),
+            timeout: CONTAINMENT_ESCAPE_PROBE_TIMEOUT,
             termination_grace: Duration::from_secs(1),
             pipe_drain_timeout: Duration::from_secs(2),
             stdout_bytes: 16 * 1024,
@@ -2910,6 +2912,25 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn process_is_live(pid: i32) -> bool {
+        if !process_exists(pid) {
+            return false;
+        }
+        Command::new("/bin/ps")
+            .args(["-p", &pid.to_string(), "-o", "stat="])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| {
+                output
+                    .stdout
+                    .into_iter()
+                    .find(|byte| !byte.is_ascii_whitespace())
+            })
+            .is_none_or(|state| state != b'Z')
+    }
+
+    #[cfg(unix)]
     #[test]
     fn containment_monitor_process() {
         if std::env::var_os(MONITOR_REGISTRATION_FD_ENV).is_none() {
@@ -3245,11 +3266,11 @@ mod tests {
 
         let cleanup_deadline = Instant::now() + Duration::from_secs(30);
         for pid in [outer_pid, nested_pid] {
-            while process_exists(pid) && Instant::now() < cleanup_deadline {
+            while process_is_live(pid) && Instant::now() < cleanup_deadline {
                 thread::sleep(Duration::from_millis(5));
             }
             assert!(
-                !process_exists(pid),
+                !process_is_live(pid),
                 "registered process {pid} survived outer supervisor termination"
             );
         }

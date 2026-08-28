@@ -18,7 +18,7 @@ use super::cache::{self, CacheEnvironment};
 use super::delta;
 use super::doctor;
 use super::evidence::{self, EvidenceEntry, EvidenceIndex};
-use super::exec::run_captured_with_limits as run_captured;
+use super::exec::{run_captured_with_bound_environment, run_captured_with_limits as run_captured};
 use super::{gate_by_id, CiError};
 use crate::git_text;
 
@@ -292,6 +292,14 @@ fn validate_detached_state(captured: &super::exec::Captured) -> Result<(), (Stri
     }
 }
 
+fn run_git_captured(
+    root: &Path,
+    arguments: &[String],
+    limits: super::exec::Limits,
+) -> super::exec::Captured {
+    run_captured_with_bound_environment(root, "git", arguments, limits, true, |_| Ok(Vec::new()))
+}
+
 fn inspect_detached_state(
     root: &Path,
     authority: &Authority,
@@ -300,9 +308,8 @@ fn inspect_detached_state(
     if !required_mode {
         return (None, None);
     }
-    let captured = run_captured(
+    let captured = run_git_captured(
         root,
-        "git",
         &[
             "-c".into(),
             format!("safe.directory={}", root.display()),
@@ -310,7 +317,6 @@ fn inspect_detached_state(
             "-q".into(),
             "HEAD".into(),
         ],
-        &[],
         authority.supervision.builtin_limits(),
     );
     let failure = validate_detached_state(&captured).err();
@@ -2424,7 +2430,7 @@ fn git_status_empty(
         "--untracked-files=all".to_string(),
         "-z".to_string(),
     ];
-    let captured = run_captured(root, "git", &arguments, &[], supervision.builtin_limits());
+    let captured = run_git_captured(root, &arguments, supervision.builtin_limits());
     if !captured.succeeded() {
         return Err(captured.failure_detail("git status"));
     }

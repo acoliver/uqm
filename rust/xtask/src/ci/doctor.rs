@@ -136,8 +136,8 @@ impl ResolvedExecutable {
         &self.execution_path
     }
 
-    // Cargo exports its own executable path to build scripts, so canonical linked builds
-    // must execute the retained toolchain path rather than a byte-identical relocation.
+    // Some tools depend on their installation path. Cargo exports it to build scripts,
+    // while packaged macOS tools may resolve adjacent runtime support from that path.
     pub(crate) fn execute_retained_source(&mut self) {
         let Some((source, source_identity)) = self.source.take() else {
             return;
@@ -308,7 +308,14 @@ fn observe_tool(
     let Some((program, arguments)) = command.split_first() else {
         return failed_tool_observation(name, command, expected, "empty version command".into());
     };
-    let output = super::exec::run_captured_with_limits(root, program, arguments, &[], limits);
+    let output = super::exec::run_captured_with_bound_environment(
+        root,
+        program,
+        arguments,
+        limits,
+        program == "git",
+        |_| Ok(Vec::new()),
+    );
     let executable_identity = output.executable_identity.clone();
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -510,12 +517,13 @@ fn run_git(
     .into_iter()
     .chain(arguments.iter().map(|argument| (*argument).to_string()))
     .collect();
-    Ok(super::exec::run_captured_with_limits(
+    Ok(super::exec::run_captured_with_bound_environment(
         root,
         "git",
         &arguments,
-        &[],
         authority.supervision.builtin_limits(),
+        true,
+        |_| Ok(Vec::new()),
     ))
 }
 
