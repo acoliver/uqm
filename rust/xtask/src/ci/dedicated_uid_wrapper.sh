@@ -9,22 +9,41 @@ while [ "$count" -gt 0 ]; do
     shift
     count=$((count - 1))
 done
+has_live_processes() {
+    local selector=$1
+    local pids
+    local status
+    local state
+    pids="$(/usr/bin/pgrep "$selector" "$uid" 2>/dev/null)"
+    status=$?
+    case "$status" in
+        0) ;;
+        1) return 1 ;;
+        *) return 2 ;;
+    esac
+    for pid in $pids; do
+        if ! state="$(/bin/ps -o stat= -p "$pid" 2>/dev/null)"; then
+            /bin/kill -0 "$pid" 2>/dev/null && return 2
+            continue
+        fi
+        state="${state#"${state%%[![:space:]]*}"}"
+        case "$state" in
+            Z*|"") ;;
+            *) return 0 ;;
+        esac
+    done
+    return 1
+}
 has_processes() {
     local status
-    /usr/bin/pgrep -U "$uid" >/dev/null 2>&1
+    has_live_processes -U
     status=$?
     case "$status" in
         0) return 0 ;;
         1) ;;
         *) return 2 ;;
     esac
-    /usr/bin/pgrep -u "$uid" >/dev/null 2>&1
-    status=$?
-    case "$status" in
-        0) return 0 ;;
-        1) return 1 ;;
-        *) return 2 ;;
-    esac
+    has_live_processes -u
 }
 has_processes
 status=$?

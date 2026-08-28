@@ -456,6 +456,24 @@ fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, 
 }
 
 #[cfg(target_os = "linux")]
+fn linux_process_state_and_group(stat: &str, path: &Path) -> Result<(char, i32), String> {
+    let after_comm = stat
+        .rfind(')')
+        .ok_or_else(|| format!("malformed process stat: {}", path.display()))?;
+    let mut fields = stat[after_comm + 1..].split_whitespace();
+    let state = fields
+        .next()
+        .and_then(|value| value.chars().next())
+        .ok_or_else(|| format!("missing process state in {}", path.display()))?;
+    let group = fields
+        .nth(1)
+        .ok_or_else(|| format!("missing process group in {}", path.display()))?
+        .parse::<i32>()
+        .map_err(|error| format!("invalid process group in {}: {error}", path.display()))?;
+    Ok((state, group))
+}
+
+#[cfg(target_os = "linux")]
 fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, String> {
     for entry in std::fs::read_dir("/proc").map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
@@ -477,18 +495,8 @@ fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, 
                 return Err(format!("cannot inspect {}: {error}", stat_path.display()));
             }
         };
-        let after_comm = stat
-            .rfind(')')
-            .ok_or_else(|| format!("malformed process stat: {}", stat_path.display()))?;
-        let group = stat[after_comm + 1..]
-            .split_whitespace()
-            .nth(2)
-            .ok_or_else(|| format!("missing process group in {}", stat_path.display()))?
-            .parse::<i32>()
-            .map_err(|error| {
-                format!("invalid process group in {}: {error}", stat_path.display())
-            })?;
-        if group == process_group {
+        let (state, group) = linux_process_state_and_group(&stat, &stat_path)?;
+        if state != 'Z' && group == process_group {
             return Ok(true);
         }
     }
@@ -520,7 +528,7 @@ fn privileged_uid_pkill_command(uid: &str, signal: i32, selector: &str) -> Resul
     Ok(command)
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn uid_pgrep_command(uid: &str, selector: &str) -> Result<Command, String> {
     if !matches!(selector, "-U" | "-u") {
         return Err(format!("unsupported UID inspection selector {selector}"));
@@ -593,7 +601,7 @@ fn run_privileged_uid_pkill(uid: &str, signal: i32, selector: &str) -> Result<bo
     )
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn run_uid_pgrep(uid: &str, selector: &str) -> Result<bool, String> {
     run_uid_process_command(
         uid_pgrep_command(uid, selector)?,
@@ -614,10 +622,78 @@ fn privileged_uid_cleanup(uid: &str, signal: i32) -> Result<(), String> {
     first_error.map_or(Ok(()), Err)
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
     for selector in ["-U", "-u"] {
         if run_uid_pgrep(uid, selector)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_process_real_and_effective_uids(status: &str, path: &Path) -> Result<(u32, u32), String> {
+    let line = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Uid:"))
+        .ok_or_else(|| format!("missing process UIDs in {}", path.display()))?;
+    let mut fields = line.split_whitespace();
+    let real = fields
+        .next()
+        .ok_or_else(|| format!("missing real process UID in {}", path.display()))?
+        .parse::<u32>()
+        .map_err(|error| format!("invalid real process UID in {}: {error}", path.display()))?;
+    let effective = fields
+        .next()
+        .ok_or_else(|| format!("missing effective process UID in {}", path.display()))?
+        .parse::<u32>()
+        .map_err(|error| {
+            format!(
+                "invalid effective process UID in {}: {error}",
+                path.display()
+            )
+        })?;
+    Ok((real, effective))
+}
+
+#[cfg(target_os = "linux")]
+fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
+    let uid = uid
+        .parse::<u32>()
+        .map_err(|error| format!("invalid dedicated containment uid: {error}"))?;
+    for entry in std::fs::read_dir("/proc").map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        if entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.parse::<i32>().ok())
+            .is_none()
+        {
+            continue;
+        }
+        let stat_path = entry.path().join("stat");
+        let stat = match std::fs::read_to_string(&stat_path) {
+            Ok(stat) => stat,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!("cannot inspect {}: {error}", stat_path.display()));
+            }
+        };
+        let (state, _) = linux_process_state_and_group(&stat, &stat_path)?;
+        if state == 'Z' {
+            continue;
+        }
+        let status_path = entry.path().join("status");
+        let status = match std::fs::read_to_string(&status_path) {
+            Ok(status) => status,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!("cannot inspect {}: {error}", status_path.display()));
+            }
+        };
+        let (real, effective) = linux_process_real_and_effective_uids(&status, &status_path)?;
+        if real == uid || effective == uid {
             return Ok(false);
         }
     }
@@ -2290,6 +2366,43 @@ pub fn run_containment_escape_helper(arguments: &[String]) -> Result<(), String>
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+fn stage_containment_check_executable(
+    home: &Path,
+    executable: &Path,
+) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = home.join("containment-check-helper");
+    if directory.exists() {
+        std::fs::remove_dir_all(&directory)
+            .map_err(|error| format!("cannot clear {}: {error}", directory.display()))?;
+    }
+    std::fs::create_dir(&directory)
+        .map_err(|error| format!("cannot create {}: {error}", directory.display()))?;
+    let staged = directory.join("uqm-xtask");
+    std::fs::copy(executable, &staged).map_err(|error| {
+        format!(
+            "cannot stage containment-check executable at {}: {error}",
+            staged.display()
+        )
+    })?;
+    std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o550)).map_err(|error| {
+        format!(
+            "cannot authorize containment-check executable {}: {error}",
+            staged.display()
+        )
+    })?;
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o750)).map_err(
+        |error| {
+            format!(
+                "cannot lock containment-check executable directory {}: {error}",
+                directory.display()
+            )
+        },
+    )?;
+    Ok((directory, staged))
+}
+
 pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
     let config = parse_dedicated_containment_config(
         std::env::var_os(DEDICATED_CONTAINMENT_UID_ENV),
@@ -2342,13 +2455,15 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
     let sentinel = directory.join("escaped-write.txt");
     let executable = std::env::current_exe()
         .map_err(|error| format!("cannot locate containment-check executable: {error}"))?;
+    let (helper_directory, helper_executable) =
+        stage_containment_check_executable(Path::new(&config.home), &executable)?;
     let arguments = vec![
         CONTAINMENT_ESCAPE_HELPER_COMMAND.to_string(),
         sentinel.to_string_lossy().into_owned(),
     ];
     let captured = run_captured_with_limits(
         root,
-        &executable.to_string_lossy(),
+        &helper_executable.to_string_lossy(),
         &arguments,
         &[],
         Limits {
@@ -2360,8 +2475,10 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
             executable_bytes: 268_435_456,
         },
     );
+    std::fs::remove_dir_all(&helper_directory)
+        .map_err(|error| format!("cannot remove {}: {error}", helper_directory.display()))?;
     if !captured.succeeded() {
-        return Err(captured.failure_detail("Darwin dedicated-uid containment check"));
+        return Err(captured.failure_detail("dedicated-uid containment check"));
     }
     thread::sleep(Duration::from_millis(700));
     if sentinel.exists() {
@@ -2556,6 +2673,53 @@ mod tests {
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
+    fn containment_helper_is_staged_where_the_dedicated_identity_can_execute_it() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let home = tempfile::tempdir().unwrap();
+        let source = home.path().join("source-xtask");
+        std::fs::write(&source, b"exact executable bytes").unwrap();
+        let (directory, staged) = stage_containment_check_executable(home.path(), &source).unwrap();
+        assert_eq!(std::fs::read(&staged).unwrap(), b"exact executable bytes");
+        assert_eq!(
+            directory.metadata().unwrap().permissions().mode() & 0o777,
+            0o750
+        );
+        assert_eq!(
+            staged.metadata().unwrap().permissions().mode() & 0o777,
+            0o550
+        );
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_process_inspection_distinguishes_terminal_processes_and_uids() {
+        let path = Path::new("/proc/42/stat");
+        assert_eq!(
+            linux_process_state_and_group("42 (name with ) marker) Z 1 599 0", path).unwrap(),
+            ('Z', 599)
+        );
+        assert_eq!(
+            linux_process_state_and_group("42 (name) S 1 600 0", path).unwrap(),
+            ('S', 600)
+        );
+        assert!(linux_process_state_and_group("malformed", path).is_err());
+
+        let status_path = Path::new("/proc/42/status");
+        assert_eq!(
+            linux_process_real_and_effective_uids(
+                "Name:\tprobe\nUid:\t59999\t60000\t59999\t60000\n",
+                status_path,
+            )
+            .unwrap(),
+            (59_999, 60_000)
+        );
+        assert!(linux_process_real_and_effective_uids("Name:\tprobe\n", status_path).is_err());
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
     fn dedicated_containment_config_fails_closed_without_process_environment_mutation() {
         let missing = Err(std::env::VarError::NotPresent);
         assert_eq!(
@@ -2675,6 +2839,9 @@ mod tests {
         assert!(arguments.iter().any(|argument| argument == "argument"));
         assert!(DEDICATED_UID_WRAPPER.contains("/usr/bin/pkill -KILL -U \"$uid\""));
         assert!(DEDICATED_UID_WRAPPER.contains("/usr/bin/pkill -KILL -u \"$uid\""));
+        assert!(DEDICATED_UID_WRAPPER.contains("/bin/ps -o stat= -p \"$pid\""));
+        assert!(DEDICATED_UID_WRAPPER.contains("/bin/kill -0 \"$pid\""));
+        assert!(DEDICATED_UID_WRAPPER.contains("Z*|\"\""));
         assert!(DEDICATED_UID_WRAPPER.contains("/usr/bin/env -i"));
     }
 
@@ -2692,20 +2859,24 @@ mod tests {
                         .collect::<Vec<_>>(),
                     ["-n", "/usr/bin/pkill", signal_argument, selector, "59999"]
                 );
-                let inspection = uid_pgrep_command("59999", selector).unwrap();
-                assert_eq!(inspection.get_program(), "/usr/bin/pgrep");
-                assert_eq!(
-                    inspection
-                        .get_args()
-                        .map(|argument| argument.to_string_lossy().into_owned())
-                        .collect::<Vec<_>>(),
-                    [selector, "59999"]
-                );
+                #[cfg(target_os = "macos")]
+                {
+                    let inspection = uid_pgrep_command("59999", selector).unwrap();
+                    assert_eq!(inspection.get_program(), "/usr/bin/pgrep");
+                    assert_eq!(
+                        inspection
+                            .get_args()
+                            .map(|argument| argument.to_string_lossy().into_owned())
+                            .collect::<Vec<_>>(),
+                        [selector, "59999"]
+                    );
+                }
             }
         }
         assert!(privileged_uid_pkill_command("59999", 0, "-U").is_err());
         assert!(privileged_uid_pkill_command("59999", libc::SIGINT, "-U").is_err());
         assert!(privileged_uid_pkill_command("59999", libc::SIGTERM, "--uid").is_err());
+        #[cfg(target_os = "macos")]
         assert!(uid_pgrep_command("59999", "--uid").is_err());
     }
 
