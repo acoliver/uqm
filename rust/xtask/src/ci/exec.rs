@@ -245,6 +245,7 @@ struct LeaderAnchor {
     pid: libc::pid_t,
     monitor_anchor_pid: libc::pid_t,
     observed: bool,
+    observed_at: Option<Instant>,
     reaped: bool,
     dedicated_uid: Option<String>,
 }
@@ -264,6 +265,7 @@ impl LeaderAnchor {
                 .map_err(|_| "child process identifier does not fit pid_t".to_string())?,
             monitor_anchor_pid,
             observed: false,
+            observed_at: None,
             reaped: false,
             dedicated_uid,
         })
@@ -296,6 +298,7 @@ impl LeaderAnchor {
         // SAFETY: waitid initialized info on success.
         if unsafe { info.assume_init().si_pid() } != 0 {
             self.observed = true;
+            self.observed_at = Some(Instant::now());
         }
         Ok(self.observed)
     }
@@ -309,6 +312,18 @@ impl LeaderAnchor {
         }
         self.reaped = true;
         Ok(())
+    }
+
+    fn descendant_cleanup_required(
+        &self,
+        now: Instant,
+        group_clean: bool,
+        settle_grace: Duration,
+    ) -> bool {
+        !group_clean
+            && self.observed_at.is_some_and(|observed_at| {
+                now.saturating_duration_since(observed_at) >= settle_grace
+            })
     }
 }
 
@@ -2185,13 +2200,15 @@ fn supervise(launch: Launch, limits: Limits, deadline: Instant) -> SupervisionOu
         let now = Instant::now();
         let child_running = !anchor.observed;
         let group_clean = observed_group_clean(&mut probe, &anchor);
+        let descendant_cleanup_required =
+            anchor.descendant_cleanup_required(now, group_clean, limits.termination_grace);
         let (reason, timeout_triggered) = select_termination_reason(
             probe.termination_reason,
             child_running,
             now >= probe.deadline,
             probe.capture.output_limited(),
             probe.supervision_error.is_some(),
-            !child_running && !group_clean,
+            descendant_cleanup_required,
         );
         probe.termination_reason = reason;
         probe.timed_out |= timeout_triggered;
@@ -3266,11 +3283,30 @@ mod tests {
             pid: 123,
             monitor_anchor_pid: 124,
             observed: true,
+            observed_at: Some(Instant::now()),
             reaped: false,
             dedicated_uid: None,
         };
         anchor.mark_reaped().unwrap();
         assert!(signal_group(&anchor, 0).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn descendant_cleanup_waits_for_natural_process_group_settlement() {
+        let observed_at = Instant::now();
+        let anchor = LeaderAnchor {
+            pid: 123,
+            monitor_anchor_pid: 124,
+            observed: true,
+            observed_at: Some(observed_at),
+            reaped: false,
+            dedicated_uid: None,
+        };
+        let grace = Duration::from_millis(100);
+        assert!(!anchor.descendant_cleanup_required(observed_at, false, grace));
+        assert!(anchor.descendant_cleanup_required(observed_at + grace, false, grace));
+        assert!(!anchor.descendant_cleanup_required(observed_at + grace, true, grace));
     }
 
     #[cfg(unix)]
@@ -3474,6 +3510,21 @@ mod tests {
         assert_eq!(captured.termination_reason, "output-limit");
         assert_eq!(captured.process_group_cleanup, "verified-empty");
         assert!(captured.supervision_error.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn short_lived_descendant_settles_without_false_cleanup_failure() {
+        let captured = run_captured_with_limits(
+            Path::new("."),
+            "sh",
+            &["-c".into(), "(sleep 0.05) &".into()],
+            &[],
+            limits(),
+        );
+        assert!(captured.succeeded(), "{captured:?}");
+        assert_eq!(captured.termination_reason, "none");
+        assert_eq!(captured.process_group_cleanup, "verified-empty");
     }
 
     #[cfg(unix)]
