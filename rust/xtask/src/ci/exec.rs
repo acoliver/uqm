@@ -728,11 +728,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                     if observed == 0 {
                         match macos_process_is_terminal(pid) {
                             Ok(true) => continue,
-                            Ok(false) => {
-                                return Err(format!(
-                                    "cannot inspect live process {pid} for dedicated uid {uid}: proc_pidinfo returned no data"
-                                ));
-                            }
+                            Ok(false) => return Ok(false),
                             Err(error) => {
                                 return Err(format!(
                                     "cannot inspect process {pid} for dedicated uid {uid}: {error}"

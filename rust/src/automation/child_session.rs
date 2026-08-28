@@ -944,7 +944,7 @@ mod os {
             })
         }
 
-        fn observe(&mut self) -> io::Result<bool> {
+        pub(super) fn observe(&mut self) -> io::Result<bool> {
             if self.reaped {
                 return Err(io::Error::other("cannot observe a reaped leader anchor"));
             }
@@ -994,6 +994,56 @@ mod os {
     }
 
     #[cfg(target_os = "macos")]
+    fn macos_process_is_terminal(pid: libc::pid_t) -> io::Result<bool> {
+        let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+        let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
+            .map_err(|_| io::Error::other("process-info size does not fit c_int"))?;
+        // SAFETY: info is writable for expected bytes and pid came from proc_listpids.
+        let written = unsafe {
+            libc::proc_pidinfo(
+                pid,
+                libc::PROC_PIDTBSDINFO,
+                0,
+                info.as_mut_ptr().cast(),
+                expected,
+            )
+        };
+        if written == expected {
+            // SAFETY: proc_pidinfo initialized the complete structure.
+            return Ok(unsafe { info.assume_init() }.pbi_status == libc::SZOMB);
+        }
+        if written == 0 {
+            let output = Command::new("/bin/ps")
+                .args(["-o", "state=", "-p", &pid.to_string()])
+                .output()
+                .map_err(|error| {
+                    io::Error::other(format!(
+                        "cannot inspect process {pid} state with ps: {error}"
+                    ))
+                })?;
+            if output.status.success() {
+                let state = std::str::from_utf8(&output.stdout)
+                    .map_err(|error| {
+                        io::Error::other(format!("process {pid} state is not UTF-8: {error}"))
+                    })?
+                    .trim();
+                if let Some(state) = state.as_bytes().first() {
+                    return Ok(*state == b'Z');
+                }
+            }
+            // SAFETY: signal zero checks whether the listed PID still exists.
+            if unsafe { libc::kill(pid, 0) } == -1
+                && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+            {
+                return Ok(true);
+            }
+        }
+        Err(io::Error::other(format!(
+            "cannot inspect process {pid}: proc_pidinfo returned {written} bytes, expected {expected}"
+        )))
+    }
+
+    #[cfg(target_os = "macos")]
     fn process_group_has_other_members(
         process_group: u32,
         ignored: &[libc::pid_t],
@@ -1033,14 +1083,32 @@ mod os {
                     .ok()
                     .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
                     .ok_or_else(|| io::Error::other("invalid process-group byte count"))?;
-                return Ok(pids[..count]
+                for pid in pids[..count]
                     .iter()
-                    .any(|pid| *pid > 0 && !ignored.contains(pid)));
+                    .copied()
+                    .filter(|pid| *pid > 0 && !ignored.contains(pid))
+                {
+                    if !macos_process_is_terminal(pid)? {
+                        return Ok(true);
+                    }
+                }
+                return Ok(false);
             }
         }
         Err(io::Error::other(
             "process-group membership changed during every inspection",
         ))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn linux_stat_is_live_group_member(stat: &str, process_group: u32) -> bool {
+        let Some(after_comm) = stat.rfind(')') else {
+            return false;
+        };
+        let mut fields = stat[after_comm + 1..].split_whitespace();
+        let state = fields.next();
+        let pgrp = fields.nth(1).and_then(|field| field.parse::<u32>().ok());
+        state != Some("Z") && pgrp == Some(process_group)
     }
 
     #[cfg(target_os = "linux")]
@@ -1066,14 +1134,7 @@ mod os {
             let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
                 continue;
             };
-            let Some(after_comm) = stat.rfind(')') else {
-                continue;
-            };
-            let pgrp = stat[after_comm + 1..]
-                .split_whitespace()
-                .nth(2)
-                .and_then(|field| field.parse::<u32>().ok());
-            if pgrp == Some(process_group) {
+            if linux_stat_is_live_group_member(&stat, process_group) {
                 return Ok(true);
             }
         }
@@ -2338,6 +2399,23 @@ mod os_tests {
         assert_eq!(parse_linux_proc_start_micros("42 (x) R", 0), None);
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_group_membership_ignores_terminal_processes() {
+        assert!(super::os::linux_stat_is_live_group_member(
+            "42 (live worker) S 1 599 0",
+            599
+        ));
+        assert!(!super::os::linux_stat_is_live_group_member(
+            "42 (terminal worker) Z 1 599 0",
+            599
+        ));
+        assert!(!super::os::linux_stat_is_live_group_member(
+            "42 (other group) S 1 600 0",
+            599
+        ));
+    }
+
     fn make_config(dir: &TempDir, timeout: Duration, grace: Duration) -> ChildSessionConfig {
         ChildSessionConfig {
             stdout_log: dir.path().join("out.log"),
@@ -2770,7 +2848,14 @@ mod os_tests {
     fn partial_cleanup_accepts_an_already_exited_leader_and_reaps_it() {
         let (mut child, mut anchor) = partial_cleanup_child("0.01");
         let pid = child.id();
-        std::thread::sleep(Duration::from_millis(30));
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !anchor.observe().expect("observe cleanup child") {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "cleanup child did not exit"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
 
         super::os::cleanup_partial_spawn(
             &mut child,
