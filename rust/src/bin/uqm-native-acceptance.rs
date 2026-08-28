@@ -927,9 +927,6 @@ impl NativeObservationSession {
 }
 
 fn validate_run_paths(executable: &Path, content: &Path, script: &Path) -> Result<PathBuf, String> {
-    if !cfg!(target_os = "macos") {
-        return Err("native-window acceptance is unsupported on this platform".to_string());
-    }
     for (label, path) in [
         ("executable", executable),
         ("content", content),
@@ -1183,6 +1180,9 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         linked_build_proof,
         linked_build_member_limit,
     } = inputs;
+    if !cfg!(target_os = "macos") {
+        return Err("native-window acceptance is unsupported on this platform".to_string());
+    }
     if !root.is_absolute() {
         return Err("evidence root must be absolute".to_string());
     }

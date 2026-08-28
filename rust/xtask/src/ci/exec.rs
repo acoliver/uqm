@@ -2964,6 +2964,17 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    fn limits_for_current_executable() -> Limits {
+        let mut test_limits = limits();
+        test_limits.executable_bytes = std::env::current_exe()
+            .expect("test executable")
+            .metadata()
+            .expect("test executable metadata")
+            .len();
+        test_limits
+    }
+
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn containment_fixture_permissioning_is_causal() {
@@ -3427,7 +3438,7 @@ mod tests {
             return;
         }
         let executable = std::env::current_exe().expect("test executable");
-        let mut test_limits = limits();
+        let mut test_limits = limits_for_current_executable();
         test_limits.timeout = Duration::from_secs(30);
         test_limits.termination_grace = Duration::from_millis(100);
         test_limits.pipe_drain_timeout = Duration::from_secs(2);
@@ -3614,7 +3625,7 @@ mod tests {
         std::fs::create_dir(&directory).expect("create test directory");
         let mut unrelated = spawn_test_group("wait");
         let executable = std::env::current_exe().expect("test executable");
-        let mut test_limits = limits();
+        let mut test_limits = limits_for_current_executable();
         test_limits.timeout = Duration::from_secs(15);
         test_limits.pipe_drain_timeout = Duration::from_secs(1);
         let captured = run_captured_with_limits(

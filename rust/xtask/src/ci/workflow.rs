@@ -4920,12 +4920,20 @@ raise SystemExit(module.main())
     #[cfg(unix)]
     #[test]
     fn workflow_supervisor_removes_partial_logs_after_exclusive_setup_failure() {
+        use std::os::unix::fs::PermissionsExt as _;
+
         let temporary = tempfile::tempdir().unwrap();
+        let executable = temporary.path().join("command");
+        fs::write(&executable, b"#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o500)).unwrap();
         fs::write(temporary.path().join("stderr.log"), b"occupied\n").unwrap();
 
-        let status = workflow_supervisor_command(&temporary, &["/bin/true"])
-            .status()
-            .unwrap();
+        let status = workflow_supervisor_command(
+            &temporary,
+            &[executable.to_str().expect("UTF-8 executable path")],
+        )
+        .status()
+        .unwrap();
         assert!(!status.success());
         assert!(!temporary.path().join("stdout.log").exists());
         assert_eq!(
@@ -4936,7 +4944,7 @@ raise SystemExit(module.main())
         assert!(receipt["launch_error"]
             .as_str()
             .is_some_and(|error| !error.is_empty()));
-        assert!(receipt["executable_identity"].is_null());
+        assert!(receipt["executable_identity"].is_object());
     }
 
     #[cfg(unix)]
