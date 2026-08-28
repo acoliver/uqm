@@ -2640,6 +2640,7 @@ fn temporary_name() -> std::ffi::CString {
 #[cfg(unix)]
 fn createat_new(parent: &std::os::fd::OwnedFd, name: &std::ffi::CStr) -> std::io::Result<fs::File> {
     use std::os::fd::{AsRawFd as _, FromRawFd as _};
+    use std::os::unix::fs::PermissionsExt as _;
 
     let fd = unsafe {
         libc::openat(
@@ -2652,7 +2653,9 @@ fn createat_new(parent: &std::os::fd::OwnedFd, name: &std::ffi::CStr) -> std::io
     if fd < 0 {
         return Err(std::io::Error::last_os_error());
     }
-    Ok(unsafe { fs::File::from_raw_fd(fd) })
+    let file = unsafe { fs::File::from_raw_fd(fd) };
+    file.set_permissions(fs::Permissions::from_mode(0o640))?;
+    Ok(file)
 }
 
 #[cfg(unix)]
@@ -14954,6 +14957,25 @@ mod tests {
             .iter()
             .any(|contract| contract == "evidence.builtin.bootstrap-proof.lcar.inventory"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn publisher_files_are_readable_by_the_containment_group_but_not_writable() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let temp = tempfile::tempdir().unwrap();
+        let publisher = EvidencePublisher::open(temp.path()).unwrap();
+        publisher.create("receipt.json", b"{}\n").unwrap();
+
+        assert_eq!(
+            fs::metadata(temp.path().join("receipt.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
     }
 
     #[cfg(unix)]

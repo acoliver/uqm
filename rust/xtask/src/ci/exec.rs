@@ -726,15 +726,19 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                         )
                     };
                     if observed == 0 {
-                        // SAFETY: signal zero checks existence without delivering a signal.
-                        if unsafe { libc::kill(pid, 0) } < 0
-                            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
-                        {
-                            continue;
+                        match macos_process_is_terminal(pid) {
+                            Ok(true) => continue,
+                            Ok(false) => {
+                                return Err(format!(
+                                    "cannot inspect live process {pid} for dedicated uid {uid}: proc_pidinfo returned no data"
+                                ));
+                            }
+                            Err(error) => {
+                                return Err(format!(
+                                    "cannot inspect process {pid} for dedicated uid {uid}: {error}"
+                                ));
+                            }
                         }
-                        return Err(format!(
-                            "cannot inspect process {pid} for dedicated uid {uid}: proc_pidinfo returned no data"
-                        ));
                     }
                     if observed != expected {
                         return Err(format!(

@@ -1181,6 +1181,12 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         ] {
             fs::create_dir_all(directory)
                 .map_err(|error| format!("create {}: {error}", directory.display()))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt as _;
+                fs::set_permissions(directory, fs::Permissions::from_mode(0o750))
+                    .map_err(|error| format!("publish {}: {error}", directory.display()))?;
+            }
         }
 
         let retained_executable = inputs.join("uqm");
@@ -1824,11 +1830,11 @@ fn validate_archive_entry(index: usize, entry: &zip::read::ZipFile<'_>) -> Resul
         ));
     }
     if let Some(mode) = entry.unix_mode() {
-        let kind = mode & u32::from(libc::S_IFMT);
+        let kind = u64::from(mode) & u64::from(libc::S_IFMT);
         let expected = if entry.is_dir() {
-            u32::from(libc::S_IFDIR)
+            u64::from(libc::S_IFDIR)
         } else {
-            u32::from(libc::S_IFREG)
+            u64::from(libc::S_IFREG)
         };
         if kind != 0 && kind != expected {
             return Err(format!(
@@ -1884,9 +1890,11 @@ fn extract_archive_file<R: io::Read>(
             relative.display()
         ));
     }
+    use std::os::unix::fs::PermissionsExt as _;
     output
-        .sync_all()
-        .map_err(|error| format!("sync content entry {}: {error}", relative.display()))
+        .set_permissions(fs::Permissions::from_mode(0o640))
+        .and_then(|()| output.sync_all())
+        .map_err(|error| format!("publish content entry {}: {error}", relative.display()))
 }
 
 fn ensure_parent_directories(
@@ -1917,19 +1925,30 @@ fn ensure_directories(
         };
         let name_c = component_cstring(name)?;
         traversed.push(name);
-        if unsafe { libc::mkdirat(current.as_raw_fd(), name_c.as_ptr(), 0o700) } == 0 {
+        let created = if unsafe { libc::mkdirat(current.as_raw_fd(), name_c.as_ptr(), 0o700) } == 0
+        {
             materialized.entries.push(MaterializedEntry {
                 relative_path: traversed.clone(),
                 kind: MaterializedEntryKind::Directory,
             });
-        } else if io::Error::last_os_error().raw_os_error() != Some(libc::EEXIST) {
+            true
+        } else if io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST) {
+            false
+        } else {
             return Err(format!(
                 "create content directory {}: {}",
                 traversed.display(),
                 io::Error::last_os_error()
             ));
-        }
+        };
         current = open_directory_at(&current, &name_c, &traversed)?;
+        if created && unsafe { libc::fchmod(current.as_raw_fd(), 0o750) } != 0 {
+            return Err(format!(
+                "publish content directory {}: {}",
+                traversed.display(),
+                io::Error::last_os_error()
+            ));
+        }
     }
     Ok(current)
 }
@@ -2177,6 +2196,13 @@ fn create_fresh_root(root: &Path, allow_precreated: bool) -> Result<FreshRoot, S
         return Err(format!("bind evidence root: {error}"));
     }
     let directory = unsafe { std::os::fd::OwnedFd::from_raw_fd(directory) };
+    if created && unsafe { libc::fchmod(directory.as_raw_fd(), 0o750) } != 0 {
+        let error = std::io::Error::last_os_error();
+        unsafe {
+            libc::unlinkat(parent_fd.as_raw_fd(), filename.as_ptr(), libc::AT_REMOVEDIR);
+        }
+        return Err(format!("publish evidence root: {error}"));
+    }
     if !created {
         let mut members = fs::read_dir(&bound_path)
             .map_err(|error| format!("inspect precreated evidence root: {error}"))?;
@@ -2511,7 +2537,7 @@ fn copy_executable_bounded(source: &Path, destination: &Path, limit: u64) -> Res
                 );
             }
         };
-        if let Err(error) = file.set_permissions(fs::Permissions::from_mode(0o500)) {
+        if let Err(error) = file.set_permissions(fs::Permissions::from_mode(0o550)) {
             drop(file);
             return copy_failure_cleanup(
                 destination,
@@ -2534,12 +2560,12 @@ fn copy_executable_bounded(source: &Path, destination: &Path, limit: u64) -> Res
                 );
             }
         };
-        if !metadata.is_file() || metadata.permissions().mode() & 0o7777 != 0o500 {
+        if !metadata.is_file() || metadata.permissions().mode() & 0o7777 != 0o550 {
             drop(file);
             return copy_failure_cleanup(
                 destination,
                 format!(
-                    "retained executable {} does not have exact mode 0500",
+                    "retained executable {} does not have exact mode 0550",
                     destination.display()
                 ),
             );
@@ -2607,6 +2633,20 @@ fn copy_bounded_reader<R: io::Read>(
                 source.display()
             ),
         );
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        if let Err(error) = output.set_permissions(fs::Permissions::from_mode(0o640)) {
+            drop(output);
+            return copy_failure_cleanup(
+                destination,
+                format!(
+                    "publish linked-build input {}: {error}",
+                    destination.display()
+                ),
+            );
+        }
     }
     if let Err(error) = output.sync_all() {
         drop(output);
@@ -2948,6 +2988,7 @@ fn relative_regular_file_identity(path: &Path) -> Result<(u64, String), String> 
 fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::os::fd::{AsRawFd as _, FromRawFd as _};
     use std::os::unix::ffi::OsStringExt as _;
+    use std::os::unix::fs::PermissionsExt as _;
 
     let (parent, filename) = opened_parent(path)?;
     let temporary_name = path
@@ -2975,7 +3016,11 @@ fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String>
     }
     let mut file = fs::File::from(unsafe { std::os::fd::OwnedFd::from_raw_fd(descriptor) });
     use std::io::Write as _;
-    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+    if let Err(error) = file
+        .write_all(bytes)
+        .and_then(|()| file.set_permissions(fs::Permissions::from_mode(0o640)))
+        .and_then(|()| file.sync_all())
+    {
         drop(file);
         unsafe { libc::unlinkat(parent.as_raw_fd(), temporary_name.as_ptr(), 0) };
         return Err(format!("write temporary for {}: {error}", path.display()));
@@ -3476,7 +3521,7 @@ mod tests {
 
     #[test]
     fn fresh_root_remains_bound_when_its_path_is_replaced() {
-        use std::os::unix::fs::symlink;
+        use std::os::unix::fs::{symlink, PermissionsExt as _};
         let _cwd_guard = CWD_TEST_LOCK.lock().unwrap();
 
         let parent = tempfile::tempdir().unwrap();
@@ -3484,6 +3529,10 @@ mod tests {
         let requested = parent.path().join("evidence");
         let retained = parent.path().join("retained");
         let root = create_fresh_root(&requested, false).unwrap();
+        assert_eq!(
+            fs::metadata(&requested).unwrap().permissions().mode() & 0o777,
+            0o750
+        );
         fs::rename(&requested, &retained).unwrap();
         symlink(outside.path(), &requested).unwrap();
 
@@ -3640,7 +3689,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn bounded_executable_copy_publishes_exact_owner_execute_mode() {
+    fn bounded_executable_copy_is_readable_by_the_containment_group_but_not_writable() {
         use std::os::unix::fs::PermissionsExt as _;
 
         let root = tempfile::tempdir().unwrap();
@@ -3653,7 +3702,26 @@ mod tests {
         assert_eq!(fs::read(&destination).unwrap(), b"executable");
         assert_eq!(
             fs::metadata(&destination).unwrap().permissions().mode() & 0o7777,
-            0o500
+            0o550
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_regular_copy_is_readable_by_the_containment_group_but_not_writable() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("destination");
+        fs::write(&source, b"content").unwrap();
+
+        copy_regular_bounded(&source, &destination, 1024).unwrap();
+
+        assert_eq!(fs::read(&destination).unwrap(), b"content");
+        assert_eq!(
+            fs::metadata(&destination).unwrap().permissions().mode() & 0o7777,
+            0o640
         );
     }
 
@@ -3818,6 +3886,45 @@ mod tests {
         assert!(!content_root.join("data").exists());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn content_materialization_is_readable_by_the_containment_group_but_not_writable() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use zip::write::SimpleFileOptions;
+
+        let root = tempfile::tempdir().unwrap();
+        let package = root.path().join("content.uqm");
+        let file = fs::File::create(&package).unwrap();
+        let mut archive = zip::ZipWriter::new(file);
+        archive
+            .start_file("data/value.txt", SimpleFileOptions::default())
+            .unwrap();
+        archive.write_all(b"content").unwrap();
+        archive.finish().unwrap();
+        let content_root = root.path().join("retained-content");
+        fs::create_dir(&content_root).unwrap();
+
+        let mut materialized =
+            materialize_content_package(&package, &content_root, 1024, None).unwrap();
+        assert_eq!(
+            fs::metadata(content_root.join("data"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o750
+        );
+        assert_eq!(
+            fs::metadata(content_root.join("data/value.txt"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+        materialized.cleanup().unwrap();
+    }
+
     #[test]
     fn content_materialization_rejects_an_oversized_archive_name() {
         use zip::write::SimpleFileOptions;
@@ -3971,6 +4078,14 @@ mod tests {
         let destination = root.path().join("stable.png");
         write_bytes_atomic_noclobber(&destination, b"first").unwrap();
         assert_eq!(fs::read(&destination).unwrap(), b"first");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            assert_eq!(
+                fs::metadata(&destination).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
         assert!(!root.path().join("stable.png.tmp").exists());
 
         assert!(write_bytes_atomic_noclobber(&destination, b"second").is_err());
