@@ -124,7 +124,7 @@ pub(crate) struct ResolvedExecutable {
     identity: ToolExecutableIdentity,
     execution_path: String,
     _staging: Option<tempfile::TempDir>,
-    source: Option<(File, ToolExecutableIdentity)>,
+    source: Option<(File, ToolExecutableIdentity, String)>,
 }
 
 impl ResolvedExecutable {
@@ -139,11 +139,11 @@ impl ResolvedExecutable {
     // Some tools depend on their installation path. Cargo exports it to build scripts,
     // while packaged macOS tools may resolve adjacent runtime support from that path.
     pub(crate) fn execute_retained_source(&mut self) {
-        let Some((source, source_identity)) = self.source.take() else {
+        let Some((source, source_identity, invocation_path)) = self.source.take() else {
             return;
         };
         self.file = source;
-        self.execution_path.clone_from(&source_identity.path);
+        self.execution_path = invocation_path;
         self.identity = source_identity;
         self._staging = None;
     }
@@ -156,6 +156,17 @@ impl ResolvedExecutable {
         )?;
         if observed != self.identity {
             return Err("resolved executable changed while it was running".into());
+        }
+        if self.execution_path != self.identity.path {
+            let rebound = fs::canonicalize(&self.execution_path).map_err(|error| {
+                format!(
+                    "cannot re-resolve executable {}: {error}",
+                    self.execution_path
+                )
+            })?;
+            if rebound != Path::new(&self.identity.path) {
+                return Err("resolved executable path changed while it was running".into());
+            }
         }
         Ok(())
     }
@@ -174,8 +185,17 @@ pub(crate) fn resolve_executable(
             .find(|path| path.is_file())
             .ok_or_else(|| format!("cannot resolve executable '{program}' from PATH"))?
     };
-    let path = fs::canonicalize(&candidate)
+    let invocation_parent = candidate
+        .parent()
+        .ok_or_else(|| format!("executable path has no parent: {}", candidate.display()))?
+        .canonicalize()
         .map_err(|error| format!("cannot resolve {}: {error}", candidate.display()))?;
+    let execution_name = candidate
+        .file_name()
+        .ok_or_else(|| format!("executable path has no filename: {}", candidate.display()))?;
+    let invocation_path = invocation_parent.join(execution_name);
+    let path = fs::canonicalize(&invocation_path)
+        .map_err(|error| format!("cannot resolve {}: {error}", invocation_path.display()))?;
     let (mut source, _) = super::bounded_io::open_regular_nofollow(&path, executable_limit)?;
     let source_identity = identity_from_file(&mut source, &path, executable_limit)?;
     if executable_requires_original_path(&path, &source)? {
@@ -192,9 +212,6 @@ pub(crate) fn resolve_executable(
         .path()
         .canonicalize()
         .map_err(|error| format!("cannot resolve executable staging directory: {error}"))?;
-    let execution_name = candidate
-        .file_name()
-        .ok_or_else(|| format!("executable path has no filename: {}", candidate.display()))?;
     let execution_path = staging_path.join(execution_name);
     let staged_mode = (source_identity.mode | ((source_identity.mode & 0o500) >> 3)) & !0o6020;
     let mut output = fs::OpenOptions::new()
@@ -231,7 +248,11 @@ pub(crate) fn resolve_executable(
         file,
         identity,
         _staging: Some(staging),
-        source: Some((source, source_identity)),
+        source: Some((
+            source,
+            source_identity,
+            invocation_path.to_string_lossy().into_owned(),
+        )),
     })
 }
 
@@ -551,6 +572,67 @@ mod tests {
         assert!(tool_requires_retained_source("cargo"));
         assert!(tool_requires_retained_source("git"));
         assert!(!tool_requires_retained_source("rustc"));
+    }
+
+    #[test]
+    fn retained_source_preserves_a_final_symlink_invocation() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("rustup");
+        let proxy = temp.path().join("cargo");
+        fs::write(
+            &target,
+            b"#!/bin/sh\n[ \"${0##*/}\" = cargo ] || exit 97\nprintf cargo-proxy",
+        )
+        .unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+        std::os::unix::fs::symlink(&target, &proxy).unwrap();
+
+        let captured = super::super::exec::run_captured_with_bound_environment(
+            temp.path(),
+            proxy.to_str().unwrap(),
+            &[],
+            super::super::exec::Limits {
+                timeout: Duration::from_secs(5),
+                termination_grace: Duration::from_secs(1),
+                pipe_drain_timeout: Duration::from_secs(1),
+                stdout_bytes: 1024,
+                stderr_bytes: 1024,
+                executable_bytes: 1024,
+            },
+            true,
+            |_| Ok(Vec::new()),
+        );
+
+        assert!(captured.succeeded(), "{}", captured.failure_detail("cargo"));
+        assert_eq!(captured.stdout, b"cargo-proxy");
+        assert_eq!(
+            captured.executable_identity.unwrap().path,
+            target.canonicalize().unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn retained_source_rejects_final_symlink_rebinding() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("rustup");
+        let replacement = temp.path().join("replacement");
+        let proxy = temp.path().join("cargo");
+        fs::write(&target, b"#!/bin/sh\nexit 0").unwrap();
+        fs::write(&replacement, b"#!/bin/sh\nexit 0").unwrap();
+        for path in [&target, &replacement] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        std::os::unix::fs::symlink(&target, &proxy).unwrap();
+
+        let mut resolved = resolve_executable(proxy.to_str().unwrap(), 1024).unwrap();
+        resolved.execute_retained_source();
+        fs::remove_file(&proxy).unwrap();
+        std::os::unix::fs::symlink(&replacement, &proxy).unwrap();
+
+        assert_eq!(
+            resolved.verify_unchanged().unwrap_err(),
+            "resolved executable path changed while it was running"
+        );
     }
 
     #[test]
