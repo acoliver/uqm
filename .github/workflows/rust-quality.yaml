@@ -718,11 +718,6 @@ jobs:
           CARGO_HOME: ${{ runner.temp }}/s4-bootstrap-cargo-home
           CARGO_TARGET_DIR: ${{ runner.temp }}/s4-tool-target
           RUSTUP_HOME: ${{ runner.temp }}/s4-rustup-home
-          GOBIN: ${{ runner.temp }}/s4-tools/bin
-          GOPATH: ${{ runner.temp }}/s4-tools/go
-          GOSUMDB: sum.golang.org
-          GONOSUMDB: ""
-          GOPRIVATE: ""
           TOOLS_JSON: ${{ needs.plan.outputs.tools }}
         run: |
           set -euo pipefail
@@ -750,7 +745,19 @@ jobs:
           cov_version="$(jq -er '.cargo_llvm_cov.version' <<<"${TOOLS_JSON}")"
           cov_sha256="$(jq -er '.cargo_llvm_cov.integrity_identity' <<<"${TOOLS_JSON}")"
           actionlint_version="$(jq -er '.actionlint.version' <<<"${TOOLS_JSON}")"
-          actionlint_sum="$(jq -er '.actionlint.integrity_identity' <<<"${TOOLS_JSON}")"
+          actionlint_manifest_sha256="$(jq -er '.actionlint.integrity_identity' <<<"${TOOLS_JSON}")"
+          actionlint_member_limit="$(jq -er '.actions.evidence_snapshot_member_limit_bytes' "${RUNNER_TEMP}/s4-gates-authority.json")"
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64) actionlint_platform="linux-amd64" ;;
+            Linux-ARM64) actionlint_platform="linux-arm64" ;;
+            macOS-X64) actionlint_platform="darwin-amd64" ;;
+            macOS-ARM64) actionlint_platform="darwin-arm64" ;;
+            *) printf 'unsupported actionlint platform: %s-%s\n' "${RUNNER_OS}" "${RUNNER_ARCH}" >&2; exit 1 ;;
+          esac
+          actionlint_sha256="$(jq -er --arg platform "${actionlint_platform}" \
+            '.actionlint.distribution_requirements[] | select(.requirement == $platform) | .sha256' \
+            <<<"${TOOLS_JSON}")"
+          actionlint_archive_platform="${actionlint_platform//-/_}"
           supervise tools-lizard "${tools}/python/bin/pip" install --disable-pip-version-check --require-hashes -r "${lizard_requirements}"
           mkdir -p "${tools}/bin"
           ln -s "${tools}/python/bin/lizard" "${tools}/bin/lizard"
@@ -807,8 +814,21 @@ jobs:
           }
           install_verified_cargo_tool cargo-audit "${audit_version}" "${audit_sha256}" tools-cargo-audit
           install_verified_cargo_tool cargo-llvm-cov "${cov_version}" "${cov_sha256}" tools-cargo-llvm-cov
-          supervise tools-actionlint go install "github.com/rhysd/actionlint/cmd/actionlint@v${actionlint_version}"
-          test "$(cat "${GOPATH}/pkg/mod/cache/download/github.com/rhysd/actionlint/@v/v${actionlint_version}.ziphash")" = "${actionlint_sum}"
+          actionlint_archive="${RUNNER_TEMP}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz"
+          actionlint_checksums="${RUNNER_TEMP}/actionlint_${actionlint_version}_checksums.txt"
+          supervise tools-actionlint-checksums-download curl --proto '=https' --tlsv1.2 --location --fail \
+            --silent --show-error --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+            --max-filesize "${actionlint_member_limit}" --output "${actionlint_checksums}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_checksums.txt"
+          printf '%s  %s\n' "${actionlint_manifest_sha256}" "${actionlint_checksums}" | shasum -a 256 -c -
+          supervise tools-actionlint-download curl --proto '=https' --tlsv1.2 --location --fail \
+            --silent --show-error --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+            --max-filesize "${actionlint_member_limit}" --output "${actionlint_archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz"
+          printf '%s  %s\n' "${actionlint_sha256}" "${actionlint_archive}" | shasum -a 256 -c -
+          test "$(awk -v file="actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz" '$2 == file { print $1 }' "${actionlint_checksums}")" = "${actionlint_sha256}"
+          supervise tools-actionlint tar -xzf "${actionlint_archive}" -C "${tools}/bin" actionlint
+          test -x "${tools}/bin/actionlint" && test ! -L "${tools}/bin/actionlint"
           while IFS= read -r component; do
             supervise "tools-component-${component}" rustup component add "${component}"
           done < <(jq -r '.rust.components[]' <<<"${TOOLS_JSON}")

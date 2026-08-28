@@ -937,18 +937,26 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
         && is_lower_hex(&authority.tools.cargo_audit.integrity_identity, 64)
         && authority.tools.cargo_llvm_cov.installation_integrity == "cargo-registry-sha256"
         && is_lower_hex(&authority.tools.cargo_llvm_cov.integrity_identity, 64)
-        && authority.tools.actionlint.installation_integrity == "go-checksum-database"
-        && authority
-            .tools
-            .actionlint
-            .integrity_identity
-            .starts_with("h1:")
-        && authority.tools.actionlint.integrity_identity.len() == 47
-        && authority.tools.actionlint.integrity_identity[3..]
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/' | b'='));
+        && authority.tools.actionlint.installation_integrity == "github-release-sha256"
+        && is_lower_hex(&authority.tools.actionlint.integrity_identity, 64);
     if !integrity_valid {
         return Err("authority tool installation integrity identities are incomplete".into());
+    }
+    let actionlint_distributions: BTreeSet<_> = authority
+        .tools
+        .actionlint
+        .distribution_requirements
+        .iter()
+        .map(|requirement| requirement.requirement.as_str())
+        .collect();
+    if actionlint_distributions
+        != BTreeSet::from(["darwin-amd64", "darwin-arm64", "linux-amd64", "linux-arm64"])
+        || authority.tools.actionlint.distribution_requirements.len() != 4
+    {
+        return Err(
+            "authority actionlint identity must pin exactly the four supported release archives"
+                .into(),
+        );
     }
     if authority.tools.lizard.distribution_requirements.is_empty()
         || !authority
@@ -1740,8 +1748,16 @@ mod tests {
         assert!(validate_authority(&cargo).is_err());
 
         let mut actionlint = fixture_authority();
-        actionlint.tools.actionlint.integrity_identity = "h1:not-a-module-sum".into();
+        actionlint.tools.actionlint.integrity_identity = "not-a-digest".into();
         assert!(validate_authority(&actionlint).is_err());
+
+        let mut missing_actionlint_archive = fixture_authority();
+        missing_actionlint_archive
+            .tools
+            .actionlint
+            .distribution_requirements
+            .pop();
+        assert!(validate_authority(&missing_actionlint_archive).is_err());
     }
 
     #[test]

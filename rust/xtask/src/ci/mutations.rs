@@ -760,7 +760,10 @@ fn workflow_trust_boundary_mutant(
     let mut mutant = std::str::from_utf8(baseline).ok()?.to_string();
     for (from, to) in [
         (authority.actions.checkout.as_str(), "actions/checkout@v4"),
-        ("GONOSUMDB: \"\"", "GONOSUMDB: \"private.example\""),
+        (
+            "actionlint_checksums}\" | shasum -a 256 -c -",
+            "actionlint_checksums}\" | shasum -a 256",
+        ),
         (
             "/usr/sbin/useradd --uid",
             "/usr/sbin/useradd-disabled --uid",

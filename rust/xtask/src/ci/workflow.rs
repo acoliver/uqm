@@ -28,7 +28,7 @@ use super::CiError;
 pub const WORKFLOW_FILE: &str = ".github/workflows/rust-quality.yaml";
 pub const VALIDATION_SCHEMA: &str = "uqm-s4-workflow-validation-v1";
 const TOOL_INSTALL_RUN_SHA256: &str =
-    "1f3b4825368694a2ad4260977ab4663f00331d757287e567b65fb5fffa1ecba8";
+    "2b5cc04d6732a4464949731e417bfd193ccb9fd94d7d6e2df9c305a181f956b1";
 
 const FORBIDDEN_COMMANDS: [&str; 8] = [
     "cargo fmt",
@@ -434,9 +434,6 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 fn valid_tool_install_step(step: &Yaml) -> bool {
     step.get_str(&["env", "TOOLS_JSON"]) == Some("${{ needs.plan.outputs.tools }}")
-        && step.get_str(&["env", "GOSUMDB"]) == Some("sum.golang.org")
-        && step.get_str(&["env", "GONOSUMDB"]) == Some("")
-        && step.get_str(&["env", "GOPRIVATE"]) == Some("")
         && step.get_str(&["run"]).is_some_and(|run| {
             sha256_hex(run.as_bytes()) == TOOL_INSTALL_RUN_SHA256
                 && [
@@ -460,14 +457,18 @@ fn valid_tool_install_step(step: &Yaml) -> bool {
                     "CARGO_NET_OFFLINE=true cargo install --locked",
                     "--root \"${tools}\" --path \"${source}\"",
                     ".actionlint.integrity_identity",
-                    r#".ziphash")" = "${actionlint_sum}""#,
+                    ".actionlint.distribution_requirements[]",
+                    "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_checksums.txt",
+                    "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz",
+                    "tools-actionlint-download",
+                    "tools-actionlint tar -xzf",
                     ".rust.components[]",
                     "find -P \"${RUSTUP_HOME}\" -type d -exec chmod g+rx {} +",
                     "find -P \"${RUSTUP_HOME}\" -type f -exec chmod g+r {} +",
                 ]
                 .iter()
                 .all(|needle| run.contains(needle))
-                && run.matches("shasum -a 256 -c -").count() == 1
+                && run.matches("shasum -a 256 -c -").count() == 3
                 && run.matches("install_verified_cargo_tool cargo-").count() == 2
                 && !run.contains("cargo install --locked --root")
                 && run.find("shasum -a 256 -c -") < run.find("tarfile.open")
@@ -3465,10 +3466,13 @@ total_timeout=60
                 "--root \"${tools}\"",
             ),
             (
-                r#".ziphash")" = "${actionlint_sum}""#,
-                r#".ziphash")" != "${actionlint_sum}""#,
+                ".actionlint.distribution_requirements[]",
+                ".lizard.distribution_requirements[]",
             ),
-            ("GOSUMDB: sum.golang.org", "GOSUMDB: off"),
+            (
+                ".actionlint.integrity_identity",
+                ".actionlint.expected_output_prefix",
+            ),
         ];
         for (old, new) in mutations {
             let mutated = WORKFLOW.replacen(old, new, 1);

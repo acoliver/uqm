@@ -89,8 +89,26 @@
     },
     "actionlint": {
       "version": "1.7.7",
-      "installation_integrity": "go-checksum-database",
-      "integrity_identity": "h1:0KgkoNTrYY7vmOCs9BW2AHxLvvpoY9nEUzgBHiPUr0k=",
+      "installation_integrity": "github-release-sha256",
+      "integrity_identity": "ac22e6577b8d133c7cd779682e65712ef722e719a297633699a4da05e9f351e0",
+      "distribution_requirements": [
+        {
+          "requirement": "darwin-amd64",
+          "sha256": "28e5de5a05fc558474f638323d736d822fff183d2d492f0aecb2b73cc44584f5"
+        },
+        {
+          "requirement": "darwin-arm64",
+          "sha256": "2693315b9093aeacb4ebd91a993fea54fc215057bf0da2659056b4bc033873db"
+        },
+        {
+          "requirement": "linux-amd64",
+          "sha256": "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+        },
+        {
+          "requirement": "linux-arm64",
+          "sha256": "401942f9c24ed71e4fe71b76c7d638f66d8633575c4016efd2977ce7c28317d0"
+        }
+      ],
       "version_command": ["actionlint", "--version"],
       "expected_output_prefix": "1.7.7"
     }
