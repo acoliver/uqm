@@ -2461,11 +2461,10 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
         CONTAINMENT_ESCAPE_HELPER_COMMAND.to_string(),
         sentinel.to_string_lossy().into_owned(),
     ];
-    let captured = run_captured_with_limits(
+    let captured = run_captured_with_bound_environment(
         root,
         &helper_executable.to_string_lossy(),
         &arguments,
-        &[],
         Limits {
             timeout: Duration::from_secs(5),
             termination_grace: Duration::from_secs(1),
@@ -2474,6 +2473,8 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
             stderr_bytes: 16 * 1024,
             executable_bytes: 268_435_456,
         },
+        true,
+        |_| Ok(Vec::new()),
     );
     std::fs::remove_dir_all(&helper_directory)
         .map_err(|error| format!("cannot remove {}: {error}", helper_directory.display()))?;
