@@ -45,19 +45,6 @@ has_processes() {
     esac
     has_live_processes -u
 }
-has_processes
-status=$?
-case "$status" in
-    0)
-        echo "dedicated containment uid $uid was already in use" >&2
-        exit 125
-        ;;
-    1) ;;
-    *)
-        echo "cannot inspect dedicated containment uid $uid" >&2
-        exit 125
-        ;;
-esac
 cleanup() {
     local status
     trap - EXIT HUP INT TERM
@@ -78,6 +65,10 @@ cleanup() {
     has_processes
     [ "$?" -eq 1 ]
 }
+if ! cleanup; then
+    echo "dedicated containment uid $uid still owns processes before launch" >&2
+    exit 125
+fi
 trap 'cleanup || true; exit 143' HUP INT TERM
 trap 'cleanup || true' EXIT
 /usr/bin/sudo -n -u "#$uid" -- /usr/bin/env -i "${env_args[@]}" "$@"

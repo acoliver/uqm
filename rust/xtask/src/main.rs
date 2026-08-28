@@ -2125,6 +2125,22 @@ fn retained_rust_tool_program(variable: &str, tool: &str) -> Result<String, Stri
     Ok(program.to_string())
 }
 
+fn normalize_path_dependent_tool_versions(
+    expected: &mut ToolchainIdentity,
+    observed: &ToolchainIdentity,
+) {
+    expected.rustc.version.clone_from(&observed.rustc.version);
+    expected.cargo.version.clone_from(&observed.cargo.version);
+    expected.cc.version.clone_from(&observed.cc.version);
+    expected.ar.version.clone_from(&observed.ar.version);
+    expected.nm.version.clone_from(&observed.nm.version);
+    expected
+        .pkg_config
+        .version
+        .clone_from(&observed.pkg_config.version);
+    expected.linker.version.clone_from(&observed.linker.version);
+}
+
 fn canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String> {
     let executable_limit = ci::authority::load_authority(root)?
         .supervision
@@ -2167,29 +2183,25 @@ fn canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String> {
     toolchain.ar.sha256 = tools[3].identity().sha256.clone();
     toolchain.nm.sha256 = tools[4].identity().sha256.clone();
     toolchain.pkg_config.sha256 = tools[5].identity().sha256.clone();
-    let marker = serde_json::to_string(&toolchain)
-        .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?;
-    env::set_var("CARGO", &toolchain.cargo.executable);
-    env::set_var("RUSTC", &toolchain.rustc.executable);
-    env::set_var("CC", &toolchain.cc.executable);
-    env::set_var("AR", &toolchain.ar.executable);
-    env::set_var("NM", &toolchain.nm.executable);
-    env::set_var("PKG_CONFIG", &toolchain.pkg_config.executable);
-    env::set_var("UQM_CANONICAL_TOOLCHAIN", marker);
+    apply_canonical_toolchain_environment(&toolchain);
     let observed = resolve_toolchain(root, &host)
         .map_err(|error| format!("re-resolve canonical toolchain: {error}"))?;
-    if observed != toolchain {
+    let mut expected = toolchain;
+    normalize_path_dependent_tool_versions(&mut expected, &observed);
+    if observed != expected {
         return Err(format!(
             "canonical toolchain does not reproduce from its environment: expected {}; observed {}",
-            serde_json::to_string(&toolchain).unwrap_or_else(|_| "<unserializable>".into()),
+            serde_json::to_string(&expected).unwrap_or_else(|_| "<unserializable>".into()),
             serde_json::to_string(&observed).unwrap_or_else(|_| "<unserializable>".into())
         ));
     }
     for tool in &mut tools {
         tool.verify_unchanged()?;
     }
-    env::set_var("RUSTC_LINKER", &toolchain.linker.executable);
-    Ok(toolchain)
+    let marker = serde_json::to_string(&observed)
+        .map_err(|error| format!("cannot serialize canonical toolchain: {error}"))?;
+    env::set_var("UQM_CANONICAL_TOOLCHAIN", marker);
+    Ok(observed)
 }
 
 fn artifact_digests(artifacts: &[Artifact]) -> Vec<ArtifactDigest> {
@@ -2556,6 +2568,48 @@ mod tests {
                 .unwrap(),
             toolchain
         );
+    }
+
+    #[test]
+    fn canonical_tool_versions_follow_the_final_executable_identity_only() {
+        fn tool(executable: &str, version: &str) -> uqm_ownership::ToolIdentity {
+            uqm_ownership::ToolIdentity {
+                executable: executable.into(),
+                version: version.into(),
+                sha256: "0".repeat(64),
+                effective_args: Vec::new(),
+            }
+        }
+
+        let expected = ToolchainIdentity {
+            target: "x86_64-unknown-linux-gnu".into(),
+            rustc: tool("/tools/rustc", "rustc via alias"),
+            cargo: tool("/tools/cargo", "cargo via alias"),
+            cc: tool("/tools/gcc-13", "cc via alias"),
+            ar: tool("/tools/ar", "ar via alias"),
+            nm: tool("/tools/nm", "nm via alias"),
+            pkg_config: tool("/tools/pkg-config", "pkg-config via alias"),
+            linker: tool("/tools/linker", "linker via alias"),
+        };
+        let mut observed = expected.clone();
+        for identity in [
+            &mut observed.rustc,
+            &mut observed.cargo,
+            &mut observed.cc,
+            &mut observed.ar,
+            &mut observed.nm,
+            &mut observed.pkg_config,
+            &mut observed.linker,
+        ] {
+            identity.version = format!("{} directly", identity.executable);
+        }
+        let mut normalized = expected.clone();
+        normalize_path_dependent_tool_versions(&mut normalized, &observed);
+        assert_eq!(normalized, observed);
+
+        observed.cc.executable = "/tools/different-gcc".into();
+        normalize_path_dependent_tool_versions(&mut normalized, &observed);
+        assert_ne!(normalized, observed);
     }
 
     #[test]

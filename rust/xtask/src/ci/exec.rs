@@ -2939,6 +2939,14 @@ mod tests {
         assert!(DEDICATED_UID_WRAPPER.contains("/bin/kill -0 \"$pid\""));
         assert!(DEDICATED_UID_WRAPPER.contains("Z*|\"\""));
         assert!(DEDICATED_UID_WRAPPER.contains("/usr/bin/env -i"));
+        let initial_cleanup = DEDICATED_UID_WRAPPER.find("if ! cleanup; then").unwrap();
+        let launch = DEDICATED_UID_WRAPPER
+            .find("/usr/bin/sudo -n -u \"#$uid\"")
+            .unwrap();
+        assert!(initial_cleanup < launch);
+        assert!(DEDICATED_UID_WRAPPER
+            .contains("dedicated containment uid $uid still owns processes before launch"));
+        assert!(!DEDICATED_UID_WRAPPER.contains("was already in use"));
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
