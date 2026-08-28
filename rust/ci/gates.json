@@ -240,6 +240,7 @@
   },
   "native_acceptance": {
     "platform": "macos",
+    "dedicated_execution_uid": 59999,
     "content_url": "https://downloads.sourceforge.net/sc2/uqm-0.8.0-content.uqm",
     "content_filename": "uqm-0.8.0-content.uqm",
     "content_sha256": "77d75ac25e6fb755a33c4ba3b38a7b7bc41fcbc02896891b0cc9ac9214b72eef",

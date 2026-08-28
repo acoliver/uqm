@@ -25,6 +25,8 @@ const DEDICATED_CONTAINMENT_HOME_ENV: &str = "UQM_CI_DEDICATED_CONTAINMENT_HOME"
 const DEDICATED_CONTAINMENT_USER_ENV: &str = "UQM_CI_DEDICATED_CONTAINMENT_USER";
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub const CONTAINMENT_ESCAPE_HELPER_COMMAND: &str = "__ci-containment-escape-helper";
+#[cfg(target_os = "macos")]
+pub const CONTAINMENT_CREDENTIAL_PROBE_COMMAND: &str = "__ci-containment-credential-probe";
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const DEDICATED_UID_WRAPPER: &str = include_str!("dedicated_uid_wrapper.sh");
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2494,6 +2496,73 @@ pub fn run_containment_escape_helper(arguments: &[String]) -> Result<(), String>
     unsafe { libc::_exit(status) };
 }
 
+#[cfg(target_os = "macos")]
+pub fn run_containment_credential_probe(arguments: &[String]) -> Result<(), String> {
+    let [dedicated_uid, console_uid, sentinel] = arguments else {
+        return Err(
+            "containment credential probe requires dedicated UID, console UID, and sentinel".into(),
+        );
+    };
+    let dedicated_uid = dedicated_uid
+        .parse::<u32>()
+        .map_err(|error| format!("invalid dedicated UID: {error}"))?;
+    let console_uid = console_uid
+        .parse::<u32>()
+        .map_err(|error| format!("invalid console UID: {error}"))?;
+    // SAFETY: getuid and geteuid have no preconditions.
+    let real_uid = unsafe { libc::getuid() };
+    let effective_uid = unsafe { libc::geteuid() };
+    if real_uid != dedicated_uid
+        || effective_uid != dedicated_uid
+        || dedicated_uid == 0
+        || dedicated_uid == console_uid
+    {
+        return Err(format!(
+            "credential probe ran with real UID {real_uid} and effective UID {effective_uid}; expected dedicated UID {dedicated_uid}, distinct from console UID {console_uid}"
+        ));
+    }
+
+    let manager_uid = Command::new("/bin/launchctl")
+        .arg("manageruid")
+        .env_clear()
+        .output()
+        .map_err(|error| format!("cannot query launchd manager UID: {error}"))?;
+    let manager_uid_text = std::str::from_utf8(&manager_uid.stdout)
+        .map_err(|error| format!("launchd manager UID is not UTF-8: {error}"))?
+        .trim();
+    if !manager_uid.status.success() || manager_uid_text != console_uid.to_string() {
+        return Err(format!(
+            "credential probe entered launchd manager UID {manager_uid_text:?}; expected {console_uid}"
+        ));
+    }
+    let manager_name = Command::new("/bin/launchctl")
+        .arg("managername")
+        .env_clear()
+        .output()
+        .map_err(|error| format!("cannot query launchd manager name: {error}"))?;
+    let manager_name_text = std::str::from_utf8(&manager_name.stdout)
+        .map_err(|error| format!("launchd manager name is not UTF-8: {error}"))?
+        .trim();
+    if !manager_name.status.success() || manager_name_text != "Aqua" {
+        return Err(format!(
+            "credential probe entered launchd manager {manager_name_text:?}; expected Aqua"
+        ));
+    }
+
+    println!(
+        "{}",
+        serde_json::json!({
+            "dedicated_uid": dedicated_uid,
+            "real_uid": real_uid,
+            "effective_uid": effective_uid,
+            "console_uid": console_uid,
+            "launchd_manager_uid": console_uid,
+            "launchd_manager_name": manager_name_text,
+        })
+    );
+    run_containment_escape_helper(std::slice::from_ref(sentinel))
+}
+
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn stage_containment_check_executable(
     home: &Path,
@@ -2532,12 +2601,38 @@ fn stage_containment_check_executable(
     Ok((directory, staged))
 }
 
+#[cfg(target_os = "macos")]
+fn validate_containment_credential_proof(
+    bytes: &[u8],
+    dedicated_uid: u32,
+    console_uid: u32,
+) -> Result<serde_json::Value, String> {
+    let proof: serde_json::Value = serde_json::from_slice(bytes)
+        .map_err(|error| format!("parse containment credential proof: {error}"))?;
+    let expected = serde_json::json!({
+        "dedicated_uid": dedicated_uid,
+        "real_uid": dedicated_uid,
+        "effective_uid": dedicated_uid,
+        "console_uid": console_uid,
+        "launchd_manager_uid": console_uid,
+        "launchd_manager_name": "Aqua",
+    });
+    if proof != expected || dedicated_uid == 0 || dedicated_uid == console_uid {
+        return Err(format!(
+            "containment credential proof differs from the dedicated UID and console bootstrap authority: {proof}"
+        ));
+    }
+    Ok(proof)
+}
+
 pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
+    // SAFETY: geteuid has no preconditions.
+    let controller_uid = unsafe { libc::geteuid() };
     let config = parse_dedicated_containment_config(
         std::env::var_os(DEDICATED_CONTAINMENT_UID_ENV),
         std::env::var(DEDICATED_CONTAINMENT_HOME_ENV),
         std::env::var(DEDICATED_CONTAINMENT_USER_ENV),
-        unsafe { libc::geteuid() },
+        controller_uid,
     )
     .map_err(|error| error.to_string())?
     .ok_or_else(|| {
@@ -2586,36 +2681,93 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
         .map_err(|error| format!("cannot locate containment-check executable: {error}"))?;
     let (helper_directory, helper_executable) =
         stage_containment_check_executable(Path::new(&config.home), &executable)?;
-    let arguments = vec![
-        CONTAINMENT_ESCAPE_HELPER_COMMAND.to_string(),
-        sentinel.to_string_lossy().into_owned(),
-    ];
-    let captured = run_captured_with_bound_environment(
-        root,
-        &helper_executable.to_string_lossy(),
-        &arguments,
-        Limits {
-            timeout: CONTAINMENT_ESCAPE_PROBE_TIMEOUT,
-            termination_grace: Duration::from_secs(1),
-            pipe_drain_timeout: Duration::from_secs(2),
-            stdout_bytes: 16 * 1024,
-            stderr_bytes: 16 * 1024,
-            executable_bytes: 268_435_456,
-        },
-        true,
-        |_| Ok(Vec::new()),
-    );
-    std::fs::remove_dir_all(&helper_directory)
-        .map_err(|error| format!("cannot remove {}: {error}", helper_directory.display()))?;
-    if !captured.succeeded() {
-        return Err(captured.failure_detail("dedicated-uid containment check"));
-    }
-    thread::sleep(Duration::from_millis(700));
-    if sentinel.exists() {
-        return Err("a pre-observation detached grandchild escaped dedicated-uid cleanup".into());
-    }
-    std::fs::remove_dir_all(&directory)
-        .map_err(|error| format!("cannot remove {}: {error}", directory.display()))?;
+    let containment_result = (|| -> Result<(), String> {
+        let arguments = vec![
+            CONTAINMENT_ESCAPE_HELPER_COMMAND.to_string(),
+            sentinel.to_string_lossy().into_owned(),
+        ];
+        let captured = run_captured_with_bound_environment(
+            root,
+            &helper_executable.to_string_lossy(),
+            &arguments,
+            Limits {
+                timeout: CONTAINMENT_ESCAPE_PROBE_TIMEOUT,
+                termination_grace: Duration::from_secs(1),
+                pipe_drain_timeout: Duration::from_secs(2),
+                stdout_bytes: 16 * 1024,
+                stderr_bytes: 16 * 1024,
+                executable_bytes: 268_435_456,
+            },
+            true,
+            |_| Ok(Vec::new()),
+        );
+        if !captured.succeeded() {
+            return Err(captured.failure_detail("dedicated-uid containment check"));
+        }
+        thread::sleep(Duration::from_millis(700));
+        if sentinel.exists() {
+            return Err(
+                "a pre-observation detached grandchild escaped dedicated-uid cleanup".into(),
+            );
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let credential_sentinel = directory.join("credential-probe-escaped-write.txt");
+            let arguments = vec![
+                "__ci-test".to_string(),
+                CONTAINMENT_CREDENTIAL_PROBE_COMMAND.to_string(),
+                config.uid.clone(),
+                controller_uid.to_string(),
+                credential_sentinel.to_string_lossy().into_owned(),
+            ];
+            let captured = run_captured_with_bound_environment(
+                root,
+                &helper_executable.to_string_lossy(),
+                &arguments,
+                Limits {
+                    timeout: CONTAINMENT_ESCAPE_PROBE_TIMEOUT,
+                    termination_grace: Duration::from_secs(1),
+                    pipe_drain_timeout: Duration::from_secs(2),
+                    stdout_bytes: 16 * 1024,
+                    stderr_bytes: 16 * 1024,
+                    executable_bytes: 268_435_456,
+                },
+                true,
+                |_| Ok(Vec::new()),
+            );
+            if !captured.succeeded() {
+                return Err(captured.failure_detail(
+                    "dedicated-uid console-bootstrap credential and cleanup check",
+                ));
+            }
+            let dedicated_uid = config.uid.parse::<u32>().map_err(|error| {
+                format!("invalid dedicated UID after containment check: {error}")
+            })?;
+            let proof = validate_containment_credential_proof(
+                &captured.stdout,
+                dedicated_uid,
+                controller_uid,
+            )?;
+            println!("dedicated containment credential proof: {proof}");
+            thread::sleep(Duration::from_millis(700));
+            if credential_sentinel.exists() {
+                return Err(
+                    "a detached grandchild escaped the dedicated-uid console-bootstrap route"
+                        .into(),
+                );
+            }
+        }
+        Ok(())
+    })();
+
+    let helper_cleanup = std::fs::remove_dir_all(&helper_directory)
+        .map_err(|error| format!("cannot remove {}: {error}", helper_directory.display()));
+    let directory_cleanup = std::fs::remove_dir_all(&directory)
+        .map_err(|error| format!("cannot remove {}: {error}", directory.display()));
+    containment_result?;
+    helper_cleanup?;
+    directory_cleanup?;
     Ok(())
 }
 
@@ -3043,6 +3195,79 @@ mod tests {
         assert!(DEDICATED_UID_WRAPPER
             .contains("dedicated containment uid $uid still owns processes before launch"));
         assert!(!DEDICATED_UID_WRAPPER.contains("was already in use"));
+        assert!(DEDICATED_UID_WRAPPER.contains("/bin/launchctl asuser \"$SUDO_UID\""));
+        const DARWIN_ROUTE: &str = r##"if [ "$(/usr/bin/uname -s)" = Darwin ] \
+    && [ -n "${SUDO_UID:-}" ] \
+    && [ "${command[1]:-}" = __ci-test ]; then
+    /bin/launchctl asuser "$SUDO_UID" \
+        /usr/bin/sudo -n -u "#$uid" -- \
+        /usr/bin/env -i "${env_args[@]}" "${command[@]}"
+else
+    /usr/bin/sudo -n -u "#$uid" -- /usr/bin/env -i "${env_args[@]}" "${command[@]}"
+fi"##;
+        let validates_darwin_route = |script: &str| {
+            script
+                .split_once("if [ \"$(/usr/bin/uname -s)\" = Darwin ]")
+                .and_then(|(_, suffix)| suffix.split_once("\nstatus=$?"))
+                .is_some_and(|(route, _)| {
+                    format!("if [ \"$(/usr/bin/uname -s)\" = Darwin ]{route}") == DARWIN_ROUTE
+                })
+        };
+        assert!(validates_darwin_route(DEDICATED_UID_WRAPPER));
+        let bypass = DARWIN_ROUTE.replace(
+            "/bin/launchctl asuser \"$SUDO_UID\" \\\n        /usr/bin/sudo -n -u \"#$uid\" -- \\\n        /usr/bin/env -i",
+            "/bin/launchctl asuser \"$SUDO_UID\" /usr/bin/env -i",
+        );
+        let superficial = format!(
+            "{}\n# superficial text: {}",
+            DEDICATED_UID_WRAPPER.replacen(DARWIN_ROUTE, &bypass, 1),
+            "/usr/bin/sudo -n -u \"#$uid\""
+        );
+        assert!(!validates_darwin_route(&superficial));
+        assert!(!DEDICATED_UID_WRAPPER.contains("native GUI broker"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn containment_credential_proof_binds_dedicated_uid_and_aqua_bootstrap() {
+        let proof = serde_json::json!({
+            "dedicated_uid": 59_999,
+            "real_uid": 59_999,
+            "effective_uid": 59_999,
+            "console_uid": 501,
+            "launchd_manager_uid": 501,
+            "launchd_manager_name": "Aqua",
+        });
+        assert_eq!(
+            validate_containment_credential_proof(
+                serde_json::to_vec(&proof).unwrap().as_slice(),
+                59_999,
+                501,
+            )
+            .unwrap(),
+            proof
+        );
+        for (path, value) in [
+            ("/real_uid", serde_json::json!(501)),
+            ("/effective_uid", serde_json::json!(0)),
+            ("/launchd_manager_uid", serde_json::json!(59_999)),
+            ("/launchd_manager_name", serde_json::json!("Background")),
+        ] {
+            let mut mutation = proof.clone();
+            *mutation.pointer_mut(path).unwrap() = value;
+            assert!(validate_containment_credential_proof(
+                serde_json::to_vec(&mutation).unwrap().as_slice(),
+                59_999,
+                501,
+            )
+            .is_err());
+        }
+        assert!(validate_containment_credential_proof(
+            serde_json::to_vec(&proof).unwrap().as_slice(),
+            501,
+            501,
+        )
+        .is_err());
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

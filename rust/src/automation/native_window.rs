@@ -67,6 +67,7 @@ impl NativeInventoryLimits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeWindowRuntimeContract {
+    pub expected_execution_uid: u32,
     pub capture_timeout_ms: u64,
     pub capture_kill_grace_ms: u64,
     pub observer_timeout_ms: u64,
@@ -124,7 +125,8 @@ impl NativeWindowRuntimeContract {
         let operation_bound = self
             .observer_timeout_ms
             .saturating_add(self.observer_kill_grace_ms);
-        self.capture_timeout_ms > 0
+        self.expected_execution_uid > 0
+            && self.capture_timeout_ms > 0
             && self.capture_kill_grace_ms > 0
             && self.observer_timeout_ms
                 > self
@@ -652,7 +654,7 @@ pub struct NativeWindowReceipt {
     pub passed: bool,
 }
 
-pub const NATIVE_ACCEPTANCE_SCHEMA: &str = "uqm-native-window-acceptance-v1";
+pub const NATIVE_ACCEPTANCE_SCHEMA: &str = "uqm-native-window-acceptance-v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -813,10 +815,18 @@ struct LinkedCompileProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct NativeExecutionIdentity {
+    pub real_uid: u32,
+    pub effective_uid: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NativeAcceptanceManifest {
     pub schema: String,
     pub command: Vec<String>,
     pub environment: std::collections::BTreeMap<String, String>,
+    pub execution_identity: NativeExecutionIdentity,
     pub executable: NativeRetainedInput,
     pub script: NativeRetainedInput,
     pub content_package: NativeRetainedInput,
@@ -3511,6 +3521,9 @@ pub fn validate_native_acceptance_bundle(
 ) -> Result<(), NativeWindowProofError> {
     if manifest.schema != NATIVE_ACCEPTANCE_SCHEMA
         || !manifest.passed
+        || manifest.execution_identity.real_uid == 0
+        || manifest.execution_identity.real_uid != manifest.execution_identity.effective_uid
+        || manifest.execution_identity.real_uid != manifest.runtime_contract.expected_execution_uid
         || !valid_acceptance_command_environment(manifest)
         || manifest.trace_path != "automation/trace.jsonl"
         || !valid_acceptance_child_contract(manifest)
@@ -3665,6 +3678,7 @@ mod tests {
 
     fn runtime_contract() -> NativeWindowRuntimeContract {
         NativeWindowRuntimeContract {
+            expected_execution_uid: 501,
             capture_timeout_ms: 30_000,
             capture_kill_grace_ms: 5_000,
             observer_timeout_ms: 40_000,
@@ -4143,6 +4157,10 @@ mod tests {
                 "SDL_AUDIODRIVER".to_string(),
                 "dummy".to_string(),
             )]),
+            execution_identity: NativeExecutionIdentity {
+                real_uid: 501,
+                effective_uid: 501,
+            },
             executable: executable_input,
             script: NativeRetainedInput {
                 relative_path: "inputs/linked-playable-v1.json".to_string(),
@@ -4666,6 +4684,27 @@ mod tests {
             .insert("SDL_VIDEODRIVER".to_string(), "dummy".to_string());
         assert_eq!(
             validate_native_acceptance_bundle(root.path(), &forged_environment),
+            Err(NativeWindowProofError::Receipt)
+        );
+        let mut forged_root_identity = manifest.clone();
+        forged_root_identity.execution_identity.real_uid = 0;
+        forged_root_identity.execution_identity.effective_uid = 0;
+        assert_eq!(
+            validate_native_acceptance_bundle(root.path(), &forged_root_identity),
+            Err(NativeWindowProofError::Receipt)
+        );
+        let mut mismatched_identity = manifest.clone();
+        mismatched_identity.execution_identity.effective_uid += 1;
+        assert_eq!(
+            validate_native_acceptance_bundle(root.path(), &mismatched_identity),
+            Err(NativeWindowProofError::Receipt)
+        );
+        let mut wrong_expected_identity = manifest.clone();
+        wrong_expected_identity
+            .runtime_contract
+            .expected_execution_uid += 1;
+        assert_eq!(
+            validate_native_acceptance_bundle(root.path(), &wrong_expected_identity),
             Err(NativeWindowProofError::Receipt)
         );
         let mut forged_process = manifest.clone();

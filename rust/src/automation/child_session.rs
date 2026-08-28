@@ -2762,10 +2762,26 @@ mod os_tests {
             .expect("parse descendant pid")
     }
 
-    fn process_exists(pid: u32) -> bool {
-        // SAFETY: signal zero only checks whether this exact PID exists.
-        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
-        result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+    fn process_is_live(pid: u32) -> bool {
+        #[cfg(target_os = "linux")]
+        {
+            let stat = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+                Ok(stat) => stat,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return false,
+                Err(_) => return true,
+            };
+            let Some(after_comm) = stat.rfind(')') else {
+                return true;
+            };
+            return stat[after_comm + 1..].split_whitespace().next() != Some("Z");
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            // SAFETY: signal zero only checks whether this exact PID exists.
+            let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+            result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+        }
     }
 
     #[test]
@@ -2784,7 +2800,7 @@ mod os_tests {
         assert!(!receipt.kill_sent);
         assert!(receipt.output_drained);
         assert!(receipt.orphan_check_passed);
-        assert!(!process_exists(descendant_pid));
+        assert!(!process_is_live(descendant_pid));
         assert_eq!(
             std::fs::read_to_string(dir.path().join("out.log")).expect("read stdout log"),
             "descendant-stdout"
@@ -2813,7 +2829,7 @@ mod os_tests {
         assert!(receipt.kill_sent);
         assert!(receipt.output_drained);
         assert!(receipt.orphan_check_passed);
-        assert!(!process_exists(descendant_pid));
+        assert!(!process_is_live(descendant_pid));
     }
 
     fn partial_cleanup_child(seconds: &str) -> (std::process::Child, super::os::LeaderAnchor) {

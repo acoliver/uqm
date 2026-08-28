@@ -71,7 +71,16 @@ if ! cleanup; then
 fi
 trap 'cleanup || true; exit 143' HUP INT TERM
 trap 'cleanup || true' EXIT
-/usr/bin/sudo -n -u "#$uid" -- /usr/bin/env -i "${env_args[@]}" "$@"
+command=("$@")
+if [ "$(/usr/bin/uname -s)" = Darwin ] \
+    && [ -n "${SUDO_UID:-}" ] \
+    && [ "${command[1]:-}" = __ci-test ]; then
+    /bin/launchctl asuser "$SUDO_UID" \
+        /usr/bin/sudo -n -u "#$uid" -- \
+        /usr/bin/env -i "${env_args[@]}" "${command[@]}"
+else
+    /usr/bin/sudo -n -u "#$uid" -- /usr/bin/env -i "${env_args[@]}" "${command[@]}"
+fi
 status=$?
 if ! cleanup; then
     echo "dedicated containment uid $uid still owns processes after SIGKILL" >&2

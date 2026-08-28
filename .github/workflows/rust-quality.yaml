@@ -540,6 +540,7 @@ jobs:
     name: ${{ github.event_name == 'pull_request_target' && format('S4 gates ({0})', matrix.tuple) || format('S4 gates ({0}, non-merge)', matrix.tuple) }}
     env:
       RUSTUP_TOOLCHAIN: ${{ fromJSON(needs.plan.outputs.tools).rust.version }}
+      NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}
     needs: plan
     strategy:
       fail-fast: false
@@ -772,7 +773,8 @@ jobs:
             local member_limit
             member_limit="$(jq -er '.actions.evidence_snapshot_member_limit_bytes' "${RUNNER_TEMP}/s4-gates-authority.json")"
             supervise "${label}-download" curl --proto '=https' --tlsv1.2 --location --fail \
-              --silent --show-error --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+              --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+              --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
               --max-filesize "${member_limit}" --output "${archive}" \
               "https://crates.io/api/v1/crates/${name}/${version}/download"
             printf '%s  %s\n' "${expected_sha256}" "${archive}" | shasum -a 256 -c -
@@ -817,12 +819,14 @@ jobs:
           actionlint_archive="${RUNNER_TEMP}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz"
           actionlint_checksums="${RUNNER_TEMP}/actionlint_${actionlint_version}_checksums.txt"
           supervise tools-actionlint-checksums-download curl --proto '=https' --tlsv1.2 --location --fail \
-            --silent --show-error --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+            --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
             --max-filesize "${actionlint_member_limit}" --output "${actionlint_checksums}" \
             "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_checksums.txt"
           printf '%s  %s\n' "${actionlint_manifest_sha256}" "${actionlint_checksums}" | shasum -a 256 -c -
           supervise tools-actionlint-download curl --proto '=https' --tlsv1.2 --location --fail \
-            --silent --show-error --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+            --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
             --max-filesize "${actionlint_member_limit}" --output "${actionlint_archive}" \
             "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz"
           printf '%s  %s\n' "${actionlint_sha256}" "${actionlint_archive}" | shasum -a 256 -c -
@@ -869,7 +873,7 @@ jobs:
         run: |
           set -euo pipefail
           containment_user="uqm_s4_containment"
-          containment_uid="59999"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
           runner_gid="$(id -g)"
           if dscl . -list /Users UniqueID | awk -v uid="${containment_uid}" '$2 == uid { found = 1 } END { exit !found }'; then
             echo "containment uid ${containment_uid} is already allocated" >&2
@@ -901,7 +905,7 @@ jobs:
         run: |
           set -euo pipefail
           containment_user="uqm_s4_containment"
-          containment_uid="59999"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
           runner_gid="$(id -g)"
           if getent passwd "${containment_uid}" >/dev/null; then
             echo "containment uid ${containment_uid} is already allocated" >&2
@@ -1017,7 +1021,7 @@ jobs:
         run: |
           set -euo pipefail
           containment_user="uqm_s4_containment"
-          containment_uid="59999"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
           marker="${RUNNER_TEMP}/s4-linux-containment-created"
           if ! sudo -n test -f "${marker}"; then
             exit 0
@@ -1052,7 +1056,7 @@ jobs:
         run: |
           set -euo pipefail
           containment_user="uqm_s4_containment"
-          containment_uid="59999"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
           marker="${RUNNER_TEMP}/s4-containment-created"
           if ! sudo -n test -f "${marker}"; then
             exit 0

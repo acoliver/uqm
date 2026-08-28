@@ -162,6 +162,41 @@ impl RunSession {
         self.entries.extend(entries);
         Ok(())
     }
+
+    fn record_snapshot_entries(
+        &mut self,
+        files: &[evidence::RegularFileSnapshot],
+        destination_prefix: &str,
+        role: &str,
+        mime: &str,
+        producing_gate: &str,
+        producing_command: &[String],
+    ) -> Result<(), CiError> {
+        let mut entries = Vec::with_capacity(files.len());
+        for file in files {
+            let relative = format!("{destination_prefix}/{}", file.relative_path);
+            let current = evidence::read_regular_relative(&self.evidence_root, &relative).map_err(
+                |error| CiError::new("evidence.read", format!("cannot read {relative}: {error}")),
+            )?;
+            if current != file.bytes {
+                return Err(CiError::new(
+                    "evidence.read",
+                    format!("evidence changed after snapshot: {relative}"),
+                ));
+            }
+            entries.push(evidence::entry_from_bytes(
+                &relative,
+                &file.bytes,
+                role,
+                mime,
+                producing_gate,
+                producing_command,
+            )?);
+        }
+        self.entries.extend(entries);
+        Ok(())
+    }
+
     /// Record a payload that is already inside the self-contained bundle.
     pub fn entry_from_evidence_path(
         &mut self,
@@ -1461,6 +1496,19 @@ fn execute_process_gate(
     Ok(())
 }
 
+fn validate_native_runtime_authority(
+    authority: &Authority,
+    observed: uqm_rust::automation::native_window::NativeWindowRuntimeContract,
+) -> Result<(), CiError> {
+    if observed != authority.native_runtime_contract() {
+        return Err(CiError::new(
+            "tests.post.xtask-test.native-window-acceptance",
+            "native acceptance runtime contract differs from machine authority",
+        ));
+    }
+    Ok(())
+}
+
 fn retain_native_acceptance(
     session: &mut RunSession,
     gate: &Gate,
@@ -1487,6 +1535,7 @@ fn retain_native_acceptance(
                 format!("cannot parse {}: {error}", manifest_path.display()),
             )
         })?;
+    validate_native_runtime_authority(&session.authority, manifest.runtime_contract)?;
     let validation = materialize_native_snapshot(session, &snapshot)?;
     uqm_rust::automation::validate_native_acceptance_bundle(validation.path(), &manifest).map_err(
         |error| {
@@ -1612,7 +1661,7 @@ fn retain_native_acceptance_files(
     contract: &str,
 ) -> Result<(), CiError> {
     session
-        .publish_snapshot_entries(
+        .record_snapshot_entries(
             &snapshot.files(),
             "payloads/native-window.acceptance",
             role,
@@ -2522,6 +2571,18 @@ mod tests {
     }
 
     #[test]
+    fn native_runtime_contract_must_match_machine_authority() {
+        let authority: Authority =
+            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
+        let expected = authority.native_runtime_contract();
+        validate_native_runtime_authority(&authority, expected).unwrap();
+
+        let mut forged = expected;
+        forged.expected_execution_uid += 1;
+        assert!(validate_native_runtime_authority(&authority, forged).is_err());
+    }
+
+    #[test]
     fn runtime_bindings_keep_source_authority_and_git_trust_distinct() {
         let source = Path::new("/exact-head");
         let bindings =
@@ -3293,6 +3354,12 @@ mod tests {
             features: Vec::new(),
             entries: Vec::new(),
         };
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+
+            fs::set_permissions(&native_root, fs::Permissions::from_mode(0o550)).unwrap();
+        }
 
         retain_native_acceptance_failure(&mut session, &gate, &step, &native_root).unwrap();
         assert_eq!(session.entries.len(), 6);
@@ -3304,8 +3371,9 @@ mod tests {
         }));
         #[cfg(unix)]
         {
-            use std::os::unix::fs::symlink;
+            use std::os::unix::fs::{symlink, PermissionsExt as _};
 
+            fs::set_permissions(&native_root, fs::Permissions::from_mode(0o750)).unwrap();
             let outside = temp.path().join("outside-diagnostic");
             fs::write(&outside, b"must not be read").unwrap();
             fs::create_dir_all(native_root.join("automation")).unwrap();

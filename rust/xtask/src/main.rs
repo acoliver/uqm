@@ -256,6 +256,13 @@ fn run() -> Result<(), String> {
         return run_containment_hidden_command(&command, &args.collect::<Vec<_>>())
             .expect("matched Darwin hidden command must dispatch");
     }
+    #[cfg(target_os = "macos")]
+    if command == "__ci-test"
+        && env::args().nth(2).as_deref() == Some(ci::exec::CONTAINMENT_CREDENTIAL_PROBE_COMMAND)
+    {
+        let arguments = args.collect::<Vec<_>>();
+        return ci::exec::run_containment_credential_probe(&arguments[1..]);
+    }
     if command == "observer-helper" || command == "__ci-native-acceptance" {
         let mut native_arguments = vec!["uqm-native-acceptance".to_string()];
         if command == "observer-helper" {
@@ -815,8 +822,20 @@ fn stage_linked_build_bytes(
             "linked-build proof member {filename} exceeds authority limit"
         ));
     }
-    fs::write(directory.join(filename), bytes)
+    let path = directory.join(filename);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .map_err(|error| format!("create linked-build proof member {filename}: {error}"))?;
+    file.write_all(bytes)
         .map_err(|error| format!("write linked-build proof member {filename}: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        file.set_permissions(fs::Permissions::from_mode(0o640))
+            .map_err(|error| format!("publish linked-build proof member {filename}: {error}"))?;
+    }
     Ok(retained_identity(retained_path, bytes))
 }
 
@@ -2468,6 +2487,32 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn linked_build_proof_members_are_group_readable_and_immutable_to_the_group() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let directory = tempfile::tempdir().unwrap();
+        let retained = stage_linked_build_bytes(
+            directory.path(),
+            "member.json",
+            "inputs/linked-build/member.json",
+            b"{}\n",
+            1024,
+        )
+        .unwrap();
+
+        assert_eq!(retained.byte_length, 3);
+        assert_eq!(
+            fs::metadata(directory.path().join("member.json"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+    }
 
     #[test]
     fn packaged_manifest_binds_executable_to_the_package_path() {

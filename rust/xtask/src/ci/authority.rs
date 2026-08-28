@@ -591,6 +591,7 @@ pub struct NativeContentTransportAuthority {
 #[serde(deny_unknown_fields)]
 pub struct NativeAcceptanceAuthority {
     pub platform: String,
+    pub dedicated_execution_uid: u32,
     pub content_url: String,
     pub content_filename: String,
     pub content_sha256: String,
@@ -685,6 +686,7 @@ impl Authority {
     ) -> uqm_rust::automation::native_window::NativeWindowRuntimeContract {
         let runtime = self.native_acceptance.runtime_contract;
         uqm_rust::automation::native_window::NativeWindowRuntimeContract {
+            expected_execution_uid: self.native_acceptance.dedicated_execution_uid,
             capture_timeout_ms: runtime.capture_timeout_ms,
             capture_kill_grace_ms: runtime.capture_kill_grace_ms,
             observer_timeout_ms: runtime.observer_timeout_ms,
@@ -1139,7 +1141,8 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     }
     let native = &authority.native_acceptance;
     let content_transport = &native.content_transport;
-    if native.platform != "macos"
+    if native.dedicated_execution_uid == 0
+        || native.platform != "macos"
         || !native.content_url.starts_with("https://")
         || !safe_content_filename(&native.content_filename)
         || !valid_sha256(&native.content_sha256)
@@ -1525,6 +1528,12 @@ mod tests {
 
     #[test]
     fn malformed_native_acceptance_content_identity_is_rejected() {
+        let mut zero_uid = fixture_authority();
+        zero_uid.native_acceptance.dedicated_execution_uid = 0;
+        assert!(validate_authority(&zero_uid)
+            .unwrap_err()
+            .contains("native acceptance configuration"));
+
         let mut missing_filename = fixture_authority();
         missing_filename.native_acceptance.content_filename.clear();
         assert!(validate_authority(&missing_filename)

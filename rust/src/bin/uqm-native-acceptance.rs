@@ -19,14 +19,14 @@ use uqm_rust::automation::{
     validate_script, ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionFailure,
     ChildSessionReceipt, NativeAcceptanceFailureManifest, NativeAcceptanceManifest,
     NativeAcceptanceSetupFailureContract, NativeAcceptanceSetupFailureManifest,
-    NativeChildCleanupReceipt, NativeLinkedBuildReceipt, NativeProcessIdentity,
-    NativeRetainedInput, NativeScreenshot, NativeScreenshotStage, NativeWindowAck,
-    NativeWindowAckPublisher, NativeWindowBinding, NativeWindowBounds, NativeWindowChildState,
-    NativeWindowConfigFile, NativeWindowObservation, NativeWindowObserverError, NativeWindowProof,
-    NativeWindowPublication, NativeWindowStateReader, ObservedNativeWindow, ProcessIdentity,
-    TraceRecord, NATIVE_ACCEPTANCE_FAILURE_SCHEMA, NATIVE_ACCEPTANCE_SCHEMA,
-    NATIVE_ACCEPTANCE_SETUP_FAILURE_SCHEMA, NATIVE_LINKED_BUILD_RECEIPT_SCHEMA,
-    NATIVE_WINDOW_ACK_SCHEMA, NATIVE_WINDOW_CONFIG_SCHEMA,
+    NativeChildCleanupReceipt, NativeExecutionIdentity, NativeLinkedBuildReceipt,
+    NativeProcessIdentity, NativeRetainedInput, NativeScreenshot, NativeScreenshotStage,
+    NativeWindowAck, NativeWindowAckPublisher, NativeWindowBinding, NativeWindowBounds,
+    NativeWindowChildState, NativeWindowConfigFile, NativeWindowObservation,
+    NativeWindowObserverError, NativeWindowProof, NativeWindowPublication, NativeWindowStateReader,
+    ObservedNativeWindow, ProcessIdentity, TraceRecord, NATIVE_ACCEPTANCE_FAILURE_SCHEMA,
+    NATIVE_ACCEPTANCE_SCHEMA, NATIVE_ACCEPTANCE_SETUP_FAILURE_SCHEMA,
+    NATIVE_LINKED_BUILD_RECEIPT_SCHEMA, NATIVE_WINDOW_ACK_SCHEMA, NATIVE_WINDOW_CONFIG_SCHEMA,
 };
 use uqm_rust::mainloop::options::{DEFAULT_RESOLUTION_HEIGHT, DEFAULT_RESOLUTION_WIDTH};
 
@@ -1035,6 +1035,20 @@ fn clean_child_outcome(
     )
 }
 
+#[cfg(unix)]
+fn native_execution_identity() -> Result<NativeExecutionIdentity, String> {
+    // SAFETY: getuid and geteuid have no preconditions.
+    Ok(NativeExecutionIdentity {
+        real_uid: unsafe { libc::getuid() },
+        effective_uid: unsafe { libc::geteuid() },
+    })
+}
+
+#[cfg(not(unix))]
+fn native_execution_identity() -> Result<NativeExecutionIdentity, String> {
+    Err("native execution identity is supported only on Unix".to_string())
+}
+
 fn finish_observer(observer: BoundedNativeObserver) -> Result<(), String> {
     observer
         .finish()
@@ -1072,6 +1086,7 @@ fn build_acceptance_manifest(
         schema: NATIVE_ACCEPTANCE_SCHEMA.to_string(),
         command: inputs.command.to_vec(),
         environment: BTreeMap::from([("SDL_AUDIODRIVER".to_string(), "dummy".to_string())]),
+        execution_identity: native_execution_identity()?,
         executable: inputs.executable.clone(),
         script: inputs.script.clone(),
         content_package: inputs.content_package.clone(),
@@ -3084,6 +3099,9 @@ mod tests {
 
     fn runtime_contract() -> NativeWindowRuntimeContract {
         NativeWindowRuntimeContract {
+            expected_execution_uid: native_execution_identity()
+                .map(|identity| identity.effective_uid)
+                .unwrap_or(1),
             capture_timeout_ms: 30_000,
             capture_kill_grace_ms: 5_000,
             observer_timeout_ms: 40_000,

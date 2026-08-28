@@ -28,7 +28,7 @@ use super::CiError;
 pub const WORKFLOW_FILE: &str = ".github/workflows/rust-quality.yaml";
 pub const VALIDATION_SCHEMA: &str = "uqm-s4-workflow-validation-v1";
 const TOOL_INSTALL_RUN_SHA256: &str =
-    "2b5cc04d6732a4464949731e417bfd193ccb9fd94d7d6e2df9c305a181f956b1";
+    "119bb3a7435a3ef26ccd3d9c9fe4d1f7de9144f31de10a8e46886dae1ff3b994";
 
 const FORBIDDEN_COMMANDS: [&str; 8] = [
     "cargo fmt",
@@ -1165,11 +1165,10 @@ fn rule_bootstrap_failure_receipts(document: &Yaml) -> RuleResult {
 
 fn rule_uid_containment(document: &Yaml) -> RuleResult {
     let rule = "workflow.uid_containment";
-    let steps = document
-        .get("jobs")
-        .and_then(|jobs| jobs.get("gates"))
-        .map(job_steps)
-        .unwrap_or_default();
+    let gates_job = document.get("jobs").and_then(|jobs| jobs.get("gates"));
+    let native_acceptance_env =
+        gates_job.and_then(|job| job.get_str(&["env", "NATIVE_ACCEPTANCE_JSON"]));
+    let steps = gates_job.map(job_steps).unwrap_or_default();
     let named = |name| {
         steps
             .iter()
@@ -1220,6 +1219,7 @@ fn rule_uid_containment(document: &Yaml) -> RuleResult {
         && linux_cleanup_position < finalize_position
         && cleanup_position < finalize_position;
     let valid = ordered
+        && native_acceptance_env == Some("${{ needs.plan.outputs.native_acceptance }}")
         && valid_dedicated_containment_provision(provision)
         && valid_linux_containment_provision(linux_provision)
         && valid_dedicated_containment_check(check)
@@ -1248,7 +1248,7 @@ fn valid_dedicated_containment_provision(step: &Yaml) -> bool {
         && step.get_str(&["if"]) == Some("runner.os == 'macOS'")
         && [
             "containment_user=\"uqm_s4_containment\"",
-            "containment_uid=\"59999\"",
+            "containment_uid=\"$(jq -er '.dedicated_execution_uid",
             "dscl . -list /Users UniqueID | awk",
             "dscl . -read \"/Users/${containment_user}\"",
             "install -o root -g wheel -m 0400 /dev/null \"${RUNNER_TEMP}/s4-containment-created\"",
@@ -1274,7 +1274,7 @@ fn valid_linux_containment_provision(step: &Yaml) -> bool {
         && step.get_str(&["if"]) == Some("runner.os == 'Linux'")
         && [
             "containment_user=\"uqm_s4_containment\"",
-            "containment_uid=\"59999\"",
+            "containment_uid=\"$(jq -er '.dedicated_execution_uid",
             "getent passwd \"${containment_uid}\"",
             "getent passwd \"${containment_user}\"",
             "s4-linux-containment-created",
@@ -1342,6 +1342,7 @@ fn valid_dedicated_containment_cleanup(step: &Yaml) -> bool {
         && step.get_str(&["if"]) == Some("always() && runner.os == 'macOS'")
         && repeated_kill
         && [
+            "containment_uid=\"$(jq -er '.dedicated_execution_uid",
             "marker=\"${RUNNER_TEMP}/s4-containment-created\"",
             "if ! sudo -n test -f \"${marker}\"",
             "stat -f '%u:%Lp' \"${marker}\"",
@@ -1366,6 +1367,7 @@ fn valid_linux_containment_cleanup(step: &Yaml) -> bool {
     step.get_str(&["id"]) == Some("linux_containment_cleanup")
         && step.get_str(&["if"]) == Some("always() && runner.os == 'Linux'")
         && [
+            "containment_uid=\"$(jq -er '.dedicated_execution_uid",
             "marker=\"${RUNNER_TEMP}/s4-linux-containment-created\"",
             "if ! sudo -n test -f \"${marker}\"",
             "stat -c '%u:%a' \"${marker}\"",
@@ -3294,6 +3296,14 @@ total_timeout=60
     fn dedicated_containment_mutations_are_rejected() {
         for (from, to) in [
             (
+                "NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}",
+                "NATIVE_ACCEPTANCE_JSON: '{}'",
+            ),
+            (
+                "containment_uid=\"$(jq -er '.dedicated_execution_uid | select(type == \"number\" and . == floor and . > 0)' <<<\"${NATIVE_ACCEPTANCE_JSON}\")\"",
+                "containment_uid=\"59999\"",
+            ),
+            (
                 "dscl . -list /Users UniqueID | awk",
                 "printf '%s' skipped-uid-collision-check | awk",
             ),
@@ -3538,8 +3548,10 @@ total_timeout=60
     #[test]
     fn native_content_authority_bypass_is_rejected() {
         let mutated = WORKFLOW.replacen(
-            "NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}",
-            "NATIVE_ACCEPTANCE_JSON: '{}'",
+            "MATRIX_OS: ${{ matrix.os }}
+          NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}",
+            "MATRIX_OS: ${{ matrix.os }}
+          NATIVE_ACCEPTANCE_JSON: '{}'",
             1,
         );
         assert_ne!(mutated, WORKFLOW);
