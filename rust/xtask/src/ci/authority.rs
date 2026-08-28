@@ -686,7 +686,6 @@ impl Authority {
     ) -> uqm_rust::automation::native_window::NativeWindowRuntimeContract {
         let runtime = self.native_acceptance.runtime_contract;
         uqm_rust::automation::native_window::NativeWindowRuntimeContract {
-            expected_execution_uid: self.native_acceptance.dedicated_execution_uid,
             capture_timeout_ms: runtime.capture_timeout_ms,
             capture_kill_grace_ms: runtime.capture_kill_grace_ms,
             observer_timeout_ms: runtime.observer_timeout_ms,

@@ -2773,7 +2773,7 @@ mod os_tests {
             let Some(after_comm) = stat.rfind(')') else {
                 return true;
             };
-            return stat[after_comm + 1..].split_whitespace().next() != Some("Z");
+            stat[after_comm + 1..].split_whitespace().next() != Some("Z")
         }
 
         #[cfg(not(target_os = "linux"))]

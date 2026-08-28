@@ -256,13 +256,6 @@ fn run() -> Result<(), String> {
         return run_containment_hidden_command(&command, &args.collect::<Vec<_>>())
             .expect("matched Darwin hidden command must dispatch");
     }
-    #[cfg(target_os = "macos")]
-    if command == "__ci-test"
-        && env::args().nth(2).as_deref() == Some(ci::exec::CONTAINMENT_CREDENTIAL_PROBE_COMMAND)
-    {
-        let arguments = args.collect::<Vec<_>>();
-        return ci::exec::run_containment_credential_probe(&arguments[1..]);
-    }
     if command == "observer-helper" || command == "__ci-native-acceptance" {
         let mut native_arguments = vec!["uqm-native-acceptance".to_string()];
         if command == "observer-helper" {
@@ -288,7 +281,10 @@ fn run() -> Result<(), String> {
     run_preflight(&root, preflight_for(&command)?)
         .map_err(|error| format!("{command} preflight: {error}"))?;
     match command.as_str() {
-        "__ci-test" => test_all(&root).map_err(|error| format!("test command: {error}")),
+        "__ci-test" => test_all(&root, false).map_err(|error| format!("test command: {error}")),
+        "__ci-native-test" => {
+            native_test(&root).map_err(|error| format!("native test command: {error}"))
+        }
         "__ci-package" => package(&root),
         "__ci-capture-dependencies" => capture_dependencies(&root),
         "__ci-production" => production(&root).map(|_| ()),
@@ -297,7 +293,10 @@ fn run() -> Result<(), String> {
         "__ci-ownership-fixture" => verify_fixture_ownership(&root),
         "debug" => build_profile(&root, Profile::Debug),
         "release" => build_profile(&root, Profile::Release),
-        "test" => test_all(&root).map_err(|error| format!("test command: {error}")),
+        "test" => test_all(&root, true).map_err(|error| format!("test command: {error}")),
+        "native-test" => {
+            native_test(&root).map_err(|error| format!("native test command: {error}"))
+        }
         "probe" => run_script(&root, "rust/probes/run_p00_probes.sh"),
         "harness" => run_harnesses(&root),
         "production" => production(&root).map(|_| ()),
@@ -312,7 +311,7 @@ fn run() -> Result<(), String> {
 }
 
 fn usage() -> String {
-    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|probe|harness|package|production|prove|verify|capture-dependencies|doctor|matrix|ci>".into()
+    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native-test|probe|harness|package|production|prove|verify|capture-dependencies|doctor|matrix|ci>".into()
 }
 
 fn preflight_for(command: &str) -> Result<Preflight, String> {
@@ -329,8 +328,10 @@ fn preflight_for(command: &str) -> Result<Preflight, String> {
         | "doctor" => Ok(Preflight::Full),
         "verify"
         | "test"
+        | "native-test"
         | "__ci-verify"
         | "__ci-test"
+        | "__ci-native-test"
         | "__ci-ownership-production"
         | "__ci-ownership-fixture" => Ok(Preflight::ContractOnly),
         "matrix" => Ok(Preflight::PureInspection),
@@ -514,7 +515,7 @@ fn require_test_inventory(command: &Command, route: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn test_all(root: &Path) -> Result<(), String> {
+fn test_all(root: &Path, run_native_acceptance: bool) -> Result<(), String> {
     let cargo_target = ci_cargo_target_dir()?;
     let test_cargo = retained_rust_tool_program("CARGO", "cargo")?;
 
@@ -607,6 +608,31 @@ fn test_all(root: &Path) -> Result<(), String> {
             .env("RUSTC_LINKER", &toolchain.linker.executable)
             .args(linked_arguments),
         "Cargo test strict linked provider fixture",
+    )?;
+    if run_native_acceptance {
+        run_native_window_acceptance(root, &linked_build_proof)?;
+    }
+    Ok(())
+}
+
+fn native_test(root: &Path) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        println!("native window acceptance is not required on this platform");
+        return Ok(());
+    }
+    let cargo_target = ci_cargo_target_dir()?;
+    let toolchain = canonical_toolchain(root)
+        .map_err(|error| format!("prepare canonical native-test toolchain: {error}"))?;
+    prepare_source_environment(root)?;
+    prepare_canonical_build(&toolchain)?;
+    let marker = serde_json::to_string(&toolchain)
+        .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
+    let linked_build_proof = build_linked_test_proof(
+        root,
+        &toolchain.cargo.executable,
+        &toolchain.linker.executable,
+        &marker,
+        cargo_target.as_deref(),
     )?;
     run_native_window_acceptance(root, &linked_build_proof)
 }
@@ -908,7 +934,7 @@ fn run_native_window_acceptance(
     let acceptance_policy =
         serde_json::to_string(&authority.native_acceptance.acceptance_policy)
             .map_err(|error| format!("serialize native acceptance policy: {error}"))?;
-    run_command(
+    run_aqua_command(
         Command::new(controller).current_dir(root).args([
             "__ci-native-acceptance",
             "run",
@@ -2374,6 +2400,27 @@ fn run_command(command: &mut Command, label: &str) -> Result<(), String> {
         Err(captured.failure_detail(label))
     }
 }
+fn run_aqua_command(command: &mut Command, label: &str) -> Result<(), String> {
+    let captured = run_bounded_command_in_session(command, label, CommandSession::CurrentAqua)
+        .map_err(|error| format!("{label}: {error}"))?;
+    std::io::stdout()
+        .write_all(&captured.stdout)
+        .map_err(|error| format!("cannot write {label} stdout: {error}"))?;
+    std::io::stderr()
+        .write_all(&captured.stderr)
+        .map_err(|error| format!("cannot write {label} stderr: {error}"))?;
+    if captured.succeeded() {
+        Ok(())
+    } else {
+        Err(captured.failure_detail(label))
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CommandSession {
+    Dedicated,
+    CurrentAqua,
+}
 
 fn retained_source_mode(
     program: &str,
@@ -2393,6 +2440,14 @@ fn retained_source_mode(
 }
 
 fn run_bounded_command(command: &Command, label: &str) -> Result<ci::exec::Captured, String> {
+    run_bounded_command_in_session(command, label, CommandSession::Dedicated)
+}
+
+fn run_bounded_command_in_session(
+    command: &Command,
+    label: &str,
+    session: CommandSession,
+) -> Result<ci::exec::Captured, String> {
     let root = repository_root()?;
     let authority = ci::load_authority(&root)?;
     let working_directory = command
@@ -2435,37 +2490,49 @@ fn run_bounded_command(command: &Command, label: &str) -> Result<ci::exec::Captu
     }
     let (execute_retained_source, is_canonical_cargo) =
         retained_source_mode(program, &environment)?;
-    Ok(ci::exec::run_captured_with_bound_environment(
-        &working_directory,
-        program,
-        &arguments,
-        authority.supervision.builtin_limits(),
-        execute_retained_source,
-        |execution_path| {
-            let mut environment = environment;
-            if is_canonical_cargo {
-                let position = environment
-                    .iter()
-                    .position(|(name, _)| name == "UQM_CANONICAL_TOOLCHAIN")
-                    .ok_or_else(|| {
-                        "canonical toolchain marker disappeared before launch".to_string()
-                    })?;
-                let mut toolchain: ToolchainIdentity =
-                    serde_json::from_str(&environment[position].1)
-                        .map_err(|error| format!("invalid canonical toolchain marker: {error}"))?;
-                toolchain.cargo.executable = execution_path.to_string();
-                environment[position].1 = serde_json::to_string(&toolchain).map_err(|error| {
-                    format!("cannot bind canonical toolchain marker to executable: {error}")
+    let bind_environment = |execution_path: &str| {
+        let mut environment = environment;
+        if is_canonical_cargo {
+            let position = environment
+                .iter()
+                .position(|(name, _)| name == "UQM_CANONICAL_TOOLCHAIN")
+                .ok_or_else(|| {
+                    "canonical toolchain marker disappeared before launch".to_string()
                 })?;
-                if let Some((_, cargo)) = environment.iter_mut().find(|(name, _)| name == "CARGO") {
-                    *cargo = execution_path.to_string();
-                } else {
-                    environment.push(("CARGO".into(), execution_path.to_string()));
-                }
+            let mut toolchain: ToolchainIdentity =
+                serde_json::from_str(&environment[position].1)
+                    .map_err(|error| format!("invalid canonical toolchain marker: {error}"))?;
+            toolchain.cargo.executable = execution_path.to_string();
+            environment[position].1 = serde_json::to_string(&toolchain).map_err(|error| {
+                format!("cannot bind canonical toolchain marker to executable: {error}")
+            })?;
+            if let Some((_, cargo)) = environment.iter_mut().find(|(name, _)| name == "CARGO") {
+                *cargo = execution_path.to_string();
+            } else {
+                environment.push(("CARGO".into(), execution_path.to_string()));
             }
-            Ok(environment)
-        },
-    ))
+        }
+        Ok(environment)
+    };
+    let captured = match session {
+        CommandSession::Dedicated => ci::exec::run_captured_with_bound_environment(
+            &working_directory,
+            program,
+            &arguments,
+            authority.supervision.builtin_limits(),
+            execute_retained_source,
+            bind_environment,
+        ),
+        CommandSession::CurrentAqua => ci::exec::run_captured_in_current_aqua_session(
+            &working_directory,
+            program,
+            &arguments,
+            authority.supervision.builtin_limits(),
+            execute_retained_source,
+            bind_environment,
+        ),
+    };
+    Ok(captured)
 }
 
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, limit: u64) -> Result<T, String> {

@@ -1035,18 +1035,42 @@ fn clean_child_outcome(
     )
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
+fn launchd_manager_value(subcommand: &str) -> Result<String, String> {
+    let output = Command::new("/bin/launchctl")
+        .arg(subcommand)
+        .env_clear()
+        .output()
+        .map_err(|error| format!("cannot query launchd {subcommand}: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "launchctl {subcommand} failed with status {}",
+            output.status
+        ));
+    }
+    std::str::from_utf8(&output.stdout)
+        .map(str::trim)
+        .map(str::to_string)
+        .map_err(|error| format!("launchd {subcommand} is not UTF-8: {error}"))
+}
+
+#[cfg(target_os = "macos")]
 fn native_execution_identity() -> Result<NativeExecutionIdentity, String> {
+    let launchd_manager_uid = launchd_manager_value("manageruid")?
+        .parse::<u32>()
+        .map_err(|error| format!("launchd manager UID is invalid: {error}"))?;
     // SAFETY: getuid and geteuid have no preconditions.
     Ok(NativeExecutionIdentity {
         real_uid: unsafe { libc::getuid() },
         effective_uid: unsafe { libc::geteuid() },
+        launchd_manager_uid,
+        launchd_manager_name: launchd_manager_value("managername")?,
     })
 }
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "macos"))]
 fn native_execution_identity() -> Result<NativeExecutionIdentity, String> {
-    Err("native execution identity is supported only on Unix".to_string())
+    Err("native execution identity requires the macOS Aqua session".to_string())
 }
 
 fn finish_observer(observer: BoundedNativeObserver) -> Result<(), String> {
@@ -3099,9 +3123,6 @@ mod tests {
 
     fn runtime_contract() -> NativeWindowRuntimeContract {
         NativeWindowRuntimeContract {
-            expected_execution_uid: native_execution_identity()
-                .map(|identity| identity.effective_uid)
-                .unwrap_or(1),
             capture_timeout_ms: 30_000,
             capture_kill_grace_ms: 5_000,
             observer_timeout_ms: 40_000,

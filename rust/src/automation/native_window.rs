@@ -67,7 +67,6 @@ impl NativeInventoryLimits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NativeWindowRuntimeContract {
-    pub expected_execution_uid: u32,
     pub capture_timeout_ms: u64,
     pub capture_kill_grace_ms: u64,
     pub observer_timeout_ms: u64,
@@ -125,8 +124,7 @@ impl NativeWindowRuntimeContract {
         let operation_bound = self
             .observer_timeout_ms
             .saturating_add(self.observer_kill_grace_ms);
-        self.expected_execution_uid > 0
-            && self.capture_timeout_ms > 0
+        self.capture_timeout_ms > 0
             && self.capture_kill_grace_ms > 0
             && self.observer_timeout_ms
                 > self
@@ -818,6 +816,8 @@ struct LinkedCompileProfile {
 pub struct NativeExecutionIdentity {
     pub real_uid: u32,
     pub effective_uid: u32,
+    pub launchd_manager_uid: u32,
+    pub launchd_manager_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -3523,7 +3523,8 @@ pub fn validate_native_acceptance_bundle(
         || !manifest.passed
         || manifest.execution_identity.real_uid == 0
         || manifest.execution_identity.real_uid != manifest.execution_identity.effective_uid
-        || manifest.execution_identity.real_uid != manifest.runtime_contract.expected_execution_uid
+        || manifest.execution_identity.real_uid != manifest.execution_identity.launchd_manager_uid
+        || manifest.execution_identity.launchd_manager_name != "Aqua"
         || !valid_acceptance_command_environment(manifest)
         || manifest.trace_path != "automation/trace.jsonl"
         || !valid_acceptance_child_contract(manifest)
@@ -3678,7 +3679,6 @@ mod tests {
 
     fn runtime_contract() -> NativeWindowRuntimeContract {
         NativeWindowRuntimeContract {
-            expected_execution_uid: 501,
             capture_timeout_ms: 30_000,
             capture_kill_grace_ms: 5_000,
             observer_timeout_ms: 40_000,
@@ -4160,6 +4160,8 @@ mod tests {
             execution_identity: NativeExecutionIdentity {
                 real_uid: 501,
                 effective_uid: 501,
+                launchd_manager_uid: 501,
+                launchd_manager_name: "Aqua".to_string(),
             },
             executable: executable_input,
             script: NativeRetainedInput {
@@ -4699,12 +4701,18 @@ mod tests {
             validate_native_acceptance_bundle(root.path(), &mismatched_identity),
             Err(NativeWindowProofError::Receipt)
         );
-        let mut wrong_expected_identity = manifest.clone();
-        wrong_expected_identity
-            .runtime_contract
-            .expected_execution_uid += 1;
+        let mut mismatched_launchd_identity = manifest.clone();
+        mismatched_launchd_identity
+            .execution_identity
+            .launchd_manager_uid += 1;
         assert_eq!(
-            validate_native_acceptance_bundle(root.path(), &wrong_expected_identity),
+            validate_native_acceptance_bundle(root.path(), &mismatched_launchd_identity),
+            Err(NativeWindowProofError::Receipt)
+        );
+        let mut non_aqua_identity = manifest.clone();
+        non_aqua_identity.execution_identity.launchd_manager_name = "Background".to_string();
+        assert_eq!(
+            validate_native_acceptance_bundle(root.path(), &non_aqua_identity),
             Err(NativeWindowProofError::Receipt)
         );
         let mut forged_process = manifest.clone();

@@ -3921,7 +3921,7 @@ fn validate_failed_process_gate(
             first_failed,
         ));
     } else if failed_gate.id == "tests"
-        && first_failed == "tests.post.xtask-test.native-window-acceptance"
+        && first_failed == "tests.post.native-acceptance.native-window-acceptance"
     {
         contracts.extend(validate_failed_native_acceptance_postprocess(
             root,
@@ -3962,7 +3962,7 @@ fn validate_failed_process_gate(
         {
             contracts.push("evidence.security.advisory_database_revision".to_string());
         }
-        if failed_gate.id == "tests" && first_failed == "tests.xtask-test" {
+        if failed_gate.id == "tests" && first_failed == "tests.native-acceptance" {
             contracts.extend(validate_failed_native_acceptance_evidence(
                 root,
                 index,
@@ -4298,7 +4298,11 @@ fn validate_failed_native_acceptance_postprocess(
     gate: &super::authority::Gate,
 ) -> Vec<String> {
     let mut contracts = Vec::new();
-    let Some(step) = gate.steps.iter().find(|step| step.id == "xtask-test") else {
+    let Some(step) = gate
+        .steps
+        .iter()
+        .find(|step| step.id == "native-acceptance")
+    else {
         return vec!["evidence.native_window.authority_step".to_string()];
     };
     contracts.extend(validate_builtin_step(
@@ -4349,7 +4353,11 @@ fn validate_failed_native_acceptance_evidence(
     if !index.tuple.starts_with("macos-") {
         return vec!["evidence.native_window.failure.platform".to_string()];
     }
-    let Some(step) = gate.steps.iter().find(|step| step.id == "xtask-test") else {
+    let Some(step) = gate
+        .steps
+        .iter()
+        .find(|step| step.id == "native-acceptance")
+    else {
         return vec!["evidence.native_window.failure.step".to_string()];
     };
     let acceptance_root = root.join("payloads/native-window.acceptance");
@@ -4466,7 +4474,11 @@ fn validate_native_acceptance_evidence(
             vec!["evidence.native_window.unexpected_tuple".to_string()]
         };
     }
-    let Some(step) = gate.steps.iter().find(|step| step.id == "xtask-test") else {
+    let Some(step) = gate
+        .steps
+        .iter()
+        .find(|step| step.id == "native-acceptance")
+    else {
         return vec!["evidence.native_window.authority_step".to_string()];
     };
     let mut contracts = Vec::new();
@@ -18278,6 +18290,11 @@ mod tests {
         let step = gate
             .steps
             .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap();
+        let unrelated_step = gate
+            .steps
+            .iter()
             .find(|step| step.id == "xtask-test")
             .unwrap();
         let bundle = tempfile::tempdir().unwrap();
@@ -18340,7 +18357,7 @@ mod tests {
             &step.command,
             (Some(0), None, None),
         );
-        let contract = "tests.post.xtask-test.native-window-acceptance";
+        let contract = "tests.post.native-acceptance.native-window-acceptance";
         let result = serde_json::to_vec(&serde_json::json!({
             "schema": "uqm-s4-gate-result-v1",
             "gate": gate.id,
@@ -18382,6 +18399,17 @@ mod tests {
         );
         let mut unrelated_test_failure = index.clone();
         unrelated_test_failure.first_failed_contract = Some("tests.xtask-test".to_string());
+        unrelated_test_failure.entries.retain(|entry| {
+            entry.producing_gate != gate.id || !entry.path.contains("tests/native-acceptance.")
+        });
+        write_builtin_step_fixture(
+            bundle.path(),
+            &mut unrelated_test_failure.entries,
+            &gate.id,
+            &unrelated_step.id,
+            &unrelated_step.command,
+            (Some(0), None, None),
+        );
         let step_result_entry = unrelated_test_failure
             .entries
             .iter()
@@ -18480,7 +18508,7 @@ mod tests {
         let step = gate
             .steps
             .iter()
-            .find(|step| step.id == "xtask-test")
+            .find(|step| step.id == "native-acceptance")
             .unwrap();
         let bundle = tempfile::tempdir().unwrap();
         let acceptance = bundle.path().join("payloads/native-window.acceptance");
@@ -18670,7 +18698,7 @@ mod tests {
                 .unwrap(),
             );
         }
-        let contract = "tests.xtask-test";
+        let contract = "tests.native-acceptance";
         let result = serde_json::to_vec(&serde_json::json!({
             "schema": "uqm-s4-gate-result-v1",
             "gate": gate.id,

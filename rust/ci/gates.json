@@ -490,6 +490,20 @@
             "--",
             "test"
           ]
+        },
+        {
+          "id": "native-acceptance",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "--manifest-path",
+            "rust/xtask/Cargo.toml",
+            "--",
+            "native-test"
+          ]
         }
       ]
     },

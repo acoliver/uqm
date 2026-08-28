@@ -347,9 +347,9 @@ fn test_condvar_wait_timeout() {
     let elapsed = start.elapsed();
     // Should have timed out
     assert!(!result, "Should have timed out, not signaled");
-    // Should have waited approximately the timeout duration
-    assert!(elapsed >= Duration::from_millis(40)); // Allow some tolerance
-    assert!(elapsed < Duration::from_millis(200)); // But not too long
+    // The lower bound proves the wait did not return immediately. Scheduling load can
+    // delay a timed wait arbitrarily after its deadline, so there is no valid ceiling.
+    assert!(elapsed >= Duration::from_millis(40));
 }
 
 // ============================================================================

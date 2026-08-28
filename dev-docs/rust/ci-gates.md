@@ -74,18 +74,20 @@ distribution metadata, not pull-request source; pull-request-controlled commands
 only after containment is active.
 
 On Linux and macOS, the gates job creates an otherwise-unused local identity before it
-runs merge-deciding gate subprocesses. The base-owned controller starts each
-subprocess under that identity and, before returning, kills and checks for every
-process with its real or effective UID. This includes a process that calls `setsid`,
-double-forks, and loses every observable ancestor before the controller's first
-process snapshot. A base-owned containment check exercises that escape pattern before
-authoritative gates run, and successful transport retains
+runs merge-deciding gate subprocesses. The base-owned controller starts ordinary and
+non-GUI subprocesses under that identity and, before returning, kills and checks for
+every process with its real or effective UID. This includes a process that calls
+`setsid`, double-forks, and loses every observable ancestor before the controller's
+first process snapshot. A base-owned containment check exercises that escape pattern
+before authoritative gates run, and successful transport retains
 `containment-check.result.json`. An always-running, marker-gated cleanup removes the
 identity after killing and checking its remaining processes. The outer workflow
 supervisor's receipt describes only its own process-tree boundary; dedicated-UID
-containment is established by the separate containment-check receipt. After untrusted
-gates return, a base-owned supervised check revalidates the exact source SHA, tracked
-and untracked state, and authority bytes, retaining `source-revalidation.result.json`.
+containment is established by the separate containment-check receipt. The exact
+`tests.native-acceptance` step has a narrower macOS execution rule described below.
+After untrusted gates return, a base-owned supervised check revalidates the exact
+source SHA, tracked and untracked state, and authority bytes, retaining
+`source-revalidation.result.json`.
 
 Normal pull requests cannot change gate authority and production code together. An
 authority update first needs a separately reviewed base-policy change, after which
@@ -180,10 +182,28 @@ target dependencies. The bootstrap gate launches that package path with the fixe
 `rust/scripts/main-menu-v1.json` profile, validates its LCAR offline, and captures
 teardown.
 
-On macOS tuples, the tests gate also runs the direct native-window acceptance
-runner against the linked executable. The workflow derives the content URL,
-filename, version, byte length, and SHA-256 from `rust/ci/gates.json`. It downloads
-`uqm-0.8.0-content.uqm`, requires exactly 11,547,353 bytes and SHA-256
+The tests gate contains a separate `native-acceptance` authority step on every tuple.
+Linux executes the step under the dedicated identity and records that native-window
+acceptance is not required there. On macOS, the base-owned controller permits the
+current Aqua session only for the exact hidden command derived from this step. Cocoa
+window creation requires matching Unix credentials and launchd session ownership, so
+running a dedicated UID inside another user's Aqua session is not accepted. The Aqua
+coordinator still uses bounded process-group supervision. It starts from a cleared
+environment and restores only the host toolchain/runtime allowlist, explicit
+authority-derived values, and the three containment bindings needed by the linked
+build. Runner command files and credential channels are excluded. The coordinator
+runs the linked Cargo build under the dedicated identity, stages read-only proof
+inputs, and then launches the retained executable directly in its credential-matched
+Aqua session. The dedicated wrapper sets `umask 0027`, which gives the runner's shared
+primary group read and traversal access to ordinary generated outputs while excluding
+other users. All other gate commands remain under dedicated-UID containment.
+
+The native manifest records the real UID, effective UID, launchd manager UID, and
+launchd manager name. Validation requires a non-root process, equal real and effective
+UIDs, a matching manager UID, manager name `Aqua`, and runtime-contract bytes equal to
+the authority. The workflow derives the content URL, filename, version, byte length,
+and SHA-256 from `rust/ci/gates.json`. It downloads `uqm-0.8.0-content.uqm`, requires
+exactly 11,547,353 bytes and SHA-256
 `77d75ac25e6fb755a33c4ba3b38a7b7bc41fcbc02896891b0cc9ac9214b72eef`, and
 provides the verified directory through `UQM_CI_NATIVE_CONTENT_ROOT`. The runner
 retains that exact package in its evidence bundle. Detached replay checks the

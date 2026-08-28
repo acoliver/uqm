@@ -25,8 +25,6 @@ const DEDICATED_CONTAINMENT_HOME_ENV: &str = "UQM_CI_DEDICATED_CONTAINMENT_HOME"
 const DEDICATED_CONTAINMENT_USER_ENV: &str = "UQM_CI_DEDICATED_CONTAINMENT_USER";
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 pub const CONTAINMENT_ESCAPE_HELPER_COMMAND: &str = "__ci-containment-escape-helper";
-#[cfg(target_os = "macos")]
-pub const CONTAINMENT_CREDENTIAL_PROBE_COMMAND: &str = "__ci-containment-credential-probe";
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const DEDICATED_UID_WRAPPER: &str = include_str!("dedicated_uid_wrapper.sh");
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1815,6 +1813,32 @@ fn containment_environment_allows(name: &str) -> bool {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+fn filter_inherited_environment(
+    variables: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+    allows: impl Fn(&str) -> bool,
+) -> Result<BTreeMap<String, String>, std::io::Error> {
+    let mut environment = BTreeMap::new();
+    for (name, value) in variables {
+        let name = name.into_string().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "cannot transfer a non-UTF-8 environment name into a bounded child",
+            )
+        })?;
+        let value = value.into_string().map_err(|_| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("cannot transfer non-UTF-8 environment variable {name}"),
+            )
+        })?;
+        if allows(&name) {
+            environment.insert(name, value);
+        }
+    }
+    Ok(environment)
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn bind_dedicated_containment_environment(
     environment: &mut BTreeMap<String, String>,
     extra_env: &[(String, String)],
@@ -1882,24 +1906,8 @@ fn dedicated_contained_command(
         return Ok(command);
     };
 
-    let mut environment = BTreeMap::new();
-    for (name, value) in std::env::vars_os() {
-        let name = name.into_string().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "cannot transfer a non-UTF-8 environment name into dedicated containment",
-            )
-        })?;
-        let value = value.into_string().map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("cannot transfer non-UTF-8 environment variable {name}"),
-            )
-        })?;
-        if containment_environment_allows(&name) {
-            environment.insert(name, value);
-        }
-    }
+    let mut environment =
+        filter_inherited_environment(std::env::vars_os(), containment_environment_allows)?;
     bind_dedicated_containment_environment(&mut environment, extra_env, &config);
     Ok(build_dedicated_containment_command(
         &config,
@@ -1907,6 +1915,89 @@ fn dedicated_contained_command(
         program,
         arguments,
     ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LaunchContext {
+    DedicatedContainment,
+    CurrentAquaSession,
+}
+
+#[cfg(target_os = "macos")]
+fn launchd_manager_value(subcommand: &str) -> Result<String, std::io::Error> {
+    let output = Command::new("/bin/launchctl")
+        .arg(subcommand)
+        .env_clear()
+        .output()?;
+    if !output.status.success() {
+        return Err(std::io::Error::other(format!(
+            "launchctl {subcommand} failed with status {}",
+            output.status
+        )));
+    }
+    std::str::from_utf8(&output.stdout)
+        .map(str::trim)
+        .map(str::to_string)
+        .map_err(std::io::Error::other)
+}
+
+#[cfg(target_os = "macos")]
+fn current_aqua_session() -> Result<(), std::io::Error> {
+    // SAFETY: getuid and geteuid have no preconditions.
+    let real_uid = unsafe { libc::getuid() };
+    let effective_uid = unsafe { libc::geteuid() };
+    let manager_uid = launchd_manager_value("manageruid")?
+        .parse::<u32>()
+        .map_err(std::io::Error::other)?;
+    let manager_name = launchd_manager_value("managername")?;
+    if real_uid == 0
+        || real_uid != effective_uid
+        || manager_uid != real_uid
+        || manager_name != "Aqua"
+    {
+        return Err(std::io::Error::other(format!(
+            "native acceptance requires matching non-root real/effective/Aqua manager UIDs; real={real_uid}, effective={effective_uid}, manager={manager_uid}, manager_name={manager_name:?}"
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn current_aqua_environment_allows(name: &str) -> bool {
+    containment_environment_allows(name)
+        || matches!(
+            name,
+            DEDICATED_CONTAINMENT_UID_ENV
+                | DEDICATED_CONTAINMENT_HOME_ENV
+                | DEDICATED_CONTAINMENT_USER_ENV
+        )
+}
+
+#[cfg(target_os = "macos")]
+fn current_aqua_command(
+    program: &str,
+    arguments: &[String],
+    extra_env: &[(String, String)],
+) -> Result<Command, std::io::Error> {
+    let mut environment =
+        filter_inherited_environment(std::env::vars_os(), current_aqua_environment_allows)?;
+    for (name, value) in extra_env {
+        if matches!(
+            name.as_str(),
+            DEDICATED_CONTAINMENT_UID_ENV
+                | DEDICATED_CONTAINMENT_HOME_ENV
+                | DEDICATED_CONTAINMENT_USER_ENV
+        ) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("current-Aqua child cannot override trusted containment binding {name}"),
+            ));
+        }
+        environment.insert(name.clone(), value.clone());
+    }
+    let mut command = Command::new(program);
+    command.args(arguments).env_clear().envs(environment);
+    Ok(command)
 }
 
 #[cfg(unix)]
@@ -1917,20 +2008,46 @@ fn launch(
     extra_env: &[(String, String)],
     limits: Limits,
     deadline: Instant,
+    context: LaunchContext,
 ) -> Result<Launch, LaunchError> {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    let mut command =
-        dedicated_contained_command(program, arguments, extra_env).map_err(|error| {
-            LaunchError {
-                label: "dedicated-uid containment".to_string(),
-                error,
+    let mut command = match context {
+        LaunchContext::DedicatedContainment => {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            {
+                dedicated_contained_command(program, arguments, extra_env).map_err(|error| {
+                    LaunchError {
+                        label: "dedicated-uid containment".to_string(),
+                        error,
+                    }
+                })?
             }
-        })?;
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    let mut command = {
-        let mut command = Command::new(program);
-        command.args(arguments);
-        command
+            #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+            {
+                let mut command = Command::new(program);
+                command.args(arguments);
+                command
+            }
+        }
+        LaunchContext::CurrentAquaSession => {
+            #[cfg(target_os = "macos")]
+            {
+                current_aqua_session().map_err(|error| LaunchError {
+                    label: "native Aqua session".to_string(),
+                    error,
+                })?;
+                current_aqua_command(program, arguments, extra_env).map_err(|error| {
+                    LaunchError {
+                        label: "native Aqua environment".to_string(),
+                        error,
+                    }
+                })?
+            }
+            #[cfg(not(target_os = "macos"))]
+            return Err(LaunchError {
+                label: "native Aqua session".to_string(),
+                error: std::io::Error::other("native Aqua launch is supported only on macOS"),
+            });
+        }
     };
     let containment =
         Containment::start(limits.termination_grace).map_err(|error| LaunchError {
@@ -1950,10 +2067,12 @@ fn launch(
         });
     }
     configure_process_group(&mut command, containment.protocol(), registration_timeout);
-    // The dedicated-uid wrapper reconstructs this exact environment for the
-    // unprivileged target. Setting it here also preserves ordinary launches.
-    for (name, value) in extra_env {
-        command.env(name, value);
+    if context == LaunchContext::DedicatedContainment {
+        // The dedicated-uid wrapper reconstructs this exact environment for the
+        // unprivileged target. Setting it here also preserves ordinary launches.
+        for (name, value) in extra_env {
+            command.env(name, value);
+        }
     }
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -2033,8 +2152,9 @@ fn launch(
     extra_env: &[(String, String)],
     limits: Limits,
     deadline: Instant,
+    context: LaunchContext,
 ) -> Result<Launch, LaunchError> {
-    let _ = limits;
+    let _ = (limits, context);
     let mut command = Command::new(program);
     command
         .current_dir(working_directory)
@@ -2496,73 +2616,6 @@ pub fn run_containment_escape_helper(arguments: &[String]) -> Result<(), String>
     unsafe { libc::_exit(status) };
 }
 
-#[cfg(target_os = "macos")]
-pub fn run_containment_credential_probe(arguments: &[String]) -> Result<(), String> {
-    let [dedicated_uid, console_uid, sentinel] = arguments else {
-        return Err(
-            "containment credential probe requires dedicated UID, console UID, and sentinel".into(),
-        );
-    };
-    let dedicated_uid = dedicated_uid
-        .parse::<u32>()
-        .map_err(|error| format!("invalid dedicated UID: {error}"))?;
-    let console_uid = console_uid
-        .parse::<u32>()
-        .map_err(|error| format!("invalid console UID: {error}"))?;
-    // SAFETY: getuid and geteuid have no preconditions.
-    let real_uid = unsafe { libc::getuid() };
-    let effective_uid = unsafe { libc::geteuid() };
-    if real_uid != dedicated_uid
-        || effective_uid != dedicated_uid
-        || dedicated_uid == 0
-        || dedicated_uid == console_uid
-    {
-        return Err(format!(
-            "credential probe ran with real UID {real_uid} and effective UID {effective_uid}; expected dedicated UID {dedicated_uid}, distinct from console UID {console_uid}"
-        ));
-    }
-
-    let manager_uid = Command::new("/bin/launchctl")
-        .arg("manageruid")
-        .env_clear()
-        .output()
-        .map_err(|error| format!("cannot query launchd manager UID: {error}"))?;
-    let manager_uid_text = std::str::from_utf8(&manager_uid.stdout)
-        .map_err(|error| format!("launchd manager UID is not UTF-8: {error}"))?
-        .trim();
-    if !manager_uid.status.success() || manager_uid_text != console_uid.to_string() {
-        return Err(format!(
-            "credential probe entered launchd manager UID {manager_uid_text:?}; expected {console_uid}"
-        ));
-    }
-    let manager_name = Command::new("/bin/launchctl")
-        .arg("managername")
-        .env_clear()
-        .output()
-        .map_err(|error| format!("cannot query launchd manager name: {error}"))?;
-    let manager_name_text = std::str::from_utf8(&manager_name.stdout)
-        .map_err(|error| format!("launchd manager name is not UTF-8: {error}"))?
-        .trim();
-    if !manager_name.status.success() || manager_name_text != "Aqua" {
-        return Err(format!(
-            "credential probe entered launchd manager {manager_name_text:?}; expected Aqua"
-        ));
-    }
-
-    println!(
-        "{}",
-        serde_json::json!({
-            "dedicated_uid": dedicated_uid,
-            "real_uid": real_uid,
-            "effective_uid": effective_uid,
-            "console_uid": console_uid,
-            "launchd_manager_uid": console_uid,
-            "launchd_manager_name": manager_name_text,
-        })
-    );
-    run_containment_escape_helper(std::slice::from_ref(sentinel))
-}
-
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn stage_containment_check_executable(
     home: &Path,
@@ -2599,30 +2652,6 @@ fn stage_containment_check_executable(
         },
     )?;
     Ok((directory, staged))
-}
-
-#[cfg(target_os = "macos")]
-fn validate_containment_credential_proof(
-    bytes: &[u8],
-    dedicated_uid: u32,
-    console_uid: u32,
-) -> Result<serde_json::Value, String> {
-    let proof: serde_json::Value = serde_json::from_slice(bytes)
-        .map_err(|error| format!("parse containment credential proof: {error}"))?;
-    let expected = serde_json::json!({
-        "dedicated_uid": dedicated_uid,
-        "real_uid": dedicated_uid,
-        "effective_uid": dedicated_uid,
-        "console_uid": console_uid,
-        "launchd_manager_uid": console_uid,
-        "launchd_manager_name": "Aqua",
-    });
-    if proof != expected || dedicated_uid == 0 || dedicated_uid == console_uid {
-        return Err(format!(
-            "containment credential proof differs from the dedicated UID and console bootstrap authority: {proof}"
-        ));
-    }
-    Ok(proof)
 }
 
 pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
@@ -2711,53 +2740,6 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
             );
         }
 
-        #[cfg(target_os = "macos")]
-        {
-            let credential_sentinel = directory.join("credential-probe-escaped-write.txt");
-            let arguments = vec![
-                "__ci-test".to_string(),
-                CONTAINMENT_CREDENTIAL_PROBE_COMMAND.to_string(),
-                config.uid.clone(),
-                controller_uid.to_string(),
-                credential_sentinel.to_string_lossy().into_owned(),
-            ];
-            let captured = run_captured_with_bound_environment(
-                root,
-                &helper_executable.to_string_lossy(),
-                &arguments,
-                Limits {
-                    timeout: CONTAINMENT_ESCAPE_PROBE_TIMEOUT,
-                    termination_grace: Duration::from_secs(1),
-                    pipe_drain_timeout: Duration::from_secs(2),
-                    stdout_bytes: 16 * 1024,
-                    stderr_bytes: 16 * 1024,
-                    executable_bytes: 268_435_456,
-                },
-                true,
-                |_| Ok(Vec::new()),
-            );
-            if !captured.succeeded() {
-                return Err(captured.failure_detail(
-                    "dedicated-uid console-bootstrap credential and cleanup check",
-                ));
-            }
-            let dedicated_uid = config.uid.parse::<u32>().map_err(|error| {
-                format!("invalid dedicated UID after containment check: {error}")
-            })?;
-            let proof = validate_containment_credential_proof(
-                &captured.stdout,
-                dedicated_uid,
-                controller_uid,
-            )?;
-            println!("dedicated containment credential proof: {proof}");
-            thread::sleep(Duration::from_millis(700));
-            if credential_sentinel.exists() {
-                return Err(
-                    "a detached grandchild escaped the dedicated-uid console-bootstrap route"
-                        .into(),
-                );
-            }
-        }
         Ok(())
     })();
 
@@ -2804,6 +2786,51 @@ pub fn run_captured_with_bound_environment<F>(
 where
     F: FnOnce(&str) -> Result<Vec<(String, String)>, String>,
 {
+    run_captured_with_launch_context(
+        working_directory,
+        program,
+        arguments,
+        limits,
+        execute_retained_source,
+        environment,
+        LaunchContext::DedicatedContainment,
+    )
+}
+
+pub fn run_captured_in_current_aqua_session<F>(
+    working_directory: &Path,
+    program: &str,
+    arguments: &[String],
+    limits: Limits,
+    execute_retained_source: bool,
+    environment: F,
+) -> Captured
+where
+    F: FnOnce(&str) -> Result<Vec<(String, String)>, String>,
+{
+    run_captured_with_launch_context(
+        working_directory,
+        program,
+        arguments,
+        limits,
+        execute_retained_source,
+        environment,
+        LaunchContext::CurrentAquaSession,
+    )
+}
+
+fn run_captured_with_launch_context<F>(
+    working_directory: &Path,
+    program: &str,
+    arguments: &[String],
+    limits: Limits,
+    execute_retained_source: bool,
+    environment: F,
+    context: LaunchContext,
+) -> Captured
+where
+    F: FnOnce(&str) -> Result<Vec<(String, String)>, String>,
+{
     let started = Instant::now();
     let Some(deadline) = started.checked_add(limits.timeout) else {
         return launch_failure(
@@ -2837,6 +2864,7 @@ where
         &extra_env,
         limits,
         deadline,
+        context,
     ) {
         Ok(launch) => launch,
         Err(LaunchError { label, error }) => {
@@ -3134,6 +3162,46 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn current_aqua_environment_is_clean_and_preserves_nested_containment_bindings() {
+        let inherited = [
+            ("PATH", "/usr/bin:/bin"),
+            ("GITHUB_TOKEN", "secret"),
+            ("UQM_SECRET", "secret"),
+            (DEDICATED_CONTAINMENT_UID_ENV, "59999"),
+            (DEDICATED_CONTAINMENT_HOME_ENV, "/tmp/containment"),
+            (DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment"),
+        ]
+        .into_iter()
+        .map(|(name, value)| (name.into(), value.into()));
+        let environment =
+            filter_inherited_environment(inherited, current_aqua_environment_allows).unwrap();
+
+        assert_eq!(environment.get("PATH").unwrap(), "/usr/bin:/bin");
+        assert_eq!(
+            environment.get(DEDICATED_CONTAINMENT_UID_ENV).unwrap(),
+            "59999"
+        );
+        assert_eq!(
+            environment.get(DEDICATED_CONTAINMENT_HOME_ENV).unwrap(),
+            "/tmp/containment"
+        );
+        assert_eq!(
+            environment.get(DEDICATED_CONTAINMENT_USER_ENV).unwrap(),
+            "uqm_s4_containment"
+        );
+        assert!(!environment.contains_key("GITHUB_TOKEN"));
+        assert!(!environment.contains_key("UQM_SECRET"));
+
+        assert!(current_aqua_command(
+            "/usr/bin/true",
+            &[],
+            &[(DEDICATED_CONTAINMENT_UID_ENV.into(), "60000".into())],
+        )
+        .is_err());
+    }
+
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn dedicated_containment_command_strips_controls_and_binds_child_identity() {
@@ -3187,87 +3255,20 @@ mod tests {
         assert!(DEDICATED_UID_WRAPPER.contains("/bin/kill -0 \"$pid\""));
         assert!(DEDICATED_UID_WRAPPER.contains("Z*|\"\""));
         assert!(DEDICATED_UID_WRAPPER.contains("/usr/bin/env -i"));
+        let umask = DEDICATED_UID_WRAPPER.find("umask 0027").unwrap();
         let initial_cleanup = DEDICATED_UID_WRAPPER.find("if ! cleanup; then").unwrap();
         let launch = DEDICATED_UID_WRAPPER
             .find("/usr/bin/sudo -n -u \"#$uid\"")
             .unwrap();
+        assert!(umask < initial_cleanup);
         assert!(initial_cleanup < launch);
         assert!(DEDICATED_UID_WRAPPER
             .contains("dedicated containment uid $uid still owns processes before launch"));
         assert!(!DEDICATED_UID_WRAPPER.contains("was already in use"));
-        assert!(DEDICATED_UID_WRAPPER.contains("/bin/launchctl asuser \"$SUDO_UID\""));
-        const DARWIN_ROUTE: &str = r##"if [ "$(/usr/bin/uname -s)" = Darwin ] \
-    && [ -n "${SUDO_UID:-}" ] \
-    && [ "${command[1]:-}" = __ci-test ]; then
-    /bin/launchctl asuser "$SUDO_UID" \
-        /usr/bin/sudo -n -u "#$uid" -- \
-        /usr/bin/env -i "${env_args[@]}" "${command[@]}"
-else
-    /usr/bin/sudo -n -u "#$uid" -- /usr/bin/env -i "${env_args[@]}" "${command[@]}"
-fi"##;
-        let validates_darwin_route = |script: &str| {
-            script
-                .split_once("if [ \"$(/usr/bin/uname -s)\" = Darwin ]")
-                .and_then(|(_, suffix)| suffix.split_once("\nstatus=$?"))
-                .is_some_and(|(route, _)| {
-                    format!("if [ \"$(/usr/bin/uname -s)\" = Darwin ]{route}") == DARWIN_ROUTE
-                })
-        };
-        assert!(validates_darwin_route(DEDICATED_UID_WRAPPER));
-        let bypass = DARWIN_ROUTE.replace(
-            "/bin/launchctl asuser \"$SUDO_UID\" \\\n        /usr/bin/sudo -n -u \"#$uid\" -- \\\n        /usr/bin/env -i",
-            "/bin/launchctl asuser \"$SUDO_UID\" /usr/bin/env -i",
-        );
-        let superficial = format!(
-            "{}\n# superficial text: {}",
-            DEDICATED_UID_WRAPPER.replacen(DARWIN_ROUTE, &bypass, 1),
-            "/usr/bin/sudo -n -u \"#$uid\""
-        );
-        assert!(!validates_darwin_route(&superficial));
-        assert!(!DEDICATED_UID_WRAPPER.contains("native GUI broker"));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn containment_credential_proof_binds_dedicated_uid_and_aqua_bootstrap() {
-        let proof = serde_json::json!({
-            "dedicated_uid": 59_999,
-            "real_uid": 59_999,
-            "effective_uid": 59_999,
-            "console_uid": 501,
-            "launchd_manager_uid": 501,
-            "launchd_manager_name": "Aqua",
-        });
-        assert_eq!(
-            validate_containment_credential_proof(
-                serde_json::to_vec(&proof).unwrap().as_slice(),
-                59_999,
-                501,
-            )
-            .unwrap(),
-            proof
-        );
-        for (path, value) in [
-            ("/real_uid", serde_json::json!(501)),
-            ("/effective_uid", serde_json::json!(0)),
-            ("/launchd_manager_uid", serde_json::json!(59_999)),
-            ("/launchd_manager_name", serde_json::json!("Background")),
-        ] {
-            let mut mutation = proof.clone();
-            *mutation.pointer_mut(path).unwrap() = value;
-            assert!(validate_containment_credential_proof(
-                serde_json::to_vec(&mutation).unwrap().as_slice(),
-                59_999,
-                501,
-            )
-            .is_err());
-        }
-        assert!(validate_containment_credential_proof(
-            serde_json::to_vec(&proof).unwrap().as_slice(),
-            501,
-            501,
-        )
-        .is_err());
+        assert!(!DEDICATED_UID_WRAPPER.contains("launchctl"));
+        assert!(DEDICATED_UID_WRAPPER.contains(
+            "/usr/bin/sudo -n -u \"#$uid\" -- /usr/bin/env -i \"${env_args[@]}\" \"$@\""
+        ));
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

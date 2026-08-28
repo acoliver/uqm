@@ -1002,6 +1002,7 @@ fn trusted_controller_command(command: &[String]) -> Option<&'static str> {
         {
             match command.as_str() {
                 "test" => Some("__ci-test"),
+                "native-test" => Some("__ci-native-test"),
                 "package" => Some("__ci-package"),
                 "capture-dependencies" => Some("__ci-capture-dependencies"),
                 _ => None,
@@ -1296,8 +1297,27 @@ fn stage_trusted_control_plane_script(
     ))
 }
 
+fn use_current_aqua_session(
+    gate_id: &str,
+    step_id: &str,
+    tuple: &str,
+    effective_command: &[String],
+) -> Result<bool, CiError> {
+    if gate_id != "tests" || step_id != "native-acceptance" || !tuple.starts_with("macos-") {
+        return Ok(false);
+    }
+    if effective_command.len() == 2 && effective_command[1] == "__ci-native-test" {
+        return Ok(true);
+    }
+    Err(CiError::new(
+        format!("{gate_id}.pre.{step_id}.launch-context"),
+        "current-Aqua execution is restricted to the embedded native-test controller",
+    ))
+}
+
 fn execute_process_gate(
     session: &mut RunSession,
+
     cache: &CacheEnvironment,
     gate: &Gate,
     controller_command: &[String],
@@ -1360,7 +1380,7 @@ fn execute_process_gate(
         }
         let native_platform_prefix = format!("{}-", session.authority.native_acceptance.platform);
         let native_acceptance_root = (gate.id == "tests"
-            && step.id == "xtask-test"
+            && step.id == "native-acceptance"
             && session.tuple.starts_with(&native_platform_prefix))
         .then(|| {
             session
@@ -1434,14 +1454,27 @@ fn execute_process_gate(
                 )
             })?;
         }
-        let captured = super::exec::run_captured_with_bound_environment(
-            &session.root.join(&step.cwd),
-            &effective_command[0],
-            &effective_command[1..],
-            session.authority.supervision.limits(step.timeout_seconds),
-            execute_retained_source,
-            |_| Ok(env_overrides),
-        );
+        let current_aqua =
+            use_current_aqua_session(&gate.id, &step.id, &session.tuple, &effective_command)?;
+        let captured = if current_aqua {
+            super::exec::run_captured_in_current_aqua_session(
+                &session.root.join(&step.cwd),
+                &effective_command[0],
+                &effective_command[1..],
+                session.authority.supervision.limits(step.timeout_seconds),
+                execute_retained_source,
+                |_| Ok(env_overrides),
+            )
+        } else {
+            super::exec::run_captured_with_bound_environment(
+                &session.root.join(&step.cwd),
+                &effective_command[0],
+                &effective_command[1..],
+                session.authority.supervision.limits(step.timeout_seconds),
+                execute_retained_source,
+                |_| Ok(env_overrides),
+            )
+        };
         write_captured(
             session,
             gate,
@@ -1502,7 +1535,7 @@ fn validate_native_runtime_authority(
 ) -> Result<(), CiError> {
     if observed != authority.native_runtime_contract() {
         return Err(CiError::new(
-            "tests.post.xtask-test.native-window-acceptance",
+            "tests.post.native-acceptance.native-window-acceptance",
             "native acceptance runtime contract differs from machine authority",
         ));
     }
@@ -1518,20 +1551,20 @@ fn retain_native_acceptance(
     let manifest_path = root.join("native-acceptance.json");
     let snapshot = evidence::EvidenceSnapshot::open(root).map_err(|error| {
         CiError::new(
-            "tests.post.xtask-test.native-window-acceptance",
+            "tests.post.native-acceptance.native-window-acceptance",
             format!("cannot snapshot {}: {error}", root.display()),
         )
     })?;
     let manifest_bytes = snapshot.read("native-acceptance.json").map_err(|error| {
         CiError::new(
-            "tests.post.xtask-test.native-window-acceptance",
+            "tests.post.native-acceptance.native-window-acceptance",
             format!("cannot read {}: {error}", manifest_path.display()),
         )
     })?;
     let manifest: uqm_rust::automation::NativeAcceptanceManifest =
         serde_json::from_slice(manifest_bytes).map_err(|error| {
             CiError::new(
-                "tests.post.xtask-test.native-window-acceptance",
+                "tests.post.native-acceptance.native-window-acceptance",
                 format!("cannot parse {}: {error}", manifest_path.display()),
             )
         })?;
@@ -1540,7 +1573,7 @@ fn retain_native_acceptance(
     uqm_rust::automation::validate_native_acceptance_bundle(validation.path(), &manifest).map_err(
         |error| {
             CiError::new(
-                "tests.post.xtask-test.native-window-acceptance",
+                "tests.post.native-acceptance.native-window-acceptance",
                 format!("native acceptance bundle failed validation: {error:?}"),
             )
         },
@@ -1551,7 +1584,7 @@ fn retain_native_acceptance(
         "native-window.acceptance",
         gate,
         step,
-        "tests.post.xtask-test.native-window-acceptance",
+        "tests.post.native-acceptance.native-window-acceptance",
     )
 }
 
@@ -1629,13 +1662,13 @@ fn materialize_native_snapshot(
 ) -> Result<tempfile::TempDir, CiError> {
     let directory = tempfile::tempdir_in(&session.evidence_root).map_err(|error| {
         CiError::new(
-            "tests.post.xtask-test.native-window-acceptance",
+            "tests.post.native-acceptance.native-window-acceptance",
             format!("cannot create native validation snapshot: {error}"),
         )
     })?;
     let publisher = evidence::EvidencePublisher::open(directory.path()).map_err(|error| {
         CiError::new(
-            "tests.post.xtask-test.native-window-acceptance",
+            "tests.post.native-acceptance.native-window-acceptance",
             format!("cannot open native validation snapshot: {error}"),
         )
     })?;
@@ -1644,7 +1677,7 @@ fn materialize_native_snapshot(
             .replace(&file.relative_path, &file.bytes)
             .map_err(|error| {
                 CiError::new(
-                    "tests.post.xtask-test.native-window-acceptance",
+                    "tests.post.native-acceptance.native-window-acceptance",
                     format!("cannot materialize {}: {error}", file.relative_path),
                 )
             })?;
@@ -2571,6 +2604,33 @@ mod tests {
     }
 
     #[test]
+    fn current_aqua_launch_is_restricted_to_exact_native_controller_step() {
+        let native = vec![
+            std::env::current_exe()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            "__ci-native-test".to_string(),
+        ];
+        assert!(
+            use_current_aqua_session("tests", "native-acceptance", "macos-aarch64", &native,)
+                .unwrap()
+        );
+        for (gate, step, tuple) in [
+            ("tests", "xtask-test", "macos-aarch64"),
+            ("package", "native-acceptance", "macos-aarch64"),
+            ("tests", "native-acceptance", "linux-x86_64"),
+        ] {
+            assert!(!use_current_aqua_session(gate, step, tuple, &native).unwrap());
+        }
+        let arbitrary = vec![native[0].clone(), "__ci-test".to_string()];
+        assert!(
+            use_current_aqua_session("tests", "native-acceptance", "macos-x86_64", &arbitrary,)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn native_runtime_contract_must_match_machine_authority() {
         let authority: Authority =
             serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
@@ -2578,7 +2638,7 @@ mod tests {
         validate_native_runtime_authority(&authority, expected).unwrap();
 
         let mut forged = expected;
-        forged.expected_execution_uid += 1;
+        forged.capture_timeout_ms += 1;
         assert!(validate_native_runtime_authority(&authority, forged).is_err());
     }
 
@@ -2659,6 +2719,7 @@ mod tests {
     fn head_xtask_gate_vectors_are_rewritten_only_when_exact() {
         for (command, hidden) in [
             ("test", "__ci-test"),
+            ("native-test", "__ci-native-test"),
             ("package", "__ci-package"),
             ("capture-dependencies", "__ci-capture-dependencies"),
         ] {
@@ -3182,7 +3243,7 @@ mod tests {
         let step = gate
             .steps
             .iter()
-            .find(|step| step.id == "xtask-test")
+            .find(|step| step.id == "native-acceptance")
             .unwrap()
             .clone();
         let evidence_root = temp.path().join("evidence");
@@ -3207,7 +3268,7 @@ mod tests {
         };
         let missing_manifest =
             retain_native_acceptance_failure(&mut session, &gate, &step, &native_root).unwrap_err();
-        assert_eq!(missing_manifest.contract, "tests.xtask-test");
+        assert_eq!(missing_manifest.contract, "tests.native-acceptance");
         assert!(missing_manifest
             .detail
             .contains("native-acceptance-failure.json"));
@@ -3217,7 +3278,7 @@ mod tests {
         fs::write(&manifest_path, b"not JSON").unwrap();
         let malformed =
             retain_native_acceptance_failure(&mut session, &gate, &step, &native_root).unwrap_err();
-        assert_eq!(malformed.contract, "tests.xtask-test");
+        assert_eq!(malformed.contract, "tests.native-acceptance");
         assert!(session.entries.is_empty());
         fs::remove_file(&manifest_path).unwrap();
 
@@ -3226,7 +3287,7 @@ mod tests {
         symlink(&target, native_root.join("native-acceptance-failure.json")).unwrap();
         let error =
             retain_native_acceptance_failure(&mut session, &gate, &step, &native_root).unwrap_err();
-        assert_eq!(error.contract, "tests.xtask-test");
+        assert_eq!(error.contract, "tests.native-acceptance");
         assert!(session.entries.is_empty());
     }
     #[test]
@@ -3245,7 +3306,7 @@ mod tests {
         let step = gate
             .steps
             .iter()
-            .find(|step| step.id == "xtask-test")
+            .find(|step| step.id == "native-acceptance")
             .unwrap()
             .clone();
         let evidence_root = temp.path().join("evidence");
@@ -3380,7 +3441,7 @@ mod tests {
             symlink(&outside, native_root.join("automation/unsafe-link")).unwrap();
             let error = retain_native_acceptance_failure(&mut session, &gate, &step, &native_root)
                 .unwrap_err();
-            assert_eq!(error.contract, "tests.xtask-test");
+            assert_eq!(error.contract, "tests.native-acceptance");
             assert_eq!(session.entries.len(), 6);
         }
         assert!(session.entries.iter().any(|entry| {
@@ -3402,7 +3463,7 @@ mod tests {
         let step = gate
             .steps
             .iter()
-            .find(|step| step.id == "xtask-test")
+            .find(|step| step.id == "native-acceptance")
             .unwrap()
             .clone();
         let evidence_root = temp.path().join("evidence");

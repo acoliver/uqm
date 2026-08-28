@@ -1130,8 +1130,10 @@ const MINI_XTASK_MANIFEST: &str =
 const MINI_XTASK_MAIN: &str = r#"use std::process::{exit, Command};
 
 fn main() {
-    if std::env::args().nth(1).as_deref() != Some("test") {
-        exit(2);
+    match std::env::args().nth(1).as_deref() {
+        Some("native-test") => return,
+        Some("test") => {}
+        _ => exit(2),
     }
     let code = match Command::new("cargo")
         .args([
