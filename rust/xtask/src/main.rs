@@ -27,6 +27,7 @@ mod native_acceptance_runner;
 const PRODUCTION_FEATURES: &str = "audio_heart,linked_c_archive";
 const NATIVE_INPUTS: &str = "rust/build/native-inputs.json";
 const NATIVE_DEPENDENCIES: &str = "rust/build/native-dependencies.json";
+const NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV: &str = "UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT";
 const PROVIDER_MANIFEST: &str = "rust/ownership/native-provider-manifest.json";
 const MATRIX: &str = "rust/build/supported-matrix.json";
 const TREND: &str = "rust/build/native-input-trend.json";
@@ -915,26 +916,30 @@ fn run_native_window_acceptance(
     let acceptance_policy =
         serde_json::to_string(&authority.native_acceptance.acceptance_policy)
             .map_err(|error| format!("serialize native acceptance policy: {error}"))?;
-    run_aqua_command(
-        Command::new(controller).current_dir(root).args([
-            "__ci-native-acceptance",
-            "run",
-            &linked_executable.display().to_string(),
-            &PathBuf::from(content_root).display().to_string(),
-            &script.display().to_string(),
-            &PathBuf::from(evidence_root).display().to_string(),
-            &linked_length,
-            &linked_sha256,
-            &runtime_contract,
-            &acceptance_policy,
-            &linked_build_proof.directory.path().display().to_string(),
-            &authority
-                .actions
-                .evidence_snapshot_member_limit_bytes
-                .to_string(),
-        ]),
-        "Direct linked native-window acceptance",
-    )
+    let mut command = Command::new(controller);
+    command.current_dir(root).args([
+        "__ci-native-acceptance",
+        "run",
+        &linked_executable.display().to_string(),
+        &PathBuf::from(content_root).display().to_string(),
+        &script.display().to_string(),
+        &PathBuf::from(evidence_root).display().to_string(),
+        &linked_length,
+        &linked_sha256,
+        &runtime_contract,
+        &acceptance_policy,
+        &linked_build_proof.directory.path().display().to_string(),
+        &authority
+            .actions
+            .evidence_snapshot_member_limit_bytes
+            .to_string(),
+    ]);
+    // The Aqua child inherits only an allowlisted environment, so the trusted
+    // controller's precreated-root binding must be forwarded explicitly.
+    if let Ok(precreated) = env::var(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV) {
+        command.env(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV, precreated);
+    }
+    run_aqua_command(&mut command, "Direct linked native-window acceptance")
 }
 
 fn native_acceptance_executables(target: &Path) -> Result<(PathBuf, PathBuf), String> {
@@ -1073,6 +1078,7 @@ fn production_subprocess_environment(
     let mut environment = source_subprocess_environment(root)?;
     environment.push(("CARGO_BUILD_JOBS".into(), "1".into()));
     environment.extend(canonical_toolchain_subprocess_environment(toolchain)?);
+    environment.push(("UQM_NATIVE_PROFILE".into(), "production".into()));
     Ok(environment)
 }
 
@@ -2673,12 +2679,13 @@ mod tests {
         let environment = production_subprocess_environment(&root, &toolchain).unwrap();
         let environment = BTreeMap::from_iter(environment);
 
-        assert_eq!(environment.len(), 12);
+        assert_eq!(environment.len(), 13);
         assert_eq!(
             environment["SOURCE_DATE_EPOCH"],
             source_date_epoch(&root).unwrap().to_string()
         );
         assert_eq!(environment["UQM_BUILD_DATE"], source_date(&root).unwrap());
+        assert_eq!(environment["UQM_NATIVE_PROFILE"], "production");
         assert_eq!(environment["CARGO_BUILD_JOBS"], "1");
         assert_eq!(environment["CC"], "/tools/cc");
         assert_eq!(environment["AR"], "/tools/ar");
