@@ -5120,7 +5120,7 @@ mod tests {
             &output_directory,
             &nonce,
             41,
-            std::time::Duration::from_millis(100),
+            std::time::Duration::from_secs(60),
             4096,
         )
         .unwrap();

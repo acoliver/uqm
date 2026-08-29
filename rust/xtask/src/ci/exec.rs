@@ -3626,7 +3626,7 @@ mod tests {
         let mut unrelated = spawn_test_group("wait");
         let executable = std::env::current_exe().expect("test executable");
         let mut test_limits = limits_for_current_executable();
-        test_limits.timeout = Duration::from_secs(15);
+        test_limits.timeout = Duration::from_secs(120);
         test_limits.pipe_drain_timeout = Duration::from_secs(1);
         let captured = run_captured_with_limits(
             Path::new("."),

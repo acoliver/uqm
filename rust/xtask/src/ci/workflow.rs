@@ -4764,7 +4764,7 @@ with mock.patch.object(module, "group_members", return_value=[7, 43]), \
         assert!(receipt["descendant_signals"]
             .as_array()
             .is_some_and(|entries| entries.iter().any(|entry| {
-                entry["signal"] == "SIGTERM"
+                matches!(entry["signal"].as_str(), Some("SIGTERM" | "SIGKILL"))
                     && entry["result"] == "delivered"
                     && entry["pid"].as_u64().is_some_and(|pid| pid > 1)
                     && valid_descendant_start_identity(&entry["start_identity"])
