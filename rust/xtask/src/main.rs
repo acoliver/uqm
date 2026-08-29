@@ -630,7 +630,7 @@ fn build_linked_test_proof(
 ) -> Result<LinkedBuildProof, String> {
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
-    let environment = linked_build_subprocess_environment(toolchain)?;
+    let environment = linked_build_subprocess_environment(root, toolchain)?;
     let marker = serde_json::to_string(toolchain)
         .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
     let mut arguments = [
@@ -1057,25 +1057,39 @@ fn canonical_toolchain_subprocess_environment(
 }
 
 fn linked_build_subprocess_environment(
+    root: &Path,
     toolchain: &ToolchainIdentity,
 ) -> Result<Vec<(String, String)>, String> {
-    let mut environment = canonical_toolchain_subprocess_environment(toolchain)?;
+    let mut environment = source_subprocess_environment(root)?;
+    environment.extend(canonical_toolchain_subprocess_environment(toolchain)?);
     environment.push(("UQM_NATIVE_PROFILE".into(), "linked-test".into()));
     Ok(environment)
 }
 
 fn production_subprocess_environment(
+    root: &Path,
     toolchain: &ToolchainIdentity,
 ) -> Result<Vec<(String, String)>, String> {
-    let mut environment = vec![("CARGO_BUILD_JOBS".into(), "1".into())];
+    let mut environment = source_subprocess_environment(root)?;
+    environment.push(("CARGO_BUILD_JOBS".into(), "1".into()));
     environment.extend(canonical_toolchain_subprocess_environment(toolchain)?);
     Ok(environment)
+}
+
+fn source_subprocess_environment(root: &Path) -> Result<Vec<(String, String)>, String> {
+    Ok(vec![
+        (
+            "SOURCE_DATE_EPOCH".into(),
+            source_date_epoch(root)?.to_string(),
+        ),
+        ("UQM_BUILD_DATE".into(), source_date(root)?),
+    ])
 }
 
 fn cargo_production(root: &Path, toolchain: &ToolchainIdentity) -> Result<ProductionPaths, String> {
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
-    let environment = production_subprocess_environment(toolchain)?;
+    let environment = production_subprocess_environment(root, toolchain)?;
     let arguments = [
         "build",
         "--locked",
@@ -2655,10 +2669,16 @@ mod tests {
             pkg_config: tool("/tools/pkg-config"),
             linker: tool("/tools/linker"),
         };
-        let environment = production_subprocess_environment(&toolchain).unwrap();
+        let root = repository_root().unwrap();
+        let environment = production_subprocess_environment(&root, &toolchain).unwrap();
         let environment = BTreeMap::from_iter(environment);
 
-        assert_eq!(environment.len(), 10);
+        assert_eq!(environment.len(), 12);
+        assert_eq!(
+            environment["SOURCE_DATE_EPOCH"],
+            source_date_epoch(&root).unwrap().to_string()
+        );
+        assert_eq!(environment["UQM_BUILD_DATE"], source_date(&root).unwrap());
         assert_eq!(environment["CARGO_BUILD_JOBS"], "1");
         assert_eq!(environment["CC"], "/tools/cc");
         assert_eq!(environment["AR"], "/tools/ar");
@@ -2678,7 +2698,7 @@ mod tests {
         );
 
         let linked_environment =
-            BTreeMap::from_iter(linked_build_subprocess_environment(&toolchain).unwrap());
+            BTreeMap::from_iter(linked_build_subprocess_environment(&root, &toolchain).unwrap());
         let mut expected_linked_environment = environment;
         expected_linked_environment.remove("CARGO_BUILD_JOBS");
         expected_linked_environment.insert("UQM_NATIVE_PROFILE".into(), "linked-test".into());

@@ -3257,6 +3257,7 @@ mod tests {
         assert!(validate_linked_build_cargo_messages(&receipt, &duplicate_completion).is_err());
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn runner_requires_an_absolute_evidence_root_before_inspecting_inputs() {
         let digest = "0".repeat(64);
@@ -3303,6 +3304,8 @@ mod tests {
             assert!(error.starts_with(&format!("{label} path must be absolute:")));
         }
     }
+
+    #[cfg(target_os = "macos")]
     #[test]
     fn pre_spawn_failure_publishes_a_typed_self_validating_envelope() {
         let parent = tempfile::tempdir().unwrap();

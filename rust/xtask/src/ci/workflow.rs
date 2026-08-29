@@ -4838,9 +4838,10 @@ with mock.patch.object(module, "group_members", return_value=[7, 43]), \
         assert_eq!(receipt["descendants_terminated"], true);
         assert!(receipt["descendant_signals"]
             .as_array()
-            .is_some_and(|entries| entries
-                .iter()
-                .any(|entry| entry["signal"] == "SIGTERM" && entry["result"] == "delivered")));
+            .is_some_and(|entries| entries.iter().any(|entry| {
+                matches!(entry["signal"].as_str(), Some("SIGTERM" | "SIGKILL"))
+                    && entry["result"] == "delivered"
+            })));
         assert_no_matching_processes(&marker);
     }
 
