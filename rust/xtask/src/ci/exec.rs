@@ -56,6 +56,7 @@ pub struct Captured {
     pub process_group_cleanup: &'static str,
     pub pipe_cleanup: &'static str,
     pub supervision_error: Option<String>,
+    pub descendant_survivors: Option<String>,
 }
 
 impl Captured {
@@ -89,9 +90,12 @@ impl Captured {
         match self.termination_reason {
             "timeout" => format!("subprocess {program} exceeded its authorized timeout"),
             "output-limit" => format!("subprocess {program} exceeded an authorized output limit"),
-            "descendant-cleanup" => {
-                format!("subprocess {program} left descendants in its owned process group")
-            }
+            "descendant-cleanup" => match &self.descendant_survivors {
+                Some(survivors) => format!(
+                    "subprocess {program} left descendants in its owned process group: {survivors}"
+                ),
+                None => format!("subprocess {program} left descendants in its owned process group"),
+            },
             _ => format!(
                 "subprocess {program} failed with exit code {:?} and signal {:?}",
                 self.exit_code, self.signal
@@ -1749,6 +1753,7 @@ fn launch_failure(program: &str, error: &std::io::Error, limits: Limits) -> Capt
         process_group_cleanup: "not-started",
         pipe_cleanup: "not-started",
         supervision_error: None,
+        descendant_survivors: None,
     }
 }
 
@@ -1776,6 +1781,7 @@ struct Probe {
     termination_started: Option<Instant>,
     pipe_deadline: Option<Instant>,
     supervision_error: Option<String>,
+    descendant_survivors: Option<String>,
 }
 
 impl Probe {
@@ -1804,6 +1810,7 @@ impl Probe {
             termination_started: None,
             pipe_deadline: None,
             supervision_error: None,
+            descendant_survivors: None,
         }
     }
 }
@@ -2483,6 +2490,15 @@ fn supervise(launch: Launch, limits: Limits, deadline: Instant) -> SupervisionOu
         );
         probe.termination_reason = reason;
         probe.timed_out |= timeout_triggered;
+        if descendant_cleanup_required && probe.descendant_survivors.is_none() {
+            // Sample the survivors before cleanup removes them, so the receipt
+            // names what outlived the leader instead of only that something did.
+            let survivors =
+                describe_group_survivors(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid]);
+            if !survivors.is_empty() {
+                probe.descendant_survivors = Some(survivors);
+            }
+        }
         apply_terminations(
             &mut probe,
             &mut anchor,
@@ -2672,6 +2688,7 @@ fn receipt(limits: Limits, outcome: SupervisionOutcome) -> Captured {
         process_group_cleanup: outcome.process_group_cleanup,
         pipe_cleanup: outcome.pipe_cleanup,
         supervision_error: probe.supervision_error,
+        descendant_survivors: probe.descendant_survivors,
     }
 }
 

@@ -442,6 +442,7 @@ mod tests {
             process_group_cleanup: "verified-empty",
             pipe_cleanup: "complete",
             supervision_error: None,
+            descendant_survivors: None,
         }
     }
 
