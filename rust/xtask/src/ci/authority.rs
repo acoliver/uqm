@@ -834,6 +834,28 @@ fn valid_action_identity(value: &str) -> bool {
 
 /// Validate the authority against the fixed contract shapes.
 pub fn validate_authority(authority: &Authority) -> Result<(), String> {
+    validate_schema_and_ledger(authority)?;
+    validate_zero_native_delta(authority)?;
+    validate_control_plane_paths(authority)?;
+    validate_preflight_probes(authority)?;
+    validate_native_prerequisites(authority)?;
+    validate_tool_identities(authority)?;
+    validate_rust_components(authority)?;
+    validate_action_identities(authority)?;
+    validate_workflow_budgets(authority)?;
+    validate_evidence_roles(authority)?;
+    validate_runner_mapping(authority)?;
+    validate_mutation_targets(authority)?;
+    validate_profiles(authority)?;
+    validate_complexity_and_coverage(authority)?;
+    validate_cache_and_supervision(authority)?;
+    validate_native_acceptance(authority)?;
+    validate_package_and_bootstrap(authority)?;
+    validate_gate_inventory(authority)?;
+    Ok(())
+}
+
+fn validate_schema_and_ledger(authority: &Authority) -> Result<(), String> {
     if authority.schema != AUTHORITY_SCHEMA {
         return Err(format!(
             "unsupported authority schema '{}'",
@@ -850,6 +872,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority ownership ledger identity is invalid".into());
     }
+    Ok(())
+}
+
+fn validate_zero_native_delta(authority: &Authority) -> Result<(), String> {
     let delta = &authority.zero_native_delta;
     if delta.tracked_sources
         + delta.providers
@@ -862,6 +888,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority S4 native ownership delta must be zero".into());
     }
+    Ok(())
+}
+
+fn validate_control_plane_paths(authority: &Authority) -> Result<(), String> {
     let actual_paths: BTreeSet<_> = authority
         .control_plane_paths
         .iter()
@@ -873,6 +903,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority control-plane paths must be nonempty, unique, and relative".into());
     }
+    Ok(())
+}
+
+fn validate_preflight_probes(authority: &Authority) -> Result<(), String> {
     let preflight_names: BTreeSet<_> = authority
         .tools
         .preflight
@@ -890,6 +924,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority preflight probes must be unique and executable".into());
     }
+    Ok(())
+}
+
+fn validate_native_prerequisites(authority: &Authority) -> Result<(), String> {
     for (platform, packages) in [
         ("linux", &authority.tools.native_prerequisites.linux),
         ("macos", &authority.tools.native_prerequisites.macos),
@@ -908,6 +946,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
             ));
         }
     }
+    Ok(())
+}
+
+fn validate_tool_identities(authority: &Authority) -> Result<(), String> {
     for (name, tool) in authority.tools.entries() {
         if tool.version.is_empty()
             || tool.version_command.is_empty()
@@ -967,6 +1009,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
             "authority lizard identity must pin its complete hashed distribution set".into(),
         );
     }
+    Ok(())
+}
+
+fn validate_rust_components(authority: &Authority) -> Result<(), String> {
     let rust_components: BTreeSet<_> = authority
         .tools
         .rust
@@ -980,6 +1026,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority Rust components must be nonempty and unique".into());
     }
+    Ok(())
+}
+
+fn validate_action_identities(authority: &Authority) -> Result<(), String> {
     if !valid_action_identity(&authority.actions.checkout)
         || !valid_action_identity(&authority.actions.upload_artifact)
     {
@@ -1004,6 +1054,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("actions transport and upload bounds are invalid".into());
     }
+    Ok(())
+}
+
+fn validate_workflow_budgets(authority: &Authority) -> Result<(), String> {
     let workflow = &authority.workflow;
     if !(1..=360).contains(&workflow.plan_job_timeout_minutes)
         || !(1..=360).contains(&workflow.gates_job_timeout_minutes)
@@ -1020,6 +1074,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
             "authority workflow runtime and bootstrap transport budgets are invalid".into(),
         );
     }
+    Ok(())
+}
+
+fn validate_evidence_roles(authority: &Authority) -> Result<(), String> {
     let actual_roles: BTreeSet<_> = authority
         .evidence_roles
         .iter()
@@ -1036,6 +1094,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     if authority.matrix_file != MATRIX_RELATIVE {
         return Err("authority matrix_file must name the fixed compatibility input".into());
     }
+    Ok(())
+}
+
+fn validate_runner_mapping(authority: &Authority) -> Result<(), String> {
     let runner_tuples: BTreeSet<_> = authority
         .runner_mapping
         .iter()
@@ -1061,6 +1123,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
                 .into(),
         );
     }
+    Ok(())
+}
+
+fn validate_mutation_targets(authority: &Authority) -> Result<(), String> {
     let mutation_targets = authority
         .mutation_targets
         .iter()
@@ -1074,6 +1140,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority mutation_targets must declare every supported target once".into());
     }
+    Ok(())
+}
+
+fn validate_profiles(authority: &Authority) -> Result<(), String> {
     let profile_features = authority
         .profiles
         .pure_test
@@ -1100,6 +1170,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority test profiles must contain unique nonempty features".into());
     }
+    Ok(())
+}
+
+fn validate_complexity_and_coverage(authority: &Authority) -> Result<(), String> {
     if authority.complexity.maximum == 0
         || authority.complexity.source_roots.is_empty()
         || authority
@@ -1122,6 +1196,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority coverage configuration is invalid".into());
     }
+    Ok(())
+}
+
+fn validate_cache_and_supervision(authority: &Authority) -> Result<(), String> {
     if authority.cache.mode != CACHE_MODES[0] {
         return Err("authority cache mode must be 'isolated-empty'".into());
     }
@@ -1138,6 +1216,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority subprocess supervision limits must be nonzero".into());
     }
+    Ok(())
+}
+
+fn validate_native_acceptance(authority: &Authority) -> Result<(), String> {
     let native = &authority.native_acceptance;
     let content_transport = &native.content_transport;
     if native.dedicated_execution_uid == 0
@@ -1165,6 +1247,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority native acceptance configuration is invalid".into());
     }
+    Ok(())
+}
+
+fn validate_package_and_bootstrap(authority: &Authority) -> Result<(), String> {
     let package = &authority.package;
     let artifact_roles: BTreeSet<_> = package
         .artifacts
@@ -1197,6 +1283,10 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     {
         return Err("authority bootstrap proof configuration is invalid".into());
     }
+    Ok(())
+}
+
+fn validate_gate_inventory(authority: &Authority) -> Result<(), String> {
     let ids = authority.gate_ids();
     let unique_ids: BTreeSet<_> = ids.iter().copied().collect();
     if ids.is_empty() || ids.iter().any(|id| id.is_empty()) || unique_ids.len() != ids.len() {

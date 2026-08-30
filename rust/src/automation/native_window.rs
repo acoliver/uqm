@@ -3868,8 +3868,34 @@ mod tests {
         );
     }
 
-    #[test]
-    fn playable_floor_rejects_299_and_accepts_300_with_semantic_evidence() {
+    /// Rewrite the bundle command as root-relative descriptors.
+    fn descriptor_bound_manifest(manifest: &NativeAcceptanceManifest) -> NativeAcceptanceManifest {
+        let mut descriptor_bound = manifest.clone();
+        descriptor_bound.command = vec![
+            "./inputs/uqm".to_string(),
+            "--configdir=./config".to_string(),
+            "--contentdir=./inputs/content".to_string(),
+            "--automation-script=./inputs/linked-playable-v1.json".to_string(),
+            "--automation-output=./automation".to_string(),
+            "--native-window-proof=./native-window-proof.json".to_string(),
+        ];
+        descriptor_bound
+    }
+
+    /// Read the retained linked-build receipt as bytes and parsed JSON.
+    fn linked_receipt_state(root: &Path) -> (PathBuf, Vec<u8>, serde_json::Value) {
+        let path = root.join("inputs/linked-build/linked-build-receipt.json");
+        let bytes = fs::read(&path).unwrap();
+        let value = serde_json::from_slice(&bytes).unwrap();
+        (path, bytes, value)
+    }
+
+    /// Build the accepted playable bundle used by the acceptance-validation tests.
+    fn playable_acceptance_fixture() -> (
+        tempfile::TempDir,
+        NativeWindowReceipt,
+        NativeAcceptanceManifest,
+    ) {
         let mut proof = NativeWindowProof::new(process(), bounds(), policy());
         advance(&mut proof, 120);
         proof
@@ -4222,6 +4248,20 @@ mod tests {
                 .collect(),
             passed: true,
         };
+        (root, receipt, manifest)
+    }
+
+    #[test]
+    fn playable_floor_rejects_299_and_accepts_300_with_semantic_evidence() {
+        let (_root, receipt, manifest) = playable_acceptance_fixture();
+        assert_eq!(receipt.stable_presentations, 300);
+        assert!(receipt.passed);
+        assert!(manifest.passed);
+    }
+
+    #[test]
+    fn linked_build_receipt_mutations_are_rejected() {
+        let (root, _receipt, manifest) = playable_acceptance_fixture();
         let relocated = tempfile::tempdir().unwrap();
         for retained in &manifest.retained_files {
             let source = root.path().join(&retained.relative_path);
@@ -4338,6 +4378,14 @@ mod tests {
             );
             fs::write(path, original).unwrap();
         }
+    }
+
+    #[test]
+    fn forged_publications_and_authority_bindings_are_rejected() {
+        let (root, _receipt, manifest) = playable_acceptance_fixture();
+        let descriptor_bound = descriptor_bound_manifest(&manifest);
+        let (linked_receipt_path, linked_receipt_bytes, linked_receipt_value) =
+            linked_receipt_state(root.path());
         let mut missing_publication = manifest.clone();
         for (member, receipt_field, mutate) in [
             (
@@ -4493,6 +4541,16 @@ mod tests {
             Err(NativeWindowProofError::Receipt)
         );
         assert!(validate_native_acceptance_bundle(root.path(), &manifest).is_ok());
+    }
+
+    #[test]
+    fn bundle_policy_and_configuration_mismatches_are_rejected() {
+        let (root, _receipt, manifest) = playable_acceptance_fixture();
+        let descriptor_bound = descriptor_bound_manifest(&manifest);
+        let script_path = root.path().join("inputs/linked-playable-v1.json");
+        let content_path = root
+            .path()
+            .join("inputs/content/packages/uqm-0.8.0-content.uqm");
         let mut sparse_observations = manifest.clone();
         let stable_presentation = sparse_observations.window.screenshots[0].committed_presentation;
         let playable_presentation =
@@ -4818,6 +4876,11 @@ mod tests {
             validate_native_acceptance_bundle(root.path(), &identical_screenshots),
             Err(NativeWindowProofError::ScreenshotStage)
         );
+    }
+
+    #[test]
+    fn screenshot_and_observation_identity_is_enforced() {
+        let (root, receipt, _manifest) = playable_acceptance_fixture();
         let stable_position = receipt
             .screenshots
             .iter()

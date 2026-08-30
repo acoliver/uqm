@@ -62,16 +62,16 @@
       "expected_output_prefix": "rustc 1.97.1 "
     },
     "lizard": {
-      "version": "1.17.31",
+      "version": "1.24.0",
       "installation_integrity": "pip-require-hashes",
       "integrity_identity": "embedded-distribution-requirements",
       "distribution_requirements": [
-        {"requirement": "lizard==1.17.31", "sha256": "e2a87b0a6be04c2db41a0708fc81ac7ef50694c92360233b7b81088a9695076f"},
+        {"requirement": "lizard==1.24.0", "sha256": "a688bc607a891ff4a7836826f25742dc9c1bf648da3075dbd495e199e8848602"},
         {"requirement": "pathspec==1.1.1", "sha256": "a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189"},
         {"requirement": "pygments==2.21.0", "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"}
       ],
       "version_command": ["lizard", "--version"],
-      "expected_output_prefix": "1.17.31"
+      "expected_output_prefix": "1.24.0"
     },
     "cargo_audit": {
       "version": "0.21.2",

@@ -1202,31 +1202,15 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         let script = fs::canonicalize(script)
             .map_err(|error| format!("canonicalize script {}: {error}", script.display()))?;
         let content_package = find_content_package(&content)?;
-        let inputs = root.join("inputs");
-        let content_root = inputs.join("content");
-        let content_packages = content_root.join("packages");
-        let linked_build = inputs.join("linked-build");
-        let automation = root.join("automation");
-        let screenshots = root.join("screenshots");
-        let config_root = root.join("config");
-        for directory in [
-            &inputs,
-            &content_root,
-            &content_packages,
-            &linked_build,
-            &automation,
-            &screenshots,
-            &config_root,
-        ] {
-            fs::create_dir_all(directory)
-                .map_err(|error| format!("create {}: {error}", directory.display()))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt as _;
-                fs::set_permissions(directory, fs::Permissions::from_mode(0o750))
-                    .map_err(|error| format!("publish {}: {error}", directory.display()))?;
-            }
-        }
+        let RunDirectories {
+            inputs,
+            content_root,
+            content_packages,
+            linked_build,
+            automation,
+            screenshots,
+            config_root,
+        } = create_run_directories(root)?;
 
         let retained_executable = inputs.join("uqm");
         let retained_script = inputs.join("linked-playable-v1.json");
@@ -1275,15 +1259,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         )?;
         let nonce = fresh_nonce()?;
         let requested_bounds = runtime_contract.expected_client_bounds;
-        if requested_bounds.width
-            != u32::try_from(DEFAULT_RESOLUTION_WIDTH)
-                .map_err(|_| "default resolution width is invalid".to_string())?
-            || requested_bounds.height
-                != u32::try_from(DEFAULT_RESOLUTION_HEIGHT)
-                    .map_err(|_| "default resolution height is invalid".to_string())?
-        {
-            return Err("authority native bounds differ from the linked runtime resolution".into());
-        }
+        validate_requested_bounds(requested_bounds)?;
         let proof_config = root.join("native-window-proof.json");
         write_json_atomic(
             &proof_config,
@@ -1391,6 +1367,63 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             }
         }
         return Err(error);
+    }
+    Ok(())
+}
+/// Bounded evidence directories created for one acceptance run.
+struct RunDirectories {
+    inputs: PathBuf,
+    content_root: PathBuf,
+    content_packages: PathBuf,
+    linked_build: PathBuf,
+    automation: PathBuf,
+    screenshots: PathBuf,
+    config_root: PathBuf,
+}
+
+fn create_run_directories(root: &Path) -> Result<RunDirectories, String> {
+    let inputs = root.join("inputs");
+    let content_root = inputs.join("content");
+    let directories = RunDirectories {
+        content_packages: content_root.join("packages"),
+        linked_build: inputs.join("linked-build"),
+        automation: root.join("automation"),
+        screenshots: root.join("screenshots"),
+        config_root: root.join("config"),
+        inputs,
+        content_root,
+    };
+    for directory in [
+        &directories.inputs,
+        &directories.content_root,
+        &directories.content_packages,
+        &directories.linked_build,
+        &directories.automation,
+        &directories.screenshots,
+        &directories.config_root,
+    ] {
+        fs::create_dir_all(directory)
+            .map_err(|error| format!("create {}: {error}", directory.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o750))
+                .map_err(|error| format!("publish {}: {error}", directory.display()))?;
+        }
+    }
+    Ok(directories)
+}
+
+/// Reject authority bounds that do not match the linked runtime resolution.
+fn validate_requested_bounds(requested_bounds: NativeWindowBounds) -> Result<(), String> {
+    if requested_bounds.width
+        != u32::try_from(DEFAULT_RESOLUTION_WIDTH)
+            .map_err(|_| "default resolution width is invalid".to_string())?
+        || requested_bounds.height
+            != u32::try_from(DEFAULT_RESOLUTION_HEIGHT)
+                .map_err(|_| "default resolution height is invalid".to_string())?
+    {
+        return Err("authority native bounds differ from the linked runtime resolution".into());
     }
     Ok(())
 }

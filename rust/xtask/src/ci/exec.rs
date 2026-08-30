@@ -2498,11 +2498,15 @@ fn finalize_unix(
         }
     }
     probe.capture.drain(receiver, limits);
+    // The monitor has already finished its own grace-bounded cleanup by this
+    // point, so this bound only covers its exit. A loaded host can delay that
+    // exit well past one drain interval, so allow several before declaring the
+    // monitor hung.
     if let Err(error) = containment.finish(
         limits
             .termination_grace
             .saturating_mul(2)
-            .saturating_add(limits.pipe_drain_timeout),
+            .saturating_add(limits.pipe_drain_timeout.saturating_mul(10)),
     ) {
         probe.supervision_error.get_or_insert(error);
     }
