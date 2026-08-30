@@ -857,6 +857,14 @@ fn signal_group(anchor: &LeaderAnchor, signal: i32) -> Result<(), String> {
     let error = std::io::Error::last_os_error();
     match error.raw_os_error() {
         Some(libc::ESRCH) => Ok(()),
+        // A kernel can refuse a group signal once every member has released
+        // its credentials while exiting. The survivor contract covers live
+        // members, so confirm emptiness instead of trusting the errno alone.
+        Some(libc::EPERM)
+            if !group_has_other_members(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid])? =>
+        {
+            Ok(())
+        }
         _ => Err(format!(
             "cannot signal process group {}: {error}",
             anchor.pid
@@ -3768,6 +3776,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn hanging_process_is_terminated_reaped_and_typed() {
+        // The budget must outlast containment startup on a loaded host, or the
+        // command never launches and the deadline proves nothing.
+        let mut hanging_limits = limits();
+        hanging_limits.timeout = Duration::from_secs(10);
         let captured = run_captured_with_limits(
             Path::new("."),
             "sh",
@@ -3776,7 +3788,7 @@ mod tests {
                 "trap '' TERM; while :; do sleep 1; done".into(),
             ],
             &[],
-            limits(),
+            hanging_limits,
         );
         assert!(captured.timed_out);
         assert_eq!(captured.termination_reason, "timeout");

@@ -4628,6 +4628,8 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
     match (gate, step) {
         ("probes-harnesses", "p00-probes") => &["p00-probe-results.log"],
         ("probes-harnesses", "p00-harness") => &[
+            "pkg-config-cflags.txt",
+            "pkg-config-libs.txt",
             "link-map.txt",
             "archive-nm.txt",
             "archive-nm.stderr.txt",
