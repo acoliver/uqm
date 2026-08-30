@@ -437,6 +437,7 @@ fn macos_process_is_terminal(pid: i32) -> Result<bool, String> {
 struct MacosProcessRecord {
     group: i32,
     terminal: bool,
+    start_micros: u64,
 }
 
 /// Read a process record from the kernel.
@@ -450,6 +451,8 @@ struct MacosProcessRecord {
 fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
     // Offsets within the KERN_PROC_PID record: kp_proc.p_stat, kp_proc.p_pid,
     // and kp_eproc.e_pgid.
+    const START_SECONDS_OFFSET: usize = 0;
+    const START_MICROSECONDS_OFFSET: usize = 8;
     const STATE_OFFSET: usize = 36;
     const PID_OFFSET: usize = 40;
     const GROUP_OFFSET: usize = 564;
@@ -498,9 +501,19 @@ fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
     if field(PID_OFFSET) != pid {
         return None;
     }
+    let unsigned_field = |offset: usize| -> u64 {
+        let mut bytes = [0_u8; 8];
+        bytes.copy_from_slice(&record[offset..offset + 8]);
+        u64::from_ne_bytes(bytes)
+    };
+    let start_seconds = unsigned_field(START_SECONDS_OFFSET);
+    let start_microseconds = u64::from(field(START_MICROSECONDS_OFFSET).unsigned_abs());
     Some(MacosProcessRecord {
         group: field(GROUP_OFFSET),
         terminal: record[STATE_OFFSET] == ZOMBIE_STATE,
+        start_micros: start_seconds
+            .saturating_mul(1_000_000)
+            .saturating_add(start_microseconds),
     })
 }
 
@@ -1237,24 +1250,10 @@ fn close_fds(fds: &[RawFd]) {
 
 #[cfg(target_os = "macos")]
 fn monitor_process_start(pid: i32) -> Option<u64> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    const PROC_PIDTBSDINFO: i32 = 3;
-    // SAFETY: info is correctly sized writable storage for PROC_PIDTBSDINFO.
-    let written = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            std::mem::size_of::<libc::proc_bsdinfo>() as i32,
-        )
-    };
-    if written != std::mem::size_of::<libc::proc_bsdinfo>() as i32 {
-        return None;
-    }
-    // SAFETY: proc_pidinfo filled the complete structure.
-    let info = unsafe { info.assume_init() };
-    Some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
+    // A registered leader can exit before the monitor answers its registration.
+    // proc_pidinfo refuses such a process, which would leave the monitor unable
+    // to capture an identity it already has; the kernel record still reports it.
+    macos_process_record(pid).map(|record| record.start_micros)
 }
 
 #[cfg(target_os = "linux")]
@@ -3176,6 +3175,43 @@ mod tests {
         assert_eq!(record.group, unsafe { libc::getpgrp() });
         assert!(!record.terminal);
         assert!(macos_process_record(i32::MAX).is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_start_identity_survives_a_leader_that_exits_before_registration_is_answered() {
+        // SAFETY: fork has no preconditions here; the child exits immediately.
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0, "fork failed");
+        if child == 0 {
+            // SAFETY: the child does nothing but exit.
+            unsafe { libc::_exit(0) };
+        }
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let record = macos_process_record(child).expect("record for exited child");
+            if record.terminal {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "child never reached a terminal state"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        let start = monitor_process_start(child);
+        assert!(
+            start.is_some_and(|start| start > 0),
+            "an exited leader must still yield a start identity"
+        );
+
+        // SAFETY: child is this process's direct child.
+        assert_eq!(
+            unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) },
+            child
+        );
     }
 
     #[cfg(target_os = "macos")]
