@@ -1154,8 +1154,10 @@ impl Containment {
                 None => command.env_remove(MONITOR_DEDICATED_UID_ENV),
             };
         }
+        // Retain what the monitor says about its own failure; discarding it
+        // leaves an exit status with no stated cause.
         #[cfg(not(test))]
-        command.stderr(Stdio::null());
+        command.stderr(Stdio::piped());
         // SAFETY: fcntl and close are async-signal-safe. A separate process
         // group keeps the monitor outside every group it is authorized to kill.
         unsafe {
@@ -1215,6 +1217,17 @@ impl Containment {
             .map_err(|error| format!("cannot unregister supervised process group {pid}: {error}"))
     }
 
+    /// Read what the monitor reported before exiting, bounded and best effort.
+    fn monitor_diagnosis(&mut self) -> Option<String> {
+        use std::io::Read as _;
+
+        let mut stderr = self.monitor.stderr.take()?;
+        let mut buffer = Vec::new();
+        stderr.by_ref().take(4096).read_to_end(&mut buffer).ok()?;
+        let detail = String::from_utf8_lossy(&buffer).trim().to_string();
+        (!detail.is_empty()).then_some(detail)
+    }
+
     fn finish(mut self, timeout: Duration) -> Result<(), String> {
         for fd in [
             self.lifeline_write,
@@ -1231,7 +1244,15 @@ impl Containment {
             match self.monitor.try_wait() {
                 Ok(Some(status)) if status.success() => return Ok(()),
                 Ok(Some(status)) => {
-                    return Err(format!("nested process-group monitor failed with {status}"));
+                    let detail = self.monitor_diagnosis();
+                    return Err(match detail {
+                        Some(detail) => {
+                            format!("nested process-group monitor failed with {status}: {detail}")
+                        }
+                        None => format!(
+                            "nested process-group monitor failed with {status} and said nothing"
+                        ),
+                    });
                 }
                 Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(5)),
                 Ok(None) => {
