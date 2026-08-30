@@ -2345,7 +2345,19 @@ fn observe_child(probe: &mut Probe, child: &mut std::process::Child) {
 #[cfg(unix)]
 fn observed_group_clean(probe: &mut Probe, anchor: &LeaderAnchor) -> bool {
     match process_group_clean(anchor) {
-        Ok(clean) => clean,
+        Ok(true) => true,
+        Ok(false) => {
+            // Name the members at the instant the group is seen occupied; a
+            // later sample can miss a descendant that has since exited.
+            if probe.descendant_survivors.is_none() {
+                let survivors =
+                    describe_group_survivors(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid]);
+                if !survivors.is_empty() {
+                    probe.descendant_survivors = Some(survivors);
+                }
+            }
+            false
+        }
         Err(error) => {
             probe.supervision_error.get_or_insert(error);
             false
@@ -2490,15 +2502,6 @@ fn supervise(launch: Launch, limits: Limits, deadline: Instant) -> SupervisionOu
         );
         probe.termination_reason = reason;
         probe.timed_out |= timeout_triggered;
-        if descendant_cleanup_required && probe.descendant_survivors.is_none() {
-            // Sample the survivors before cleanup removes them, so the receipt
-            // names what outlived the leader instead of only that something did.
-            let survivors =
-                describe_group_survivors(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid]);
-            if !survivors.is_empty() {
-                probe.descendant_survivors = Some(survivors);
-            }
-        }
         apply_terminations(
             &mut probe,
             &mut anchor,
