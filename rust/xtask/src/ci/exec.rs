@@ -1063,13 +1063,24 @@ struct Containment {
 
 #[cfg(unix)]
 impl Containment {
-    fn start(grace: Duration) -> Result<Self, std::io::Error> {
+    fn start(grace: Duration, context: LaunchContext) -> Result<Self, std::io::Error> {
         use std::os::unix::process::CommandExt as _;
 
+        // Only a command launched under the dedicated identity may clean it up.
+        // A command dispatched into the current session never runs as that
+        // identity, so cleaning it would reach processes it never created.
         #[cfg(any(target_os = "macos", target_os = "linux"))]
-        let dedicated_uid = dedicated_containment_config()?.map(|config| config.uid);
+        let dedicated_uid = match context {
+            LaunchContext::DedicatedContainment => {
+                dedicated_containment_config()?.map(|config| config.uid)
+            }
+            LaunchContext::CurrentAquaSession => None,
+        };
         #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        let dedicated_uid: Option<String> = None;
+        let dedicated_uid: Option<String> = {
+            let _ = context;
+            None
+        };
         let (monitor_registration, registration) = socket_pair_cloexec()?;
         let (token_read, token_write) = match pipe_cloexec() {
             Ok(pipe) => pipe,
@@ -2178,7 +2189,7 @@ fn launch(
         }
     };
     let containment =
-        Containment::start(limits.termination_grace).map_err(|error| LaunchError {
+        Containment::start(limits.termination_grace, context).map_err(|error| LaunchError {
             label: "nested process-group monitor".to_string(),
             error,
         })?;
@@ -2218,15 +2229,14 @@ fn launch(
             deadline.saturating_duration_since(Instant::now()),
         )
         .and_then(|monitor_anchor_pid| {
-            // Hold a command to the dedicated identity only when it was
-            // launched under it. A command dispatched into the current session
-            // never runs as that identity, so its cleanup cannot be judged by
-            // whether that identity still owns processes.
-            let dedicated_uid = match context {
-                LaunchContext::DedicatedContainment => containment.dedicated_uid.clone(),
-                LaunchContext::CurrentAquaSession => None,
-            };
-            LeaderAnchor::new(child.id(), monitor_anchor_pid, dedicated_uid)
+            // The containment carries the dedicated identity only for a command
+            // launched under it, so this follows that decision rather than
+            // repeating it.
+            LeaderAnchor::new(
+                child.id(),
+                monitor_anchor_pid,
+                containment.dedicated_uid.clone(),
+            )
         });
     let anchor = match anchor {
         Ok(anchor) => anchor,
