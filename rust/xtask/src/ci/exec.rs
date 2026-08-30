@@ -597,8 +597,17 @@ fn describe_process(pid: libc::pid_t) -> String {
         .ok()
         .filter(|length| *length > 0)
         .and_then(|length| String::from_utf8(path[..length].to_vec()).ok())
-        .unwrap_or_else(|| "unknown executable".to_string());
-    format!("{pid} ({name})")
+        .unwrap_or_else(|| "no executable path".to_string());
+    // proc_pidpath can name the image a departing process was spawned from
+    // rather than the one it ran, so report the kernel's own view beside it.
+    match macos_process_record(pid) {
+        Some(record) => format!(
+            "{pid} ({name}, group {}, {})",
+            record.group,
+            if record.terminal { "exited" } else { "live" }
+        ),
+        None => format!("{pid} ({name}, absent from the process table)"),
+    }
 }
 
 #[cfg(target_os = "linux")]
