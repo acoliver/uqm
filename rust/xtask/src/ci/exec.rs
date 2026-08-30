@@ -1512,7 +1512,9 @@ impl MonitorAnchor {
         fd_io(self.result_read, &mut result, false)
             .map_err(|error| format!("containment anchor {} did not reply: {error}", self.pid))?;
         let errno = i32::from_ne_bytes(result);
-        if errno == 0 {
+        // A group that no longer exists needs no termination, so ESRCH is the
+        // outcome this asks for rather than a failure to achieve it.
+        if errno == 0 || errno == libc::ESRCH {
             Ok(())
         } else {
             Err(format!(
