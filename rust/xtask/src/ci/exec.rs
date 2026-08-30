@@ -466,6 +466,65 @@ fn macos_process_is_terminal(pid: i32) -> Result<bool, String> {
     ))
 }
 
+/// Read a process group id from the kernel process record.
+///
+/// `proc_listpids` filters by group without reporting each process's own group,
+/// so a candidate it returns is confirmed here before it counts as a member.
+/// The record answers for exiting processes that `proc_pidinfo` refuses, and it
+/// carries the pid so a mismatched record is rejected rather than trusted.
+#[cfg(target_os = "macos")]
+fn macos_process_group(pid: libc::pid_t) -> Option<i32> {
+    // Offsets within the KERN_PROC_PID record: kp_proc.p_pid and
+    // kp_eproc.e_pgid, both c_int.
+    const PID_OFFSET: usize = 40;
+    const GROUP_OFFSET: usize = 564;
+    const MINIMUM_RECORD: usize = GROUP_OFFSET + std::mem::size_of::<i32>();
+
+    let mut mib: [libc::c_int; 4] = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_PID, pid];
+    let mut required: usize = 0;
+    // SAFETY: mib names KERN_PROC_PID for one PID, and a null buffer with a
+    // writable length requests the record size without writing any bytes.
+    let sized = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            mib.len() as u32,
+            std::ptr::null_mut(),
+            &raw mut required,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if sized != 0 || required < MINIMUM_RECORD {
+        return None;
+    }
+    let mut record = vec![0_u8; required];
+    let mut written = required;
+    // SAFETY: record is writable for written bytes, and the kernel reports the
+    // byte count it produced through written.
+    let read = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            mib.len() as u32,
+            record.as_mut_ptr().cast::<libc::c_void>(),
+            &raw mut written,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if read != 0 || written < MINIMUM_RECORD {
+        return None;
+    }
+    let field = |offset: usize| -> i32 {
+        let mut bytes = [0_u8; 4];
+        bytes.copy_from_slice(&record[offset..offset + 4]);
+        i32::from_ne_bytes(bytes)
+    };
+    if field(PID_OFFSET) != pid {
+        return None;
+    }
+    Some(field(GROUP_OFFSET))
+}
+
 #[cfg(target_os = "macos")]
 fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, String> {
     const PROC_PGRP_ONLY: u32 = 2;
@@ -518,6 +577,11 @@ fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, 
                 .copied()
                 .filter(|pid| *pid > 0 && !ignored.contains(pid))
             {
+                // Confirm the candidate still belongs to this group: the filter
+                // can name a process that has left it or whose PID was reused.
+                if macos_process_group(pid).is_none_or(|group| group != process_group) {
+                    continue;
+                }
                 if !macos_process_is_terminal(pid)? {
                     return Ok(true);
                 }
@@ -553,6 +617,7 @@ fn describe_group_survivors(process_group: i32, ignored: &[i32]) -> String {
         .iter()
         .copied()
         .filter(|pid| *pid > 0 && !ignored.contains(pid))
+        .filter(|pid| macos_process_group(*pid).is_some_and(|group| group == process_group))
         .filter(|pid| !matches!(macos_process_is_terminal(*pid), Ok(true)))
         .take(SURVIVOR_LIMIT)
         .map(|pid| {
