@@ -423,62 +423,38 @@ fn configure_process_group(_command: &mut Command, _registration_timeout: Durati
 
 #[cfg(target_os = "macos")]
 fn macos_process_is_terminal(pid: i32) -> Result<bool, String> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
-        .map_err(|_| "macOS process-info size does not fit c_int".to_string())?;
-    // SAFETY: info is writable for expected bytes and the pid came from proc_listpids.
-    let written = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            expected,
-        )
-    };
-    if written == expected {
-        // SAFETY: proc_pidinfo initialized the complete structure.
-        let info = unsafe { info.assume_init() };
-        return Ok(info.pbi_status == libc::SZOMB);
+    // A process that has exited but has not been reaped is terminal. The kernel
+    // process record reports that state; proc_pidinfo refuses such a process,
+    // which is why membership is decided from the record instead.
+    match macos_process_record(pid) {
+        Some(record) => Ok(record.terminal),
+        None => Ok(true),
     }
-    if written == 0 {
-        let output = Command::new("/bin/ps")
-            .args(["-o", "state=", "-p", &pid.to_string()])
-            .output()
-            .map_err(|error| format!("cannot inspect process {pid} state with ps: {error}"))?;
-        if output.status.success() {
-            let state = std::str::from_utf8(&output.stdout)
-                .map_err(|error| format!("process {pid} state is not UTF-8: {error}"))?
-                .trim();
-            if let Some(state) = state.as_bytes().first() {
-                return Ok(*state == b'Z');
-            }
-        }
-        // SAFETY: signal zero checks existence without delivering a signal.
-        if unsafe { libc::kill(pid, 0) } < 0
-            && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
-        {
-            return Ok(true);
-        }
-    }
-    Err(format!(
-        "cannot inspect process {pid} from its process-group membership: proc_pidinfo returned {written} bytes, expected {expected}"
-    ))
 }
 
-/// Read a process group id from the kernel process record.
+/// One process as the kernel reports it.
+#[cfg(target_os = "macos")]
+struct MacosProcessRecord {
+    group: i32,
+    terminal: bool,
+}
+
+/// Read a process record from the kernel.
 ///
 /// `proc_listpids` filters by group without reporting each process's own group,
-/// so a candidate it returns is confirmed here before it counts as a member.
-/// The record answers for exiting processes that `proc_pidinfo` refuses, and it
-/// carries the pid so a mismatched record is rejected rather than trusted.
+/// and `proc_pidinfo` refuses a process that has exited but has not been reaped,
+/// which is exactly the process a supervision check must classify. This record
+/// answers both questions at once and carries the pid, so a record that does not
+/// describe the requested process is rejected rather than trusted.
 #[cfg(target_os = "macos")]
-fn macos_process_group(pid: libc::pid_t) -> Option<i32> {
-    // Offsets within the KERN_PROC_PID record: kp_proc.p_pid and
-    // kp_eproc.e_pgid, both c_int.
+fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
+    // Offsets within the KERN_PROC_PID record: kp_proc.p_stat, kp_proc.p_pid,
+    // and kp_eproc.e_pgid.
+    const STATE_OFFSET: usize = 36;
     const PID_OFFSET: usize = 40;
     const GROUP_OFFSET: usize = 564;
     const MINIMUM_RECORD: usize = GROUP_OFFSET + std::mem::size_of::<i32>();
+    const ZOMBIE_STATE: u8 = 5;
 
     let mut mib: [libc::c_int; 4] = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_PID, pid];
     let mut required: usize = 0;
@@ -522,7 +498,10 @@ fn macos_process_group(pid: libc::pid_t) -> Option<i32> {
     if field(PID_OFFSET) != pid {
         return None;
     }
-    Some(field(GROUP_OFFSET))
+    Some(MacosProcessRecord {
+        group: field(GROUP_OFFSET),
+        terminal: record[STATE_OFFSET] == ZOMBIE_STATE,
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -580,14 +559,15 @@ fn group_member_other_than(
                 .copied()
                 .filter(|pid| *pid > 0 && !ignored.contains(pid))
             {
-                // Confirm the candidate still belongs to this group: the filter
-                // can name a process that has left it or whose PID was reused.
-                if macos_process_group(pid).is_none_or(|group| group != process_group) {
+                // The filter can name a process that has left the group, whose
+                // PID was reused, or that has exited without being reaped.
+                let Some(record) = macos_process_record(pid) else {
+                    continue;
+                };
+                if record.group != process_group || record.terminal {
                     continue;
                 }
-                if !macos_process_is_terminal(pid)? {
-                    return Ok(Some(pid));
-                }
+                return Ok(Some(pid));
             }
             return Ok(None);
         }
@@ -3185,6 +3165,58 @@ mod tests {
         );
         assert!(terminal, "exited child was not classified as terminal");
         assert!(macos_process_is_terminal(i32::MAX).unwrap());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_record_reports_this_process_group_and_rejects_absent_processes() {
+        let pid = std::process::id() as libc::pid_t;
+        let record = macos_process_record(pid).expect("record for this process");
+        // SAFETY: getpgrp has no preconditions.
+        assert_eq!(record.group, unsafe { libc::getpgrp() });
+        assert!(!record.terminal);
+        assert!(macos_process_record(i32::MAX).is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_membership_excludes_an_exited_child_of_this_group() {
+        // SAFETY: fork has no preconditions here; the child exits immediately.
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0, "fork failed");
+        if child == 0 {
+            // SAFETY: the child does nothing but exit.
+            unsafe { libc::_exit(0) };
+        }
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            let record = macos_process_record(child).expect("record for exited child");
+            if record.terminal {
+                // The unreaped child still reports this group, so membership
+                // must exclude it on state rather than on group alone.
+                // SAFETY: getpgrp has no preconditions.
+                assert_eq!(record.group, unsafe { libc::getpgrp() });
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "child never reached a terminal state"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        // SAFETY: getpgrp has no preconditions.
+        let group = unsafe { libc::getpgrp() };
+        let occupant = group_member_other_than(group, &[std::process::id() as libc::pid_t])
+            .expect("membership inspection");
+        assert_ne!(occupant, Some(child));
+
+        // SAFETY: child is this process's direct child.
+        assert_eq!(
+            unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) },
+            child
+        );
     }
 
     #[cfg(target_os = "macos")]
