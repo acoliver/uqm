@@ -4765,7 +4765,7 @@ with mock.patch.object(module, "group_members", return_value=[7, 43]), \
             .as_array()
             .is_some_and(|entries| entries.iter().any(|entry| {
                 matches!(entry["signal"].as_str(), Some("SIGTERM" | "SIGKILL"))
-                    && entry["result"] == "delivered"
+                    && terminating_signal_outcome(&entry["result"])
                     && entry["pid"].as_u64().is_some_and(|pid| pid > 1)
                     && valid_descendant_start_identity(&entry["start_identity"])
             })));
@@ -4840,9 +4840,24 @@ with mock.patch.object(module, "group_members", return_value=[7, 43]), \
             .as_array()
             .is_some_and(|entries| entries.iter().any(|entry| {
                 matches!(entry["signal"].as_str(), Some("SIGTERM" | "SIGKILL"))
-                    && entry["result"] == "delivered"
+                    && terminating_signal_outcome(&entry["result"])
             })));
         assert_no_matching_processes(&marker);
+    }
+
+    /// Accept every outcome that leaves an escaped descendant not running.
+    ///
+    /// The supervisor stops a descendant, re-verifies its identity, and only
+    /// then signals it, so a descendant that exits during that sequence is
+    /// recorded as absent rather than signaled. That is a correct outcome; the
+    /// tests still require that the descendant was observed, that termination
+    /// was reported, and that no matching process survives.
+    #[cfg(unix)]
+    fn terminating_signal_outcome(result: &serde_json::Value) -> bool {
+        matches!(
+            result.as_str(),
+            Some("delivered" | "not-found" | "identity-changed")
+        )
     }
 
     #[cfg(unix)]
