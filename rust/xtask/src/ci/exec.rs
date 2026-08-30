@@ -526,7 +526,10 @@ fn macos_process_group(pid: libc::pid_t) -> Option<i32> {
 }
 
 #[cfg(target_os = "macos")]
-fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, String> {
+fn group_member_other_than(
+    process_group: i32,
+    ignored: &[i32],
+) -> Result<Option<libc::pid_t>, String> {
     const PROC_PGRP_ONLY: u32 = 2;
     for _ in 0..3 {
         // SAFETY: a null buffer requests the required size.
@@ -583,57 +586,26 @@ fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, 
                     continue;
                 }
                 if !macos_process_is_terminal(pid)? {
-                    return Ok(true);
+                    return Ok(Some(pid));
                 }
             }
-            return Ok(false);
+            return Ok(None);
         }
     }
     Err("process-group membership changed during every inspection".to_string())
 }
-/// Name the live members of a process group for a supervision failure message.
+/// Describe one process for a supervision failure message.
 #[cfg(target_os = "macos")]
-fn describe_group_survivors(process_group: i32, ignored: &[i32]) -> String {
-    const PROC_PGRP_ONLY: u32 = 2;
-    const SURVIVOR_LIMIT: usize = 8;
-    let Ok(group) = u32::try_from(process_group) else {
-        return "process group is negative".to_string();
-    };
-    let mut pids = vec![0 as libc::pid_t; 256];
-    let Ok(bytes) = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>()) else {
-        return "process-group buffer does not fit c_int".to_string();
-    };
-    // SAFETY: pids is writable for bytes bytes.
-    let written =
-        unsafe { libc::proc_listpids(PROC_PGRP_ONLY, group, pids.as_mut_ptr().cast(), bytes) };
-    if written < 0 {
-        return format!(
-            "membership unavailable: {}",
-            std::io::Error::last_os_error()
-        );
-    }
-    let count = usize::try_from(written).unwrap_or(0) / std::mem::size_of::<libc::pid_t>();
-    let survivors: Vec<String> = pids[..count.min(pids.len())]
-        .iter()
-        .copied()
-        .filter(|pid| *pid > 0 && !ignored.contains(pid))
-        .filter(|pid| macos_process_group(*pid).is_some_and(|group| group == process_group))
-        .filter(|pid| !matches!(macos_process_is_terminal(*pid), Ok(true)))
-        .take(SURVIVOR_LIMIT)
-        .map(|pid| {
-            let mut path = [0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-            // SAFETY: path is writable for its full length.
-            let written =
-                unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), path.len() as u32) };
-            let name = usize::try_from(written)
-                .ok()
-                .filter(|length| *length > 0)
-                .and_then(|length| String::from_utf8(path[..length].to_vec()).ok())
-                .unwrap_or_else(|| "unknown executable".to_string());
-            format!("{pid} ({name})")
-        })
-        .collect();
-    survivors.join(", ")
+fn describe_process(pid: libc::pid_t) -> String {
+    let mut path = [0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: path is writable for its full length.
+    let written = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), path.len() as u32) };
+    let name = usize::try_from(written)
+        .ok()
+        .filter(|length| *length > 0)
+        .and_then(|length| String::from_utf8(path[..length].to_vec()).ok())
+        .unwrap_or_else(|| "unknown executable".to_string());
+    format!("{pid} ({name})")
 }
 
 #[cfg(target_os = "linux")]
@@ -655,7 +627,10 @@ fn linux_process_state_and_group(stat: &str, path: &Path) -> Result<(char, i32),
 }
 
 #[cfg(target_os = "linux")]
-fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, String> {
+fn group_member_other_than(
+    process_group: i32,
+    ignored: &[i32],
+) -> Result<Option<libc::pid_t>, String> {
     for entry in std::fs::read_dir("/proc").map_err(|error| error.to_string())? {
         let entry = entry.map_err(|error| error.to_string())?;
         let Some(pid) = entry
@@ -678,50 +653,19 @@ fn group_has_other_members(process_group: i32, ignored: &[i32]) -> Result<bool, 
         };
         let (state, group) = linux_process_state_and_group(&stat, &stat_path)?;
         if state != 'Z' && group == process_group {
-            return Ok(true);
+            return Ok(Some(pid));
         }
     }
-    Ok(false)
+    Ok(None)
 }
 
-/// Name the live members of a process group for a supervision failure message.
+/// Describe one process for a supervision failure message.
 #[cfg(target_os = "linux")]
-fn describe_group_survivors(process_group: i32, ignored: &[i32]) -> String {
-    const SURVIVOR_LIMIT: usize = 8;
-    let Ok(entries) = std::fs::read_dir("/proc") else {
-        return "membership unavailable".to_string();
-    };
-    let mut survivors = Vec::new();
-    for entry in entries.flatten() {
-        if survivors.len() >= SURVIVOR_LIMIT {
-            break;
-        }
-        let Some(pid) = entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.parse::<i32>().ok())
-        else {
-            continue;
-        };
-        if ignored.contains(&pid) {
-            continue;
-        }
-        let stat_path = entry.path().join("stat");
-        let Ok(stat) = std::fs::read_to_string(&stat_path) else {
-            continue;
-        };
-        let Ok((state, group)) = linux_process_state_and_group(&stat, &stat_path) else {
-            continue;
-        };
-        if state == 'Z' || group != process_group {
-            continue;
-        }
-        let name = std::fs::read_to_string(entry.path().join("comm"))
-            .map(|comm| comm.trim().to_string())
-            .unwrap_or_else(|_| "unknown executable".to_string());
-        survivors.push(format!("{pid} ({name})"));
-    }
-    survivors.join(", ")
+fn describe_process(pid: libc::pid_t) -> String {
+    let name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+        .map(|comm| comm.trim().to_string())
+        .unwrap_or_else(|_| "unknown executable".to_string());
+    format!("{pid} ({name})")
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -1012,11 +956,7 @@ fn signal_group(anchor: &LeaderAnchor, signal: i32) -> Result<(), String> {
         // A kernel can refuse a group signal once every member has released
         // its credentials while exiting. The survivor contract covers live
         // members, so confirm emptiness instead of trusting the errno alone.
-        Some(libc::EPERM)
-            if !group_has_other_members(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid])? =>
-        {
-            Ok(())
-        }
+        Some(libc::EPERM) if group_occupant(anchor)?.is_none() => Ok(()),
         _ => Err(format!(
             "cannot signal process group {}: {error}",
             anchor.pid
@@ -1025,10 +965,13 @@ fn signal_group(anchor: &LeaderAnchor, signal: i32) -> Result<(), String> {
 }
 
 #[cfg(unix)]
+fn group_occupant(anchor: &LeaderAnchor) -> Result<Option<libc::pid_t>, String> {
+    group_member_other_than(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid])
+}
+
+#[cfg(unix)]
 fn process_group_clean(anchor: &LeaderAnchor) -> Result<bool, String> {
-    if !anchor.observed
-        || group_has_other_members(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid])?
-    {
+    if !anchor.observed || group_occupant(anchor)?.is_some() {
         return Ok(false);
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -2412,13 +2355,11 @@ fn observed_group_clean(probe: &mut Probe, anchor: &LeaderAnchor) -> bool {
     match process_group_clean(anchor) {
         Ok(true) => true,
         Ok(false) => {
-            // Name the members at the instant the group is seen occupied; a
-            // later sample can miss a descendant that has since exited.
+            // Name the exact process whose membership produced the verdict, so
+            // a descendant that exits moments later is still identified.
             if probe.descendant_survivors.is_none() {
-                let survivors =
-                    describe_group_survivors(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid]);
-                if !survivors.is_empty() {
-                    probe.descendant_survivors = Some(survivors);
+                if let Ok(Some(pid)) = group_occupant(anchor) {
+                    probe.descendant_survivors = Some(describe_process(pid));
                 }
             }
             false
@@ -2680,17 +2621,21 @@ fn finalize_unix(
     let process_group_cleanup = if final_group_clean {
         "verified-empty"
     } else {
-        probe.supervision_error.get_or_insert_with(|| {
-            let survivors =
-                describe_group_survivors(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid]);
-            if survivors.is_empty() {
-                "owned process group was not empty before the leader reap boundary".to_string()
-            } else {
-                format!(
-                    "owned process group was not empty before the leader reap boundary: {survivors}"
-                )
-            }
-        });
+        let occupant = group_occupant(&anchor)
+            .ok()
+            .flatten()
+            .map(describe_process)
+            .or_else(|| probe.descendant_survivors.clone());
+        probe
+            .supervision_error
+            .get_or_insert_with(|| match occupant {
+                Some(occupant) => format!(
+                    "owned process group was not empty before the leader reap boundary: {occupant}"
+                ),
+                None => {
+                    "owned process group was not empty before the leader reap boundary".to_string()
+                }
+            });
         "failed"
     };
     let pipe_cleanup = if probe.capture.pipes_finished() {
