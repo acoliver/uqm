@@ -983,16 +983,38 @@ fn group_occupant(anchor: &LeaderAnchor) -> Result<Option<libc::pid_t>, String> 
     group_member_other_than(anchor.pid, &[anchor.pid, anchor.monitor_anchor_pid])
 }
 
+/// Why a supervised group is not yet clean.
 #[cfg(unix)]
-fn process_group_clean(anchor: &LeaderAnchor) -> Result<bool, String> {
-    if !anchor.observed || group_occupant(anchor)?.is_some() {
-        return Ok(false);
+enum GroupOccupancy {
+    Clean,
+    LeaderUnobserved,
+    Occupant(libc::pid_t),
+    DedicatedUidBusy,
+}
+
+#[cfg(unix)]
+fn process_group_occupancy(anchor: &LeaderAnchor) -> Result<GroupOccupancy, String> {
+    if !anchor.observed {
+        return Ok(GroupOccupancy::LeaderUnobserved);
+    }
+    if let Some(pid) = group_occupant(anchor)? {
+        return Ok(GroupOccupancy::Occupant(pid));
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     if let Some(uid) = &anchor.dedicated_uid {
-        return privileged_uid_is_empty(uid);
+        if !privileged_uid_is_empty(uid)? {
+            return Ok(GroupOccupancy::DedicatedUidBusy);
+        }
     }
-    Ok(true)
+    Ok(GroupOccupancy::Clean)
+}
+
+#[cfg(unix)]
+fn process_group_clean(anchor: &LeaderAnchor) -> Result<bool, String> {
+    Ok(matches!(
+        process_group_occupancy(anchor)?,
+        GroupOccupancy::Clean
+    ))
 }
 
 #[cfg(not(unix))]
@@ -2355,12 +2377,17 @@ fn observed_group_clean(probe: &mut Probe, anchor: &LeaderAnchor) -> bool {
     match process_group_clean(anchor) {
         Ok(true) => true,
         Ok(false) => {
-            // Name the exact process whose membership produced the verdict, so
-            // a descendant that exits moments later is still identified.
+            // Record why the group is occupied at the moment it is observed, so
+            // a cause that resolves moments later is still reported exactly.
             if probe.descendant_survivors.is_none() {
-                if let Ok(Some(pid)) = group_occupant(anchor) {
-                    probe.descendant_survivors = Some(describe_process(pid));
-                }
+                probe.descendant_survivors = match process_group_occupancy(anchor) {
+                    Ok(GroupOccupancy::Occupant(pid)) => Some(describe_process(pid)),
+                    Ok(GroupOccupancy::DedicatedUidBusy) => Some(format!(
+                        "no group member; the dedicated containment uid {} still owns processes",
+                        anchor.dedicated_uid.as_deref().unwrap_or("unknown")
+                    )),
+                    _ => None,
+                };
             }
             false
         }
@@ -2621,11 +2648,21 @@ fn finalize_unix(
     let process_group_cleanup = if final_group_clean {
         "verified-empty"
     } else {
-        let occupant = group_occupant(&anchor)
-            .ok()
-            .flatten()
-            .map(describe_process)
-            .or_else(|| probe.descendant_survivors.clone());
+        let occupant = match process_group_occupancy(&anchor) {
+            Ok(GroupOccupancy::Occupant(pid)) => Some(describe_process(pid)),
+            Ok(GroupOccupancy::DedicatedUidBusy) => Some(format!(
+                "no group member; the dedicated containment uid {} still owns processes",
+                anchor.dedicated_uid.as_deref().unwrap_or("unknown")
+            )),
+            Ok(GroupOccupancy::LeaderUnobserved) => {
+                Some("no group member; the leader was never observed".to_string())
+            }
+            Ok(GroupOccupancy::Clean) => {
+                Some("no group member remained when the failure was recorded".to_string())
+            }
+            Err(_) => None,
+        }
+        .or_else(|| probe.descendant_survivors.clone());
         probe
             .supervision_error
             .get_or_insert_with(|| match occupant {
