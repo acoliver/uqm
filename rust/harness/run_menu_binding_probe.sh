@@ -178,6 +178,20 @@ capture_nm() {
     printf '%s\n' "${nm_exit}" > "${exit_path}"
 
     if [ "${nm_exit}" -ne 0 ]; then
+        # Apple's nm cannot read the embedded bitcode attributes that the
+        # pinned Rust toolchain emits, so it rejects standard-library members
+        # while still listing every symbol this probe verifies. Tolerate that
+        # exact producer/reader mismatch and nothing else; the symbol
+        # requirements below remain the contract.
+        local errors
+        local mismatches
+        errors=$(grep -c 'error:' "${stderr_path}" || true)
+        mismatches=$(grep -c "Unknown attribute kind ([0-9]*) (Producer: 'LLVM[0-9.]*-rust-[0-9.]*-stable' Reader: 'LLVM APPLE" "${stderr_path}" || true)
+        if [ "${errors}" -gt 0 ] && [ "${errors}" -eq "${mismatches}" ]; then
+            echo "NOTE: nm exited ${nm_exit} for ${name}; ${mismatches} members carry attributes this nm cannot read" >&2
+            echo "NOTE: every reported error is that producer mismatch, and the required symbols are verified below" >&2
+            return 0
+        fi
         echo "FAIL: nm exited ${nm_exit} for ${name}: ${NM_PATH} $*" >&2
         cat "${stdout_path}"
         cat "${stderr_path}" >&2
