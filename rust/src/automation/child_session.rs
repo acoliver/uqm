@@ -1043,54 +1043,67 @@ mod os {
         }
     }
 
+    /// Read the group and terminal state of a PID from the `KERN_PROC_PID`
+    /// record.
+    ///
+    /// `proc_listpids` filters by group without reporting each process's own
+    /// group, and `proc_pidinfo` refuses a process that has exited but has not
+    /// been reaped, which is exactly the process this check must classify. The
+    /// record answers both questions and carries the PID, so a record that does
+    /// not describe the requested process is rejected rather than trusted.
     #[cfg(target_os = "macos")]
-    fn macos_process_is_terminal(pid: libc::pid_t) -> io::Result<bool> {
-        let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-        let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>())
-            .map_err(|_| io::Error::other("process-info size does not fit c_int"))?;
-        // SAFETY: info is writable for expected bytes and pid came from proc_listpids.
-        let written = unsafe {
-            libc::proc_pidinfo(
-                pid,
-                libc::PROC_PIDTBSDINFO,
+    fn macos_process_group_and_state(pid: libc::pid_t) -> Option<(i32, bool)> {
+        // Offsets within the record: kp_proc.p_stat, kp_proc.p_pid, and
+        // kp_eproc.e_pgid.
+        const STATE_OFFSET: usize = 36;
+        const PID_OFFSET: usize = 40;
+        const GROUP_OFFSET: usize = 564;
+        const MINIMUM_RECORD: usize = GROUP_OFFSET + std::mem::size_of::<i32>();
+        const ZOMBIE_STATE: u8 = 5;
+
+        let mut mib: [c_int; 4] = [libc::CTL_KERN, libc::KERN_PROC, libc::KERN_PROC_PID, pid];
+        let mut required: usize = 0;
+        // SAFETY: mib names KERN_PROC_PID for one PID, and a null buffer with a
+        // writable length requests the record size without writing any bytes.
+        let sized = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(),
+                mib.len() as u32,
+                std::ptr::null_mut(),
+                &raw mut required,
+                std::ptr::null_mut(),
                 0,
-                info.as_mut_ptr().cast(),
-                expected,
             )
         };
-        if written == expected {
-            // SAFETY: proc_pidinfo initialized the complete structure.
-            return Ok(unsafe { info.assume_init() }.pbi_status == libc::SZOMB);
+        if sized != 0 || required < MINIMUM_RECORD {
+            return None;
         }
-        if written == 0 {
-            let output = Command::new("/bin/ps")
-                .args(["-o", "state=", "-p", &pid.to_string()])
-                .output()
-                .map_err(|error| {
-                    io::Error::other(format!(
-                        "cannot inspect process {pid} state with ps: {error}"
-                    ))
-                })?;
-            if output.status.success() {
-                let state = std::str::from_utf8(&output.stdout)
-                    .map_err(|error| {
-                        io::Error::other(format!("process {pid} state is not UTF-8: {error}"))
-                    })?
-                    .trim();
-                if let Some(state) = state.as_bytes().first() {
-                    return Ok(*state == b'Z');
-                }
-            }
-            // SAFETY: signal zero checks whether the listed PID still exists.
-            if unsafe { libc::kill(pid, 0) } == -1
-                && io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
-            {
-                return Ok(true);
-            }
+        let mut record = vec![0_u8; required];
+        let mut written = required;
+        // SAFETY: record is writable for written bytes, and the kernel reports
+        // the byte count it produced through written.
+        let read = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(),
+                mib.len() as u32,
+                record.as_mut_ptr().cast::<c_void>(),
+                &raw mut written,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if read != 0 || written < MINIMUM_RECORD {
+            return None;
         }
-        Err(io::Error::other(format!(
-            "cannot inspect process {pid}: proc_pidinfo returned {written} bytes, expected {expected}"
-        )))
+        let field = |offset: usize| -> i32 {
+            let mut bytes = [0_u8; 4];
+            bytes.copy_from_slice(&record[offset..offset + 4]);
+            i32::from_ne_bytes(bytes)
+        };
+        if field(PID_OFFSET) != pid {
+            return None;
+        }
+        Some((field(GROUP_OFFSET), record[STATE_OFFSET] == ZOMBIE_STATE))
     }
 
     #[cfg(target_os = "macos")]
@@ -1133,12 +1146,19 @@ mod os {
                     .ok()
                     .and_then(|value| value.checked_div(std::mem::size_of::<libc::pid_t>()))
                     .ok_or_else(|| io::Error::other("invalid process-group byte count"))?;
+                let group = i32::try_from(process_group)
+                    .map_err(|_| io::Error::other("process group does not fit c_int"))?;
                 for pid in pids[..count]
                     .iter()
                     .copied()
                     .filter(|pid| *pid > 0 && !ignored.contains(pid))
                 {
-                    if !macos_process_is_terminal(pid)? {
+                    // The filter can name a process that has left the group,
+                    // whose PID was reused, or that has exited unreaped.
+                    let Some((member_group, terminal)) = macos_process_group_and_state(pid) else {
+                        continue;
+                    };
+                    if member_group == group && !terminal {
                         return Ok(true);
                     }
                 }
@@ -1148,6 +1168,12 @@ mod os {
         Err(io::Error::other(
             "process-group membership changed during every inspection",
         ))
+    }
+
+    #[cfg(target_os = "macos")]
+    #[cfg(test)]
+    pub(super) fn macos_group_and_state(pid: libc::pid_t) -> Option<(i32, bool)> {
+        macos_process_group_and_state(pid)
     }
 
     #[cfg(target_os = "linux")]
@@ -2175,6 +2201,40 @@ pub use os::{
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_record_classifies_an_exited_child_as_terminal_in_this_group() {
+        // SAFETY: fork has no preconditions here; the child exits immediately.
+        let child = unsafe { libc::fork() };
+        assert!(child >= 0, "fork failed");
+        if child == 0 {
+            // SAFETY: the child does nothing but exit.
+            unsafe { libc::_exit(0) };
+        }
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            let (group, terminal) =
+                super::os::macos_group_and_state(child).expect("record for exited child");
+            if terminal {
+                // SAFETY: getpgrp has no preconditions.
+                assert_eq!(group, unsafe { libc::getpgrp() });
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "child never reached a terminal state"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        // SAFETY: child is this process's direct child.
+        assert_eq!(
+            unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) },
+            child
+        );
+    }
+
     use super::*;
 
     fn test_identity() -> ProcessIdentity {
