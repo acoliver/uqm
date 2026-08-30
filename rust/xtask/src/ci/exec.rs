@@ -2218,11 +2218,15 @@ fn launch(
             deadline.saturating_duration_since(Instant::now()),
         )
         .and_then(|monitor_anchor_pid| {
-            LeaderAnchor::new(
-                child.id(),
-                monitor_anchor_pid,
-                containment.dedicated_uid.clone(),
-            )
+            // Hold a command to the dedicated identity only when it was
+            // launched under it. A command dispatched into the current session
+            // never runs as that identity, so its cleanup cannot be judged by
+            // whether that identity still owns processes.
+            let dedicated_uid = match context {
+                LaunchContext::DedicatedContainment => containment.dedicated_uid.clone(),
+                LaunchContext::CurrentAquaSession => None,
+            };
+            LeaderAnchor::new(child.id(), monitor_anchor_pid, dedicated_uid)
         });
     let anchor = match anchor {
         Ok(anchor) => anchor,
