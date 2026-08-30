@@ -918,6 +918,8 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
             "harness-exit.txt",
         ],
         ("probes-harnesses", "menu-binding-probe") => &[
+            "pkg-config-cflags.txt",
+            "pkg-config-libs.txt",
             "menu-binding-link-map.txt",
             "c-archive-nm.txt",
             "c-archive-nm.stderr.txt",

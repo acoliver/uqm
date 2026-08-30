@@ -838,36 +838,86 @@ mod os {
     // --- Process identity / start-time -----------------------------------
 
     /// Capture the process start time (wall-clock microseconds since epoch)
-    /// for a PID on macOS via `proc_pidinfo` + `PROC_PIDTBSDINFO`.
+    /// for a PID on macOS from the `KERN_PROC_PID` process record.
+    ///
+    /// `proc_pidinfo` answers `ESRCH` the moment a child exits, even while its
+    /// parent still holds it unreaped, so it cannot identify a short-lived
+    /// child. The kernel process record still reports the exact start time of
+    /// an exited but unreaped process, and it begins with that `timeval`.
     ///
     /// Returns `None` if the information is unavailable (e.g. insufficient
-    /// privileges or the process has already exited).
+    /// privileges or the process has been reaped).
     ///
     /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
     /// @requirement REQ-PROOF-003
     #[cfg(target_os = "macos")]
     #[must_use]
     pub fn process_start_micros(pid: u32) -> Option<u64> {
-        // SAFETY: we provide a correctly-sized buffer for the flavor
-        // PROC_PIDTBSDINFO and pass it to proc_pidinfo. The function fills
-        // the buffer or returns an error value; we validate the returned
-        // byte count before reading.
-        unsafe {
-            let mut info: libc::proc_bsdinfo = std::mem::zeroed();
-            const PROC_PIDTBSDINFO: c_int = 3;
-            let n = libc::proc_pidinfo(
-                pid as c_int,
-                PROC_PIDTBSDINFO,
-                0,
-                &mut info as *mut _ as *mut c_void,
-                std::mem::size_of::<libc::proc_bsdinfo>() as c_int,
-            );
-            if n == std::mem::size_of::<libc::proc_bsdinfo>() as c_int {
-                Some(info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
-            } else {
-                None
-            }
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        struct StartTimeval {
+            seconds: i64,
+            microseconds: i32,
+            _padding: i32,
         }
+
+        let mut mib: [c_int; 4] = [
+            libc::CTL_KERN,
+            libc::KERN_PROC,
+            libc::KERN_PROC_PID,
+            c_int::try_from(pid).ok()?,
+        ];
+        let mut required: usize = 0;
+        // SAFETY: mib names KERN_PROC_PID for one PID, and a null buffer with a
+        // writable length requests the record size without writing any bytes.
+        let sized = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(),
+                mib.len() as u32,
+                std::ptr::null_mut(),
+                &raw mut required,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if sized != 0 || required < std::mem::size_of::<StartTimeval>() {
+            return None;
+        }
+        let mut record = vec![0_u8; required];
+        let mut written = required;
+        // SAFETY: record is writable for written bytes, and the kernel reports
+        // the byte count it produced through written.
+        let read = unsafe {
+            libc::sysctl(
+                mib.as_mut_ptr(),
+                mib.len() as u32,
+                record.as_mut_ptr().cast::<c_void>(),
+                &raw mut written,
+                std::ptr::null_mut(),
+                0,
+            )
+        };
+        if read != 0 || written < std::mem::size_of::<StartTimeval>() {
+            return None;
+        }
+        let mut start = StartTimeval {
+            seconds: 0,
+            microseconds: 0,
+            _padding: 0,
+        };
+        // SAFETY: the record begins with the process start timeval and holds at
+        // least that many initialized bytes, and both operands are plain data.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                record.as_ptr(),
+                (&raw mut start).cast::<u8>(),
+                std::mem::size_of::<StartTimeval>(),
+            );
+        }
+        u64::try_from(start.seconds)
+            .ok()?
+            .checked_mul(1_000_000)?
+            .checked_add(u64::try_from(start.microseconds).ok()?)
     }
 
     /// Capture the process start time on Linux via `/proc/<pid>/stat`.
@@ -2677,6 +2727,43 @@ mod os_tests {
         );
         assert_eq!(id.executable_digest, "deadbeef");
         let _ = session.finish();
+    }
+
+    #[test]
+    fn identity_survives_a_child_that_exits_before_it_is_captured() {
+        let child = Command::new("/usr/bin/true")
+            .spawn()
+            .expect("spawn immediate-exit child");
+        let pid = child.id();
+        let mut status = 0;
+        let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+        // Leave the child waitable so its PID stays pinned while unreaped.
+        let observed = unsafe {
+            libc::waitid(
+                libc::P_PID,
+                pid,
+                info.as_mut_ptr(),
+                libc::WEXITED | libc::WNOWAIT,
+            )
+        };
+        assert_eq!(observed, 0, "child must reach a terminal state");
+
+        let identity = capture_identity(pid, "deadbeef").expect("identity of an exited child");
+        assert_eq!(identity.pid, pid);
+        assert!(
+            identity
+                .start_time
+                .parse::<u64>()
+                .is_ok_and(|start| start > 0),
+            "start_time should be numeric: {}",
+            identity.start_time
+        );
+
+        assert_eq!(
+            unsafe { libc::waitpid(pid as libc::pid_t, &raw mut status, 0) },
+            pid as libc::pid_t
+        );
+        drop(child);
     }
 
     #[test]
