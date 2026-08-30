@@ -666,8 +666,20 @@ fn group_member_other_than(
 fn describe_process(pid: libc::pid_t) -> String {
     let name = std::fs::read_to_string(format!("/proc/{pid}/comm"))
         .map(|comm| comm.trim().to_string())
-        .unwrap_or_else(|_| "unknown executable".to_string());
-    format!("{pid} ({name})")
+        .unwrap_or_else(|_| "no executable name".to_string());
+    // Report the kernel's own view beside the name, matching what the macOS
+    // path reports, so a failure message carries the same evidence either way.
+    let stat_path = PathBuf::from(format!("/proc/{pid}/stat"));
+    match std::fs::read_to_string(&stat_path)
+        .map_err(|error| error.to_string())
+        .and_then(|stat| linux_process_state_and_group(&stat, &stat_path))
+    {
+        Ok((state, group)) => format!(
+            "{pid} ({name}, group {group}, {})",
+            if state == 'Z' { "exited" } else { "live" }
+        ),
+        Err(_) => format!("{pid} ({name}, absent from the process table)"),
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
