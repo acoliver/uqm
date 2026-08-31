@@ -1521,7 +1521,11 @@ fn capture_dependencies(root: &Path) -> Result<(), String> {
     env::set_var("SOURCE_DATE_EPOCH", epoch.to_string());
     env::set_var("UQM_BUILD_DATE", source_date(root)?);
     let toolchain = canonical_toolchain(root)?;
-    reject_ambient_build_flags()?;
+    // The gate hands this step the canonical toolchain environment, which sets
+    // CARGO_TARGET_<TRIPLE>_LINKER. Demanding no build flags at all would refuse
+    // the values the harness just supplied, so require the canonical ones and
+    // reject everything else.
+    reject_noncanonical_build_flags(&toolchain)?;
     apply_canonical_toolchain_environment(&toolchain);
     env::set_var(
         "UQM_CANONICAL_TOOLCHAIN",
