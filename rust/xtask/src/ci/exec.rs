@@ -781,6 +781,86 @@ fn macos_process_matches_uid(info: &libc::proc_bsdinfo, uid: u32) -> bool {
 }
 
 #[cfg(target_os = "macos")]
+/// Name the processes the dedicated identity still owns.
+///
+/// The identity is shared by every command in a session, so naming the
+/// survivors distinguishes a command that leaked from one that inherited.
+#[cfg(target_os = "macos")]
+fn describe_uid_survivors(uid: &str) -> String {
+    const PROC_UID_ONLY: u32 = 4;
+
+    let Ok(uid) = uid.parse::<u32>() else {
+        return "processes, and the uid could not be parsed to name them".to_string();
+    };
+    // SAFETY: a null buffer requests the required size.
+    let required = unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, std::ptr::null_mut(), 0) };
+    let Ok(slots) =
+        usize::try_from(required).map(|bytes| bytes / std::mem::size_of::<libc::pid_t>() + 16)
+    else {
+        return "processes that could not be listed".to_string();
+    };
+    let mut pids = vec![0 as libc::pid_t; slots];
+    let Ok(bytes) = i32::try_from(pids.len() * std::mem::size_of::<libc::pid_t>()) else {
+        return "processes that could not be listed".to_string();
+    };
+    // SAFETY: pids is writable for bytes bytes.
+    let written =
+        unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, pids.as_mut_ptr().cast(), bytes) };
+    let Ok(count) =
+        usize::try_from(written).map(|value| value / std::mem::size_of::<libc::pid_t>())
+    else {
+        return "processes that could not be listed".to_string();
+    };
+    let described: Vec<String> = pids[..count.min(pids.len())]
+        .iter()
+        .copied()
+        .filter(|pid| *pid > 0)
+        .map(describe_process)
+        .collect();
+    if described.is_empty() {
+        "processes that exited before they could be named".to_string()
+    } else {
+        format!("processes: {}", described.join(", "))
+    }
+}
+
+/// Name the processes the dedicated identity still owns.
+#[cfg(target_os = "linux")]
+fn describe_uid_survivors(uid: &str) -> String {
+    let Ok(uid) = uid.parse::<u32>() else {
+        return "processes, and the uid could not be parsed to name them".to_string();
+    };
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return "processes that could not be listed".to_string();
+    };
+    let mut described = Vec::new();
+    for entry in entries.flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<libc::pid_t>() else {
+            continue;
+        };
+        let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else {
+            continue;
+        };
+        let owns = status
+            .lines()
+            .find_map(|line| line.strip_prefix("Uid:"))
+            .and_then(|line| {
+                line.split_whitespace()
+                    .next()
+                    .and_then(|id| id.parse::<u32>().ok())
+            })
+            .is_some_and(|real| real == uid);
+        if owns {
+            described.push(describe_process(pid));
+        }
+    }
+    if described.is_empty() {
+        "processes that exited before they could be named".to_string()
+    } else {
+        format!("processes: {}", described.join(", "))
+    }
+}
+
 fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
     const PROC_UID_ONLY: u32 = 4;
     const PROC_RUID_ONLY: u32 = 5;
@@ -989,7 +1069,7 @@ enum GroupOccupancy {
     Clean,
     LeaderUnobserved,
     Occupant(libc::pid_t),
-    DedicatedUidBusy,
+    DedicatedUidBusy(String),
 }
 
 #[cfg(unix)]
@@ -1003,7 +1083,9 @@ fn process_group_occupancy(anchor: &LeaderAnchor) -> Result<GroupOccupancy, Stri
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     if let Some(uid) = &anchor.dedicated_uid {
         if !privileged_uid_is_empty(uid)? {
-            return Ok(GroupOccupancy::DedicatedUidBusy);
+            return Ok(GroupOccupancy::DedicatedUidBusy(describe_uid_survivors(
+                uid,
+            )));
         }
     }
     Ok(GroupOccupancy::Clean)
@@ -2419,8 +2501,8 @@ fn observed_group_clean(probe: &mut Probe, anchor: &LeaderAnchor) -> bool {
             if probe.descendant_survivors.is_none() {
                 probe.descendant_survivors = match process_group_occupancy(anchor) {
                     Ok(GroupOccupancy::Occupant(pid)) => Some(describe_process(pid)),
-                    Ok(GroupOccupancy::DedicatedUidBusy) => Some(format!(
-                        "no group member; the dedicated containment uid {} still owns processes",
+                    Ok(GroupOccupancy::DedicatedUidBusy(survivors)) => Some(format!(
+                        "no group member; the dedicated containment uid {} still owns {survivors}",
                         anchor.dedicated_uid.as_deref().unwrap_or("unknown")
                     )),
                     _ => None,
@@ -2687,8 +2769,8 @@ fn finalize_unix(
     } else {
         let occupant = match process_group_occupancy(&anchor) {
             Ok(GroupOccupancy::Occupant(pid)) => Some(describe_process(pid)),
-            Ok(GroupOccupancy::DedicatedUidBusy) => Some(format!(
-                "no group member; the dedicated containment uid {} still owns processes",
+            Ok(GroupOccupancy::DedicatedUidBusy(survivors)) => Some(format!(
+                "no group member; the dedicated containment uid {} still owns {survivors}",
                 anchor.dedicated_uid.as_deref().unwrap_or("unknown")
             )),
             Ok(GroupOccupancy::LeaderUnobserved) => {
