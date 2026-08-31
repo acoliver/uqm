@@ -68,6 +68,9 @@ cleanup() {
 }
 if ! cleanup; then
     echo "dedicated containment uid $uid still owns processes before launch" >&2
+    # Name what survived. The identity is shared by every command in a session,
+    # so the survivor is the whole question when cleanup cannot clear it.
+    /bin/ps -o pid=,ppid=,stat=,command= -U "$uid" >&2 2>/dev/null || true
     exit 125
 fi
 trap 'cleanup || true; exit 143' HUP INT TERM

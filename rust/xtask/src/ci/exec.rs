@@ -1027,8 +1027,11 @@ fn wait_for_privileged_uid_empty(uid: &str, timeout: Duration) -> Result<(), Str
             return Ok(());
         }
         if Instant::now() >= deadline {
+            // Name them: the identity is shared across a session, so which
+            // processes survived is the whole question when this fires.
             return Err(format!(
-                "dedicated containment uid {uid} still owns processes"
+                "dedicated containment uid {uid} still owns {}",
+                describe_uid_survivors(uid)
             ));
         }
         thread::sleep(Duration::from_millis(10));
