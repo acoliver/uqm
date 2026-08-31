@@ -760,6 +760,16 @@ jobs:
             <<<"${TOOLS_JSON}")"
           actionlint_archive_platform="${actionlint_platform//-/_}"
           supervise tools-lizard "${tools}/python/bin/pip" install --disable-pip-version-check --require-hashes -r "${lizard_requirements}"
+          lizard_patch="${RUNNER_TEMP}/s4-controller-source/$(jq -er '.lizard.source_patch.path' <<<"${TOOLS_JSON}")"
+          lizard_patch_sha256="$(jq -er '.lizard.source_patch.sha256' <<<"${TOOLS_JSON}")"
+          lizard_patch_target="$(jq -er '.lizard.source_patch.target' <<<"${TOOLS_JSON}")"
+          lizard_target_before="$(jq -er '.lizard.source_patch.target_sha256_before' <<<"${TOOLS_JSON}")"
+          lizard_target_after="$(jq -er '.lizard.source_patch.target_sha256_after' <<<"${TOOLS_JSON}")"
+          printf '%s  %s\n' "${lizard_patch_sha256}" "${lizard_patch}" | shasum -a 256 -c -
+          lizard_packages="$("${tools}/python/bin/python" -P -c 'import lizard_languages, pathlib; print(pathlib.Path(lizard_languages.__file__).resolve().parent.parent)')"
+          printf '%s  %s\n' "${lizard_target_before}" "${lizard_packages}/${lizard_patch_target}" | shasum -a 256 -c -
+          supervise tools-lizard-patch patch --batch --strip 1 --directory "${lizard_packages}" --input "${lizard_patch}"
+          printf '%s  %s\n' "${lizard_target_after}" "${lizard_packages}/${lizard_patch_target}" | shasum -a 256 -c -
           mkdir -p "${tools}/bin"
           ln -s "${tools}/python/bin/lizard" "${tools}/bin/lizard"
           install_verified_cargo_tool() {

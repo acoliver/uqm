@@ -28,7 +28,7 @@ use super::CiError;
 pub const WORKFLOW_FILE: &str = ".github/workflows/rust-quality.yaml";
 pub const VALIDATION_SCHEMA: &str = "uqm-s4-workflow-validation-v1";
 const TOOL_INSTALL_RUN_SHA256: &str =
-    "119bb3a7435a3ef26ccd3d9c9fe4d1f7de9144f31de10a8e46886dae1ff3b994";
+    "f980bcd5e91307e1e3dc23bbe09409869d5f71dbbd436342313fa10393e7f967";
 
 const FORBIDDEN_COMMANDS: [&str; 8] = [
     "cargo fmt",
@@ -462,18 +462,27 @@ fn valid_tool_install_step(step: &Yaml) -> bool {
                     "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz",
                     "tools-actionlint-download",
                     "tools-actionlint tar -xzf",
+                    ".lizard.source_patch.sha256",
+                    ".lizard.source_patch.target_sha256_before",
+                    ".lizard.source_patch.target_sha256_after",
+                    "tools-lizard-patch patch --batch --strip 1",
                     ".rust.components[]",
                     "find -P \"${RUSTUP_HOME}\" -type d -exec chmod g+rx {} +",
                     "find -P \"${RUSTUP_HOME}\" -type f -exec chmod g+r {} +",
                 ]
                 .iter()
                 .all(|needle| run.contains(needle))
-                && run.matches("shasum -a 256 -c -").count() == 3
+                && run.matches("shasum -a 256 -c -").count() == 6
                 && run.matches("install_verified_cargo_tool cargo-").count() == 2
                 && !run.contains("cargo install --locked --root")
                 && run.find("shasum -a 256 -c -") < run.find("tarfile.open")
                 && run.find("cargo fetch --locked")
                     < run.find("CARGO_NET_OFFLINE=true cargo install")
+                // The correction is applied to an installed distribution, and
+                // the resulting file is verified before the tool is exposed.
+                && run.find("supervise tools-lizard \"") < run.find("tools-lizard-patch")
+                && run.find("tools-lizard-patch")
+                    < run.find("ln -s \"${tools}/python/bin/lizard\"")
         })
 }
 

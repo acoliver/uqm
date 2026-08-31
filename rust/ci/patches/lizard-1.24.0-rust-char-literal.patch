@@ -1,0 +1,21 @@
+Correct the Rust lifetime pattern so a character literal is not consumed.
+
+lizard's Rust reader treats `'Z'` as the lifetime `'Z`, leaving the closing
+quote to open a string that runs to the next apostrophe in the file. In
+rust/xtask/src/ci/exec.rs that swallows about 3400 lines, so the reader sees
+60 of 135 functions and reports a 30-line function as 2631 lines.
+
+A lifetime is never followed by a quote, so requiring that distinguishes the
+two forms.
+
+--- a/lizard_languages/rust.py
++++ b/lizard_languages/rust.py
+@@ -26,7 +26,7 @@
+ 
+     @staticmethod
+     def generate_tokens(source_code, addition='', token_class=None):
+-        addition = r"|(?:'\w+\b)"  # lifetimes, labels
++        addition = r"|(?:'\w+\b(?!'))"  # lifetimes, labels (not char literals)
+         return CodeReader.generate_tokens(source_code, addition, token_class)
+ 
+ 

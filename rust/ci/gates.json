@@ -71,7 +71,15 @@
         {"requirement": "pygments==2.21.0", "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"}
       ],
       "version_command": ["lizard", "--version"],
-      "expected_output_prefix": "1.24.0"
+      "expected_output_prefix": "1.24.0",
+      "source_patch": {
+        "path": "rust/ci/patches/lizard-1.24.0-rust-char-literal.patch",
+        "sha256": "159269a3109db06cd214251beba034bfca9f448ecb9844115fd4caed0b41c86f",
+        "target": "lizard_languages/rust.py",
+        "target_sha256_before": "2712654efeefb18412f355aae9d339ea00593c1954c871fcced7cb6c9f21554f",
+        "target_sha256_after": "a275d1cf55e73607bbd1c60d2e28e8ac423530b2fb3b3ba92db0a90e23df118b",
+        "reason": "lizard reads a Rust character literal as a lifetime and swallows the rest of the file into a string; the gate cannot measure what it cannot parse"
+      }
     },
     "cargo_audit": {
       "version": "0.21.2",

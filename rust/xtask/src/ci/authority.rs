@@ -407,6 +407,24 @@ pub struct ToolIdentity {
     pub distribution_requirements: Vec<DistributionRequirement>,
     pub version_command: Vec<String>,
     pub expected_output_prefix: String,
+    /// A correction applied to the installed tool, if it needs one.
+    #[serde(default)]
+    pub source_patch: Option<ToolSourcePatch>,
+}
+
+/// A hash-verified correction applied to an installed tool.
+///
+/// The installed distribution stays hash-verified, and so does the patch and
+/// the file it produces, so what runs in the gate is still pinned end to end.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ToolSourcePatch {
+    pub path: String,
+    pub sha256: String,
+    pub target: String,
+    pub target_sha256_before: String,
+    pub target_sha256_after: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
