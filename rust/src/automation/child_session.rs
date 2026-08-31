@@ -2935,7 +2935,9 @@ mod os_tests {
     fn direct_exit_terminates_descendant_holding_both_output_pipes() {
         let dir = TempDir::new().expect("tempdir");
         let pid_file = dir.path().join("descendant.pid");
-        let config = make_config(&dir, Duration::from_secs(5), Duration::from_millis(200));
+        // The grace also bounds the reader join, so it must exceed scheduling
+        // jitter on a loaded machine, as in the sibling test below.
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_millis(500));
         let command = command_with_pipe_holding_descendant(&pid_file, false);
         let session = ChildSession::spawn(command, config).expect("spawn");
 
