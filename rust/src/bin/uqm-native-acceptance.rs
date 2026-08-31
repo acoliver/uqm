@@ -1591,11 +1591,70 @@ struct FailureManifestContext<'a> {
     child: &'a NativeChildCleanupReceipt,
 }
 
+/// Retain the operating system's crash report for a child that died by signal.
+///
+/// A signal tells you the run died, not where. macOS writes a report with a
+/// backtrace for exactly this case and then nobody reads it, so copy the one
+/// belonging to this run into the evidence before the manifest is inventoried.
+/// The report is written asynchronously, so wait briefly for it to appear.
+#[cfg(target_os = "macos")]
+fn retain_crash_report(root: &Path, pid: u32) {
+    let Some(home) = std::env::var_os("HOME") else {
+        return;
+    };
+    let floor = std::time::SystemTime::now() - std::time::Duration::from_secs(1800);
+    let reports = Path::new(&home).join("Library/Logs/DiagnosticReports");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        if let Ok(entries) = fs::read_dir(&reports) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("ips") {
+                    continue;
+                }
+                let recent = entry
+                    .metadata()
+                    .ok()
+                    .and_then(|metadata| metadata.modified().ok())
+                    .is_some_and(|modified| modified >= floor);
+                if !recent {
+                    continue;
+                }
+                let Ok(bytes) = fs::read(&path) else {
+                    continue;
+                };
+                // The report names the process it belongs to; match this run's.
+                // The field is written with spaces around the colon.
+                let text = String::from_utf8_lossy(&bytes);
+                if !text.contains(&format!("\"pid\" : {pid}")) {
+                    continue;
+                }
+                let _ = fs::write(root.join("crash-report.ips"), &bytes);
+                return;
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+}
+
+/// Other platforms retain nothing here; their crash artefacts are configured
+/// outside this harness.
+#[cfg(not(target_os = "macos"))]
+fn retain_crash_report(_root: &Path, _pid: u32) {}
+
 fn publish_failure_manifest(
     context: &FailureManifestContext<'_>,
     contract: NativeAcceptanceFailureContract,
     error: &str,
 ) -> Result<PathBuf, String> {
+    if context.child.signal.is_some() {
+        // Retain before the inventory runs, so the report is indexed with the
+        // rest of the evidence rather than appearing as an unexpected file.
+        retain_crash_report(context.root, context.child.process.pid);
+    }
     let manifest = NativeAcceptanceFailureManifest {
         schema: NATIVE_ACCEPTANCE_FAILURE_SCHEMA.to_string(),
         command: context.command.to_vec(),
