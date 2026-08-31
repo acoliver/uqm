@@ -120,9 +120,14 @@ pub fn resolve_toolchain(root: &Path, target: &str) -> Result<ToolchainIdentity,
             &["--version"],
             &[],
         )?,
+        // RUSTC_LINKER is something this project exports for its own builds, so
+        // consulting it here would make resolution depend on whether that had
+        // already happened in the current process: a build and its verification
+        // would then disagree about the linker while agreeing on everything
+        // else. Take the explicit cargo channel or the resolved compiler.
         linker: resolve_tool(
             root,
-            &selector(&[linker_name.as_str(), "RUSTC_LINKER"], &cc_selector),
+            &selector(&[linker_name.as_str()], &cc_selector),
             &["--version"],
             &[],
         )?,
