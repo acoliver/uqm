@@ -508,6 +508,54 @@ fn selected_gates(authority: &Authority, gate_arg: &str) -> Result<Vec<Gate>, St
     }
 }
 
+/// Record what the tool preflight and the zero-native delta observed.
+///
+/// Returns the delta contract that failed, if it did, so the caller can order it
+/// behind any earlier preflight failure.
+fn record_preflight_reports(
+    session: &mut RunSession,
+    gates: &[Gate],
+    controller_command: &[String],
+    tool_report: &doctor::ToolReport,
+    delta_report: Option<&delta::DeltaReport>,
+) -> Result<Option<String>, String> {
+    let tool_report_path = session.evidence_root.join("tool-preflight.json");
+    fs::write(
+        &tool_report_path,
+        serde_json::to_vec_pretty(&tool_report)
+            .map_err(|error| format!("cannot serialize tool preflight: {error}"))?,
+    )
+    .map_err(|error| format!("cannot write {}: {error}", tool_report_path.display()))?;
+    session.entry_from_evidence_path(
+        &tool_report_path,
+        "preflight.tools",
+        "application/json",
+        &gates[0].id,
+        controller_command,
+    )?;
+
+    let delta_failure = if let Some(report) = delta_report {
+        let path = session.evidence_root.join("zero-native-delta.json");
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(report)
+                .map_err(|error| format!("cannot serialize zero-native delta: {error}"))?,
+        )
+        .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        session.entry_from_evidence_path(
+            &path,
+            "ownership.zero-native-delta",
+            "application/json",
+            "ownership-link",
+            controller_command,
+        )?;
+        (!report.passed).then_some("ownership.zero_native_delta".to_string())
+    } else {
+        None
+    };
+    Ok(delta_failure)
+}
+
 fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
     let authority =
         super::load_authority(root).map_err(|error| format!("authority.load: {error}"))?;
@@ -658,40 +706,13 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
         &gates[0].id,
         &controller_command,
     )?;
-    let tool_report_path = session.evidence_root.join("tool-preflight.json");
-    fs::write(
-        &tool_report_path,
-        serde_json::to_vec_pretty(&tool_report)
-            .map_err(|error| format!("cannot serialize tool preflight: {error}"))?,
-    )
-    .map_err(|error| format!("cannot write {}: {error}", tool_report_path.display()))?;
-    session.entry_from_evidence_path(
-        &tool_report_path,
-        "preflight.tools",
-        "application/json",
-        &gates[0].id,
+    let delta_failure = record_preflight_reports(
+        &mut session,
+        &gates,
         &controller_command,
+        &tool_report,
+        delta_report.as_ref(),
     )?;
-
-    let delta_failure = if let Some(report) = &delta_report {
-        let path = session.evidence_root.join("zero-native-delta.json");
-        fs::write(
-            &path,
-            serde_json::to_vec_pretty(report)
-                .map_err(|error| format!("cannot serialize zero-native delta: {error}"))?,
-        )
-        .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
-        session.entry_from_evidence_path(
-            &path,
-            "ownership.zero-native-delta",
-            "application/json",
-            "ownership-link",
-            &controller_command,
-        )?;
-        (!report.passed).then_some("ownership.zero_native_delta".to_string())
-    } else {
-        None
-    };
 
     let first_failed = preflight_failure
         .as_ref()
