@@ -1604,7 +1604,8 @@ fn retain_crash_report(root: &Path, pid: u32) {
     };
     let floor = std::time::SystemTime::now() - std::time::Duration::from_secs(1800);
     let reports = Path::new(&home).join("Library/Logs/DiagnosticReports");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let deadline_seconds = 20;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(deadline_seconds);
     loop {
         if let Ok(entries) = fs::read_dir(&reports) {
             for entry in entries.flatten() {
@@ -1634,6 +1635,29 @@ fn retain_crash_report(root: &Path, pid: u32) {
             }
         }
         if std::time::Instant::now() >= deadline {
+            // Record why nothing was retained. A silent absence is
+            // indistinguishable from "the report was never looked for".
+            let candidates = fs::read_dir(&reports)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .filter(|entry| {
+                            entry.path().extension().and_then(|value| value.to_str()) == Some("ips")
+                        })
+                        .count()
+                })
+                .map_or_else(
+                    |error| format!("unreadable: {error}"),
+                    |count| format!("{count} report(s) present"),
+                );
+            let _ = fs::write(
+                root.join("crash-report-absent.txt"),
+                format!(
+                    "no crash report for pid {pid} after {}s\ndirectory: {}\n{candidates}\n",
+                    deadline_seconds,
+                    reports.display()
+                ),
+            );
             return;
         }
         std::thread::sleep(std::time::Duration::from_millis(250));
