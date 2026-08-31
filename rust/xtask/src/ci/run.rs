@@ -1319,6 +1319,106 @@ fn use_current_aqua_session(
     ))
 }
 
+/// Describe a failed step, retaining the native acceptance failure manifest
+/// when the step published one.
+fn failed_step_error(
+    session: &mut RunSession,
+    gate: &Gate,
+    step: &Step,
+    captured: &super::exec::Captured,
+    native_acceptance_root: Option<&Path>,
+) -> CiError {
+    let contract = format!("{}.{}", gate.id, step.id);
+    let mut detail = captured.failure_detail(&step.command[0]);
+    if let Some(root) = native_acceptance_root {
+        let manifest = root.join("native-acceptance-failure.json");
+        match fs::symlink_metadata(&manifest) {
+            Ok(_) => {
+                if let Err(error) = retain_native_acceptance_failure(session, gate, step, root) {
+                    detail.push_str(&format!(
+                        "; retaining native-acceptance failure evidence failed at {}: {}",
+                        error.contract, error.detail
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => detail.push_str(&format!(
+                "; cannot inspect optional native-acceptance failure manifest {}: {error}",
+                manifest.display()
+            )),
+        }
+    }
+    CiError::new(contract, detail)
+}
+
+/// Prepare the directory a step's subordinate processes write their output to.
+///
+/// Only steps that declare subordinate outputs need it, and the directory must
+/// be reachable by the dedicated identity before the step runs.
+fn prepare_subordinate_output_root(
+    session: &RunSession,
+    gate: &Gate,
+    step: &Step,
+    subordinate_root: &Path,
+    env_overrides: &mut Vec<(String, String)>,
+) -> Result<(), CiError> {
+    fs::create_dir_all(subordinate_root).map_err(|error| {
+        CiError::new(
+            format!("{}.pre.{}.subordinate-output", gate.id, step.id),
+            format!("cannot create {}: {error}", subordinate_root.display()),
+        )
+    })?;
+    super::exec::permit_containment_directory(subordinate_root).map_err(|detail| {
+        CiError::new(
+            format!("{}.pre.{}.dedicated_containment", gate.id, step.id),
+            detail,
+        )
+    })?;
+    env_overrides.extend(subordinate_evidence_environment(
+        &session.authority,
+        subordinate_root,
+    ));
+    Ok(())
+}
+
+/// Prepare the evidence root the native acceptance step writes into.
+///
+/// The root is created and made reachable by the dedicated identity before the
+/// step runs, and the step is told where it is.
+fn prepare_native_acceptance_root(
+    gate: &Gate,
+    step: &Step,
+    root: &Path,
+    env_overrides: &mut Vec<(String, String)>,
+) -> Result<(), CiError> {
+    fs::create_dir_all(root).map_err(|error| {
+        CiError::new(
+            format!("{}.pre.{}.native-acceptance-root", gate.id, step.id),
+            format!("cannot create {}: {error}", root.display()),
+        )
+    })?;
+    super::exec::permit_containment_directory(root).map_err(|detail| {
+        CiError::new(
+            format!("{}.pre.{}.native-acceptance-root", gate.id, step.id),
+            detail,
+        )
+    })?;
+    env_overrides.extend([
+        (
+            "UQM_CI_NATIVE_ACCEPTANCE_EVIDENCE_ROOT".into(),
+            root.display().to_string(),
+        ),
+        (
+            "UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT".into(),
+            "1".into(),
+        ),
+    ]);
+    if let Ok(content_root) = env::var("UQM_CI_NATIVE_CONTENT_ROOT") {
+        env_overrides.push(("UQM_CI_NATIVE_CONTENT_ROOT".into(), content_root));
+    }
+    Ok(())
+}
+
 fn execute_process_gate(
     session: &mut RunSession,
 
@@ -1365,22 +1465,13 @@ fn execute_process_gate(
             .join(&gate.id)
             .join(&step.id);
         if !subordinate_names.is_empty() {
-            fs::create_dir_all(&subordinate_root).map_err(|error| {
-                CiError::new(
-                    format!("{}.pre.{}.subordinate-output", gate.id, step.id),
-                    format!("cannot create {}: {error}", subordinate_root.display()),
-                )
-            })?;
-            super::exec::permit_containment_directory(&subordinate_root).map_err(|detail| {
-                CiError::new(
-                    format!("{}.pre.{}.dedicated_containment", gate.id, step.id),
-                    detail,
-                )
-            })?;
-            env_overrides.extend(subordinate_evidence_environment(
-                &session.authority,
+            prepare_subordinate_output_root(
+                session,
+                gate,
+                step,
                 &subordinate_root,
-            ));
+                &mut env_overrides,
+            )?;
         }
         let native_platform_prefix = format!("{}-", session.authority.native_acceptance.platform);
         let native_acceptance_root = (gate.id == "tests"
@@ -1392,31 +1483,7 @@ fn execute_process_gate(
                 .join("payloads/native-window.acceptance")
         });
         if let Some(root) = &native_acceptance_root {
-            fs::create_dir_all(root).map_err(|error| {
-                CiError::new(
-                    format!("{}.pre.{}.native-acceptance-root", gate.id, step.id),
-                    format!("cannot create {}: {error}", root.display()),
-                )
-            })?;
-            super::exec::permit_containment_directory(root).map_err(|detail| {
-                CiError::new(
-                    format!("{}.pre.{}.native-acceptance-root", gate.id, step.id),
-                    detail,
-                )
-            })?;
-            env_overrides.extend([
-                (
-                    "UQM_CI_NATIVE_ACCEPTANCE_EVIDENCE_ROOT".into(),
-                    root.display().to_string(),
-                ),
-                (
-                    "UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT".into(),
-                    "1".into(),
-                ),
-            ]);
-            if let Ok(content_root) = env::var("UQM_CI_NATIVE_CONTENT_ROOT") {
-                env_overrides.push(("UQM_CI_NATIVE_CONTENT_ROOT".into(), content_root));
-            }
+            prepare_native_acceptance_root(gate, step, root, &mut env_overrides)?;
         }
         let execute_retained_source = process_command_requires_retained_source(&step.command);
         let (effective_command, trusted_script_directory, staged_script_sha256) =
@@ -1498,29 +1565,13 @@ fn execute_process_gate(
             captured.succeeded(),
         );
         if !captured.succeeded() {
-            let contract = format!("{}.{}", gate.id, step.id);
-            let mut detail = captured.failure_detail(&step.command[0]);
-            if let Some(root) = native_acceptance_root.as_deref() {
-                let manifest = root.join("native-acceptance-failure.json");
-                match fs::symlink_metadata(&manifest) {
-                    Ok(_) => {
-                        if let Err(error) =
-                            retain_native_acceptance_failure(session, gate, step, root)
-                        {
-                            detail.push_str(&format!(
-                                "; retaining native-acceptance failure evidence failed at {}: {}",
-                                error.contract, error.detail
-                            ));
-                        }
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => detail.push_str(&format!(
-                        "; cannot inspect optional native-acceptance failure manifest {}: {error}",
-                        manifest.display()
-                    )),
-                }
-            }
-            return Err(CiError::new(contract, detail));
+            return Err(failed_step_error(
+                session,
+                gate,
+                step,
+                &captured,
+                native_acceptance_root.as_deref(),
+            ));
         }
         subordinate_result?;
         if let Some(root) = native_acceptance_root.as_deref() {
