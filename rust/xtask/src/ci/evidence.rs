@@ -4745,6 +4745,37 @@ fn subordinate_bytes(
     read_bundle_file(root, &entry.path).ok()
 }
 
+/// Accept an `nm` failure that reports only attributes it cannot read.
+///
+/// Apple's `nm` rejects standard-library members built by the pinned Rust
+/// toolchain because it does not understand their bitcode attributes, while
+/// still listing every symbol the probe verifies. The harness tolerates that
+/// exact mismatch and records the true exit status, so the evidence stays
+/// truthful and this decides whether the status is acceptable. Any other error,
+/// or an empty symbol listing, remains a failure.
+fn nm_failed_only_on_unreadable_attributes(stdout: Option<&[u8]>, stderr: Option<&[u8]>) -> bool {
+    let (Some(stdout), Some(stderr)) = (stdout, stderr) else {
+        return false;
+    };
+    if stdout.is_empty() {
+        return false;
+    }
+    let Ok(stderr) = std::str::from_utf8(stderr) else {
+        return false;
+    };
+    let mut errors = stderr
+        .lines()
+        .filter(|line| line.contains("error:"))
+        .peekable();
+    errors.peek().is_some()
+        && errors.all(|line| {
+            line.contains("Unknown attribute kind")
+                && line.contains("Producer: 'LLVM")
+                && line.contains("-rust-")
+                && line.contains("Reader: 'LLVM APPLE")
+        })
+}
+
 fn nm_prefixes(step: &str) -> &'static [&'static str] {
     match step {
         "p00-harness" => &["archive", "harness"],
@@ -4870,7 +4901,10 @@ fn validate_step_subordinate_semantics(
                 "evidence.subordinate.{}.{}.nm_exit",
                 step.id, prefix
             ));
-        } else if complete && parsed != Some(0) {
+        } else if complete
+            && parsed != Some(0)
+            && !nm_failed_only_on_unreadable_attributes(stdout.as_deref(), stderr.as_deref())
+        {
             contracts.push(format!(
                 "evidence.subordinate.{}.{}.nm_nonzero",
                 step.id, prefix
@@ -17839,6 +17873,37 @@ mod tests {
         index.source_sha = "b".repeat(40);
         assert!(validate_transport_index(temp.path(), &index)
             .contains(&"transport.required-gates.result".to_string()));
+    }
+
+    #[test]
+    fn nm_status_accepts_only_unreadable_attribute_errors() {
+        let mismatch = b"nm: error: libuqm.a(std.o): Unknown attribute kind (102) \
+(Producer: 'LLVM22.1.6-rust-1.97.1-stable' Reader: 'LLVM APPLE_1_1700.0.13.5_0')\n";
+        let symbols = b"0000 T _DoInput\n".as_slice();
+
+        assert!(nm_failed_only_on_unreadable_attributes(
+            Some(symbols),
+            Some(mismatch)
+        ));
+
+        // A second, unrelated error is not covered by the exception.
+        let mixed = [mismatch.as_slice(), b"nm: error: no such file\n"].concat();
+        assert!(!nm_failed_only_on_unreadable_attributes(
+            Some(symbols),
+            Some(&mixed)
+        ));
+
+        // Without symbols there is nothing the probe could have verified.
+        assert!(!nm_failed_only_on_unreadable_attributes(
+            Some(b""),
+            Some(mismatch)
+        ));
+
+        // A failure that reported nothing at all stays a failure.
+        assert!(!nm_failed_only_on_unreadable_attributes(
+            Some(symbols),
+            Some(b"")
+        ));
     }
 
     #[test]
