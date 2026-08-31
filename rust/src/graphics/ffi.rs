@@ -386,6 +386,19 @@ pub unsafe extern "C" fn rust_gfx_uninit() {
         for i in 0..TFB_GFX_NUMSCREENS {
             state.scaled_buffers[i] = None;
         }
+        // A crash here reported a surface pointer of 0x83, which is neither null
+        // nor a heap address, so record what is about to be freed and from which
+        // slot. Without this the fault names only SDL_FreeSurface.
+        for i in 0..TFB_GFX_NUMSCREENS {
+            rust_bridge_log_msg(&format!(
+                "RUST_GFX_UNINIT surface[{i}]={:p}",
+                state.surfaces[i]
+            ));
+        }
+        rust_bridge_log_msg(&format!(
+            "RUST_GFX_UNINIT format_conv_surf={:p}",
+            state.format_conv_surf
+        ));
         for i in 0..TFB_GFX_NUMSCREENS {
             if !state.surfaces[i].is_null() {
                 unsafe { SDL_FreeSurface(state.surfaces[i]) };
