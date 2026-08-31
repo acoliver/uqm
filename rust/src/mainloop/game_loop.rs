@@ -3,7 +3,6 @@
 //! @plan PLAN-20260707-MAINLOOP.P06
 //! @requirement REQ-ML-001, REQ-ML-007, REQ-ML-008
 
-#[cfg(not(test))]
 use std::os::raw::c_int;
 
 use super::state_machine::{self, ActivityDecision, BreakAction, GameStateInfo};
@@ -435,6 +434,18 @@ mod cffi {
 ///
 /// @plan PLAN-20260707-MAINLOOP.P06
 /// @requirement REQ-ML-001
+/// The same entry point for test builds, which link the C archive but must
+/// never start a game.
+///
+/// `Starcon2Main` references this symbol, so a test binary that links the
+/// archive needs it to exist. Nothing in a test calls it, and anything that
+/// did would be a defect, so it reports that rather than running.
+#[cfg(test)]
+#[no_mangle]
+pub extern "C" fn rust_game_loop() -> c_int {
+    panic!("rust_game_loop must not run under test");
+}
+
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn rust_game_loop() -> c_int {
