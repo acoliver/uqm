@@ -794,6 +794,23 @@ fn validate_internal_fixture(
     target: &str,
     authority: &authority::Authority,
 ) -> Result<(), String> {
+    match target {
+        "ownership" => validate_ownership_mutant(fixture, authority),
+        "security" => validate_security_mutant(fixture, authority),
+        "link" => validate_link_mutant(fixture, authority),
+        "coverage" => validate_coverage_mutant(fixture, authority),
+        "cache" => validate_cache_mutant(fixture, authority),
+        "workflow" => validate_workflow_mutant(root, fixture, authority),
+        "artifact" => validate_artifact_mutant(),
+        _ => Err(format!("unsupported internal mutation target '{target}'")),
+    }
+}
+
+/// Validate the retained ownership mutation fixture.
+fn validate_ownership_mutant(
+    fixture: &Path,
+    authority: &authority::Authority,
+) -> Result<(), String> {
     let read = |path: &str| {
         super::bounded_io::read_regular_nofollow(
             &fixture.join(path),
@@ -801,129 +818,183 @@ fn validate_internal_fixture(
         )
         .map_err(|error| format!("cannot read internal mutation fixture {path}: {error}"))
     };
-    match target {
-        "ownership" => {
-            let value: authority::Authority = serde_json::from_slice(&read("authority.json")?)
-                .map_err(|error| format!("invalid authority mutation fixture: {error}"))?;
-            match authority::validate_authority(&value) {
-                Ok(()) => Ok(()),
-                Err(error) if value.gates.iter().any(|gate| gate.owner.is_empty()) => Err(format!(
-                    "authority-owner: gate owners must be nonempty: {error}"
-                )),
-                Err(error) => Err(error),
-            }
-        }
-        "security" => {
-            let value: authority::Authority = serde_json::from_slice(&read("authority.json")?)
-                .map_err(|error| format!("invalid authority mutation fixture: {error}"))?;
-            authority::validate_authority(&value)?;
-            let expected = authority
-                .gates
-                .iter()
-                .find(|gate| gate.id == "security")
-                .ok_or_else(|| "retained authority has no security gate".to_string())?;
-            let observed = value
-                .gates
-                .iter()
-                .find(|gate| gate.id == "security")
-                .ok_or_else(|| "mutant authority has no security gate".to_string())?;
-            let expected = serde_json::to_vec(&expected.steps)
-                .map_err(|error| format!("serialize retained security gate: {error}"))?;
-            let observed = serde_json::to_vec(&observed.steps)
-                .map_err(|error| format!("serialize mutant security gate: {error}"))?;
-            if observed != expected {
-                return Err(
-                    "security-command: security gate differs from retained authority and no longer retains --deny warnings"
-                        .into(),
-                );
-            }
-            Ok(())
-        }
-        "link" => {
-            let value: uqm_ownership::Manifest =
-                serde_json::from_slice(&read("provider-manifest.json")?)
-                    .map_err(|error| format!("invalid provider mutation fixture: {error}"))?;
-            match value.validate_self() {
-                Ok(()) => Ok(()),
-                Err(error) => {
-                    let detail = error.to_string();
-                    if detail.contains("DUPLICATE_PROVIDER")
-                        && detail.contains("symbol contract must be non-empty and unique")
-                    {
-                        Err(format!(
-                            "duplicate-provider: duplicate symbol provider: {detail}"
-                        ))
-                    } else {
-                        Err(detail)
-                    }
-                }
-            }
-        }
-        "coverage" => {
-            let percent = super::run::lcov_line_coverage(&read("coverage.lcov")?)?;
-            if percent >= authority.coverage.minimum_line_percent {
-                Ok(())
-            } else {
-                Err(format!(
-                    "coverage-floor: line coverage is {percent:.2}%, below {:.2}%",
-                    authority.coverage.minimum_line_percent
-                ))
-            }
-        }
-        "cache" => {
-            let receipt = serde_json::from_slice(&read("cache-initial-state.json")?)
-                .map_err(|error| format!("invalid cache mutation fixture: {error}"))?;
-            let failures = super::cache::validate_receipt(&receipt, &authority.cache)?;
-            if failures.is_empty() {
-                Ok(())
-            } else if receipt.registry_cache_present
-                && failures.contains("cache.initial_state.cache_present")
-            {
-                Err(format!(
-                    "cache-registry: isolated cache receipt declares a registry cache: {failures:?}"
-                ))
-            } else {
-                Err(format!(
-                    "cache receipt failed unrelated contracts: {failures:?}"
-                ))
-            }
-        }
-        "workflow" => {
-            let yaml = String::from_utf8(read("rust-quality.yaml")?)
-                .map_err(|error| format!("workflow mutation fixture is not UTF-8: {error}"))?;
-            let document = super::workflow::parse_yaml(&yaml)?;
-            let tuples = super::plan::derive_plan(root)?.tuple_names();
-            let failed = super::workflow::validate_semantics(&document, &tuples, authority)
-                .into_iter()
-                .filter(|rule| !rule.passed)
-                .map(|rule| rule.rule)
-                .collect::<Vec<_>>();
-            let required = [
-                "workflow.actions_full_sha",
-                "workflow.tool_authority",
-                "workflow.uid_containment",
-                "workflow.bootstrap_failure_receipts",
-                "workflow.content_addressed_transport",
-            ];
-            if required
-                .iter()
-                .all(|rule| failed.iter().any(|failed| failed == rule))
-            {
-                Err(format!(
-                    "workflow-trust-boundaries rejected {}",
-                    required.join(", ")
-                ))
-            } else if failed.is_empty() {
-                Ok(())
-            } else {
-                Err(format!(
-                    "workflow-trust-boundaries mutation did not causally reject every required rule; failed rules: {failed:?}"
-                ))
-            }
-        }
-        "artifact" => Err("artifact mutation requires detached top-level replay".to_string()),
-        _ => Err(format!("unsupported internal mutation target '{target}'")),
+    let value: authority::Authority = serde_json::from_slice(&read("authority.json")?)
+        .map_err(|error| format!("invalid authority mutation fixture: {error}"))?;
+    match authority::validate_authority(&value) {
+        Ok(()) => Ok(()),
+        Err(error) if value.gates.iter().any(|gate| gate.owner.is_empty()) => Err(format!(
+            "authority-owner: gate owners must be nonempty: {error}"
+        )),
+        Err(error) => Err(error),
     }
+}
+
+/// Validate the retained security mutation fixture.
+fn validate_security_mutant(
+    fixture: &Path,
+    authority: &authority::Authority,
+) -> Result<(), String> {
+    let read = |path: &str| {
+        super::bounded_io::read_regular_nofollow(
+            &fixture.join(path),
+            authority.actions.evidence_snapshot_member_limit_bytes,
+        )
+        .map_err(|error| format!("cannot read internal mutation fixture {path}: {error}"))
+    };
+    let value: authority::Authority = serde_json::from_slice(&read("authority.json")?)
+        .map_err(|error| format!("invalid authority mutation fixture: {error}"))?;
+    authority::validate_authority(&value)?;
+    let expected = authority
+        .gates
+        .iter()
+        .find(|gate| gate.id == "security")
+        .ok_or_else(|| "retained authority has no security gate".to_string())?;
+    let observed = value
+        .gates
+        .iter()
+        .find(|gate| gate.id == "security")
+        .ok_or_else(|| "mutant authority has no security gate".to_string())?;
+    let expected = serde_json::to_vec(&expected.steps)
+        .map_err(|error| format!("serialize retained security gate: {error}"))?;
+    let observed = serde_json::to_vec(&observed.steps)
+        .map_err(|error| format!("serialize mutant security gate: {error}"))?;
+    if observed != expected {
+        return Err(
+                "security-command: security gate differs from retained authority and no longer retains --deny warnings"
+                    .into(),
+            );
+    }
+    Ok(())
+}
+
+/// Validate the retained link mutation fixture.
+fn validate_link_mutant(fixture: &Path, authority: &authority::Authority) -> Result<(), String> {
+    let read = |path: &str| {
+        super::bounded_io::read_regular_nofollow(
+            &fixture.join(path),
+            authority.actions.evidence_snapshot_member_limit_bytes,
+        )
+        .map_err(|error| format!("cannot read internal mutation fixture {path}: {error}"))
+    };
+    let value: uqm_ownership::Manifest =
+        serde_json::from_slice(&read("provider-manifest.json")?)
+            .map_err(|error| format!("invalid provider mutation fixture: {error}"))?;
+    match value.validate_self() {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            let detail = error.to_string();
+            if detail.contains("DUPLICATE_PROVIDER")
+                && detail.contains("symbol contract must be non-empty and unique")
+            {
+                Err(format!(
+                    "duplicate-provider: duplicate symbol provider: {detail}"
+                ))
+            } else {
+                Err(detail)
+            }
+        }
+    }
+}
+
+/// Validate the retained coverage mutation fixture.
+fn validate_coverage_mutant(
+    fixture: &Path,
+    authority: &authority::Authority,
+) -> Result<(), String> {
+    let read = |path: &str| {
+        super::bounded_io::read_regular_nofollow(
+            &fixture.join(path),
+            authority.actions.evidence_snapshot_member_limit_bytes,
+        )
+        .map_err(|error| format!("cannot read internal mutation fixture {path}: {error}"))
+    };
+    let percent = super::run::lcov_line_coverage(&read("coverage.lcov")?)?;
+    if percent >= authority.coverage.minimum_line_percent {
+        Ok(())
+    } else {
+        Err(format!(
+            "coverage-floor: line coverage is {percent:.2}%, below {:.2}%",
+            authority.coverage.minimum_line_percent
+        ))
+    }
+}
+
+/// Validate the retained cache mutation fixture.
+fn validate_cache_mutant(fixture: &Path, authority: &authority::Authority) -> Result<(), String> {
+    let read = |path: &str| {
+        super::bounded_io::read_regular_nofollow(
+            &fixture.join(path),
+            authority.actions.evidence_snapshot_member_limit_bytes,
+        )
+        .map_err(|error| format!("cannot read internal mutation fixture {path}: {error}"))
+    };
+    let receipt = serde_json::from_slice(&read("cache-initial-state.json")?)
+        .map_err(|error| format!("invalid cache mutation fixture: {error}"))?;
+    let failures = super::cache::validate_receipt(&receipt, &authority.cache)?;
+    if failures.is_empty() {
+        Ok(())
+    } else if receipt.registry_cache_present
+        && failures.contains("cache.initial_state.cache_present")
+    {
+        Err(format!(
+            "cache-registry: isolated cache receipt declares a registry cache: {failures:?}"
+        ))
+    } else {
+        Err(format!(
+            "cache receipt failed unrelated contracts: {failures:?}"
+        ))
+    }
+}
+
+/// Validate the retained workflow mutation fixture.
+fn validate_workflow_mutant(
+    root: &Path,
+    fixture: &Path,
+    authority: &authority::Authority,
+) -> Result<(), String> {
+    let read = |path: &str| {
+        super::bounded_io::read_regular_nofollow(
+            &fixture.join(path),
+            authority.actions.evidence_snapshot_member_limit_bytes,
+        )
+        .map_err(|error| format!("cannot read internal mutation fixture {path}: {error}"))
+    };
+    let yaml = String::from_utf8(read("rust-quality.yaml")?)
+        .map_err(|error| format!("workflow mutation fixture is not UTF-8: {error}"))?;
+    let document = super::workflow::parse_yaml(&yaml)?;
+    let tuples = super::plan::derive_plan(root)?.tuple_names();
+    let failed = super::workflow::validate_semantics(&document, &tuples, authority)
+        .into_iter()
+        .filter(|rule| !rule.passed)
+        .map(|rule| rule.rule)
+        .collect::<Vec<_>>();
+    let required = [
+        "workflow.actions_full_sha",
+        "workflow.tool_authority",
+        "workflow.uid_containment",
+        "workflow.bootstrap_failure_receipts",
+        "workflow.content_addressed_transport",
+    ];
+    if required
+        .iter()
+        .all(|rule| failed.iter().any(|failed| failed == rule))
+    {
+        Err(format!(
+            "workflow-trust-boundaries rejected {}",
+            required.join(", ")
+        ))
+    } else if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+                "workflow-trust-boundaries mutation did not causally reject every required rule; failed rules: {failed:?}"
+            ))
+    }
+}
+
+/// Validate the retained artifact mutation fixture.
+fn validate_artifact_mutant() -> Result<(), String> {
+    Err("artifact mutation requires detached top-level replay".to_string())
 }
 
 fn validate_artifact_mutation_fixture(fixture: &Path, phase: &str) -> Result<(), String> {
