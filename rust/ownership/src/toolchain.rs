@@ -677,7 +677,15 @@ mod tests {
         env::remove_var("PKG_CONFIG_LIBDIR");
         env::remove_var("CARGO_PROFILE_RELEASE_OPT_LEVEL");
         env::remove_var("CARGO_TARGET_DIR");
-        env::remove_var("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS");
-        env::remove_var("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER");
+        // The canonical build exports CARGO_TARGET_<TRIPLE>_LINKER for whichever
+        // triple it is running on, so naming triples here would leave the
+        // variable set on every platform the list forgot.
+        let target_specific: Vec<String> = env::vars_os()
+            .filter_map(|(name, _)| name.into_string().ok())
+            .filter(|key| key.starts_with("CARGO_TARGET_") && key != "CARGO_TARGET_DIR")
+            .collect();
+        for key in target_specific {
+            env::remove_var(key);
+        }
     }
 }
