@@ -1975,6 +1975,43 @@ fn read_manifest_artifact(root: &Path, item: &Artifact, limit: u64) -> Result<Ve
     })
 }
 
+/// Describe which tool in a recorded toolchain differs from the live one.
+///
+/// Whole-struct equality reports only that the toolchain moved, which is the
+/// least useful thing to know when a build and its verification disagree.
+fn describe_toolchain_difference(recorded: &ToolchainIdentity, live: &ToolchainIdentity) -> String {
+    if recorded.target != live.target {
+        return format!(
+            "target recorded {} but resolved {}",
+            recorded.target, live.target
+        );
+    }
+    let tools = [
+        ("rustc", &recorded.rustc, &live.rustc),
+        ("cargo", &recorded.cargo, &live.cargo),
+        ("cc", &recorded.cc, &live.cc),
+        ("ar", &recorded.ar, &live.ar),
+        ("nm", &recorded.nm, &live.nm),
+        ("pkg_config", &recorded.pkg_config, &live.pkg_config),
+        ("linker", &recorded.linker, &live.linker),
+    ];
+    for (name, was, now) in tools {
+        if was.executable != now.executable {
+            return format!(
+                "{name} recorded {} but resolved {}",
+                was.executable, now.executable
+            );
+        }
+        if was.version != now.version {
+            return format!(
+                "{name} at {} recorded a different version than it now reports",
+                was.executable
+            );
+        }
+    }
+    "no individual tool differs, which contradicts the comparison".to_string()
+}
+
 fn validate_live_native_evidence(
     root: &Path,
     evidence: &NativeBuildEvidence,
@@ -2091,8 +2128,16 @@ fn validate_live_native_evidence(
         ),
     ];
     if let Some((field, _)) = checks.iter().find(|(_, matches)| !matches) {
+        let detail = if *field == "toolchain" {
+            format!(
+                ": {}",
+                describe_toolchain_difference(&evidence.toolchain, toolchain)
+            )
+        } else {
+            String::new()
+        };
         return Err(format!(
-            "native build evidence field differs from live identity: {field}"
+            "native build evidence field differs from live identity: {field}{detail}"
         ));
     }
     Ok(())
