@@ -82,11 +82,11 @@
       }
     },
     "cargo_audit": {
-      "version": "0.21.2",
+      "version": "0.22.2",
       "installation_integrity": "cargo-registry-sha256",
-      "integrity_identity": "16e82b1e8f78af1aadf7cd98535a8ea0bbc20452f93c28e03788cfc92ef600a8",
+      "integrity_identity": "700c2b240f7fd330c24b675fe429f73a5b676531fcc6300400b2b67f155ba12a",
       "version_command": ["cargo", "audit", "--version"],
-      "expected_output_prefix": "cargo-audit-audit 0.21.2"
+      "expected_output_prefix": "cargo-audit-audit 0.22.2"
     },
     "cargo_llvm_cov": {
       "version": "0.6.16",
