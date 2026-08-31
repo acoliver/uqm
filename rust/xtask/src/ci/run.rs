@@ -2431,7 +2431,10 @@ fn coverage_gate(
         "--all-targets".into(),
         "--no-default-features".into(),
         "--features".into(),
-        session.authority.profiles.linked_test.join(","),
+        // Measure the Rust under test, in the configuration its tests are
+        // written for. The linked profile drives the C game through FFI, which
+        // the linked provider fixture and native acceptance cover instead.
+        session.authority.profiles.pure_test.join(","),
         "--lcov".into(),
         "--output-path".into(),
         output_path.display().to_string(),
