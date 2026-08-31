@@ -451,14 +451,53 @@ pub fn scheduler_reduce(
 }
 
 /// Process an admitted input callback.
+///
+/// Each family below answers only for the actions it owns, and the families
+/// are disjoint, so the order they are consulted in does not change behaviour.
 fn reduce_admitted_input(
     state: &SchedulerState,
     config: &SchedulerConfig<'_>,
     action: &Action,
     sv: u64,
 ) -> SchedulerTransition {
-    match (action, state.phase) {
-        // Ready wait_input_ticks(0): advance immediately (zero-wait chaining).
+    if let Some(transition) = reduce_input_timing(state, config, action, sv) {
+        return transition;
+    }
+    if let Some(transition) = reduce_menu_key(state, config, action, sv) {
+        return transition;
+    }
+    if let Some(transition) = reduce_player_key(state, config, action, sv) {
+        return transition;
+    }
+    if let Some(transition) = reduce_navigation(state, action, sv) {
+        return transition;
+    }
+    if let Some(transition) = reduce_condition_wait(state, action, sv) {
+        return transition;
+    }
+    if let Some(transition) = reduce_capture_and_assertion(state, config, action, sv) {
+        return transition;
+    }
+
+    // Any event/action pair not handled above is impossible for this phase.
+    SchedulerTransition {
+        new_state: SchedulerState {
+            terminal: Some(TerminalOutcome::InvalidState),
+            state_version: sv,
+            ..*state
+        },
+        effects: EffectPlan::none(),
+    }
+}
+
+/// Reduce a timing wait, or decline so the next family may answer.
+fn reduce_input_timing(
+    state: &SchedulerState,
+    config: &SchedulerConfig<'_>,
+    action: &Action,
+    sv: u64,
+) -> Option<SchedulerTransition> {
+    Some(match (action, state.phase) {
         (Action::WaitInputTicks(w), ActionPhase::WaitingForInput) if w.count == 0 => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -521,6 +560,18 @@ fn reduce_admitted_input(
         }
 
         // set_menu_key: plan one owned-key write, advance on commit.
+        _ => return None,
+    })
+}
+
+/// Reduce a menu key, or decline so the next family may answer.
+fn reduce_menu_key(
+    state: &SchedulerState,
+    config: &SchedulerConfig<'_>,
+    action: &Action,
+    sv: u64,
+) -> Option<SchedulerTransition> {
+    Some(match (action, state.phase) {
         (Action::SetMenuKey(s), ActionPhase::WaitingForInput) => {
             let effects = EffectPlan {
                 write_key: Some((s.key, if s.value != 0 { 1 } else { 0 })),
@@ -635,7 +686,18 @@ fn reduce_admitted_input(
             },
             effects: EffectPlan::none(),
         },
+        _ => return None,
+    })
+}
 
+/// Reduce a player key, or decline so the next family may answer.
+fn reduce_player_key(
+    state: &SchedulerState,
+    config: &SchedulerConfig<'_>,
+    action: &Action,
+    sv: u64,
+) -> Option<SchedulerTransition> {
+    Some(match (action, state.phase) {
         (Action::SetPlayerKey(s), ActionPhase::WaitingForInput) => {
             let effects = EffectPlan {
                 write_player_key: Some((s.key, u8::from(s.value != 0))),
@@ -643,7 +705,6 @@ fn reduce_admitted_input(
             };
             advance_to_next(state, config, sv, effects)
         }
-
         (Action::TapPlayerKey(t), ActionPhase::WaitingForInput) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: if t.hold == 1 {
@@ -711,12 +772,48 @@ fn reduce_admitted_input(
             },
             effects: EffectPlan::none(),
         },
+        _ => return None,
+    })
+}
 
+/// Reduce a navigation request, or decline so the next family may answer.
+fn reduce_navigation(
+    state: &SchedulerState,
+    action: &Action,
+    sv: u64,
+) -> Option<SchedulerTransition> {
+    Some(match (action, state.phase) {
         (Action::NavigateToPlanet(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
                         remaining: navigation.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    terminal: Some(TerminalOutcome::SemanticMismatch),
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: remaining - 1,
                     },
                     state_version: sv,
                     ..*state
@@ -746,32 +843,17 @@ fn reduce_admitted_input(
             },
             effects: EffectPlan::none(),
         },
-        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    terminal: Some(TerminalOutcome::SemanticMismatch),
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
-        (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining }) => {
-            SchedulerTransition {
-                new_state: SchedulerState {
-                    phase: ActionPhase::Navigating {
-                        remaining: remaining - 1,
-                    },
-                    state_version: sv,
-                    ..*state
-                },
-                effects: EffectPlan::none(),
-            }
-        }
+        _ => return None,
+    })
+}
+
+/// Reduce a wait on an observed condition, or decline so the next family may answer.
+fn reduce_condition_wait(
+    state: &SchedulerState,
+    action: &Action,
+    sv: u64,
+) -> Option<SchedulerTransition> {
+    Some(match (action, state.phase) {
         (Action::SelectPlanetMenu(select), ActionPhase::WaitingForInput) => SchedulerTransition {
             new_state: SchedulerState {
                 phase: ActionPhase::WaitingCondition {
@@ -1006,17 +1088,29 @@ fn reduce_admitted_input(
             }
         }
         // capture: arm once, commit to WaitingCapture.
+        _ => return None,
+    })
+}
+
+/// Reduce a capture, assertion, fixture, or finish, or decline so the next family may answer.
+fn reduce_capture_and_assertion(
+    state: &SchedulerState,
+    config: &SchedulerConfig<'_>,
+    action: &Action,
+    sv: u64,
+) -> Option<SchedulerTransition> {
+    Some(match (action, state.phase) {
         (Action::Capture(_), ActionPhase::WaitingForInput) => {
             let new_gen = match state.capture_generation.next() {
                 Some(g) => g,
                 None => {
-                    return SchedulerTransition {
+                    return Some(SchedulerTransition {
                         new_state: SchedulerState {
                             terminal: Some(TerminalOutcome::CaptureGenerationOverflow),
                             ..*state
                         },
                         effects: EffectPlan::none(),
-                    };
+                    });
                 }
             };
             let effects = EffectPlan {
@@ -1104,15 +1198,8 @@ fn reduce_admitted_input(
         },
 
         // Any event/action pair not handled above is impossible for this phase.
-        _ => SchedulerTransition {
-            new_state: SchedulerState {
-                terminal: Some(TerminalOutcome::InvalidState),
-                state_version: sv,
-                ..*state
-            },
-            effects: EffectPlan::none(),
-        },
-    }
+        _ => return None,
+    })
 }
 
 /// Process a committed-present callback.
