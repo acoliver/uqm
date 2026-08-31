@@ -780,7 +780,6 @@ fn macos_process_matches_uid(info: &libc::proc_bsdinfo, uid: u32) -> bool {
     info.pbi_status != libc::SZOMB && (info.pbi_uid == uid || info.pbi_ruid == uid)
 }
 
-#[cfg(target_os = "macos")]
 /// Name the processes the dedicated identity still owns.
 ///
 /// The identity is shared by every command in a session, so naming the
@@ -861,6 +860,7 @@ fn describe_uid_survivors(uid: &str) -> String {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
     const PROC_UID_ONLY: u32 = 4;
     const PROC_RUID_ONLY: u32 = 5;
