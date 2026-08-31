@@ -20,8 +20,18 @@ RustSec advisory database revision declared by the authority, verifies that chec
 and runs `cargo audit --db target/ci-advisory-db --no-fetch --deny warnings`.
 Successful security evidence retains a deterministic pack of the verified database.
 Offline replay checks the authority-pinned file count and SHA-256 without Git or
-network access. Coverage includes applicable first-party workspace targets and must reach 80 percent. The exact pure feature profile is
-`audio_heart,debug-process`; the exact linked profile adds `linked_c_archive`.
+network access. Because the database revision is pinned, the pinned `cargo-audit`
+must be able to parse it: that revision carries advisories scored with CVSS 4.0,
+which releases before 0.22 reject outright while loading, failing the gate before
+it examines this tree at all. Moving either pin means checking it against the
+other.
+
+Coverage measures the pure profile, which is the configuration the unit suite is
+written for, and must reach 70 percent. The linked profile drives the C game
+through FFI and is covered by the linked provider fixture and native acceptance
+instead; running the whole unit suite against it exercises real C statics with no
+game state. The exact pure feature profile is `audio_heart,debug-process`; the
+exact linked profile adds `linked_c_archive`.
 
 Workflow job limits, authority-fetch transport limits, and native-content attempt,
 read, and backoff limits also come from `rust/ci/gates.json`. Jobs that depend on a
