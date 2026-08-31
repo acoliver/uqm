@@ -2251,7 +2251,24 @@ fn normalize_path_dependent_tool_versions(
     expected.linker.version.clone_from(&observed.linker.version);
 }
 
+/// The canonical toolchain, resolved once for the life of the process.
+///
+/// Resolution reads CC, AR, NM, PKG_CONFIG and CARGO_TARGET_<TRIPLE>_LINKER,
+/// and this process exports those same variables once it has resolved them. A
+/// second resolution therefore answers from what the first one published rather
+/// than from the environment the process was given, so a build and the
+/// verification of that build can disagree about the linker while agreeing on
+/// everything else. Resolving once removes the order dependence.
+static CANONICAL_TOOLCHAIN: std::sync::OnceLock<Result<ToolchainIdentity, String>> =
+    std::sync::OnceLock::new();
+
 fn canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String> {
+    CANONICAL_TOOLCHAIN
+        .get_or_init(|| resolve_canonical_toolchain(root))
+        .clone()
+}
+
+fn resolve_canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String> {
     let executable_limit = ci::authority::load_authority(root)?
         .supervision
         .executable_member_limit_bytes;
