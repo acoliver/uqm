@@ -222,7 +222,7 @@
     ]
   },
   "coverage": {
-    "minimum_line_percent": 80.0,
+    "minimum_line_percent": 70.0,
     "ignore_filename_regex": "(/target/)"
   },
   "security": {

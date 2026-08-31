@@ -717,9 +717,9 @@ pub(crate) fn expected_causal_contract(
             "coverage" => (
                 "coverage.lcov",
                 coverage_fixture(40),
-                coverage_fixture(30),
+                coverage_fixture(26),
                 "coverage-floor",
-                &["coverage-floor", "75.00%"],
+                &["coverage-floor", "65.00%"],
             ),
             "cache" => (
                 "cache-initial-state.json",

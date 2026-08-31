@@ -2366,13 +2366,22 @@ fn complexity_gate(session: &mut RunSession, gate: &Gate) -> Result<(), CiError>
         return Err(CiError::new("complexity.exec", error));
     }
     if !captured.succeeded() {
-        return Err(CiError::new(
-            "complexity.maximum",
+        // A non-zero exit means lizard found something over the limit. Anything
+        // else means it never got to say, so report what actually stopped it.
+        let contract = if captured.exit_code == Some(0) {
+            "complexity.supervision"
+        } else {
+            "complexity.maximum"
+        };
+        let detail = if captured.exit_code == Some(0) {
+            captured.failure_detail("lizard")
+        } else {
             format!(
-                "lizard rejected tracked Rust source at configured maximum {} with {:?}",
-                session.authority.complexity.maximum, captured.exit_code
-            ),
-        ));
+                "lizard rejected tracked Rust source at configured maximum {}",
+                session.authority.complexity.maximum
+            )
+        };
+        return Err(CiError::new(contract, detail));
     }
     Ok(())
 }
@@ -2473,7 +2482,7 @@ fn coverage_gate(
     if !captured.succeeded() {
         return Err(CiError::new(
             "coverage.exec",
-            format!("cargo llvm-cov failed with {:?}", captured.exit_code),
+            captured.failure_detail("cargo llvm-cov"),
         ));
     }
     let bytes = super::bounded_io::read_regular_nofollow(
