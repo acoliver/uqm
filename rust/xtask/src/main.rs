@@ -2012,6 +2012,29 @@ fn describe_toolchain_difference(recorded: &ToolchainIdentity, live: &ToolchainI
     "no individual tool differs, which contradicts the comparison".to_string()
 }
 
+/// Report the variables that decide how a tool resolves.
+///
+/// A mismatch between a recorded build and its verification is decided by the
+/// environment each one read, so name those values rather than inferring them.
+fn describe_resolution_inputs(target: &str) -> String {
+    let suffix = target.to_ascii_uppercase().replace('-', "_");
+    let names = [
+        format!("CARGO_TARGET_{suffix}_LINKER"),
+        "RUSTC_LINKER".to_string(),
+        "CC".to_string(),
+        format!("CC_{target}"),
+        format!("CC_{}", target.replace('-', "_")),
+    ];
+    let seen: Vec<String> = names
+        .iter()
+        .map(|name| match env::var(name) {
+            Ok(value) => format!("{name}={value}"),
+            Err(_) => format!("{name} unset"),
+        })
+        .collect();
+    seen.join(", ")
+}
+
 fn validate_live_native_evidence(
     root: &Path,
     evidence: &NativeBuildEvidence,
@@ -2130,8 +2153,9 @@ fn validate_live_native_evidence(
     if let Some((field, _)) = checks.iter().find(|(_, matches)| !matches) {
         let detail = if *field == "toolchain" {
             format!(
-                ": {}",
-                describe_toolchain_difference(&evidence.toolchain, toolchain)
+                ": {}; verifying environment: {}",
+                describe_toolchain_difference(&evidence.toolchain, toolchain),
+                describe_resolution_inputs(&toolchain.target)
             )
         } else {
             String::new()
