@@ -914,6 +914,9 @@ fn execute_gate(
     let gate_dir = session.evidence_root.join(&gate.id);
     fs::create_dir_all(&gate_dir)
         .map_err(|error| CiError::new(format!("{}.evidence", gate.id), error.to_string()))?;
+    if gate.id == "package" {
+        prepare_package_output_root(session, gate)?;
+    }
     match gate.kind {
         GateKind::Process => execute_process_gate(session, cache, gate, controller_command),
         GateKind::Builtin => execute_builtin_gate(session, cache, gate),
@@ -1370,6 +1373,43 @@ fn failed_step_error(
         }
     }
     CiError::new(contract, detail)
+}
+
+/// Prepare the directory the package gate writes its artefacts into.
+///
+/// The gate may build under the dedicated containment identity while the
+/// controller that inventories the result runs as the ordinary user. Creating
+/// the directory here, owned by the controller and setgid, means everything
+/// written inside carries the shared group and stays readable to whoever has to
+/// hash it.
+fn prepare_package_output_root(session: &RunSession, gate: &Gate) -> Result<(), CiError> {
+    let root = session.root.join("rust/target/uqm-package");
+    fs::create_dir_all(&root).map_err(|error| {
+        CiError::new(
+            format!("{}.pre.package-root", gate.id),
+            format!("cannot create {}: {error}", root.display()),
+        )
+    })?;
+    super::exec::permit_containment_directory(&root)
+        .map_err(|detail| CiError::new(format!("{}.pre.package-root", gate.id), detail))?;
+    share_group_with_children(&root)
+        .map_err(|detail| CiError::new(format!("{}.pre.package-root", gate.id), detail))
+}
+
+/// Mark a directory so that everything created inside inherits its group.
+#[cfg(unix)]
+fn share_group_with_children(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("cannot inspect {}: {error}", path.display()))?;
+    let shared = (metadata.permissions().mode() & 0o7777) | 0o2770;
+    fs::set_permissions(path, fs::Permissions::from_mode(shared))
+        .map_err(|error| format!("cannot share {} with its group: {error}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn share_group_with_children(_path: &Path) -> Result<(), String> {
+    Ok(())
 }
 
 /// Prepare the directory a step's subordinate processes write their output to.
