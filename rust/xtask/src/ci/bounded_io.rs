@@ -181,12 +181,12 @@ pub fn copy_regular_nofollow(source: &Path, destination: &Path, limit: u64) -> R
     copy_regular_nofollow_mode(source, destination, limit, 0o666, None)
 }
 
-pub fn copy_executable_nofollow(
+pub fn copy_group_readable_executable_nofollow(
     source: &Path,
     destination: &Path,
     limit: u64,
 ) -> Result<u64, String> {
-    copy_regular_nofollow_mode(source, destination, limit, 0o500, Some(0o500))
+    copy_regular_nofollow_mode(source, destination, limit, 0o550, Some(0o550))
 }
 
 fn copy_regular_nofollow_mode(
@@ -257,7 +257,20 @@ fn copy_regular_nofollow_mode(
     result
 }
 
-pub fn write_regular_nofollow(destination: &Path, bytes: &[u8], limit: u64) -> Result<(), String> {
+pub fn write_group_readable_regular_nofollow(
+    destination: &Path,
+    bytes: &[u8],
+    limit: u64,
+) -> Result<(), String> {
+    write_regular_nofollow_with_mode(destination, bytes, limit, 0o440)
+}
+
+fn write_regular_nofollow_with_mode(
+    destination: &Path,
+    bytes: &[u8],
+    limit: u64,
+    mode: u32,
+) -> Result<(), String> {
     let length = u64::try_from(bytes.len())
         .map_err(|_| format!("{} is too large for this host", destination.display()))?;
     if length > limit {
@@ -272,7 +285,7 @@ pub fn write_regular_nofollow(destination: &Path, bytes: &[u8], limit: u64) -> R
             destination_parent.as_raw_fd(),
             destination_name.as_ptr(),
             libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC | libc::O_NOFOLLOW,
-            0o400,
+            mode,
         )
     };
     if descriptor < 0 {
@@ -284,7 +297,7 @@ pub fn write_regular_nofollow(destination: &Path, bytes: &[u8], limit: u64) -> R
     }
     let mut output = unsafe { File::from_raw_fd(descriptor) };
     let result = (|| {
-        if unsafe { libc::fchmod(output.as_raw_fd(), 0o400) } != 0 {
+        if unsafe { libc::fchmod(output.as_raw_fd(), mode as libc::mode_t) } != 0 {
             return Err(format!(
                 "cannot set mode on {}: {}",
                 destination.display(),
@@ -299,7 +312,7 @@ pub fn write_regular_nofollow(destination: &Path, bytes: &[u8], limit: u64) -> R
         let metadata = output
             .metadata()
             .map_err(|error| format!("cannot inspect {}: {error}", destination.display()))?;
-        if metadata.len() != length || metadata.permissions().mode() & 0o7777 != 0o400 {
+        if metadata.len() != length || metadata.permissions().mode() & 0o7777 != mode {
             return Err(format!(
                 "{} did not retain its exact bounded regular-file identity",
                 destination.display()
@@ -409,18 +422,18 @@ mod tests {
     }
 
     #[test]
-    fn executable_copy_publishes_exact_mode_and_can_be_spawned() {
+    fn group_readable_executable_copy_publishes_exact_mode_and_can_be_spawned() {
         let temporary = tempfile::tempdir().unwrap();
         let root = fs::canonicalize(temporary.path()).unwrap();
         let source = root.join("source");
         let destination = root.join("destination");
         fs::write(&source, b"#!/bin/sh\nexit 0\n").unwrap();
 
-        copy_executable_nofollow(&source, &destination, 64).unwrap();
+        copy_group_readable_executable_nofollow(&source, &destination, 64).unwrap();
 
         assert_eq!(
             fs::metadata(&destination).unwrap().permissions().mode() & 0o7777,
-            0o500
+            0o550
         );
         assert!(std::process::Command::new(&destination)
             .status()
@@ -434,12 +447,27 @@ mod tests {
         let root = fs::canonicalize(temporary.path()).unwrap();
         let destination = root.join("destination");
 
-        write_regular_nofollow(&destination, b"manifest\n", 64).unwrap();
+        write_regular_nofollow_with_mode(&destination, b"manifest\n", 64, 0o400).unwrap();
 
         assert_eq!(fs::read(&destination).unwrap(), b"manifest\n");
         assert_eq!(
             fs::metadata(&destination).unwrap().permissions().mode() & 0o7777,
             0o400
+        );
+    }
+
+    #[test]
+    fn group_readable_writer_publishes_read_only_exact_bytes() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(temporary.path()).unwrap();
+        let destination = root.join("destination");
+
+        write_group_readable_regular_nofollow(&destination, b"manifest\n", 64).unwrap();
+
+        assert_eq!(fs::read(&destination).unwrap(), b"manifest\n");
+        assert_eq!(
+            fs::metadata(&destination).unwrap().permissions().mode() & 0o7777,
+            0o440
         );
     }
 
