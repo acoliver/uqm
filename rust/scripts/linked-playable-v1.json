@@ -15,28 +15,38 @@
       "action": "tap_menu_key",
       "key": "down",
       "value": 1,
-      "hold": 3,
+      "hold": 1,
       "settle": 3
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "NewGame",
+      "to": "LoadGame"
     },
     {
       "action": "tap_menu_key",
       "key": "down",
       "value": 1,
-      "hold": 3,
+      "hold": 1,
       "settle": 3
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "LoadGame",
+      "to": "SuperMelee"
     },
     {
       "action": "tap_menu_key",
       "key": "select",
       "value": 1,
-      "hold": 3,
+      "hold": 1,
       "settle": 10
     },
     {
       "action": "tap_menu_key",
       "key": "select",
       "value": 1,
-      "hold": 3,
+      "hold": 1,
       "settle": 10
     },
     {

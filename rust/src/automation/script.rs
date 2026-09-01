@@ -2121,10 +2121,29 @@ mod tests {
     }
 
     #[test]
-    fn linked_playable_script_requires_300_sustained_input_ticks_and_battle_frames() {
+    fn linked_playable_script_uses_exact_menu_navigation_and_sustained_battle_input() {
         let bytes = include_bytes!("../../scripts/linked-playable-v1.json");
         let document = parse_script(bytes, "rust/scripts/linked-playable-v1.json").unwrap();
         let script = validate_script(document, "rust/scripts/linked-playable-v1.json").unwrap();
+
+        assert_eq!(
+            script.transitions(),
+            &[
+                MainMenuTransition::new(RestartMenuItem::NewGame, RestartMenuItem::LoadGame),
+                MainMenuTransition::new(RestartMenuItem::LoadGame, RestartMenuItem::SuperMelee),
+            ]
+        );
+        let menu_taps: Vec<&TapMenuKeyStep> = script
+            .steps()
+            .iter()
+            .filter_map(|action| match action {
+                Action::TapMenuKey(tap) => Some(tap),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(menu_taps.len(), 4);
+        assert!(menu_taps.iter().all(|tap| tap.hold == 1));
+
         assert!(script.budgets.max_presentations >= 301);
         assert!(script.steps.iter().any(|action| {
             matches!(
