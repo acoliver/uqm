@@ -4292,6 +4292,8 @@ mod tests {
     #[test]
     fn inherited_pipe_descendant_is_cleaned_without_waiting_for_eof() {
         let root = tempfile::tempdir().unwrap();
+        let mut descendant_limits = limits();
+        descendant_limits.timeout = Duration::from_secs(10);
         let captured = run_captured_with_limits(
             root.path(),
             "sh",
@@ -4300,7 +4302,7 @@ mod tests {
                 "(trap '' TERM; mkdir ready; exec sleep 30) & while [ ! -d ready ]; do :; done; rmdir ready; printf parent-exited".into(),
             ],
             &[],
-            limits(),
+            descendant_limits,
         );
         assert_eq!(captured.stdout, b"parent-exited");
         assert_eq!(captured.exit_code, Some(0));
