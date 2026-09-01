@@ -9071,7 +9071,7 @@ fn validate_bootstrap_run_command(command: &[String], authority: &Authority) -> 
         && Path::new(&command[3]).ends_with(&authority.bootstrap_proof.packaged_manifest)
         && Path::new(&command[4]) == root.join(&authority.bootstrap_proof.profile)
         && Path::new(&command[5]).is_absolute()
-        && Path::new(&command[5]).ends_with("bootstrap-proof/output")
+        && Path::new(&command[5]).ends_with("bootstrap-proof/proof-workspace/output")
 }
 
 fn validate_bootstrap_validate_command(command: &[String]) -> bool {
@@ -9080,7 +9080,7 @@ fn validate_bootstrap_validate_command(command: &[String]) -> bool {
         && Path::new(&command[0]).ends_with("rust/target/debug/uqm-gameplay-proof")
         && command[1] == "validate"
         && Path::new(&command[2]).is_absolute()
-        && Path::new(&command[2]).ends_with("bootstrap-proof/output/lcar-v1.json")
+        && Path::new(&command[2]).ends_with("bootstrap-proof/proof-workspace/output/lcar-v1.json")
 }
 
 fn validate_passed_collection_receipt(
@@ -13643,7 +13643,7 @@ mod tests {
             "/tmp/repository".into(),
             "/tmp/repository/rust/target/uqm-package/production-artifacts.json".into(),
             "/tmp/repository/rust/scripts/main-menu-v1.json".into(),
-            "/tmp/evidence/bootstrap-proof/output".into(),
+            "/tmp/evidence/bootstrap-proof/proof-workspace/output".into(),
         ];
         write_builtin_step_fixture(
             &root,
@@ -13684,7 +13684,7 @@ mod tests {
         let validate_command = vec![
             "/tmp/repository/rust/target/debug/uqm-gameplay-proof".into(),
             "validate".into(),
-            "/tmp/evidence/bootstrap-proof/output/lcar-v1.json".into(),
+            "/tmp/evidence/bootstrap-proof/proof-workspace/output/lcar-v1.json".into(),
         ];
         write_builtin_step_fixture(
             &root,
@@ -13738,7 +13738,7 @@ mod tests {
             "/tmp/repository".into(),
             "/tmp/repository/rust/target/uqm-package/x86_64-unknown-linux-gnu/production-artifacts.json".into(),
             "/tmp/repository/rust/scripts/main-menu-v1.json".into(),
-            "/tmp/evidence/bootstrap-proof/output".into(),
+            "/tmp/evidence/bootstrap-proof/proof-workspace/output".into(),
         ];
         let executable = b"\x7fELF bootstrap executable";
         let profile = include_bytes!("../../../scripts/main-menu-v1.json");
@@ -14051,7 +14051,7 @@ mod tests {
         let validate_command = vec![
             run_command[0].clone(),
             "validate".into(),
-            "/tmp/evidence/bootstrap-proof/output/lcar-v1.json".into(),
+            "/tmp/evidence/bootstrap-proof/proof-workspace/output/lcar-v1.json".into(),
         ];
         for (step, command) in [
             ("build-runner", build.as_slice()),
@@ -14347,7 +14347,7 @@ mod tests {
             (Some(1), None, None),
         );
         let run_stderr =
-            b"proof failed; retained /tmp/evidence/bootstrap-proof/output/failure-lcar-v1.json\n";
+            b"proof failed; retained /tmp/evidence/bootstrap-proof/proof-workspace/output/failure-lcar-v1.json\n";
         rewrite_bundle_path(
             &root,
             &mut failed_run.entries,

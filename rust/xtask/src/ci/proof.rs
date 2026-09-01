@@ -137,7 +137,7 @@ fn run_bootstrap_steps(
         &build_command,
     )?;
 
-    let output_dir = proof_output_dir(&session.evidence_root);
+    let output_dir = prepare_proof_output_dir(&session.evidence_root)?;
     let proof_bin = root.join(PROOF_BIN);
 
     let run_command = vec![
@@ -213,8 +213,20 @@ fn run_bootstrap_steps(
     )
 }
 
-fn proof_output_dir(evidence_root: &Path) -> PathBuf {
-    evidence_root.join("bootstrap-proof/output")
+fn prepare_proof_output_dir(evidence_root: &Path) -> Result<PathBuf, CiError> {
+    let workspace = evidence_root.join("bootstrap-proof/proof-workspace");
+    std::fs::create_dir(&workspace).map_err(|error| {
+        CiError::new(
+            "bootstrap-proof.pre.output-workspace",
+            format!(
+                "cannot create fresh proof workspace {}: {error}",
+                workspace.display()
+            ),
+        )
+    })?;
+    super::exec::permit_containment_directory(&workspace)
+        .map_err(|detail| CiError::new("bootstrap-proof.pre.output-workspace", detail))?;
+    Ok(workspace.join("output"))
 }
 
 fn retain_lcar_bundle(
@@ -458,9 +470,10 @@ mod tests {
         fs::create_dir(&gate_root).unwrap();
         fs::write(gate_root.join("build-runner.result.json"), b"{}").unwrap();
 
-        let output = proof_output_dir(evidence.path());
+        let output = prepare_proof_output_dir(evidence.path()).expect("prepare proof workspace");
+        assert_eq!(output, gate_root.join("proof-workspace/output"));
         assert!(!output.exists());
-        fs::create_dir(&output).unwrap();
+        fs::create_dir(&output).expect("proof runner must be able to create fresh output");
     }
 
     #[test]
