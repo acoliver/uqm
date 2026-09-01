@@ -74,11 +74,11 @@
       "expected_output_prefix": "1.24.0",
       "source_patch": {
         "path": "rust/ci/patches/lizard-1.24.0-rust-char-literal.patch",
-        "sha256": "159269a3109db06cd214251beba034bfca9f448ecb9844115fd4caed0b41c86f",
+        "sha256": "a4b214ace720d9196a98c1ac5e1f2e74cb8c701f250430377ec8f7a5034719a9",
         "target": "lizard_languages/rust.py",
         "target_sha256_before": "2712654efeefb18412f355aae9d339ea00593c1954c871fcced7cb6c9f21554f",
-        "target_sha256_after": "a275d1cf55e73607bbd1c60d2e28e8ac423530b2fb3b3ba92db0a90e23df118b",
-        "reason": "lizard reads a Rust character literal as a lifetime and swallows the rest of the file into a string; the gate cannot measure what it cannot parse"
+        "target_sha256_after": "1c6e5895ccbbaac07dc2c328911379123d9cd8952f9379b95207823439c796a1",
+        "reason": "lizard reads Rust character literals as lifetimes and splits raw lifetimes at '#', silently hiding following functions from the complexity gate"
       }
     },
     "cargo_audit": {

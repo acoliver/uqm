@@ -1882,7 +1882,7 @@ fn harness_mutation(
 
 fn complexity_mutation(authority: &authority::Authority) -> Result<MutationCase, CiError> {
     let temp = mutation_tempdir("mutations.fixture.tempdir")?;
-    let baseline_source = b"fn bounded() -> u32 { 1 }\n";
+    let baseline_source = include_bytes!("../../../ci/patches/lizard-rust-char-literal-repro.rs");
     let file = fixture_file(temp.path(), "runaway.rs", utf8_fixture(baseline_source)?)?;
     let mut command = vec!["lizard".to_string()];
     command.extend(authority.complexity.lizard_arguments.clone());
@@ -1898,7 +1898,8 @@ fn complexity_mutation(authority: &authority::Authority) -> Result<MutationCase,
         authority,
     )];
     let baseline_files = vec![mutation_file(&file)?];
-    let mut source = String::from("fn runaway() -> u32 {\n    let mut value = 0;\n");
+    let mut source = utf8_fixture(baseline_source)?.to_string();
+    source.push_str("\nfn runaway() -> u32 {\n    let mut value = 0;\n");
     for _ in 0..45 {
         source.push_str("    if value < 1000 { value += 1; }\n");
     }
@@ -1926,11 +1927,11 @@ fn complexity_mutation(authority: &authority::Authority) -> Result<MutationCase,
     Ok(MutationCase {
         target: "complexity".into(),
         contract: "mutations.complexity.rejects_over_limit".into(),
-        defect: "a function with cyclomatic complexity above the 40 maximum".into(),
+        defect: "an over-limit function after Rust character literals and raw lifetimes".into(),
         baseline_accepted,
         rejection_observed,
         detail: format!(
-            "authoritative lizard route on a 45-branch function exited {:?}",
+            "authoritative lizard route read through the Rust lexer reproduction and exited {:?} on a 45-branch function",
             executions.last().and_then(|execution| execution.exit_code)
         ),
         baseline_executions,
