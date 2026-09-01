@@ -2614,6 +2614,29 @@ pub fn native_window_trace_semantic_snapshot(
         if label.starts_with("player_input") {
             return Err(NativeWindowProofError::Receipt);
         }
+        if label.starts_with("battle_frames_reached:") {
+            let values = label
+                .strip_prefix("battle_frames_reached:count=")
+                .ok_or(NativeWindowProofError::Receipt)?;
+            let (actual_value, minimum_value) = values
+                .split_once(":minimum=")
+                .ok_or(NativeWindowProofError::Receipt)?;
+            let actual = actual_value
+                .parse::<u64>()
+                .map_err(|_| NativeWindowProofError::Receipt)?;
+            let minimum = minimum_value
+                .parse::<u64>()
+                .map_err(|_| NativeWindowProofError::Receipt)?;
+            if record.kind != crate::automation::trace::RecordKind::SemanticAssertion
+                || actual.to_string() != actual_value
+                || minimum.to_string() != minimum_value
+                || minimum == 0
+                || actual < minimum
+            {
+                return Err(NativeWindowProofError::Receipt);
+            }
+            verified_battle_frames = verified_battle_frames.max(actual);
+        }
         if label.starts_with("battle_frames_verified:") {
             let value = label
                 .strip_prefix("battle_frames_verified:count=")
@@ -4979,13 +5002,26 @@ mod tests {
             trace_record(
                 4,
                 crate::automation::trace::RecordKind::SemanticAssertion,
+                Some("battle_frames_reached:count=23:minimum=1"),
+            ),
+            trace_record(
+                5,
+                crate::automation::trace::RecordKind::SemanticAssertion,
                 Some("battle_frames_verified:count=300"),
             ),
         ];
         assert_eq!(
-            native_window_trace_semantic_snapshot(&valid).unwrap(),
+            native_window_trace_semantic_snapshot(&valid[..5]).unwrap(),
             NativeWindowSemanticSnapshot {
                 trace_record_count: 5,
+                accepted_player_inputs: 1,
+                verified_battle_frames: 23,
+            }
+        );
+        assert_eq!(
+            native_window_trace_semantic_snapshot(&valid).unwrap(),
+            NativeWindowSemanticSnapshot {
+                trace_record_count: 6,
                 accepted_player_inputs: 1,
                 verified_battle_frames: 300,
             }
@@ -4993,6 +5029,11 @@ mod tests {
         for forged in [
             "player_input:key=Unknown:value=1",
             "player_input:key=Weapon:value=01",
+            "battle_frames_reached:count=0:minimum=1",
+            "battle_frames_reached:count=1:minimum=0",
+            "battle_frames_reached:count=01:minimum=1",
+            "battle_frames_reached:count=1:minimum=01",
+            "battle_frames_reached:value=1:minimum=1",
             "battle_frames_verified:count=0300",
             "battle_frames_verified:value=300",
         ] {

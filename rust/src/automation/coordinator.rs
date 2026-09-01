@@ -711,6 +711,22 @@ impl Coordinator {
             }
         } else if let Some(result) = self.service_planet_side_wait(inner) {
             scheduler_event = self.record_planet_side_result(inner, result, scheduler_event);
+        } else if let Some(Action::WaitForBattleFrames(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let actual = crate::automation::battle_observer::current_frame();
+            if battle_frame_floor_reached(actual, wait.minimum) {
+                inner.verified_battle_frames = inner.verified_battle_frames.max(actual);
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "battle_frames_reached:count={actual}:minimum={}",
+                        wait.minimum
+                    ),
+                );
+            }
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -2153,6 +2169,10 @@ fn map_scheduler_terminal(terminal: Option<TerminalOutcome>) -> TerminalClass {
     }
 }
 
+fn battle_frame_floor_reached(actual: u64, minimum: u64) -> bool {
+    actual >= minimum
+}
+
 // ===========================================================================
 //  Unit tests
 // ===========================================================================
@@ -2220,6 +2240,14 @@ mod tests {
             "player_input_observed:key=Weapon:intended=1:current=1:pulsed=1"
         );
         assert_eq!(presentation_wait_trace_label(300), "wait_presentations:300");
+    }
+
+    #[test]
+    fn battle_frame_wait_requires_the_observed_floor() {
+        assert!(!battle_frame_floor_reached(0, 1));
+        assert!(!battle_frame_floor_reached(299, 300));
+        assert!(battle_frame_floor_reached(1, 1));
+        assert!(battle_frame_floor_reached(334, 300));
     }
 
     #[test]

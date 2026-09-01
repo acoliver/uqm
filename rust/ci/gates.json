@@ -260,8 +260,8 @@
       "backoff_seconds": [1, 2]
     },
     "script": "rust/scripts/linked-playable-v1.json",
-    "script_sha256": "2500294a4ee03100edc619569defc991c4fd2dbc5eec4ab0d8a526697c82a42c",
-    "script_byte_length": 2071,
+    "script_sha256": "95aee4114081c72222f50df6ccf7b8f01bafdb954f613381a4be6457562ed934",
+    "script_byte_length": 2169,
     "acceptance_policy": {
       "stable_presentation_floor": 120,
       "playable_presentation_floor": 300,

@@ -105,8 +105,8 @@ pub use script::{
     PlanetSideOutcomeName, PlayerKey, RootDocument, SceneAssertion, ScriptStep,
     SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep, SetPlayerKeyStep,
     SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
-    WaitForCommunicationEndStep, WaitForCommunicationReplayStep, WaitForDispatchStep,
-    WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
+    WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
+    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
     WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};

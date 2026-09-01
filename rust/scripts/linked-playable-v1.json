@@ -53,10 +53,6 @@
       "count": 40
     },
     {
-      "action": "capture",
-      "label": "linked-battle-start"
-    },
-    {
       "action": "assert_activity",
       "mask": 767,
       "equals": 512
@@ -67,6 +63,15 @@
       "value": 1,
       "hold": 3,
       "settle": 20
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 1,
+      "max_ticks": 500
+    },
+    {
+      "action": "capture",
+      "label": "linked-battle-start"
     },
     {
       "action": "tap_player_key",

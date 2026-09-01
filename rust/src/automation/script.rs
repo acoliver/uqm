@@ -513,6 +513,14 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// Wait for the current battle to complete at least `minimum` real frames.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForBattleFramesStep {
+    pub minimum: u64,
+    pub max_ticks: u64,
+}
+
 /// Wait for exactly `count` committed presentation callbacks.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -605,6 +613,7 @@ pub enum Action {
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertBattleFrames(BattleFramesAssertion),
+    WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
@@ -1320,6 +1329,16 @@ fn validate_wait_step(
 ) -> Option<Result<(), AutomationError>> {
     let (max_ticks, field) = match step {
         Action::WaitForDispatch(wait) => (wait.max_ticks, "wait_for_dispatch"),
+        Action::WaitForBattleFrames(wait) => {
+            if wait.minimum == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_for_battle_frames minimum must be positive",
+                )));
+            }
+            (wait.max_ticks, "wait_for_battle_frames")
+        }
         Action::WaitForCommunicationReplay(wait) => {
             (wait.max_ticks, "wait_for_communication_replay")
         }
@@ -1700,7 +1719,7 @@ mod tests {
         let txt = r#"{
             "version":1,
             "name":"real-path-actions",
-            "budgets":{"max_input_ticks":75,"max_presentations":1,"max_wallclock_seconds":60},
+            "budgets":{"max_input_ticks":85,"max_presentations":1,"max_wallclock_seconds":60},
             "steps":[
                 {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
                 {"action":"wait_for_communication_replay","max_ticks":10},
@@ -1708,6 +1727,7 @@ mod tests {
                 {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
                 {"action":"navigate_to_orbit","planet":3,"max_ticks":10},
                 {"action":"wait_for_planet_side_start","max_ticks":10},
+                {"action":"wait_for_battle_frames","minimum":1,"max_ticks":10},
                 {"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":10},
                 {"action":"finish"}
             ]
@@ -1738,6 +1758,10 @@ mod tests {
                     max_ticks: 10
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
+                Action::WaitForBattleFrames(WaitForBattleFramesStep {
+                    minimum: 1,
+                    max_ticks: 10
+                }),
                 Action::WaitForDispatch(WaitForDispatchStep {
                     encounter: 2,
                     dialogue: 2,
@@ -1756,6 +1780,7 @@ mod tests {
             r#"{"action":"select_communication_response","index":0,"max_ticks":0}"#,
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
+            r#"{"action":"wait_for_battle_frames","minimum":1,"max_ticks":0}"#,
         ] {
             let txt = format!(
                 "{{\"version\":1,\"name\":\"invalid\",\"budgets\":{{\"max_input_ticks\":2,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
@@ -1764,6 +1789,14 @@ mod tests {
             let err = validate_script(doc, p()).unwrap_err();
             assert!(format!("{err}").contains("max_ticks must be positive"));
         }
+    }
+
+    #[test]
+    fn rejects_zero_battle_frame_wait_minimum() {
+        let txt = r#"{"version":1,"name":"invalid","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"wait_for_battle_frames","minimum":0,"max_ticks":1},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let err = validate_script(doc, p()).unwrap_err();
+        assert!(format!("{err}").contains("minimum must be positive"));
     }
 
     #[test]
@@ -2167,6 +2200,41 @@ mod tests {
             .collect();
         assert_eq!(menu_taps.len(), 4);
         assert!(menu_taps.iter().all(|tap| tap.hold == 1));
+
+        let weapon = script
+            .steps()
+            .iter()
+            .position(|action| {
+                matches!(
+                    action,
+                    Action::TapPlayerKey(TapPlayerKeyStep {
+                        key: PlayerKey::Weapon,
+                        ..
+                    })
+                )
+            })
+            .unwrap();
+        let battle_ready = script
+            .steps()
+            .iter()
+            .position(|action| {
+                matches!(
+                    action,
+                    Action::WaitForBattleFrames(WaitForBattleFramesStep { minimum: 1, .. })
+                )
+            })
+            .unwrap();
+        let battle_capture = script
+            .steps()
+            .iter()
+            .position(|action| {
+                matches!(
+                    action,
+                    Action::Capture(CaptureStep { label, .. }) if label == "linked-battle-start"
+                )
+            })
+            .unwrap();
+        assert!(weapon < battle_ready && battle_ready < battle_capture);
 
         assert!(script.budgets.max_presentations >= 301);
         assert!(script.steps.iter().any(|action| {
