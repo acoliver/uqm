@@ -2276,8 +2276,7 @@ fn normalize_path_dependent_tool_versions(
 }
 
 /// The program the linker is selected by, before it is resolved to an identity.
-fn linker_program() -> String {
-    let host = host_target().unwrap_or_default();
+fn linker_program(host: &str) -> String {
     let suffix = host.to_ascii_uppercase().replace('-', "_");
     env::var(format!("CARGO_TARGET_{suffix}_LINKER"))
         .or_else(|_| env::var("CC"))
@@ -2307,6 +2306,7 @@ fn resolve_canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String>
         .executable_member_limit_bytes;
     let cargo_program = retained_rust_tool_program("CARGO", "cargo")?;
     let rustc_program = retained_rust_tool_program("RUSTC", "rustc")?;
+    let host = host_target().map_err(|error| format!("resolve host target: {error}"))?;
     let tool_programs = [
         ("Cargo", cargo_program),
         ("rustc", rustc_program),
@@ -2317,7 +2317,7 @@ fn resolve_canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String>
             "pkg-config",
             env::var("PKG_CONFIG").unwrap_or_else(|_| "pkg-config".into()),
         ),
-        ("linker", linker_program()),
+        ("linker", linker_program(&host)),
     ];
     let mut tools = tool_programs
         .iter()
@@ -2326,7 +2326,6 @@ fn resolve_canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String>
                 .map_err(|error| format!("resolve retained {label} source: {error}"))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let host = host_target().map_err(|error| format!("resolve host target: {error}"))?;
     let mut toolchain = resolve_toolchain(root, &host)
         .map_err(|error| format!("resolve canonical toolchain: {error}"))?;
     for tool in &mut tools {
