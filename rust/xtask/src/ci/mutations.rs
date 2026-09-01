@@ -671,6 +671,17 @@ fn cache_fixture(registry_cache_present: bool) -> Option<Vec<u8>> {
     .ok()
 }
 
+fn complexity_fixture() -> (Vec<u8>, Vec<u8>) {
+    let baseline = include_bytes!("../../../ci/patches/lizard-rust-char-literal-repro.rs").to_vec();
+    let mut mutant = baseline.clone();
+    mutant.extend_from_slice(b"\nfn runaway() -> u32 {\n    let mut value = 0;\n");
+    for _ in 0..45 {
+        mutant.extend_from_slice(b"    if value < 1000 { value += 1; }\n");
+    }
+    mutant.extend_from_slice(b"    value\n}\n");
+    (baseline, mutant)
+}
+
 pub(crate) fn expected_causal_contract(
     target: &str,
     authority: &authority::Authority,
@@ -750,15 +761,11 @@ pub(crate) fn expected_causal_contract(
                 )
             }
             "complexity" => {
-                let mut mutant = String::from("fn runaway() -> u32 {\n    let mut value = 0;\n");
-                for _ in 0..45 {
-                    mutant.push_str("    if value < 1000 { value += 1; }\n");
-                }
-                mutant.push_str("    value\n}\n");
+                let (baseline, mutant) = complexity_fixture();
                 (
                     "runaway.rs",
-                    b"fn bounded() -> u32 { 1 }\n".to_vec(),
-                    mutant.into_bytes(),
+                    baseline,
+                    mutant,
                     "cyclomatic-complexity",
                     &["runaway"],
                 )
@@ -1882,8 +1889,8 @@ fn harness_mutation(
 
 fn complexity_mutation(authority: &authority::Authority) -> Result<MutationCase, CiError> {
     let temp = mutation_tempdir("mutations.fixture.tempdir")?;
-    let baseline_source = include_bytes!("../../../ci/patches/lizard-rust-char-literal-repro.rs");
-    let file = fixture_file(temp.path(), "runaway.rs", utf8_fixture(baseline_source)?)?;
+    let (baseline_source, mutant_source) = complexity_fixture();
+    let file = fixture_file(temp.path(), "runaway.rs", utf8_fixture(&baseline_source)?)?;
     let mut command = vec!["lizard".to_string()];
     command.extend(authority.complexity.lizard_arguments.clone());
     command.push("runaway.rs".to_string());
@@ -1898,13 +1905,7 @@ fn complexity_mutation(authority: &authority::Authority) -> Result<MutationCase,
         authority,
     )];
     let baseline_files = vec![mutation_file(&file)?];
-    let mut source = utf8_fixture(baseline_source)?.to_string();
-    source.push_str("\nfn runaway() -> u32 {\n    let mut value = 0;\n");
-    for _ in 0..45 {
-        source.push_str("    if value < 1000 { value += 1; }\n");
-    }
-    source.push_str("    value\n}\n");
-    write_mutant(&file, source.as_bytes())?;
+    write_mutant(&file, &mutant_source)?;
     let executions = vec![run_mutation_command(
         temp.path(),
         tool_home.path(),
@@ -1919,8 +1920,8 @@ fn complexity_mutation(authority: &authority::Authority) -> Result<MutationCase,
         baseline_accepted && route_rejected_with_diagnostic(&executions, &["runaway"]);
     let (recipe, expected_diagnostic) = causal_contract(
         "runaway.rs",
-        baseline_source,
-        source.as_bytes(),
+        &baseline_source,
+        &mutant_source,
         "cyclomatic-complexity",
         &["runaway"],
     );
