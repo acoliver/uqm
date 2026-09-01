@@ -333,12 +333,70 @@ fn mutation_file_at(path: &Path, retained_path: &str) -> Result<MutationFile, Ci
         retained_path: retained_path.to_string(),
     })
 }
-fn mutation_tempdir(context: &str) -> Result<tempfile::TempDir, CiError> {
-    let directory =
-        tempfile::tempdir().map_err(|error| CiError::new(context, error.to_string()))?;
+fn mutation_tempdir_at(
+    containment_home: Option<&Path>,
+    context: &str,
+) -> Result<tempfile::TempDir, CiError> {
+    let directory = if let Some(home) = containment_home {
+        tempfile::Builder::new()
+            .prefix("uqm-mutation-")
+            .tempdir_in(home)
+    } else {
+        tempfile::tempdir()
+    }
+    .map_err(|error| CiError::new(context, error.to_string()))?;
     super::exec::permit_containment_directory(directory.path())
         .map_err(|detail| CiError::new(context, detail))?;
     Ok(directory)
+}
+
+fn mutation_tempdir(context: &str) -> Result<tempfile::TempDir, CiError> {
+    let containment_home = super::exec::dedicated_containment_home()
+        .map_err(|detail| CiError::new(context, detail))?;
+    mutation_tempdir_at(containment_home.as_deref(), context)
+}
+
+fn mutation_target_path(root: &Path, containment_home: Option<&Path>) -> Result<PathBuf, CiError> {
+    let Some(containment_home) = containment_home else {
+        return Ok(root.join("cargo-target"));
+    };
+    let fixture = root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| {
+            CiError::new(
+                "mutations.fixture.target",
+                format!("mutation fixture has no UTF-8 basename: {}", root.display()),
+            )
+        })?;
+    Ok(containment_home.join(format!("uqm-mutation-target-{fixture}")))
+}
+
+fn prepare_mutation_target_at(
+    root: &Path,
+    containment_home: Option<&Path>,
+) -> Result<PathBuf, CiError> {
+    let target = mutation_target_path(root, containment_home)?;
+    match fs::symlink_metadata(&target) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(target),
+        Err(error) => Err(CiError::new(
+            "mutations.fixture.target",
+            format!(
+                "cannot inspect fresh Cargo target {}: {error}",
+                target.display()
+            ),
+        )),
+        Ok(_) => Err(CiError::new(
+            "mutations.fixture.target",
+            format!("fresh Cargo target already exists: {}", target.display()),
+        )),
+    }
+}
+
+fn prepare_mutation_target(root: &Path) -> Result<PathBuf, CiError> {
+    let containment_home = super::exec::dedicated_containment_home()
+        .map_err(|detail| CiError::new("mutations.fixture.target", detail))?;
+    prepare_mutation_target_at(root, containment_home.as_deref())
 }
 
 fn utf8_fixture(bytes: &[u8]) -> Result<&str, CiError> {
@@ -459,11 +517,18 @@ fn authoritative_gate<'a>(
 fn run_authoritative_step(
     root: &Path,
     cargo_home: &Path,
+    cargo_target: &Path,
     authority: &authority::Authority,
     gate: &str,
     step: &Step,
 ) -> MutationExecution {
-    let environment = vec![("CARGO_HOME".to_string(), cargo_home.display().to_string())];
+    let environment = vec![
+        ("CARGO_HOME".to_string(), cargo_home.display().to_string()),
+        (
+            "CARGO_TARGET_DIR".to_string(),
+            cargo_target.display().to_string(),
+        ),
+    ];
     let (captured, executable_identity) = run_bound_captured(
         &root.join(&step.cwd),
         &step.command,
@@ -511,12 +576,14 @@ fn run_mutation_command(
 fn run_authoritative_route(
     root: &Path,
     cargo_home: &Path,
+    cargo_target: &Path,
     authority: &authority::Authority,
     gate: &Gate,
 ) -> Vec<MutationExecution> {
     let mut executions = Vec::new();
     for step in &gate.steps {
-        let execution = run_authoritative_step(root, cargo_home, authority, &gate.id, step);
+        let execution =
+            run_authoritative_step(root, cargo_home, cargo_target, authority, &gate.id, step);
         let accepted = execution_accepted(&execution);
         executions.push(execution);
         if !accepted {
@@ -1236,15 +1303,27 @@ fn format_mutation(authority: &authority::Authority) -> Result<MutationCase, CiE
         utf8_fixture(baseline_source)?,
     )?;
     let cargo_home = mutation_tempdir("mutations.fixture.cargo_home")?;
+    let cargo_target = prepare_mutation_target(temp.path())?;
     let gate = authoritative_gate(authority, "format")?;
-    let baseline_executions =
-        run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let baseline_executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_files = vec![
         mutation_file(&manifest)?,
         mutation_file_at(&source, "src/lib.rs")?,
     ];
     write_mutant(&source, mutant_source)?;
-    let executions = run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_accepted = route_accepted(&baseline_executions, gate);
     let rejection_observed =
         baseline_accepted && route_rejected_with_diagnostic(&executions, &["src/lib.rs"]);
@@ -1307,9 +1386,15 @@ fn check_mutation(authority: &authority::Authority) -> Result<MutationCase, CiEr
         "#[test]\nfn linked_provider_fixture() {}\n",
     )?;
     let cargo_home = mutation_tempdir("mutations.fixture.cargo_home")?;
+    let cargo_target = prepare_mutation_target(temp.path())?;
     let gate = authoritative_gate(authority, "check")?;
-    let baseline_executions =
-        run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let baseline_executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_files = vec![
         mutation_file(&manifest)?,
         mutation_file(&lock)?,
@@ -1318,7 +1403,13 @@ fn check_mutation(authority: &authority::Authority) -> Result<MutationCase, CiEr
         mutation_file_at(&linked_test, "tests/linked_provider_fixture.rs")?,
     ];
     write_mutant(&source, mutant_source)?;
-    let executions = run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_accepted = route_accepted(&baseline_executions, gate);
     let rejection_observed = baseline_accepted
         && route_rejected_with_diagnostic(&executions, &["src/lib.rs", "mismatched types"]);
@@ -1372,9 +1463,15 @@ fn clippy_mutation(authority: &authority::Authority) -> Result<MutationCase, CiE
         "#[test]\nfn linked_provider_fixture() {}\n",
     )?;
     let cargo_home = mutation_tempdir("mutations.fixture.cargo_home")?;
+    let cargo_target = prepare_mutation_target(temp.path())?;
     let gate = authoritative_gate(authority, "clippy")?;
-    let baseline_executions =
-        run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let baseline_executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_files = vec![
         mutation_file(&manifest)?,
         mutation_file(&lock)?,
@@ -1383,7 +1480,13 @@ fn clippy_mutation(authority: &authority::Authority) -> Result<MutationCase, CiE
         mutation_file_at(&linked_test, "tests/linked_provider_fixture.rs")?,
     ];
     write_mutant(&source, mutant_source)?;
-    let executions = run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_accepted = route_accepted(&baseline_executions, gate);
     let rejection_observed = baseline_accepted
         && route_rejected_with_diagnostic(&executions, &["src/lib.rs", "unused variable"]);
@@ -1434,9 +1537,15 @@ fn test_mutation(authority: &authority::Authority) -> Result<MutationCase, CiErr
     let xtask_lock = fixture_file(temp.path(), "rust/xtask/Cargo.lock", MINI_XTASK_LOCK)?;
     let xtask_main = fixture_file(temp.path(), "rust/xtask/src/main.rs", MINI_XTASK_MAIN)?;
     let cargo_home = mutation_tempdir("mutations.fixture.cargo_home")?;
+    let cargo_target = prepare_mutation_target(temp.path())?;
     let gate = authoritative_gate(authority, "tests")?;
-    let baseline_executions =
-        run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let baseline_executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_files = vec![
         mutation_file_at(&manifest, "fixture/Cargo.toml")?,
         mutation_file_at(&lock, "fixture/Cargo.lock")?,
@@ -1446,7 +1555,13 @@ fn test_mutation(authority: &authority::Authority) -> Result<MutationCase, CiErr
         mutation_file_at(&xtask_main, "rust/xtask/src/main.rs")?,
     ];
     write_mutant(&source, mutant_source)?;
-    let executions = run_authoritative_route(temp.path(), cargo_home.path(), authority, gate);
+    let executions = run_authoritative_route(
+        temp.path(),
+        cargo_home.path(),
+        &cargo_target,
+        authority,
+        gate,
+    );
     let baseline_accepted = route_accepted(&baseline_executions, gate);
     let rejection_observed =
         baseline_accepted && route_rejected_with_diagnostic(&executions, &["must_pass", "FAILED"]);
@@ -2128,6 +2243,67 @@ mod tests {
         ] {
             assert_internal_causal_rejection(target);
         }
+    }
+
+    #[test]
+    fn dedicated_mutation_tempdir_stays_under_containment_home() {
+        let home = tempfile::tempdir().unwrap();
+        let fixture = mutation_tempdir_at(Some(home.path()), "mutations.fixture.tempdir").unwrap();
+
+        assert_eq!(fixture.path().parent(), Some(home.path()));
+    }
+
+    #[test]
+    fn mutation_target_is_explicit_and_must_start_absent() {
+        let fixture = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+
+        assert_eq!(
+            prepare_mutation_target_at(fixture.path(), None).unwrap(),
+            fixture.path().join("cargo-target")
+        );
+        let dedicated = prepare_mutation_target_at(fixture.path(), Some(home.path())).unwrap();
+        assert_eq!(dedicated.parent(), Some(home.path()));
+        fs::create_dir(&dedicated).unwrap();
+        let error = prepare_mutation_target_at(fixture.path(), Some(home.path())).unwrap_err();
+        assert_eq!(error.contract, "mutations.fixture.target");
+        assert!(error.detail.contains("already exists"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cargo_mutation_uses_external_target_when_fixture_parents_are_read_only() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let fixture = tempfile::tempdir().unwrap();
+        fixture_file(fixture.path(), "rust/Cargo.toml", MINI_MANIFEST).unwrap();
+        fixture_file(fixture.path(), "rust/Cargo.lock", MINI_LOCK).unwrap();
+        fixture_file(fixture.path(), "rust/src/lib.rs", "pub fn valid() {}\n").unwrap();
+        let cargo_home = tempfile::tempdir().unwrap();
+        let target_home = tempfile::tempdir().unwrap();
+        let cargo_target = mutation_target_path(fixture.path(), Some(target_home.path())).unwrap();
+        let rust_root = fixture.path().join("rust");
+        let source_root = rust_root.join("src");
+        fs::set_permissions(&source_root, fs::Permissions::from_mode(0o550)).unwrap();
+        fs::set_permissions(&rust_root, fs::Permissions::from_mode(0o550)).unwrap();
+
+        let output = std::process::Command::new("cargo")
+            .args(["check", "--locked", "--manifest-path", "rust/Cargo.toml"])
+            .current_dir(fixture.path())
+            .env("CARGO_HOME", cargo_home.path())
+            .env("CARGO_TARGET_DIR", &cargo_target)
+            .output()
+            .unwrap();
+
+        fs::set_permissions(&rust_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&source_root, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(
+            output.status.success(),
+            "cargo check failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(cargo_target.is_dir());
+        assert!(!rust_root.join("target").exists());
     }
 
     #[test]

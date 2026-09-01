@@ -1,7 +1,7 @@
 //! Bounded, deadline-enforced subprocess execution shared by every CI gate step.
 
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread;
@@ -2181,6 +2181,18 @@ fn dedicated_containment_config() -> Result<Option<UidContainmentConfig>, std::i
         std::env::var(DEDICATED_CONTAINMENT_USER_ENV),
         unsafe { libc::geteuid() },
     )
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub fn dedicated_containment_home() -> Result<Option<PathBuf>, String> {
+    dedicated_containment_config()
+        .map(|config| config.map(|config| PathBuf::from(config.home)))
+        .map_err(|error| error.to_string())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+pub fn dedicated_containment_home() -> Result<Option<PathBuf>, String> {
+    Ok(None)
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
