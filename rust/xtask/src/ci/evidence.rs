@@ -5227,7 +5227,9 @@ fn validate_failed_package_postprocess(
     let mut expected_roles = Vec::new();
     let artifact_failure = first_failed.strip_prefix("package.post.artifact.");
     match first_failed {
-        "package.post.manifest-read" | "package.post.manifest-retain" => {}
+        "package.post.manifest-verify"
+        | "package.post.manifest-read"
+        | "package.post.manifest-retain" => {}
         "package.post.ownership-report"
         | "package.post.dependencies-validate"
         | "package.post.dependencies-retain" => {
@@ -12546,6 +12548,7 @@ mod tests {
                 "{contract} must replay from the retained bundle",
             );
         };
+        assert_production_failure(&mut manifest_read, "package.post.manifest-verify");
         assert_production_failure(&mut manifest_read, "package.post.manifest-read");
 
         let retain_supplemental = |roles: &[String]| {
@@ -12559,6 +12562,16 @@ mod tests {
             });
             index
         };
+        let manifest_verify_extra = retain_supplemental(&["package-manifest".to_string()]);
+        assert!(validate_failed_package_postprocess(
+            bundle.path(),
+            &manifest_verify_extra,
+            &authority,
+            gate,
+            "package.post.manifest-verify",
+        )
+        .iter()
+        .any(|contract| contract == "evidence.package.post.supplemental_prefix"));
         assert!(validate_failed_package_postprocess(
             bundle.path(),
             &manifest_read,
