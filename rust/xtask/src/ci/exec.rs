@@ -1359,10 +1359,16 @@ impl Containment {
 #[cfg(unix)]
 fn pipe_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
     let mut fds = [-1; 2];
-    // SAFETY: fds points to two writable file-descriptor slots.
-    if unsafe { libc::pipe(fds.as_mut_ptr()) } == -1 {
+    // Linux can close the fork/exec inheritance race atomically. Darwin lacks
+    // pipe2, so the monitor also treats registration EOF as owner completion.
+    #[cfg(target_os = "linux")]
+    let created = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
+    #[cfg(not(target_os = "linux"))]
+    let created = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    if created == -1 {
         return Err(std::io::Error::last_os_error());
     }
+    #[cfg(not(target_os = "linux"))]
     for fd in fds {
         // SAFETY: fd was returned by pipe.
         if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
@@ -1377,10 +1383,15 @@ fn pipe_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
 #[cfg(unix)]
 fn socket_pair_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
     let mut fds = [-1; 2];
+    #[cfg(target_os = "linux")]
+    let socket_type = libc::SOCK_STREAM | libc::SOCK_CLOEXEC;
+    #[cfg(not(target_os = "linux"))]
+    let socket_type = libc::SOCK_STREAM;
     // SAFETY: fds points to two writable descriptor slots.
-    if unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) } == -1 {
+    if unsafe { libc::socketpair(libc::AF_UNIX, socket_type, 0, fds.as_mut_ptr()) } == -1 {
         return Err(std::io::Error::last_os_error());
     }
+    #[cfg(not(target_os = "linux"))]
     for fd in fds {
         // SAFETY: fd was returned by socketpair.
         if unsafe { libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) } == -1 {
@@ -1653,6 +1664,27 @@ impl MonitorAnchor {
 }
 
 #[cfg(unix)]
+fn registration_peer_closed(fd: RawFd) -> Result<bool, String> {
+    loop {
+        let mut byte = 0_u8;
+        // SAFETY: byte is writable storage and fd is the monitor's Unix socket.
+        let read = unsafe { libc::recv(fd, (&mut byte as *mut u8).cast(), 1, libc::MSG_PEEK) };
+        if read == 0 {
+            return Ok(true);
+        }
+        if read > 0 {
+            return Ok(false);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(format!(
+                "cannot inspect containment registration closure: {error}"
+            ));
+        }
+    }
+}
+
+#[cfg(unix)]
 fn monitor_reply(
     fd: RawFd,
     status: i32,
@@ -1833,7 +1865,18 @@ pub fn run_containment_monitor_from_env() -> Result<(), String> {
                 }
             }
         }
-        if descriptors[0].revents & libc::POLLIN != 0 {
+        let registration_events = descriptors[0].revents;
+        if registration_events & libc::POLLHUP != 0 {
+            // Registration is held by the owner and supervised descendants, so
+            // clean EOF is an independent completion signal when a non-atomic
+            // close-on-exec fallback leaks the lifeline into another child.
+            match registration_peer_closed(registration_fd) {
+                Ok(true) => break Ok(()),
+                Ok(false) => {}
+                Err(error) => break Err(error),
+            }
+        }
+        if registration_events & (libc::POLLIN | libc::POLLHUP) != 0 {
             if let Err(error) = monitor_request(registration_fd, lifeline_fd, &mut registrations) {
                 break Err(error);
             }
@@ -3729,6 +3772,22 @@ mod tests {
                     .find(|byte| !byte.is_ascii_whitespace())
             })
             .is_none_or(|state| state != b'Z')
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn containment_monitor_accepts_registration_eof_when_lifeline_is_still_open() {
+        let containment =
+            Containment::start(Duration::from_millis(10), LaunchContext::CurrentAquaSession)
+                .expect("start containment monitor");
+        // Model a close-on-exec race leaking the lifeline into an unrelated child.
+        let leaked_lifeline = unsafe { libc::dup(containment.lifeline_write) };
+        assert!(leaked_lifeline >= 0, "duplicate lifeline descriptor");
+
+        let result = containment.finish(Duration::from_secs(1));
+        close_fd(leaked_lifeline);
+
+        assert!(result.is_ok(), "{result:?}");
     }
 
     #[cfg(unix)]
