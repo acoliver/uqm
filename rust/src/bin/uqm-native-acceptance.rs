@@ -707,6 +707,45 @@ impl NativeObservationSession {
         Ok(())
     }
 
+    fn observe_final_publication(&mut self, identity: &ProcessIdentity) -> io::Result<()> {
+        if let Err(error) = &self.backing_verification {
+            return Err(io::Error::other(error.clone()));
+        }
+        let state = self
+            .state_reader
+            .read_if_present(&self.nonce, identity.pid, self.requested_bounds)
+            .map_err(io::Error::other)?
+            .ok_or_else(|| io::Error::other("final native publication is missing"))?;
+        if state.committed_presentation == self.last_presentation {
+            let observed = self
+                .publications
+                .last()
+                .ok_or_else(|| io::Error::other("final native publication was not observed"))?;
+            if observed.state != state {
+                return Err(io::Error::other(
+                    "final native publication changed after acknowledgement",
+                ));
+            }
+            return Ok(());
+        }
+        if self.last_presentation.checked_add(1) != Some(state.committed_presentation) {
+            return Err(io::Error::other(format!(
+                "final native presentation sequence skipped from {} to {}",
+                self.last_presentation, state.committed_presentation
+            )));
+        }
+        if state.semantic.accepted_player_inputs < self.recorded_input_events
+            || state.semantic.verified_battle_frames < self.recorded_battle_frames
+        {
+            return Err(io::Error::other(
+                "final native semantic snapshot counters regressed",
+            ));
+        }
+        self.recorded_input_events = state.semantic.accepted_player_inputs;
+        self.recorded_battle_frames = state.semantic.verified_battle_frames;
+        self.acknowledge_publication(&state)
+    }
+
     fn observe(
         &mut self,
         identity: &ProcessIdentity,
@@ -1307,10 +1346,11 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         )
         .map_err(|error| format!("spawn exact linked executable: {error}"))?;
         child_spawned = true;
-        let child_identity = native_identity(session.identity(), &nonce);
+        let child_process_identity = session.identity().clone();
+        let child_identity = native_identity(&child_process_identity, &nonce);
         let mut observation = NativeObservationSession {
             backing_verification: verify_spawned_executable(
-                session.identity(),
+                &child_process_identity,
                 &retained_executable,
                 &executable_input,
             ),
@@ -1333,7 +1373,18 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         let session_result =
             session.finish_observing(|identity| observation.observe(identity, &mut observer));
 
-        let observer_result = finish_observer(observer);
+        let final_observation_result = if session_result
+            .as_ref()
+            .is_ok_and(|receipt| receipt.exit_code == Some(0) && receipt.signal.is_none())
+        {
+            observation
+                .observe_final_publication(&child_process_identity)
+                .map_err(|error| format!("observe final native publication: {error}"))
+        } else {
+            Ok(())
+        };
+        let observer_finish_result = finish_observer(observer);
+        let observer_result = final_observation_result.and(observer_finish_result);
         finalize_run(FinalizeRun {
             root,
             automation: &automation,
@@ -3326,6 +3377,124 @@ mod tests {
             authority: input("inputs/linked-build/gates.json"),
             canonical_toolchain: input("inputs/linked-build/canonical-toolchain.json"),
         }
+    }
+
+    fn child_state(
+        nonce: &str,
+        pid: u32,
+        bounds: NativeWindowBounds,
+        presentation: u64,
+        input_events: u64,
+        battle_frames: u64,
+    ) -> NativeWindowChildState {
+        NativeWindowChildState {
+            schema: uqm_rust::automation::NATIVE_WINDOW_STATE_SCHEMA.to_string(),
+            nonce: nonce.to_string(),
+            pid,
+            sdl_window_id: 1,
+            committed_presentation: presentation,
+            shown: true,
+            requested_client_bounds: bounds,
+            client_bounds: bounds,
+            semantic: uqm_rust::automation::NativeWindowSemanticSnapshot {
+                trace_record_count: presentation,
+                accepted_player_inputs: input_events,
+                verified_battle_frames: battle_frames,
+            },
+        }
+    }
+
+    fn final_publication_session(
+        root: &Path,
+        final_state: &NativeWindowChildState,
+        prior_state: &NativeWindowChildState,
+    ) -> (NativeObservationSession, ProcessIdentity) {
+        let automation = root.join("automation");
+        fs::create_dir(&automation).unwrap();
+        let state_path = automation.join("native-window-state.json");
+        let ack_path = automation.join("native-window-ack.json");
+        fs::write(&state_path, serde_json::to_vec(final_state).unwrap()).unwrap();
+        let identity = ProcessIdentity {
+            pid: final_state.pid,
+            start_time: "test-start".to_string(),
+            executable_digest: "a".repeat(64),
+        };
+        let acknowledgement = NativeWindowAck {
+            schema: NATIVE_WINDOW_ACK_SCHEMA.to_string(),
+            nonce: final_state.nonce.clone(),
+            committed_presentation: prior_state.committed_presentation,
+        };
+        let policy = acceptance_policy();
+        let session = NativeObservationSession {
+            backing_verification: Ok(()),
+            state_reader: NativeWindowStateReader::bind(&state_path, 64 * 1024).unwrap(),
+            ack_publisher: NativeWindowAckPublisher::bind(&ack_path).unwrap(),
+            screenshots: root.join("screenshots"),
+            evidence_root: root.to_path_buf(),
+            nonce: final_state.nonce.clone(),
+            requested_bounds: final_state.requested_client_bounds,
+            acceptance_policy: policy,
+            proof: NativeWindowProof::new(
+                native_identity(&identity, &final_state.nonce),
+                final_state.requested_client_bounds,
+                policy,
+            ),
+            last_presentation: prior_state.committed_presentation,
+            provisional_window_id: None,
+            first_visible_presentation: None,
+            recorded_input_events: prior_state.semantic.accepted_player_inputs,
+            recorded_battle_frames: prior_state.semantic.verified_battle_frames,
+            playable_captured: false,
+            publications: vec![NativeWindowPublication {
+                acknowledgement,
+                state: prior_state.clone(),
+            }],
+        };
+        (session, identity)
+    }
+
+    #[test]
+    fn final_publication_drain_accepts_only_the_next_nonregressing_snapshot() {
+        let root = tempfile::tempdir().unwrap();
+        let nonce = "a".repeat(64);
+        let bounds = runtime_contract().expected_client_bounds;
+        let prior = child_state(&nonce, 123, bounds, 9, 3, 301);
+        let final_state = child_state(&nonce, 123, bounds, 10, 8, 309);
+        let (mut session, identity) = final_publication_session(root.path(), &final_state, &prior);
+
+        session.observe_final_publication(&identity).unwrap();
+
+        assert_eq!(session.last_presentation, 10);
+        assert_eq!(session.recorded_input_events, 8);
+        assert_eq!(session.recorded_battle_frames, 309);
+        assert_eq!(session.publications.last().unwrap().state, final_state);
+        let acknowledgement: NativeWindowAck = serde_json::from_slice(
+            &fs::read(root.path().join("automation/native-window-ack.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(acknowledgement.committed_presentation, 10);
+    }
+
+    #[test]
+    fn final_publication_drain_rejects_skips_regressions_and_rewrites() {
+        let nonce = "a".repeat(64);
+        let bounds = runtime_contract().expected_client_bounds;
+        let prior = child_state(&nonce, 123, bounds, 9, 3, 301);
+
+        let root = tempfile::tempdir().unwrap();
+        let skipped = child_state(&nonce, 123, bounds, 11, 8, 309);
+        let (mut session, identity) = final_publication_session(root.path(), &skipped, &prior);
+        assert!(session.observe_final_publication(&identity).is_err());
+
+        let root = tempfile::tempdir().unwrap();
+        let regressed = child_state(&nonce, 123, bounds, 10, 2, 309);
+        let (mut session, identity) = final_publication_session(root.path(), &regressed, &prior);
+        assert!(session.observe_final_publication(&identity).is_err());
+
+        let root = tempfile::tempdir().unwrap();
+        let rewritten = child_state(&nonce, 123, bounds, 9, 4, 301);
+        let (mut session, identity) = final_publication_session(root.path(), &rewritten, &prior);
+        assert!(session.observe_final_publication(&identity).is_err());
     }
 
     fn cargo_messages_for_test(package_id: &str, archive_package_id: &str) -> Vec<u8> {
