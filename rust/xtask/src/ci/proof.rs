@@ -107,12 +107,15 @@ fn run_bootstrap_steps(
 
     let build_command = vec![
         "cargo".into(),
-        "build".into(),
+        "rustc".into(),
         "--locked".into(),
         "--manifest-path".into(),
         "rust/Cargo.toml".into(),
         "--bin".into(),
         "uqm-gameplay-proof".into(),
+        "--".into(),
+        "-C".into(),
+        "strip=debuginfo".into(),
     ];
     run_step(
         session,

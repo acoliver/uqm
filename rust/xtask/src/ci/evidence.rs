@@ -7393,12 +7393,15 @@ fn validate_failed_bootstrap_payloads(
     if runner_count == 1 {
         let build: Vec<String> = vec![
             "cargo".into(),
-            "build".into(),
+            "rustc".into(),
             "--locked".into(),
             "--manifest-path".into(),
             "rust/Cargo.toml".into(),
             "--bin".into(),
             "uqm-gameplay-proof".into(),
+            "--".into(),
+            "-C".into(),
+            "strip=debuginfo".into(),
         ];
         validate_builtin_payload(
             index,
@@ -7470,12 +7473,15 @@ fn validate_failed_bootstrap_gate(
     validate_failed_bootstrap_payloads(root, index, authority, first_failed, &mut contracts);
     let build: Vec<String> = vec![
         "cargo".into(),
-        "build".into(),
+        "rustc".into(),
         "--locked".into(),
         "--manifest-path".into(),
         "rust/Cargo.toml".into(),
         "--bin".into(),
         "uqm-gameplay-proof".into(),
+        "--".into(),
+        "-C".into(),
+        "strip=debuginfo".into(),
     ];
     let steps = ["build-runner", "run", "validate"];
     let failed_position = match first_failed {
@@ -8931,12 +8937,15 @@ fn validate_successful_builtin_gate(
         "bootstrap-proof" => {
             let build = vec![
                 "cargo".into(),
-                "build".into(),
+                "rustc".into(),
                 "--locked".into(),
                 "--manifest-path".into(),
                 "rust/Cargo.toml".into(),
                 "--bin".into(),
                 "uqm-gameplay-proof".into(),
+                "--".into(),
+                "-C".into(),
+                "strip=debuginfo".into(),
             ];
             contracts.extend(validate_builtin_step(
                 root,
@@ -13425,12 +13434,15 @@ mod tests {
         bootstrap.entries.clear();
         let build: Vec<String> = vec![
             "cargo".into(),
-            "build".into(),
+            "rustc".into(),
             "--locked".into(),
             "--manifest-path".into(),
             "rust/Cargo.toml".into(),
             "--bin".into(),
             "uqm-gameplay-proof".into(),
+            "--".into(),
+            "-C".into(),
+            "strip=debuginfo".into(),
         ];
         for (path, role, bytes) in [
             (
@@ -14017,12 +14029,15 @@ mod tests {
         index.entries.last_mut().unwrap().producing_gate = "bootstrap-proof".into();
         let build = vec![
             "cargo".into(),
-            "build".into(),
+            "rustc".into(),
             "--locked".into(),
             "--manifest-path".into(),
             "rust/Cargo.toml".into(),
             "--bin".into(),
             "uqm-gameplay-proof".into(),
+            "--".into(),
+            "-C".into(),
+            "strip=debuginfo".into(),
         ];
         write_bundle_entry(
             root,
