@@ -9,7 +9,7 @@
 
 #[cfg(test)]
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::authority::Gate;
 use super::cache::CacheEnvironment;
@@ -137,9 +137,7 @@ fn run_bootstrap_steps(
         &build_command,
     )?;
 
-    let output_dir = session.evidence_root.join("bootstrap-proof");
-    std::fs::create_dir_all(&output_dir)
-        .map_err(|error| CiError::new("bootstrap-proof.output", error.to_string()))?;
+    let output_dir = proof_output_dir(&session.evidence_root);
     let proof_bin = root.join(PROOF_BIN);
 
     let run_command = vec![
@@ -213,6 +211,10 @@ fn run_bootstrap_steps(
             contract: "bootstrap-proof.validate",
         },
     )
+}
+
+fn proof_output_dir(evidence_root: &Path) -> PathBuf {
+    evidence_root.join("bootstrap-proof/output")
 }
 
 fn retain_lcar_bundle(
@@ -447,6 +449,18 @@ mod tests {
             supervision_error: None,
             descendant_survivors: None,
         }
+    }
+
+    #[test]
+    fn proof_output_remains_fresh_after_gate_capture() {
+        let evidence = tempfile::tempdir().unwrap();
+        let gate_root = evidence.path().join("bootstrap-proof");
+        fs::create_dir(&gate_root).unwrap();
+        fs::write(gate_root.join("build-runner.result.json"), b"{}").unwrap();
+
+        let output = proof_output_dir(evidence.path());
+        assert!(!output.exists());
+        fs::create_dir(&output).unwrap();
     }
 
     #[test]
