@@ -569,6 +569,12 @@ pub struct WaitForCommunicationReplayStep {
 #[serde(deny_unknown_fields)]
 pub struct SetupPlanetSideCollisionFixtureStep {}
 
+/// The no-payload step that waits for the production restart menu to finish
+/// initialization and accept navigation input.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForMainMenuReadyStep {}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -580,6 +586,7 @@ pub struct SetupPlanetSideCollisionFixtureStep {}
 pub enum Action {
     WaitInputTicks(WaitInputTicksStep),
     WaitPresentations(WaitPresentationsStep),
+    WaitForMainMenuReady(WaitForMainMenuReadyStep),
     SetMenuKey(SetMenuKeyStep),
     TapMenuKey(TapMenuKeyStep),
     SetPlayerKey(SetPlayerKeyStep),
@@ -1179,8 +1186,11 @@ fn validate_step(
     path: &str,
     requirements: &mut StepRequirements,
 ) -> Result<(), AutomationError> {
-    // Every action consumes at least one admitted input callback, including
-    // immediate assertions, capture arming, and the final Finish action.
+    if matches!(step, Action::WaitForMainMenuReady(_)) {
+        return Ok(());
+    }
+    // Every other action consumes at least one admitted input callback,
+    // including immediate assertions, capture arming, and the final Finish action.
     requirements.add_input_callbacks(1, index, path, "")?;
     if let Some(result) = validate_key_step(step, index, path, requirements) {
         return result;
@@ -2092,6 +2102,16 @@ mod tests {
     }
 
     #[test]
+    fn main_menu_readiness_is_event_driven_and_rejects_payload_fields() {
+        let valid = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
+        let document = parse_script(valid.as_bytes(), p()).unwrap();
+        assert!(validate_script(document, p()).is_ok());
+
+        let payload = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready","ticks":1},{"action":"finish"}]}"#;
+        assert!(parse_script(payload.as_bytes(), p()).is_err());
+    }
+
+    #[test]
     fn wait_presentations_requires_positive_count_and_inclusive_budget() {
         let zero = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":3,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":0},{"action":"finish"}]}"#;
         let doc = parse_script(zero.as_bytes(), p()).unwrap();
@@ -2126,6 +2146,10 @@ mod tests {
         let document = parse_script(bytes, "rust/scripts/linked-playable-v1.json").unwrap();
         let script = validate_script(document, "rust/scripts/linked-playable-v1.json").unwrap();
 
+        assert!(matches!(
+            script.steps().first(),
+            Some(Action::WaitForMainMenuReady(_))
+        ));
         assert_eq!(
             script.transitions(),
             &[

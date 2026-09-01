@@ -8,8 +8,7 @@
   },
   "steps": [
     {
-      "action": "wait_input_ticks",
-      "count": 10
+      "action": "wait_for_main_menu_ready"
     },
     {
       "action": "tap_menu_key",

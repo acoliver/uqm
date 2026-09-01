@@ -218,7 +218,7 @@ struct CoordInner {
     /// Queued menu transition events that arrived while the scheduler
     /// was not in WaitingSemantic. Replayed when the scheduler enters
     /// WaitingSemantic.
-    pending_transitions: Vec<u8>,
+    pending_transitions: Vec<(u8, u8)>,
     /// The label of the currently armed capture step, if any.
     /// Used when the capture completes to write a PNG artifact.
     armed_capture_label: Option<String>,
@@ -924,20 +924,20 @@ impl Coordinator {
                 actions: &self.actions,
                 transitions: &self.transitions,
             };
-            let pending: Vec<u8> = std::mem::take(&mut inner.pending_transitions);
-            for to in pending {
-                eprintln!("[automation] replaying pending menu_transition to={}", to);
+            let pending: Vec<(u8, u8)> = std::mem::take(&mut inner.pending_transitions);
+            for (from, to) in pending {
+                eprintln!("[automation] replaying pending menu_transition from={from} to={to}");
                 let t2 = scheduler_reduce(
                     &inner.sched_state,
                     &config2,
-                    SchedulerEvent::MenuTransition { to },
+                    SchedulerEvent::MenuTransition { from, to },
                 );
                 inner.sched_state = t2.new_state;
                 let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch)
                 {
-                    format!("menu_transition_failed:to={to}")
+                    format!("menu_transition_failed:from={from}:to={to}")
                 } else {
-                    format!("menu_transition_passed:to={to}")
+                    format!("menu_transition_passed:from={from}:to={to}")
                 };
                 self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
                 if inner.sched_state.is_terminal() {
@@ -1433,16 +1433,45 @@ impl Coordinator {
     //  Menu transition observation (called from handle_navigate)
     // -----------------------------------------------------------------------
 
-    /// Process an observed main-menu transition. Returns true if the game
-    /// loop should stop (e.g., semantic assertion mismatch).
-    pub fn process_menu_transition(to_index: u8) -> bool {
+    /// Advance a script waiting for the initialized production restart menu.
+    pub fn process_main_menu_ready() -> bool {
         let Some(coord) = Self::get() else {
             return false;
         };
-        coord.process_menu_transition_inner(to_index)
+        let mut inner = coord.inner.lock();
+        if inner.terminal_class.is_some() {
+            return true;
+        }
+        let config = SchedulerConfig {
+            actions: &coord.actions,
+            transitions: &coord.transitions,
+        };
+        let transition =
+            scheduler_reduce(&inner.sched_state, &config, SchedulerEvent::MainMenuReady);
+        inner.sched_state = transition.new_state;
+        coord.write_trace_labeled(
+            &mut inner,
+            RecordKind::SemanticAssertion,
+            "main_menu_ready".to_string(),
+        );
+        if inner.sched_state.is_terminal() {
+            let class = map_scheduler_terminal(inner.sched_state.terminal);
+            coord.set_terminal(&mut inner, class);
+            return true;
+        }
+        false
     }
 
-    fn process_menu_transition_inner(&self, to_index: u8) -> bool {
+    /// Process an observed main-menu transition. Returns true if the game
+    /// loop should stop (e.g., semantic assertion mismatch).
+    pub fn process_menu_transition(from_index: u8, to_index: u8) -> bool {
+        let Some(coord) = Self::get() else {
+            return false;
+        };
+        coord.process_menu_transition_inner(from_index, to_index)
+    }
+
+    fn process_menu_transition_inner(&self, from_index: u8, to_index: u8) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
@@ -1458,30 +1487,30 @@ impl Coordinator {
         // It will be replayed when the scheduler enters WaitingSemantic.
         if inner.sched_state.phase != crate::automation::scheduler::ActionPhase::WaitingSemantic {
             eprintln!(
-                "[automation] menu_transition to={} queued (phase={:?})",
-                to_index, inner.sched_state.phase
+                "[automation] menu_transition from={} to={} queued (phase={:?})",
+                from_index, to_index, inner.sched_state.phase
             );
-            inner.pending_transitions.push(to_index);
+            inner.pending_transitions.push((from_index, to_index));
             return false;
         }
 
         // Process pending transitions first.
-        let mut to_process: Vec<u8> = std::mem::take(&mut inner.pending_transitions);
-        to_process.push(to_index);
+        let mut to_process: Vec<(u8, u8)> = std::mem::take(&mut inner.pending_transitions);
+        to_process.push((from_index, to_index));
 
-        for to in to_process {
-            eprintln!("[automation] menu_transition to={} processing", to);
+        for (from, to) in to_process {
+            eprintln!("[automation] menu_transition from={from} to={to} processing");
             let transition = scheduler_reduce(
                 &inner.sched_state,
                 &config,
-                SchedulerEvent::MenuTransition { to },
+                SchedulerEvent::MenuTransition { from, to },
             );
             inner.sched_state = transition.new_state;
 
             let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch) {
-                format!("menu_transition_failed:to={to}")
+                format!("menu_transition_failed:from={from}:to={to}")
             } else {
-                format!("menu_transition_passed:to={to}")
+                format!("menu_transition_passed:from={from}:to={to}")
             };
             self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
 

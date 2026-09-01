@@ -185,8 +185,10 @@ pub enum SchedulerEvent {
     NavigationReached,
     /// A runtime-observed condition required by the current action was reached.
     ConditionReached,
-    /// An observed typed main-menu transition to `item`.
-    MenuTransition { to: u8 },
+    /// The production restart menu finished initialization and accepts input.
+    MainMenuReady,
+    /// An observed typed main-menu transition.
+    MenuTransition { from: u8, to: u8 },
 }
 
 /// Planned effects produced by the scheduler reducer.
@@ -318,6 +320,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
             phase,
             ActionPhase::WaitingForInput | ActionPhase::WaitingSemantic
         ),
+        Action::WaitForMainMenuReady(_) => phase == ActionPhase::WaitingForInput,
         _ => phase == ActionPhase::WaitingForInput,
     }
 }
@@ -446,7 +449,19 @@ pub fn scheduler_reduce(
                 }
             }
         }
-        SchedulerEvent::MenuTransition { to } => reduce_menu_transition(state, config, to, sv),
+        SchedulerEvent::MainMenuReady => {
+            if matches!(current_action, Action::WaitForMainMenuReady(_)) {
+                advance_to_next(state, config, sv, EffectPlan::none())
+            } else {
+                SchedulerTransition {
+                    new_state: *state,
+                    effects: EffectPlan::none(),
+                }
+            }
+        }
+        SchedulerEvent::MenuTransition { from, to } => {
+            reduce_menu_transition(state, config, from, to, sv)
+        }
     }
 }
 
@@ -498,6 +513,13 @@ fn reduce_input_timing(
     sv: u64,
 ) -> Option<SchedulerTransition> {
     Some(match (action, state.phase) {
+        (Action::WaitForMainMenuReady(_), ActionPhase::WaitingForInput) => SchedulerTransition {
+            new_state: SchedulerState {
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
         (Action::WaitInputTicks(w), ActionPhase::WaitingForInput) if w.count == 0 => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -1299,6 +1321,7 @@ fn reduce_committed_present(
 fn reduce_menu_transition(
     state: &SchedulerState,
     config: &SchedulerConfig<'_>,
+    from: u8,
     to: u8,
     sv: u64,
 ) -> SchedulerTransition {
@@ -1328,7 +1351,7 @@ fn reduce_menu_transition(
     }
 
     if let Some(expected) = config.transitions.get(transition_idx) {
-        if expected.to.as_u8() == to {
+        if expected.from.as_u8() == from && expected.to.as_u8() == to {
             advance_to_next(state, config, sv, EffectPlan::none())
         } else {
             SchedulerTransition {
@@ -1413,8 +1436,8 @@ mod tests {
     use crate::automation::script::{
         ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToMoonStep, SetMenuKeyStep,
         TapMenuKeyStep, TapPlayerKeyStep, WaitForCommunicationEndStep,
-        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitInputTicksStep,
-        WaitPresentationsStep,
+        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForMainMenuReadyStep,
+        WaitInputTicksStep, WaitPresentationsStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
@@ -1969,6 +1992,25 @@ mod tests {
         assert!(t.effects.is_empty());
     }
 
+    #[test]
+    fn main_menu_readiness_ignores_input_until_production_ready_event() {
+        let actions = [
+            Action::WaitForMainMenuReady(WaitForMainMenuReadyStep {}),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let state = SchedulerState::initial();
+
+        let input = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(input.new_state.step_index, 0);
+        assert_eq!(input.new_state.phase, ActionPhase::WaitingForInput);
+        assert_eq!(input.new_state.terminal, None);
+
+        let ready = scheduler_reduce(&input.new_state, &config, SchedulerEvent::MainMenuReady);
+        assert_eq!(ready.new_state.step_index, 1);
+        assert_eq!(ready.new_state.terminal, None);
+    }
+
     // --- Semantic transition ---
 
     #[test]
@@ -1991,10 +2033,39 @@ mod tests {
             &state,
             &config,
             SchedulerEvent::MenuTransition {
+                from: RestartMenuItem::NewGame.as_u8(),
                 to: RestartMenuItem::LoadGame.as_u8(),
             },
         );
         assert_eq!(t.new_state.step_index, 1);
+    }
+
+    #[test]
+    fn semantic_same_destination_wrong_source_is_terminal() {
+        let trans = MainMenuTransition::new(RestartMenuItem::NewGame, RestartMenuItem::LoadGame);
+        let actions = [
+            Action::AssertMainMenuTransition(MainMenuTransitionDto {
+                from: "NewGame".into(),
+                to: "LoadGame".into(),
+            }),
+            Action::Finish,
+        ];
+        let config = cfg_with_trans(&actions, std::slice::from_ref(&trans));
+        let mut state = SchedulerState::initial();
+        state.phase = ActionPhase::WaitingSemantic;
+
+        let t = scheduler_reduce(
+            &state,
+            &config,
+            SchedulerEvent::MenuTransition {
+                from: RestartMenuItem::SuperMelee.as_u8(),
+                to: RestartMenuItem::LoadGame.as_u8(),
+            },
+        );
+        assert_eq!(
+            t.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
     }
 
     #[test]
@@ -2016,6 +2087,7 @@ mod tests {
             &state,
             &config,
             SchedulerEvent::MenuTransition {
+                from: RestartMenuItem::NewGame.as_u8(),
                 to: RestartMenuItem::Quit.as_u8(),
             },
         );

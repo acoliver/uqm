@@ -184,6 +184,9 @@ fn init_first_frame<O: RestartMenuOps + ?Sized>(ops: &O, state: &mut DoRestartSt
         (c_extern::ONE_SECOND / 2) as i16,
     );
     ops.sleep_thread_until(fade_result);
+    if crate::automation::coordinator::Coordinator::is_active() {
+        let _stop = crate::automation::coordinator::Coordinator::process_main_menu_ready();
+    }
 }
 
 /// Handle menu selection dispatch.
@@ -289,6 +292,7 @@ fn handle_navigate<O: RestartMenuOps + ?Sized>(
         // assertion matching.
         if crate::automation::coordinator::Coordinator::is_active() {
             let _stop = crate::automation::coordinator::Coordinator::process_menu_transition(
+                cur_item.as_u8(),
                 new_item.as_u8(),
             );
         }
