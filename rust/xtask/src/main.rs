@@ -2275,6 +2275,15 @@ fn normalize_path_dependent_tool_versions(
     expected.linker.version.clone_from(&observed.linker.version);
 }
 
+/// The program the linker is selected by, before it is resolved to an identity.
+fn linker_program() -> String {
+    let host = host_target().unwrap_or_default();
+    let suffix = host.to_ascii_uppercase().replace('-', "_");
+    env::var(format!("CARGO_TARGET_{suffix}_LINKER"))
+        .or_else(|_| env::var("CC"))
+        .unwrap_or_else(|_| "cc".into())
+}
+
 /// The canonical toolchain, resolved once for the life of the process.
 ///
 /// Resolution reads CC, AR, NM, PKG_CONFIG and CARGO_TARGET_<TRIPLE>_LINKER,
@@ -2308,6 +2317,7 @@ fn resolve_canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String>
             "pkg-config",
             env::var("PKG_CONFIG").unwrap_or_else(|_| "pkg-config".into()),
         ),
+        ("linker", linker_program()),
     ];
     let mut tools = tool_programs
         .iter()
@@ -2334,6 +2344,14 @@ fn resolve_canonical_toolchain(root: &Path) -> Result<ToolchainIdentity, String>
     toolchain.ar.sha256 = tools[3].identity().sha256.clone();
     toolchain.nm.sha256 = tools[4].identity().sha256.clone();
     toolchain.pkg_config.sha256 = tools[5].identity().sha256.clone();
+    // The linker needs the same treatment as every other tool. Without it the
+    // linker keeps the name it was selected by while the compiler is replaced
+    // by its resolved identity, and on a distribution where /usr/bin/cc is a
+    // symlink to a versioned gcc the two describe the same program with
+    // different paths. A build and its verification then disagree about the
+    // linker and agree about everything else.
+    toolchain.linker.executable = tools[6].identity().path.clone();
+    toolchain.linker.sha256 = tools[6].identity().sha256.clone();
     apply_canonical_toolchain_environment(&toolchain);
     let observed = resolve_toolchain(root, &host)
         .map_err(|error| format!("re-resolve canonical toolchain: {error}"))?;
