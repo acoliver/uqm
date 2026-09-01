@@ -6136,12 +6136,15 @@ fn valid_lcar_identity(
         && failure_matches
         && manifest.get("git_head").and_then(|value| value.as_str())
             == Some(index.source_sha.as_str())
-        && manifest.get("target").and_then(|value| value.as_str()) == Some(index.tuple.as_str())
+        && rust_target_for_tuple(&index.tuple).is_some_and(|target| {
+            manifest.get("target").and_then(|value| value.as_str()) == Some(target)
+        })
         && manifest.get("profile").and_then(|value| value.as_str())
             == Some(authority.package.profile.as_str())
         && manifest.get("features") == Some(&serde_json::json!(authority.package.features))
         && manifest.get("renderer").and_then(|value| value.as_str()) == Some("sdl2-software-dummy")
-        && manifest.get("seed").and_then(|value| value.as_u64()) == Some(0x5eed_c0de)
+        && manifest.get("seed").and_then(|value| value.as_u64())
+            == Some(u64::from(uqm_rust::automation::AUTOMATION_SEED))
         && manifest.get("environment") == Some(&environment)
 }
 
@@ -7268,7 +7271,7 @@ fn validate_lcar_tree_snapshot(
 }
 
 fn validate_coverage_command(command: &[String], authority: &Authority) -> bool {
-    let features = authority.profiles.linked_test.join(",");
+    let features = authority.profiles.pure_test.join(",");
     command.len() == 14
         && command[0..9]
             == [
@@ -8471,14 +8474,15 @@ fn valid_provider_entries(entries: Option<&Vec<serde_json::Value>>) -> bool {
                         item.get("archive_decision")
                             .and_then(serde_json::Value::as_str),
                     )
-                    .is_some_and(|((provider, path), decision)| {
-                        if decision == "include" {
-                            provider == format!("native_object:{path}")
-                        } else {
-                            provider
-                                .strip_prefix("rust_source:")
-                                .is_some_and(validate_relative_path)
-                        }
+                    .is_some_and(|((provider, path), decision)| match decision {
+                        "include" => provider == format!("native_object:{path}"),
+                        "exclude_recompiled" => provider
+                            .strip_prefix("recompiled_native:")
+                            .is_some_and(validate_relative_path),
+                        "exclude_duplicate_provider" | "exclude_replaced" => provider
+                            .strip_prefix("rust_source:")
+                            .is_some_and(validate_relative_path),
+                        _ => false,
                     })
         }) && items.windows(2).all(|pair| {
             pair[0]
@@ -9182,8 +9186,15 @@ fn expected_collection_identities<'a>(
                 "workflow.actions_full_sha",
                 "workflow.required_identity_environment",
                 "workflow.tool_authority",
+                "workflow.precontainment_isolation",
+                "workflow.trusted_plan_outputs",
+                "workflow.required_gates_fallback",
+                "workflow.supervised_subprocesses",
+                "workflow.bootstrap_failure_receipts",
+                "workflow.uid_containment",
                 "workflow.least_permissions",
                 "workflow.timeouts",
+                "workflow.matrix_shell_transport",
                 "workflow.generated_matrix",
                 "workflow.no_direct_gate_commands",
                 "workflow.no_cache_action",
@@ -10229,6 +10240,35 @@ mod tests {
             .unwrap(),
             b"{}\n"
         );
+    }
+
+    #[test]
+    fn coverage_command_uses_the_pure_test_profile() {
+        let authority: Authority =
+            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
+        let mut command = vec![
+            "cargo".to_string(),
+            "llvm-cov".to_string(),
+            "--manifest-path".to_string(),
+            "rust/Cargo.toml".to_string(),
+            "--workspace".to_string(),
+            "--all-targets".to_string(),
+            "--no-default-features".to_string(),
+            "--features".to_string(),
+            authority.profiles.pure_test.join(","),
+            "--lcov".to_string(),
+            "--output-path".to_string(),
+            std::env::temp_dir()
+                .join("coverage.lcov")
+                .display()
+                .to_string(),
+            "--ignore-filename-regex".to_string(),
+            authority.coverage.ignore_filename_regex.clone(),
+        ];
+        assert!(validate_coverage_command(&command, &authority));
+
+        command[8] = authority.profiles.linked_test.join(",");
+        assert!(!validate_coverage_command(&command, &authority));
     }
 
     fn sample_entry(path: &str, role: &str, payload: &[u8], gate: &str) -> EvidenceEntry {
@@ -11416,8 +11456,15 @@ mod tests {
             "workflow.actions_full_sha",
             "workflow.required_identity_environment",
             "workflow.tool_authority",
+            "workflow.precontainment_isolation",
+            "workflow.trusted_plan_outputs",
+            "workflow.required_gates_fallback",
+            "workflow.supervised_subprocesses",
+            "workflow.bootstrap_failure_receipts",
+            "workflow.uid_containment",
             "workflow.least_permissions",
             "workflow.timeouts",
+            "workflow.matrix_shell_transport",
             "workflow.generated_matrix",
             "workflow.no_direct_gate_commands",
             "workflow.no_cache_action",
@@ -11968,13 +12015,22 @@ mod tests {
         }
         let provider_report = serde_json::json!({
             "schema": "uqm-provider-report-v1",
-            "entries": [{
-                "path": "native/example.c.o",
-                "issue": "EXAMPLE",
-                "provider": "native_object:native/example.c.o",
-                "archive_decision": "include",
-                "status": "ok"
-            }],
+            "entries": [
+                {
+                    "path": "native/example.c.o",
+                    "issue": "EXAMPLE",
+                    "provider": "native_object:native/example.c.o",
+                    "archive_decision": "include",
+                    "status": "ok"
+                },
+                {
+                    "path": "native/recompiled.c.o",
+                    "issue": "EXAMPLE",
+                    "provider": "recompiled_native:sc2/src/recompiled.c",
+                    "archive_decision": "exclude_recompiled",
+                    "status": "ok"
+                }
+            ],
             "ledger_sha256": authority.ledger_identity.sha256,
             "symbols": [{
                 "symbol": "example_symbol",
@@ -11985,11 +12041,11 @@ mod tests {
             }],
             "tracked_native_file_delta": 0,
             "summary": {
-                "total_objects": 1,
+                "total_objects": 2,
                 "included": 1,
-                "excluded": 0,
+                "excluded": 1,
                 "duplicate_providers_excluded": 0,
-                "recompiled": 0,
+                "recompiled": 1,
                 "replaced": 0,
                 "violations": 0,
                 "passed": true
@@ -13165,7 +13221,12 @@ mod tests {
             serde_json::from_slice(&read_bundle_file(&root, &validation_entry.path).unwrap())
                 .unwrap();
         validation["first_failed_rule"] = serde_json::json!("workflow.timeouts");
-        validation["rules"][7]["passed"] = serde_json::json!(false);
+        validation["rules"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|rule| rule["rule"] == "workflow.timeouts")
+            .unwrap()["passed"] = serde_json::json!(false);
         rewrite_bundle_entry(
             &root,
             &mut index.entries,
@@ -13984,11 +14045,11 @@ mod tests {
                 "--scroll=pc"
             ],
             "environment": {"SDL_AUDIODRIVER": "dummy", "SDL_VIDEODRIVER": "dummy"},
-            "target": index.tuple,
+            "target": rust_target_for_tuple(&index.tuple).unwrap(),
             "profile": authority.package.profile,
             "features": authority.package.features,
             "renderer": "sdl2-software-dummy",
-            "seed": 0x5eed_c0de_u64,
+            "seed": uqm_rust::automation::AUTOMATION_SEED,
             "provenance": {
                 "production_manifest_sha256": package_hash,
                 "executable_sha256": executable_hash,
@@ -14136,7 +14197,7 @@ mod tests {
             "--all-targets".into(),
             "--no-default-features".into(),
             "--features".into(),
-            authority.profiles.linked_test.join(","),
+            authority.profiles.pure_test.join(","),
             "--lcov".into(),
             "--output-path".into(),
             root.join("coverage.lcov").display().to_string(),
@@ -14901,6 +14962,17 @@ mod tests {
         assert!(contracts
             .iter()
             .any(|contract| contract == "evidence.builtin.bootstrap-proof.lcar.identity"));
+
+        let mut unmapped_index = index.clone();
+        unmapped_index.tuple = "unsupported-x86_64".to_string();
+        let mut missing_target = lcar.clone();
+        missing_target.as_object_mut().unwrap().remove("target");
+        assert!(!valid_lcar_identity(
+            &missing_target,
+            &unmapped_index,
+            &authority,
+            None
+        ));
 
         let mut forged_cleanup = lcar.clone();
         forged_cleanup["cleanup"]["config_root_removed"] = serde_json::json!(false);
