@@ -12,8 +12,9 @@
 //! real C wrapper functions (from P02b `rust_bridge_mainloop.c`) which
 //! read/write the actual UQM globals.
 //!
-//! In test builds (`cfg(test)`), the safe wrappers route through the
-//! test shim (`rust_test_bridge.c`) which uses test-local globals. This
+//! In test builds (`cfg(test)`), the safe wrappers route through a
+//! pure-Rust test shim (`c_extern::test_set_activity` /
+//! `c_extern::test_get_activity`) which uses test-local globals. This
 //! allows round-trip boundary tests to run without linking the full UQM
 //! C codebase.
 //!
@@ -126,8 +127,7 @@ pub fn get_current_activity() -> ActivityValue {
     }
     #[cfg(test)]
     {
-        // SAFETY: test shim, reads test-local global.
-        let raw = unsafe { prod::test_get_activity() };
+        let raw = prod::test_get_activity();
         ActivityValue(raw)
     }
 }
@@ -151,8 +151,7 @@ pub fn set_current_activity(val: ActivityValue) {
     }
     #[cfg(test)]
     {
-        // SAFETY: test shim, writes test-local global.
-        unsafe { prod::test_set_activity(val.0) };
+        prod::test_set_activity(val.0);
     }
 }
 
@@ -178,8 +177,7 @@ pub fn get_next_activity() -> ActivityValue {
     }
     #[cfg(test)]
     {
-        // SAFETY: test shim.
-        let raw = unsafe { prod::test_get_activity() };
+        let raw = prod::test_get_activity();
         ActivityValue(raw)
     }
 }
@@ -197,8 +195,7 @@ pub fn set_next_activity(val: ActivityValue) {
     }
     #[cfg(test)]
     {
-        // SAFETY: test shim.
-        unsafe { prod::test_set_activity(val.0) };
+        prod::test_set_activity(val.0);
     }
 }
 
@@ -458,7 +455,7 @@ pub unsafe fn load_kernel(
 }
 
 // ---------------------------------------------------------------------------
-// Boundary tests — Tier 2 (C shim round-trip)
+// Boundary tests — Tier 2 (test shim round-trip)
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -475,9 +472,9 @@ mod tests {
     fn test_current_activity_round_trip_rust_to_c() {
         // GIVEN: set activity from Rust
         set_current_activity(ActivityValue(0x0403)); // IN_ENCOUNTER | START_ENCOUNTER
-                                                     // THEN: C shim reads the same value
-        let from_c = unsafe { prod::test_get_activity() };
-        assert_eq!(from_c, 0x0403);
+                                                     // THEN: the test shim reads the same value
+        let from_shim = prod::test_get_activity();
+        assert_eq!(from_shim, 0x0403);
     }
 
     /// @plan PLAN-20260707-MAINLOOP.P03
@@ -485,8 +482,8 @@ mod tests {
     #[test]
     #[serial]
     fn test_current_activity_round_trip_c_to_rust() {
-        // GIVEN: C shim sets activity
-        unsafe { prod::test_set_activity(0x0804) };
+        // GIVEN: the test shim sets activity
+        prod::test_set_activity(0x0804);
         // START_INTERPLANETARY | IN_INTERPLANETARY
         // WHEN: Rust reads it
         let activity = get_current_activity();

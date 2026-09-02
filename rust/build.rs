@@ -116,7 +116,6 @@ fn run() -> Result<(), String> {
     println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
-    compile_local_helpers();
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
@@ -174,20 +173,6 @@ fn require_some<T>(value: Option<T>, context: &str) -> T {
     match value {
         Some(value) => value,
         None => fail(context),
-    }
-}
-
-fn compile_local_helpers() {
-    for (source, library) in [
-        ("src/io/uio_vfprintf_helper.c", "uio_vfprintf_helper"),
-        ("src/mainloop/rust_test_bridge.c", "uqm_test_bridge"),
-    ] {
-        cc::Build::new()
-            .warnings(true)
-            .file(source)
-            .cpp(false)
-            .compile(library);
-        println!("cargo:rerun-if-changed={source}");
     }
 }
 
