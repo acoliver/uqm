@@ -23,8 +23,7 @@ use std::ptr;
 
 use uqm_rust::input::menu_binding::query_menu_binding;
 use uqm_rust::io::uio_bridge::{
-    uio_DirHandle, uio_Repository, uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir,
-    uio_openRepository,
+    uio_DirHandle, uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir, uio_openRepository,
 };
 use uqm_rust::resource::ffi_bridge::{InitResourceSystem, LoadResourceIndex};
 
