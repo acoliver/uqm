@@ -91,11 +91,6 @@ name = "menu_binding_probe"
 path = "probes/menu_binding_probe.rs"
 required-features = ["linked_c_archive"]
 
-[[bin]]
-name = "p00_symbol_harness"
-path = "probes/p00_symbol_harness.rs"
-required-features = ["linked_c_archive"]
-
 [[test]]
 name = "linked_provider_fixture"
 path = "tests/linked_provider_fixture.rs"

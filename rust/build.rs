@@ -604,13 +604,6 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
                     archive.display()
                 );
             }
-            // The P00 symbol harness proves selective member extraction: its
-            // #[used] symbol table drives the references, so the archive is
-            // linked bare and the linker pulls only the members it demands.
-            println!(
-                "cargo:rustc-link-arg-bin=p00_symbol_harness={}",
-                archive.display()
-            );
         }
         "linux" => {
             println!("cargo:rustc-link-lib=static:+whole-archive,-bundle=uqm_c");

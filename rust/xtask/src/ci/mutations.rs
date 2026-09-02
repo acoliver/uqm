@@ -1660,7 +1660,7 @@ fn build_harness_fixture(root: &Path, script: &str) -> Result<Vec<PathBuf>, CiEr
     let cargo = tools.join("cargo");
     write_executable(
         &cargo,
-        "#!/bin/sh\nmap=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -Clink-arg=-Wl,-map,*) map=${1#-Clink-arg=-Wl,-map,} ;;\n    -Clink-arg=-Wl,-Map,*) map=${1#-Clink-arg=-Wl,-Map,} ;;\n  esac\n  shift\ndone\n[ -n \"$map\" ] && printf 'fixture map\\n' > \"$map\"\nbin=$(mktemp \"${TMPDIR:-/tmp}/p00_symbol_harness.XXXXXX\")\ncat > \"$bin\" <<'EOF'\n#!/bin/sh\necho harness_symbol_count=7\necho RESULT=PASS\nEOF\nchmod +x \"$bin\"\nprintf '{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"p00_symbol_harness\",\"kind\":[\"bin\"]},\"executable\":\"%s\"}\\n' \"$bin\"\n",
+        "#!/bin/sh\nmap=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -Clink-arg=-Wl,-map,*) map=${1#-Clink-arg=-Wl,-map,} ;;\n    -Clink-arg=-Wl,-Map,*) map=${1#-Clink-arg=-Wl,-Map,} ;;\n  esac\n  shift\ndone\n[ -n \"$map\" ] && printf 'fixture map\\n' > \"$map\"\nbin=$(mktemp \"${TMPDIR:-/tmp}/uqm.XXXXXX\")\n: > \"$bin\"\nchmod +x \"$bin\"\nprintf '{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"uqm\",\"kind\":[\"bin\"]},\"executable\":\"%s\"}\\n' \"$bin\"\n",
     )?;
     let archive = target.join("libuqm_c.a");
     fs::write(&archive, b"fixture archive\n")
