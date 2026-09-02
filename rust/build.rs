@@ -750,14 +750,6 @@ fn compile_p00_harness(toolchain: &ToolchainIdentity) -> Result<(), String> {
     let sc2_dir = manifest_dir.join("../sc2");
     let harness_dir = manifest_dir.join("harness");
     let out_dir = output_directory()?;
-    cc::Build::new()
-        .warnings(true)
-        .file(harness_dir.join("sdl_surface_accessors.c"))
-        .include(&harness_dir)
-        .include(&sc2_dir)
-        .includes(&sdl2_includes)
-        .cpp(false)
-        .compile("p00_sdl_accessors");
     let harness_obj = out_dir.join("p00_harness.o");
     compile_harness_c(
         &harness_dir.join("p00_harness.c"),
@@ -791,8 +783,6 @@ fn compile_p00_harness(toolchain: &ToolchainIdentity) -> Result<(), String> {
         "P00 harness archive",
     )?;
     for source in [
-        "harness/sdl_surface_accessors.c",
-        "harness/sdl_surface_accessors.h",
         "harness/menu_binding_accessor.c",
         "harness/menu_binding_accessor.h",
         "harness/menu_binding_probe.c",
