@@ -3817,6 +3817,16 @@ mod tests {
         }
     }
 
+    /// Publish a PID under its final name atomically, so a reader that observes
+    /// the name always observes the complete number. Creating the final name
+    /// first would let a reader see an empty file between creation and write.
+    #[cfg(unix)]
+    fn publish_pid_file(path: &Path, pid: i32) {
+        let pending = path.with_extension("pid.pending");
+        std::fs::write(&pending, pid.to_string()).expect("write pending PID");
+        std::fs::rename(&pending, path).expect("publish PID");
+    }
+
     #[cfg(unix)]
     #[test]
     fn nested_group_helper_process() {
@@ -3824,11 +3834,10 @@ mod tests {
             return;
         }
         let pid = unsafe { libc::getpid() };
-        std::fs::write(
-            std::env::var("UQM_TEST_NESTED_PID_FILE").expect("PID file"),
-            pid.to_string(),
-        )
-        .expect("write nested PID after registration acknowledgment");
+        publish_pid_file(
+            Path::new(&std::env::var("UQM_TEST_NESTED_PID_FILE").expect("PID file")),
+            pid,
+        );
         unsafe {
             libc::signal(libc::SIGTERM, libc::SIG_IGN);
         }
@@ -3873,11 +3882,10 @@ mod tests {
             assert!(Instant::now() < deadline, "nested helper did not register");
             thread::sleep(Duration::from_millis(5));
         }
-        std::fs::write(
-            std::env::var("UQM_TEST_OUTER_PID_FILE").expect("outer PID file"),
-            std::process::id().to_string(),
-        )
-        .expect("write outer PID");
+        publish_pid_file(
+            Path::new(&std::env::var("UQM_TEST_OUTER_PID_FILE").expect("outer PID file")),
+            i32::try_from(std::process::id()).expect("process identifier fits in a PID"),
+        );
         loop {
             thread::sleep(Duration::from_secs(1));
         }
