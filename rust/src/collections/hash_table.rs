@@ -647,7 +647,7 @@ mod tests {
     #[test]
     fn historical_hash_preserves_target_c_char_promotion() {
         let key = [0x80_u8 as c_char, 0xff_u8 as c_char, 0];
-        let expected = if c_char::MIN < 0 {
+        let expected = if std::any::type_name::<c_char>() == "i8" {
             0x0000_07f1
         } else {
             0x0000_08fd

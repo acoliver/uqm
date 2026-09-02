@@ -1275,7 +1275,7 @@ unsafe fn uio_fgets_inner(buf: *mut c_char, size: c_int, stream: *mut uio_Stream
         }
     };
 
-    let buffer = slice::from_raw_parts_mut(buf as *mut u8, max_len);
+    let buffer = slice::from_raw_parts_mut(buf.cast::<u8>(), max_len);
     let mut count = 0usize;
     let max_read = max_len - 1; // leave room for null terminator
 
@@ -1928,7 +1928,7 @@ pub unsafe extern "C" fn uio_copyFileBlock(
 
         // Copy to caller buffer
         if bytes_read > 0 {
-            let dest_slice = slice::from_raw_parts_mut(buffer as *mut u8, bytes_read);
+            let dest_slice = slice::from_raw_parts_mut(buffer.cast::<u8>(), bytes_read);
             dest_slice.copy_from_slice(&temp_buf[..bytes_read]);
         }
 
@@ -3836,7 +3836,7 @@ pub unsafe extern "C" fn uio_fclose(stream: *mut uio_Stream) -> c_int {
         if !s.buf.is_null() {
             if let Some(size) = get_buffer_size(s.buf) {
                 let buffer_layout = std::alloc::Layout::from_size_align(size, 1).unwrap();
-                std::alloc::dealloc(s.buf as *mut u8, buffer_layout);
+                std::alloc::dealloc(s.buf.cast::<u8>(), buffer_layout);
                 remove_buffer_size(s.buf);
             }
             // If size not found in registry, buffer was likely not allocated by us
@@ -4307,7 +4307,7 @@ pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
             let buffer_size = get_buffer_size(list.buffer);
             if let Some(size) = buffer_size {
                 let buffer_layout = std::alloc::Layout::from_size_align(size, 1).unwrap();
-                std::alloc::dealloc(list.buffer as *mut u8, buffer_layout);
+                std::alloc::dealloc(list.buffer.cast::<u8>(), buffer_layout);
                 remove_buffer_size(list.buffer);
             }
             // If size not found in registry, we have a leak - but better than double-free!

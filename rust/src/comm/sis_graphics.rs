@@ -366,7 +366,7 @@ unsafe fn copy_cstr(src: *const std::ffi::c_char, buf: &mut [u8; 80], offset: us
     }
     let mut i = 0;
     while offset + i < buf.len() - 1 {
-        let ch = *src.add(i) as u8;
+        let ch = (*src.add(i)).to_ne_bytes()[0];
         if ch == 0 {
             break;
         }

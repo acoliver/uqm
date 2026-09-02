@@ -22,25 +22,31 @@ The separately scoped `capture-dependencies` command performs a target-scoped bo
 
 ## Explicit transitional native inputs
 
-This contract is authorized by immutable ownership ledger v6
-(`uqm-native-ownership-ledger-v6`): raw revision
-`8f03fa7844feac162a3759ed768f3f38f75fbf7e`, gist history revision
-`d7602e17c4401ed322f60ddfe6bf5e61d4754e24`, and SHA-256
-`ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496`.
+This contract is authorized by immutable ownership ledger v7
+(`uqm-native-ownership-ledger-v7`): raw revision
+`d35f6156bff0b202306cca57d517f800234951df`, gist history revision
+`46eb961886e2aefe8b2085a3af4b1afbc5e82a77`, and SHA-256
+`d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a`.
 The pinned raw URL is
-<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/8f03fa7844feac162a3759ed768f3f38f75fbf7e/uqm-native-ownership-ledger.json>.
+<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json>.
 Both the provider manifest and native-input trend report encode this identity;
 repository validation does not fetch mutable network state.
 
 `rust/build/native-inputs.json` is the exact source/object/profile authority, bound field-for-field to `rust/ownership/native-provider-manifest.json`; `rust/build/native-dependencies.json` is the hashed tracked transitive header/config/include authority. Each entry declares a git-tracked canonical source, SHA-256, unique output name, producing command, canonical owner, and profile. The root preflight rejects an untracked declaration before build work, and `rust/build.rs` verifies every declaration and compiles all 321 entries into its current Cargo `OUT_DIR`; ignored object trees and stale outputs cannot authorize archive membership. Canonical domain ownership does not transfer to S2.
 
-`rust/build/native-input-trend.json` fixes the current and maximum count at 321, down from 339 assessment objects. The count may only decrease. The tracked native-file delta is zero. Infrastructure deltas are one removed recursive Cargo invocation, one removed ambient-object path, one stale `heap.c.o` provider, two Rust hash-table provider cutovers, and all active hardcoded workstation paths. The report pins ledger v6 and names both cutovers: `native/charhashtable.c.o` to the sole Rust provider with RESOURCE/#22 retaining source-deletion ownership, and `native/stringhashtable.c.o` to the same Rust provider with CORE_NATIVE/#22 retaining source-deletion ownership. `CharHashTable` and `StringHashTable` are Rust-owned C ABI providers in `rust/src/collections/hash_table.rs`; their superseded C objects are excluded from production archive membership. No generic hash-table C template is tracked, embedded, generated, or staged.
+`rust/build/native-input-trend.json` fixes the current and maximum count at 321, down from 339 assessment objects. The count may only decrease. The tracked native-file delta is zero. Infrastructure deltas are one removed recursive Cargo invocation, one removed ambient-object path, one stale `heap.c.o` provider, two Rust hash-table provider cutovers, and all active hardcoded workstation paths. The report pins ledger v7 and names both cutovers: `native/charhashtable.c.o` to the sole Rust provider with RESOURCE/#22 retaining source-deletion ownership, and `native/stringhashtable.c.o` to the same Rust provider with CORE_NATIVE/#22 retaining source-deletion ownership. `CharHashTable` and `StringHashTable` are Rust-owned C ABI providers in `rust/src/collections/hash_table.rs`; their superseded C objects are excluded from production archive membership. No generic hash-table C template is tracked, embedded, generated, or staged.
 
 S1's source-derived provider manifest independently enforces exact archive membership, one provider per internal symbol, duplicate/unassigned rejection, `displist.c.o` exclusion, strict final linking, and provider reports. `heap.c.o` has no source and is absent; `heap.h` remains COLLECTIONS-owned.
 
+S4 consumes this matrix and the accepted S2 commands through
+`rust/ci/gates.json`; it does not redefine target, prerequisite, determinism,
+verification, or package semantics. Required CI executes every S2 tuple from an
+isolated empty Cargo home and absent build-output paths. The S4 native-input delta
+is zero and the maximum transitional input count remains 321.
+
 ## Supported matrix and prerequisites
 
-`rust/build/supported-matrix.json` is authoritative. Supported hosts are current macOS and Linux on `aarch64` and `x86_64`, with SDL2 software rendering/input, UQM 0.8 content, cpal audio (ALSA on Linux), full networking, and directory-manifest packaging. Any other tuple fails before native compilation and reports every dimension.
+`rust/ci/gates.json` is the machine authority for the exact supported tuples and runner mappings. `rust/build/supported-matrix.json` remains the S2 semantic input and must derive exactly the same tuple set. Supported hosts are current macOS and Linux on `aarch64` and `x86_64`, with SDL2 software rendering/input, UQM 0.8 content, cpal audio (ALSA on Linux), full networking, and directory-manifest packaging. Any other tuple fails before native compilation and reports every dimension.
 
 Prerequisites are discovered for the active target with `pkg-config`; no Homebrew, `/usr/local`, volume, or user path is configured. Required packages are SDL2, libpng, liblzma, bzip2, and ALSA on Linux, plus `cc`, `ar`, `nm`, Cargo, and rustc. A missing tool or package reports the exact command and target package set that failed.
 
@@ -50,7 +56,7 @@ Production resolves one target-aware toolchain before Cargo runs: canonical exec
 
 Production uses sorted source and archive input order, unique fixed member names, optimized non-debug C compilation, `ZERO_AR_DATE=1`, a unified `rust/Cargo.lock`, disabled incremental compilation, and deterministic `__DATE__`/`__TIME__` definitions. Repeated builds from the same checkout, target, toolchain, package metadata, dependency set, compile profile, and source epoch must produce byte-identical `uqm` bytes.
 
-`rust/target/production-artifacts.json` records the executable, Rust static archive, C static archive, exact object sidecar, and provider report. Every entry includes role, repository-relative path, MIME type, byte length, SHA-256, and producing command. `prove` performs two genuinely empty/full release builds (removing the entire `rust/target/release` directory between each build), compares source/toolchain identity first, then all five artifacts by byte length and SHA-256, and records both digest sets and build identities as the determinism proof consumed by CI. `package` first runs the full `prove` determinism proof and validates staged evidence before installing the executable and manifest to `rust/target/uqm-package/<target>/`.
+`rust/target/production-artifacts.json` records the executable, Rust static archive, C static archive, exact object sidecar, and provider report. Every entry includes role, repository-relative path, MIME type, byte length, SHA-256, and producing command. `prove` performs two genuinely empty/full release builds (removing the entire `rust/target/release` directory between each build), compares source/toolchain identity first, then all five artifacts by byte length and SHA-256, and records both digest sets and build identities as the determinism proof consumed by CI. `package` first runs the full `prove` determinism proof and validates staged evidence. It installs the executable with exact mode `0500` at `rust/target/uqm-package/<target>/uqm` and rewrites the packaged manifest's executable path to that file, so bootstrap proof launches the package artifact itself.
 
 ## Clean-checkout replay
 

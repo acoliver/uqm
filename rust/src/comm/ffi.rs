@@ -1438,7 +1438,7 @@ pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
         return std::ptr::null();
     }
     let s = SetAbsStringTableIndex(phrases, index + i);
-    GetStringAddress(s) as *const u8
+    GetStringAddress(s).cast::<u8>()
 }
 
 /// Ported from C's c_get_alliance_name_full: full alliance name with CommanderName append.
@@ -1466,7 +1466,7 @@ unsafe fn get_alliance_name_full(
     let src_cstr = CStr::from_ptr(src);
     let src_bytes = src_cstr.to_bytes();
     let copy_len = (buf_len as usize - 1).min(src_bytes.len());
-    std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), buf as *mut u8, copy_len);
+    std::ptr::copy_nonoverlapping(src_bytes.as_ptr(), buf.cast::<u8>(), copy_len);
     *buf.add(copy_len) = 0;
 
     // If state==3, append CommanderName
@@ -1482,7 +1482,7 @@ unsafe fn get_alliance_name_full(
             if append_len > 0 {
                 std::ptr::copy_nonoverlapping(
                     cname_bytes.as_ptr(),
-                    buf.add(used) as *mut u8,
+                    buf.add(used).cast::<u8>(),
                     append_len,
                 );
                 *buf.add(used + append_len) = 0;

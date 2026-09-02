@@ -120,9 +120,14 @@ pub fn resolve_toolchain(root: &Path, target: &str) -> Result<ToolchainIdentity,
             &["--version"],
             &[],
         )?,
+        // RUSTC_LINKER is something this project exports for its own builds, so
+        // consulting it here would make resolution depend on whether that had
+        // already happened in the current process: a build and its verification
+        // would then disagree about the linker while agreeing on everything
+        // else. Take the explicit cargo channel or the resolved compiler.
         linker: resolve_tool(
             root,
-            &selector(&[linker_name.as_str(), "RUSTC_LINKER"], &cc_selector),
+            &selector(&[linker_name.as_str()], &cc_selector),
             &["--version"],
             &[],
         )?,
@@ -251,7 +256,7 @@ fn reject_target_specific_toolchain_overrides(
             Ok(key) => key,
             Err(_) => continue,
         };
-        if !key.starts_with("CARGO_TARGET_") {
+        if !key.starts_with("CARGO_TARGET_") || key == "CARGO_TARGET_DIR" {
             continue;
         }
         let expected = canonical.and_then(|toolchain| canonical_target_value(toolchain, &key));
@@ -566,6 +571,15 @@ mod tests {
 
     #[test]
     #[serial]
+    fn reject_ambient_build_flags_accepts_cargo_target_directory() {
+        clean_environment_for_tests();
+        env::set_var("CARGO_TARGET_DIR", "/tmp/uqm-target");
+        assert!(reject_target_specific_toolchain_overrides(None).is_ok());
+        env::remove_var("CARGO_TARGET_DIR");
+    }
+
+    #[test]
+    #[serial]
     fn reject_ambient_build_flags_rejects_target_linker_override() {
         clean_environment_for_tests();
         env::set_var("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER", "gcc-12");
@@ -667,7 +681,16 @@ mod tests {
         env::remove_var("PKG_CONFIG_SYSROOT_DIR");
         env::remove_var("PKG_CONFIG_LIBDIR");
         env::remove_var("CARGO_PROFILE_RELEASE_OPT_LEVEL");
-        env::remove_var("CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS");
-        env::remove_var("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER");
+        env::remove_var("CARGO_TARGET_DIR");
+        // The canonical build exports CARGO_TARGET_<TRIPLE>_LINKER for whichever
+        // triple it is running on, so naming triples here would leave the
+        // variable set on every platform the list forgot.
+        let target_specific: Vec<String> = env::vars_os()
+            .filter_map(|(name, _)| name.into_string().ok())
+            .filter(|key| key.starts_with("CARGO_TARGET_") && key != "CARGO_TARGET_DIR")
+            .collect();
+        for key in target_specific {
+            env::remove_var(key);
+        }
     }
 }

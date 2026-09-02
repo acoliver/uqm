@@ -1,400 +1,1808 @@
-name: Rust Quality Checks
+name: Rust quality
 
 on:
   push:
-    branches: [ main, develop, phase0-foundation ]
-  pull_request:
-    branches: [ main, develop ]
+  pull_request_target:
 
 concurrency:
-  group: rust-quality-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: rust-quality-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: false
 
 jobs:
-  ownership-strict-link:
-    runs-on: ubuntu-latest
+  plan:
+    name: ${{ github.event_name == 'pull_request_target' && 'Derive supported S2 matrix' || 'Derive supported S2 matrix (non-merge)' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
+      actions: read
       contents: read
+    outputs:
+      source_sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      tools: ${{ steps.plan.outputs.tools }}
+      actions: ${{ steps.plan.outputs.actions }}
+      native_acceptance: ${{ steps.plan.outputs.native_acceptance }}
+      retention_days: ${{ steps.plan_authority.outputs.retention_days }}
+      workflow: ${{ steps.plan.outputs.workflow }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-      - name: Validate ownership mutations
-        run: cargo test --manifest-path rust/ownership/Cargo.toml --all-targets
-      - name: Lint ownership validator
-        run: cargo clippy --manifest-path rust/ownership/Cargo.toml --all-targets -- -D warnings
-      - name: Verify focused S1 strict production-link contract
-        run: rust/ownership/verify-fixture.sh
-      - name: Upload focused S1 strict-link artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: ownership-s1-strict-link-fixture
-          path: rust/target/ownership-strict-link-fixture/
-          if-no-files-found: error
-
-
-  s3-linked-test-fixtures:
-    name: S3 pure and strict linked-test fixtures
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-          rustflags: ''
-      - name: Install production prerequisites
+      - name: Seed plan transport fallback
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libsdl2-dev libpng-dev liblzma-dev libbz2-dev pkg-config
-      - name: Run S3 canonical fixture command
+          set -euo pipefail
+          root="${RUNNER_TEMP}/s4-plan-evidence"
+          mkdir -p "${root}"
+          ROOT="${root}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["ROOT"])
+          temporary = root / ".index.json.seed"
+          fallback = {
+              "schema": "uqm-s4-transport-finalizer-fallback-v1",
+              "job": "plan",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": None,
+              "first_failed_contract": "transport.finalize",
+              "detail": "transport finalizer did not replace the pre-seeded fallback index",
+          }
+          temporary.write_text(json.dumps(fallback, indent=2) + "\n")
+          temporary.replace(root / "index.json")
+          PY
+      - name: Resolve exact plan authority
+        id: plan_authority
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_REPOSITORY: ${{ github.repository }}
+          BASE_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TEMP}/s4-plan-evidence"
+          authority="${root}/authority-snapshot.json"
+          fetch_authority() {
+            local repository="$1"
+            local revision="$2"
+            local response="$3"
+            local output="$4"
+            curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+              --connect-timeout 30 --max-time 120 --max-filesize 1048576 \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${repository}/contents/rust/ci/gates.json?ref=${revision}" \
+              > "${response}"
+            test "$(wc -c < "${response}")" -le 1048576
+            jq -er '.content' "${response}" | base64 --decode > "${output}"
+            test "$(wc -c < "${output}")" -le 1048576
+            test "$(jq -er '.schema' "${output}")" = "uqm-s4-ci-authority-v1"
+          }
+          fetch_authority \
+            "${SOURCE_REPOSITORY}" "${SOURCE_SHA}" \
+            "${RUNNER_TEMP}/s4-plan-source-authority-response.json" "${authority}.source"
+          fetch_authority \
+            "${BASE_REPOSITORY}" "${BASE_SHA}" \
+            "${RUNNER_TEMP}/s4-plan-base-authority-response.json" "${authority}.base"
+          cmp --silent "${authority}.source" "${authority}.base"
+          retention_days="$(jq -er '
+            .actions.artifact_retention_days
+            | select(type == "number" and . == floor and . >= 1 and . <= 90)' \
+            "${authority}.source")"
+          mv "${authority}.source" "${authority}"
+          rm "${authority}.base"
+          printf 'retention_days=%s\n' "${retention_days}" >> "${GITHUB_OUTPUT}"
+      - name: Check out base-owned controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .s4-controller-source
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Build base-owned external xtask
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/s4-plan-cargo-home
+          CARGO_TARGET_DIR: ${{ runner.temp }}/s4-plan-target
+        run: |
+          set -euo pipefail
+          authority="${RUNNER_TEMP}/s4-plan-evidence/authority-snapshot.json"
+          controller="${RUNNER_TEMP}/s4-controller-source"
+          test ! -e "${controller}"
+          mv "${GITHUB_WORKSPACE}/.s4-controller-source" "${controller}"
+          supervisor="${RUNNER_TEMP}/s4-plan-workflow-supervisor.py"
+          cp "${controller}/rust/xtask/src/ci/workflow_supervisor.py" "${supervisor}"
+          supervise() {
+            local label="$1"
+            shift
+            python3 "${supervisor}" \
+              --authority "${authority}" \
+              --receipt "${RUNNER_TEMP}/s4-plan-evidence/${label}.result.json" \
+              --stdout "${RUNNER_TEMP}/s4-plan-evidence/${label}.stdout.log" \
+              --stderr "${RUNNER_TEMP}/s4-plan-evidence/${label}.stderr.log" \
+              -- "$@"
+          }
+          packages=()
+          while IFS= read -r package; do
+            packages+=("${package}")
+          done < <(jq -er '.tools.native_prerequisites.linux[]' "${authority}")
+          test "${#packages[@]}" -gt 0
+          supervise bootstrap-apt-update sudo apt-get update
+          supervise bootstrap-apt-install sudo apt-get install --yes "${packages[@]}"
+          rust_version="$(jq -er '.tools.rust.version' "${authority}")"
+          rust_commit="$(jq -er '.tools.rust.integrity_identity' "${authority}")"
+          supervise bootstrap-rustup rustup toolchain install "${rust_version}" --profile minimal
+          test "$(rustup run "${rust_version}" rustc -vV | sed -n 's/^commit-hash: //p')" = "${rust_commit}"
+          supervise bootstrap-xtask-build cargo "+${rust_version}" build --locked \
+            --manifest-path "${controller}/rust/xtask/Cargo.toml"
+      - name: Check out exact source
+        id: checkout_plan
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Derive untrusted plan with base-owned controller
+        id: plan_build
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/s4-plan-cargo-home
+          CARGO_TARGET_DIR: ${{ runner.temp }}/s4-plan-target
+        run: |
+          set -euo pipefail
+          export EVIDENCE_DIR="${RUNNER_TEMP}/s4-plan-evidence"
+          xtask="${CARGO_TARGET_DIR}/debug/uqm-xtask"
+          python3 "${RUNNER_TEMP}/s4-plan-workflow-supervisor.py" \
+            --authority "${EVIDENCE_DIR}/authority-snapshot.json" \
+            --receipt "${EVIDENCE_DIR}/ci-plan.result.json" \
+            --stdout "${EVIDENCE_DIR}/ci-plan.json" \
+            --stderr "${EVIDENCE_DIR}/ci-plan.stderr.log" \
+            -- "${xtask}" ci plan
+      - name: Validate and publish trusted plan
+        id: plan
         shell: bash
         run: |
-          set -o pipefail
-          mkdir -p rust/target
-          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- test 2>&1 | tee rust/target/s3-test.log
-      - name: Upload S3 fixture evidence
+          set -euo pipefail
+          plan="${RUNNER_TEMP}/s4-plan-evidence/ci-plan.json"
+          authority="${RUNNER_TEMP}/s4-plan-evidence/authority-snapshot.json"
+          trusted_tuples='[{"os":"macos","architecture":"aarch64","tuple":"macos-aarch64","runner":"macos-15","expected_uname":"arm64"},{"os":"macos","architecture":"x86_64","tuple":"macos-x86_64","runner":"macos-15-intel","expected_uname":"x86_64"},{"os":"linux","architecture":"aarch64","tuple":"linux-aarch64","runner":"ubuntu-24.04-arm","expected_uname":"aarch64"},{"os":"linux","architecture":"x86_64","tuple":"linux-x86_64","runner":"ubuntu-24.04","expected_uname":"x86_64"}]'
+          jq -e \
+            --argjson trusted_tuples "${trusted_tuples}" \
+            --slurpfile authority "${authority}" \
+            'type == "object"
+             and .schema == "uqm-s4-plan-v1"
+             and .authority == "rust/ci/gates.json"
+             and .tuples == $trusted_tuples
+             and .authority_contract == $authority[0]' \
+            "${plan}" >/dev/null
+          matrix="$(jq -cer --argjson trusted_tuples "${trusted_tuples}" \
+            'select(.tuples == $trusted_tuples) | {include: .tuples}' "${plan}")"
+          tools="$(jq -cer '.authority_contract.tools | select(type == "object")' "${plan}")"
+          actions="$(jq -cer '.authority_contract.actions | select(type == "object")' "${plan}")"
+          native_acceptance="$(jq -cer \
+            '.authority_contract.native_acceptance | select(type == "object")' "${plan}")"
+          workflow="$(jq -cer \
+            '.authority_contract.workflow | select(type == "object")' "${plan}")"
+          {
+            printf 'matrix=%s\n' "${matrix}"
+            printf 'tools=%s\n' "${tools}"
+            printf 'actions=%s\n' "${actions}"
+            printf 'native_acceptance=%s\n' "${native_acceptance}"
+            printf 'workflow=%s\n' "${workflow}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Finalize plan transport evidence
         if: always()
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout_plan.outcome }}
+          PLAN_BUILD_OUTCOME: ${{ steps.plan_build.outcome }}
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          JOB_STATUS: ${{ job.status }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          export EVIDENCE_DIR="${RUNNER_TEMP}/s4-plan-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+          python3 -P - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          import sys
+          from pathlib import Path
+
+          root = Path(os.environ["EVIDENCE_DIR"])
+          nofollow = getattr(os, "O_NOFOLLOW", 0)
+          nonblock = getattr(os, "O_NONBLOCK", 0)
+          root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+          if not stat.S_ISDIR(os.fstat(root_fd).st_mode):
+              raise RuntimeError("transport evidence root is not a regular directory")
+
+          def read_descriptor(descriptor, label, limit=None):
+              if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                  raise RuntimeError(f"transport member is not regular: {label}")
+              chunks = []
+              total = 0
+              while True:
+                  read_size = 65536 if limit is None else min(65536, limit - total + 1)
+                  chunk = os.read(descriptor, read_size)
+                  if not chunk:
+                      return b"".join(chunks)
+                  total += len(chunk)
+                  if limit is not None and total > limit:
+                      raise RuntimeError(f"transport member exceeds authority byte limit: {label}")
+                  chunks.append(chunk)
+
+          def read_regular_path(path):
+              components = Path(path).parts
+              if not components:
+                  raise RuntimeError("empty authority path")
+              descriptor = os.open("/" if Path(path).is_absolute() else ".", os.O_RDONLY | os.O_DIRECTORY | nofollow)
+              try:
+                  for position, component in enumerate(components):
+                      if component in ("/", "."):
+                          continue
+                      next_descriptor = os.open(
+                          component,
+                          os.O_RDONLY | nofollow | nonblock,
+                          dir_fd=descriptor,
+                      )
+                      os.close(descriptor)
+                      descriptor = next_descriptor
+                      mode = os.fstat(descriptor).st_mode
+                      if position + 1 < len(components) and not stat.S_ISDIR(mode):
+                          raise RuntimeError(f"authority path component is not a directory: {component}")
+                  return read_descriptor(descriptor, path)
+              finally:
+                  os.close(descriptor)
+
+          def atomic_write(name, data, temporary_name):
+              try:
+                  os.unlink(temporary_name, dir_fd=root_fd)
+              except FileNotFoundError:
+                  pass
+              flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow
+              descriptor = os.open(temporary_name, flags, 0o600, dir_fd=root_fd)
+              try:
+                  remaining = memoryview(data)
+                  while remaining:
+                      written = os.write(descriptor, remaining)
+                      if written == 0:
+                          raise RuntimeError(f"short write for {temporary_name}")
+                      remaining = remaining[written:]
+                  os.fsync(descriptor)
+              finally:
+                  os.close(descriptor)
+              os.replace(temporary_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+
+          fallback = {
+              "schema": "uqm-s4-transport-finalizer-fallback-v1",
+              "job": "plan",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": None,
+              "first_failed_contract": "transport.finalize",
+              "detail": "transport finalizer did not replace the pre-seeded fallback index",
+          }
+          atomic_write(
+              "index.json",
+              (json.dumps(fallback, indent=2) + "\n").encode(),
+              ".index.json.tmp",
+          )
+
+          def collect(directory_fd):
+              members = []
+              entries_seen = 0
+              path_bytes_seen = 0
+              content_bytes_seen = 0
+              pending = [(os.dup(directory_fd), "")]
+              try:
+                  while pending:
+                      current_fd, prefix = pending.pop()
+                      try:
+                          names = []
+                          with os.scandir(current_fd) as iterator:
+                              for entry in iterator:
+                                  relative = f"{prefix}/{entry.name}" if prefix else entry.name
+                                  encoded_length = len(relative.encode("utf-8"))
+                                  entries_seen += 1
+                                  path_bytes_seen += encoded_length
+                                  if (
+                                      entries_seen > member_count_limit
+                                      or encoded_length > path_limit
+                                      or path_bytes_seen > aggregate_path_limit
+                                  ):
+                                      raise RuntimeError("transport tree exceeds authority path or member limit")
+                                  names.append(entry.name)
+                          for name in sorted(names):
+                              relative = f"{prefix}/{name}" if prefix else name
+                              if relative == "index.json":
+                                  continue
+                              descriptor = os.open(
+                                  name,
+                                  os.O_RDONLY | nofollow | nonblock,
+                                  dir_fd=current_fd,
+                              )
+                              try:
+                                  metadata = os.fstat(descriptor)
+                                  if stat.S_ISDIR(metadata.st_mode):
+                                      pending.append((descriptor, relative))
+                                      descriptor = None
+                                  elif stat.S_ISREG(metadata.st_mode):
+                                      remaining = aggregate_limit - content_bytes_seen
+                                      if metadata.st_size > member_limit or metadata.st_size > remaining:
+                                          raise RuntimeError("transport tree exceeds authority content limit")
+                                      data = read_descriptor(descriptor, relative, min(member_limit, remaining))
+                                      if len(data) != metadata.st_size:
+                                          raise RuntimeError(f"transport member changed while reading: {relative}")
+                                      content_bytes_seen += len(data)
+                                      members.append({
+                                          "path": relative,
+                                          "byte_length": len(data),
+                                          "sha256": hashlib.sha256(data).hexdigest(),
+                                      })
+                                  else:
+                                      raise RuntimeError(f"transport member is not regular: {relative}")
+                              finally:
+                                  if descriptor is not None:
+                                      os.close(descriptor)
+                      finally:
+                          os.close(current_fd)
+              finally:
+                  for descriptor, _ in pending:
+                      os.close(descriptor)
+              members.sort(key=lambda member: member["path"])
+              return members
+
+          setup = {
+              "schema": "uqm-s4-workflow-setup-results-v1",
+              "job": "plan",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": None,
+              "steps": [
+                  {"step": "plan-build", "outcome": os.environ["PLAN_BUILD_OUTCOME"]},
+                  {"step": "checkout", "outcome": os.environ["CHECKOUT_OUTCOME"]},
+                  {"step": "plan", "outcome": os.environ["PLAN_OUTCOME"]},
+              ],
+          }
+          atomic_write(
+              "workflow-setup-results.json",
+              (json.dumps(setup, indent=2) + "\n").encode(),
+              ".workflow-setup-results.tmp",
+          )
+          try:
+              authority_descriptor = os.open(
+                  "authority-snapshot.json",
+                  os.O_RDONLY | nofollow | nonblock,
+                  dir_fd=root_fd,
+              )
+              try:
+                  authority_bytes = read_descriptor(
+                      authority_descriptor,
+                      "authority-snapshot.json",
+                      1024 * 1024,
+                  )
+              finally:
+                  os.close(authority_descriptor)
+              authority_value = json.loads(authority_bytes)
+              actions = authority_value["actions"]
+              member_limit = actions["evidence_snapshot_member_limit_bytes"]
+              member_count_limit = actions["evidence_snapshot_member_count_limit"]
+              aggregate_limit = actions["evidence_snapshot_aggregate_limit_bytes"]
+              path_limit = actions["evidence_snapshot_path_limit_bytes"]
+              aggregate_path_limit = actions["evidence_snapshot_aggregate_path_limit_bytes"]
+              limits = [member_limit, member_count_limit, aggregate_limit, path_limit, aggregate_path_limit]
+              if any(not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0 for limit in limits):
+                  raise ValueError("authority transport traversal limits are invalid")
+          except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError, RuntimeError):
+              sys.exit(0)
+          try:
+              checked_out_authority = read_regular_path(Path("rust/ci/gates.json"))
+          except FileNotFoundError:
+              if os.environ["CHECKOUT_OUTCOME"] == "success":
+                  raise RuntimeError("successful checkout omitted machine authority")
+          else:
+              if checked_out_authority != authority_bytes:
+                  raise RuntimeError("resolved and checked-out machine authority differ")
+          files = collect(root_fd)
+          index = {
+              "schema": "uqm-s4-transport-evidence-v1",
+              "job": "plan",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "job_status": os.environ["JOB_STATUS"],
+              "files": files,
+          }
+          atomic_write(
+              "index.json",
+              (json.dumps(index, indent=2) + "\n").encode(),
+              ".index.json.tmp",
+          )
+          PY
+      - name: Upload plan evidence
+        id: upload_plan
+        if: always() && steps.plan_authority.outputs.retention_days != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: s3-linked-test-fixtures
-          path: |
-            rust/target/s3-test.log
-            rust/target/debug/build/uqm-*/out/native-build-evidence.json
-            rust/target/debug/build/uqm-*/out/provider-report.json
-            rust/target/debug/build/uqm-*/out/uqm-c-objects.manifest
+          name: s4-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-plan-evidence
+          if-no-files-found: error
+          retention-days: ${{ steps.plan_authority.outputs.retention_days }}
+      - name: Upload plan evidence without unresolved retention
+        id: upload_plan_authority_unavailable
+        if: always() && steps.plan_authority.outputs.retention_days == ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s4-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-plan-evidence
+          if-no-files-found: error
+      - name: Record plan upload receipt
+        if: always()
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ steps.plan_authority.outputs.retention_days != '' && steps.upload_plan.outputs.artifact-digest || steps.upload_plan_authority_unavailable.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.plan_authority.outputs.retention_days != '' && steps.upload_plan.outputs.artifact-id || steps.upload_plan_authority_unavailable.outputs.artifact-id }}
+          ARTIFACT_NAME: s4-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          ARTIFACT_URL: ${{ steps.plan_authority.outputs.retention_days != '' && steps.upload_plan.outputs.artifact-url || steps.upload_plan_authority_unavailable.outputs.artifact-url }}
+          GH_TOKEN: ${{ github.token }}
+          RETENTION_DAYS: ${{ steps.plan_authority.outputs.retention_days }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          UPLOAD_OUTCOME: ${{ steps.plan_authority.outputs.retention_days != '' && steps.upload_plan.outcome || steps.upload_plan_authority_unavailable.outcome }}
+        run: |
+          set -euo pipefail
+          receipt="${RUNNER_TEMP}/s4-plan-upload-receipt"
+          mkdir -p "${receipt}"
+          size=""
+          authority="${RUNNER_TEMP}/s4-plan-evidence/authority-snapshot.json"
+          if [[ ! -s "${authority}" || -z "${RETENTION_DAYS}" ]]; then
+            RECEIPT_ROOT="${receipt}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          succeeded = os.environ["UPLOAD_OUTCOME"] == "success"
+          receipt = {
+              "schema": "uqm-s4-upload-authority-unavailable-v1",
+              "job": "plan",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None,
+              "artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None,
+              "artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None,
+              "retention_days": None,
+              "size_in_bytes": None,
+              "upload_outcome": os.environ["UPLOAD_OUTCOME"],
+              "failure": "exact authority could not be resolved before checkout",
+          }
+          (Path(os.environ["RECEIPT_ROOT"]) / "upload-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n"
+          )
+          PY
+            exit 0
+          fi
+          connect_timeout="$(jq -er '.actions.github_api_connect_timeout_seconds' "${authority}")"
+          total_timeout="$(jq -er '.actions.github_api_total_timeout_seconds' "${authority}")"
+          if [[ "${UPLOAD_OUTCOME}" == "success" ]]; then
+            test -n "${ARTIFACT_ID}"
+            test -n "${ARTIFACT_URL}"
+            test -n "${ARTIFACT_DIGEST}"
+            size="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+              --connect-timeout "${connect_timeout}" --max-time "${total_timeout}" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+              | jq -er --arg name "${ARTIFACT_NAME}" --argjson id "${ARTIFACT_ID}" \
+                'select(.id == $id and .name == $name and .expired == false and .size_in_bytes > 0) | .size_in_bytes')"
+          fi
+          RECEIPT_ROOT="${receipt}" ARTIFACT_SIZE="${size}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          succeeded = os.environ["UPLOAD_OUTCOME"] == "success"
+          receipt = {
+              "schema": "uqm-s4-upload-receipt-v1",
+              "job": "plan",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None,
+              "artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None,
+              "artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None,
+              "retention_days": int(os.environ["RETENTION_DAYS"]),
+              "size_in_bytes": int(os.environ["ARTIFACT_SIZE"]) if succeeded else None,
+              "upload_outcome": os.environ["UPLOAD_OUTCOME"],
+          }
+          (Path(os.environ["RECEIPT_ROOT"]) / "upload-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n"
+          )
+          PY
+      - name: Upload plan upload receipt
+        if: always() && steps.plan_authority.outputs.retention_days != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s4-plan-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-plan-upload-receipt
+          if-no-files-found: error
+          retention-days: ${{ steps.plan_authority.outputs.retention_days }}
+      - name: Upload plan upload receipt without unresolved retention
+        if: always() && steps.plan_authority.outputs.retention_days == ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s4-plan-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-plan-upload-receipt
           if-no-files-found: error
 
-
-  reproducible-build-contract:
-    name: Clean checkout root command (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+  gates:
+    name: ${{ github.event_name == 'pull_request_target' && format('S4 gates ({0})', matrix.tuple) || format('S4 gates ({0}, non-merge)', matrix.tuple) }}
+    env:
+      RUSTUP_TOOLCHAIN: ${{ fromJSON(needs.plan.outputs.tools).rust.version }}
+      NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}
+    needs: plan
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            expected_arch: x86_64
-            tuple: linux-x86_64
-          - os: ubuntu-24.04-arm
-            expected_arch: aarch64
-            tuple: linux-aarch64
-          - os: macos-15-intel
-            expected_arch: x86_64
-            tuple: macos-x86_64
-          - os: macos-15
-            expected_arch: arm64
-            tuple: macos-aarch64
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ fromJSON(needs.plan.outputs.workflow).gates_job_timeout_minutes }}
     permissions:
+      actions: read
       contents: read
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Seed gate transport fallback
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TUPLE: ${{ matrix.tuple }}
+        run: |
+          set -euo pipefail
+          root="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${root}"
+          ROOT="${root}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["ROOT"])
+          temporary = root / ".index.json.seed"
+          fallback = {
+              "schema": "uqm-s4-transport-finalizer-fallback-v1",
+              "job": "gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": os.environ["TUPLE"],
+              "first_failed_contract": "transport.finalize",
+              "detail": "transport finalizer did not replace the pre-seeded fallback index",
+          }
+          temporary.write_text(json.dumps(fallback, indent=2) + "\n")
+          temporary.replace(root / "index.json")
+          PY
+      - name: Check out base-owned controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.workflow_sha }}
+          path: .s4-controller-source
           clean: true
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Build base-owned xtask outside required cache paths
+        id: xtask_build
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/s4-bootstrap-cargo-home
+          CARGO_TARGET_DIR: ${{ runner.temp }}/s4-xtask-target
+          RUSTUP_HOME: ${{ runner.temp }}/s4-rustup-home
+          MATRIX_OS: ${{ matrix.os }}
+          TOOLS_JSON: ${{ needs.plan.outputs.tools }}
+        run: |
+          set -euo pipefail
+          runner_uid="$(id -u)"
+          chmod 0750 "${RUNNER_TEMP}"
+          verify_trusted_path() {
+            local path="$1"
+            local kind="$2"
+            local mode="$3"
+            test "$(find -P "${path}" -prune -type "${kind}" -user "${runner_uid}" -perm "${mode}" -print)" = "${path}"
+          }
+          verify_trusted_path "${RUNNER_TEMP}" d 0750
+          controller="${RUNNER_TEMP}/s4-controller-source"
+          test ! -e "${controller}"
+          mv "${GITHUB_WORKSPACE}/.s4-controller-source" "${controller}"
+          supervisor="${RUNNER_TEMP}/s4-gates-workflow-supervisor.py"
+          native_helper="${RUNNER_TEMP}/s4-gates-workflow-native-content.py"
+          authority="${RUNNER_TEMP}/s4-gates-authority.json"
+          install -m 0500 "${controller}/rust/xtask/src/ci/workflow_supervisor.py" "${supervisor}"
+          install -m 0500 "${controller}/rust/xtask/src/ci/workflow_native_content.py" "${native_helper}"
+          install -m 0440 "${controller}/rust/ci/gates.json" "${authority}"
+          verify_trusted_path "${supervisor}" f 0500
+          verify_trusted_path "${native_helper}" f 0500
+          verify_trusted_path "${authority}" f 0440
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
+          supervise_bootstrap() {
+            local label="$1"
+            shift
+            local prefix="${EVIDENCE_DIR}/xtask-build-bootstrap-${label}"
+            if python3 "${supervisor}" \
+              --authority "${authority}" \
+              --receipt "${prefix}.result.json" \
+              --stdout "${prefix}.stdout.log" \
+              --stderr "${prefix}.stderr.log" \
+              -- "$@"; then
+              return 0
+            fi
+            cp "${prefix}.result.json" "${EVIDENCE_DIR}/xtask-build.result.json"
+            return 1
+          }
+          packages=()
+          while IFS= read -r package; do
+            packages+=("${package}")
+          done < <(jq -er --arg os "${MATRIX_OS}" '.native_prerequisites[$os][]' <<<"${TOOLS_JSON}")
+          test "${#packages[@]}" -gt 0
+          if [[ "${MATRIX_OS}" == "linux" ]]; then
+            supervise_bootstrap prerequisites-apt-update sudo apt-get update
+            supervise_bootstrap prerequisites-apt-install sudo apt-get install --yes "${packages[@]}"
+          else
+            supervise_bootstrap prerequisites-brew brew install "${packages[@]}"
+          fi
+          rust_version="$(jq -er '.rust.version' <<<"${TOOLS_JSON}")"
+          rust_commit="$(jq -er '.rust.integrity_identity' <<<"${TOOLS_JSON}")"
+          supervise_bootstrap xtask-rustup rustup toolchain install "${rust_version}" --profile minimal
+          test "$(rustup run "${rust_version}" rustc -vV | sed -n 's/^commit-hash: //p')" = "${rust_commit}"
+          python3 "${supervisor}" \
+            --authority "${authority}" \
+            --receipt "${EVIDENCE_DIR}/xtask-build.result.json" \
+            --stdout "${EVIDENCE_DIR}/xtask-build.stdout.log" \
+            --stderr "${EVIDENCE_DIR}/xtask-build.stderr.log" \
+            -- cargo "+${rust_version}" build --locked --manifest-path "${controller}/rust/xtask/Cargo.toml"
+          trusted_xtask="${RUNNER_TEMP}/s4-gates-controller"
+          install -m 0550 "${CARGO_TARGET_DIR}/debug/uqm-xtask" "${trusted_xtask}"
+          verify_trusted_path "${trusted_xtask}" f 0550
+      - name: Check out exact source
+        id: checkout_gates
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          toolchain: stable
-          components: rustfmt, clippy
-          rustflags: ''
-          cache: false
-      - name: Assert official runner architecture
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify native runner architecture
+        id: architecture
+        shell: bash
+        env:
+          EXPECTED_UNAME: ${{ matrix.expected_uname }}
         run: |
-          actual=$(uname -m)
-          test "$actual" = "${{ matrix.expected_arch }}" || { echo "expected ${{ matrix.expected_arch }}, got $actual"; exit 1; }
-      - name: Install Ubuntu production prerequisites
-        if: runner.os == 'Linux'
+          set -euo pipefail
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+          exec > >(tee "${EVIDENCE_DIR}/architecture.stdout.log") \
+            2> >(tee "${EVIDENCE_DIR}/architecture.stderr.log" >&2)
+          actual="$(uname -m)"
+          test "${actual}" = "${EXPECTED_UNAME}"
+      - name: Install native prerequisites
+        id: prerequisites
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          MATRIX_OS: ${{ matrix.os }}
+          TOOLS_JSON: ${{ needs.plan.outputs.tools }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libsdl2-dev libpng-dev liblzma-dev libbz2-dev pkg-config
-      - name: Install macOS production prerequisites
+          set -euo pipefail
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+          supervise() {
+            local label="$1"
+            shift
+            python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+              --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
+              --receipt "${EVIDENCE_DIR}/${label}.result.json" \
+              --stdout "${EVIDENCE_DIR}/${label}.stdout.log" \
+              --stderr "${EVIDENCE_DIR}/${label}.stderr.log" \
+              -- "$@"
+          }
+          packages=()
+          while IFS= read -r package; do
+            packages+=("${package}")
+          done < <(jq -er --arg os "${MATRIX_OS}" '.native_prerequisites[$os][]' <<<"${TOOLS_JSON}")
+          test "${#packages[@]}" -gt 0
+          if [[ "${MATRIX_OS}" == "linux" ]]; then
+            supervise prerequisites-apt-update sudo apt-get update
+            supervise prerequisites-apt-install sudo apt-get install --yes "${packages[@]}"
+          else
+            supervise prerequisites-brew brew install "${packages[@]}"
+          fi
+      - name: Install pinned gate tools
+        id: tools
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          CARGO_HOME: ${{ runner.temp }}/s4-bootstrap-cargo-home
+          CARGO_TARGET_DIR: ${{ runner.temp }}/s4-tool-target
+          RUSTUP_HOME: ${{ runner.temp }}/s4-rustup-home
+          TOOLS_JSON: ${{ needs.plan.outputs.tools }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+          supervise() {
+            local label="$1"
+            shift
+            python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+              --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
+              --receipt "${EVIDENCE_DIR}/${label}.result.json" \
+              --stdout "${EVIDENCE_DIR}/${label}.stdout.log" \
+              --stderr "${EVIDENCE_DIR}/${label}.stderr.log" \
+              -- "$@"
+          }
+          tools="${RUNNER_TEMP}/s4-tools"
+          rust_commit="$(jq -er '.rust.integrity_identity' <<<"${TOOLS_JSON}")"
+          supervise tools-rustup rustup toolchain install "${RUSTUP_TOOLCHAIN}" --profile minimal
+          test "$(rustup run "${RUSTUP_TOOLCHAIN}" rustc -vV | sed -n 's/^commit-hash: //p')" = "${rust_commit}"
+          supervise tools-venv python3 -P -m venv "${tools}/python"
+          lizard_requirements="${RUNNER_TEMP}/s4-lizard-requirements.txt"
+          jq -er '.lizard.distribution_requirements[] | "\(.requirement) --hash=sha256:\(.sha256)"' <<<"${TOOLS_JSON}" > "${lizard_requirements}"
+          audit_version="$(jq -er '.cargo_audit.version' <<<"${TOOLS_JSON}")"
+          audit_sha256="$(jq -er '.cargo_audit.integrity_identity' <<<"${TOOLS_JSON}")"
+          cov_version="$(jq -er '.cargo_llvm_cov.version' <<<"${TOOLS_JSON}")"
+          cov_sha256="$(jq -er '.cargo_llvm_cov.integrity_identity' <<<"${TOOLS_JSON}")"
+          actionlint_version="$(jq -er '.actionlint.version' <<<"${TOOLS_JSON}")"
+          actionlint_manifest_sha256="$(jq -er '.actionlint.integrity_identity' <<<"${TOOLS_JSON}")"
+          actionlint_member_limit="$(jq -er '.actions.evidence_snapshot_member_limit_bytes' "${RUNNER_TEMP}/s4-gates-authority.json")"
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64) actionlint_platform="linux-amd64" ;;
+            Linux-ARM64) actionlint_platform="linux-arm64" ;;
+            macOS-X64) actionlint_platform="darwin-amd64" ;;
+            macOS-ARM64) actionlint_platform="darwin-arm64" ;;
+            *) printf 'unsupported actionlint platform: %s-%s\n' "${RUNNER_OS}" "${RUNNER_ARCH}" >&2; exit 1 ;;
+          esac
+          actionlint_sha256="$(jq -er --arg platform "${actionlint_platform}" \
+            '.actionlint.distribution_requirements[] | select(.requirement == $platform) | .sha256' \
+            <<<"${TOOLS_JSON}")"
+          actionlint_archive_platform="${actionlint_platform//-/_}"
+          supervise tools-lizard "${tools}/python/bin/pip" install --disable-pip-version-check --require-hashes -r "${lizard_requirements}"
+          lizard_patch="${RUNNER_TEMP}/s4-controller-source/$(jq -er '.lizard.source_patch.path' <<<"${TOOLS_JSON}")"
+          lizard_patch_sha256="$(jq -er '.lizard.source_patch.sha256' <<<"${TOOLS_JSON}")"
+          lizard_patch_target="$(jq -er '.lizard.source_patch.target' <<<"${TOOLS_JSON}")"
+          lizard_target_before="$(jq -er '.lizard.source_patch.target_sha256_before' <<<"${TOOLS_JSON}")"
+          lizard_target_after="$(jq -er '.lizard.source_patch.target_sha256_after' <<<"${TOOLS_JSON}")"
+          printf '%s  %s\n' "${lizard_patch_sha256}" "${lizard_patch}" | shasum -a 256 -c -
+          lizard_packages="$("${tools}/python/bin/python" -P -c 'import lizard_languages, pathlib; print(pathlib.Path(lizard_languages.__file__).resolve().parent.parent)')"
+          printf '%s  %s\n' "${lizard_target_before}" "${lizard_packages}/${lizard_patch_target}" | shasum -a 256 -c -
+          supervise tools-lizard-patch patch --batch --strip 1 --directory "${lizard_packages}" --input "${lizard_patch}"
+          printf '%s  %s\n' "${lizard_target_after}" "${lizard_packages}/${lizard_patch_target}" | shasum -a 256 -c -
+          mkdir -p "${tools}/bin"
+          ln -s "${tools}/python/bin/lizard" "${tools}/bin/lizard"
+          install_verified_cargo_tool() {
+            local name="$1"
+            local version="$2"
+            local expected_sha256="$3"
+            local label="$4"
+            local archive="${RUNNER_TEMP}/${name}-${version}.crate"
+            local source_parent="${RUNNER_TEMP}/s4-verified-cargo-sources"
+            local source="${source_parent}/${name}-${version}"
+            local member_limit
+            member_limit="$(jq -er '.actions.evidence_snapshot_member_limit_bytes' "${RUNNER_TEMP}/s4-gates-authority.json")"
+            supervise "${label}-download" curl --proto '=https' --tlsv1.2 --location --fail \
+              --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+              --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+              --max-filesize "${member_limit}" --output "${archive}" \
+              "https://crates.io/api/v1/crates/${name}/${version}/download"
+            printf '%s  %s\n' "${expected_sha256}" "${archive}" | shasum -a 256 -c -
+            rm -rf "${source}"
+            mkdir -p "${source_parent}"
+            python3 -P - "${archive}" "${source_parent}" "${name}-${version}" \
+              "${RUNNER_TEMP}/s4-gates-authority.json" <<'PYTHON'
+          import json, pathlib, sys, tarfile
+          archive, destination, expected_root, authority_path = sys.argv[1:]
+          actions = json.load(open(authority_path, encoding="utf-8"))["actions"]
+          count = total = path_total = 0
+          with tarfile.open(archive, "r:gz") as source:
+              members = source.getmembers()
+              for member in members:
+                  path = pathlib.PurePosixPath(member.name)
+                  count += 1
+                  total += member.size
+                  path_total += len(member.name.encode("utf-8"))
+                  if (not member.name or path.is_absolute() or ".." in path.parts
+                          or path.parts[0] != expected_root
+                          or not (member.isdir() or member.isfile())):
+                      raise SystemExit(f"unsafe Cargo archive member: {member.name!r}")
+              if count > actions["evidence_snapshot_member_count_limit"]:
+                  raise SystemExit("Cargo archive member-count limit exceeded")
+              if total > actions["evidence_snapshot_aggregate_limit_bytes"]:
+                  raise SystemExit("Cargo archive expansion limit exceeded")
+              if path_total > actions["evidence_snapshot_aggregate_path_limit_bytes"]:
+                  raise SystemExit("Cargo archive path budget exceeded")
+              if any(len(member.name.encode("utf-8")) > actions["evidence_snapshot_path_limit_bytes"] for member in members):
+                  raise SystemExit("Cargo archive member path limit exceeded")
+              source.extractall(destination, members=members)
+          PYTHON
+            test -d "${source}" && test ! -L "${source}"
+            test -f "${source}/Cargo.toml" && test ! -L "${source}/Cargo.toml"
+            test -f "${source}/Cargo.lock" && test ! -L "${source}/Cargo.lock"
+            supervise "${label}-fetch-locked" cargo fetch --locked --manifest-path "${source}/Cargo.toml"
+            supervise "${label}-install" env CARGO_NET_OFFLINE=true cargo install --locked \
+              --root "${tools}" --path "${source}"
+          }
+          install_verified_cargo_tool cargo-audit "${audit_version}" "${audit_sha256}" tools-cargo-audit
+          install_verified_cargo_tool cargo-llvm-cov "${cov_version}" "${cov_sha256}" tools-cargo-llvm-cov
+          actionlint_archive="${RUNNER_TEMP}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz"
+          actionlint_checksums="${RUNNER_TEMP}/actionlint_${actionlint_version}_checksums.txt"
+          supervise tools-actionlint-checksums-download curl --proto '=https' --tlsv1.2 --location --fail \
+            --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+            --max-filesize "${actionlint_member_limit}" --output "${actionlint_checksums}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_checksums.txt"
+          printf '%s  %s\n' "${actionlint_manifest_sha256}" "${actionlint_checksums}" | shasum -a 256 -c -
+          supervise tools-actionlint-download curl --proto '=https' --tlsv1.2 --location --fail \
+            --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+            --user-agent 'uqm-s4-ci/1.0 (https://github.com/acoliver/uqm)' \
+            --max-filesize "${actionlint_member_limit}" --output "${actionlint_archive}" \
+            "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz"
+          printf '%s  %s\n' "${actionlint_sha256}" "${actionlint_archive}" | shasum -a 256 -c -
+          test "$(awk -v file="actionlint_${actionlint_version}_${actionlint_archive_platform}.tar.gz" '$2 == file { print $1 }' "${actionlint_checksums}")" = "${actionlint_sha256}"
+          supervise tools-actionlint tar -xzf "${actionlint_archive}" -C "${tools}/bin" actionlint
+          test -x "${tools}/bin/actionlint" && test ! -L "${tools}/bin/actionlint"
+          while IFS= read -r component; do
+            supervise "tools-component-${component}" rustup component add "${component}"
+          done < <(jq -r '.rust.components[]' <<<"${TOOLS_JSON}")
+          find -P "${RUSTUP_HOME}" -type d -exec chmod g+rx {} +
+          find -P "${RUSTUP_HOME}" -type f -exec chmod g+r {} +
+          printf '%s\n' "${tools}/bin" >> "${GITHUB_PATH}"
+      - name: Provision authority-pinned native acceptance content
+        id: native_content
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        env:
+          MATRIX_OS: ${{ matrix.os }}
+          NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+          if [[ "${MATRIX_OS}" != "$(jq -er '.platform' <<<"${NATIVE_ACCEPTANCE_JSON}")" ]]; then
+            exit 0
+          fi
+          content_root="${RUNNER_TEMP}/s4-native-content"
+          filename="$(jq -er '.content_filename' <<<"${NATIVE_ACCEPTANCE_JSON}")"
+          destination="${content_root}/${filename}"
+          mkdir -p "${content_root}"
+          python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
+            --receipt "${EVIDENCE_DIR}/native-content.result.json" \
+            --stdout "${EVIDENCE_DIR}/native-content.stdout.log" \
+            --stderr "${EVIDENCE_DIR}/native-content.stderr.log" \
+            -- python3 "${RUNNER_TEMP}/s4-gates-workflow-native-content.py" \
+              --authority-json "${NATIVE_ACCEPTANCE_JSON}" \
+              --destination "${destination}"
+          printf 'UQM_CI_NATIVE_CONTENT_ROOT=%s\n' "${content_root}" >> "${GITHUB_ENV}"
+      - name: Provision dedicated Darwin containment identity
+        id: containment_provision
         if: runner.os == 'macOS'
-        run: brew install sdl2 libpng xz bzip2 pkg-config
-      - name: Validate root command and machine-readable matrix
+        shell: bash
         run: |
-          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- doctor
-          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- matrix > rust/target-supported-matrix.json
-      - name: Test root-command negative fixtures
-        run: cargo test --locked --manifest-path rust/xtask/Cargo.toml --all-targets
-      - name: Prove strict production determinism from clean builds
+          set -euo pipefail
+          containment_user="uqm_s4_containment"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
+          runner_gid="$(id -g)"
+          if dscl . -list /Users UniqueID | awk -v uid="${containment_uid}" '$2 == uid { found = 1 } END { exit !found }'; then
+            echo "containment uid ${containment_uid} is already allocated" >&2
+            exit 1
+          fi
+          if dscl . -read "/Users/${containment_user}" >/dev/null 2>&1; then
+            echo "containment user ${containment_user} is already allocated" >&2
+            exit 1
+          fi
+          sudo -n install -o root -g wheel -m 0400 /dev/null "${RUNNER_TEMP}/s4-containment-created"
+          sudo -n dscl . -create "/Users/${containment_user}"
+          sudo -n dscl . -create "/Users/${containment_user}" UniqueID "${containment_uid}"
+          sudo -n dscl . -create "/Users/${containment_user}" PrimaryGroupID "${runner_gid}"
+          sudo -n dscl . -create "/Users/${containment_user}" NFSHomeDirectory "${RUNNER_TEMP}/s4-containment-home"
+          sudo -n dscl . -create "/Users/${containment_user}" UserShell /bin/bash
+          test "$(dscl . -read "/Users/${containment_user}" UniqueID | awk '{print $2}')" = "${containment_uid}"
+          sudo -n install -d -o "${containment_uid}" -g "${runner_gid}" -m 0770 "${RUNNER_TEMP}/s4-containment-home"
+          find -P "${GITHUB_WORKSPACE}" -type d -exec chmod g+rx,go-w {} +
+          find -P "${GITHUB_WORKSPACE}" -type f -exec chmod g+r,go-w {} +
+          {
+            echo "UQM_CI_DEDICATED_CONTAINMENT_UID=${containment_uid}"
+            echo "UQM_CI_DEDICATED_CONTAINMENT_USER=${containment_user}"
+            echo "UQM_CI_DEDICATED_CONTAINMENT_HOME=${RUNNER_TEMP}/s4-containment-home"
+          } >> "${GITHUB_ENV}"
+      - name: Provision dedicated Linux containment identity
+        id: linux_containment_provision
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
-          rm rust/target-supported-matrix.json
-          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- prove
-      - name: Verify all S1 strict-link invariants
-        run: rust/ownership/verify-production.sh
-      - name: Reject exact target dependency-inventory drift
+          set -euo pipefail
+          containment_user="uqm_s4_containment"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
+          runner_gid="$(id -g)"
+          if getent passwd "${containment_uid}" >/dev/null; then
+            echo "containment uid ${containment_uid} is already allocated" >&2
+            exit 1
+          fi
+          if getent passwd "${containment_user}" >/dev/null; then
+            echo "containment user ${containment_user} is already allocated" >&2
+            exit 1
+          fi
+          sudo -n install -o root -g root -m 0400 /dev/null "${RUNNER_TEMP}/s4-linux-containment-created"
+          sudo -n /usr/sbin/useradd --uid "${containment_uid}" --gid "${runner_gid}" \
+            --home-dir "${RUNNER_TEMP}/s4-containment-home" --shell /bin/bash "${containment_user}"
+          test "$(id -u "${containment_user}")" = "${containment_uid}"
+          sudo -n install -d -o "${containment_uid}" -g "${runner_gid}" -m 0770 "${RUNNER_TEMP}/s4-containment-home"
+          find -P "${GITHUB_WORKSPACE}" -type d -exec chmod g+rx,go-w {} +
+          find -P "${GITHUB_WORKSPACE}" -type f -exec chmod g+r,go-w {} +
+          {
+            echo "UQM_CI_DEDICATED_CONTAINMENT_UID=${containment_uid}"
+            echo "UQM_CI_DEDICATED_CONTAINMENT_USER=${containment_user}"
+            echo "UQM_CI_DEDICATED_CONTAINMENT_HOME=${RUNNER_TEMP}/s4-containment-home"
+          } >> "${GITHUB_ENV}"
+      - name: Verify dedicated-UID pre-observation escape containment
+        id: containment_check
+        if: runner.os == 'macOS' || runner.os == 'Linux'
+        shell: bash
+        env:
+          XTASK: ${{ runner.temp }}/s4-gates-controller
         run: |
-          cargo run --locked --manifest-path rust/xtask/Cargo.toml -- capture-dependencies
-          jq -n \
-            --slurpfile authority rust/build/native-dependencies.json \
-            --slurpfile capture "rust/target/native-dependencies-${{ matrix.tuple }}.candidate.json" \
-            --arg tuple "${{ matrix.tuple }}" '
-            ([$authority[0].dependencies[] | select(.targets | index($tuple)) | .path] | sort)
-            == ($capture[0].dependencies | sort)
-          ' | grep -qx true
-      - name: Upload reproducibility evidence
+          set -euo pipefail
+          python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
+            --receipt "${RUNNER_TEMP}/s4-command-evidence/containment-check.result.json" \
+            --stdout "${RUNNER_TEMP}/s4-command-evidence/containment-check.stdout.log" \
+            --stderr "${RUNNER_TEMP}/s4-command-evidence/containment-check.stderr.log" \
+            -- "${XTASK}" ci containment-check
+      - name: Execute all authoritative gates
+        id: authoritative_gates
+        shell: bash
+        env:
+          RUSTUP_HOME: ${{ runner.temp }}/s4-rustup-home
+          UQM_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          UQM_CI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          UQM_CI_EXPECTED_TUPLE: ${{ matrix.tuple }}
+          UQM_CI_CACHE_MODE: isolated-empty
+          UQM_CI_EVIDENCE_ROOT: ${{ runner.temp }}/s4-command-evidence/bundle
+          UQM_CI_SOURCE_ROOT: ${{ github.workspace }}
+          UQM_CI_AUTHORITY_PATH: ${{ runner.temp }}/s4-gates-authority.json
+          UQM_CI_TRUSTED_STAGING_ROOT: ${{ runner.temp }}
+          XTASK: ${{ runner.temp }}/s4-gates-controller
+        run: |
+          set -uo pipefail
+          evidence="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${evidence}"
+          if [[ "${UQM_CI_BASE_SHA}" =~ ^0{40}$ ]]; then
+            if ! resolved_base="$(git rev-parse HEAD^)"; then
+              printf 'cannot resolve push comparison base\n' >&2
+              exit 1
+            fi
+          elif ! resolved_base="$(git merge-base "${UQM_CI_BASE_SHA}" HEAD)"; then
+            printf 'cannot resolve merge base for %s\n' "${UQM_CI_BASE_SHA}" >&2
+            exit 1
+          fi
+          UQM_CI_BASE_SHA="${resolved_base}"
+          export UQM_CI_BASE_SHA
+          python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
+            --receipt "${evidence}/ci-run.result.json" \
+            --stdout "${evidence}/ci-run.stdout.log" \
+            --stderr "${evidence}/ci-run.stderr.log" \
+            --timeout-profile aggregate-run \
+            -- "${XTASK}" ci run all
+          status=$?
+          printf '{"schema":"uqm-s4-command-result-v1","tuple":"%s","source_sha":"%s","exit_code":%d}\n' \
+            "${UQM_CI_EXPECTED_TUPLE}" "${UQM_CI_EXPECTED_SHA}" "${status}" \
+            >"${evidence}/command-result.json"
+          exit "${status}"
+      - name: Revalidate exact source after untrusted gates
+        id: source_revalidation
         if: always()
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          evidence="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${evidence}"
+          python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
+            --receipt "${evidence}/source-revalidation.result.json" \
+            --stdout "${evidence}/source-revalidation.stdout.log" \
+            --stderr "${evidence}/source-revalidation.stderr.log" \
+            -- /bin/bash -c "
+              set -euo pipefail
+              test \"\$(git rev-parse HEAD)\" = \"\$1\"
+              git diff --quiet --no-ext-diff HEAD --
+              test -z \"\$(git ls-files --others --exclude-standard)\"
+              cmp -- rust/ci/gates.json \"\$2\"
+              test \"\$(find -P \"\$6\" -prune -type d -user \"\$7\" -perm 0750 -print)\" = \"\$6\"
+              test \"\$(find -P \"\$3\" -prune -type f -user \"\$7\" -perm 0500 -print)\" = \"\$3\"
+              test \"\$(find -P \"\$4\" -prune -type f -user \"\$7\" -perm 0550 -print)\" = \"\$4\"
+              test \"\$(find -P \"\$5\" -prune -type f -user \"\$7\" -perm 0500 -print)\" = \"\$5\"
+              test \"\$(find -P \"\$2\" -prune -type f -user \"\$7\" -perm 0440 -print)\" = \"\$2\"
+            " source-revalidation "${EXPECTED_SOURCE_SHA}" \
+              "${RUNNER_TEMP}/s4-gates-authority.json" \
+              "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+              "${RUNNER_TEMP}/s4-gates-controller" \
+              "${RUNNER_TEMP}/s4-gates-workflow-native-content.py" \
+              "${RUNNER_TEMP}" "$(id -u)"
+      - name: Remove dedicated Linux containment identity
+        id: linux_containment_cleanup
+        if: always() && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          containment_user="uqm_s4_containment"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
+          marker="${RUNNER_TEMP}/s4-linux-containment-created"
+          if ! sudo -n test -f "${marker}"; then
+            exit 0
+          fi
+          test "$(stat -c '%u:%a' "${marker}")" = "0:400"
+          for attempt in 1 2 3 4 5; do
+            sudo -n pkill -KILL -U "${containment_uid}" >/dev/null 2>&1 || true
+            sudo -n pkill -KILL -u "${containment_uid}" >/dev/null 2>&1 || true
+            if ! sudo -n pgrep -U "${containment_uid}" >/dev/null 2>&1 && ! sudo -n pgrep -u "${containment_uid}" >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "${attempt}" == 5 ]]; then
+              echo "dedicated containment uid still owns processes" >&2
+              exit 1
+            fi
+            sleep 0.2
+          done
+          if getent passwd "${containment_user}" >/dev/null; then
+            created_uid="$(id -u "${containment_user}")"
+            if [[ -n "${created_uid}" && "${created_uid}" != "${containment_uid}" ]]; then
+              echo "refusing to remove containment user with unexpected uid ${created_uid}" >&2
+              exit 1
+            fi
+            sudo -n /usr/sbin/userdel "${containment_user}"
+          fi
+          sudo -n rm -rf "${RUNNER_TEMP}/s4-containment-home"
+          sudo -n rm -f "${marker}"
+      - name: Remove dedicated Darwin containment identity
+        id: containment_cleanup
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          containment_user="uqm_s4_containment"
+          containment_uid="$(jq -er '.dedicated_execution_uid | select(type == "number" and . == floor and . > 0)' <<<"${NATIVE_ACCEPTANCE_JSON}")"
+          marker="${RUNNER_TEMP}/s4-containment-created"
+          if ! sudo -n test -f "${marker}"; then
+            exit 0
+          fi
+          test "$(stat -f '%u:%Lp' "${marker}")" = "0:400"
+          for attempt in 1 2 3 4 5; do
+            sudo -n pkill -KILL -U "${containment_uid}" >/dev/null 2>&1 || true
+            sudo -n pkill -KILL -u "${containment_uid}" >/dev/null 2>&1 || true
+            if ! sudo -n pgrep -U "${containment_uid}" >/dev/null 2>&1 && ! sudo -n pgrep -u "${containment_uid}" >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "${attempt}" == 5 ]]; then
+              echo "dedicated containment uid still owns processes" >&2
+              exit 1
+            fi
+            sleep 0.2
+          done
+          if dscl . -read "/Users/${containment_user}" >/dev/null 2>&1; then
+            created_uid="$(dscl . -read "/Users/${containment_user}" UniqueID 2>/dev/null | awk '{print $2}' || true)"
+            if [[ -n "${created_uid}" && "${created_uid}" != "${containment_uid}" ]]; then
+              echo "refusing to remove containment user with unexpected uid ${created_uid}" >&2
+              exit 1
+            fi
+            sudo -n dscl . -delete "/Users/${containment_user}"
+          fi
+          sudo -n rm -rf "${RUNNER_TEMP}/s4-containment-home"
+          sudo -n rm -f "${marker}"
+      - name: Finalize transport evidence
+        if: always()
+        shell: bash
+        env:
+          ARCHITECTURE_OUTCOME: ${{ steps.architecture.outcome }}
+          CHECKOUT_OUTCOME: ${{ steps.checkout_gates.outcome }}
+          CONTAINMENT_CHECK_OUTCOME: ${{ steps.containment_check.outcome }}
+          GATES_OUTCOME: ${{ steps.authoritative_gates.outcome }}
+          JOB_STATUS: ${{ job.status }}
+          NATIVE_CONTENT_OUTCOME: ${{ steps.native_content.outcome }}
+          PREREQUISITES_OUTCOME: ${{ steps.prerequisites.outcome }}
+          SOURCE_REVALIDATION_OUTCOME: ${{ steps.source_revalidation.outcome }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TOOLS_OUTCOME: ${{ steps.tools.outcome }}
+          TUPLE: ${{ matrix.tuple }}
+          XTASK_BUILD_OUTCOME: ${{ steps.xtask_build.outcome }}
+        run: |
+          set -euo pipefail
+          export EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+          python3 -P - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          from pathlib import Path
+
+          root = Path(os.environ["EVIDENCE_DIR"])
+          nofollow = getattr(os, "O_NOFOLLOW", 0)
+          nonblock = getattr(os, "O_NONBLOCK", 0)
+          root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+          if not stat.S_ISDIR(os.fstat(root_fd).st_mode):
+              raise RuntimeError("transport evidence root is not a regular directory")
+
+          def read_descriptor(descriptor, label, limit=None):
+              if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                  raise RuntimeError(f"transport member is not regular: {label}")
+              chunks = []
+              total = 0
+              while True:
+                  read_size = 65536 if limit is None else min(65536, limit - total + 1)
+                  chunk = os.read(descriptor, read_size)
+                  if not chunk:
+                      return b"".join(chunks)
+                  total += len(chunk)
+                  if limit is not None and total > limit:
+                      raise RuntimeError(f"transport member exceeds authority byte limit: {label}")
+                  chunks.append(chunk)
+
+          def read_regular_path(path):
+              components = Path(path).parts
+              if not components:
+                  raise RuntimeError("empty authority path")
+              descriptor = os.open("/" if Path(path).is_absolute() else ".", os.O_RDONLY | os.O_DIRECTORY | nofollow)
+              try:
+                  for position, component in enumerate(components):
+                      if component in ("/", "."):
+                          continue
+                      next_descriptor = os.open(
+                          component,
+                          os.O_RDONLY | nofollow | nonblock,
+                          dir_fd=descriptor,
+                      )
+                      os.close(descriptor)
+                      descriptor = next_descriptor
+                      mode = os.fstat(descriptor).st_mode
+                      if position + 1 < len(components) and not stat.S_ISDIR(mode):
+                          raise RuntimeError(f"authority path component is not a directory: {component}")
+                  return read_descriptor(descriptor, path)
+              finally:
+                  os.close(descriptor)
+
+          def atomic_write(name, data, temporary_name):
+              try:
+                  os.unlink(temporary_name, dir_fd=root_fd)
+              except FileNotFoundError:
+                  pass
+              flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow
+              descriptor = os.open(temporary_name, flags, 0o600, dir_fd=root_fd)
+              try:
+                  remaining = memoryview(data)
+                  while remaining:
+                      written = os.write(descriptor, remaining)
+                      if written == 0:
+                          raise RuntimeError(f"short write for {temporary_name}")
+                      remaining = remaining[written:]
+                  os.fsync(descriptor)
+              finally:
+                  os.close(descriptor)
+              os.replace(temporary_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+
+          fallback = {
+              "schema": "uqm-s4-transport-finalizer-fallback-v1",
+              "job": "gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": os.environ["TUPLE"],
+              "first_failed_contract": "transport.finalize",
+              "detail": "transport finalizer did not replace the pre-seeded fallback index",
+          }
+          atomic_write(
+              "index.json",
+              (json.dumps(fallback, indent=2) + "\n").encode(),
+              ".index.json.tmp",
+          )
+
+          def collect(directory_fd):
+              members = []
+              entries_seen = 0
+              path_bytes_seen = 0
+              content_bytes_seen = 0
+              pending = [(os.dup(directory_fd), "")]
+              try:
+                  while pending:
+                      current_fd, prefix = pending.pop()
+                      try:
+                          names = []
+                          with os.scandir(current_fd) as iterator:
+                              for entry in iterator:
+                                  relative = f"{prefix}/{entry.name}" if prefix else entry.name
+                                  encoded_length = len(relative.encode("utf-8"))
+                                  entries_seen += 1
+                                  path_bytes_seen += encoded_length
+                                  if (
+                                      entries_seen > member_count_limit
+                                      or encoded_length > path_limit
+                                      or path_bytes_seen > aggregate_path_limit
+                                  ):
+                                      raise RuntimeError("transport tree exceeds authority path or member limit")
+                                  names.append(entry.name)
+                          for name in sorted(names):
+                              relative = f"{prefix}/{name}" if prefix else name
+                              if relative == "index.json":
+                                  continue
+                              descriptor = os.open(
+                                  name,
+                                  os.O_RDONLY | nofollow | nonblock,
+                                  dir_fd=current_fd,
+                              )
+                              try:
+                                  metadata = os.fstat(descriptor)
+                                  if stat.S_ISDIR(metadata.st_mode):
+                                      pending.append((descriptor, relative))
+                                      descriptor = None
+                                  elif stat.S_ISREG(metadata.st_mode):
+                                      remaining = aggregate_limit - content_bytes_seen
+                                      if metadata.st_size > member_limit or metadata.st_size > remaining:
+                                          raise RuntimeError("transport tree exceeds authority content limit")
+                                      data = read_descriptor(descriptor, relative, min(member_limit, remaining))
+                                      if len(data) != metadata.st_size:
+                                          raise RuntimeError(f"transport member changed while reading: {relative}")
+                                      content_bytes_seen += len(data)
+                                      members.append({
+                                          "path": relative,
+                                          "byte_length": len(data),
+                                          "sha256": hashlib.sha256(data).hexdigest(),
+                                      })
+                                  else:
+                                      raise RuntimeError(f"transport member is not regular: {relative}")
+                              finally:
+                                  if descriptor is not None:
+                                      os.close(descriptor)
+                      finally:
+                          os.close(current_fd)
+              finally:
+                  for descriptor, _ in pending:
+                      os.close(descriptor)
+              members.sort(key=lambda member: member["path"])
+              return members
+
+          steps = [
+              {"step": "xtask-build", "outcome": os.environ["XTASK_BUILD_OUTCOME"]},
+              {"step": "checkout", "outcome": os.environ["CHECKOUT_OUTCOME"]},
+              {"step": "architecture", "outcome": os.environ["ARCHITECTURE_OUTCOME"]},
+              {"step": "prerequisites", "outcome": os.environ["PREREQUISITES_OUTCOME"]},
+              {"step": "tools", "outcome": os.environ["TOOLS_OUTCOME"]},
+              {"step": "native-content", "outcome": os.environ["NATIVE_CONTENT_OUTCOME"]},
+          ]
+          steps.append({
+              "step": "containment-check",
+              "outcome": os.environ["CONTAINMENT_CHECK_OUTCOME"],
+          })
+          steps.append({"step": "authoritative-gates", "outcome": os.environ["GATES_OUTCOME"]})
+          steps.append({
+              "step": "source-revalidation",
+              "outcome": os.environ["SOURCE_REVALIDATION_OUTCOME"],
+          })
+          setup = {
+              "schema": "uqm-s4-workflow-setup-results-v1",
+              "job": "gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": os.environ["TUPLE"],
+              "steps": steps,
+          }
+          atomic_write(
+              "workflow-setup-results.json",
+              (json.dumps(setup, indent=2) + "\n").encode(),
+              ".workflow-setup-results.tmp",
+          )
+          authority = Path(os.environ["RUNNER_TEMP"]) / "s4-gates-authority.json"
+          try:
+              authority_bytes = read_regular_path(authority)
+          except FileNotFoundError:
+              pass
+          else:
+              authority_value = json.loads(authority_bytes)
+              actions = authority_value["actions"]
+              member_limit = actions["evidence_snapshot_member_limit_bytes"]
+              member_count_limit = actions["evidence_snapshot_member_count_limit"]
+              aggregate_limit = actions["evidence_snapshot_aggregate_limit_bytes"]
+              path_limit = actions["evidence_snapshot_path_limit_bytes"]
+              aggregate_path_limit = actions["evidence_snapshot_aggregate_path_limit_bytes"]
+              limits = [member_limit, member_count_limit, aggregate_limit, path_limit, aggregate_path_limit]
+              if any(not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0 for limit in limits):
+                  raise RuntimeError("authority transport traversal limits are invalid")
+              atomic_write(
+                  "authority-snapshot.json",
+                  authority_bytes,
+                  ".authority-snapshot.tmp",
+              )
+          files = collect(root_fd)
+          index = {
+              "schema": "uqm-s4-transport-evidence-v1",
+              "job": "gates",
+              "tuple": os.environ["TUPLE"],
+              "source_sha": os.environ["SOURCE_SHA"],
+              "job_status": os.environ["JOB_STATUS"],
+              "files": files,
+          }
+          atomic_write(
+              "index.json",
+              (json.dumps(index, indent=2) + "\n").encode(),
+              ".index.json.tmp",
+          )
+          PY
+      - name: Upload gate evidence
+        id: upload_gates
+        if: always() && needs.plan.outputs.retention_days != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: reproducible-build-${{ matrix.tuple }}
-          path: |
-            rust/target/production-artifacts.json
-            rust/target-supported-matrix.json
-            rust/target/ownership-production-report.json
+          name: s4-${{ matrix.tuple }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-command-evidence
           if-no-files-found: error
-
-  issue23-native-acceptance:
-    name: Issue 23 native acceptance (${{ matrix.tuple }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-15-intel
-            expected_arch: x86_64
-            tuple: macos-x86_64-compatibility
-          - os: macos-14
-            expected_arch: arm64
-            tuple: macos-14-aarch64
-          - os: ubuntu-22.04
-            expected_arch: x86_64
-            tuple: ubuntu-22.04-x86_64
-          - os: ubuntu-24.04-arm
-            expected_arch: aarch64
-            tuple: ubuntu-24.04-aarch64
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          clean: true
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659
-        with:
-          toolchain: stable
-          rustflags: ''
-          cache: false
-      - name: Assert native runner architecture
-        run: |
-          actual=$(uname -m)
-          test "$actual" = "${{ matrix.expected_arch }}" || { echo "expected ${{ matrix.expected_arch }}, got $actual"; exit 1; }
-      - name: Install Linux gameplay prerequisites
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libsdl2-dev libpng-dev liblzma-dev libbz2-dev pkg-config
-      - name: Install macOS gameplay prerequisites
-        if: runner.os == 'macOS'
-        run: brew install sdl2 libpng xz bzip2 pkg-config
-      - name: Run canonical strict link, probes, harnesses, gameplay, shutdown, and mutations
-        run: rust/scripts/run_issue23_acceptance.sh
-      - name: Upload all issue-23 evidence
-        if: always()
+          retention-days: ${{ needs.plan.outputs.retention_days }}
+      - name: Upload gate evidence without unresolved retention
+        id: upload_gates_authority_unavailable
+        if: always() && needs.plan.outputs.retention_days == ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: issue23-native-${{ matrix.tuple }}
-          path: |
-            rust/target/issue23-acceptance/
-            rust/target/production-artifacts.json
-            rust/target/ownership-production-report.json
-            rust/target/debug/build/uqm-*/out/native-build-evidence.json
-            rust/target/debug/build/uqm-*/out/provider-report.json
-            rust/target/debug/build/uqm-*/out/uqm-c-objects.manifest
+          name: s4-${{ matrix.tuple }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-command-evidence
+          if-no-files-found: error
+      - name: Record gate upload receipt
+        if: always()
+        shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ needs.plan.outputs.retention_days != '' && steps.upload_gates.outputs.artifact-digest || steps.upload_gates_authority_unavailable.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ needs.plan.outputs.retention_days != '' && steps.upload_gates.outputs.artifact-id || steps.upload_gates_authority_unavailable.outputs.artifact-id }}
+          ARTIFACT_NAME: s4-${{ matrix.tuple }}-${{ github.run_id }}-${{ github.run_attempt }}
+          ARTIFACT_URL: ${{ needs.plan.outputs.retention_days != '' && steps.upload_gates.outputs.artifact-url || steps.upload_gates_authority_unavailable.outputs.artifact-url }}
+          GH_TOKEN: ${{ github.token }}
+          RETENTION_DAYS: ${{ needs.plan.outputs.retention_days }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TUPLE: ${{ matrix.tuple }}
+          UPLOAD_OUTCOME: ${{ needs.plan.outputs.retention_days != '' && steps.upload_gates.outcome || steps.upload_gates_authority_unavailable.outcome }}
+        run: |
+          set -euo pipefail
+          receipt="${RUNNER_TEMP}/s4-gate-upload-receipt"
+          mkdir -p "${receipt}"
+          size=""
+          authority="${RUNNER_TEMP}/s4-gates-authority.json"
+          if [[ ! -s "${authority}" || -z "${RETENTION_DAYS}" ]]; then
+            RECEIPT_ROOT="${receipt}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          succeeded = os.environ["UPLOAD_OUTCOME"] == "success"
+          receipt = {
+              "schema": "uqm-s4-upload-authority-unavailable-v1",
+              "job": "gates",
+              "tuple": os.environ["TUPLE"],
+              "source_sha": os.environ["SOURCE_SHA"],
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None,
+              "artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None,
+              "artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None,
+              "retention_days": None,
+              "size_in_bytes": None,
+              "upload_outcome": os.environ["UPLOAD_OUTCOME"],
+              "failure": "exact authority could not be resolved before gate execution",
+          }
+          (Path(os.environ["RECEIPT_ROOT"]) / "upload-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n"
+          )
+          PY
+            exit 0
+          fi
+          connect_timeout="$(jq -er '.actions.github_api_connect_timeout_seconds' "${RUNNER_TEMP}/s4-gates-authority.json")"
+          total_timeout="$(jq -er '.actions.github_api_total_timeout_seconds' "${RUNNER_TEMP}/s4-gates-authority.json")"
+          if [[ "${UPLOAD_OUTCOME}" == "success" ]]; then
+            test -n "${ARTIFACT_ID}"
+            test -n "${ARTIFACT_URL}"
+            test -n "${ARTIFACT_DIGEST}"
+            size="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+              --connect-timeout "${connect_timeout}" --max-time "${total_timeout}" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+              | jq -er --arg name "${ARTIFACT_NAME}" --argjson id "${ARTIFACT_ID}" \
+                'select(.id == $id and .name == $name and .expired == false and .size_in_bytes > 0) | .size_in_bytes')"
+          fi
+          RECEIPT_ROOT="${receipt}" ARTIFACT_SIZE="${size}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          succeeded = os.environ["UPLOAD_OUTCOME"] == "success"
+          receipt = {
+              "schema": "uqm-s4-upload-receipt-v1",
+              "job": "gates",
+              "tuple": os.environ["TUPLE"],
+              "source_sha": os.environ["SOURCE_SHA"],
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None,
+              "artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None,
+              "artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None,
+              "retention_days": int(os.environ["RETENTION_DAYS"]),
+              "size_in_bytes": int(os.environ["ARTIFACT_SIZE"]) if succeeded else None,
+              "upload_outcome": os.environ["UPLOAD_OUTCOME"],
+          }
+          (Path(os.environ["RECEIPT_ROOT"]) / "upload-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n"
+          )
+          PY
+      - name: Upload gate upload receipt
+        if: always() && needs.plan.outputs.retention_days != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s4-${{ matrix.tuple }}-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-gate-upload-receipt
+          if-no-files-found: error
+          retention-days: ${{ needs.plan.outputs.retention_days }}
+      - name: Upload gate upload receipt without unresolved retention
+        if: always() && needs.plan.outputs.retention_days == ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: s4-${{ matrix.tuple }}-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-gate-upload-receipt
           if-no-files-found: error
 
-  issue23-macos13-exclusion:
-    name: Issue 23 macOS 13 x86_64 runner exclusion
-    runs-on: macos-15-intel
+  required-gates:
+    name: ${{ github.event_name == 'pull_request_target' && 'Required S4 gates' || 'Required S4 gates (non-merge)' }}
+    if: always()
+    needs:
+      - plan
+      - gates
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: read
     steps:
-      - name: Record unavailable official runner tuple
+      - name: Seed required-gates transport fallback
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          mkdir -p rust/target/issue23-exclusions
-          cat > rust/target/issue23-exclusions/macos-13-x86_64.json <<'JSON'
-          {
-            "schema": "uqm-excluded-native-execution-v1",
-            "tuple": "macos-13-x86_64",
-            "executed": false,
-            "reason": "GitHub Actions no longer provides the macos-13 hosted runner label; actionlint's official runner-label database rejects it. The maintained native Intel compatibility execution uses macos-15-intel."
+          set -euo pipefail
+          root="${RUNNER_TEMP}/s4-required-evidence"
+          mkdir -p "${root}"
+          ROOT="${root}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["ROOT"])
+          temporary = root / ".index.json.seed"
+          fallback = {
+              "schema": "uqm-s4-transport-finalizer-fallback-v1",
+              "job": "required-gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": None,
+              "first_failed_contract": "transport.finalize",
+              "detail": "transport finalizer did not replace the pre-seeded fallback index",
           }
-          JSON
-      - name: Upload machine-readable exclusion
+          temporary.write_text(json.dumps(fallback, indent=2) + "\n")
+          temporary.replace(root / "index.json")
+          PY
+      - name: Validate available required-gates authority
+        id: required_authority
         if: always()
+        shell: bash
+        env:
+          ACTIONS_JSON: ${{ needs.plan.outputs.actions }}
+          PLAN_RETENTION_DAYS: ${{ needs.plan.outputs.retention_days }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${PLAN_RETENTION_DAYS}" ]]; then
+            exit 0
+          fi
+          if [[ ! "${PLAN_RETENTION_DAYS}" =~ ^[1-9][0-9]*$ ]]; then
+            printf 'plan retention output is malformed\n' >&2
+            exit 1
+          fi
+          values="$(jq -er '
+            select(type == "object")
+            | select(
+                (.artifact_retention_days | type) == "number"
+                and .artifact_retention_days == (.artifact_retention_days | floor)
+                and .artifact_retention_days >= 1
+                and .artifact_retention_days <= 90
+                and (.github_api_connect_timeout_seconds | type) == "number"
+                and .github_api_connect_timeout_seconds == (.github_api_connect_timeout_seconds | floor)
+                and .github_api_connect_timeout_seconds >= 1
+                and (.github_api_total_timeout_seconds | type) == "number"
+                and .github_api_total_timeout_seconds == (.github_api_total_timeout_seconds | floor)
+                and .github_api_total_timeout_seconds > .github_api_connect_timeout_seconds
+              )
+            | [.artifact_retention_days, .github_api_connect_timeout_seconds, .github_api_total_timeout_seconds]
+            | @tsv' <<<"${ACTIONS_JSON}")"
+          IFS=$'\t' read -r retention_days connect_timeout total_timeout <<<"${values}"
+          test "${retention_days}" = "${PLAN_RETENTION_DAYS}"
+          {
+            printf 'available=true\n'
+            printf 'retention_days=%s\n' "${retention_days}"
+            printf 'connect_timeout=%s\n' "${connect_timeout}"
+            printf 'total_timeout=%s\n' "${total_timeout}"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Aggregate required results
+        if: always()
+        shell: bash
+        env:
+          ACTIONS_JSON: ${{ needs.plan.outputs.actions }}
+          PLAN_RESULT: ${{ needs.plan.result }}
+          GATES_RESULT: ${{ needs.gates.result }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          evidence="${RUNNER_TEMP}/s4-required-evidence"
+          mkdir -p "${evidence}"
+          printf '{"schema":"uqm-s4-required-result-v1","source_sha":"%s","plan":"%s","gates":"%s"}\n' \
+            "${SOURCE_SHA}" "${PLAN_RESULT}" "${GATES_RESULT}" \
+            >"${evidence}/required-result.json"
+          EVIDENCE_DIR="${evidence}" python3 -P - <<'PY'
+          import hashlib
+          import json
+          import os
+          import stat
+          from pathlib import Path
+
+          root = Path(os.environ["EVIDENCE_DIR"])
+          nofollow = getattr(os, "O_NOFOLLOW", 0)
+          nonblock = getattr(os, "O_NONBLOCK", 0)
+          root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+          if not stat.S_ISDIR(os.fstat(root_fd).st_mode):
+              raise RuntimeError("transport evidence root is not a regular directory")
+
+          def read_descriptor(descriptor, label, limit=None):
+              if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                  raise RuntimeError(f"transport member is not regular: {label}")
+              chunks = []
+              total = 0
+              while True:
+                  read_size = 65536 if limit is None else min(65536, limit - total + 1)
+                  chunk = os.read(descriptor, read_size)
+                  if not chunk:
+                      return b"".join(chunks)
+                  total += len(chunk)
+                  if limit is not None and total > limit:
+                      raise RuntimeError(f"transport member exceeds authority byte limit: {label}")
+                  chunks.append(chunk)
+
+          def read_regular_path(path):
+              components = Path(path).parts
+              if not components:
+                  raise RuntimeError("empty authority path")
+              descriptor = os.open("/" if Path(path).is_absolute() else ".", os.O_RDONLY | os.O_DIRECTORY | nofollow)
+              try:
+                  for position, component in enumerate(components):
+                      if component in ("/", "."):
+                          continue
+                      next_descriptor = os.open(
+                          component,
+                          os.O_RDONLY | nofollow | nonblock,
+                          dir_fd=descriptor,
+                      )
+                      os.close(descriptor)
+                      descriptor = next_descriptor
+                      mode = os.fstat(descriptor).st_mode
+                      if position + 1 < len(components) and not stat.S_ISDIR(mode):
+                          raise RuntimeError(f"authority path component is not a directory: {component}")
+                  return read_descriptor(descriptor, path)
+              finally:
+                  os.close(descriptor)
+
+          def atomic_write(name, data, temporary_name):
+              try:
+                  os.unlink(temporary_name, dir_fd=root_fd)
+              except FileNotFoundError:
+                  pass
+              flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | nofollow
+              descriptor = os.open(temporary_name, flags, 0o600, dir_fd=root_fd)
+              try:
+                  remaining = memoryview(data)
+                  while remaining:
+                      written = os.write(descriptor, remaining)
+                      if written == 0:
+                          raise RuntimeError(f"short write for {temporary_name}")
+                      remaining = remaining[written:]
+                  os.fsync(descriptor)
+              finally:
+                  os.close(descriptor)
+              os.replace(temporary_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
+
+          fallback = {
+              "schema": "uqm-s4-transport-finalizer-fallback-v1",
+              "job": "required-gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "tuple": None,
+              "first_failed_contract": "transport.finalize",
+              "detail": "transport finalizer did not replace the pre-seeded fallback index",
+          }
+          atomic_write(
+              "index.json",
+              (json.dumps(fallback, indent=2) + "\n").encode(),
+              ".index.json.tmp",
+          )
+
+          actions = json.loads(os.environ["ACTIONS_JSON"])
+          member_limit = actions["evidence_snapshot_member_limit_bytes"]
+          member_count_limit = actions["evidence_snapshot_member_count_limit"]
+          aggregate_limit = actions["evidence_snapshot_aggregate_limit_bytes"]
+          path_limit = actions["evidence_snapshot_path_limit_bytes"]
+          aggregate_path_limit = actions["evidence_snapshot_aggregate_path_limit_bytes"]
+          limits = [member_limit, member_count_limit, aggregate_limit, path_limit, aggregate_path_limit]
+          if any(not isinstance(limit, int) or isinstance(limit, bool) or limit <= 0 for limit in limits):
+              raise RuntimeError("authority transport traversal limits are invalid")
+          names = []
+          path_bytes_seen = 0
+          with os.scandir(root_fd) as iterator:
+              for entry in iterator:
+                  encoded_length = len(entry.name.encode("utf-8"))
+                  path_bytes_seen += encoded_length
+                  if (
+                      len(names) + 1 > member_count_limit
+                      or encoded_length > path_limit
+                      or path_bytes_seen > aggregate_path_limit
+                  ):
+                      raise RuntimeError("transport tree exceeds authority path or member limit")
+                  names.append(entry.name)
+          files = []
+          required_data = None
+          content_bytes_seen = 0
+          for name in sorted(names):
+              if name == "index.json":
+                  continue
+              descriptor = os.open(
+                  name,
+                  os.O_RDONLY | nofollow | nonblock,
+                  dir_fd=root_fd,
+              )
+              try:
+                  metadata = os.fstat(descriptor)
+                  remaining = aggregate_limit - content_bytes_seen
+                  if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > member_limit or metadata.st_size > remaining:
+                      raise RuntimeError(f"required transport member exceeds authority limit: {name}")
+                  data = read_descriptor(descriptor, name, min(member_limit, remaining))
+                  if len(data) != metadata.st_size:
+                      raise RuntimeError(f"transport member changed while reading: {name}")
+                  content_bytes_seen += len(data)
+              finally:
+                  os.close(descriptor)
+              if name == "required-result.json":
+                  required_data = data
+              files.append({
+                  "path": name,
+                  "byte_length": len(data),
+                  "sha256": hashlib.sha256(data).hexdigest(),
+              })
+          if [item["path"] for item in files] != ["required-result.json"] or required_data is None:
+              raise RuntimeError("required-gates transport members are not exact")
+          result = json.loads(required_data)
+          index = {
+              "schema": "uqm-s4-transport-evidence-v1",
+              "job": "required-gates",
+              "source_sha": result["source_sha"],
+              "files": files,
+          }
+          atomic_write(
+              "index.json",
+              (json.dumps(index, indent=2) + "\n").encode(),
+              ".index.json.tmp",
+          )
+          PY
+          test "${PLAN_RESULT}" = "success"
+          test "${GATES_RESULT}" = "success"
+      - name: Upload aggregate evidence
+        id: upload_required
+        if: always() && steps.required_authority.outputs.available == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: issue23-excluded-macos-13-x86_64
-          path: rust/target/issue23-exclusions/macos-13-x86_64.json
+          name: s4-required-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-required-evidence
           if-no-files-found: error
-
-  quality-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+          retention-days: ${{ steps.required_authority.outputs.retention_days }}
+      - name: Upload aggregate evidence without validated retention
+        id: upload_required_authority_unavailable
+        if: always() && steps.required_authority.outputs.available != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          toolchain: stable
-          components: rustfmt, clippy
-
-      - name: Install dependencies
+          name: s4-required-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-required-evidence
+          if-no-files-found: error
+      - name: Record aggregate upload receipt
+        if: always()
         shell: bash
+        env:
+          ARTIFACT_DIGEST: ${{ steps.required_authority.outputs.available == 'true' && steps.upload_required.outputs.artifact-digest || steps.upload_required_authority_unavailable.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.required_authority.outputs.available == 'true' && steps.upload_required.outputs.artifact-id || steps.upload_required_authority_unavailable.outputs.artifact-id }}
+          ARTIFACT_NAME: s4-required-${{ github.run_id }}-${{ github.run_attempt }}
+          ARTIFACT_URL: ${{ steps.required_authority.outputs.available == 'true' && steps.upload_required.outputs.artifact-url || steps.upload_required_authority_unavailable.outputs.artifact-url }}
+          AUTHORITY_AVAILABLE: ${{ steps.required_authority.outputs.available }}
+          CONNECT_TIMEOUT: ${{ steps.required_authority.outputs.connect_timeout }}
+          GH_TOKEN: ${{ github.token }}
+          RETENTION_DAYS: ${{ steps.required_authority.outputs.retention_days }}
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TOTAL_TIMEOUT: ${{ steps.required_authority.outputs.total_timeout }}
+          UPLOAD_OUTCOME: ${{ steps.required_authority.outputs.available == 'true' && steps.upload_required.outcome || steps.upload_required_authority_unavailable.outcome }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libsdl2-dev
-          pip3 install --break-system-packages lizard
-          cargo install cargo-audit
+          set -euo pipefail
+          receipt="${RUNNER_TEMP}/s4-required-upload-receipt"
+          mkdir -p "${receipt}"
+          size=""
+          if [[ "${AUTHORITY_AVAILABLE}" != "true" ]]; then
+            RECEIPT_ROOT="${receipt}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-      - name: Check formatting
-        run: |
-          cd rust
-          cargo fmt -- --check
+          succeeded = os.environ["UPLOAD_OUTCOME"] == "success"
+          receipt = {
+              "schema": "uqm-s4-upload-authority-unavailable-v1",
+              "job": "required-gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None,
+              "artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None,
+              "artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None,
+              "retention_days": None,
+              "size_in_bytes": None,
+              "upload_outcome": os.environ["UPLOAD_OUTCOME"],
+              "failure": "validated required-gates retention authority is unavailable",
+          }
+          (Path(os.environ["RECEIPT_ROOT"]) / "upload-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n"
+          )
+          PY
+            exit 0
+          fi
+          connect_timeout="${CONNECT_TIMEOUT:?validated authority connect timeout is missing}"
+          total_timeout="${TOTAL_TIMEOUT:?validated authority total timeout is missing}"
+          if [[ "${UPLOAD_OUTCOME}" == "success" ]]; then
+            test -n "${ARTIFACT_ID}"
+            test -n "${ARTIFACT_URL}"
+            test -n "${ARTIFACT_DIGEST}"
+            size="$(curl --fail --silent --show-error --retry 5 --retry-delay 1 --retry-all-errors \
+              --connect-timeout "${connect_timeout}" --max-time "${total_timeout}" \
+              --header "Authorization: Bearer ${GH_TOKEN}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+              | jq -er --arg name "${ARTIFACT_NAME}" --argjson id "${ARTIFACT_ID}" \
+                'select(.id == $id and .name == $name and .expired == false and .size_in_bytes > 0) | .size_in_bytes')"
+          fi
+          RECEIPT_ROOT="${receipt}" ARTIFACT_SIZE="${size}" python3 -P - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-      - name: Run clippy
-        run: |
-          cd rust
-          # --all-targets so tests, benches and examples are linted too, not
-          # just the library. Without it, lint failures can sit in test code
-          # indefinitely.
-          cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: Check complexity
-        run: |
-          # Every tracked Rust production and test source. rust/ as a whole is
-          # not scanned because it contains rust/target, which is generated
-          # build output: scanning it wastes time and lets vendored code decide
-          # whether this gate passes.
-          lizard -C 40 -w -x "*.c" -x "*.h" \
-            rust/src \
-            rust/tests \
-            rust/xtask \
-            rust/ownership \
-            rust/harness \
-            rust/probes \
-            rust/examples
-
-      - name: Security audit
-        run: |
-          cd rust
-          # --deny warnings, because plain `cargo audit` exits 0 on unsound,
-          # unmaintained and yanked crates. Without it the job reports
-          # "N allowed warnings found" and passes, which is how an unsound
-          # dependency sat in the tree unnoticed.
-          cargo audit --deny warnings
-
-      - name: Validate workflows
-        uses: rhysd/actionlint@v1.7.7
-
-  test-ubuntu:
-    runs-on: ubuntu-latest
-    needs: quality-gate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install SDL2
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libsdl2-dev
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+          succeeded = os.environ["UPLOAD_OUTCOME"] == "success"
+          receipt = {
+              "schema": "uqm-s4-upload-receipt-v1",
+              "job": "required-gates",
+              "source_sha": os.environ["SOURCE_SHA"],
+              "artifact_name": os.environ["ARTIFACT_NAME"],
+              "artifact_id": int(os.environ["ARTIFACT_ID"]) if succeeded else None,
+              "artifact_url": os.environ["ARTIFACT_URL"] if succeeded else None,
+              "artifact_digest": os.environ["ARTIFACT_DIGEST"] if succeeded else None,
+              "retention_days": int(os.environ["RETENTION_DAYS"]),
+              "size_in_bytes": int(os.environ["ARTIFACT_SIZE"]) if succeeded else None,
+              "upload_outcome": os.environ["UPLOAD_OUTCOME"],
+          }
+          (Path(os.environ["RECEIPT_ROOT"]) / "upload-receipt.json").write_text(
+              json.dumps(receipt, indent=2) + "\n"
+          )
+          PY
+      - name: Upload aggregate upload receipt
+        if: always() && steps.required_authority.outputs.available == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          toolchain: stable
-
-      - uses: taiki-e/install-action@v2
+          name: s4-required-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-required-upload-receipt
+          if-no-files-found: error
+          retention-days: ${{ steps.required_authority.outputs.retention_days }}
+      - name: Upload aggregate upload receipt without validated retention
+        if: always() && steps.required_authority.outputs.available != 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          tool: cargo-llvm-cov
-
-      - name: Run tests with coverage
-        run: |
-          cd rust
-          cargo llvm-cov --lib --lcov --remap-path-prefix --output-path coverage-ubuntu.lcov \
-            --ignore-filename-regex '(/target/|/bindings\.rs$)'
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-ubuntu
-          path: rust/coverage-ubuntu.lcov
-
-  test-macos:
-    runs-on: macos-latest
-    needs: quality-gate
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install SDL2
-        run: brew install sdl2
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Run tests with coverage
-        run: |
-          cd rust
-          cargo llvm-cov --lib --lcov --remap-path-prefix --output-path coverage-macos.lcov \
-            --ignore-filename-regex '(/target/|/bindings\.rs$)'
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-macos
-          path: rust/coverage-macos.lcov
-
-  coverage-report:
-    runs-on: ubuntu-latest
-    needs: [test-ubuntu, test-macos]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install coverage tools
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lcov
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: coverage
-
-      - name: Combine coverage reports
-        shell: bash
-        run: |
-          lcov -a coverage/coverage-ubuntu/coverage-ubuntu.lcov \
-               -a coverage/coverage-macos/coverage-macos.lcov \
-               -o combined.lcov
-          # Remove generated build output; source under rust/target is not retained by this job.
-          lcov --ignore-errors unused --remove combined.lcov '*/target/*' 'target/*' -o combined.lcov
-
-      - name: Generate HTML report
-        run: |
-          cd rust
-          genhtml ../combined.lcov --output-directory ../coverage-html --ignore-errors source
-
-      - name: Enforce coverage threshold
-        shell: bash
-        run: |
-          coverage=$(lcov --summary combined.lcov | awk '/lines\./ {gsub("%","",$2); print $2}')
-          echo "Total line coverage: ${coverage}%"
-          awk -v cov="$coverage" 'BEGIN { if (cov < 60) { exit 1 } }'
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-html
-          path: coverage-html
+          name: s4-required-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/s4-required-upload-receipt
+          if-no-files-found: error

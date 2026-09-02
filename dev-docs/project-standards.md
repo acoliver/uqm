@@ -105,15 +105,21 @@ Production paths must not rely on panic-driven control flow. Use `Result` and
 
 ## 5) Lint, complexity and security gates
 
-These gates are enforced in CI by `.github/workflows/rust-quality.yaml`. They
-may be tightened. They must not be weakened.
+These gates are composed by `rust/ci/gates.json` and consumed by
+`.github/workflows/rust-quality.yaml`. The workflow must not duplicate gate
+commands or narrow the matrix. Gates may be tightened. They must not be weakened.
 
-| Gate | Command |
+| Gate | Contract |
 |---|---|
 | Formatting | `cargo fmt --all --check` |
-| Lints | `cargo clippy --workspace --all-targets -- -D warnings` |
-| Complexity | `lizard -C 40 -w` over tracked source, excluding generated build output |
-| Advisories | `cargo audit --deny warnings` |
+| Lints | Clippy over the exact pure and linked profiles with `--all-targets` where applicable and `-D warnings` |
+| Complexity | `lizard -C 40 -w` over every tracked `.rs` file under `rust` and `rast` |
+| Advisories | Fetch the authority-pinned RustSec database revision, then run `cargo audit --db target/ci-advisory-db --no-fetch --deny warnings` |
+| Coverage | At least 80 percent over applicable first-party workspace targets without first-party exclusions |
+
+The complete order, exact command vectors, feature profiles, cache mode, mutation
+targets, and runner mapping are documented in `rust/ci/gates.json` and
+`dev-docs/rust/ci-gates.md`.
 
 Notes that matter:
 
@@ -121,8 +127,12 @@ Notes that matter:
 - Complexity is measured over tracked production and test source. Generated
   build output is excluded because vendored code must not decide whether this
   gate passes; no first-party source may be excluded.
-- `cargo audit` without `--deny warnings` exits zero on unsound, unmaintained
-  and yanked crates. The flag is what makes the gate a gate.
+- `cargo audit` without `--deny warnings` exits zero on unsound, unmaintained,
+  and yanked crates. The security gate uses `--no-fetch` against the exact RustSec
+  revision in `rust/ci/gates.json`, so the audit input cannot change during a run.
+  Successful evidence retains that database in a deterministic binary pack whose
+  file count and SHA-256 are also pinned in the authority. Offline replay validates
+  the pack without accessing Git or the network.
 
 ### Explicit prohibitions
 

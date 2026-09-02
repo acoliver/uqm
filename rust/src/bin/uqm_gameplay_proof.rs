@@ -1079,8 +1079,7 @@ fn verify_source_binding(repo_root: &Path, expected_head: &str) -> Result<(), St
     if head.trim() != expected_head {
         return Err("current repository HEAD differs from production manifest".into());
     }
-    let status = Command::new("git")
-        .current_dir(repo_root)
+    let status = git_command(repo_root)
         .args(["status", "--porcelain=v1", "--untracked-files=all", "-z"])
         .output()
         .map_err(|error| format!("run git source cleanliness check: {error}"))?;
@@ -1090,9 +1089,16 @@ fn verify_source_binding(repo_root: &Path, expected_head: &str) -> Result<(), St
     Ok(())
 }
 
+fn git_command(root: &Path) -> Command {
+    let mut safe_directory = std::ffi::OsString::from("safe.directory=");
+    safe_directory.push(root.as_os_str());
+    let mut command = Command::new("git");
+    command.arg("-c").arg(safe_directory).current_dir(root);
+    command
+}
+
 fn git_output(root: &Path, args: &[&str], label: &str) -> Result<String, String> {
-    let output = Command::new("git")
-        .current_dir(root)
+    let output = git_command(root)
         .args(args)
         .output()
         .map_err(|error| format!("run git for {label}: {error}"))?;

@@ -1,0 +1,731 @@
+{
+  "schema": "uqm-s4-ci-authority-v1",
+  "ledger_identity": {
+    "schema": "uqm-native-ownership-ledger-v7",
+    "assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
+    "history_revision": "46eb961886e2aefe8b2085a3af4b1afbc5e82a77",
+    "raw_revision": "d35f6156bff0b202306cca57d517f800234951df",
+    "sha256": "d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a",
+    "url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json"
+  },
+  "zero_native_delta": {
+    "tracked_sources": 0,
+    "providers": 0,
+    "objects": 0,
+    "internal_symbols": 0,
+    "bridges": 0,
+    "generated_bindings": 0,
+    "transitional_flags": 0,
+    "maximum_transitional_native_inputs": 321
+  },
+  "control_plane_paths": [
+    ".github/workflows/rust-quality.yaml",
+    ".github/actionlint.yaml",
+    "rust/ci/**",
+    "rust/xtask/**",
+    "rust/probes/run_p00_probes.sh",
+    "rust/harness/run_p00_harness.sh",
+    "rust/harness/run_menu_binding_probe.sh",
+    "rust/ownership/verify-fixture.sh",
+    "rust/ownership/verify-production.sh",
+    "rust/build/supported-matrix.json",
+    "rust/ownership/native-provider-manifest.json",
+    "rust/ownership/src/lib.rs",
+    "rust/build/native-input-trend.json",
+    "dev-docs/rust/ci-gates.md",
+    "dev-docs/rust/reproducible-build.md",
+    "dev-docs/rust/ownership-and-strict-linking.md",
+    "dev-docs/README.md",
+    "dev-docs/project-standards.md"
+  ],
+  "tools": {
+    "preflight": [
+      {"name": "cargo", "version_command": ["cargo", "--version"], "expected_output_prefix": null, "accepted_exit_codes": [0]},
+      {"name": "git", "version_command": ["git", "--version"], "expected_output_prefix": "git version ", "accepted_exit_codes": [0]},
+      {"name": "cc", "version_command": ["cc", "--version"], "expected_output_prefix": null, "accepted_exit_codes": [0]},
+      {"name": "ar", "version_command": ["ar", "--version"], "expected_output_prefix": null, "accepted_exit_codes": [0, 1]},
+      {"name": "nm", "version_command": ["nm", "--version"], "expected_output_prefix": null, "accepted_exit_codes": [0]},
+      {"name": "pkg-config", "version_command": ["pkg-config", "--version"], "expected_output_prefix": null, "accepted_exit_codes": [0]},
+      {"name": "rustfmt", "version_command": ["rustfmt", "--version"], "expected_output_prefix": null, "accepted_exit_codes": [0]},
+      {"name": "cargo-clippy", "version_command": ["cargo", "clippy", "--version"], "expected_output_prefix": "clippy", "accepted_exit_codes": [0]}
+    ],
+    "native_prerequisites": {
+      "linux": ["build-essential", "libasound2-dev", "libbz2-dev", "liblzma-dev", "libpng-dev", "libsdl2-dev", "pkg-config", "python3-venv"],
+      "macos": ["bzip2", "libpng", "pkg-config", "sdl2", "xz"]
+    },
+    "rust": {
+      "version": "1.97.1",
+      "installation_integrity": "rustup-release-commit",
+      "integrity_identity": "8bab26f4f68e0e26f0bb7960be334d5b520ea452",
+      "components": ["rustfmt", "clippy", "llvm-tools-preview"],
+      "version_command": ["rustc", "--version"],
+      "expected_output_prefix": "rustc 1.97.1 "
+    },
+    "lizard": {
+      "version": "1.24.0",
+      "installation_integrity": "pip-require-hashes",
+      "integrity_identity": "embedded-distribution-requirements",
+      "distribution_requirements": [
+        {"requirement": "lizard==1.24.0", "sha256": "a688bc607a891ff4a7836826f25742dc9c1bf648da3075dbd495e199e8848602"},
+        {"requirement": "pathspec==1.1.1", "sha256": "a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189"},
+        {"requirement": "pygments==2.21.0", "sha256": "2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9"}
+      ],
+      "version_command": ["lizard", "--version"],
+      "expected_output_prefix": "1.24.0",
+      "source_patch": {
+        "path": "rust/ci/patches/lizard-1.24.0-rust-char-literal.patch",
+        "sha256": "a4b214ace720d9196a98c1ac5e1f2e74cb8c701f250430377ec8f7a5034719a9",
+        "target": "lizard_languages/rust.py",
+        "target_sha256_before": "2712654efeefb18412f355aae9d339ea00593c1954c871fcced7cb6c9f21554f",
+        "target_sha256_after": "1c6e5895ccbbaac07dc2c328911379123d9cd8952f9379b95207823439c796a1",
+        "reason": "lizard reads Rust character literals as lifetimes and splits raw lifetimes at '#', silently hiding following functions from the complexity gate"
+      }
+    },
+    "cargo_audit": {
+      "version": "0.22.2",
+      "installation_integrity": "cargo-registry-sha256",
+      "integrity_identity": "700c2b240f7fd330c24b675fe429f73a5b676531fcc6300400b2b67f155ba12a",
+      "version_command": ["cargo", "audit", "--version"],
+      "expected_output_prefix": "cargo-audit-audit 0.22.2"
+    },
+    "cargo_llvm_cov": {
+      "version": "0.9.0",
+      "installation_integrity": "cargo-registry-sha256",
+      "integrity_identity": "cc4d894e2ff02b503a59b14c17bf1e9939a8a9a8f9dae38245f9acfccb12b7d5",
+      "version_command": ["cargo", "llvm-cov", "--version"],
+      "expected_output_prefix": "cargo-llvm-cov 0.9.0"
+    },
+    "actionlint": {
+      "version": "1.7.7",
+      "installation_integrity": "github-release-sha256",
+      "integrity_identity": "ac22e6577b8d133c7cd779682e65712ef722e719a297633699a4da05e9f351e0",
+      "distribution_requirements": [
+        {
+          "requirement": "darwin-amd64",
+          "sha256": "28e5de5a05fc558474f638323d736d822fff183d2d492f0aecb2b73cc44584f5"
+        },
+        {
+          "requirement": "darwin-arm64",
+          "sha256": "2693315b9093aeacb4ebd91a993fea54fc215057bf0da2659056b4bc033873db"
+        },
+        {
+          "requirement": "linux-amd64",
+          "sha256": "023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
+        },
+        {
+          "requirement": "linux-arm64",
+          "sha256": "401942f9c24ed71e4fe71b76c7d638f66d8633575c4016efd2977ce7c28317d0"
+        }
+      ],
+      "version_command": ["actionlint", "--version"],
+      "expected_output_prefix": "1.7.7"
+    }
+  },
+  "actions": {
+    "checkout": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+    "upload_artifact": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+    "artifact_retention_days": 30,
+    "transport_member_limit_bytes": 67108864,
+    "evidence_snapshot_member_count_limit": 10000,
+    "evidence_snapshot_member_limit_bytes": 67108864,
+    "evidence_snapshot_aggregate_limit_bytes": 268435456,
+    "evidence_snapshot_path_limit_bytes": 4096,
+    "evidence_snapshot_aggregate_path_limit_bytes": 8388608,
+    "github_api_connect_timeout_seconds": 10,
+    "github_api_total_timeout_seconds": 60
+  },
+  "workflow": {
+    "plan_job_timeout_minutes": 20,
+    "gates_job_timeout_minutes": 180,
+    "required_gates_job_timeout_minutes": 5,
+    "bootstrap_authority_retry_limit": 5,
+    "bootstrap_authority_retry_delay_seconds": 1,
+    "bootstrap_authority_connect_timeout_seconds": 30,
+    "bootstrap_authority_total_timeout_seconds": 120,
+    "bootstrap_authority_response_limit_bytes": 1048576
+  },
+  "evidence_roles": [
+    {"role": "step.stdout", "media_type": "text/plain"},
+    {"role": "step.stderr", "media_type": "text/plain"},
+    {"role": "step.result", "media_type": "application/json"},
+    {"role": "gate.result", "media_type": "application/json"},
+    {"role": "preflight.tools", "media_type": "application/json"},
+    {"role": "authority.snapshot", "media_type": "application/json"},
+    {"role": "preflight.source", "media_type": "application/json"},
+    {"role": "cache.initial-state", "media_type": "application/json"},
+    {"role": "coverage.lcov", "media_type": "text/plain"},
+    {"role": "package-manifest", "media_type": "application/json"},
+    {"role": "package-executable", "media_type": "application/x-executable"},
+    {"role": "package-rust_static_archive", "media_type": "application/x-archive"},
+    {"role": "package-c_static_archive", "media_type": "application/x-archive"},
+    {"role": "package-object_sidecar", "media_type": "text/plain"},
+    {"role": "package-provider_report", "media_type": "application/json"},
+    {"role": "ownership-production-report", "media_type": "application/json"},
+    {"role": "native-dependency-capture", "media_type": "application/json"},
+    {"role": "bootstrap-proof.package-manifest", "media_type": "application/json"},
+    {"role": "bootstrap-proof.executable", "media_type": "application/x-executable"},
+    {"role": "bootstrap-proof.profile", "media_type": "application/json"},
+    {"role": "bootstrap-proof.runner", "media_type": "application/x-executable"},
+    {"role": "bootstrap-proof.lcar", "media_type": "application/json"},
+    {"role": "bootstrap-proof.failure-lcar", "media_type": "application/json"},
+    {"role": "bootstrap-proof.lcar-artifact", "media_type": "application/octet-stream"},
+    {"role": "workflow.validation", "media_type": "application/json"},
+    {"role": "ownership.zero-native-delta", "media_type": "application/json"},
+    {"role": "security.advisory-database", "media_type": "application/octet-stream"},
+    {"role": "subordinate.output", "media_type": "application/octet-stream"},
+    {"role": "native-window.acceptance", "media_type": "application/octet-stream"},
+    {"role": "native-window.failure", "media_type": "application/octet-stream"},
+    {"role": "mutations.receipt", "media_type": "application/json"},
+    {"role": "mutation.fixture", "media_type": "application/octet-stream"}
+  ],
+  "matrix_file": "rust/build/supported-matrix.json",
+  "runner_mapping": [
+    {
+      "os": "macos",
+      "architecture": "aarch64",
+      "tuple": "macos-aarch64",
+      "runner": "macos-15",
+      "expected_uname": "arm64"
+    },
+    {
+      "os": "macos",
+      "architecture": "x86_64",
+      "tuple": "macos-x86_64",
+      "runner": "macos-15-intel",
+      "expected_uname": "x86_64"
+    },
+    {
+      "os": "linux",
+      "architecture": "aarch64",
+      "tuple": "linux-aarch64",
+      "runner": "ubuntu-24.04-arm",
+      "expected_uname": "aarch64"
+    },
+    {
+      "os": "linux",
+      "architecture": "x86_64",
+      "tuple": "linux-x86_64",
+      "runner": "ubuntu-24.04",
+      "expected_uname": "x86_64"
+    }
+  ],
+  "complexity": {
+    "maximum": 40,
+    "source_roots": [
+      "rust",
+      "rast"
+    ],
+    "lizard_arguments": [
+      "-C",
+      "40",
+      "-w"
+    ]
+  },
+  "coverage": {
+    "minimum_line_percent": 70.0,
+    "ignore_filename_regex": "(/target/)"
+  },
+  "security": {
+    "advisory_database_repository": "https://github.com/RustSec/advisory-db",
+    "advisory_database_revision": "bf5c0d245a92671908518d7e765914d437954ed6",
+    "advisory_database_path": "target/ci-advisory-db",
+    "advisory_database_pack_sha256": "df2a70ac75f569a5fabb1c651a741a86f7a23a85dc6bf26fa2d7a1e9a81d71a4",
+    "advisory_database_file_count": 1244
+  },
+  "cache": {
+    "mode": "isolated-empty",
+    "require_rust_target_absent": true,
+    "require_sc2_obj_absent": true
+  },
+  "supervision": {
+    "builtin_timeout_seconds": 3600,
+    "aggregate_run_timeout_seconds": 9300,
+    "termination_grace_milliseconds": 1000,
+    "pipe_drain_timeout_milliseconds": 1000,
+    "stdout_limit_bytes": 4194304,
+    "stderr_limit_bytes": 4194304,
+    "executable_member_limit_bytes": 268435456
+  },
+  "native_acceptance": {
+    "platform": "macos",
+    "dedicated_execution_uid": 59999,
+    "content_url": "https://downloads.sourceforge.net/sc2/uqm-0.8.0-content.uqm",
+    "content_filename": "uqm-0.8.0-content.uqm",
+    "content_sha256": "77d75ac25e6fb755a33c4ba3b38a7b7bc41fcbc02896891b0cc9ac9214b72eef",
+    "content_byte_length": 11547353,
+    "content_version": "0.8.0",
+    "content_transport": {
+      "attempt_limit": 3,
+      "read_timeout_seconds": 120,
+      "backoff_seconds": [1, 2]
+    },
+    "script": "rust/scripts/linked-playable-v1.json",
+    "script_sha256": "95aee4114081c72222f50df6ccf7b8f01bafdb954f613381a4be6457562ed934",
+    "script_byte_length": 2169,
+    "acceptance_policy": {
+      "stable_presentation_floor": 120,
+      "playable_presentation_floor": 300,
+      "battle_frame_floor": 300
+    },
+    "runtime_contract": {
+      "capture_timeout_ms": 30000,
+      "capture_kill_grace_ms": 5000,
+      "observer_timeout_ms": 40000,
+      "observer_kill_grace_ms": 5000,
+      "acknowledgement_timeout_ms": 95000,
+      "outer_child_timeout_ms": 300000,
+      "outer_child_kill_grace_ms": 5000,
+      "child_stdout_budget_bytes": 16777216,
+      "child_stderr_budget_bytes": 16777216,
+      "observer_response_budget_bytes": 65536,
+      "capture_budget_bytes": 67108864,
+      "content_expansion_budget_bytes": 33554432,
+      "expected_client_bounds": {
+        "x": 80,
+        "y": 80,
+        "width": 1280,
+        "height": 960
+      }
+    }
+  },
+  "package": {
+    "manifest_schema": "uqm-deterministic-artifacts-v4",
+    "producing_command": "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production",
+    "profile": "release",
+    "cargo_manifest_sha256": "f84d988649a4a9b4814299c744bcd65ab34fb6b11f2ed153975aeb662fac0ec3",
+    "cargo_lock_sha256": "eb0020dc91990fea7446c8ce2660869388e119667ea72ff1e205803deee48796",
+    "features": [
+      "audio_heart",
+      "linked_c_archive"
+    ],
+    "artifacts": [
+      {
+        "role": "executable",
+        "media_type": "application/x-executable",
+        "producing_command": "cargo build --locked --manifest-path rust/Cargo.toml --release --no-default-features --features audio_heart,linked_c_archive --bin uqm"
+      },
+      {
+        "role": "rust_static_archive",
+        "media_type": "application/x-archive",
+        "producing_command": "cargo build --locked --manifest-path rust/Cargo.toml --release --no-default-features --features audio_heart,linked_c_archive --bin uqm"
+      },
+      {
+        "role": "c_static_archive",
+        "media_type": "application/x-archive",
+        "producing_command": "canonical ar rcs <OUT_DIR>/libuqm_c.a <exact manifest-selected native objects>"
+      },
+      {
+        "role": "object_sidecar",
+        "media_type": "text/plain",
+        "producing_command": "rust/build.rs archive_sidecar_inputs(rust/build/native-inputs.json, rust/ownership/native-provider-manifest.json)"
+      },
+      {
+        "role": "provider_report",
+        "media_type": "application/json",
+        "producing_command": "rust/build.rs uqm_ownership::Validator::generate_report()"
+      }
+    ]
+  },
+  "bootstrap_proof": {
+    "profile": "rust/scripts/main-menu-v1.json",
+    "profile_sha256": "1eb2b8e6a99c661a92447556947895053de92609458a3c2f4a3f1d8631799b26",
+    "packaged_root": "rust/target/uqm-package",
+    "packaged_executable": "uqm",
+    "packaged_manifest": "production-artifacts.json"
+  },
+  "profiles": {
+    "pure_test": [
+      "audio_heart",
+      "debug-process"
+    ],
+    "linked_test": [
+      "audio_heart",
+      "debug-process",
+      "linked_c_archive"
+    ]
+  },
+  "gates": [
+    {
+      "id": "format",
+      "owner": "S4",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "fmt-check",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": [
+            "cargo",
+            "fmt",
+            "--all",
+            "--check"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check",
+      "owner": "S4",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "check-pure-workspace",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--workspace",
+            "--all-targets",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process"
+          ]
+        },
+        {
+          "id": "check-linked-bin",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "native_profile": "linked-test",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,linked_c_archive",
+            "--bin",
+            "uqm"
+          ]
+        },
+        {
+          "id": "check-linked-fixture",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "native_profile": "linked-test",
+          "command": [
+            "cargo",
+            "check",
+            "--locked",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,linked_c_archive",
+            "--test",
+            "linked_provider_fixture"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "clippy",
+      "owner": "S4",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "clippy-pure-workspace",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--workspace",
+            "--all-targets",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process",
+            "--",
+            "-D",
+            "warnings"
+          ]
+        },
+        {
+          "id": "clippy-linked-bin",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "native_profile": "linked-test",
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,linked_c_archive",
+            "--bin",
+            "uqm",
+            "--",
+            "-D",
+            "warnings"
+          ]
+        },
+        {
+          "id": "clippy-linked-fixture",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "native_profile": "linked-test",
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--no-default-features",
+            "--features",
+            "audio_heart,debug-process,linked_c_archive",
+            "--test",
+            "linked_provider_fixture",
+            "--",
+            "-D",
+            "warnings"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tests",
+      "owner": "S3",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "xtask-test",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "--manifest-path",
+            "rust/xtask/Cargo.toml",
+            "--",
+            "test"
+          ]
+        },
+        {
+          "id": "native-acceptance",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "--manifest-path",
+            "rust/xtask/Cargo.toml",
+            "--",
+            "native-test"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ownership-link",
+      "owner": "S1",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "ownership-tests",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/ownership/Cargo.toml",
+            "--all-targets"
+          ]
+        },
+        {
+          "id": "ownership-clippy",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/ownership/Cargo.toml",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ]
+        },
+        {
+          "id": "verify-fixture",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "command": [
+            "bash",
+            "rust/ownership/verify-fixture.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "probes-harnesses",
+      "owner": "S3",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "p00-probes",
+          "timeout_seconds": 3600,
+          "native_profile": "linked-test",
+          "cwd": ".",
+          "command": [
+            "bash",
+            "rust/probes/run_p00_probes.sh"
+          ]
+        },
+        {
+          "id": "p00-harness",
+          "timeout_seconds": 3600,
+          "native_profile": "linked-test",
+          "cwd": ".",
+          "command": [
+            "bash",
+            "rust/harness/run_p00_harness.sh"
+          ]
+        },
+        {
+          "id": "menu-binding-probe",
+          "timeout_seconds": 3600,
+          "native_profile": "linked-test",
+          "cwd": ".",
+          "command": [
+            "bash",
+            "rust/harness/run_menu_binding_probe.sh"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "complexity",
+      "owner": "S4",
+      "kind": "builtin"
+    },
+    {
+      "id": "security",
+      "owner": "S4",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "advisory-db-init",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": ["git", "init", "--quiet", "target/ci-advisory-db"]
+        },
+        {
+          "id": "advisory-db-remote",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": ["git", "-C", "target/ci-advisory-db", "remote", "add", "origin", "https://github.com/RustSec/advisory-db"]
+        },
+        {
+          "id": "advisory-db-fetch",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": ["git", "-C", "target/ci-advisory-db", "fetch", "--quiet", "--depth", "1", "origin", "bf5c0d245a92671908518d7e765914d437954ed6"]
+        },
+        {
+          "id": "advisory-db-checkout",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": ["git", "-C", "target/ci-advisory-db", "checkout", "--quiet", "--detach", "FETCH_HEAD"]
+        },
+        {
+          "id": "advisory-db-revision",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": ["git", "-C", "target/ci-advisory-db", "rev-parse", "HEAD"]
+        },
+        {
+          "id": "cargo-audit",
+          "timeout_seconds": 3600,
+          "cwd": "rust",
+          "command": ["cargo", "audit", "--db", "target/ci-advisory-db", "--no-fetch", "--deny", "warnings"]
+        }
+      ]
+    },
+    {
+      "id": "coverage",
+      "owner": "S4",
+      "kind": "builtin"
+    },
+    {
+      "id": "package",
+      "owner": "S2",
+      "kind": "process",
+      "steps": [
+        {
+          "id": "xtask-package",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "native_profile": "production",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "--manifest-path",
+            "rust/xtask/Cargo.toml",
+            "--",
+            "package"
+          ]
+        },
+        {
+          "id": "verify-production-ownership",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "native_profile": "production",
+          "command": [
+            "bash",
+            "rust/ownership/verify-production.sh"
+          ]
+        },
+        {
+          "id": "capture-native-dependencies",
+          "timeout_seconds": 3600,
+          "cwd": ".",
+          "native_profile": "production",
+          "command": [
+            "cargo",
+            "run",
+            "--locked",
+            "--manifest-path",
+            "rust/xtask/Cargo.toml",
+            "--",
+            "capture-dependencies"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bootstrap-proof",
+      "owner": "S3",
+      "kind": "builtin"
+    },
+    {
+      "id": "workflow",
+      "owner": "S4",
+      "kind": "builtin"
+    },
+    {
+      "id": "mutations",
+      "owner": "S4",
+      "kind": "builtin"
+    }
+  ],
+  "mutation_targets": [
+    "format",
+    "check",
+    "clippy",
+    "test",
+    "ownership",
+    "link",
+    "harness",
+    "complexity",
+    "security",
+    "coverage",
+    "cache",
+    "workflow",
+    "artifact"
+  ]
+}

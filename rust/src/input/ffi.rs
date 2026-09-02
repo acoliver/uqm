@@ -1009,7 +1009,7 @@ pub unsafe extern "C" fn rust_VControl_DumpGesture(
     let bytes = result.as_bytes();
     let copy_len = std::cmp::min(bytes.len(), (n - 1) as usize);
 
-    ptr::copy_nonoverlapping(bytes.as_ptr(), buf as *mut u8, copy_len);
+    ptr::copy_nonoverlapping(bytes.as_ptr(), buf.cast::<u8>(), copy_len);
     *buf.add(copy_len) = 0;
 
     copy_len as c_int

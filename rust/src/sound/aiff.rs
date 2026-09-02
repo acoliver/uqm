@@ -371,6 +371,96 @@ impl AiffDecoder {
         let write_bytes = dec_pcm * block_align;
         Ok(write_bytes)
     }
+
+    /// Check the parsed header against the formats this decoder accepts.
+    ///
+    /// Every rejection closes the decoder and reports the reason, matching the
+    /// behaviour the caller relied on when these checks were written inline.
+    fn validate_parsed_header(&mut self, is_aifc: bool, ssnd_found: bool) -> DecodeResult<()> {
+        // REQ-SV-5: sample frames > 0
+        if self.common.sample_frames == 0 {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::InvalidData("no sound data".into()));
+        }
+
+        // REQ-SV-1: round bits to byte boundary
+        self.bits_per_sample = (self.common.sample_size + 7) & !7;
+
+        // REQ-SV-2: bits per sample range
+        if self.bits_per_sample == 0 || self.bits_per_sample > 16 {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::UnsupportedFormat(
+                "bits_per_sample must be 1-16".into(),
+            ));
+        }
+
+        // REQ-SV-3: channel count
+        if self.common.channels != 1 && self.common.channels != 2 {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::UnsupportedFormat(
+                "only mono and stereo supported".into(),
+            ));
+        }
+
+        // REQ-SV-4: sample rate range
+        if self.common.sample_rate < MIN_SAMPLE_RATE || self.common.sample_rate > MAX_SAMPLE_RATE {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::UnsupportedFormat("sample_rate".into()));
+        }
+
+        // REQ-SV-6: SSND required
+        if !ssnd_found {
+            self.last_error = -2;
+            self.close();
+            return Err(DecodeError::InvalidData("no SSND chunk".into()));
+        }
+
+        // Compression handling (REQ-CH-1 through REQ-CH-4)
+        if !is_aifc {
+            if self.common.ext_type_id != 0 {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat("AIFF with extension".into()));
+            }
+            self.comp_type = CompressionType::None;
+        } else if self.common.ext_type_id == SDX2_COMPRESSION {
+            self.comp_type = CompressionType::Sdx2;
+        } else {
+            self.close();
+            return Err(DecodeError::UnsupportedFormat(
+                "unknown AIFC compression".into(),
+            ));
+        }
+
+        // SDX2-specific validation (REQ-CH-5, REQ-CH-6)
+        if self.comp_type == CompressionType::Sdx2 {
+            if self.bits_per_sample != 16 {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat(
+                    "SDX2 requires 16-bit".into(),
+                ));
+            }
+            if self.common.channels as usize > MAX_CHANNELS {
+                self.close();
+                return Err(DecodeError::UnsupportedFormat(
+                    "SDX2 too many channels".into(),
+                ));
+            }
+        }
+
+        // Block sizes (REQ-SV-7..9)
+        self.block_align = (self.bits_per_sample / 8) * self.common.channels;
+        if self.comp_type == CompressionType::None {
+            self.file_block = self.block_align;
+        } else {
+            self.file_block = self.block_align / 2; // 2:1 SDX2 compression
+        }
+
+        Ok(())
+    }
 }
 
 impl SoundDecoder for AiffDecoder {
@@ -519,88 +609,7 @@ impl SoundDecoder for AiffDecoder {
         }
 
         // Validation phase
-
-        // REQ-SV-5: sample frames > 0
-        if self.common.sample_frames == 0 {
-            self.last_error = -2;
-            self.close();
-            return Err(DecodeError::InvalidData("no sound data".into()));
-        }
-
-        // REQ-SV-1: round bits to byte boundary
-        self.bits_per_sample = (self.common.sample_size + 7) & !7;
-
-        // REQ-SV-2: bits per sample range
-        if self.bits_per_sample == 0 || self.bits_per_sample > 16 {
-            self.last_error = -2;
-            self.close();
-            return Err(DecodeError::UnsupportedFormat(
-                "bits_per_sample must be 1-16".into(),
-            ));
-        }
-
-        // REQ-SV-3: channel count
-        if self.common.channels != 1 && self.common.channels != 2 {
-            self.last_error = -2;
-            self.close();
-            return Err(DecodeError::UnsupportedFormat(
-                "only mono and stereo supported".into(),
-            ));
-        }
-
-        // REQ-SV-4: sample rate range
-        if self.common.sample_rate < MIN_SAMPLE_RATE || self.common.sample_rate > MAX_SAMPLE_RATE {
-            self.last_error = -2;
-            self.close();
-            return Err(DecodeError::UnsupportedFormat("sample_rate".into()));
-        }
-
-        // REQ-SV-6: SSND required
-        if !ssnd_found {
-            self.last_error = -2;
-            self.close();
-            return Err(DecodeError::InvalidData("no SSND chunk".into()));
-        }
-
-        // Compression handling (REQ-CH-1 through REQ-CH-4)
-        if !is_aifc {
-            if self.common.ext_type_id != 0 {
-                self.close();
-                return Err(DecodeError::UnsupportedFormat("AIFF with extension".into()));
-            }
-            self.comp_type = CompressionType::None;
-        } else if self.common.ext_type_id == SDX2_COMPRESSION {
-            self.comp_type = CompressionType::Sdx2;
-        } else {
-            self.close();
-            return Err(DecodeError::UnsupportedFormat(
-                "unknown AIFC compression".into(),
-            ));
-        }
-
-        // SDX2-specific validation (REQ-CH-5, REQ-CH-6)
-        if self.comp_type == CompressionType::Sdx2 {
-            if self.bits_per_sample != 16 {
-                self.close();
-                return Err(DecodeError::UnsupportedFormat(
-                    "SDX2 requires 16-bit".into(),
-                ));
-            }
-            if self.common.channels as usize > MAX_CHANNELS {
-                self.close();
-                return Err(DecodeError::UnsupportedFormat(
-                    "SDX2 too many channels".into(),
-                ));
-            }
-        }
-
-        // Block sizes (REQ-SV-7..9)
-        self.block_align = (self.bits_per_sample / 8) * self.common.channels;
-        if self.comp_type == CompressionType::None {
-            self.file_block = self.block_align;
-        } else {
-            self.file_block = self.block_align / 2; // 2:1 SDX2 compression
-        }
+        self.validate_parsed_header(is_aifc, ssnd_found)?;
 
         // Extract audio data (REQ-SV-10)
         let data_start = data_ofs as usize;

@@ -36,6 +36,95 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "linked_c_archive")]
+use crate::c_bindings::controller_input::{
+    CurrentInputState, PulsedInputState, CONTROL_TEMPLATE_NUM_TEMPLATES, NUM_KEYS,
+};
+#[cfg(feature = "linked_c_archive")]
+use crate::c_bindings::player_control_template;
+
+#[cfg(feature = "linked_c_archive")]
+const NUM_PLAYER_KEYS: usize = NUM_KEYS as usize;
+#[cfg(feature = "linked_c_archive")]
+const NUM_INPUT_TEMPLATES: usize = CONTROL_TEMPLATE_NUM_TEMPLATES as usize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PendingPlayerInput {
+    index: i32,
+    value: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PlayerInputObservation {
+    Matched { current: i32, pulsed: i32 },
+    Missing,
+    Contradictory { current: i32, pulsed: i32 },
+}
+
+fn inject_menu_key(index: i32, value: i32) -> bool {
+    input_ffi::inject_menu_key(index, value);
+    !input_ffi::injection_rejected()
+}
+
+fn prepare_player_input(index: i32, value: i32) -> Option<PendingPlayerInput> {
+    input_ffi::inject_player_key(index, value);
+    (!input_ffi::injection_rejected()).then_some(PendingPlayerInput {
+        index,
+        value: i32::from(value != 0),
+    })
+}
+
+fn inject_player_key(index: i32, value: i32) -> bool {
+    input_ffi::inject_player_key(index, value);
+    !input_ffi::injection_rejected()
+}
+
+#[cfg(feature = "linked_c_archive")]
+fn read_player_input_state(index: i32) -> Option<(i32, i32)> {
+    let index = usize::try_from(index).ok()?;
+    if index >= NUM_PLAYER_KEYS {
+        return None;
+    }
+    unsafe {
+        let template = usize::try_from(player_control_template(0)?).ok()?;
+        if template >= NUM_INPUT_TEMPLATES {
+            return None;
+        }
+        Some((
+            CurrentInputState.key[template][index],
+            PulsedInputState.key[template][index],
+        ))
+    }
+}
+
+#[cfg(not(feature = "linked_c_archive"))]
+fn read_player_input_state(_index: i32) -> Option<(i32, i32)> {
+    None
+}
+
+fn observe_player_input_with(
+    pending: PendingPlayerInput,
+    observer: impl FnOnce(i32) -> Option<(i32, i32)>,
+) -> PlayerInputObservation {
+    let Some((current, pulsed)) = observer(pending.index) else {
+        return PlayerInputObservation::Missing;
+    };
+    let matches_write = match pending.value {
+        0 => current == 0 && pulsed == 0,
+        1 => current == 1 && matches!(pulsed, 0 | 1),
+        _ => false,
+    };
+    if matches_write {
+        PlayerInputObservation::Matched { current, pulsed }
+    } else {
+        PlayerInputObservation::Contradictory { current, pulsed }
+    }
+}
+
+fn observe_player_input(pending: PendingPlayerInput) -> PlayerInputObservation {
+    observe_player_input_with(pending, read_player_input_state)
+}
+
 /// Outcome of servicing a planet-side wait for one input callback.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct PlanetSideWaitResult {
@@ -56,6 +145,13 @@ impl PlanetSideWaitResult {
             labels: vec![label],
         }
     }
+}
+
+/// A scripted player input awaiting production-state observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PendingAcceptedPlayerInput {
+    key: crate::automation::script::PlayerKey,
+    injection: PendingPlayerInput,
 }
 
 /// Whether a settled trip satisfies a wait bound to `awaited`.
@@ -114,12 +210,15 @@ struct CoordInner {
     present_seen: u64,
     last_observed: Instant,
     trace_seq: u64,
+    accepted_player_inputs: u64,
+    pending_player_input: Option<PendingAcceptedPlayerInput>,
+    verified_battle_frames: u64,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
     /// was not in WaitingSemantic. Replayed when the scheduler enters
     /// WaitingSemantic.
-    pending_transitions: Vec<u8>,
+    pending_transitions: Vec<(u8, u8)>,
     /// The label of the currently armed capture step, if any.
     /// Used when the capture completes to write a PNG artifact.
     armed_capture_label: Option<String>,
@@ -210,6 +309,9 @@ impl Coordinator {
                 present_seen: 0,
                 last_observed: now,
                 trace_seq: 0,
+                accepted_player_inputs: 0,
+                pending_player_input: None,
+                verified_battle_frames: 0,
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -244,6 +346,30 @@ impl Coordinator {
     /// Whether automation is active and the coordinator is initialized.
     pub fn is_active() -> bool {
         Self::get().is_some()
+    }
+    /// Return one atomic semantic snapshot for the backend publication.
+    ///
+    /// The backend calls this after presenting pixels but before the corresponding coordinator
+    /// presentation callback. `trace_seq` is the length of the exact committed trace prefix;
+    /// both semantic counters are protected by the same lock as trace publication.
+    pub fn native_window_semantic_snapshot() -> Option<(u64, u64, u64)> {
+        let coord = Self::get()?;
+        let inner = coord.inner.lock();
+        Some((
+            inner.trace_seq,
+            inner.accepted_player_inputs,
+            inner.verified_battle_frames,
+        ))
+    }
+
+    /// Terminate active automation when an external evidence publisher fails.
+    pub fn external_trace_failure(detail: impl Into<String>) {
+        let Some(coord) = Self::get() else {
+            return;
+        };
+        let mut inner = coord.inner.lock();
+        coord.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, detail.into());
+        coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
     }
 
     /// Activate the script's start scene after game structures and initial
@@ -307,25 +433,70 @@ impl Coordinator {
         let Some(coord) = Self::get() else {
             return false;
         };
-        if coord.halt_on_rejected_injection() {
-            return true;
-        }
         coord.process_input_inner()
     }
 
-    /// Stop the run if the native owner ever refused an input write.
-    ///
-    /// The script's action never reached the game, so continuing would assert
-    /// against state the automation never actually produced.
-    fn halt_on_rejected_injection(&self) -> bool {
-        if !crate::automation::input_ffi::injection_rejected() {
+    /// Observe a scripted player input after production updates current and pulsed state.
+    pub fn process_player_input_observation() -> bool {
+        let Some(coord) = Self::get() else {
             return false;
-        }
+        };
+        coord.process_player_input_observation_inner()
+    }
+
+    fn process_player_input_observation_inner(&self) -> bool {
         let mut inner = self.inner.lock();
-        if inner.terminal_class.is_none() {
-            self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+        if inner.terminal_class.is_some() {
+            return true;
         }
-        true
+        let Some(pending) = inner.pending_player_input.take() else {
+            return false;
+        };
+
+        match observe_player_input(pending.injection) {
+            PlayerInputObservation::Matched { current, pulsed } => {
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    player_input_observation_trace_label(
+                        pending.key,
+                        pending.injection.value,
+                        current,
+                        pulsed,
+                    ),
+                );
+                let Some(next) = accepted_player_input_count(inner.accepted_player_inputs, pulsed)
+                else {
+                    self.write_trace_labeled(
+                        &mut inner,
+                        RecordKind::SemanticAssertion,
+                        "accepted_player_inputs_overflow".to_string(),
+                    );
+                    self.set_terminal(&mut inner, TerminalClass::CounterOverflow);
+                    return true;
+                };
+                inner.accepted_player_inputs = next;
+                self.write_trace_labeled(
+                    &mut inner,
+                    RecordKind::SemanticAssertion,
+                    player_input_trace_label(pending.key, pending.injection.value),
+                );
+                if inner.sched_state.is_terminal() {
+                    let class = map_scheduler_terminal(inner.sched_state.terminal);
+                    self.set_terminal(&mut inner, class);
+                    return true;
+                }
+                false
+            }
+            PlayerInputObservation::Missing => {
+                self.reject_player_input_observation(&mut inner, pending, None);
+                true
+            }
+            PlayerInputObservation::Contradictory { current, pulsed } => {
+                self.reject_player_input_observation(&mut inner, pending, Some((current, pulsed)));
+                true
+            }
+        }
     }
 
     /// Whether the current semantic response action is waiting for NPC speech
@@ -484,10 +655,11 @@ impl Coordinator {
             {
                 if ready {
                     crate::comm::ffi::rust_SelectResponseIndex(select.index as i32);
-                    crate::automation::input_ffi::inject_menu_key(
-                        i32::from(crate::automation::script::MenuKey::Select.index()),
-                        1,
-                    );
+                    let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
+                    if !inject_menu_key(key_index, 1) {
+                        self.reject_input(inner, "menu", key_index, 1);
+                        return scheduler_event;
+                    }
                     inner.release_semantic_select = true;
                     inner.consumed_response_generation = generation;
                     scheduler_event = SchedulerEvent::ConditionReached;
@@ -520,10 +692,11 @@ impl Coordinator {
                 && generation > inner.consumed_planet_menu_generation
                 && phase == expected
             {
-                crate::automation::input_ffi::inject_menu_key(
-                    i32::from(crate::automation::script::MenuKey::Select.index()),
-                    1,
-                );
+                let key_index = i32::from(crate::automation::script::MenuKey::Select.index());
+                if !inject_menu_key(key_index, 1) {
+                    self.reject_input(inner, "menu", key_index, 1);
+                    return scheduler_event;
+                }
                 inner.release_semantic_select = true;
                 inner.consumed_planet_menu_generation = generation;
                 scheduler_event = SchedulerEvent::ConditionReached;
@@ -538,6 +711,22 @@ impl Coordinator {
             }
         } else if let Some(result) = self.service_planet_side_wait(inner) {
             scheduler_event = self.record_planet_side_result(inner, result, scheduler_event);
+        } else if let Some(Action::WaitForBattleFrames(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let actual = crate::automation::battle_observer::current_frame();
+            if battle_frame_floor_reached(actual, wait.minimum) {
+                inner.verified_battle_frames = inner.verified_battle_frames.max(actual);
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "battle_frames_reached:count={actual}:minimum={}",
+                        wait.minimum
+                    ),
+                );
+            }
         } else if let Some(Action::WaitForDispatch(wait)) =
             self.actions.get(inner.sched_state.step_index)
         {
@@ -594,17 +783,21 @@ impl Coordinator {
                 },
             );
             if reached {
-                Self::set_navigation_controls(
+                if !Self::set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
-                );
+                ) {
+                    self.reject_input(inner, "navigation", -1, -1);
+                    return scheduler_event;
+                }
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
                     format!("navigation_reached:planet={}", navigation.planet),
                 );
-            } else {
-                Self::set_navigation_controls(control);
+            } else if !Self::set_navigation_controls(control) {
+                self.reject_input(inner, "navigation", -1, -1);
+                return scheduler_event;
             }
         } else if let Some(Action::NavigateToOrbit(navigation)) =
             self.actions.get(inner.sched_state.step_index)
@@ -634,9 +827,12 @@ impl Coordinator {
                 },
             );
             if reached {
-                Self::set_navigation_controls(
+                if !Self::set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
-                );
+                ) {
+                    self.reject_input(inner, "navigation", -1, -1);
+                    return scheduler_event;
+                }
                 inner.orbit_transition_pending = true;
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
@@ -644,8 +840,9 @@ impl Coordinator {
                     RecordKind::SemanticAssertion,
                     format!("orbit_reached:planet={}", navigation.planet),
                 );
-            } else {
-                Self::set_navigation_controls(control);
+            } else if !Self::set_navigation_controls(control) {
+                self.reject_input(inner, "navigation", -1, -1);
+                return scheduler_event;
             }
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
@@ -708,9 +905,12 @@ impl Coordinator {
                 }
             }
             if reached_orbit {
-                Self::set_navigation_controls(
+                if !Self::set_navigation_controls(
                     crate::automation::navigation::NavigationControl::default(),
-                );
+                ) {
+                    self.reject_input(inner, "navigation", -1, -1);
+                    return scheduler_event;
+                }
                 scheduler_event = SchedulerEvent::NavigationReached;
                 self.write_trace_labeled(
                     inner,
@@ -723,8 +923,9 @@ impl Coordinator {
                         snapshot.target_data_index
                     ),
                 );
-            } else {
-                Self::set_navigation_controls(control);
+            } else if !Self::set_navigation_controls(control) {
+                self.reject_input(inner, "navigation", -1, -1);
+                return scheduler_event;
             }
         }
         scheduler_event
@@ -739,20 +940,20 @@ impl Coordinator {
                 actions: &self.actions,
                 transitions: &self.transitions,
             };
-            let pending: Vec<u8> = std::mem::take(&mut inner.pending_transitions);
-            for to in pending {
-                eprintln!("[automation] replaying pending menu_transition to={}", to);
+            let pending: Vec<(u8, u8)> = std::mem::take(&mut inner.pending_transitions);
+            for (from, to) in pending {
+                eprintln!("[automation] replaying pending menu_transition from={from} to={to}");
                 let t2 = scheduler_reduce(
                     &inner.sched_state,
                     &config2,
-                    SchedulerEvent::MenuTransition { to },
+                    SchedulerEvent::MenuTransition { from, to },
                 );
                 inner.sched_state = t2.new_state;
                 let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch)
                 {
-                    format!("menu_transition_failed:to={to}")
+                    format!("menu_transition_failed:from={from}:to={to}")
                 } else {
-                    format!("menu_transition_passed:to={to}")
+                    format!("menu_transition_passed:from={from}:to={to}")
                 };
                 self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
                 if inner.sched_state.is_terminal() {
@@ -768,13 +969,17 @@ impl Coordinator {
         if inner.terminal_class.is_some() {
             return true;
         }
+        if self.reject_unobserved_player_input(&mut inner) {
+            return true;
+        }
 
         let released_semantic_select = inner.release_semantic_select;
         if released_semantic_select {
-            crate::automation::input_ffi::inject_menu_key(
-                i32::from(crate::automation::script::MenuKey::Select.index()),
-                0,
-            );
+            let index = i32::from(crate::automation::script::MenuKey::Select.index());
+            if !inject_menu_key(index, 0) {
+                self.reject_input(&mut inner, "menu", index, 0);
+                return true;
+            }
             inner.release_semantic_select = false;
         }
         let orbit_transition_pending = inner.orbit_transition_pending;
@@ -820,9 +1025,15 @@ impl Coordinator {
             released_semantic_select,
             orbit_transition_pending,
         );
+        if inner.terminal_class.is_some() {
+            return true;
+        }
 
         scheduler_event = self.service_navigation(&mut inner, scheduler_event);
 
+        if inner.terminal_class.is_some() {
+            return true;
+        }
         // The setup_planet_side_collision_fixture action is explicit and
         // one-shot: only the current action queues, only once.  A duplicate
         // while a request is still pending is a fail-fast semantic
@@ -861,10 +1072,15 @@ impl Coordinator {
             transitions: &self.transitions,
         };
         let transition = scheduler_reduce(&inner.sched_state, &config, scheduler_event);
+        let previous_state = inner.sched_state;
         inner.sched_state = transition.new_state;
 
         // Step 3: Apply effects.
-        self.apply_effects(&mut inner, &transition.effects, None);
+        if !self.apply_effects(&mut inner, &transition.effects, None) {
+            inner.sched_state =
+                scheduler_state_after_effects(previous_state, transition.new_state, false);
+            return true;
+        }
 
         // Step 4: Write trace.
         self.write_trace(&mut inner, RecordKind::InputTick);
@@ -875,6 +1091,12 @@ impl Coordinator {
 
         // Step 5: Check terminal.
         if inner.sched_state.is_terminal() {
+            if terminal_waits_for_player_input_observation(
+                inner.sched_state,
+                inner.pending_player_input.is_some(),
+            ) {
+                return false;
+            }
             let class = map_scheduler_terminal(inner.sched_state.terminal);
             eprintln!(
                 "[automation] scheduler terminal: {:?} -> class={:?}",
@@ -983,11 +1205,14 @@ impl Coordinator {
             self.actions.get(inner.sched_state.step_index)
         {
             match crate::automation::battle_observer::assert_progress(assertion.minimum) {
-                Ok(actual) => self.write_trace_labeled(
-                    inner,
-                    RecordKind::SemanticAssertion,
-                    format!("battle_frames_verified:count={actual}"),
-                ),
+                Ok(actual) => {
+                    inner.verified_battle_frames = inner.verified_battle_frames.max(actual);
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        format!("battle_frames_verified:count={actual}"),
+                    );
+                }
                 Err(error) => {
                     self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
                     self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -1096,7 +1321,21 @@ impl Coordinator {
         let Some(coord) = Self::get() else {
             return false;
         };
-        coord.process_present_inner(frame)
+        #[cfg(feature = "debug-process")]
+        let committed_presentation = frame.as_ref().map(|frame| frame.count);
+        let stop = coord.process_present_inner(frame);
+        #[cfg(feature = "debug-process")]
+        if let Some(committed_presentation) = committed_presentation {
+            if let Err(error) = crate::automation::native_window::publish_native_window_presentation(
+                committed_presentation,
+            ) {
+                Self::external_trace_failure(format!(
+                    "native-window state publication failed: {error}"
+                ));
+                return true;
+            }
+        }
+        stop
     }
 
     fn process_present_inner(
@@ -1106,6 +1345,9 @@ impl Coordinator {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
+            return true;
+        }
+        if self.reject_unobserved_player_input(&mut inner) {
             return true;
         }
 
@@ -1176,14 +1418,25 @@ impl Coordinator {
                 generation: CaptureGeneration(frame.generation),
             },
         );
+        let previous_state = inner.sched_state;
         inner.sched_state = transition.new_state;
 
         if self.write_presentation_trace(&mut inner, &frame) {
             return true;
         }
-        self.apply_effects(&mut inner, &transition.effects, Some(&frame));
+        if !self.apply_effects(&mut inner, &transition.effects, Some(&frame)) {
+            inner.sched_state =
+                scheduler_state_after_effects(previous_state, transition.new_state, false);
+            return true;
+        }
 
         if inner.sched_state.is_terminal() {
+            if terminal_waits_for_player_input_observation(
+                inner.sched_state,
+                inner.pending_player_input.is_some(),
+            ) {
+                return false;
+            }
             let class = map_scheduler_terminal(inner.sched_state.terminal);
             self.set_terminal(&mut inner, class);
             return true;
@@ -1196,16 +1449,45 @@ impl Coordinator {
     //  Menu transition observation (called from handle_navigate)
     // -----------------------------------------------------------------------
 
-    /// Process an observed main-menu transition. Returns true if the game
-    /// loop should stop (e.g., semantic assertion mismatch).
-    pub fn process_menu_transition(to_index: u8) -> bool {
+    /// Advance a script waiting for the initialized production restart menu.
+    pub fn process_main_menu_ready() -> bool {
         let Some(coord) = Self::get() else {
             return false;
         };
-        coord.process_menu_transition_inner(to_index)
+        let mut inner = coord.inner.lock();
+        if inner.terminal_class.is_some() {
+            return true;
+        }
+        let config = SchedulerConfig {
+            actions: &coord.actions,
+            transitions: &coord.transitions,
+        };
+        let transition =
+            scheduler_reduce(&inner.sched_state, &config, SchedulerEvent::MainMenuReady);
+        inner.sched_state = transition.new_state;
+        coord.write_trace_labeled(
+            &mut inner,
+            RecordKind::SemanticAssertion,
+            "main_menu_ready".to_string(),
+        );
+        if inner.sched_state.is_terminal() {
+            let class = map_scheduler_terminal(inner.sched_state.terminal);
+            coord.set_terminal(&mut inner, class);
+            return true;
+        }
+        false
     }
 
-    fn process_menu_transition_inner(&self, to_index: u8) -> bool {
+    /// Process an observed main-menu transition. Returns true if the game
+    /// loop should stop (e.g., semantic assertion mismatch).
+    pub fn process_menu_transition(from_index: u8, to_index: u8) -> bool {
+        let Some(coord) = Self::get() else {
+            return false;
+        };
+        coord.process_menu_transition_inner(from_index, to_index)
+    }
+
+    fn process_menu_transition_inner(&self, from_index: u8, to_index: u8) -> bool {
         let mut inner = self.inner.lock();
 
         if inner.terminal_class.is_some() {
@@ -1221,30 +1503,30 @@ impl Coordinator {
         // It will be replayed when the scheduler enters WaitingSemantic.
         if inner.sched_state.phase != crate::automation::scheduler::ActionPhase::WaitingSemantic {
             eprintln!(
-                "[automation] menu_transition to={} queued (phase={:?})",
-                to_index, inner.sched_state.phase
+                "[automation] menu_transition from={} to={} queued (phase={:?})",
+                from_index, to_index, inner.sched_state.phase
             );
-            inner.pending_transitions.push(to_index);
+            inner.pending_transitions.push((from_index, to_index));
             return false;
         }
 
         // Process pending transitions first.
-        let mut to_process: Vec<u8> = std::mem::take(&mut inner.pending_transitions);
-        to_process.push(to_index);
+        let mut to_process: Vec<(u8, u8)> = std::mem::take(&mut inner.pending_transitions);
+        to_process.push((from_index, to_index));
 
-        for to in to_process {
-            eprintln!("[automation] menu_transition to={} processing", to);
+        for (from, to) in to_process {
+            eprintln!("[automation] menu_transition from={from} to={to} processing");
             let transition = scheduler_reduce(
                 &inner.sched_state,
                 &config,
-                SchedulerEvent::MenuTransition { to },
+                SchedulerEvent::MenuTransition { from, to },
             );
             inner.sched_state = transition.new_state;
 
             let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch) {
-                format!("menu_transition_failed:to={to}")
+                format!("menu_transition_failed:from={from}:to={to}")
             } else {
-                format!("menu_transition_passed:to={to}")
+                format!("menu_transition_passed:from={from}:to={to}")
             };
             self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
 
@@ -1285,8 +1567,12 @@ impl Coordinator {
             if inner.finalized {
                 return Err("automation coordinator finalized more than once".into());
             }
+            self.reject_unobserved_player_input(&mut inner);
+            if inner.terminal_class.is_none() {
+                self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
+            }
             inner.finalized = true;
-            self.write_trace(&mut inner, RecordKind::RunEnd);
+            self.write_terminal_trace(&mut inner);
             inner.terminal_class
         };
 
@@ -1324,7 +1610,9 @@ impl Coordinator {
     /// Also propagates the stop to the game loop by setting CHECK_ABORT
     /// and MainExited to force the game loop to exit.
     fn set_terminal(&self, inner: &mut CoordInner, class: TerminalClass) {
-        inner.terminal_class = Some(class);
+        if !record_first_terminal(&mut inner.terminal_class, class) {
+            return;
+        }
         self.runtime.mirror.terminal.try_set(class);
 
         // Propagate stop to the C game loop: set CHECK_ABORT so the
@@ -1429,7 +1717,7 @@ impl Coordinator {
         result
     }
 
-    fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) {
+    fn set_navigation_controls(control: crate::automation::navigation::NavigationControl) -> bool {
         use crate::automation::script::{MenuKey, PlayerKey};
 
         for (key, active) in [
@@ -1437,10 +1725,9 @@ impl Coordinator {
             (PlayerKey::Left, control.left),
             (PlayerKey::Right, control.right),
         ] {
-            crate::automation::input_ffi::inject_player_key(
-                i32::from(key.index()),
-                i32::from(active),
-            );
+            if !inject_player_key(i32::from(key.index()), i32::from(active)) {
+                return false;
+            }
         }
 
         let (up, select) = if control.leave_orbit {
@@ -1450,11 +1737,11 @@ impl Coordinator {
             (false, false)
         };
         for (key, active) in [(MenuKey::Up, up), (MenuKey::Select, select)] {
-            crate::automation::input_ffi::inject_menu_key(
-                i32::from(key.index()),
-                i32::from(active),
-            );
+            if !inject_menu_key(i32::from(key.index()), i32::from(active)) {
+                return false;
+            }
         }
+        true
     }
 
     /// Apply planned effects from the scheduler reducer.
@@ -1463,24 +1750,30 @@ impl Coordinator {
         inner: &mut CoordInner,
         effects: &EffectPlan,
         frame: Option<&crate::automation::capture::PresentedFrame>,
-    ) {
-        // Note: `inner` is `&mut` so callers can pass it as mutable.
+    ) -> bool {
         if let Some((key, value)) = effects.write_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            crate::automation::input_ffi::inject_menu_key(i32::from(index), i32::from(value));
+            if !inject_menu_key(i32::from(index), i32::from(value)) {
+                self.reject_input(inner, "menu", i32::from(index), i32::from(value));
+                return false;
+            }
         }
         if let Some(key) = effects.release_key {
             let index = crate::automation::input::menu_key_to_index(key);
-            crate::automation::input_ffi::inject_menu_key(i32::from(index), 0);
+            if !inject_menu_key(i32::from(index), 0) {
+                self.reject_input(inner, "menu", i32::from(index), 0);
+                return false;
+            }
         }
         if let Some((key, value)) = effects.write_player_key {
-            crate::automation::input_ffi::inject_player_key(
-                i32::from(key.index()),
-                i32::from(value),
-            );
+            if !self.queue_player_input_observation(inner, key, i32::from(value)) {
+                return false;
+            }
         }
         if let Some(key) = effects.release_player_key {
-            crate::automation::input_ffi::inject_player_key(i32::from(key.index()), 0);
+            if !self.queue_player_input_observation(inner, key, 0) {
+                return false;
+            }
         }
         if let Some(gen) = effects.arm_capture {
             self.runtime.mirror.set_capture_generation(gen.0);
@@ -1501,6 +1794,76 @@ impl Coordinator {
                 None => self.capture_failure(inner, "capture completed without a presented frame"),
             }
         }
+        if let Some(count) = effects.complete_presentation_wait {
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                presentation_wait_trace_label(count),
+            );
+        }
+        true
+    }
+
+    fn queue_player_input_observation(
+        &self,
+        inner: &mut CoordInner,
+        key: crate::automation::script::PlayerKey,
+        value: i32,
+    ) -> bool {
+        if self.reject_unobserved_player_input(inner) {
+            return false;
+        }
+        let Some(injection) = prepare_player_input(i32::from(key.index()), value) else {
+            self.reject_input(inner, "player", i32::from(key.index()), value);
+            return false;
+        };
+        inner.pending_player_input = Some(PendingAcceptedPlayerInput { key, injection });
+        true
+    }
+
+    fn reject_player_input_observation(
+        &self,
+        inner: &mut CoordInner,
+        pending: PendingAcceptedPlayerInput,
+        observed: Option<(i32, i32)>,
+    ) {
+        let label = match observed {
+            Some((current, pulsed)) => format!(
+                "player_input_observation_contradictory:key={:?}:intended={}:current={current}:pulsed={pulsed}",
+                pending.key, pending.injection.value
+            ),
+            None => format!(
+                "player_input_observation_missing:key={:?}:intended={}",
+                pending.key, pending.injection.value
+            ),
+        };
+        self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+        self.set_terminal(inner, TerminalClass::SemanticMismatch);
+    }
+
+    fn reject_unobserved_player_input(&self, inner: &mut CoordInner) -> bool {
+        let Some(pending) = inner.pending_player_input.take() else {
+            return false;
+        };
+        self.write_trace_labeled(
+            inner,
+            RecordKind::SemanticAssertion,
+            format!(
+                "player_input_observation_missing:key={:?}:intended={}:reason=next_callback",
+                pending.key, pending.injection.value
+            ),
+        );
+        self.set_terminal(inner, TerminalClass::SemanticMismatch);
+        true
+    }
+
+    fn reject_input(&self, inner: &mut CoordInner, domain: &str, index: i32, value: i32) {
+        self.write_trace_labeled(
+            inner,
+            RecordKind::SemanticAssertion,
+            format!("input_rejected:domain={domain}:index={index}:value={value}"),
+        );
+        self.set_terminal(inner, TerminalClass::SemanticMismatch);
     }
 
     /// Write a trace record through the ordered commit.
@@ -1528,6 +1891,37 @@ impl Coordinator {
         if let Ok(jsonl) = record.to_jsonl() {
             let res = self.runtime.commit.reserve_sequence(seq);
             res.commit_record(jsonl);
+        }
+    }
+
+    fn write_terminal_trace(&self, inner: &mut CoordInner) {
+        let seq = inner.trace_seq;
+        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let terminal_reason = inner
+            .terminal_class
+            .and_then(|class| serde_json::to_value(class).ok())
+            .and_then(|value| value.as_str().map(str::to_owned));
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            kind: RecordKind::RunEnd,
+            label: None,
+            from: None,
+            to: None,
+            terminal_reason,
+            seed_application: None,
+            presentation: None,
+            activity: None,
+        };
+        if let Ok(jsonl) = record.to_jsonl() {
+            self.runtime
+                .commit
+                .reserve_sequence(seq)
+                .commit_record(jsonl);
         }
     }
 
@@ -1647,6 +2041,25 @@ impl Coordinator {
     }
 }
 
+fn record_first_terminal(slot: &mut Option<TerminalClass>, class: TerminalClass) -> bool {
+    if slot.is_some() {
+        return false;
+    }
+    *slot = Some(class);
+    true
+}
+fn scheduler_state_after_effects(
+    previous: SchedulerState,
+    transitioned: SchedulerState,
+    accepted: bool,
+) -> SchedulerState {
+    if accepted {
+        transitioned
+    } else {
+        previous
+    }
+}
+
 fn activity_evidence(assertion: &ActivityAssertion, word: u16) -> ActivityEvidence {
     ActivityEvidence {
         word,
@@ -1751,13 +2164,52 @@ fn map_scheduler_terminal(terminal: Option<TerminalOutcome>) -> TerminalClass {
         Some(TerminalOutcome::CaptureGenerationOverflow) => {
             TerminalClass::CaptureGenerationOverflow
         }
+        Some(TerminalOutcome::InvalidState) => TerminalClass::SemanticMismatch,
         None => TerminalClass::CooperativeStop,
     }
+}
+
+fn battle_frame_floor_reached(actual: u64, minimum: u64) -> bool {
+    actual >= minimum
 }
 
 // ===========================================================================
 //  Unit tests
 // ===========================================================================
+
+fn terminal_waits_for_player_input_observation(
+    scheduler_state: SchedulerState,
+    observation_pending: bool,
+) -> bool {
+    scheduler_state.is_terminal() && observation_pending
+}
+
+fn accepted_player_input_count(current: u64, observed_value: i32) -> Option<u64> {
+    if observed_value == 0 {
+        Some(current)
+    } else {
+        current.checked_add(1)
+    }
+}
+
+fn player_input_trace_label(key: crate::automation::script::PlayerKey, value: i32) -> String {
+    format!("player_input:key={key:?}:value={value}")
+}
+
+fn player_input_observation_trace_label(
+    key: crate::automation::script::PlayerKey,
+    intended: i32,
+    current: i32,
+    pulsed: i32,
+) -> String {
+    format!(
+        "player_input_observed:key={key:?}:intended={intended}:current={current}:pulsed={pulsed}"
+    )
+}
+
+fn presentation_wait_trace_label(count: u64) -> String {
+    format!("wait_presentations:{count}")
+}
 
 #[cfg(test)]
 mod tests {
@@ -1771,6 +2223,121 @@ mod tests {
         assert!(!consume_new_generation(&mut consumed, 1));
         assert!(consume_new_generation(&mut consumed, 2));
         assert_eq!(consumed, 2);
+    }
+    #[test]
+    fn semantic_trace_labels_bind_observed_player_input_and_presentation_waits() {
+        assert_eq!(
+            player_input_trace_label(crate::automation::script::PlayerKey::Thrust, 1),
+            "player_input:key=Thrust:value=1"
+        );
+        assert_eq!(
+            player_input_observation_trace_label(
+                crate::automation::script::PlayerKey::Weapon,
+                1,
+                1,
+                1,
+            ),
+            "player_input_observed:key=Weapon:intended=1:current=1:pulsed=1"
+        );
+        assert_eq!(presentation_wait_trace_label(300), "wait_presentations:300");
+    }
+
+    #[test]
+    fn battle_frame_wait_requires_the_observed_floor() {
+        assert!(!battle_frame_floor_reached(0, 1));
+        assert!(!battle_frame_floor_reached(299, 300));
+        assert!(battle_frame_floor_reached(1, 1));
+        assert!(battle_frame_floor_reached(334, 300));
+    }
+
+    #[test]
+    fn post_update_observation_accepts_and_rejects_without_a_presentation() {
+        let press = PendingPlayerInput { index: 4, value: 1 };
+        assert_eq!(
+            observe_player_input_with(press, |_| Some((1, 1))),
+            PlayerInputObservation::Matched {
+                current: 1,
+                pulsed: 1,
+            }
+        );
+        assert_eq!(
+            observe_player_input_with(press, |_| Some((1, 0))),
+            PlayerInputObservation::Matched {
+                current: 1,
+                pulsed: 0,
+            }
+        );
+        let release = PendingPlayerInput { index: 4, value: 0 };
+        assert_eq!(
+            observe_player_input_with(release, |_| Some((0, 0))),
+            PlayerInputObservation::Matched {
+                current: 0,
+                pulsed: 0,
+            }
+        );
+        assert_eq!(
+            observe_player_input_with(release, |_| Some((1, 0))),
+            PlayerInputObservation::Contradictory {
+                current: 1,
+                pulsed: 0,
+            }
+        );
+        assert_eq!(
+            observe_player_input_with(press, |_| None),
+            PlayerInputObservation::Missing
+        );
+    }
+
+    #[test]
+    fn accepted_player_input_count_changes_only_for_observed_press() {
+        assert_eq!(accepted_player_input_count(7, 0), Some(7));
+        assert_eq!(accepted_player_input_count(7, 1), Some(8));
+        assert_eq!(accepted_player_input_count(u64::MAX, 1), None);
+    }
+
+    #[test]
+    fn terminal_success_waits_for_pending_player_input_observation() {
+        let mut terminal = SchedulerState::initial();
+        terminal.terminal = Some(TerminalOutcome::FinishComplete);
+
+        assert!(terminal_waits_for_player_input_observation(terminal, true));
+        assert!(!terminal_waits_for_player_input_observation(
+            terminal, false
+        ));
+        assert!(!terminal_waits_for_player_input_observation(
+            SchedulerState::initial(),
+            true,
+        ));
+    }
+
+    #[test]
+    fn terminal_class_is_first_writer_wins() {
+        let mut terminal = None;
+        assert!(record_first_terminal(
+            &mut terminal,
+            TerminalClass::SemanticMismatch,
+        ));
+        assert!(!record_first_terminal(
+            &mut terminal,
+            TerminalClass::TraceFailure,
+        ));
+        assert_eq!(terminal, Some(TerminalClass::SemanticMismatch));
+    }
+    #[test]
+    fn rejected_effects_do_not_advance_scheduler_state() {
+        let previous = SchedulerState::initial();
+        let mut transitioned = previous;
+        transitioned.step_index = 1;
+        transitioned.state_version = 1;
+
+        assert_eq!(
+            scheduler_state_after_effects(previous, transitioned, false),
+            previous
+        );
+        assert_eq!(
+            scheduler_state_after_effects(previous, transitioned, true),
+            transitioned
+        );
     }
 
     #[test]

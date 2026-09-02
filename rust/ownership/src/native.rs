@@ -1,6 +1,7 @@
 //! Exact native-input, production-profile, and transitive-dependency authority.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -491,8 +492,12 @@ pub fn validate_git_tracked<'a>(
     if paths.is_empty() {
         return Err("tracked-input validation requires a non-empty authority".into());
     }
+    let mut safe_directory = OsString::from("safe.directory=");
+    safe_directory.push(root);
     let output = Command::new("git")
         .current_dir(root)
+        .arg("-c")
+        .arg(safe_directory)
         .args(["ls-files", "--error-unmatch", "--"])
         .args(&paths)
         .output()

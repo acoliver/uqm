@@ -2101,11 +2101,16 @@ dependencies = [
 name = "uqm-xtask"
 version = "0.8.0"
 dependencies = [
+ "image",
+ "libc",
+ "png",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "uqm",
  "uqm-ownership",
+ "zip",
 ]
 
 [[package]]

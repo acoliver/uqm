@@ -34,6 +34,7 @@ const G_MASK: u32 = 0x00FF0000; // G in bits 16-23
 const B_MASK: u32 = 0x0000FF00; // B in bits 8-15
 const A_MASK_SCREEN: u32 = 0x00000000; // no alpha on screen surfaces
 const A_MASK_ALPHA: u32 = 0x000000FF; // alpha mask for format_conv_surf (font backing)
+const SDL_DONTFREE: u32 = 0x00000004;
 
 // Real SDL_Surface structure layout from SDL2
 #[repr(C)]
@@ -75,6 +76,23 @@ extern "C" {
         Amask: u32,
     ) -> *mut SDL_Surface;
     fn SDL_FreeSurface(surface: *mut SDL_Surface);
+}
+
+fn lend_surface_to_c(surface: *mut SDL_Surface) {
+    assert!(!surface.is_null());
+    // SAFETY: SDL_CreateRGBSurface returned this live surface to the caller.
+    unsafe { (*surface).flags |= SDL_DONTFREE };
+}
+
+fn free_owned_surface(surface: *mut SDL_Surface) {
+    assert!(!surface.is_null());
+
+    // C receives borrowed TFB_Canvas pointers. Clear the SDL ownership marker
+    // only when the Rust owner is ready to release the surface.
+    unsafe {
+        (*surface).flags &= !SDL_DONTFREE;
+        SDL_FreeSurface(surface);
+    }
 }
 
 /// Thread-local graphics state wrapper
@@ -296,11 +314,13 @@ pub unsafe extern "C" fn rust_gfx_init(
             // Clean up already created surfaces
             for &surface in surfaces.iter().take(i) {
                 if !surface.is_null() {
-                    unsafe { SDL_FreeSurface(surface) };
+                    free_owned_surface(surface);
                 }
             }
             return -1;
         }
+
+        lend_surface_to_c(surface);
 
         surfaces[i] = surface;
         rust_bridge_log_msg(&format!(
@@ -317,12 +337,13 @@ pub unsafe extern "C" fn rust_gfx_init(
         rust_bridge_log_msg("RUST_GFX_INIT: Failed to create format_conv_surf");
         for &surface in &surfaces {
             if !surface.is_null() {
-                unsafe { SDL_FreeSurface(surface) };
+                free_owned_surface(surface);
             }
         }
         return -1;
     }
 
+    lend_surface_to_c(format_conv_surf);
     let mut state = RustGraphicsState {
         sdl_context,
         video,
@@ -386,14 +407,26 @@ pub unsafe extern "C" fn rust_gfx_uninit() {
         for i in 0..TFB_GFX_NUMSCREENS {
             state.scaled_buffers[i] = None;
         }
+        // Name each owner slot before release so hosted crash evidence identifies
+        // which borrowed surface crossed the ownership boundary incorrectly.
+        for i in 0..TFB_GFX_NUMSCREENS {
+            rust_bridge_log_msg(&format!(
+                "RUST_GFX_UNINIT surface[{i}]={:p}",
+                state.surfaces[i]
+            ));
+        }
+        rust_bridge_log_msg(&format!(
+            "RUST_GFX_UNINIT format_conv_surf={:p}",
+            state.format_conv_surf
+        ));
         for i in 0..TFB_GFX_NUMSCREENS {
             if !state.surfaces[i].is_null() {
-                unsafe { SDL_FreeSurface(state.surfaces[i]) };
+                free_owned_surface(state.surfaces[i]);
                 state.surfaces[i] = std::ptr::null_mut();
             }
         }
         if !state.format_conv_surf.is_null() {
-            unsafe { SDL_FreeSurface(state.format_conv_surf) };
+            free_owned_surface(state.format_conv_surf);
             state.format_conv_surf = std::ptr::null_mut();
         }
 
@@ -1020,6 +1053,20 @@ mod tests {
         {
             assert_eq!(std::mem::size_of::<SDL_Rect>(), 16);
         }
+    }
+
+    #[test]
+    fn borrowed_surface_survives_borrower_free_attempt() {
+        let surface =
+            unsafe { SDL_CreateRGBSurface(0, 1, 1, 32, R_MASK, G_MASK, B_MASK, A_MASK_SCREEN) };
+        assert!(!surface.is_null());
+
+        lend_surface_to_c(surface);
+        unsafe { SDL_FreeSurface(surface) };
+
+        // SDL_DONTFREE turns SDL_FreeSurface into a no-op for a borrower.
+        assert_ne!(unsafe { (*surface).flags } & SDL_DONTFREE, 0);
+        free_owned_surface(surface);
     }
 
     // ========================================================================

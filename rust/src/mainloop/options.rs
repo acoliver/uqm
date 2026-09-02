@@ -32,6 +32,8 @@ const TFB_SCALE_STEP: c_int = 1;
 const OPT_PC: c_int = 2;
 const OPT_3DO: c_int = 1;
 
+pub const DEFAULT_RESOLUTION_WIDTH: c_int = 1280;
+pub const DEFAULT_RESOLUTION_HEIGHT: c_int = 960;
 // ===========================================================================
 //  Parsed options — accessible from C via FFI
 // ===========================================================================
@@ -102,6 +104,7 @@ pub struct ParsedOptions {
     /// None when not supplied. When both are Some, automation is active.
     pub automation_script: Option<String>,
     pub automation_output: Option<String>,
+    pub native_window_proof: Option<String>,
 }
 
 impl Default for ParsedOptions {
@@ -139,13 +142,14 @@ impl Default for ParsedOptions {
             music_volume_scale: 1.0,
             sfx_volume_scale: 1.0,
             speech_volume_scale: 1.0,
-            resolution_width: 1280,
-            resolution_height: 960,
+            resolution_width: DEFAULT_RESOLUTION_WIDTH,
+            resolution_height: DEFAULT_RESOLUTION_HEIGHT,
             player1_control: None,
             player2_control: None,
             parse_error: false,
             automation_script: None,
             automation_output: None,
+            native_window_proof: None,
         }
     }
 }
@@ -171,7 +175,7 @@ pub fn parsed() -> &'static ParsedOptions {
 // ===========================================================================
 
 fn build_command() -> Command {
-    Command::new("uqm")
+    let command = Command::new("uqm")
         .about("The Ur-Quan Masters")
         .disable_help_flag(true)
         .disable_version_flag(true)
@@ -388,7 +392,18 @@ fn build_command() -> Command {
                 .long("automation-output")
                 .value_name("DIR")
                 .help("Path to automation output directory"),
+        );
+    #[cfg(feature = "debug-process")]
+    {
+        command.arg(
+            Arg::new("native-window-proof")
+                .long("native-window-proof")
+                .value_name("FILE")
+                .help("Path to proof-only native-window configuration"),
         )
+    }
+    #[cfg(not(feature = "debug-process"))]
+    command
 }
 
 // ===========================================================================
@@ -452,29 +467,70 @@ fn load_config_defaults() -> ParsedOptions {
 /// Apply a single config file key=value pair to ParsedOptions.
 fn apply_config_value(opts: &mut ParsedOptions, key: &str, raw_val: &str) {
     // raw_val is "TYPE:value" e.g. "BOOLEAN:true", "INT32:960", "STRING:mixsdl"
-    let (vtype, vstr) = match raw_val.split_once(':') {
-        Some((t, v)) => (t, v),
-        None => return,
+    let Some((vtype, vstr)) = raw_val.split_once(':') else {
+        return;
     };
 
+    match vtype {
+        "BOOLEAN" => apply_boolean_config(opts, key, vstr),
+        "INT32" => apply_int32_config(opts, key, vstr),
+        "STRING" => apply_string_config(opts, key, vstr),
+        _ => {}
+    }
+}
+
+fn apply_boolean_config(opts: &mut ParsedOptions, key: &str, vstr: &str) {
+    let enabled = vstr == "true";
     match key {
-        "reswidth" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.resolution_width = v;
+        // alwaysgl only applies when true
+        "alwaysgl" if enabled => opts.opengl = true,
+        "usegl" => opts.opengl = enabled,
+        "fullscreen" => opts.fullscreen = enabled,
+        "scanlines" => opts.scanlines = enabled,
+        "showfps" => opts.show_fps = enabled,
+        "keepaspectratio" => opts.keep_aspect_ratio = enabled,
+        "subtitles" => opts.subtitles = enabled,
+        "textmenu" => opts.which_menu = if enabled { OPT_PC } else { OPT_3DO },
+        "textgradients" => opts.which_fonts = if enabled { OPT_PC } else { OPT_3DO },
+        "iconicscan" => opts.which_coarse_scan = if enabled { OPT_3DO } else { OPT_PC },
+        "smoothscroll" => opts.smooth_scroll = if enabled { OPT_3DO } else { OPT_PC },
+        "pulseshield" => opts.which_shield = if enabled { OPT_3DO } else { OPT_PC },
+        "3domovies" => opts.which_intro = if enabled { OPT_3DO } else { OPT_PC },
+        "3domusic" => opts.use_3do_music = enabled,
+        "remixmusic" => opts.use_remix_music = enabled,
+        "speech" => opts.use_speech = enabled,
+        "smoothmelee" => {
+            opts.melee_scale = if enabled {
+                TFB_SCALE_TRILINEAR
+            } else {
+                TFB_SCALE_STEP
             }
         }
-        "resheight" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.resolution_height = v;
-            }
-        }
-        "alwaysgl" if vtype == "BOOLEAN" && vstr == "true" => {
-            opts.opengl = true; // alwaysgl only applies when true
-        }
-        "usegl" if vtype == "BOOLEAN" => {
-            opts.opengl = vstr == "true";
-        }
-        "scaler" if vtype == "STRING" => {
+        "positionalsfx" => opts.stereo_sfx = enabled,
+        _ => {} // unknown key, skip
+    }
+}
+
+fn apply_int32_config(opts: &mut ParsedOptions, key: &str, vstr: &str) {
+    let Ok(value) = vstr.parse::<i32>() else {
+        return;
+    };
+    match key {
+        "reswidth" => opts.resolution_width = value,
+        "resheight" => opts.resolution_height = value,
+        "gamma" => opts.gamma = value as f32 / 1000.0,
+        "musicvol" => opts.music_volume_scale = value as f32 / 100.0,
+        "sfxvol" => opts.sfx_volume_scale = value as f32 / 100.0,
+        "speechvol" => opts.speech_volume_scale = value as f32 / 100.0,
+        "player1control" => opts.player1_control = Some(value),
+        "player2control" => opts.player2_control = Some(value),
+        _ => {} // unknown key, skip
+    }
+}
+
+fn apply_string_config(opts: &mut ParsedOptions, key: &str, vstr: &str) {
+    match key {
+        "scaler" => {
             opts.scaler = match vstr {
                 "hq" => TFB_GFXFLAGS_SCALE_HQXX,
                 "xbrz3" => TFB_GFXFLAGS_SCALE_XBRZ3,
@@ -483,84 +539,20 @@ fn apply_config_value(opts: &mut ParsedOptions, key: &str, raw_val: &str) {
                 _ => opts.scaler,
             };
         }
-        "fullscreen" if vtype == "BOOLEAN" => opts.fullscreen = vstr == "true",
-        "scanlines" if vtype == "BOOLEAN" => opts.scanlines = vstr == "true",
-        "showfps" if vtype == "BOOLEAN" => opts.show_fps = vstr == "true",
-        "keepaspectratio" if vtype == "BOOLEAN" => opts.keep_aspect_ratio = vstr == "true",
-        "gamma" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.gamma = v as f32 / 1000.0;
-            }
-        }
-        "subtitles" if vtype == "BOOLEAN" => opts.subtitles = vstr == "true",
-        "textmenu" if vtype == "BOOLEAN" => {
-            opts.which_menu = if vstr == "true" { OPT_PC } else { OPT_3DO }
-        }
-        "textgradients" if vtype == "BOOLEAN" => {
-            opts.which_fonts = if vstr == "true" { OPT_PC } else { OPT_3DO }
-        }
-        "iconicscan" if vtype == "BOOLEAN" => {
-            opts.which_coarse_scan = if vstr == "true" { OPT_3DO } else { OPT_PC }
-        }
-        "smoothscroll" if vtype == "BOOLEAN" => {
-            opts.smooth_scroll = if vstr == "true" { OPT_3DO } else { OPT_PC }
-        }
-        "pulseshield" if vtype == "BOOLEAN" => {
-            opts.which_shield = if vstr == "true" { OPT_3DO } else { OPT_PC }
-        }
-        "3domovies" if vtype == "BOOLEAN" => {
-            opts.which_intro = if vstr == "true" { OPT_3DO } else { OPT_PC }
-        }
-        "3domusic" if vtype == "BOOLEAN" => opts.use_3do_music = vstr == "true",
-        "remixmusic" if vtype == "BOOLEAN" => opts.use_remix_music = vstr == "true",
-        "speech" if vtype == "BOOLEAN" => opts.use_speech = vstr == "true",
-        "smoothmelee" if vtype == "BOOLEAN" => {
-            opts.melee_scale = if vstr == "true" {
-                TFB_SCALE_TRILINEAR
-            } else {
-                TFB_SCALE_STEP
-            }
-        }
-        "audiodriver" if vtype == "STRING" => {
+        "audiodriver" => {
             opts.sound_driver = match vstr {
                 "mixsdl" => AUDIO_DRIVER_MIXSDL,
                 "none" => AUDIO_DRIVER_NOSOUND,
                 _ => opts.sound_driver,
             };
         }
-        "audioquality" if vtype == "STRING" => {
+        "audioquality" => {
             opts.sound_quality = match vstr {
                 "low" => AUDIO_QUALITY_LOW,
                 "medium" => AUDIO_QUALITY_MEDIUM,
                 "high" => AUDIO_QUALITY_HIGH,
                 _ => opts.sound_quality,
             };
-        }
-        "positionalsfx" if vtype == "BOOLEAN" => opts.stereo_sfx = vstr == "true",
-        "musicvol" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.music_volume_scale = v as f32 / 100.0;
-            }
-        }
-        "sfxvol" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.sfx_volume_scale = v as f32 / 100.0;
-            }
-        }
-        "speechvol" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.speech_volume_scale = v as f32 / 100.0;
-            }
-        }
-        "player1control" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.player1_control = Some(v);
-            }
-        }
-        "player2control" if vtype == "INT32" => {
-            if let Ok(v) = vstr.parse::<i32>() {
-                opts.player2_control = Some(v);
-            }
         }
         _ => {} // unknown key, skip
     }
@@ -590,6 +582,16 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
         return;
     }
 
+    apply_display_arguments(&matches, opts);
+    apply_path_arguments(&matches, opts);
+    if !apply_enum_arguments(&matches, opts) {
+        return;
+    }
+    apply_choice_arguments(&matches, opts);
+    apply_scalar_arguments(&matches, opts);
+}
+
+fn apply_display_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) {
     // Resolution: WIDTHxHEIGHT
     if let Some(res) = matches.get_one::<String>("res") {
         if let Some((w, h)) = parse_resolution(res) {
@@ -629,7 +631,9 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
     if matches.get_flag("safe") {
         opts.safe_mode = true;
     }
+}
 
+fn apply_path_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) {
     // String options
     if let Some(v) = matches.get_one::<String>("configdir") {
         opts.config_dir = Some(v.clone());
@@ -654,12 +658,20 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
     if let Some(v) = matches.get_one::<String>("automation-output") {
         opts.automation_output = Some(v.clone());
     }
+    #[cfg(feature = "debug-process")]
+    if let Some(v) = matches.get_one::<String>("native-window-proof") {
+        opts.native_window_proof = Some(v.clone());
+    }
 
     // Addons (can be specified multiple times)
     if let Some(addons) = matches.get_many::<String>("addon") {
         opts.addons = addons.cloned().collect();
     }
+}
 
+/// Apply enumerated selections. Returns false when a value is unrecognized,
+/// which stops argument parsing exactly as the combined parser did.
+fn apply_enum_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) -> bool {
     // List/enum options
     if let Some(v) = matches.get_one::<String>("scale") {
         opts.scaler = match v.as_str() {
@@ -669,7 +681,7 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
             "none" | "no" => 0,
             _ => {
                 opts.parse_error = true;
-                return;
+                return false;
             }
         };
     }
@@ -680,7 +692,7 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
             "bilinear" => 0,
             _ => {
                 opts.parse_error = true;
-                return;
+                return false;
             }
         };
     }
@@ -691,7 +703,7 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
             "high" => AUDIO_QUALITY_HIGH,
             _ => {
                 opts.parse_error = true;
-                return;
+                return false;
             }
         };
     }
@@ -701,11 +713,14 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
             "none" | "nosound" => AUDIO_DRIVER_NOSOUND,
             _ => {
                 opts.parse_error = true;
-                return;
+                return false;
             }
         };
     }
+    true
+}
 
+fn apply_choice_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) {
     // 3do/pc choice options
     if let Some(v) = matches.get_one::<String>("intro") {
         opts.which_intro = parse_choice(v, opts);
@@ -725,7 +740,9 @@ fn parse_args_into(args: &[String], opts: &mut ParsedOptions) {
     if let Some(v) = matches.get_one::<String>("scroll") {
         opts.smooth_scroll = parse_choice(v, opts);
     }
+}
 
+fn apply_scalar_arguments(matches: &clap::ArgMatches, opts: &mut ParsedOptions) {
     // Volume options (0-100 → 0.0-1.0 scale)
     if let Some(v) = matches.get_one::<String>("musicvol") {
         opts.music_volume_scale = parse_volume(v).unwrap_or_else(|| {
@@ -1014,8 +1031,10 @@ mod tests {
         assert!(opts.keep_aspect_ratio);
         assert_eq!(opts.scaler, TFB_GFXFLAGS_SCALE_XBRZ3);
         assert_eq!(opts.sound_driver, AUDIO_DRIVER_MIXSDL);
-        assert_eq!(opts.resolution_width, 1280);
-        assert_eq!(opts.resolution_height, 960);
+        assert_eq!(DEFAULT_RESOLUTION_WIDTH, 1280);
+        assert_eq!(DEFAULT_RESOLUTION_HEIGHT, 960);
+        assert_eq!(opts.resolution_width, DEFAULT_RESOLUTION_WIDTH);
+        assert_eq!(opts.resolution_height, DEFAULT_RESOLUTION_HEIGHT);
     }
 
     #[test]
@@ -1217,6 +1236,21 @@ mod tests {
         assert_eq!(opts.which_menu, OPT_3DO);
         apply_config_value(&mut opts, "smoothmelee", "BOOLEAN:true");
         assert_eq!(opts.melee_scale, TFB_SCALE_TRILINEAR);
+    }
+
+    #[cfg(feature = "debug-process")]
+    #[test]
+    fn native_window_proof_option_is_parsed() {
+        let opts = parse(&[
+            "uqm",
+            "--automation-script=/tmp/script.json",
+            "--native-window-proof=/tmp/native-proof.json",
+        ]);
+        assert_eq!(opts.automation_script.as_deref(), Some("/tmp/script.json"));
+        assert_eq!(
+            opts.native_window_proof.as_deref(),
+            Some("/tmp/native-proof.json")
+        );
     }
 
     #[test]

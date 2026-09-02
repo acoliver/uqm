@@ -115,6 +115,7 @@ fn run() -> Result<(), String> {
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
     println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
+    generate_input_abi_bindings()?;
     compile_local_helpers();
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
@@ -151,7 +152,9 @@ fn validate_toolchain_marker(actual: &ToolchainIdentity) -> Result<(), String> {
     let expected: ToolchainIdentity = serde_json::from_str(&marker)
         .map_err(|error| format!("invalid UQM_CANONICAL_TOOLCHAIN marker: {error}"))?;
     if &expected != actual {
-        return Err("build.rs effective toolchain differs from canonical xtask selection".into());
+        return Err(format!(
+            "build.rs effective toolchain differs from canonical xtask selection: expected {expected:?}; actual {actual:?}"
+        ));
     }
     Ok(())
 }
@@ -678,6 +681,27 @@ fn generate_hash_abi_bindings() -> Result<(), String> {
     let generated = canonicalize_hash_abi_names(bindings.to_string());
     fs::write(out_dir.join("hash_table_abi.rs"), generated)
         .map_err(|error| format!("cannot write generated hash-table ABI bindings: {error}"))
+}
+fn generate_input_abi_bindings() -> Result<(), String> {
+    let out_dir = output_directory()?;
+    let header = "../sc2/src/uqm/controls.h";
+    println!("cargo:rerun-if-changed={header}");
+    let bindings = bindgen::Builder::default()
+        .header(header)
+        .clang_arg("-I../sc2")
+        .clang_arg("-I../sc2/src")
+        .allowlist_type("CONTROLLER_INPUT_STATE")
+        .allowlist_type("CONTROL_TEMPLATE")
+        .allowlist_var("(NUM_KEYS|NUM_MENU_KEYS|NUM_TEMPLATES)")
+        .allowlist_var("(CurrentInputState|PulsedInputState)")
+        .generate_comments(false)
+        .generate()
+        .map_err(|error| format!("cannot generate controller-input ABI bindings: {error}"))?;
+    fs::write(
+        out_dir.join("controller_input_abi.rs"),
+        bindings.to_string(),
+    )
+    .map_err(|error| format!("cannot write generated controller-input ABI bindings: {error}"))
 }
 
 fn canonicalize_hash_abi_names(mut bindings: String) -> String {

@@ -121,6 +121,9 @@ impl Drop for MenuSoundSilence {
 mod tests {
     use super::*;
 
+    // The thread-local policy records what was set; the linked build drives
+    // unsynchronised C statics instead and cannot observe that.
+    #[cfg(not(feature = "linked_c_archive"))]
     #[test]
     fn silencing_restores_the_callers_policy_exactly_once() {
         policy::reset((0x0F, 0x10));
@@ -148,6 +151,9 @@ mod tests {
         );
     }
 
+    // The thread-local policy records what was set; the linked build drives
+    // unsynchronised C statics instead and cannot observe that.
+    #[cfg(not(feature = "linked_c_archive"))]
     #[test]
     fn nested_trips_each_restore_their_own_caller_policy() {
         policy::reset((0x21, 0x22));

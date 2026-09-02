@@ -513,6 +513,21 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// Wait for the current battle to complete at least `minimum` real frames.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForBattleFramesStep {
+    pub minimum: u64,
+    pub max_ticks: u64,
+}
+
+/// Wait for exactly `count` committed presentation callbacks.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitPresentationsStep {
+    pub count: u64,
+}
+
 /// Assert the live PlanetSide collision verdicts on presented frames.
 ///
 /// Each counter is a floor: the lander must have collected at least
@@ -562,6 +577,12 @@ pub struct WaitForCommunicationReplayStep {
 #[serde(deny_unknown_fields)]
 pub struct SetupPlanetSideCollisionFixtureStep {}
 
+/// The no-payload step that waits for the production restart menu to finish
+/// initialization and accept navigation input.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForMainMenuReadyStep {}
+
 /// The closed set of automation actions (REQ-SCRIPT-003).
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P01
@@ -572,6 +593,8 @@ pub struct SetupPlanetSideCollisionFixtureStep {}
 #[serde(rename_all = "snake_case")]
 pub enum Action {
     WaitInputTicks(WaitInputTicksStep),
+    WaitPresentations(WaitPresentationsStep),
+    WaitForMainMenuReady(WaitForMainMenuReadyStep),
     SetMenuKey(SetMenuKeyStep),
     TapMenuKey(TapMenuKeyStep),
     SetPlayerKey(SetPlayerKeyStep),
@@ -590,6 +613,7 @@ pub enum Action {
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertBattleFrames(BattleFramesAssertion),
+    WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
@@ -1071,390 +1095,15 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
     validate_finish_semantics(&steps, path)?;
 
     // Per-step validation.
-    let mut transitions = Vec::new();
-    let mut required_input_callbacks: u64 = 0;
-    let required_presentations: u64 = 0;
-    for (i, step) in steps.iter().enumerate() {
-        // Every action consumes at least one admitted input callback, including
-        // immediate assertions, capture arming, and the final Finish action.
-        required_input_callbacks = required_input_callbacks.checked_add(1).ok_or_else(|| {
-            AutomationError::ArithmeticOverflow {
-                path: path.to_string(),
-                reason: format!("required input ticks overflow at step {i}"),
-            }
-        })?;
-        match step {
-            Action::WaitInputTicks(w) => {
-                // The base callback above accounts for the first wait callback.
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(w.count.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: count={}",
-                            w.count
-                        ),
-                    })?;
-            }
-            Action::SetMenuKey(s) => {
-                if s.value > 1 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!("set_menu_key value must be 0 or 1, got {}", s.value),
-                    ));
-                }
-            }
-            Action::TapMenuKey(t) => {
-                if t.hold == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "tap_menu_key hold must be positive",
-                    ));
-                }
-                if t.value > 1 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!("tap_menu_key value must be 0 or 1, got {}", t.value),
-                    ));
-                }
-                // A tap consumes `hold` admitted input callbacks while held
-                // and `settle` admitted input callbacks while settling.
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(t.hold)
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: hold={}",
-                            t.hold
-                        ),
-                    })?;
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(t.settle)
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: settle={}",
-                            t.settle
-                        ),
-                    })?;
-            }
-            Action::SetPlayerKey(s) => {
-                if s.value > 1 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!("set_player_key value must be 0 or 1, got {}", s.value),
-                    ));
-                }
-            }
-            Action::TapPlayerKey(t) => {
-                if t.hold == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "tap_player_key hold must be positive",
-                    ));
-                }
-                if t.value > 1 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!("tap_player_key value must be 0 or 1, got {}", t.value),
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(t.hold)
-                    .and_then(|value| value.checked_add(t.settle))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: hold={}, settle={}",
-                            t.hold, t.settle
-                        ),
-                    })?;
-            }
-            Action::WaitForDispatch(wait) => {
-                if wait.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "wait_for_dispatch max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(wait.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            wait.max_ticks
-                        ),
-                    })?;
-            }
-            Action::SelectCommunicationResponse(select) => {
-                if select.index >= 8 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "select_communication_response index must be 0..=7",
-                    ));
-                }
-                if select.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "select_communication_response max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(select.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            select.max_ticks
-                        ),
-                    })?;
-            }
-            Action::WaitForCommunicationEnd(wait) => {
-                if wait.minimum_completions == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "wait_for_communication_end minimum_completions must be positive",
-                    ));
-                }
-                if wait.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "wait_for_communication_end max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(wait.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            wait.max_ticks
-                        ),
-                    })?;
-            }
-            Action::WaitForCommunicationReplay(wait) => {
-                if wait.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "wait_for_communication_replay max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(wait.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            wait.max_ticks
-                        ),
-                    })?;
-            }
-            Action::NavigateToMoon(navigation) => {
-                if navigation.planet > 8 || navigation.moon > 3 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!(
-                            "navigate_to_moon target must be planet 0..=8 and moon 0..=3, got planet={} moon={}",
-                            navigation.planet, navigation.moon
-                        ),
-                    ));
-                }
-                if navigation.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "navigate_to_moon max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(navigation.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            navigation.max_ticks
-                        ),
-                    })?;
-            }
-            Action::NavigateToOrbit(navigation) => {
-                if navigation.planet > 8 || navigation.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "navigate_to_orbit requires planet 0..=8 and positive max_ticks",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(navigation.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            navigation.max_ticks
-                        ),
-                    })?;
-            }
-            Action::WaitForPlanetSideStart(wait) => {
-                if wait.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "wait_for_planet_side_start max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(wait.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            wait.max_ticks
-                        ),
-                    })?;
-            }
-            Action::WaitForPlanetSideEnd(wait) => {
-                if wait.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "wait_for_planet_side_end max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(wait.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            wait.max_ticks
-                        ),
-                    })?;
-            }
-            Action::SelectPlanetMenu(select) => {
-                if select.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "select_planet_menu max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(select.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            select.max_ticks
-                        ),
-                    })?;
-            }
-            Action::NavigateToPlanet(navigation) => {
-                if navigation.planet > 8 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!(
-                            "navigate_to_planet planet must be 0..=8, got {}",
-                            navigation.planet
-                        ),
-                    ));
-                }
-                if navigation.max_ticks == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "navigate_to_planet max_ticks must be positive",
-                    ));
-                }
-                required_input_callbacks = required_input_callbacks
-                    .checked_add(navigation.max_ticks.saturating_sub(1))
-                    .ok_or_else(|| AutomationError::ArithmeticOverflow {
-                        path: path.to_string(),
-                        reason: format!(
-                            "required input ticks overflow at step {i}: max_ticks={}",
-                            navigation.max_ticks
-                        ),
-                    })?;
-            }
-            Action::Capture(c) => {
-                if !is_valid_label(&c.label) {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!(
-                            "capture label '{}' is invalid: must be nonempty and reject separators, '..', and control characters",
-                            c.label
-                        ),
-                    ));
-                }
-            }
-            Action::AssertActivity(a) => {
-                // REQ-SCRIPT-004: equals & !mask == 0
-                if (a.equals & !a.mask) != 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        format!(
-                            "assert_activity: equals (0x{:04X}) has bits outside mask (0x{:04X})",
-                            a.equals, a.mask
-                        ),
-                    ));
-                }
-            }
-            Action::AssertScene(_) | Action::AssertDispatch(_) | Action::AssertGameOptions(_) => {}
-            Action::AssertCommunicationResponses(assertion) => {
-                if assertion.minimum == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "assert_communication_responses: minimum must be greater than zero",
-                    ));
-                }
-            }
-            Action::AssertBattleFrames(assertion) => {
-                if assertion.minimum == 0 {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "assert_battle_frames: minimum must be greater than zero",
-                    ));
-                }
-            }
-            Action::AssertPlanetSideCollisions(assertion) => {
-                if assertion.mineral_pickups == 0
-                    && assertion.creature_hits == 0
-                    && assertion.seam_hits == 0
-                {
-                    return Err(AutomationError::step(
-                        path,
-                        i,
-                        "assert_planet_side_collisions: at least one of mineral_pickups, creature_hits, seam_hits must be positive",
-                    ));
-                }
-            }
-            Action::AssertMainMenuTransition(dto_inner) => {
-                let from = parse_menu_item(&dto_inner.from, i, path)?;
-                let to = parse_menu_item(&dto_inner.to, i, path)?;
-                transitions.push(MainMenuTransition::new(from, to));
-            }
-            Action::SetupPlanetSideCollisionFixture(_) => {}
-            Action::Finish => {}
-        }
+    let mut requirements = StepRequirements::default();
+    for (index, step) in steps.iter().enumerate() {
+        validate_step(step, index, path, &mut requirements)?;
     }
+    let StepRequirements {
+        transitions,
+        input_callbacks: required_input_callbacks,
+        presentations: required_presentations,
+    } = requirements;
 
     // Inclusive-limit static lower bound (REQ-SCRIPT-004, REQ-WATCH-001).
     // A maximum M admits at most M-1 callbacks; requiring N admitted callbacks
@@ -1479,6 +1128,391 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         steps,
         transitions,
     })
+}
+
+/// Admitted-callback and transition tallies accumulated across script steps.
+#[derive(Default)]
+struct StepRequirements {
+    transitions: Vec<MainMenuTransition>,
+    input_callbacks: u64,
+    presentations: u64,
+}
+
+impl StepRequirements {
+    fn add_input_callbacks(
+        &mut self,
+        amount: u64,
+        index: usize,
+        path: &str,
+        detail: &str,
+    ) -> Result<(), AutomationError> {
+        self.input_callbacks = self.input_callbacks.checked_add(amount).ok_or_else(|| {
+            AutomationError::ArithmeticOverflow {
+                path: path.to_string(),
+                reason: format!("required input ticks overflow at step {index}{detail}"),
+            }
+        })?;
+        Ok(())
+    }
+
+    fn add_presentations(
+        &mut self,
+        amount: u64,
+        index: usize,
+        path: &str,
+        detail: &str,
+    ) -> Result<(), AutomationError> {
+        self.presentations = self.presentations.checked_add(amount).ok_or_else(|| {
+            AutomationError::ArithmeticOverflow {
+                path: path.to_string(),
+                reason: format!("required presentations overflow at step {index}{detail}"),
+            }
+        })?;
+        Ok(())
+    }
+
+    /// Charge a bounded wait: its final tick is the base callback already
+    /// charged for the step, so only the remainder is added here.
+    fn add_bounded_wait(
+        &mut self,
+        max_ticks: u64,
+        index: usize,
+        path: &str,
+    ) -> Result<(), AutomationError> {
+        self.add_input_callbacks(
+            max_ticks.saturating_sub(1),
+            index,
+            path,
+            &format!(": max_ticks={max_ticks}"),
+        )
+    }
+}
+
+/// Validate one script step and charge its admitted-callback requirements.
+fn validate_step(
+    step: &Action,
+    index: usize,
+    path: &str,
+    requirements: &mut StepRequirements,
+) -> Result<(), AutomationError> {
+    if matches!(step, Action::WaitForMainMenuReady(_)) {
+        return Ok(());
+    }
+    // Every other action consumes at least one admitted input callback,
+    // including immediate assertions, capture arming, and the final Finish action.
+    requirements.add_input_callbacks(1, index, path, "")?;
+    if let Some(result) = validate_key_step(step, index, path, requirements) {
+        return result;
+    }
+    if let Some(result) = validate_wait_step(step, index, path, requirements) {
+        return result;
+    }
+    if let Some(result) = validate_navigation_step(step, index, path, requirements) {
+        return result;
+    }
+    validate_assertion_step(step, index, path, requirements)
+}
+
+/// Validate tick, presentation, and key actions. Returns `None` for other steps.
+fn validate_key_step(
+    step: &Action,
+    index: usize,
+    path: &str,
+    requirements: &mut StepRequirements,
+) -> Option<Result<(), AutomationError>> {
+    let outcome = match step {
+        Action::WaitInputTicks(wait) => {
+            // The base callback already accounts for the first wait callback.
+            requirements.add_input_callbacks(
+                wait.count.saturating_sub(1),
+                index,
+                path,
+                &format!(": count={}", wait.count),
+            )
+        }
+        Action::WaitPresentations(wait) => {
+            if wait.count == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_presentations count must be positive",
+                )));
+            }
+            requirements.add_presentations(
+                wait.count,
+                index,
+                path,
+                &format!(": count={}", wait.count),
+            )
+        }
+        Action::SetMenuKey(set) => {
+            if set.value > 1 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!("set_menu_key value must be 0 or 1, got {}", set.value),
+                )));
+            }
+            Ok(())
+        }
+        Action::SetPlayerKey(set) => {
+            if set.value > 1 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!("set_player_key value must be 0 or 1, got {}", set.value),
+                )));
+            }
+            Ok(())
+        }
+        Action::TapMenuKey(tap) => {
+            if tap.hold == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "tap_menu_key hold must be positive",
+                )));
+            }
+            if tap.value > 1 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!("tap_menu_key value must be 0 or 1, got {}", tap.value),
+                )));
+            }
+            // A tap consumes `hold` admitted input callbacks while held
+            // and `settle` admitted input callbacks while settling.
+            requirements
+                .add_input_callbacks(tap.hold, index, path, &format!(": hold={}", tap.hold))
+                .and_then(|()| {
+                    requirements.add_input_callbacks(
+                        tap.settle,
+                        index,
+                        path,
+                        &format!(": settle={}", tap.settle),
+                    )
+                })
+        }
+        Action::TapPlayerKey(tap) => {
+            if tap.hold == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "tap_player_key hold must be positive",
+                )));
+            }
+            if tap.value > 1 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!("tap_player_key value must be 0 or 1, got {}", tap.value),
+                )));
+            }
+            requirements.add_input_callbacks(
+                tap.hold.saturating_add(tap.settle),
+                index,
+                path,
+                &format!(": hold={}, settle={}", tap.hold, tap.settle),
+            )
+        }
+        _ => return None,
+    };
+    Some(outcome)
+}
+
+/// Validate bounded waits and selections. Returns `None` for other steps.
+fn validate_wait_step(
+    step: &Action,
+    index: usize,
+    path: &str,
+    requirements: &mut StepRequirements,
+) -> Option<Result<(), AutomationError>> {
+    let (max_ticks, field) = match step {
+        Action::WaitForDispatch(wait) => (wait.max_ticks, "wait_for_dispatch"),
+        Action::WaitForBattleFrames(wait) => {
+            if wait.minimum == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_for_battle_frames minimum must be positive",
+                )));
+            }
+            (wait.max_ticks, "wait_for_battle_frames")
+        }
+        Action::WaitForCommunicationReplay(wait) => {
+            (wait.max_ticks, "wait_for_communication_replay")
+        }
+        Action::WaitForPlanetSideStart(wait) => (wait.max_ticks, "wait_for_planet_side_start"),
+        Action::WaitForPlanetSideEnd(wait) => (wait.max_ticks, "wait_for_planet_side_end"),
+        Action::SelectPlanetMenu(select) => (select.max_ticks, "select_planet_menu"),
+        Action::SelectCommunicationResponse(select) => {
+            if select.index >= 8 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "select_communication_response index must be 0..=7",
+                )));
+            }
+            (select.max_ticks, "select_communication_response")
+        }
+        Action::WaitForCommunicationEnd(wait) => {
+            if wait.minimum_completions == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_for_communication_end minimum_completions must be positive",
+                )));
+            }
+            (wait.max_ticks, "wait_for_communication_end")
+        }
+        _ => return None,
+    };
+    if max_ticks == 0 {
+        return Some(Err(AutomationError::step(
+            path,
+            index,
+            format!("{field} max_ticks must be positive"),
+        )));
+    }
+    Some(requirements.add_bounded_wait(max_ticks, index, path))
+}
+
+/// Validate solar-system navigation steps. Returns `None` for other steps.
+fn validate_navigation_step(
+    step: &Action,
+    index: usize,
+    path: &str,
+    requirements: &mut StepRequirements,
+) -> Option<Result<(), AutomationError>> {
+    let max_ticks = match step {
+        Action::NavigateToMoon(navigation) => {
+            if navigation.planet > 8 || navigation.moon > 3 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!(
+                        "navigate_to_moon target must be planet 0..=8 and moon 0..=3, got planet={} moon={}",
+                        navigation.planet, navigation.moon
+                    ),
+                )));
+            }
+            if navigation.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_moon max_ticks must be positive",
+                )));
+            }
+            navigation.max_ticks
+        }
+        Action::NavigateToOrbit(navigation) => {
+            if navigation.planet > 8 || navigation.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_orbit requires planet 0..=8 and positive max_ticks",
+                )));
+            }
+            navigation.max_ticks
+        }
+        Action::NavigateToPlanet(navigation) => {
+            if navigation.planet > 8 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    format!(
+                        "navigate_to_planet planet must be 0..=8, got {}",
+                        navigation.planet
+                    ),
+                )));
+            }
+            if navigation.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_planet max_ticks must be positive",
+                )));
+            }
+            navigation.max_ticks
+        }
+        _ => return None,
+    };
+    Some(requirements.add_bounded_wait(max_ticks, index, path))
+}
+
+/// Validate captures, assertions, and terminal steps.
+fn validate_assertion_step(
+    step: &Action,
+    index: usize,
+    path: &str,
+    requirements: &mut StepRequirements,
+) -> Result<(), AutomationError> {
+    match step {
+        Action::Capture(capture) => {
+            if !is_valid_label(&capture.label) {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    format!(
+                        "capture label '{}' is invalid: must be nonempty and reject separators, '..', and control characters",
+                        capture.label
+                    ),
+                ));
+            }
+        }
+        Action::AssertActivity(assertion) => {
+            // REQ-SCRIPT-004: equals & !mask == 0
+            if (assertion.equals & !assertion.mask) != 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    format!(
+                        "assert_activity: equals (0x{:04X}) has bits outside mask (0x{:04X})",
+                        assertion.equals, assertion.mask
+                    ),
+                ));
+            }
+        }
+        Action::AssertCommunicationResponses(assertion) => {
+            if assertion.minimum == 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_communication_responses: minimum must be greater than zero",
+                ));
+            }
+        }
+        Action::AssertBattleFrames(assertion) => {
+            if assertion.minimum == 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_battle_frames: minimum must be greater than zero",
+                ));
+            }
+        }
+        Action::AssertPlanetSideCollisions(assertion) => {
+            if assertion.mineral_pickups == 0
+                && assertion.creature_hits == 0
+                && assertion.seam_hits == 0
+            {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_planet_side_collisions: at least one of mineral_pickups, creature_hits, seam_hits must be positive",
+                ));
+            }
+        }
+        Action::AssertMainMenuTransition(transition) => {
+            let from = parse_menu_item(&transition.from, index, path)?;
+            let to = parse_menu_item(&transition.to, index, path)?;
+            requirements
+                .transitions
+                .push(MainMenuTransition::new(from, to));
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Enforce `max >= required + 1` using checked arithmetic.
@@ -1685,7 +1719,7 @@ mod tests {
         let txt = r#"{
             "version":1,
             "name":"real-path-actions",
-            "budgets":{"max_input_ticks":75,"max_presentations":1,"max_wallclock_seconds":60},
+            "budgets":{"max_input_ticks":85,"max_presentations":1,"max_wallclock_seconds":60},
             "steps":[
                 {"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":10},
                 {"action":"wait_for_communication_replay","max_ticks":10},
@@ -1693,6 +1727,7 @@ mod tests {
                 {"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":10},
                 {"action":"navigate_to_orbit","planet":3,"max_ticks":10},
                 {"action":"wait_for_planet_side_start","max_ticks":10},
+                {"action":"wait_for_battle_frames","minimum":1,"max_ticks":10},
                 {"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":10},
                 {"action":"finish"}
             ]
@@ -1723,6 +1758,10 @@ mod tests {
                     max_ticks: 10
                 }),
                 Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks: 10 }),
+                Action::WaitForBattleFrames(WaitForBattleFramesStep {
+                    minimum: 1,
+                    max_ticks: 10
+                }),
                 Action::WaitForDispatch(WaitForDispatchStep {
                     encounter: 2,
                     dialogue: 2,
@@ -1741,6 +1780,7 @@ mod tests {
             r#"{"action":"select_communication_response","index":0,"max_ticks":0}"#,
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,
+            r#"{"action":"wait_for_battle_frames","minimum":1,"max_ticks":0}"#,
         ] {
             let txt = format!(
                 "{{\"version\":1,\"name\":\"invalid\",\"budgets\":{{\"max_input_ticks\":2,\"max_presentations\":1,\"max_wallclock_seconds\":1}},\"steps\":[{action},{{\"action\":\"finish\"}}]}}"
@@ -1749,6 +1789,14 @@ mod tests {
             let err = validate_script(doc, p()).unwrap_err();
             assert!(format!("{err}").contains("max_ticks must be positive"));
         }
+    }
+
+    #[test]
+    fn rejects_zero_battle_frame_wait_minimum() {
+        let txt = r#"{"version":1,"name":"invalid","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"wait_for_battle_frames","minimum":0,"max_ticks":1},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let err = validate_script(doc, p()).unwrap_err();
+        assert!(format!("{err}").contains("minimum must be positive"));
     }
 
     #[test]
@@ -2087,6 +2135,34 @@ mod tests {
     }
 
     #[test]
+    fn main_menu_readiness_is_event_driven_and_rejects_payload_fields() {
+        let valid = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
+        let document = parse_script(valid.as_bytes(), p()).unwrap();
+        assert!(validate_script(document, p()).is_ok());
+
+        let payload = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready","ticks":1},{"action":"finish"}]}"#;
+        assert!(parse_script(payload.as_bytes(), p()).is_err());
+    }
+
+    #[test]
+    fn wait_presentations_requires_positive_count_and_inclusive_budget() {
+        let zero = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":3,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":0},{"action":"finish"}]}"#;
+        let doc = parse_script(zero.as_bytes(), p()).unwrap();
+        assert!(format!("{}", validate_script(doc, p()).unwrap_err())
+            .contains("wait_presentations count must be positive"));
+
+        let too_tight = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":2,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":2},{"action":"finish"}]}"#;
+        let doc = parse_script(too_tight.as_bytes(), p()).unwrap();
+        let error = validate_script(doc, p()).unwrap_err();
+        assert!(matches!(error, AutomationError::InsufficientBudget { .. }));
+        assert!(format!("{error}").contains("max_presentations"));
+
+        let boundary = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":3,"max_presentations":3,"max_wallclock_seconds":60},"steps":[{"action":"wait_presentations","count":2},{"action":"finish"}]}"#;
+        let doc = parse_script(boundary.as_bytes(), p()).unwrap();
+        assert!(validate_script(doc, p()).is_ok());
+    }
+
+    #[test]
     fn rejects_tap_total_exceeding_inclusive_max() {
         // tap hold=3 settle=2 needs max >= 6 (5+1). Set max=5 -> reject.
         let txt = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":5,"max_presentations":1,"max_wallclock_seconds":60},"steps":[{"action":"tap_menu_key","key":"down","value":1,"hold":3,"settle":2},{"action":"finish"}]}"#;
@@ -2095,6 +2171,88 @@ mod tests {
             validate_script(doc, p()).unwrap_err(),
             AutomationError::InsufficientBudget { .. }
         ));
+    }
+
+    #[test]
+    fn linked_playable_script_uses_exact_menu_navigation_and_sustained_battle_input() {
+        let bytes = include_bytes!("../../scripts/linked-playable-v1.json");
+        let document = parse_script(bytes, "rust/scripts/linked-playable-v1.json").unwrap();
+        let script = validate_script(document, "rust/scripts/linked-playable-v1.json").unwrap();
+
+        assert!(matches!(
+            script.steps().first(),
+            Some(Action::WaitForMainMenuReady(_))
+        ));
+        assert_eq!(
+            script.transitions(),
+            &[
+                MainMenuTransition::new(RestartMenuItem::NewGame, RestartMenuItem::LoadGame),
+                MainMenuTransition::new(RestartMenuItem::LoadGame, RestartMenuItem::SuperMelee),
+            ]
+        );
+        let menu_taps: Vec<&TapMenuKeyStep> = script
+            .steps()
+            .iter()
+            .filter_map(|action| match action {
+                Action::TapMenuKey(tap) => Some(tap),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(menu_taps.len(), 4);
+        assert!(menu_taps.iter().all(|tap| tap.hold == 1));
+
+        let weapon = script
+            .steps()
+            .iter()
+            .position(|action| {
+                matches!(
+                    action,
+                    Action::TapPlayerKey(TapPlayerKeyStep {
+                        key: PlayerKey::Weapon,
+                        ..
+                    })
+                )
+            })
+            .unwrap();
+        let battle_ready = script
+            .steps()
+            .iter()
+            .position(|action| {
+                matches!(
+                    action,
+                    Action::WaitForBattleFrames(WaitForBattleFramesStep { minimum: 1, .. })
+                )
+            })
+            .unwrap();
+        let battle_capture = script
+            .steps()
+            .iter()
+            .position(|action| {
+                matches!(
+                    action,
+                    Action::Capture(CaptureStep { label, .. }) if label == "linked-battle-start"
+                )
+            })
+            .unwrap();
+        assert!(weapon < battle_ready && battle_ready < battle_capture);
+
+        assert!(script.budgets.max_presentations >= 301);
+        assert!(script.steps.iter().any(|action| {
+            matches!(
+                action,
+                Action::TapPlayerKey(TapPlayerKeyStep {
+                    key: PlayerKey::Right,
+                    hold: 300,
+                    ..
+                })
+            )
+        }));
+        assert!(script.steps.iter().any(|action| {
+            matches!(
+                action,
+                Action::AssertBattleFrames(BattleFramesAssertion { minimum: 300 })
+            )
+        }));
     }
 
     #[test]
