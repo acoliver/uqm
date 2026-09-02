@@ -421,6 +421,27 @@ mod tests {
         assert!(!actual.join("copy").exists());
     }
 
+    /// Execute a freshly published file, waiting out the kernel's transient
+    /// `ETXTBSY`. A concurrently forked descendant of this multi-threaded test
+    /// binary can still hold an inherited write descriptor for the new inode
+    /// when the exec is attempted, and that descriptor is released as soon as
+    /// the descendant reaches its own close-on-exec.
+    fn spawn_published_executable(path: &Path) -> std::process::ExitStatus {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            match std::process::Command::new(path).status() {
+                Ok(status) => return status,
+                Err(error)
+                    if error.kind() == io::ErrorKind::ExecutableFileBusy
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => panic!("cannot execute {}: {error}", path.display()),
+            }
+        }
+    }
+
     #[test]
     fn group_readable_executable_copy_publishes_exact_mode_and_can_be_spawned() {
         let temporary = tempfile::tempdir().unwrap();
@@ -435,10 +456,7 @@ mod tests {
             fs::metadata(&destination).unwrap().permissions().mode() & 0o7777,
             0o550
         );
-        assert!(std::process::Command::new(&destination)
-            .status()
-            .unwrap()
-            .success());
+        assert!(spawn_published_executable(&destination).success());
     }
 
     #[test]
