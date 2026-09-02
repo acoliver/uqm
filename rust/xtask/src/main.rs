@@ -2984,7 +2984,7 @@ mod tests {
     }
 
     #[test]
-    fn checked_in_trend_pins_ledger_v7_and_both_hash_table_cutovers() {
+    fn checked_in_trend_pins_ledger_v8_and_both_hash_table_cutovers() {
         let bytes = include_bytes!("../../build/native-input-trend.json");
         let mut trend: Trend = serde_json::from_slice(bytes).unwrap();
         let root = repository_root().unwrap();

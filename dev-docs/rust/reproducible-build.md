@@ -23,12 +23,12 @@ The separately scoped `capture-dependencies` command performs a target-scoped bo
 ## Explicit transitional native inputs
 
 This contract is authorized by immutable ownership ledger v7
-(`uqm-native-ownership-ledger-v7`): raw revision
-`d35f6156bff0b202306cca57d517f800234951df`, gist history revision
-`46eb961886e2aefe8b2085a3af4b1afbc5e82a77`, and SHA-256
-`d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a`.
+(`uqm-native-ownership-ledger-v8`): raw revision
+`5aece912bec7e8a2a646bd1bfc95d18289f55020`, gist history revision
+`5aece912bec7e8a2a646bd1bfc95d18289f55020`, and SHA-256
+`49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789`.
 The pinned raw URL is
-<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json>.
+<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json>.
 Both the provider manifest and native-input trend report encode this identity;
 repository validation does not fetch mutable network state.
 

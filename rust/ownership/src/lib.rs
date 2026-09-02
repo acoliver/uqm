@@ -70,13 +70,13 @@ pub const MANIFEST_RELATIVE_PATH: &str = "ownership/native-provider-manifest.jso
 
 /// The schema version string this validator expects.
 pub const EXPECTED_SCHEMA: &str = "uqm-native-provider-manifest-v2";
-pub const EXPECTED_LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v7";
+pub const EXPECTED_LEDGER_SCHEMA: &str = "uqm-native-ownership-ledger-v8";
 pub const EXPECTED_ASSESSMENT_COMMIT: &str = "54e1dba5f56e9f20a3aa773d5f151470a8cf0662";
-pub const EXPECTED_LEDGER_RAW_REVISION: &str = "d35f6156bff0b202306cca57d517f800234951df";
-pub const EXPECTED_LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json";
-pub const EXPECTED_LEDGER_GIST_REVISION: &str = "46eb961886e2aefe8b2085a3af4b1afbc5e82a77";
+pub const EXPECTED_LEDGER_RAW_REVISION: &str = "5aece912bec7e8a2a646bd1bfc95d18289f55020";
+pub const EXPECTED_LEDGER_RAW_URL: &str = "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json";
+pub const EXPECTED_LEDGER_GIST_REVISION: &str = "5aece912bec7e8a2a646bd1bfc95d18289f55020";
 pub const EXPECTED_LEDGER_SHA256: &str =
-    "d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a";
+    "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
     "107169fb8c7f63899c8a13f99d9fdba02c69bb08761d0d1207d24b5bb2c3b37c";
 pub const EXPECTED_SCAN_ROOT: &str = "native";
