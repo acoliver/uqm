@@ -139,7 +139,6 @@ fn run() -> Result<(), String> {
         emit_package_links(&packages);
         emit_allowlisted_platform_links(&target_os)?;
     }
-    compile_p00_harness(&toolchain)?;
     Ok(())
 }
 
@@ -596,8 +595,20 @@ fn emit_archive_link(target_os: &str, out_dir: &Path, archive: &Path) -> Result<
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     match target_os {
         "macos" => {
+            // The library records no #[link] for the C archive so pure test
+            // builds stay C-free; every binary that must resolve the C
+            // registration symbols force-loads the archive itself.
+            for binary in ["uqm", "menu_binding_probe"] {
+                println!(
+                    "cargo:rustc-link-arg-bin={binary}=-Wl,-force_load,{}",
+                    archive.display()
+                );
+            }
+            // The P00 symbol harness proves selective member extraction: its
+            // #[used] symbol table drives the references, so the archive is
+            // linked bare and the linker pulls only the members it demands.
             println!(
-                "cargo:rustc-link-arg-bin=uqm=-Wl,-force_load,{}",
+                "cargo:rustc-link-arg-bin=p00_symbol_harness={}",
                 archive.display()
             );
         }
@@ -737,77 +748,6 @@ fn canonicalize_hash_abi_names(mut bindings: String) -> String {
         }
     }
     bindings
-}
-
-fn compile_p00_harness(toolchain: &ToolchainIdentity) -> Result<(), String> {
-    let manifest_dir = PathBuf::from(env_value("CARGO_MANIFEST_DIR")?);
-    let sdl2_includes = env::var_os("DEP_SDL2_INCLUDE")
-        .ok_or_else(|| "SDL2 dependency did not publish DEP_SDL2_INCLUDE".to_string())?;
-    let sdl2_includes: Vec<PathBuf> = env::split_paths(&sdl2_includes).collect();
-    if sdl2_includes.is_empty() {
-        return Err("DEP_SDL2_INCLUDE did not contain an SDL2 include directory".into());
-    }
-    let sc2_dir = manifest_dir.join("../sc2");
-    let harness_dir = manifest_dir.join("harness");
-    let out_dir = output_directory()?;
-    let harness_obj = out_dir.join("p00_harness.o");
-    compile_harness_c(
-        &harness_dir.join("p00_harness.c"),
-        &harness_obj,
-        std::slice::from_ref(&harness_dir),
-        toolchain,
-    )?;
-    let menu_accessor = out_dir.join("menu_binding_accessor.o");
-    let mut menu_includes = vec![sc2_dir.join("src"), sc2_dir.clone()];
-    menu_includes.extend(sdl2_includes);
-    compile_harness_c(
-        &harness_dir.join("menu_binding_accessor.c"),
-        &menu_accessor,
-        &menu_includes,
-        toolchain,
-    )?;
-    let menu_probe = out_dir.join("menu_binding_probe.o");
-    compile_harness_c(
-        &harness_dir.join("menu_binding_probe.c"),
-        &menu_probe,
-        std::slice::from_ref(&harness_dir),
-        toolchain,
-    )?;
-    let archive = out_dir.join("libp00_harness_shim.a");
-    remove_if_present(&archive)?;
-    run_status(
-        Command::new(&toolchain.ar.executable)
-            .arg("rcs")
-            .arg(&archive)
-            .args([&harness_obj, &menu_accessor]),
-        "P00 harness archive",
-    )?;
-    for source in [
-        "harness/menu_binding_accessor.c",
-        "harness/menu_binding_accessor.h",
-        "harness/menu_binding_probe.c",
-        "harness/p00_harness.c",
-        "harness/p00_harness.h",
-    ] {
-        println!("cargo:rerun-if-changed={source}");
-    }
-    Ok(())
-}
-
-fn compile_harness_c(
-    source: &Path,
-    output: &Path,
-    includes: &[PathBuf],
-    toolchain: &ToolchainIdentity,
-) -> Result<(), String> {
-    let mut command = Command::new(&toolchain.cc.executable);
-    for include in includes {
-        command.arg("-I").arg(include);
-    }
-    run_status(
-        command.arg("-c").arg(source).arg("-o").arg(output),
-        &format!("P00 compile {}", source.display()),
-    )
 }
 
 fn run_status(command: &mut Command, label: &str) -> Result<(), String> {

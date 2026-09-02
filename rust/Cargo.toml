@@ -21,7 +21,6 @@ name = "uqm-gameplay-proof"
 path = "src/bin/uqm_gameplay_proof.rs"
 
 [build-dependencies]
-cc = "1.0"
 pkg-config = "0.3"
 bindgen = "0.70"
 serde = { version = "1", features = ["derive"] }
@@ -86,6 +85,16 @@ required-features = ["debug-process"]
 [[bin]]
 name = "p00_probes"
 path = "probes/p00_probes.rs"
+
+[[bin]]
+name = "menu_binding_probe"
+path = "probes/menu_binding_probe.rs"
+required-features = ["linked_c_archive"]
+
+[[bin]]
+name = "p00_symbol_harness"
+path = "probes/p00_symbol_harness.rs"
+required-features = ["linked_c_archive"]
 
 [[test]]
 name = "linked_provider_fixture"

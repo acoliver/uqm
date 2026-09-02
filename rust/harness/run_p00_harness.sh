@@ -2,12 +2,17 @@
 #
 # P00 Linked Harness Probe Script
 #
-# Proves deterministic libuqm_c.a archive construction, force-load ordering,
-# production member extraction for the 7 source-grounded
-# production symbols required by execution-contract §8.
+# Proves deterministic libuqm_c.a archive construction and production member
+# extraction for the 7 source-grounded production symbols required by
+# execution-contract §8, and proves those symbols were actually extracted
+# into a linked harness binary.
 #
-# This script compiles and links a standalone C harness against the production
-# C archive produced by the canonical xtask production flow.
+# The harness itself is Rust (rust/probes/p00_symbol_harness.rs): a #[used]
+# static table of `unsafe extern "C" fn` pointers references the seven
+# symbols, so the linker cannot produce the binary without extracting their
+# archive members. This script builds that binary through the canonical
+# cargo toolchain, verifies the archive by nm, verifies the built binary by
+# nm, and executes the binary.
 #
 # @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §8
 #
@@ -15,9 +20,7 @@ set -euo pipefail
 
 : "${UQM_CI_CONTROLLER_EXECUTABLE:?UQM_CI_CONTROLLER_EXECUTABLE must be supplied by the trusted controller}"
 : "${CARGO:?CARGO must be supplied by the trusted controller}"
-: "${CC:?CC must be supplied by the trusted controller}"
 : "${NM:?NM must be supplied by the trusted controller}"
-: "${PKG_CONFIG:?PKG_CONFIG must be supplied by the trusted controller}"
 case "${UQM_CI_EVIDENCE_MEMBER_LIMIT_BYTES:-}" in
     ''|*[!0-9]*)
         echo "FAIL: UQM_CI_EVIDENCE_MEMBER_LIMIT_BYTES must be an authority-provided positive integer" >&2
@@ -105,59 +108,41 @@ PYTHON
 
 C_ARCHIVE_REL="$(extract_artifact_path c_static_archive)"
 SIDECAR_REL="$(extract_artifact_path object_sidecar)"
-RUST_ARCHIVE_REL="$(extract_artifact_path rust_static_archive)"
 C_ARCHIVE="${REPO_ROOT}/${C_ARCHIVE_REL}"
 MANIFEST="${REPO_ROOT}/${SIDECAR_REL}"
-RUST_ARCHIVE="${REPO_ROOT}/${RUST_ARCHIVE_REL}"
-CC_PATH="$(python3 -P - "${MANIFEST_JSON}" <<'PYTHON'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as source:
-    print(json.load(source)["native_build"]["toolchain"]["cc"]["executable"])
-PYTHON
-)"
 NM_PATH="$(python3 -P - "${MANIFEST_JSON}" <<'PYTHON'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as source:
     print(json.load(source)["native_build"]["toolchain"]["nm"]["executable"])
 PYTHON
 )"
-PKG_CONFIG_PATH="$(python3 -P - "${MANIFEST_JSON}" <<'PYTHON'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as source:
-    print(json.load(source)["native_build"]["toolchain"]["pkg_config"]["executable"])
-PYTHON
-)"
-if [ "${CC_PATH}" != "${CC}" ] || [ "${NM_PATH}" != "${NM}" ] || [ "${PKG_CONFIG_PATH}" != "${PKG_CONFIG}" ]; then
-    echo "FAIL: production manifest tools do not match the trusted controller" >&2
+if [ "${NM_PATH}" != "${NM}" ]; then
+    echo "FAIL: production manifest nm does not match the trusted controller" >&2
     exit 1
 fi
-OUT_DIR="$(dirname "${C_ARCHIVE}")"
-HARNESS_ARCHIVE="${OUT_DIR}/libp00_harness_shim.a"
 HARNESS_EVIDENCE="${UQM_CI_SUBORDINATE_EVIDENCE_ROOT}"
 mkdir -p "${HARNESS_EVIDENCE}"
 
-if ! python3 -P - "${MANIFEST_JSON}" "${CC}" "${NM}" "${PKG_CONFIG}" <<'PYTHON'
+if ! python3 -P - "${MANIFEST_JSON}" "${NM}" <<'PYTHON'
 import hashlib, json, os, stat, sys
 with open(sys.argv[1], encoding="utf-8") as source:
-    tools = json.load(source)["native_build"]["toolchain"]
-for name, actual_path in zip(("cc", "nm", "pkg_config"), sys.argv[2:]):
-    expected = tools[name]
-    if expected["executable"] != actual_path:
-        raise SystemExit(f"{name} path does not match the trusted controller")
-    executable_fd = os.open(actual_path, os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        if not stat.S_ISREG(os.fstat(executable_fd).st_mode):
-            raise SystemExit(f"{name} executable is not a regular file")
-        digest = hashlib.sha256()
-        while chunk := os.read(executable_fd, 1024 * 1024):
-            digest.update(chunk)
-    finally:
-        os.close(executable_fd)
-    if digest.hexdigest() != expected["sha256"]:
-        raise SystemExit(f"{name} digest does not match its manifest identity")
+    expected = json.load(source)["native_build"]["toolchain"]["nm"]
+if expected["executable"] != sys.argv[2]:
+    raise SystemExit("nm path does not match the trusted controller")
+executable_fd = os.open(sys.argv[2], os.O_RDONLY | os.O_NOFOLLOW)
+try:
+    if not stat.S_ISREG(os.fstat(executable_fd).st_mode):
+        raise SystemExit("nm executable is not a regular file")
+    digest = hashlib.sha256()
+    while chunk := os.read(executable_fd, 1024 * 1024):
+        digest.update(chunk)
+finally:
+    os.close(executable_fd)
+if digest.hexdigest() != expected["sha256"]:
+    raise SystemExit("nm digest does not match its manifest identity")
 PYTHON
 then
-    echo "FAIL: production manifest tools do not match trusted executable identities" >&2
+    echo "FAIL: production manifest nm does not match its trusted executable identity" >&2
     exit 1
 fi
 
@@ -177,6 +162,20 @@ capture_nm() {
     printf '%s\n' "${nm_exit}" > "${exit_path}"
 
     if [ "${nm_exit}" -ne 0 ]; then
+        # Apple's nm cannot read the embedded bitcode attributes that the
+        # pinned Rust toolchain emits, so it rejects members while still
+        # listing every symbol this probe verifies. Tolerate that exact
+        # producer/reader mismatch and nothing else (the retained exit
+        # status records the truth); the symbol requirements below remain
+        # the contract.
+        local errors
+        local mismatches
+        errors=$(grep -c 'error:' "${stderr_path}" || true)
+        mismatches=$(grep -c "Unknown attribute kind ([0-9]*) (Producer: 'LLVM[0-9.]*-rust-[0-9.]*-stable' Reader: 'LLVM APPLE" "${stderr_path}" || true)
+        if [ "${errors}" -gt 0 ] && [ "${errors}" -eq "${mismatches}" ]; then
+            echo "NOTE: nm exited ${nm_exit} for ${name}; ${mismatches} members carry attributes this nm cannot read" >&2
+            return 0
+        fi
         echo "FAIL: nm exited ${nm_exit} for ${name}: ${NM_PATH} $*" >&2
         cat "${stdout_path}"
         cat "${stderr_path}" >&2
@@ -188,16 +187,10 @@ if [ ! -f "${C_ARCHIVE}" ]; then
     echo "FAIL: ${C_ARCHIVE} not found"
     exit 1
 fi
-if [ ! -f "${HARNESS_ARCHIVE}" ]; then
-    echo "FAIL: ${HARNESS_ARCHIVE} not found"
-    exit 1
-fi
 if [ ! -f "${MANIFEST}" ]; then
     echo "FAIL: ${MANIFEST} not found"
     exit 1
 fi
-
-echo "OUT_DIR: ${OUT_DIR}"
 
 echo ""
 
@@ -205,13 +198,6 @@ echo ""
 echo "--- 1. Archive member symbol extraction (nm) ---"
 
 NM_LISTING="${HARNESS_EVIDENCE}/archive-nm.txt"
-HARNESS_MAIN=""
-LINK_MAP=""
-HARNESS_BIN=""
-cleanup() {
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
-}
-trap cleanup EXIT
 if capture_nm "archive" -A "${C_ARCHIVE}"; then :; else nm_exit=$?; exit "${nm_exit}"; fi
 : > "${HARNESS_EVIDENCE}/archive-nm-origins.txt"
 for sym in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do
@@ -239,98 +225,96 @@ else
 fi
 echo ""
 
-# --- 3. Compile and link the harness with force-load ordering ---
-echo "--- 3. Compile and link harness (force-load order per §8) ---"
+# --- 3. Build the Rust symbol-forcing harness binary ---
+echo "--- 3. Build Rust symbol harness (member extraction by reference) ---"
 
-HARNESS_MAIN=$(mktemp "${TMPDIR:-/tmp}/p00_harness_main.XXXXXX").c
 LINK_MAP=$(mktemp "${TMPDIR:-/tmp}/p00_link_map.XXXXXX").map
-HARNESS_BIN=$(mktemp "${TMPDIR:-/tmp}/p00_harness_bin.XXXXXX")
-
-cat > "${HARNESS_MAIN}" << 'HARNESS_EOF'
-#include <stdio.h>
-extern int p00_harness_verify_symbols(void);
-
-int main(void) {
-    int count = p00_harness_verify_symbols();
-    printf("harness_symbol_count=%d\n", count);
-    if (count < 0) {
-        printf("RESULT=FAIL\n");
-        return 1;
-    }
-    printf("RESULT=PASS\n");
-    return 0;
+BUILD_LOG=$(mktemp "${TMPDIR:-/tmp}/p00_build_log.XXXXXX")
+cleanup() {
+    rm -f "${LINK_MAP}" "${BUILD_LOG}"
 }
-HARNESS_EOF
+trap cleanup EXIT
 
-# Use the exact Rust static archive from the production manifest.
-if [ ! -f "${RUST_ARCHIVE}" ]; then
-    echo "FAIL: ${RUST_ARCHIVE} not found after production build"
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
-    exit 1
-fi
-
-# Discover prerequisite flags with the exact pkg-config from production evidence.
-PKG_CFLAGS_RAW="$("${PKG_CONFIG_PATH}" --cflags sdl2 libpng liblzma)"
-PKG_LIBS_RAW="$("${PKG_CONFIG_PATH}" --libs sdl2 libpng liblzma)"
-parse_pkg_config_args() {
-    local raw="$1"
-    local output="$2"
-    python3 -P - "${raw}" > "${output}" <<'PYTHON'
-import shlex, sys
-for value in shlex.split(sys.argv[1]):
-    if "\n" in value or "\r" in value:
-        raise SystemExit("pkg-config emitted a flag containing a line break")
-    print(value)
-PYTHON
-}
-PKG_CFLAGS_FILE="${HARNESS_EVIDENCE}/pkg-config-cflags.txt"
-PKG_LIBS_FILE="${HARNESS_EVIDENCE}/pkg-config-libs.txt"
-parse_pkg_config_args "${PKG_CFLAGS_RAW}" "${PKG_CFLAGS_FILE}"
-parse_pkg_config_args "${PKG_LIBS_RAW}" "${PKG_LIBS_FILE}"
-PKG_CFLAGS=(__uqm_empty_array_sentinel__)
-while IFS= read -r flag; do PKG_CFLAGS+=("${flag}"); done < "${PKG_CFLAGS_FILE}"
-PKG_LIBS=(__uqm_empty_array_sentinel__)
-while IFS= read -r flag; do PKG_LIBS+=("${flag}"); done < "${PKG_LIBS_FILE}"
-
-# Platform-specific strict linking. Keep the command in an if condition so
-# set -e cannot bypass the explicit diagnostic and retained evidence path.
 OS_NAME="$(uname -s)"
-if [ "${OS_NAME}" = "Darwin" ]; then
-    if ! "${CC_PATH}" "${PKG_CFLAGS[@]:1}" "${HARNESS_MAIN}" \
-        -L"${OUT_DIR}" \
-        -Wl,-force_load,"${HARNESS_ARCHIVE}" \
-        "${C_ARCHIVE}" \
-        "${RUST_ARCHIVE}" \
-        "${PKG_LIBS[@]:1}" -lz -lm -lbz2 -lobjc \
-        -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
-        -Wl,-map,"${LINK_MAP}" \
-        -o "${HARNESS_BIN}" 2>&1; then
-        echo "FAIL: Darwin harness link failed"
+case "${OS_NAME}" in
+    Darwin)
+        MAP_LINK_ARG="-Clink-arg=-Wl,-map,${LINK_MAP}"
+        ;;
+    Linux)
+        MAP_LINK_ARG="-Clink-arg=-Wl,-Map,${LINK_MAP}"
+        ;;
+    *)
+        echo "FAIL: unsupported OS: ${OS_NAME}"
         exit 1
-    fi
-elif [ "${OS_NAME}" = "Linux" ]; then
-    if ! "${CC_PATH}" "${PKG_CFLAGS[@]:1}" "${HARNESS_MAIN}" \
-        -L"${OUT_DIR}" \
-        -Wl,--gc-sections \
-        -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
-        -Wl,--start-group "${C_ARCHIVE}" "${RUST_ARCHIVE}" -Wl,--end-group \
-        "${PKG_LIBS[@]:1}" -lz -lm -lbz2 -lasound \
-        -Wl,-Map,"${LINK_MAP}" \
-        -o "${HARNESS_BIN}" 2>&1; then
-        echo "FAIL: Linux harness link failed"
-        exit 1
-    fi
-else
-    echo "FAIL: unsupported OS: ${OS_NAME}"
+        ;;
+esac
+
+# The same feature set the linked-test profile uses; build.rs links the C
+# archive so the #[used] symbol table forces extraction of its members.
+if ! "${CARGO}" rustc \
+        --locked \
+        --manifest-path "${RUST_DIR}/Cargo.toml" \
+        --release \
+        --no-default-features \
+        --features audio_heart,debug-process,linked_c_archive \
+        --bin p00_symbol_harness \
+        --message-format=json \
+        -- "${MAP_LINK_ARG}" > "${BUILD_LOG}"; then
+    echo "FAIL: p00 symbol harness cargo build failed"
     exit 1
 fi
-echo "PASS: Harness linked successfully"
+
+HARNESS_BIN=$(python3 -P - "${BUILD_LOG}" <<'PYTHON'
+import json, sys
+executable = None
+with open(sys.argv[1], encoding="utf-8") as source:
+    for line in source:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("reason") != "compiler-artifact":
+            continue
+        target = message.get("target") or {}
+        if target.get("name") != "p00_symbol_harness":
+            continue
+        if "bin" not in (target.get("kind") or []):
+            continue
+        path = message.get("executable")
+        if path:
+            executable = path
+if executable is None:
+    raise SystemExit("cargo reported no executable for bin p00_symbol_harness")
+print(executable)
+PYTHON
+)
+if [ -z "${HARNESS_BIN}" ] || [ ! -x "${HARNESS_BIN}" ]; then
+    echo "FAIL: harness binary not found or not executable: ${HARNESS_BIN}"
+    exit 1
+fi
+echo "PASS: harness built at ${HARNESS_BIN}"
 if capture_nm "harness" "${HARNESS_BIN}"; then :; else nm_exit=$?; exit "${nm_exit}"; fi
 echo ""
 
-# --- 4. Run the harness (no mutation — all symbols present) ---
-echo "--- 4. Run harness (all symbols present) ---"
-mkdir -p "${HARNESS_EVIDENCE}"
+# --- 4. Verify the 7 symbols were extracted into the built binary ---
+echo "--- 4. Extracted production symbols in harness binary (nm) ---"
+HARNESS_NM_LISTING="${HARNESS_EVIDENCE}/harness-nm.txt"
+: > "${HARNESS_EVIDENCE}/harness-nm-origins.txt"
+while IFS=$'\t' read -r sym archive_origin archive_member; do
+    member=$(awk -v symbol="${sym}" '$(NF - 1) == "T" && ($NF == symbol || $NF == "_" symbol) { print; exit }' "${HARNESS_NM_LISTING}")
+    origin=$(printf '%s\n' "${member}" | awk '{ print $1 }')
+    if [ -z "${member}" ]; then
+        echo "FAIL: Symbol '${sym}' not found in linked harness nm output ${HARNESS_NM_LISTING}"
+        exit 1
+    fi
+    printf '%s\t%s\t%s\n' "${sym}" "${origin}" "${member}" >> "${HARNESS_EVIDENCE}/harness-nm-origins.txt"
+    echo "  ${sym} -> ${member}"
+done < "${HARNESS_EVIDENCE}/archive-nm-origins.txt"
+echo "PASS: All 7 production symbols extracted into harness binary"
+echo ""
+
+# --- 5. Run the harness (all symbols present) ---
+echo "--- 5. Run harness (all symbols present) ---"
 HARNESS_OUTPUT_PATH="${HARNESS_EVIDENCE}/harness-output.txt"
 if run_with_bounded_output "${HARNESS_BIN}" > "${HARNESS_OUTPUT_PATH}" 2>&1; then
     HARNESS_EXIT=0
@@ -351,13 +335,11 @@ fi
 
 if [ "${HARNESS_EXIT}" -ne 0 ]; then
     echo "FAIL: Harness exited ${HARNESS_EXIT}"
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
     exit 1
 elif grep -q "RESULT=PASS" "${HARNESS_OUTPUT_PATH}"; then
     echo "PASS: Harness verified all symbols"
 else
     echo "FAIL: Harness did not pass"
-    rm -f "${HARNESS_MAIN}" "${HARNESS_BIN}" "${LINK_MAP}"
     exit 1
 fi
 echo ""

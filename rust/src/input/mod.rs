@@ -20,11 +20,13 @@ pub mod ffi;
 pub mod joystick;
 pub mod keyboard;
 pub mod keynames;
+pub mod menu_binding;
 pub mod templates;
 pub mod vcontrol;
 
 pub use joystick::{HatDirection, Joystick, JoystickAxis, JoystickHat};
 pub use keyboard::KeyBinding;
 pub use keynames::{key_from_name, key_name};
+pub use menu_binding::{query_menu_binding, MenuBindingResult};
 pub use templates::ControlTemplate;
 pub use vcontrol::{VControl, VControlError, VCONTROL};
