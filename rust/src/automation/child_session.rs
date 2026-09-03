@@ -1028,6 +1028,7 @@ mod os {
 
     const RUN_LOCK_SCHEMA: &str = "uqm-run-lock-v1";
     pub(crate) const RUN_LOCK_RECORD_NAME: &str = ".uqm-run-owner.json";
+    const OWNED_PROCESS_RECORD_NAME: &str = ".uqm-run-child.json";
     const RUN_LOCK_GUARD_NAME: &str = ".uqm-run-owner.guard";
     const RUN_LOCK_MAX_BYTES: u64 = 16 * 1024;
 
@@ -1056,6 +1057,235 @@ mod os {
         recovery: Option<RunLockRecovery>,
         owns_record: bool,
         released: bool,
+    }
+
+    /// The process a run supervised, recorded so a later run can tell a
+    /// leftover child of its own from an unrelated process that reused the pid.
+    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+    #[serde(deny_unknown_fields)]
+    pub struct OwnedProcessRecord {
+        pub schema: String,
+        pub identity: ProcessIdentity,
+    }
+
+    pub(crate) const OWNED_PROCESS_SCHEMA: &str = "uqm-run-owned-process-v1";
+
+    /// What a stale-process scan found, and what it did about it.
+    ///
+    /// Recorded rather than collapsed into a boolean so the decision is visible
+    /// in retained evidence.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum StaleProcessScan {
+        /// No previous run recorded a supervised process for this root.
+        NoRecord,
+        /// A process was recorded and is provably gone.
+        Departed { identity: ProcessIdentity },
+        /// A recorded process was still alive, verified to be the same process,
+        /// and terminated.
+        Reclaimed {
+            identity: ProcessIdentity,
+            term_sent: bool,
+            kill_sent: bool,
+        },
+    }
+
+    impl StaleProcessScan {
+        /// Whether the scan proved no matching process is alive.
+        ///
+        /// Ambiguity never reaches here: it is an error, not a verdict.
+        #[must_use]
+        pub fn proves_absence(&self) -> bool {
+            match self {
+                Self::NoRecord | Self::Departed { .. } => true,
+                Self::Reclaimed { .. } => true,
+            }
+        }
+
+        /// The identity the scan acted on, if any.
+        #[must_use]
+        pub fn identity(&self) -> Option<&ProcessIdentity> {
+            match self {
+                Self::NoRecord => None,
+                Self::Departed { identity } | Self::Reclaimed { identity, .. } => Some(identity),
+            }
+        }
+    }
+
+    fn owned_process_path(root: &Path) -> PathBuf {
+        match (root.parent(), root.file_name()) {
+            (Some(parent), Some(name)) => parent.join(format!(
+                ".{}{OWNED_PROCESS_RECORD_NAME}",
+                name.to_string_lossy()
+            )),
+            _ => root.join(OWNED_PROCESS_RECORD_NAME),
+        }
+    }
+
+    /// Record the process a run supervises, beside its run root.
+    pub fn record_owned_process(
+        root: &Path,
+        identity: &ProcessIdentity,
+    ) -> Result<(), ChildSessionError> {
+        let record = OwnedProcessRecord {
+            schema: OWNED_PROCESS_SCHEMA.to_string(),
+            identity: identity.clone(),
+        };
+        atomic_publish_json(&owned_process_path(root), &record, "publish owned process")
+    }
+
+    /// Forget the supervised process once it has been reaped.
+    pub fn clear_owned_process(root: &Path) -> Result<(), ChildSessionError> {
+        let path = owned_process_path(root);
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(ChildSessionError::RunLockIo {
+                path,
+                operation: "clear owned process",
+                error,
+            }),
+        }
+    }
+
+    /// Verify a recorded process is still the one that was recorded.
+    ///
+    /// Exactness is the point: a pid alone proves nothing once pids are reused,
+    /// so the start time and the executable image must both agree.
+    fn recorded_process_state(
+        recorded: &ProcessIdentity,
+    ) -> Result<Option<bool>, ChildSessionError> {
+        if !process_exists(recorded.pid).map_err(|error| ChildSessionError::RunLockIo {
+            path: PathBuf::from("<process table>"),
+            operation: "test recorded process",
+            error,
+        })? {
+            return Ok(None);
+        }
+        let Some(start_time) = process_start_micros(recorded.pid) else {
+            return Ok(Some(false));
+        };
+        if start_time.to_string() != recorded.start_time {
+            return Ok(Some(false));
+        }
+        let digest = match process_executable_digest(recorded.pid) {
+            Ok(digest) => digest,
+            Err(_) => return Ok(Some(false)),
+        };
+        Ok(Some(digest == recorded.executable_digest))
+    }
+
+    /// Refuse to start while a previous run of this root may still be running.
+    ///
+    /// A recorded process that is provably the same process is terminated. A
+    /// live process that does not match exactly is ambiguous: nothing is
+    /// signalled and the scan fails closed. Nothing is ever matched by name,
+    /// by pattern or by uid.
+    pub fn scan_stale_owned_process(
+        root: &Path,
+        grace: Duration,
+    ) -> Result<StaleProcessScan, ChildSessionError> {
+        let path = owned_process_path(root);
+        let bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                return Ok(StaleProcessScan::NoRecord)
+            }
+            Err(error) => {
+                return Err(ChildSessionError::RunLockIo {
+                    path,
+                    operation: "read owned process",
+                    error,
+                })
+            }
+        };
+        let record: OwnedProcessRecord = serde_json::from_slice(&bytes).map_err(|error| {
+            ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: None,
+                detail: format!(
+                    "cannot parse owned process record {}: {error}",
+                    path.display()
+                ),
+            }
+        })?;
+        if record.schema != OWNED_PROCESS_SCHEMA {
+            return Err(ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: None,
+                detail: "owned process record schema is invalid".to_string(),
+            });
+        }
+        let identity = record.identity;
+        match recorded_process_state(&identity)? {
+            None => {
+                clear_owned_process(root)?;
+                Ok(StaleProcessScan::Departed { identity })
+            }
+            Some(false) => Err(ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: Some(Box::new(identity)),
+                detail: "a live process holds the recorded pid but is not the recorded process"
+                    .to_string(),
+            }),
+            Some(true) => {
+                let outcome = terminate_verified_stale(&identity, grace)?;
+                clear_owned_process(root)?;
+                Ok(outcome)
+            }
+        }
+    }
+
+    /// Signal a process that has been verified to be the recorded one.
+    ///
+    /// The identity is re-verified immediately before each signal, so a pid
+    /// recycled between the check and the signal is never touched.
+    fn terminate_verified_stale(
+        identity: &ProcessIdentity,
+        grace: Duration,
+    ) -> Result<StaleProcessScan, ChildSessionError> {
+        let pid =
+            libc::pid_t::try_from(identity.pid).map_err(|_| ChildSessionError::RunLockIo {
+                path: PathBuf::from("<process table>"),
+                operation: "convert recorded pid",
+                error: io::Error::new(ErrorKind::InvalidInput, "PID does not fit pid_t"),
+            })?;
+        let mut term_sent = false;
+        let mut kill_sent = false;
+        for (signal, sent) in [
+            (libc::SIGTERM, &mut term_sent),
+            (libc::SIGKILL, &mut kill_sent),
+        ] {
+            if recorded_process_state(identity)? != Some(true) {
+                break;
+            }
+            // SAFETY: the identity was re-verified immediately above, so this
+            // signals the exact recorded process and never a recycled pid.
+            if unsafe { libc::kill(pid, signal) } == 0 {
+                *sent = true;
+            }
+            let deadline = std::time::Instant::now() + grace;
+            while std::time::Instant::now() < deadline {
+                if recorded_process_state(identity)? != Some(true) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            if recorded_process_state(identity)? != Some(true) {
+                break;
+            }
+        }
+        if recorded_process_state(identity)? == Some(true) {
+            return Err(ChildSessionError::RunLockAmbiguous {
+                root: PathBuf::from("<process table>"),
+                owner: Some(Box::new(identity.clone())),
+                detail: "the recorded process survived termination".to_string(),
+            });
+        }
+        Ok(StaleProcessScan::Reclaimed {
+            identity: identity.clone(),
+            term_sent,
+            kill_sent,
+        })
     }
 
     /// Where a run root's ownership guard and owner record live.
@@ -2889,6 +3119,130 @@ mod os {
             );
         }
 
+        fn run_root_in(parent: &TempDir) -> PathBuf {
+            let root = parent.path().join("output");
+            std::fs::create_dir(&root).expect("create run root");
+            root
+        }
+
+        fn spawn_sleeper() -> (std::process::Child, ProcessIdentity) {
+            let child = Command::new("/bin/sleep")
+                .arg("60")
+                .spawn()
+                .expect("spawn sleeper");
+            let digest =
+                command_executable_digest(&Command::new("/bin/sleep")).expect("sleep digest");
+            let identity = capture_identity(child.id(), &digest).expect("capture sleeper identity");
+            (child, identity)
+        }
+
+        #[test]
+        fn a_verified_stale_process_is_reclaimed() {
+            let parent = TempDir::new().expect("tempdir");
+            let root = run_root_in(&parent);
+            let (mut sleeper, identity) = spawn_sleeper();
+            record_owned_process(&root, &identity).expect("record owned process");
+
+            let scan = scan_stale_owned_process(&root, Duration::from_secs(5))
+                .expect("a verified leftover is reclaimable");
+            match scan {
+                StaleProcessScan::Reclaimed {
+                    identity: reclaimed,
+                    term_sent,
+                    ..
+                } => {
+                    assert_eq!(reclaimed, identity);
+                    assert!(term_sent, "termination must be attempted before killing");
+                }
+                other => panic!("expected the leftover to be reclaimed, got {other:?}"),
+            }
+            // This test is the reclaimed process's parent, so the pid stays
+            // resolvable as a zombie until it is reaped here. In production the
+            // parent is a departed supervisor and init reaps it.
+            let status = sleeper.wait().expect("reap the reclaimed process");
+            assert!(!status.success(), "the process was signalled, not exited");
+            assert!(!process_exists(identity.pid).expect("test reclaimed process"));
+
+            assert!(matches!(
+                scan_stale_owned_process(&root, Duration::from_secs(1)).expect("rescan"),
+                StaleProcessScan::NoRecord
+            ));
+        }
+
+        #[test]
+        fn a_live_process_that_does_not_match_is_ambiguous_and_left_running() {
+            let parent = TempDir::new().expect("tempdir");
+            let root = run_root_in(&parent);
+            let (mut sleeper, mut identity) = spawn_sleeper();
+            // Same live pid, different image: exactly the pid-reuse case that
+            // must never be signalled.
+            identity.executable_digest = "0".repeat(64);
+            record_owned_process(&root, &identity).expect("record owned process");
+
+            let error = scan_stale_owned_process(&root, Duration::from_secs(1))
+                .expect_err("an inexact match must fail closed");
+            assert!(matches!(
+                error,
+                ChildSessionError::RunLockAmbiguous { owner: Some(owner), .. }
+                    if owner.pid == identity.pid
+            ));
+            assert!(
+                process_exists(identity.pid).expect("test bystander"),
+                "an ambiguous process must be left running"
+            );
+
+            sleeper.kill().expect("stop bystander");
+            let _ = sleeper.wait();
+        }
+
+        #[test]
+        fn a_departed_process_leaves_a_clean_preflight() {
+            let parent = TempDir::new().expect("tempdir");
+            let root = run_root_in(&parent);
+            let (mut departed, identity) = spawn_sleeper();
+            departed.kill().expect("stop fixture");
+            departed.wait().expect("reap fixture");
+            record_owned_process(&root, &identity).expect("record owned process");
+
+            let (preflight, scan) = crate::automation::proof::PreflightCheck::establish(
+                &root,
+                Duration::from_secs(1),
+                true,
+                true,
+            )
+            .expect("establish preflight");
+            assert!(matches!(scan, StaleProcessScan::Departed { .. }));
+            assert_eq!(scan.identity(), Some(&identity));
+            assert!(preflight.no_matching_processes);
+            assert!(preflight.passes());
+        }
+
+        #[test]
+        fn the_scan_records_what_it_acted_on() {
+            let parent = TempDir::new().expect("tempdir");
+            let root = run_root_in(&parent);
+            let (mut sleeper, identity) = spawn_sleeper();
+            record_owned_process(&root, &identity).expect("record owned process");
+
+            let published = owned_process_path(&root);
+            assert!(
+                published.is_file(),
+                "the supervised process must be recorded beside the root, not inside it"
+            );
+            let record: OwnedProcessRecord =
+                serde_json::from_slice(&std::fs::read(&published).expect("read record"))
+                    .expect("parse record");
+            assert_eq!(record.schema, OWNED_PROCESS_SCHEMA);
+            assert_eq!(record.identity, identity);
+            assert!(std::fs::read_dir(&root)
+                .expect("read root")
+                .next()
+                .is_none());
+
+            sleeper.kill().expect("stop fixture");
+            let _ = sleeper.wait();
+        }
+
         #[test]
         fn ownership_metadata_stays_out_of_the_run_root() {
             let parent = TempDir::new().expect("tempdir");
@@ -2989,9 +3343,10 @@ pub use os::parse_linux_proc_start_micros;
 pub use os::process_start_micros;
 #[cfg(unix)]
 pub use os::{
-    capture_identity, command_executable_digest, verified_command_digest, ChildSession,
-    ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt, RunLock,
-    RunLockRecovery, StreamKind,
+    capture_identity, clear_owned_process, command_executable_digest, record_owned_process,
+    scan_stale_owned_process, verified_command_digest, ChildSession, ChildSessionConfig,
+    ChildSessionError, ChildSessionFailure, ChildSessionReceipt, OwnedProcessRecord, RunLock,
+    RunLockRecovery, StaleProcessScan, StreamKind,
 };
 
 // ===========================================================================

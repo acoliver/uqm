@@ -70,6 +70,36 @@ pub struct PreflightCheck {
 }
 
 impl PreflightCheck {
+    /// Establish a preflight for a run root by scanning for a previous run's
+    /// process rather than asserting its absence.
+    ///
+    /// `no_matching_processes` was previously supplied by the caller, so
+    /// nothing ever proved it. It is now the outcome of an exact identity scan:
+    /// a verified leftover is reclaimed, and anything ambiguous fails closed
+    /// without signalling.
+    ///
+    /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
+    /// @requirement REQ-PROOF-001
+    pub fn establish(
+        root: &std::path::Path,
+        grace: std::time::Duration,
+        fresh_root_created: bool,
+        identity_valid: bool,
+    ) -> Result<
+        (Self, crate::automation::child_session::StaleProcessScan),
+        crate::automation::child_session::ChildSessionError,
+    > {
+        let scan = crate::automation::child_session::scan_stale_owned_process(root, grace)?;
+        Ok((
+            Self {
+                fresh_root_created,
+                no_matching_processes: scan.proves_absence(),
+                identity_valid,
+            },
+            scan,
+        ))
+    }
+
     /// Returns `true` if the preflight passes.
     ///
     /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
