@@ -600,14 +600,40 @@ fn describe_process(pid: libc::pid_t) -> String {
         .unwrap_or_else(|| "no executable path".to_string());
     // proc_pidpath can name the image a departing process was spawned from
     // rather than the one it ran, so report the kernel's own view beside it.
+    // The parent decides whether this is ours by descent, so name it: without
+    // it a survivor message cannot be acted on.
+    let parent = macos_process_parent(pid);
     match macos_process_record(pid) {
         Some(record) => format!(
-            "{pid} ({name}, group {}, {})",
+            "{pid} ({name}, parent {}, group {}, {})",
+            parent.map_or_else(|| "unknown".to_string(), |value| value.to_string()),
             record.group,
             if record.terminal { "exited" } else { "live" }
         ),
         None => format!("{pid} ({name}, absent from the process table)"),
     }
+}
+
+/// The parent PID of a process, when the kernel will name it.
+#[cfg(target_os = "macos")]
+fn macos_process_parent(pid: libc::pid_t) -> Option<i32> {
+    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>()).ok()?;
+    // SAFETY: info is writable for expected bytes.
+    let observed = unsafe {
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info.as_mut_ptr().cast(),
+            expected,
+        )
+    };
+    if observed != expected {
+        return None;
+    }
+    // SAFETY: proc_pidinfo initialized the complete structure.
+    i32::try_from(unsafe { info.assume_init() }.pbi_ppid).ok()
 }
 
 /// The parent PID recorded in a `/proc/<pid>/status` file.
