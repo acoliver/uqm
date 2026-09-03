@@ -395,7 +395,7 @@ impl SessionState {
 ///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 /// @requirement REQ-PROOF-003
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ProcessIdentity {
     /// Process ID.
     pub pid: u32,
@@ -681,11 +681,14 @@ mod os {
     use std::ffi::{c_int, c_void};
     use std::fs::{File, OpenOptions};
     use std::io::{self, ErrorKind, Read, Write};
+    use std::os::fd::AsRawFd;
     use std::os::unix::process::CommandExt;
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command, ExitStatus, Stdio};
     use std::thread::{self, JoinHandle};
     use std::time::{Duration, Instant};
+
+    use crate::automation::identity::{digest_hex, sha256_file};
 
     use super::{NestedGroupOperation, NestedGroupProtocol, ProcessIdentity};
 
@@ -740,6 +743,31 @@ mod os {
         },
         /// Exact process start identity could not be captured.
         IdentityUnavailable { pid: u32 },
+        /// The executable named by the command could not be resolved or hashed.
+        ExecutableIdentity { path: PathBuf, error: io::Error },
+        /// The command executable does not match its declared provenance digest.
+        ExecutableDigestMismatch {
+            path: PathBuf,
+            declared: String,
+            actual: String,
+        },
+        /// Another live process already owns the run output root.
+        RunLockConflict {
+            root: PathBuf,
+            owner: Box<ProcessIdentity>,
+        },
+        /// A run-lock record names a live process but cannot be matched exactly.
+        RunLockAmbiguous {
+            root: PathBuf,
+            owner: Option<Box<ProcessIdentity>>,
+            detail: String,
+        },
+        /// Run-lock storage or locking failed.
+        RunLockIo {
+            path: PathBuf,
+            operation: &'static str,
+            error: io::Error,
+        },
         /// Signaling the owned process group failed for a reason other than it exiting.
         Signal {
             pid: u32,
@@ -796,6 +824,50 @@ mod os {
                 Self::IdentityUnavailable { pid } => {
                     write!(f, "process start identity unavailable for pid {pid}")
                 }
+                Self::ExecutableIdentity { path, error } => write!(
+                    f,
+                    "cannot establish executable identity for {}: {error}",
+                    path.display()
+                ),
+                Self::ExecutableDigestMismatch {
+                    path,
+                    declared,
+                    actual,
+                } => write!(
+                    f,
+                    "executable digest mismatch for {}: declared {declared}, actual {actual}",
+                    path.display()
+                ),
+                Self::RunLockConflict { root, owner } => write!(
+                    f,
+                    "run output {} is owned by live pid {} started at {} with executable {}",
+                    root.display(),
+                    owner.pid,
+                    owner.start_time,
+                    owner.executable_digest
+                ),
+                Self::RunLockAmbiguous {
+                    root,
+                    owner,
+                    detail,
+                } => write!(
+                    f,
+                    "run output {} has ambiguous ownership{}: {detail}",
+                    root.display(),
+                    owner
+                        .as_ref()
+                        .map(|identity| format!(" by pid {}", identity.pid))
+                        .unwrap_or_default()
+                ),
+                Self::RunLockIo {
+                    path,
+                    operation,
+                    error,
+                } => write!(
+                    f,
+                    "run-lock {operation} failed for {}: {error}",
+                    path.display()
+                ),
                 Self::Signal { pid, signal, error } => {
                     write!(f, "signal {signal} failed for process group {pid}: {error}")
                 }
@@ -822,6 +894,8 @@ mod os {
         fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
             match self {
                 Self::Spawn(e)
+                | Self::ExecutableIdentity { error: e, .. }
+                | Self::RunLockIo { error: e, .. }
                 | Self::LogOpen { error: e, .. }
                 | Self::ReaderStart { error: e, .. }
                 | Self::Reader { error: e, .. }
@@ -950,6 +1024,538 @@ mod os {
             .collect();
         let ticks = fields.get(19)?.parse::<u64>().ok()?;
         ticks.checked_mul(1_000_000)?.checked_div(hz)
+    }
+
+    const RUN_LOCK_SCHEMA: &str = "uqm-run-lock-v1";
+    pub(crate) const RUN_LOCK_RECORD_NAME: &str = ".uqm-run-owner.json";
+    const RUN_LOCK_GUARD_NAME: &str = ".uqm-run-owner.guard";
+    const RUN_LOCK_MAX_BYTES: u64 = 16 * 1024;
+
+    #[derive(Debug, serde::Serialize, serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct RunLockRecord {
+        schema: String,
+        owner: ProcessIdentity,
+        run_executable_digest: String,
+    }
+
+    /// A durable record that a provably absent run owner was replaced.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct RunLockRecovery {
+        /// Exact identity from the stale owner record.
+        pub previous_owner: ProcessIdentity,
+        /// Path of the atomically published recovery record.
+        pub record_path: PathBuf,
+    }
+
+    #[derive(Debug)]
+    pub struct RunLock {
+        guard: File,
+        guard_path: PathBuf,
+        record_path: PathBuf,
+        recovery: Option<RunLockRecovery>,
+        owns_record: bool,
+        released: bool,
+    }
+
+    /// Where a run root's ownership guard and owner record live.
+    ///
+    /// Both sit next to the root, named after it, so the root itself stays a
+    /// pure evidence tree. A root without a parent keeps them inside itself,
+    /// which only arises for a filesystem root.
+    fn lock_paths(root: &Path) -> (PathBuf, PathBuf) {
+        match (root.parent(), root.file_name()) {
+            (Some(parent), Some(name)) => {
+                let name = name.to_string_lossy();
+                (
+                    parent.join(format!(".{name}{RUN_LOCK_GUARD_NAME}")),
+                    parent.join(format!(".{name}{RUN_LOCK_RECORD_NAME}")),
+                )
+            }
+            _ => (
+                root.join(RUN_LOCK_GUARD_NAME),
+                root.join(RUN_LOCK_RECORD_NAME),
+            ),
+        }
+    }
+
+    impl RunLock {
+        pub fn acquire(
+            root: &Path,
+            run_executable_digest: &str,
+        ) -> Result<Self, ChildSessionError> {
+            std::fs::create_dir_all(root).map_err(|error| ChildSessionError::RunLockIo {
+                path: root.to_path_buf(),
+                operation: "create output root",
+                error,
+            })?;
+            let root = root
+                .canonicalize()
+                .map_err(|error| ChildSessionError::RunLockIo {
+                    path: root.to_path_buf(),
+                    operation: "resolve output root",
+                    error,
+                })?;
+            // Ownership metadata is control plane, not evidence, so it is kept
+            // beside the run root rather than inside it. A run root is an
+            // inventoried evidence tree and must contain nothing it did not
+            // produce.
+            let (guard_path, record_path) = lock_paths(&root);
+            let guard = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .open(&guard_path)
+                .map_err(|error| ChildSessionError::RunLockIo {
+                    path: guard_path.clone(),
+                    operation: "open guard",
+                    error,
+                })?;
+            // SAFETY: guard is an open file descriptor owned by this RunLock.
+            let locked = unsafe { libc::flock(guard.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+            if locked == -1 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::EWOULDBLOCK)
+                    || error.raw_os_error() == Some(libc::EAGAIN)
+                {
+                    return Err(classify_existing_lock(&root, &record_path)?);
+                }
+                return Err(ChildSessionError::RunLockIo {
+                    path: guard_path,
+                    operation: "acquire guard",
+                    error,
+                });
+            }
+
+            let owner = current_process_identity()?;
+            let mut run_lock = Self {
+                guard,
+                guard_path,
+                record_path,
+                recovery: None,
+                owns_record: false,
+                released: false,
+            };
+            if run_lock.record_path.exists() {
+                let existing = read_lock_record(&root, &run_lock.record_path)?;
+                match classify_owner(&existing.owner) {
+                    OwnerState::Absent => {
+                        let recovery_path = publish_recovery(&root, &existing, &owner)?;
+                        run_lock.recovery = Some(RunLockRecovery {
+                            previous_owner: existing.owner,
+                            record_path: recovery_path,
+                        });
+                    }
+                    OwnerState::Matching => {
+                        return Err(ChildSessionError::RunLockConflict {
+                            root,
+                            owner: Box::new(existing.owner),
+                        });
+                    }
+                    OwnerState::Ambiguous(detail) => {
+                        return Err(ChildSessionError::RunLockAmbiguous {
+                            root,
+                            owner: Some(Box::new(existing.owner)),
+                            detail,
+                        });
+                    }
+                }
+            }
+            let record = RunLockRecord {
+                schema: RUN_LOCK_SCHEMA.to_string(),
+                owner,
+                run_executable_digest: run_executable_digest.to_string(),
+            };
+            atomic_publish_json(&run_lock.record_path, &record, "publish owner")?;
+            run_lock.owns_record = true;
+            Ok(run_lock)
+        }
+
+        pub fn release(&mut self) -> Result<(), ChildSessionError> {
+            if self.released {
+                return Ok(());
+            }
+            if self.owns_record {
+                match std::fs::remove_file(&self.record_path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(ChildSessionError::RunLockIo {
+                            path: self.record_path.clone(),
+                            operation: "remove owner",
+                            error,
+                        });
+                    }
+                }
+                self.owns_record = false;
+            }
+            match std::fs::remove_file(&self.guard_path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(ChildSessionError::RunLockIo {
+                        path: self.guard_path.clone(),
+                        operation: "remove guard",
+                        error,
+                    });
+                }
+            }
+            // SAFETY: guard remains open and locked until this release call.
+            if unsafe { libc::flock(self.guard.as_raw_fd(), libc::LOCK_UN) } == -1 {
+                return Err(ChildSessionError::RunLockIo {
+                    path: self.guard_path.clone(),
+                    operation: "release guard",
+                    error: io::Error::last_os_error(),
+                });
+            }
+            self.released = true;
+            Ok(())
+        }
+    }
+
+    impl RunLock {
+        /// Recovery performed while taking ownership, if a stale owner record
+        /// had to be reclaimed.
+        #[must_use]
+        pub fn recovery(&self) -> Option<&RunLockRecovery> {
+            self.recovery.as_ref()
+        }
+    }
+
+    impl Drop for RunLock {
+        fn drop(&mut self) {
+            let _ = self.release();
+        }
+    }
+
+    enum OwnerState {
+        Absent,
+        Matching,
+        Ambiguous(String),
+    }
+
+    fn classify_existing_lock(
+        root: &Path,
+        record_path: &Path,
+    ) -> Result<ChildSessionError, ChildSessionError> {
+        let record = read_lock_record(root, record_path)?;
+        Ok(match classify_owner(&record.owner) {
+            OwnerState::Matching => ChildSessionError::RunLockConflict {
+                root: root.to_path_buf(),
+                owner: Box::new(record.owner),
+            },
+            OwnerState::Absent => ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: Some(Box::new(record.owner)),
+                detail: "the recorded owner is absent while another process holds the guard"
+                    .to_string(),
+            },
+            OwnerState::Ambiguous(detail) => ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: Some(Box::new(record.owner)),
+                detail,
+            },
+        })
+    }
+
+    fn classify_owner(expected: &ProcessIdentity) -> OwnerState {
+        match process_exists(expected.pid) {
+            Ok(false) => OwnerState::Absent,
+            Err(error) => OwnerState::Ambiguous(format!("cannot test owner existence: {error}")),
+            Ok(true) => {
+                let start_time = match process_start_micros(expected.pid) {
+                    Some(value) => value.to_string(),
+                    None => {
+                        return OwnerState::Ambiguous(
+                            "live owner start time is unavailable".to_string(),
+                        );
+                    }
+                };
+                let executable_digest = match process_executable_digest(expected.pid) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return OwnerState::Ambiguous(format!(
+                            "live owner executable identity is unavailable: {error}"
+                        ));
+                    }
+                };
+                let observed = ProcessIdentity {
+                    pid: expected.pid,
+                    start_time,
+                    executable_digest,
+                };
+                if expected.matches(&observed) {
+                    OwnerState::Matching
+                } else {
+                    OwnerState::Ambiguous(format!(
+                        "live pid identity differs: recorded start {} executable {}, observed start {} executable {}",
+                        expected.start_time,
+                        expected.executable_digest,
+                        observed.start_time,
+                        observed.executable_digest
+                    ))
+                }
+            }
+        }
+    }
+
+    fn process_exists(pid: u32) -> io::Result<bool> {
+        let pid = libc::pid_t::try_from(pid)
+            .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "PID does not fit pid_t"))?;
+        // SAFETY: signal zero performs an existence and permission check only.
+        if unsafe { libc::kill(pid, 0) } == 0 {
+            return Ok(true);
+        }
+        let error = io::Error::last_os_error();
+        match error.raw_os_error() {
+            Some(libc::ESRCH) => Ok(false),
+            Some(libc::EPERM) => Ok(true),
+            _ => Err(error),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn process_executable_path(pid: u32) -> io::Result<PathBuf> {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        let pid = libc::c_int::try_from(pid)
+            .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "PID does not fit c_int"))?;
+        let mut bytes = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+        // SAFETY: bytes is writable for the length passed to proc_pidpath.
+        let count = unsafe {
+            libc::proc_pidpath(pid, bytes.as_mut_ptr().cast(), bytes.len() as libc::c_uint)
+        };
+        let count = usize::try_from(count)
+            .ok()
+            .filter(|count| *count > 0 && *count <= bytes.len())
+            .ok_or_else(io::Error::last_os_error)?;
+        bytes.truncate(count);
+        Ok(PathBuf::from(std::ffi::OsString::from_vec(bytes)))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn process_executable_path(pid: u32) -> io::Result<PathBuf> {
+        std::fs::read_link(format!("/proc/{pid}/exe"))
+    }
+
+    fn process_executable_digest(pid: u32) -> io::Result<String> {
+        let path = process_executable_path(pid)?;
+        sha256_file(&path).map(|digest| digest_hex(&digest))
+    }
+
+    /// Digest of this process's own executable image.
+    ///
+    /// The image backing a running process cannot change underneath it, so the
+    /// digest is computed once and reused. Hashing it per acquisition made
+    /// every lock cost a full read of the supervising binary.
+    fn current_executable_digest() -> Result<&'static str, ChildSessionError> {
+        static DIGEST: std::sync::OnceLock<Result<String, (PathBuf, String)>> =
+            std::sync::OnceLock::new();
+        match DIGEST.get_or_init(|| {
+            let path = std::env::current_exe()
+                .map_err(|error| (PathBuf::from("<current executable>"), error.to_string()))?;
+            sha256_file(&path)
+                .map(|digest| digest_hex(&digest))
+                .map_err(|error| (path, error.to_string()))
+        }) {
+            Ok(digest) => Ok(digest.as_str()),
+            Err((path, detail)) => Err(ChildSessionError::ExecutableIdentity {
+                path: path.clone(),
+                error: io::Error::other(detail.clone()),
+            }),
+        }
+    }
+
+    fn current_process_identity() -> Result<ProcessIdentity, ChildSessionError> {
+        let pid = std::process::id();
+        let digest = current_executable_digest()?;
+        capture_identity(pid, digest)
+    }
+
+    fn read_lock_record(root: &Path, path: &Path) -> Result<RunLockRecord, ChildSessionError> {
+        let metadata =
+            std::fs::metadata(path).map_err(|error| ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: None,
+                detail: format!("cannot inspect lock record {}: {error}", path.display()),
+            })?;
+        if !metadata.is_file() || metadata.len() > RUN_LOCK_MAX_BYTES {
+            return Err(ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: None,
+                detail: "lock record is not a bounded regular file".to_string(),
+            });
+        }
+        let bytes = std::fs::read(path).map_err(|error| ChildSessionError::RunLockAmbiguous {
+            root: root.to_path_buf(),
+            owner: None,
+            detail: format!("cannot read lock record: {error}"),
+        })?;
+        let record: RunLockRecord = serde_json::from_slice(&bytes).map_err(|error| {
+            ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: None,
+                detail: format!("cannot parse lock record: {error}"),
+            }
+        })?;
+        if record.schema != RUN_LOCK_SCHEMA || record.run_executable_digest.is_empty() {
+            return Err(ChildSessionError::RunLockAmbiguous {
+                root: root.to_path_buf(),
+                owner: Some(Box::new(record.owner)),
+                detail: "lock record schema or run executable digest is invalid".to_string(),
+            });
+        }
+        Ok(record)
+    }
+
+    fn atomic_publish_json<T: serde::Serialize>(
+        path: &Path,
+        value: &T,
+        operation: &'static str,
+    ) -> Result<(), ChildSessionError> {
+        let pending = path.with_extension(format!("pending-{}", std::process::id()));
+        let bytes = serde_json::to_vec(value).map_err(|error| ChildSessionError::RunLockIo {
+            path: path.to_path_buf(),
+            operation,
+            error: io::Error::other(error),
+        })?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&pending)
+            .map_err(|error| ChildSessionError::RunLockIo {
+                path: pending.clone(),
+                operation,
+                error,
+            })?;
+        let publish = file
+            .write_all(&bytes)
+            .and_then(|()| file.sync_all())
+            .and_then(|()| {
+                drop(file);
+                std::fs::rename(&pending, path)
+            });
+        if let Err(error) = publish {
+            let _ = std::fs::remove_file(&pending);
+            return Err(ChildSessionError::RunLockIo {
+                path: path.to_path_buf(),
+                operation,
+                error,
+            });
+        }
+        Ok(())
+    }
+
+    fn publish_recovery(
+        root: &Path,
+        previous: &RunLockRecord,
+        recovered_by: &ProcessIdentity,
+    ) -> Result<PathBuf, ChildSessionError> {
+        #[derive(serde::Serialize)]
+        struct RecoveryRecord<'a> {
+            schema: &'static str,
+            previous: &'a RunLockRecord,
+            recovered_by: &'a ProcessIdentity,
+        }
+        let path = root.join(format!(
+            ".uqm-run-lock-recovery-{}-{}-{}.json",
+            previous.owner.pid, previous.owner.start_time, recovered_by.pid
+        ));
+        atomic_publish_json(
+            &path,
+            &RecoveryRecord {
+                schema: "uqm-run-lock-recovery-v1",
+                previous,
+                recovered_by,
+            },
+            "record stale-owner recovery",
+        )?;
+        Ok(path)
+    }
+
+    fn resolve_command_executable(command: &Command) -> io::Result<PathBuf> {
+        let program = Path::new(command.get_program());
+        if program.components().count() != 1 {
+            let path = if program.is_absolute() {
+                program.to_path_buf()
+            } else {
+                command
+                    .get_current_dir()
+                    .map(Path::to_path_buf)
+                    .unwrap_or(std::env::current_dir()?)
+                    .join(program)
+            };
+            return path.canonicalize();
+        }
+        let configured_path = command
+            .get_envs()
+            .find(|(name, _)| *name == "PATH")
+            .and_then(|(_, value)| value.map(std::ffi::OsStr::to_os_string));
+        let search_path = configured_path
+            .or_else(|| std::env::var_os("PATH"))
+            .unwrap_or_else(|| "/usr/bin:/bin".into());
+        let child_directory = command
+            .get_current_dir()
+            .map(Path::to_path_buf)
+            .unwrap_or(std::env::current_dir()?);
+        for directory in std::env::split_paths(&search_path) {
+            let directory = if directory.is_absolute() {
+                directory
+            } else {
+                child_directory.join(directory)
+            };
+            let candidate = directory.join(program);
+            if candidate.is_file() {
+                return candidate.canonicalize();
+            }
+        }
+        Err(io::Error::new(
+            ErrorKind::NotFound,
+            format!("{} was not found on PATH", program.display()),
+        ))
+    }
+
+    fn command_executable_identity(
+        command: &Command,
+    ) -> Result<(PathBuf, String), ChildSessionError> {
+        let path = resolve_command_executable(command).map_err(|error| {
+            ChildSessionError::ExecutableIdentity {
+                path: PathBuf::from(command.get_program()),
+                error,
+            }
+        })?;
+        let digest = sha256_file(&path)
+            .map(|digest| digest_hex(&digest))
+            .map_err(|error| ChildSessionError::ExecutableIdentity {
+                path: path.clone(),
+                error,
+            })?;
+        Ok((path, digest))
+    }
+
+    /// Resolve and hash the executable that a command would run.
+    pub fn command_executable_digest(command: &Command) -> Result<String, ChildSessionError> {
+        command_executable_identity(command).map(|(_, digest)| digest)
+    }
+
+    /// Verify a declared digest against the executable a command would run.
+    ///
+    /// A run must not proceed under a digest nobody checked, so the run that
+    /// owns an output root calls this before launching its child.
+    pub fn verified_command_digest(
+        command: &Command,
+        declared: &str,
+    ) -> Result<String, ChildSessionError> {
+        let (path, actual) = command_executable_identity(command)?;
+        if actual != declared {
+            return Err(ChildSessionError::ExecutableDigestMismatch {
+                path,
+                declared: declared.to_string(),
+                actual,
+            });
+        }
+        Ok(actual)
     }
 
     /// Build a [`ProcessIdentity`] for a PID, capturing start time and the
@@ -1362,7 +1968,7 @@ mod os {
     #[derive(Debug)]
     pub struct ChildSessionFailure {
         pub error: ChildSessionError,
-        pub receipt: ChildSessionReceipt,
+        pub receipt: Box<ChildSessionReceipt>,
     }
 
     impl std::fmt::Display for ChildSessionFailure {
@@ -1647,7 +2253,10 @@ mod os {
                     })
                 });
             match failure {
-                Some(error) => Err(ChildSessionFailure { error, receipt }),
+                Some(error) => Err(ChildSessionFailure {
+                    error,
+                    receipt: Box::new(receipt),
+                }),
                 None => Ok(receipt),
             }
         }
@@ -2127,6 +2736,195 @@ mod os {
             );
         }
     }
+    #[cfg(test)]
+    mod ownership_tests {
+        use super::*;
+        use tempfile::TempDir;
+
+        fn shell_command(script: &str) -> Command {
+            let mut command = Command::new("/bin/sh");
+            command.args(["-c", script]);
+            command
+        }
+
+        fn run_digest() -> String {
+            command_executable_digest(&Command::new("/bin/sh")).expect("shell digest")
+        }
+
+        fn acquire_error(root: &TempDir) -> ChildSessionError {
+            match RunLock::acquire(root.path(), &run_digest()) {
+                Ok(lock) => {
+                    drop(lock);
+                    panic!("ownership was granted where it must fail closed");
+                }
+                Err(error) => error,
+            }
+        }
+
+        #[test]
+        fn executable_digest_mismatch_fails_closed_before_spawn() {
+            let command = shell_command("exit 0");
+            let actual = command_executable_digest(&command).expect("shell digest");
+            let declared = "0".repeat(64);
+            assert_ne!(actual, declared);
+
+            let error = verified_command_digest(&command, &declared)
+                .expect_err("a digest nobody checked must not be accepted");
+            assert!(matches!(
+                error,
+                ChildSessionError::ExecutableDigestMismatch { declared: d, actual: a, .. }
+                    if d == declared && a == actual
+            ));
+
+            assert_eq!(
+                verified_command_digest(&command, &actual).expect("matching digest is accepted"),
+                actual
+            );
+        }
+
+        #[test]
+        fn second_acquisition_against_live_owner_fails_with_conflict() {
+            let root = TempDir::new().expect("tempdir");
+            let digest = run_digest();
+            let mut first = RunLock::acquire(root.path(), &digest).expect("first owner");
+
+            let error = acquire_error(&root);
+            assert!(matches!(
+                error,
+                ChildSessionError::RunLockConflict { owner, .. }
+                    if owner.pid == std::process::id()
+            ));
+
+            first.release().expect("release ownership");
+            assert!(!lock_paths(root.path()).1.exists());
+        }
+
+        #[test]
+        fn stale_absent_owner_is_recovered_and_durably_recorded() {
+            let root = TempDir::new().expect("tempdir");
+            let mut departed = Command::new("/bin/sleep")
+                .arg("0.05")
+                .spawn()
+                .expect("spawn owner fixture");
+            let departed_digest =
+                command_executable_digest(&Command::new("/bin/sleep")).expect("sleep digest");
+            let previous_owner = capture_identity(departed.id(), &departed_digest)
+                .expect("capture owner fixture identity");
+            departed.wait().expect("reap owner fixture");
+            assert!(!process_exists(previous_owner.pid).expect("test owner absence"));
+
+            let run_digest = run_digest();
+            let stale = RunLockRecord {
+                schema: RUN_LOCK_SCHEMA.to_string(),
+                owner: previous_owner.clone(),
+                run_executable_digest: run_digest.clone(),
+            };
+            atomic_publish_json(&lock_paths(root.path()).1, &stale, "publish stale fixture")
+                .expect("publish stale fixture");
+
+            let mut lock = RunLock::acquire(root.path(), &run_digest).expect("recover stale owner");
+            let recovery = lock.recovery().expect("observable recovery").clone();
+            assert_eq!(recovery.previous_owner, previous_owner);
+            assert!(recovery.record_path.is_file());
+            let recovery_bytes =
+                std::fs::read(&recovery.record_path).expect("read recovery record");
+            let recovery_json: serde_json::Value =
+                serde_json::from_slice(&recovery_bytes).expect("parse recovery record");
+            assert_eq!(recovery_json["schema"], "uqm-run-lock-recovery-v1");
+            assert_eq!(recovery_json["previous"]["schema"], RUN_LOCK_SCHEMA);
+            assert_eq!(
+                recovery_json["previous"]["owner"]["pid"],
+                previous_owner.pid
+            );
+
+            lock.release().expect("release ownership");
+            assert!(recovery.record_path.is_file());
+            assert!(!lock_paths(root.path()).1.exists());
+        }
+
+        #[test]
+        fn live_pid_with_mismatched_identity_is_ambiguous_and_untouched() {
+            let root = TempDir::new().expect("tempdir");
+            let mut forged_owner = current_process_identity().expect("current identity");
+            forged_owner.executable_digest = "0".repeat(64);
+            let command = shell_command("exit 0");
+            let record = RunLockRecord {
+                schema: RUN_LOCK_SCHEMA.to_string(),
+                owner: forged_owner.clone(),
+                run_executable_digest: command_executable_digest(&command).expect("shell digest"),
+            };
+            let record_path = lock_paths(root.path()).1;
+            atomic_publish_json(&record_path, &record, "publish ambiguous fixture")
+                .expect("publish ambiguous fixture");
+
+            let error = acquire_error(&root);
+            assert!(matches!(
+                error,
+                ChildSessionError::RunLockAmbiguous {
+                    owner: Some(owner),
+                    ..
+                } if *owner == forged_owner
+            ));
+            assert!(process_exists(std::process::id()).expect("current process remains live"));
+            assert!(
+                record_path.is_file(),
+                "ambiguous evidence must be preserved"
+            );
+        }
+
+        #[test]
+        fn malformed_owner_record_fails_closed_and_is_preserved() {
+            let root = TempDir::new().expect("tempdir");
+            let record_path = lock_paths(root.path()).1;
+            std::fs::write(&record_path, b"{not-json").expect("publish malformed fixture");
+
+            let error = acquire_error(&root);
+            assert!(matches!(
+                error,
+                ChildSessionError::RunLockAmbiguous { owner: None, .. }
+            ));
+            assert_eq!(
+                std::fs::read(&record_path).expect("read preserved malformed record"),
+                b"{not-json"
+            );
+        }
+
+        #[test]
+        fn ownership_metadata_stays_out_of_the_run_root() {
+            let parent = TempDir::new().expect("tempdir");
+            let run_root = parent.path().join("output");
+            std::fs::create_dir(&run_root).expect("create run root");
+
+            let mut owner = RunLock::acquire(&run_root, &run_digest()).expect("owner");
+            let inside: Vec<_> = std::fs::read_dir(&run_root)
+                .expect("read run root")
+                .map(|entry| entry.expect("entry").file_name())
+                .collect();
+            assert!(
+                inside.is_empty(),
+                "a run root is an inventoried evidence tree and must hold no ownership files: {inside:?}"
+            );
+
+            owner.release().expect("release ownership");
+        }
+
+        #[test]
+        fn ownership_is_released_when_the_owner_unwinds() {
+            let root = TempDir::new().expect("tempdir");
+            let digest = run_digest();
+            let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _owner = RunLock::acquire(root.path(), &digest).expect("owner");
+                panic!("run failed while holding ownership");
+            }));
+            assert!(panicked.is_err(), "the fixture must unwind");
+            assert!(!lock_paths(root.path()).1.exists());
+
+            let mut next = RunLock::acquire(root.path(), &digest)
+                .expect("an unwound owner must leave the root acquirable");
+            assert!(next.recovery().is_none(), "no stale record to recover");
+            next.release().expect("release ownership");
+        }
+    }
 
     #[cfg(test)]
     mod anchor_tests {
@@ -2191,8 +2989,9 @@ pub use os::parse_linux_proc_start_micros;
 pub use os::process_start_micros;
 #[cfg(unix)]
 pub use os::{
-    capture_identity, ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionFailure,
-    ChildSessionReceipt, StreamKind,
+    capture_identity, command_executable_digest, verified_command_digest, ChildSession,
+    ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt, RunLock,
+    RunLockRecovery, StreamKind,
 };
 
 // ===========================================================================
@@ -2527,6 +3326,7 @@ mod os_tests {
     }
 
     fn make_config(dir: &TempDir, timeout: Duration, grace: Duration) -> ChildSessionConfig {
+        let command = Command::new("sh");
         ChildSessionConfig {
             stdout_log: dir.path().join("out.log"),
             stderr_log: dir.path().join("err.log"),
@@ -2534,7 +3334,7 @@ mod os_tests {
             stderr_budget: 1 << 20,
             timeout,
             grace,
-            executable_digest: "deadbeef".to_string(),
+            executable_digest: command_executable_digest(&command).expect("digest sh"),
         }
     }
 
@@ -2785,7 +3585,10 @@ mod os_tests {
             id.start_time.parse::<u64>().is_ok(),
             "start_time should be numeric"
         );
-        assert_eq!(id.executable_digest, "deadbeef");
+        assert_eq!(
+            id.executable_digest,
+            command_executable_digest(&Command::new("sh")).expect("digest sh")
+        );
         let _ = session.finish();
     }
 
@@ -2840,6 +3643,10 @@ mod os_tests {
         // SAFETY: kill(pid, 0) existence check.
         let alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
         assert!(!alive, "child should be killed by Drop backstop");
+        assert!(
+            !dir.path().join(super::os::RUN_LOCK_RECORD_NAME).exists(),
+            "Drop must release the run-output owner record"
+        );
     }
 
     #[test]
@@ -2847,6 +3654,7 @@ mod os_tests {
         let dir = TempDir::new().expect("tempdir");
         let log_path = dir.path().join("out.log");
         std::fs::write(&log_path, "pre-existing").expect("write");
+        let cmd = Command::new("true");
         let config = ChildSessionConfig {
             stdout_log: log_path,
             stderr_log: dir.path().join("err.log"),
@@ -2854,9 +3662,8 @@ mod os_tests {
             stderr_budget: 1 << 20,
             timeout: Duration::from_secs(5),
             grace: Duration::from_secs(2),
-            executable_digest: "deadbeef".to_string(),
+            executable_digest: command_executable_digest(&cmd).expect("digest true"),
         };
-        let cmd = Command::new("true");
         let error = match ChildSession::spawn(cmd, config) {
             Ok(session) => panic!("log setup unexpectedly spawned pid {}", session.pid()),
             Err(error) => error,
@@ -2875,13 +3682,11 @@ mod os_tests {
     fn receipt_contains_identity() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
-        let mut cmd = Command::new("sleep");
-        cmd.arg("0.05");
+        let cmd = delayed_command("exit 0");
         let session = ChildSession::spawn(cmd, config).expect("spawn");
-        let expected_pid = session.pid();
+        let expected_identity = session.identity().clone();
         let receipt = session.finish().expect("finish");
-        assert_eq!(receipt.identity.pid, expected_pid);
-        assert_eq!(receipt.identity.executable_digest, "deadbeef");
+        assert_eq!(receipt.identity, expected_identity);
     }
 
     fn command_with_pipe_holding_descendant(

@@ -7,6 +7,8 @@ use std::process::Command;
 #[cfg(test)]
 use std::time::Duration;
 #[cfg(test)]
+use uqm_rust::automation::command_executable_digest;
+#[cfg(test)]
 use uqm_rust::automation::native_window::NativeInventoryLimits;
 use uqm_rust::automation::native_window::{
     native_window_trace_semantic_snapshot, validate_native_linked_build_semantics,
@@ -1538,7 +1540,7 @@ fn finalize_run(inputs: FinalizeRun<'_>) -> Result<(), String> {
         Ok(receipt) => (receipt, None),
         Err(failure) => {
             let error = format!("{failure}");
-            (failure.receipt, Some((failure.error, error)))
+            (*failure.receipt, Some((failure.error, error)))
         }
     };
     let child_cleanup = NativeChildCleanupReceipt {
@@ -3643,7 +3645,7 @@ mod tests {
                 stderr_budget: 1024,
                 timeout: Duration::from_secs(30),
                 grace: Duration::from_millis(10),
-                executable_digest: "a".repeat(64),
+                executable_digest: command_executable_digest(&Command::new("/bin/sleep")).unwrap(),
             },
         )
         .unwrap();
@@ -3721,7 +3723,7 @@ mod tests {
                 stderr_budget: 1024,
                 timeout: Duration::from_millis(20),
                 grace: Duration::from_millis(10),
-                executable_digest: "a".repeat(64),
+                executable_digest: command_executable_digest(&Command::new("/bin/sleep")).unwrap(),
             },
         )
         .unwrap();
@@ -3991,7 +3993,6 @@ mod tests {
             command,
             ChildSessionConfig {
                 stdout_log: root.path().join("stdout.log"),
-
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
                 stderr_budget: 1024,

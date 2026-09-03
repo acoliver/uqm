@@ -7,8 +7,9 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use uqm_rust::automation::{
-    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionReceipt, RecordKind,
-    SeedDomain, TeardownReceipt, TerminalClass, TraceRecord, AUTOMATION_SEED,
+    verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
+    ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
+    TraceRecord, AUTOMATION_SEED,
 };
 
 const SCHEMA: &str = "uqm-lcar-v1";
@@ -228,6 +229,13 @@ fn run_proof(
         &content,
         output_root,
     )?;
+    // The run owns its output root for as long as it is producing evidence
+    // there. Ownership is released when this guard drops, on every path.
+    let _ownership = RunLock::acquire(
+        &evidence.output_root,
+        &evidence.provenance.executable_sha256,
+    )
+    .map_err(|error| error.to_string())?;
     let receipt = supervise_child(
         &repo_root,
         &evidence.output_root.join("snapshots/uqm"),
@@ -307,7 +315,7 @@ fn supervise_child(
     content: &Path,
     script: &Path,
     evidence: &RunEvidence,
-) -> Result<ChildSessionReceipt, (ChildSessionError, ChildSessionReceipt)> {
+) -> Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)> {
     let run_root = evidence.output_root.join("run");
     let mut command = Command::new(executable);
     command
@@ -319,6 +327,14 @@ fn supervise_child(
         .current_dir(repo_root)
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
+    // The run must not proceed under a digest nobody checked: the declared
+    // provenance is verified against the binary this command would launch.
+    if let Err(error) = verified_command_digest(&command, &evidence.provenance.executable_sha256) {
+        return Err((
+            error,
+            Box::new(unavailable_receipt(&evidence.provenance.executable_sha256)),
+        ));
+    }
     let config = ChildSessionConfig {
         stdout_log: evidence.output_root.join("stdout.log"),
         stderr_log: evidence.output_root.join("stderr.log"),
@@ -334,7 +350,7 @@ fn supervise_child(
             eprintln!("child spawn failed before a trustworthy process receipt existed: {error}");
             return Err((
                 error,
-                unavailable_receipt(&evidence.provenance.executable_sha256),
+                Box::new(unavailable_receipt(&evidence.provenance.executable_sha256)),
             ));
         }
     };
@@ -345,13 +361,13 @@ fn supervise_child(
 
 fn complete_run(
     evidence: &mut RunEvidence,
-    child_result: Result<ChildSessionReceipt, (ChildSessionError, ChildSessionReceipt)>,
+    child_result: Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)>,
 ) -> Result<(), String> {
     let (session_contract, process) = match child_result {
         Ok(receipt) => (None, ProcessReceipt::from(receipt)),
         Err((error, receipt)) if receipt.identity.pid != 0 => (
             Some(classify_session_error(&error)),
-            ProcessReceipt::from(receipt),
+            ProcessReceipt::from(*receipt),
         ),
         Err((error, _)) => return Err(error.to_string()),
     };
