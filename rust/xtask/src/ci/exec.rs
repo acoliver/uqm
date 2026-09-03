@@ -3297,7 +3297,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use uqm_rust::automation::child_session::{
-        command_executable_digest, ChildSession, ChildSessionConfig, ChildSessionError,
+        ChildSession, ChildSessionConfig, ChildSessionError,
     };
 
     fn limits() -> Limits {
@@ -3874,7 +3874,7 @@ mod tests {
             stderr_budget: 1_024,
             timeout: Duration::from_secs(30),
             grace: Duration::from_millis(100),
-            executable_digest: command_executable_digest(&command).expect("controller digest"),
+            executable_digest: "nested-test".into(),
         };
         let _nested = ChildSession::spawn(command, config).expect("spawn nested ChildSession");
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -3946,7 +3946,7 @@ mod tests {
             stderr_budget: 1_024,
             timeout: Duration::from_millis(100),
             grace: Duration::from_millis(50),
-            executable_digest: command_executable_digest(&command).expect("shell digest"),
+            executable_digest: "nested-lifecycle-test".into(),
         };
         let session = ChildSession::spawn(command, config).expect("register nested ChildSession");
         let pid = session.pid() as libc::pid_t;

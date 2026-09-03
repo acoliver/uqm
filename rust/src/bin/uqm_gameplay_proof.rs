@@ -7,8 +7,9 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use uqm_rust::automation::{
-    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionReceipt, RecordKind, RunLock,
-    SeedDomain, TeardownReceipt, TerminalClass, TraceRecord, AUTOMATION_SEED,
+    verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
+    ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
+    TraceRecord, AUTOMATION_SEED,
 };
 
 const SCHEMA: &str = "uqm-lcar-v1";
@@ -326,6 +327,14 @@ fn supervise_child(
         .current_dir(repo_root)
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
+    // The run must not proceed under a digest nobody checked: the declared
+    // provenance is verified against the binary this command would launch.
+    if let Err(error) = verified_command_digest(&command, &evidence.provenance.executable_sha256) {
+        return Err((
+            error,
+            Box::new(unavailable_receipt(&evidence.provenance.executable_sha256)),
+        ));
+    }
     let config = ChildSessionConfig {
         stdout_log: evidence.output_root.join("stdout.log"),
         stderr_log: evidence.output_root.join("stderr.log"),

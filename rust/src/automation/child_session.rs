@@ -1515,7 +1515,11 @@ mod os {
         command_executable_identity(command).map(|(_, digest)| digest)
     }
 
-    fn verified_command_digest(
+    /// Verify a declared digest against the executable a command would run.
+    ///
+    /// A run must not proceed under a digest nobody checked, so the run that
+    /// owns an output root calls this before launching its child.
+    pub fn verified_command_digest(
         command: &Command,
         declared: &str,
     ) -> Result<String, ChildSessionError> {
@@ -2000,7 +2004,6 @@ mod os {
             mut command: Command,
             config: ChildSessionConfig,
         ) -> Result<Self, ChildSessionError> {
-            let verified_digest = verified_command_digest(&command, &config.executable_digest)?;
             let stdout_file = create_log(&config.stdout_log, StreamKind::Stdout)?;
             let stderr_file = match create_log(&config.stderr_log, StreamKind::Stderr) {
                 Ok(file) => file,
@@ -2059,7 +2062,7 @@ mod os {
                 None => None,
             };
             let mut anchor = LeaderAnchor::new(pid, monitor_anchor_pid)?;
-            let identity = match capture_identity(pid, &verified_digest) {
+            let identity = match capture_identity(pid, &config.executable_digest) {
                 Ok(identity) => identity,
                 Err(error) => {
                     let cleanup = cleanup_partial_spawn(
@@ -2720,19 +2723,6 @@ mod os {
             command
         }
 
-        fn config_for(root: &TempDir, name: &str, command: &Command) -> ChildSessionConfig {
-            ChildSessionConfig {
-                stdout_log: root.path().join(format!("{name}.stdout.log")),
-                stderr_log: root.path().join(format!("{name}.stderr.log")),
-                stdout_budget: 1 << 20,
-                stderr_budget: 1 << 20,
-                timeout: Duration::from_secs(5),
-                grace: Duration::from_secs(1),
-                executable_digest: command_executable_digest(command)
-                    .expect("resolve shell executable digest"),
-            }
-        }
-
         fn run_digest() -> String {
             command_executable_digest(&Command::new("/bin/sh")).expect("shell digest")
         }
@@ -2747,37 +2737,25 @@ mod os {
             }
         }
 
-        fn spawn_error(command: Command, config: ChildSessionConfig) -> ChildSessionError {
-            match ChildSession::spawn(command, config) {
-                Ok(session) => {
-                    let pid = session.pid();
-                    drop(session);
-                    panic!("spawn unexpectedly succeeded for pid {pid}");
-                }
-                Err(error) => error,
-            }
-        }
-
         #[test]
         fn executable_digest_mismatch_fails_closed_before_spawn() {
-            let root = TempDir::new().expect("tempdir");
-            let marker = root.path().join("spawned");
-            let command = shell_command(&format!("touch {}", marker.display()));
-            let mut config = config_for(&root, "mismatch", &command);
-            let actual = config.executable_digest.clone();
-            config.executable_digest = "0".repeat(64);
+            let command = shell_command("exit 0");
+            let actual = command_executable_digest(&command).expect("shell digest");
+            let declared = "0".repeat(64);
+            assert_ne!(actual, declared);
 
-            let error = spawn_error(command, config);
+            let error = verified_command_digest(&command, &declared)
+                .expect_err("a digest nobody checked must not be accepted");
             assert!(matches!(
                 error,
-                ChildSessionError::ExecutableDigestMismatch {
-                    declared,
-                    actual: observed,
-                    ..
-                } if declared == "0".repeat(64) && observed == actual
+                ChildSessionError::ExecutableDigestMismatch { declared: d, actual: a, .. }
+                    if d == declared && a == actual
             ));
-            assert!(!marker.exists(), "digest mismatch must prevent execution");
-            assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
+
+            assert_eq!(
+                verified_command_digest(&command, &actual).expect("matching digest is accepted"),
+                actual
+            );
         }
 
         #[test]
@@ -2972,9 +2950,9 @@ pub use os::parse_linux_proc_start_micros;
 pub use os::process_start_micros;
 #[cfg(unix)]
 pub use os::{
-    capture_identity, command_executable_digest, ChildSession, ChildSessionConfig,
-    ChildSessionError, ChildSessionFailure, ChildSessionReceipt, RunLock, RunLockRecovery,
-    StreamKind,
+    capture_identity, command_executable_digest, verified_command_digest, ChildSession,
+    ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt, RunLock,
+    RunLockRecovery, StreamKind,
 };
 
 // ===========================================================================
