@@ -682,7 +682,6 @@ mod os {
     use std::fs::{File, OpenOptions};
     use std::io::{self, ErrorKind, Read, Write};
     use std::os::fd::AsRawFd;
-    use std::os::unix::ffi::OsStringExt;
     use std::os::unix::process::CommandExt;
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command, ExitStatus, Stdio};
@@ -1282,6 +1281,8 @@ mod os {
 
     #[cfg(target_os = "macos")]
     fn process_executable_path(pid: u32) -> io::Result<PathBuf> {
+        use std::os::unix::ffi::OsStringExt as _;
+
         let pid = libc::c_int::try_from(pid)
             .map_err(|_| io::Error::new(ErrorKind::InvalidInput, "PID does not fit c_int"))?;
         let mut bytes = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
