@@ -636,6 +636,17 @@ fn macos_process_parent(pid: libc::pid_t) -> Option<i32> {
     i32::try_from(unsafe { info.assume_init() }.pbi_ppid).ok()
 }
 
+/// Whether a `/proc` read failed because the process it names has gone.
+///
+/// A process that exits mid-scan is not an inspection failure: it is the
+/// absence the scan is looking for. Linux reports this as `ENOENT` when the
+/// directory entry has been removed and as `ESRCH` when the entry survives the
+/// process, and only the first maps onto `ErrorKind::NotFound`.
+#[cfg(target_os = "linux")]
+fn process_vanished(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(libc::ESRCH)
+}
+
 /// The parent PID recorded in a `/proc/<pid>/status` file.
 #[cfg(target_os = "linux")]
 fn linux_process_parent(status: &str) -> Option<i32> {
@@ -683,7 +694,7 @@ fn group_member_other_than(
         let stat_path = entry.path().join("stat");
         let stat = match std::fs::read_to_string(&stat_path) {
             Ok(stat) => stat,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) if process_vanished(&error) => continue,
             Err(error) => {
                 return Err(format!("cannot inspect {}: {error}", stat_path.display()));
             }
@@ -1034,7 +1045,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
         let stat_path = entry.path().join("stat");
         let stat = match std::fs::read_to_string(&stat_path) {
             Ok(stat) => stat,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) if process_vanished(&error) => continue,
             Err(error) => {
                 return Err(format!("cannot inspect {}: {error}", stat_path.display()));
             }
@@ -1046,7 +1057,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
         let status_path = entry.path().join("status");
         let status = match std::fs::read_to_string(&status_path) {
             Ok(status) => status,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) if process_vanished(&error) => continue,
             Err(error) => {
                 return Err(format!("cannot inspect {}: {error}", status_path.display()));
             }
@@ -3385,6 +3396,21 @@ fn parse_dedicated_containment_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_process_that_exits_mid_scan_is_absence_not_failure() {
+        use std::io::{Error, ErrorKind};
+
+        // Both kernel reports for "it is gone", one of which does not map onto
+        // NotFound and previously failed the whole containment scan.
+        assert!(process_vanished(&Error::from(ErrorKind::NotFound)));
+        assert!(process_vanished(&Error::from_raw_os_error(libc::ESRCH)));
+
+        // A real inspection failure must still fail.
+        assert!(!process_vanished(&Error::from_raw_os_error(libc::EACCES)));
+        assert!(!process_vanished(&Error::from(ErrorKind::PermissionDenied)));
+    }
 
     #[test]
     #[cfg(any(target_os = "macos", target_os = "linux"))]
