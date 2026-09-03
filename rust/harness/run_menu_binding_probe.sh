@@ -2,18 +2,19 @@
 #
 # Menu Binding Probe — Initialized-Child Production Query Runner
 #
-# Compiles and links a standalone C probe against the production Rust and C
-# archives, then executes it as an initialized child with production resources
-# loaded. The probe queries the actual `menu.down.N` binding through the
-# narrow `uqm_query_menu_binding` accessor (which calls production
-# res_IsString/res_GetString and VControl_ParseGesture), emits the resolved
-# VCONTROL_KEY binding and alternate id, then tears down and exits.
+# Builds the Rust menu-binding probe binary through the canonical cargo
+# toolchain (linked C archive feature) and executes it as an initialized
+# child with production resources loaded. The probe queries the actual
+# `menu.down.N` binding through the Rust accessor `query_menu_binding`
+# (which calls production res_IsString/res_GetString and the production
+# gesture parser), emits the resolved VCONTROL_KEY binding and alternate
+# id, then tears down and exits.
 #
 # This script FAILS if:
 #   - The query is not found (no menu.down.N binding exists)
 #   - The resolved binding is not a VCONTROL_KEY
 #   - The binding does not originate from production resources (menu.key)
-#   - Linking fails (proves archive/Rust/C member extraction)
+#   - The cargo build fails (proves archive/Rust/C member extraction)
 #
 # Evidence (link map, nm output) is preserved in the evidence directory.
 #
@@ -125,8 +126,6 @@ PYTHON
 
 C_ARCHIVE="${REPO_ROOT}/$(extract_artifact_path c_static_archive)"
 RUST_ARCHIVE="${REPO_ROOT}/$(extract_artifact_path rust_static_archive)"
-OUT_DIR="$(dirname "${C_ARCHIVE}")"
-HARNESS_ARCHIVE="${OUT_DIR}/libp00_harness_shim.a"
 CC_PATH="$(python3 -P -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["cc"]["executable"])' "${MANIFEST_JSON}")"
 NM_PATH="$(python3 -P -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["nm"]["executable"])' "${MANIFEST_JSON}")"
 PKG_CONFIG_TOOL="$(python3 -P -c 'import json,sys; print(json.load(open(sys.argv[1]))["native_build"]["toolchain"]["pkg_config"]["executable"])' "${MANIFEST_JSON}")"
@@ -226,12 +225,8 @@ PKG_CFLAGS_FILE="${EVIDENCE_DIR}/pkg-config-cflags.txt"
 PKG_LIBS_FILE="${EVIDENCE_DIR}/pkg-config-libs.txt"
 parse_pkg_config_args "${PKG_CFLAGS_RAW}" "${PKG_CFLAGS_FILE}"
 parse_pkg_config_args "${PKG_LIBS_RAW}" "${PKG_LIBS_FILE}"
-PKG_CFLAGS=(__uqm_empty_array_sentinel__)
-while IFS= read -r flag; do PKG_CFLAGS+=("${flag}"); done < "${PKG_CFLAGS_FILE}"
-PKG_LIBS=(__uqm_empty_array_sentinel__)
-while IFS= read -r flag; do PKG_LIBS+=("${flag}"); done < "${PKG_LIBS_FILE}"
 
-for file in "${C_ARCHIVE}" "${HARNESS_ARCHIVE}" "${RUST_ARCHIVE}"; do
+for file in "${C_ARCHIVE}" "${RUST_ARCHIVE}"; do
     if [ ! -f "${file}" ]; then
         echo "FAIL: ${file} not found"
         exit 1
@@ -246,12 +241,12 @@ echo ""
 echo "--- Production symbol verification (nm) ---"
 
 # The probe references these symbols:
-#   - From libuqm_c.a: VControl_ParseGesture, uqm_query_menu_binding,
-#     InstallGraphicResTypes, InstallStringTableResType, etc.
+#   - From libuqm_c.a: VControl_ParseGesture, InstallGraphicResTypes,
+#     InstallStringTableResType, etc. (C subsystem type registration)
 #   - From libuqm_rust.a: InitResourceSystem, LoadResourceIndex,
 #     res_IsString, res_GetString, uio_openRepository, uio_mountDir,
-#     uio_openDir, uio_closeDir, uio_closeRepository
-
+#     uio_openDir, and rust_VControl_ParseGesture (the production gesture
+#     parser the Rust accessor calls)
 verify_symbol() {
     local listing="$1"
     local symbol="$2"
@@ -275,10 +270,8 @@ verify_symbol() {
 
 if capture_nm "c-archive" -A "${C_ARCHIVE}"; then :; else nm_exit=$?; exit "${nm_exit}"; fi
 if capture_nm "rust-archive" -A "${RUST_ARCHIVE}"; then :; else nm_exit=$?; exit "${nm_exit}"; fi
-if capture_nm "harness-archive" -A "${HARNESS_ARCHIVE}"; then :; else nm_exit=$?; exit "${nm_exit}"; fi
 : > "${EVIDENCE_DIR}/c-archive-nm-origins.txt"
 : > "${EVIDENCE_DIR}/rust-archive-nm-origins.txt"
-: > "${EVIDENCE_DIR}/harness-archive-nm-origins.txt"
 
 echo "  -- C archive symbols --"
 verify_symbol "${EVIDENCE_DIR}/c-archive-nm.txt" "VControl_ParseGesture" "rust_vcontrol_impl.c.o" "${EVIDENCE_DIR}/c-archive-nm-origins.txt" || exit 1
@@ -293,69 +286,82 @@ verify_symbol "${EVIDENCE_DIR}/rust-archive-nm.txt" "res_GetString" "" "${EVIDEN
 verify_symbol "${EVIDENCE_DIR}/rust-archive-nm.txt" "uio_openRepository" "" "${EVIDENCE_DIR}/rust-archive-nm-origins.txt" || exit 1
 verify_symbol "${EVIDENCE_DIR}/rust-archive-nm.txt" "uio_mountDir" "" "${EVIDENCE_DIR}/rust-archive-nm-origins.txt" || exit 1
 verify_symbol "${EVIDENCE_DIR}/rust-archive-nm.txt" "uio_openDir" "" "${EVIDENCE_DIR}/rust-archive-nm-origins.txt" || exit 1
-
-echo "  -- Harness archive symbols --"
-verify_symbol "${EVIDENCE_DIR}/harness-archive-nm.txt" "uqm_query_menu_binding" "menu_binding_accessor.o" "${EVIDENCE_DIR}/harness-archive-nm-origins.txt" || exit 1
+verify_symbol "${EVIDENCE_DIR}/rust-archive-nm.txt" "rust_VControl_ParseGesture" "" "${EVIDENCE_DIR}/rust-archive-nm-origins.txt" || exit 1
 
 echo "PASS: all required production symbols verified"
 echo ""
 
 # --------------------------------------------------------------------------
-# 4. Link the probe executable (force-load order per execution-contract §8)
+# 4. Build the Rust probe binary through the canonical cargo toolchain
 # --------------------------------------------------------------------------
 
-echo "--- Linking probe executable ---"
+echo "--- Building Rust probe binary ---"
 
-PROBE_BIN=$(mktemp "${TMPDIR:-/tmp}/menu_binding_probe_bin.XXXXXX")
 LINK_MAP=$(mktemp "${TMPDIR:-/tmp}/menu_binding_link_map.XXXXXX").map
+BUILD_LOG=$(mktemp "${TMPDIR:-/tmp}/menu_binding_build_log.XXXXXX")
 cleanup() {
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
+    rm -f "${LINK_MAP}" "${BUILD_LOG}"
 }
 trap cleanup EXIT
-PROBE_OBJ="${OUT_DIR}/menu_binding_probe.o"
 
-if [ ! -f "${PROBE_OBJ}" ]; then
-    echo "FAIL: ${PROBE_OBJ} not found"
-    rm -f "${LINK_MAP}"
-    exit 1
-fi
-
-# Link order per execution-contract §8, with the exact package flags obtained
-# from the manifest-recorded pkg-config executable. No undefined-symbol or
-# dynamic-lookup escape hatch is permitted.
 OS_NAME="$(uname -s)"
-if [ "${OS_NAME}" = "Darwin" ]; then
-    if ! "${CC_PATH}" "${PKG_CFLAGS[@]:1}" \
-        -L"${OUT_DIR}" \
-        "${PROBE_OBJ}" \
-        -Wl,-force_load,"${HARNESS_ARCHIVE}" \
-        "${C_ARCHIVE}" \
-        "${RUST_ARCHIVE}" \
-        "${PKG_LIBS[@]:1}" -lz -lm -lobjc \
-        -framework Cocoa -framework CoreAudio -framework AudioToolbox -framework CoreFoundation \
-        -Wl,-map,"${LINK_MAP}" \
-        -o "${PROBE_BIN}" 2>&1; then
-        echo "FAIL: Darwin menu binding probe link failed"
+case "${OS_NAME}" in
+    Darwin)
+        MAP_LINK_ARG="-Clink-arg=-Wl,-map,${LINK_MAP}"
+        ;;
+    Linux)
+        MAP_LINK_ARG="-Clink-arg=-Wl,-Map,${LINK_MAP}"
+        ;;
+    *)
+        echo "FAIL: unsupported OS: ${OS_NAME}"
         exit 1
-    fi
-elif [ "${OS_NAME}" = "Linux" ]; then
-    if ! "${CC_PATH}" "${PKG_CFLAGS[@]:1}" \
-        -L"${OUT_DIR}" \
-        "${PROBE_OBJ}" \
-        -Wl,--gc-sections \
-        -Wl,--whole-archive "${HARNESS_ARCHIVE}" -Wl,--no-whole-archive \
-        -Wl,--start-group "${C_ARCHIVE}" "${RUST_ARCHIVE}" -Wl,--end-group \
-        "${PKG_LIBS[@]:1}" -lbz2 -lz -lm -lasound \
-        -Wl,-Map,"${LINK_MAP}" \
-        -o "${PROBE_BIN}" 2>&1; then
-        echo "FAIL: Linux menu binding probe link failed"
-        exit 1
-    fi
-else
-    echo "FAIL: unsupported OS: ${OS_NAME}"
+        ;;
+esac
+
+# The same feature set the linked-test profile uses; the linked C archive
+# supplies C subsystem registration referenced by InitResourceSystem.
+if ! "${CARGO}" rustc \
+        --locked \
+        --manifest-path "${RUST_DIR}/Cargo.toml" \
+        --release \
+        --no-default-features \
+        --features audio_heart,debug-process,linked_c_archive \
+        --bin menu_binding_probe \
+        --message-format=json \
+        -- "${MAP_LINK_ARG}" > "${BUILD_LOG}"; then
+    echo "FAIL: menu binding probe cargo build failed"
     exit 1
 fi
-echo "PASS: probe linked successfully"
+
+PROBE_BIN=$(python3 -P - "${BUILD_LOG}" <<'PYTHON'
+import json, sys
+executable = None
+with open(sys.argv[1], encoding="utf-8") as source:
+    for line in source:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("reason") != "compiler-artifact":
+            continue
+        target = message.get("target") or {}
+        if target.get("name") != "menu_binding_probe":
+            continue
+        if "bin" not in (target.get("kind") or []):
+            continue
+        path = message.get("executable")
+        if path:
+            executable = path
+if executable is None:
+    raise SystemExit("cargo reported no executable for bin menu_binding_probe")
+print(executable)
+PYTHON
+)
+if [ -z "${PROBE_BIN}" ] || [ ! -x "${PROBE_BIN}" ]; then
+    echo "FAIL: probe binary not found or not executable: ${PROBE_BIN}"
+    exit 1
+fi
+echo "PASS: probe built at ${PROBE_BIN}"
 if capture_nm "probe-binary" "${PROBE_BIN}"; then :; else nm_exit=$?; exit "${nm_exit}"; fi
 echo ""
 
@@ -398,25 +404,21 @@ echo "--- Validating probe result ---"
 
 if [ ${PROBE_EXIT} -ne 0 ]; then
     echo "FAIL: probe exited ${PROBE_EXIT}"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
 if ! grep -q "RESULT=PASS" "${PROBE_OUTPUT_PATH}"; then
     echo "FAIL: probe did not emit RESULT=PASS"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
 if ! grep -q "found=1" "${PROBE_OUTPUT_PATH}"; then
     echo "FAIL: probe did not find a binding (found != 1)"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
 if ! grep -q "binding_type=VCONTROL_KEY" "${PROBE_OUTPUT_PATH}"; then
     echo "FAIL: probe did not confirm VCONTROL_KEY binding type"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
@@ -427,19 +429,16 @@ NUM_ALTERNATES=$(awk -F= '/^num_alternates=/ { print $2; exit }' "${PROBE_OUTPUT
 
 if [ -z "${KEY_CODE}" ] || [ "${KEY_CODE}" -le 0 ] 2>/dev/null; then
     echo "FAIL: invalid key_code (${KEY_CODE})"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
 if [ -z "${BINDING_ID}" ] || [ "${BINDING_ID}" -lt 1 ] 2>/dev/null; then
     echo "FAIL: invalid binding_id (${BINDING_ID})"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
 if [ -z "${NUM_ALTERNATES}" ] || [ "${NUM_ALTERNATES}" -lt 1 ] 2>/dev/null; then
     echo "FAIL: invalid num_alternates (${NUM_ALTERNATES})"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 
@@ -449,7 +448,6 @@ echo "PASS: binding found — key_code=${KEY_CODE}, binding_id=${BINDING_ID}, nu
 # assigns SDLK_DOWN the exact value 1073741905 (0x40000051).
 if [ "${KEY_CODE}" != "1073741905" ]; then
     echo "FAIL: menu.down.1 key_code ${KEY_CODE} does not equal SDLK_DOWN (1073741905)"
-    rm -f "${PROBE_BIN}" "${LINK_MAP}"
     exit 1
 fi
 echo "PASS: menu.down.1 is bound to SDLK_DOWN (1073741905)"
@@ -461,7 +459,7 @@ echo ""
 
 echo "--- nm evidence for probe binary ---"
 
-for sym in _main _uqm_query_menu_binding _VControl_ParseGesture _InitResourceSystem _LoadResourceIndex _res_IsString _res_GetString _rust_VControl_ParseGesture; do
+for sym in _main _VControl_ParseGesture _rust_VControl_ParseGesture _InitResourceSystem _LoadResourceIndex _res_IsString _res_GetString; do
     addr=$(awk -v symbol="${sym}" '$(NF - 1) == "T" && $NF == symbol { print; exit }' "${EVIDENCE_DIR}/probe-binary-nm.txt")
     if [ -n "${addr}" ]; then
         echo "  ${sym} -> ${addr}"

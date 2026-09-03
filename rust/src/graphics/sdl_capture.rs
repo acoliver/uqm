@@ -1,44 +1,40 @@
 //! ABI-authoritative SDL surface capture helpers.
 //!
-//! These functions wrap the C accessors compiled against the real linked SDL2
-//! headers. They provide safe Rust access to SDL_Surface width/height/pitch/
-//! pixels/format/BPP/masks and the SDL_MUSTLOCK macro.
+//! These functions operate on the real `SDL_Surface`/`SDL_PixelFormat` types
+//! from `sdl2_sys`, whose bindgen bindings are generated against the same SDL2
+//! headers the production library links against. They provide Rust access to
+//! SDL_Surface width/height/pitch/format/BPP/masks and the SDL_MUSTLOCK
+//! predicate.
 //!
 //! The lock-copy-unlock helper is the single shared production helper — both
-//! capture code and tests call the same C function (`uqm_sdl_lock_copy_unlock`).
+//! capture code and tests call the same function (`lock_copy_unlock`).
 //!
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P00 §7
 
-use std::ffi::c_void;
+use std::cell::Cell;
+use std::thread_local;
 
-// These FFI declarations link against the C harness accessors compiled in build.rs
-// via cc::Build::compile("p00_sdl_accessors"). The cc crate auto-links the resulting
-// static library into all targets (lib, bin, test).
-extern "C" {
-    fn uqm_sdl_surface_w(surf: *const c_void) -> i32;
-    fn uqm_sdl_surface_h(surf: *const c_void) -> i32;
-    fn uqm_sdl_surface_pitch(surf: *const c_void) -> i32;
-    fn uqm_sdl_surface_flags(surf: *const c_void) -> u32;
-    fn uqm_sdl_surface_format(surf: *const c_void) -> *const c_void;
-    fn uqm_sdl_must_lock(surf: *const c_void) -> u8; // SDL_bool
+use sdl2_sys::{
+    SDL_CreateRGBSurface, SDL_LockSurface, SDL_SetSurfaceRLE, SDL_Surface, SDL_UnlockSurface,
+    SDL_RLEACCEL,
+};
 
-    fn uqm_sdl_format_bpp(fmt: *const c_void) -> u8;
-    fn uqm_sdl_format_bytesPerPixel(fmt: *const c_void) -> u8;
-    fn uqm_sdl_format_Rmask(fmt: *const c_void) -> u32;
-    fn uqm_sdl_format_Gmask(fmt: *const c_void) -> u32;
-    fn uqm_sdl_format_Bmask(fmt: *const c_void) -> u32;
-    fn uqm_sdl_format_Amask(fmt: *const c_void) -> u32;
-
-    /// The ONE shared production lock-copy-unlock helper.
-    /// Returns 0 on success, -1 on lock failure, -2 on null/invalid.
-    fn uqm_sdl_lock_copy_unlock(surf: *mut c_void, dst: *mut c_void, len: usize) -> i32;
-
-    fn uqm_sdl_create_mustlock_surface(width: i32, height: i32) -> *mut c_void;
-    fn uqm_sdl_inject_lock_failure(enable: i32);
-    fn uqm_sdl_is_lock_failure_injected() -> i32;
+/// SDL2 defines `SDL_MUSTLOCK(S)` as the preprocessor macro
+/// `(((S)->flags & SDL_RLEACCEL) != 0)` (SDL_surface.h); it is not a function
+/// symbol. `SDL_RLEACCEL` is imported from `sdl2_sys`, which binds the real
+/// SDL2 headers, so this predicate tracks the linked ABI rather than a
+/// hand-written flag value.
+fn must_lock(surface: &SDL_Surface) -> bool {
+    (surface.flags & SDL_RLEACCEL) != 0
 }
 
-/// Surface metadata obtained via ABI-authoritative accessors.
+// Test fault injection is thread-local so parallel tests cannot contaminate
+// production-helper calls made by another test thread.
+thread_local! {
+    static INJECT_LOCK_FAILURE: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Surface metadata read directly from the linked SDL2 structures.
 #[derive(Debug, Clone, Copy)]
 pub struct SurfaceInfo {
     pub width: i32,
@@ -54,74 +50,170 @@ pub struct SurfaceInfo {
     pub flags: u32,
 }
 
-/// Query surface metadata via ABI-authoritative C accessors.
+/// Query surface metadata directly from the linked SDL2 struct layout.
 ///
 /// # Safety
-/// `surface` must be a valid `SDL_Surface*` from the linked SDL2 library.
-pub unsafe fn query_surface_info(surface: *const c_void) -> SurfaceInfo {
-    let format_ptr = uqm_sdl_surface_format(surface);
+/// `surface` must be a valid, non-null `SDL_Surface*` from the linked SDL2
+/// library.
+pub unsafe fn query_surface_info(surface: *const SDL_Surface) -> SurfaceInfo {
+    // SAFETY: the caller guarantees `surface` is a valid SDL_Surface, and SDL
+    // guarantees its `format` pointer stays valid for the surface's lifetime.
+    let surface = &*surface;
+    let format = &*surface.format;
 
     SurfaceInfo {
-        width: uqm_sdl_surface_w(surface),
-        height: uqm_sdl_surface_h(surface),
-        pitch: uqm_sdl_surface_pitch(surface),
-        bpp: uqm_sdl_format_bpp(format_ptr),
-        bytes_per_pixel: uqm_sdl_format_bytesPerPixel(format_ptr),
-        rmask: uqm_sdl_format_Rmask(format_ptr),
-        gmask: uqm_sdl_format_Gmask(format_ptr),
-        bmask: uqm_sdl_format_Bmask(format_ptr),
-        amask: uqm_sdl_format_Amask(format_ptr),
-        must_lock: uqm_sdl_must_lock(surface) != 0,
-        flags: uqm_sdl_surface_flags(surface),
+        width: surface.w,
+        height: surface.h,
+        pitch: surface.pitch,
+        bpp: format.BitsPerPixel,
+        bytes_per_pixel: format.BytesPerPixel,
+        rmask: format.Rmask,
+        gmask: format.Gmask,
+        bmask: format.Bmask,
+        amask: format.Amask,
+        must_lock: must_lock(surface),
+        flags: surface.flags,
     }
+}
+
+/// The ONE shared production lock-copy-unlock helper.
+///
+/// Locks the surface, copies `len` bytes from its pixel buffer into `dst`,
+/// then unlocks. Returns 0 on success, -1 on lock failure (real or injected),
+/// -2 on null/invalid arguments. On failure no pixel bytes are read. Both
+/// production capture code and tests call this — no duplicated lock/copy
+/// logic.
+///
+/// # Safety
+/// `surface` must be a valid `SDL_Surface*` whose pixel buffer holds at least
+/// `len` bytes, and `dst` must point to at least `len` writable bytes.
+unsafe fn lock_copy_unlock_raw(surface: *mut SDL_Surface, dst: *mut u8, len: usize) -> i32 {
+    if surface.is_null() || dst.is_null() || len == 0 {
+        return -2;
+    }
+
+    if is_lock_failure_injected() {
+        // Simulated lock failure — do NOT read pixels.
+        return -1;
+    }
+
+    // SAFETY: `surface` is non-null and valid per the caller contract.
+    if SDL_LockSurface(surface) != 0 {
+        // Real lock failure — do NOT read pixels.
+        return -1;
+    }
+
+    // SAFETY: the caller guarantees `dst` has at least `len` writable bytes
+    // and the locked surface's pixel buffer holds at least `len` bytes.
+    std::ptr::copy_nonoverlapping((*surface).pixels.cast::<u8>(), dst, len);
+    // SAFETY: the surface is locked by the call above, so this unlock pairs
+    // with it.
+    SDL_UnlockSurface(surface);
+    0
 }
 
 /// Copy pixel bytes through the shared production lock/copy/unlock helper.
 ///
 /// # Safety
-/// `surface` must be a valid `SDL_Surface*`. `dst` must have at least `len` bytes.
+/// See [`lock_copy_unlock_raw`].
 pub unsafe fn lock_copy_unlock(
-    surface: *mut c_void,
+    surface: *mut SDL_Surface,
     dst: *mut u8,
     len: usize,
 ) -> Result<(), String> {
-    let ret = uqm_sdl_lock_copy_unlock(surface, dst.cast(), len);
-    match ret {
+    match lock_copy_unlock_raw(surface, dst, len) {
         0 => Ok(()),
         -1 => Err("SDL_LockSurface failed".into()),
         -2 => Err("invalid surface or buffer".into()),
-        _ => Err(format!("unknown error: {ret}")),
+        ret => Err(format!("unknown error: {ret}")),
+    }
+}
+
+/// Lock a surface, returning 0 on success and -1 on failure (null surface or
+/// injected/real lock failure). Always pairs with [`unlock_surface`]. Used for
+/// lock/no-read verification in the fault-injection tests.
+///
+/// # Safety
+/// `surface` must be null or a valid `SDL_Surface*`.
+pub unsafe fn lock_surface(surface: *mut SDL_Surface) -> i32 {
+    if surface.is_null() {
+        return -1;
+    }
+
+    if is_lock_failure_injected() {
+        return -1;
+    }
+
+    // SAFETY: `surface` is non-null and valid per the caller contract.
+    if SDL_LockSurface(surface) != 0 {
+        return -1;
+    }
+
+    0
+}
+
+/// Unlock a surface previously locked with [`lock_surface`]. A null surface is
+/// ignored.
+///
+/// # Safety
+/// `surface` must be null or a valid, locked `SDL_Surface*`.
+pub unsafe fn unlock_surface(surface: *mut SDL_Surface) {
+    if !surface.is_null() {
+        // SAFETY: `surface` is non-null and valid per the caller contract.
+        SDL_UnlockSurface(surface);
     }
 }
 
 /// Create a real SDL surface that satisfies SDL_MUSTLOCK (RLEACCEL).
 ///
-/// Returns a raw `SDL_Surface*` or null on failure. Caller must `SDL_FreeSurface`.
+/// Returns a raw `SDL_Surface*` or null on failure. Caller must
+/// `SDL_FreeSurface`.
 ///
 /// # Safety
 /// The returned pointer must be freed with `SDL_FreeSurface`.
-pub unsafe fn create_mustlock_surface(width: i32, height: i32) -> *mut c_void {
-    uqm_sdl_create_mustlock_surface(width, height)
+pub unsafe fn create_mustlock_surface(width: i32, height: i32) -> *mut SDL_Surface {
+    // SDL2 2.32.x on macOS: SDL_SetSurfaceRLE does not set the SDL_RLEACCEL
+    // flag until the surface is actually RLE-encoded (which happens lazily
+    // during blit). Since SDL_MUSTLOCK is just `flags & SDL_RLEACCEL`, we
+    // enable RLE and then set the flag directly to create a deterministic
+    // surface that satisfies the SDL_MUSTLOCK predicate. The surface is still
+    // valid for lock/unlock — SDL_LockSurface handles the RLE decompression
+    // path when the flag is set.
+    // SAFETY: the arguments satisfy SDL_CreateRGBSurface's contract and SDL
+    // returns a valid surface or null.
+    let surface = SDL_CreateRGBSurface(
+        0, width, height, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF,
+    );
+    if !surface.is_null() {
+        // SAFETY: `surface` is non-null and valid, as returned by SDL.
+        SDL_SetSurfaceRLE(surface, 1);
+        // SAFETY: `surface` is non-null and valid; this sets the same flag SDL
+        // would set after actual RLE encoding, keeping the surface consistent.
+        (*surface).flags |= SDL_RLEACCEL;
+    }
+    surface
 }
 
 /// Inject a simulated lock failure for fault-injection testing.
+///
+/// While enabled, [`lock_copy_unlock`] and [`lock_surface`] report lock
+/// failure without reading pixels or calling the real SDL lock.
 pub fn inject_lock_failure(enable: bool) {
-    unsafe { uqm_sdl_inject_lock_failure(if enable { 1 } else { 0 }) };
+    INJECT_LOCK_FAILURE.with(|flag| flag.set(enable));
 }
 
 /// Check if lock failure is currently injected.
 pub fn is_lock_failure_injected() -> bool {
-    unsafe { uqm_sdl_is_lock_failure_injected() != 0 }
+    INJECT_LOCK_FAILURE.with(Cell::get)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sdl2_sys::SDL_FreeSurface;
 
     #[test]
     fn test_create_and_query_mustlock_surface() {
-        use sdl2::sys::SDL_FreeSurface;
-
         unsafe {
             let surf = create_mustlock_surface(320, 240);
             assert!(!surf.is_null(), "Failed to create MUSTLOCK surface");
@@ -133,14 +225,12 @@ mod tests {
             assert_eq!(info.bpp, 32);
             assert_eq!(info.bytes_per_pixel, 4);
 
-            SDL_FreeSurface(surf as *mut sdl2::sys::SDL_Surface);
+            SDL_FreeSurface(surf);
         }
     }
 
     #[test]
     fn test_lock_copy_unlock_success() {
-        use sdl2::sys::{SDL_CreateRGBSurface, SDL_FreeSurface};
-
         unsafe {
             let surf =
                 SDL_CreateRGBSurface(0, 4, 4, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
@@ -150,20 +240,16 @@ mod tests {
             let pixels = (*surf).pixels as *mut u8;
             assert!(!pixels.is_null());
 
-            // Lock to write initial data via the C accessors
-            extern "C" {
-                fn uqm_sdl_lock(surf: *mut c_void) -> i32;
-                fn uqm_sdl_unlock(surf: *mut c_void);
-            }
-            assert_eq!(uqm_sdl_lock(surf as *mut c_void), 0);
+            // Lock to write initial data
+            assert_eq!(lock_surface(surf), 0);
             for i in 0..(4 * 4 * 4) {
                 *pixels.add(i) = (i % 256) as u8;
             }
-            uqm_sdl_unlock(surf as *mut c_void);
+            unlock_surface(surf);
 
             // Use the shared helper to copy
             let mut dst = [0u8; 4 * 4 * 4];
-            let ret = lock_copy_unlock(surf as *mut c_void, dst.as_mut_ptr(), dst.len());
+            let ret = lock_copy_unlock(surf, dst.as_mut_ptr(), dst.len());
             assert!(ret.is_ok(), "lock_copy_unlock should succeed");
 
             // Verify the data
@@ -177,8 +263,6 @@ mod tests {
 
     #[test]
     fn test_injected_lock_failure_no_read() {
-        use sdl2::sys::{SDL_CreateRGBSurface, SDL_FreeSurface};
-
         unsafe {
             let surf =
                 SDL_CreateRGBSurface(0, 4, 4, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF);
@@ -187,15 +271,11 @@ mod tests {
             // Write known initial data
             let pixels = (*surf).pixels as *mut u8;
 
-            extern "C" {
-                fn uqm_sdl_lock(surf: *mut c_void) -> i32;
-                fn uqm_sdl_unlock(surf: *mut c_void);
-            }
-            assert_eq!(uqm_sdl_lock(surf as *mut c_void), 0);
+            assert_eq!(lock_surface(surf), 0);
             for i in 0..(4 * 4 * 4) {
                 *pixels.add(i) = 0xAA;
             }
-            uqm_sdl_unlock(surf as *mut c_void);
+            unlock_surface(surf);
 
             // Inject lock failure
             inject_lock_failure(true);
@@ -206,11 +286,13 @@ mod tests {
             // Fill with sentinel to detect any partial read
             dst.fill(0xBB);
 
-            let ret = lock_copy_unlock(surf as *mut c_void, dst.as_mut_ptr(), dst.len());
+            let ret = lock_copy_unlock(surf, dst.as_mut_ptr(), dst.len());
             assert!(
                 ret.is_err(),
                 "lock_copy_unlock should fail with injected lock failure"
             );
+            // The documented contract maps injected lock failure to -1.
+            assert_eq!(lock_copy_unlock_raw(surf, dst.as_mut_ptr(), dst.len()), -1);
 
             // Verify NO data was read — all bytes must still be the sentinel
             for (i, byte) in dst.iter().enumerate() {
@@ -235,6 +317,11 @@ mod tests {
             let mut dst = [0u8; 16];
             let ret = lock_copy_unlock(std::ptr::null_mut(), dst.as_mut_ptr(), dst.len());
             assert!(ret.is_err(), "null surface should return error");
+            // The documented contract maps null/invalid arguments to -2.
+            assert_eq!(
+                lock_copy_unlock_raw(std::ptr::null_mut(), dst.as_mut_ptr(), dst.len()),
+                -2
+            );
         }
     }
 }

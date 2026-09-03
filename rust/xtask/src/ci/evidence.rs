@@ -4628,8 +4628,6 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
     match (gate, step) {
         ("probes-harnesses", "p00-probes") => &["p00-probe-results.log"],
         ("probes-harnesses", "p00-harness") => &[
-            "pkg-config-cflags.txt",
-            "pkg-config-libs.txt",
             "link-map.txt",
             "archive-nm.txt",
             "archive-nm.stderr.txt",
@@ -4638,6 +4636,7 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
             "harness-nm.txt",
             "harness-nm.stderr.txt",
             "harness-nm.exit.txt",
+            "harness-nm-origins.txt",
             "object-manifest.txt",
             "harness-output.txt",
             "harness-exit.txt",
@@ -4654,10 +4653,6 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
             "rust-archive-nm.stderr.txt",
             "rust-archive-nm.exit.txt",
             "rust-archive-nm-origins.txt",
-            "harness-archive-nm.txt",
-            "harness-archive-nm.stderr.txt",
-            "harness-archive-nm.exit.txt",
-            "harness-archive-nm-origins.txt",
             "probe-binary-nm.txt",
             "probe-binary-nm.stderr.txt",
             "probe-binary-nm.exit.txt",
@@ -4779,12 +4774,7 @@ fn nm_failed_only_on_unreadable_attributes(stdout: Option<&[u8]>, stderr: Option
 fn nm_prefixes(step: &str) -> &'static [&'static str] {
     match step {
         "p00-harness" => &["archive", "harness"],
-        "menu-binding-probe" => &[
-            "c-archive",
-            "rust-archive",
-            "harness-archive",
-            "probe-binary",
-        ],
+        "menu-binding-probe" => &["c-archive", "rust-archive", "probe-binary"],
         _ => &[],
     }
 }
@@ -4922,10 +4912,15 @@ fn validate_step_subordinate_semantics(
             ("ProcessInputEvent", "*"),
             ("TFB_FlushGraphicsEx", "*"),
         ];
-        let valid = subordinate_bytes(root, index, gate, step, "archive-nm-origins.txt")
-            .is_some_and(|bytes| valid_selected_origins(&bytes, EXPECTED));
-        if !valid {
-            contracts.push("evidence.subordinate.p00-harness.nm_origins".to_string());
+        // The archive origins prove the symbols exist in libuqm_c.a; the
+        // harness-binary origins prove the #[used] symbol table actually
+        // extracted all seven members into the linked Rust harness.
+        for name in ["archive-nm-origins.txt", "harness-nm-origins.txt"] {
+            let valid = subordinate_bytes(root, index, gate, step, name)
+                .is_some_and(|bytes| valid_selected_origins(&bytes, EXPECTED));
+            if !valid {
+                contracts.push(format!("evidence.subordinate.p00-harness.{name}"));
+            }
         }
     } else if complete && step.id == "menu-binding-probe" {
         const C_EXPECTED: &[(&str, &str)] = &[
@@ -4941,13 +4936,11 @@ fn validate_step_subordinate_semantics(
             ("uio_openRepository", ""),
             ("uio_mountDir", ""),
             ("uio_openDir", ""),
+            ("rust_VControl_ParseGesture", ""),
         ];
-        const HARNESS_EXPECTED: &[(&str, &str)] =
-            &[("uqm_query_menu_binding", "menu_binding_accessor.o")];
         for (name, expected) in [
             ("c-archive-nm-origins.txt", C_EXPECTED),
             ("rust-archive-nm-origins.txt", RUST_EXPECTED),
-            ("harness-archive-nm-origins.txt", HARNESS_EXPECTED),
         ] {
             let valid = subordinate_bytes(root, index, gate, step, name)
                 .is_some_and(|bytes| valid_selected_origins(&bytes, expected));
@@ -10595,6 +10588,17 @@ mod tests {
             ]
             .join("\n")
             .into_bytes(),
+            ("p00-harness", "harness-nm-origins.txt") => [
+                "DoInput\t0000000000000000\t0000000000000000 T _DoInput",
+                "AnyButtonPress\t0000000000000001\t0000000000000001 T _AnyButtonPress",
+                "DoConfirmExit\t0000000000000002\t0000000000000002 T _DoConfirmExit",
+                "TFB_ProcessEvents\t0000000000000003\t0000000000000003 T _TFB_ProcessEvents",
+                "TFB_SwapBuffers\t0000000000000004\t0000000000000004 T _TFB_SwapBuffers",
+                "ProcessInputEvent\t0000000000000005\t0000000000000005 T _ProcessInputEvent",
+                "TFB_FlushGraphicsEx\t0000000000000006\t0000000000000006 T _TFB_FlushGraphicsEx",
+            ]
+            .join("\n")
+            .into_bytes(),
             ("menu-binding-probe", "c-archive-nm-origins.txt") => [
                 "VControl_ParseGesture\trust_vcontrol_impl.c.o\tlibuqm_c.a(rust_vcontrol_impl.c.o): 000 T VControl_ParseGesture",
                 "InstallGraphicResTypes\tresgfx.c.o\tlibuqm_c.a(resgfx.c.o): 000 T InstallGraphicResTypes",
@@ -10610,10 +10614,10 @@ mod tests {
                 "uio_openRepository\t\tlibuqm_rust.a(uio.o): 000 T uio_openRepository",
                 "uio_mountDir\t\tlibuqm_rust.a(uio.o): 000 T uio_mountDir",
                 "uio_openDir\t\tlibuqm_rust.a(uio.o): 000 T uio_openDir",
+                "rust_VControl_ParseGesture\t\tlibuqm_rust.a(input.o): 000 T rust_VControl_ParseGesture",
             ]
             .join("\n")
             .into_bytes(),
-            ("menu-binding-probe", "harness-archive-nm-origins.txt") => b"uqm_query_menu_binding\tmenu_binding_accessor.o\tlibp00_harness_shim.a(menu_binding_accessor.o): 000 T uqm_query_menu_binding\n".to_vec(),
             ("menu-binding-probe", "probe-output.txt") => {
                 b"RESULT=PASS\nfound=1\nbinding_type=VCONTROL_KEY\nkey_code=1073741905\nbinding_id=1\nnum_alternates=1\n".to_vec()
             }
@@ -18081,16 +18085,17 @@ mod tests {
             validate_step_subordinate_semantics(bundle.path(), &index, gate, step, true).is_empty()
         );
 
+        let original = String::from_utf8(subordinate_fixture_bytes(
+            &step.id,
+            "archive-nm-origins.txt",
+        ))
+        .unwrap();
         let path = format!(
             "payloads/subordinate.output/{}/{}/archive-nm-origins.txt",
             gate.id, step.id
         );
-        let missing_origin = String::from_utf8(subordinate_fixture_bytes(
-            &step.id,
-            "archive-nm-origins.txt",
-        ))
-        .unwrap()
-        .replacen("DoInput\tlibuqm_c.a(input.c.o):\t", "DoInput\t\t", 1);
+        let missing_origin =
+            original.replacen("DoInput\tlibuqm_c.a(input.c.o):\t", "DoInput\t\t", 1);
         rewrite_bundle_path(
             bundle.path(),
             &mut index.entries,
@@ -18100,7 +18105,35 @@ mod tests {
 
         assert_eq!(
             validate_step_subordinate_semantics(bundle.path(), &index, gate, step, true),
-            vec!["evidence.subordinate.p00-harness.nm_origins"]
+            vec!["evidence.subordinate.p00-harness.archive-nm-origins.txt"]
+        );
+
+        rewrite_bundle_path(
+            bundle.path(),
+            &mut index.entries,
+            &path,
+            original.as_bytes(),
+        );
+        let harness_path = format!(
+            "payloads/subordinate.output/{}/{}/harness-nm-origins.txt",
+            gate.id, step.id
+        );
+        let missing_extraction = String::from_utf8(subordinate_fixture_bytes(
+            &step.id,
+            "harness-nm-origins.txt",
+        ))
+        .unwrap()
+        .replacen("DoInput\t0000000000000000\t", "DoInput\t\t", 1);
+        rewrite_bundle_path(
+            bundle.path(),
+            &mut index.entries,
+            &harness_path,
+            missing_extraction.as_bytes(),
+        );
+
+        assert_eq!(
+            validate_step_subordinate_semantics(bundle.path(), &index, gate, step, true),
+            vec!["evidence.subordinate.p00-harness.harness-nm-origins.txt"]
         );
     }
 

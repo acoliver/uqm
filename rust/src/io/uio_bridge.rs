@@ -1228,7 +1228,7 @@ pub unsafe extern "C" fn uio_transplantDir(
 }
 
 // =============================================================================
-// uio_fgets / uio_fgetc / uio_ungetc / uio_fprintf / uio_fputc / uio_fputs
+// uio_fgets / uio_fgetc / uio_ungetc / uio_vfprintf / uio_fputc / uio_fputs
 // uio_fflush / uio_feof / uio_ferror / uio_clearerr / uio_streamHandle
 // =============================================================================
 
@@ -1376,9 +1376,10 @@ pub unsafe extern "C" fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int 
     c
 }
 
-// External C helper for va_list formatting (internal-only, not an exported uio_* symbol)
+// libc vasprintf(3): formats a va_list into a malloc'd, NUL-terminated buffer
+// in a single call (internal-only, not an exported uio_* symbol).
 extern "C" {
-    fn uio_vfprintf_format_helper(format: *const c_char, args: *mut libc::c_void) -> *mut c_char;
+    fn vasprintf(strp: *mut *mut c_char, fmt: *const c_char, ap: *mut libc::c_void) -> c_int;
 }
 
 /// @plan PLAN-20260314-FILE-IO.P04
@@ -1400,9 +1401,16 @@ pub unsafe extern "C" fn uio_vfprintf(
         return -1;
     }
 
-    // Use internal C helper to format the va_list into a buffer
-    let formatted_buf = uio_vfprintf_format_helper(format, args);
-    if formatted_buf.is_null() {
+    // Format the va_list into a malloc'd buffer; vasprintf performs the
+    // sizing and the allocation in one call, so no retry loop is needed.
+    let mut formatted_buf: *mut c_char = ptr::null_mut();
+    // SAFETY: `format` is a valid NUL-terminated string and `args` a valid
+    // va_list (both validated by the C caller); `strp` points to our local
+    // out-parameter. On success vasprintf stores a malloc'd, NUL-terminated
+    // buffer and returns its length; on failure it returns -1 and the
+    // pointer is left null with nothing to free.
+    let format_result = unsafe { vasprintf(&mut formatted_buf, format, args) };
+    if format_result < 0 || formatted_buf.is_null() {
         set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
         return -1;
     }

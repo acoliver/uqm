@@ -2048,7 +2048,6 @@ dependencies = [
  "anyhow",
  "bindgen 0.70.1",
  "bitflags 2.13.1",
- "cc",
  "clap",
  "cpal",
  "crc32fast",

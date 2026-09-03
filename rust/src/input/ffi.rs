@@ -18,8 +18,10 @@ const SDL_HAT_DOWN: u8 = 0x04;
 const SDL_HAT_LEFT: u8 = 0x08;
 
 /// VCONTROL_GESTURE_TYPE enum values (must match C)
-const VCONTROL_NONE: c_int = 0;
-const VCONTROL_KEY: c_int = 1;
+/// No gesture (`VCONTROL_GESTURE_TYPE_NONE` in vcontrol.h).
+pub const VCONTROL_NONE: c_int = 0;
+/// A keyboard gesture (`VCONTROL_GESTURE_TYPE_KEY` in vcontrol.h).
+pub const VCONTROL_KEY: c_int = 1;
 const VCONTROL_JOYAXIS: c_int = 2;
 const VCONTROL_JOYBUTTON: c_int = 3;
 const VCONTROL_JOYHAT: c_int = 4;

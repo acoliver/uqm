@@ -1655,26 +1655,16 @@ fn build_harness_fixture(root: &Path, script: &str) -> Result<Vec<PathBuf>, CiEr
     let nm = tools.join("nm");
     write_executable(
         &nm,
-        "#!/bin/sh\nif [ \"${1:-}\" = -A ]; then\n  for symbol in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do echo \"archive(member): 000 T $symbol\"; done\nelse\n  echo '000 T main'\nfi\n",
+        "#!/bin/sh\nif [ \"${1:-}\" = -A ]; then\n  for symbol in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do echo \"archive(member): 000 T $symbol\"; done\nelse\n  for symbol in DoInput AnyButtonPress DoConfirmExit TFB_ProcessEvents TFB_SwapBuffers ProcessInputEvent TFB_FlushGraphicsEx; do echo \"0000000000000000 T _$symbol\"; done\nfi\n",
     )?;
-    let pkg_config = tools.join("pkg-config");
-    write_executable(&pkg_config, "#!/bin/sh\nexit 0\n")?;
     let cargo = tools.join("cargo");
-    write_executable(&cargo, "#!/bin/sh\nexit 0\n")?;
-    let cc = tools.join("cc");
     write_executable(
-        &cc,
-        "#!/bin/sh\nout=\nmap=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift; out=$1 ;;\n    -Wl,-map,*) map=${1#-Wl,-map,} ;;\n    -Wl,-Map,*) map=${1#-Wl,-Map,} ;;\n  esac\n  shift\ndone\n[ -n \"$map\" ] && printf 'fixture map\\n' > \"$map\"\ncat > \"$out\" <<'EOF'\n#!/bin/sh\necho harness_symbol_count=7\necho RESULT=PASS\nEOF\nchmod +x \"$out\"\n",
+        &cargo,
+        "#!/bin/sh\nmap=\nwhile [ $# -gt 0 ]; do\n  case \"$1\" in\n    -Clink-arg=-Wl,-map,*) map=${1#-Clink-arg=-Wl,-map,} ;;\n    -Clink-arg=-Wl,-Map,*) map=${1#-Clink-arg=-Wl,-Map,} ;;\n  esac\n  shift\ndone\n[ -n \"$map\" ] && printf 'fixture map\\n' > \"$map\"\nbin=$(mktemp \"${TMPDIR:-/tmp}/uqm.XXXXXX\")\n: > \"$bin\"\nchmod +x \"$bin\"\nprintf '{\"reason\":\"compiler-artifact\",\"target\":{\"name\":\"uqm\",\"kind\":[\"bin\"]},\"executable\":\"%s\"}\\n' \"$bin\"\n",
     )?;
-    let support = [
-        target.join("libuqm_c.a"),
-        target.join("libp00_harness_shim.a"),
-        target.join("libuqm_rust.a"),
-    ];
-    for path in &support {
-        fs::write(path, b"fixture archive\n")
-            .map_err(|error| CiError::new("mutations.harness", error.to_string()))?;
-    }
+    let archive = target.join("libuqm_c.a");
+    fs::write(&archive, b"fixture archive\n")
+        .map_err(|error| CiError::new("mutations.harness", error.to_string()))?;
     let object_manifest = target.join("object-manifest.txt");
     fs::write(&object_manifest, b"a.o\nb.o\n")
         .map_err(|error| CiError::new("mutations.harness", error.to_string()))?;
@@ -1704,14 +1694,11 @@ fn build_harness_fixture(root: &Path, script: &str) -> Result<Vec<PathBuf>, CiEr
     let manifest_path = root.join("rust/target/production-artifacts.json");
     let manifest = serde_json::json!({
         "artifacts": [
-            artifact("c_static_archive", "rust/target/fake/libuqm_c.a", &support[0])?,
-            artifact("object_sidecar", "rust/target/fake/object-manifest.txt", &object_manifest)?,
-            artifact("rust_static_archive", "rust/target/fake/libuqm_rust.a", &support[2])?
+            artifact("c_static_archive", "rust/target/fake/libuqm_c.a", &archive)?,
+            artifact("object_sidecar", "rust/target/fake/object-manifest.txt", &object_manifest)?
         ],
         "native_build": {"toolchain": {
-            "cc": tool(&cc)?,
-            "nm": tool(&nm)?,
-            "pkg_config": tool(&pkg_config)?
+            "nm": tool(&nm)?
         }}
     });
     let manifest_bytes = serde_json::to_vec_pretty(&manifest)
@@ -1720,14 +1707,10 @@ fn build_harness_fixture(root: &Path, script: &str) -> Result<Vec<PathBuf>, CiEr
     Ok(vec![
         script_path,
         manifest_path,
-        support[0].clone(),
-        support[1].clone(),
-        support[2].clone(),
+        archive,
         object_manifest,
         cargo,
-        cc,
         nm,
-        pkg_config,
     ])
 }
 
@@ -1793,9 +1776,7 @@ fn harness_mutation(
         let tools = fixture.join("tools");
         environment.extend([
             ("CARGO".to_string(), "../tools/cargo".to_string()),
-            ("CC".to_string(), "../tools/cc".to_string()),
             ("NM".to_string(), "../tools/nm".to_string()),
-            ("PKG_CONFIG".to_string(), "../tools/pkg-config".to_string()),
             (
                 "UQM_CI_CONTROLLER_EXECUTABLE".to_string(),
                 tools.join("cargo").display().to_string(),

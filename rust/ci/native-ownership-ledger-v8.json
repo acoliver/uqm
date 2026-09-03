@@ -1,47 +1,11 @@
 {
-  "schema": "uqm-native-ownership-ledger-v7",
+  "schema": "uqm-native-ownership-ledger-v8",
   "assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
   "zero_native_predicate": "zero maintained first-party in-repository C-family/native implementation, including implementation-bearing headers, C++, Objective-C, assembly, generated native source, helper/test native source, and internal migration ABI",
   "source_identity_policy": "LCAR v1 requires a clean worktree at a full 40-hex PR-head commit; if exceptional uncommitted input is approved, every tracked diff and untracked input must be content-addressed in a canonical patch/tree manifest. It also requires content-addressed artifacts, checkpoint IDs, executable/content/config hashes, platform/renderer/profile/features, deterministic seed, exact commands, semantic assertions correlated to actual-presented frames, complete logs, process/resource teardown, retention URL, and offline validation. The validator rejects unhashed dirty content.",
   "external_native_policy": "Only provenance-locked allowlisted OS/external-library native code may remain; each entry requires license, security/audit owner, update policy, local-modification ban, toolchain impact, and CI enforcement.",
   "external_native_allowlist": [],
   "tracked_native_sources_and_build_inputs": [
-    {
-      "path": "rust/harness/menu_binding_accessor.c",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/harness/menu_binding_accessor.h",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/harness/menu_binding_probe.c",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/harness/p00_harness.c",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/harness/p00_harness.h",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/harness/sdl_surface_accessors.c",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/harness/sdl_surface_accessors.h",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/src/io/uio_vfprintf_helper.c",
-      "issue": "RUST_HELPERS"
-    },
-    {
-      "path": "rust/src/mainloop/rust_test_bridge.c",
-      "issue": "RUST_HELPERS"
-    },
     {
       "path": "sc2/config_unix.h",
       "issue": "CORE_NATIVE"
@@ -7744,7 +7708,7 @@
     }
   ],
   "counts": {
-    "sources": 913,
+    "sources": 904,
     "flags": 48,
     "ffi_files": 124,
     "objects": 339,
@@ -7753,9 +7717,9 @@
     "authorized_cross_domain_corrections": 18
   },
   "supersedes": {
-    "schema": "uqm-native-ownership-ledger-v6",
-    "raw_content_revision": "8f03fa7844feac162a3759ed768f3f38f75fbf7e",
-    "sha256": "ff4acff2118d169021edc7e9cf32c26662d304324e1aac35cbb4d8ec67fbe496"
+    "schema": "uqm-native-ownership-ledger-v7",
+    "raw_content_revision": "d35f6156bff0b202306cca57d517f800234951df",
+    "sha256": "d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a"
   },
   "control_plane_entries": [
     {

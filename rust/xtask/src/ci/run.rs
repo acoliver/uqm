@@ -927,8 +927,6 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
     match (gate, step) {
         ("probes-harnesses", "p00-probes") => &["p00-probe-results.log"],
         ("probes-harnesses", "p00-harness") => &[
-            "pkg-config-cflags.txt",
-            "pkg-config-libs.txt",
             "link-map.txt",
             "archive-nm.txt",
             "archive-nm.stderr.txt",
@@ -937,6 +935,7 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
             "harness-nm.txt",
             "harness-nm.stderr.txt",
             "harness-nm.exit.txt",
+            "harness-nm-origins.txt",
             "object-manifest.txt",
             "harness-output.txt",
             "harness-exit.txt",
@@ -953,10 +952,6 @@ fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
             "rust-archive-nm.stderr.txt",
             "rust-archive-nm.exit.txt",
             "rust-archive-nm-origins.txt",
-            "harness-archive-nm.txt",
-            "harness-archive-nm.stderr.txt",
-            "harness-archive-nm.exit.txt",
-            "harness-archive-nm-origins.txt",
             "probe-binary-nm.txt",
             "probe-binary-nm.stderr.txt",
             "probe-binary-nm.exit.txt",

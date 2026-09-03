@@ -12,7 +12,7 @@ use super::exec::{run_captured_with_bound_environment, Captured};
 use crate::hex_sha256;
 
 const SCHEMA: &str = "uqm-s4-zero-native-delta-v1";
-const LEDGER_PATH: &str = "rust/ci/native-ownership-ledger-v7.json";
+const LEDGER_PATH: &str = "rust/ci/native-ownership-ledger-v8.json";
 const PROVIDER_PATH: &str = "rust/ownership/native-provider-manifest.json";
 const NATIVE_INPUTS_PATH: &str = "rust/build/native-inputs.json";
 
@@ -77,16 +77,16 @@ fn measure_between(
         authority.actions.evidence_snapshot_member_limit_bytes,
     )?;
     if hex_sha256(&ledger_bytes) != authority.ledger_identity.sha256 {
-        return Err("vendored V7 ledger hash differs from authority".into());
+        return Err("vendored V8 ledger hash differs from authority".into());
     }
     let ledger: Ledger = serde_json::from_slice(&ledger_bytes)
         .map_err(|error| format!("cannot parse {LEDGER_PATH}: {error}"))?;
-    if ledger.tracked_native_sources_and_build_inputs.len() != 913
+    if ledger.tracked_native_sources_and_build_inputs.len() != 904
         || ledger.rust_internal_ffi_files.len() != 124
         || ledger.transitional_flags_and_features.len() != 48
     {
         return Err(
-            "vendored V7 ledger inventory counts differ from the expected V7 contract".into(),
+            "vendored V8 ledger inventory counts differ from the expected V8 contract".into(),
         );
     }
     let base_tree = tree(root, authority, base_sha)?;

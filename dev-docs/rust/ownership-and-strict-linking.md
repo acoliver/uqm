@@ -1,12 +1,12 @@
 # Native Ownership and Strict Production Linking
 
 Issue S1/#21 retains provider authority under authoritative immutable ownership
-ledger v7: raw revision `d35f6156bff0b202306cca57d517f800234951df`,
-gist revision `46eb961886e2aefe8b2085a3af4b1afbc5e82a77`, SHA-256
-`d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a`,
-schema `uqm-native-ownership-ledger-v7`, and assessment commit
+ledger v7: raw revision `5aece912bec7e8a2a646bd1bfc95d18289f55020`,
+gist revision `5aece912bec7e8a2a646bd1bfc95d18289f55020`, SHA-256
+`49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789`,
+schema `uqm-native-ownership-ledger-v8`, and assessment commit
 `54e1dba5f56e9f20a3aa773d5f151470a8cf0662`. The immutable raw URL is
-<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json>.
+<https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json>.
 Validation never fetches the Gist: the checked-in manifest pins the schema, raw
 revision and URL, gist history revision, and content hash. An authenticated
 projection digest covers every ledger-derived object identity field. A ledger

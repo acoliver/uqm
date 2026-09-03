@@ -28,6 +28,9 @@
 use std::ffi::c_char;
 use std::os::raw::c_int;
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicU16, Ordering};
+
 use super::types::CBoolean;
 
 // ---------------------------------------------------------------------------
@@ -310,21 +313,28 @@ extern "C" {
 }
 
 // ---------------------------------------------------------------------------
-// Test-shim declarations — only linked in `cfg(test)` via rust_test_bridge.c
+// Test-shim activity state — pure Rust, only compiled in `cfg(test)`
 // ---------------------------------------------------------------------------
 
+/// Test-local activity global backing the test shims below. Initialized to zero.
 #[cfg(test)]
-extern "C" {
-    /// Test shim: set the test-local current activity.
-    ///
-    /// This writes to a **test-local** global in `rust_test_bridge.c`,
-    /// NOT to the real `GlobData.Game_state.CurrentActivity`.
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn test_set_activity(val: u16);
+static TEST_CURRENT_ACTIVITY: AtomicU16 = AtomicU16::new(0);
 
-    /// Test shim: get the test-local current activity.
-    ///
-    /// @plan PLAN-20260707-MAINLOOP.P03
-    pub fn test_get_activity() -> u16;
+/// Test shim: set the test-local current activity.
+///
+/// This writes to a **test-local** global,
+/// NOT to the real `GlobData.Game_state.CurrentActivity`.
+///
+/// @plan PLAN-20260707-MAINLOOP.P03
+#[cfg(test)]
+pub fn test_set_activity(val: u16) {
+    TEST_CURRENT_ACTIVITY.store(val, Ordering::SeqCst);
+}
+
+/// Test shim: get the test-local current activity.
+///
+/// @plan PLAN-20260707-MAINLOOP.P03
+#[cfg(test)]
+pub fn test_get_activity() -> u16 {
+    TEST_CURRENT_ACTIVITY.load(Ordering::SeqCst)
 }

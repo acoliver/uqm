@@ -1,12 +1,12 @@
 {
   "schema": "uqm-s4-ci-authority-v1",
   "ledger_identity": {
-    "schema": "uqm-native-ownership-ledger-v7",
+    "schema": "uqm-native-ownership-ledger-v8",
     "assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
-    "history_revision": "46eb961886e2aefe8b2085a3af4b1afbc5e82a77",
-    "raw_revision": "d35f6156bff0b202306cca57d517f800234951df",
-    "sha256": "d8d90624ff846bfa24fcfdfecd684649b0f81b49a447955f63bfc3d6a97a747a",
-    "url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/d35f6156bff0b202306cca57d517f800234951df/uqm-native-ownership-ledger.json"
+    "history_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
+    "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
+    "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
+    "url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json"
   },
   "zero_native_delta": {
     "tracked_sources": 0,
@@ -292,8 +292,8 @@
     "manifest_schema": "uqm-deterministic-artifacts-v4",
     "producing_command": "cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production",
     "profile": "release",
-    "cargo_manifest_sha256": "f84d988649a4a9b4814299c744bcd65ab34fb6b11f2ed153975aeb662fac0ec3",
-    "cargo_lock_sha256": "eb0020dc91990fea7446c8ce2660869388e119667ea72ff1e205803deee48796",
+    "cargo_manifest_sha256": "c9b26cfefaaea3b1b9c78eb1a9297cc303b63b019a3657fb0f666271b67cce28",
+    "cargo_lock_sha256": "d000957426d30ab002ba6c200ad725ac0c967db5a43b41263c190efa4564fd07",
     "features": [
       "audio_heart",
       "linked_c_archive"
