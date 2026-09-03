@@ -247,6 +247,10 @@ pub fn input_trace_record(
         seed_application: None,
         presentation: None,
         activity: None,
+        readiness: None,
+        command_acknowledgement: None,
+        checkpoint: None,
+        failure: None,
     }
 }
 
@@ -284,6 +288,10 @@ pub fn semantic_trace_record(
         seed_application: None,
         presentation: None,
         activity: None,
+        readiness: None,
+        command_acknowledgement: None,
+        checkpoint: None,
+        failure: None,
     }
 }
 

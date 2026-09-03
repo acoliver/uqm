@@ -6752,7 +6752,7 @@ fn validate_bootstrap_failure_lcar(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum OfflineRecordKind {
     RunStart,
@@ -6763,6 +6763,10 @@ enum OfflineRecordKind {
     MenuTransition,
     SemanticAssertion,
     SeedApplication,
+    Readiness,
+    CommandAcknowledgement,
+    Checkpoint,
+    Failure,
     Terminal,
 }
 
@@ -6811,6 +6815,34 @@ struct OfflineActivityEvidence {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct OfflineReadinessEvidence {
+    subject: String,
+    observation: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OfflineCommandAcknowledgement {
+    command: String,
+    nonce: String,
+    outcome: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OfflineCheckpointEvidence {
+    id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OfflineFailureEvidence {
+    classification: String,
+    detail: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct OfflineTraceRecord {
     schema: u16,
     #[allow(dead_code)]
@@ -6840,6 +6872,97 @@ struct OfflineTraceRecord {
     #[serde(default)]
     #[allow(dead_code)]
     activity: Option<OfflineActivityEvidence>,
+    #[serde(default)]
+    readiness: Option<OfflineReadinessEvidence>,
+    #[serde(default)]
+    command_acknowledgement: Option<OfflineCommandAcknowledgement>,
+    #[serde(default)]
+    checkpoint: Option<OfflineCheckpointEvidence>,
+    #[serde(default)]
+    failure: Option<OfflineFailureEvidence>,
+}
+
+/// Whether the record carries exactly the payload evidence its kind requires
+/// under trace schema 2.
+fn lifecycle_payload_matches_kind(
+    kind: OfflineRecordKind,
+    readiness: &Option<OfflineReadinessEvidence>,
+    command_acknowledgement: &Option<OfflineCommandAcknowledgement>,
+    checkpoint: &Option<OfflineCheckpointEvidence>,
+    failure: &Option<OfflineFailureEvidence>,
+) -> bool {
+    let payload_count = [
+        readiness.is_some(),
+        command_acknowledgement.is_some(),
+        checkpoint.is_some(),
+        failure.is_some(),
+    ]
+    .into_iter()
+    .filter(|present| *present)
+    .count();
+    match kind {
+        OfflineRecordKind::Readiness => {
+            payload_count == 1
+                && readiness.as_ref().is_some_and(|evidence| {
+                    !evidence.subject.is_empty() && !evidence.observation.is_empty()
+                })
+        }
+        OfflineRecordKind::CommandAcknowledgement => {
+            payload_count == 1
+                && command_acknowledgement.as_ref().is_some_and(|evidence| {
+                    !evidence.command.is_empty()
+                        && evidence.nonce.len() == 64
+                        && evidence
+                            .nonce
+                            .chars()
+                            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+                        && matches!(
+                            evidence.outcome.as_str(),
+                            "accepted"
+                                | "rejected_bad_nonce"
+                                | "rejected_replay"
+                                | "rejected_unknown_command"
+                                | "rejected_push_failed"
+                        )
+                })
+        }
+        OfflineRecordKind::Checkpoint => {
+            payload_count == 1
+                && checkpoint
+                    .as_ref()
+                    .is_some_and(|evidence| !evidence.id.is_empty())
+        }
+        OfflineRecordKind::Failure => {
+            payload_count == 1
+                && failure.as_ref().is_some_and(|evidence| {
+                    !evidence.classification.is_empty() && !evidence.detail.is_empty()
+                })
+        }
+        OfflineRecordKind::RunStart
+        | OfflineRecordKind::RunEnd
+        | OfflineRecordKind::InputTick
+        | OfflineRecordKind::Presentation
+        | OfflineRecordKind::Capture
+        | OfflineRecordKind::MenuTransition
+        | OfflineRecordKind::SemanticAssertion
+        | OfflineRecordKind::SeedApplication
+        | OfflineRecordKind::Terminal => payload_count == 0,
+    }
+}
+
+/// Whether a raw trace record carries exactly the payload evidence its kind
+/// requires under trace schema 2.
+fn value_payload_matches_kind(record: &serde_json::Value) -> bool {
+    let Ok(record) = serde_json::from_value::<OfflineTraceRecord>(record.clone()) else {
+        return false;
+    };
+    lifecycle_payload_matches_kind(
+        record.kind,
+        &record.readiness,
+        &record.command_acknowledgement,
+        &record.checkpoint,
+        &record.failure,
+    )
 }
 
 fn validate_lcar_failure_trace(root: &Path, artifact_path: &str) -> bool {
@@ -6857,7 +6980,15 @@ fn validate_lcar_failure_trace(root: &Path, artifact_path: &str) -> bool {
         && records.is_some_and(|records| {
             !records.is_empty()
                 && records.iter().enumerate().all(|(sequence, record)| {
-                    record.schema == 1 && record.sequence == sequence as u64
+                    record.schema == uqm_rust::automation::TraceRecord::SCHEMA
+                        && record.sequence == sequence as u64
+                        && lifecycle_payload_matches_kind(
+                            record.kind,
+                            &record.readiness,
+                            &record.command_acknowledgement,
+                            &record.checkpoint,
+                            &record.failure,
+                        )
                 })
                 && records
                     .last()
@@ -7026,13 +7157,17 @@ fn validate_lcar_trace(
     let mut traced_captures = BTreeSet::new();
     let mut ordered_capture_paths = Vec::new();
     for (sequence, record) in records.iter().enumerate() {
-        if record.get("schema").and_then(|value| value.as_u64()) != Some(1)
+        if record.get("schema").and_then(|value| value.as_u64())
+            != Some(u64::from(uqm_rust::automation::TraceRecord::SCHEMA))
             || record.get("run").and_then(|value| value.as_u64()) != Some(1)
             || record.get("sequence").and_then(|value| value.as_u64()) != Some(sequence as u64)
         {
             return false;
         }
         let kind = record.get("kind").and_then(|value| value.as_str());
+        if !value_payload_matches_kind(record) {
+            return false;
+        }
         if matches!(kind, Some("presentation" | "capture")) {
             let presentation = record.get("presentation");
             let present_seen = record.get("present_seen").and_then(|value| value.as_u64());
@@ -10200,6 +10335,54 @@ pub fn is_hex(value: &str, length: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn schema_two_trace_value(kind: &str) -> serde_json::Value {
+        serde_json::json!({
+            "schema": uqm_rust::automation::TraceRecord::SCHEMA,
+            "run": 1,
+            "sequence": 0,
+            "input_seen": 0,
+            "present_seen": 0,
+            "elapsed_ms": 0,
+            "kind": kind
+        })
+    }
+
+    #[test]
+    fn schema_two_payload_validation_rejects_missing_extra_and_unknown_kinds() {
+        let mut readiness = schema_two_trace_value("readiness");
+        assert!(!value_payload_matches_kind(&readiness));
+
+        readiness["readiness"] = serde_json::json!({
+            "subject": "main_menu",
+            "observation": "restart_menu_first_frame_initialized"
+        });
+        assert!(value_payload_matches_kind(&readiness));
+
+        readiness["checkpoint"] = serde_json::json!({"id": "after_main_menu"});
+        assert!(!value_payload_matches_kind(&readiness));
+        assert!(!value_payload_matches_kind(&schema_two_trace_value(
+            "future_record"
+        )));
+    }
+
+    #[test]
+    fn schema_two_acknowledgement_validation_rejects_bad_nonce_and_outcome() {
+        let mut acknowledgement = schema_two_trace_value("command_acknowledgement");
+        acknowledgement["command_acknowledgement"] = serde_json::json!({
+            "command": "tap_down",
+            "nonce": "2a".repeat(32),
+            "outcome": "accepted"
+        });
+        assert!(value_payload_matches_kind(&acknowledgement));
+
+        acknowledgement["command_acknowledgement"]["nonce"] = serde_json::json!("2A".repeat(32));
+        assert!(!value_payload_matches_kind(&acknowledgement));
+        acknowledgement["command_acknowledgement"]["nonce"] = serde_json::json!("2a".repeat(32));
+        acknowledgement["command_acknowledgement"]["outcome"] =
+            serde_json::json!("not_an_ack_kind");
+        assert!(!value_payload_matches_kind(&acknowledgement));
+    }
 
     #[test]
     fn index_and_authority_validation_share_one_immutable_snapshot() {
@@ -13892,7 +14075,7 @@ mod tests {
         };
         let trace_record = |sequence: u64, kind: &str| {
             serde_json::json!({
-                "schema": 1,
+                "schema": uqm_rust::automation::TraceRecord::SCHEMA,
                 "run": 1,
                 "sequence": sequence,
                 "input_seen": 0,
@@ -13903,13 +14086,14 @@ mod tests {
         };
         let mut trace_records = [
             trace_record(0, "run_start"),
-            trace_record(1, "presentation"),
-            trace_record(2, "semantic_assertion"),
-            trace_record(3, "capture"),
+            trace_record(1, "readiness"),
+            trace_record(2, "presentation"),
+            trace_record(3, "semantic_assertion"),
             trace_record(4, "capture"),
-            trace_record(5, "run_end"),
+            trace_record(5, "capture"),
+            trace_record(6, "run_end"),
         ];
-        for index in [1_usize, 3, 4] {
+        for index in [2_usize, 4, 5] {
             trace_records[index]["present_seen"] = serde_json::json!(1);
             trace_records[index]["presentation"] = serde_json::json!({
                 "count": 1,
@@ -13918,9 +14102,13 @@ mod tests {
                 "height": 480
             });
         }
-        trace_records[2]["label"] = serde_json::json!("main_menu_visible");
-        trace_records[3]["label"] = serde_json::json!("menu-after-down_gen1");
-        trace_records[4]["label"] = serde_json::json!("menu-after-select_gen2");
+        trace_records[1]["readiness"] = serde_json::json!({
+            "subject": "main_menu",
+            "observation": "restart_menu_first_frame_initialized"
+        });
+        trace_records[3]["label"] = serde_json::json!("main_menu_visible");
+        trace_records[4]["label"] = serde_json::json!("menu-after-down_gen1");
+        trace_records[5]["label"] = serde_json::json!("menu-after-select_gen2");
         let trace = trace_records
             .iter()
             .map(serde_json::Value::to_string)

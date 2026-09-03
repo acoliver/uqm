@@ -25,7 +25,7 @@ use crate::automation::scheduler::{
 };
 use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
 use crate::automation::trace::{
-    ActivityEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
+    ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
 };
 use crate::automation::watchdog::{
     watchdog_reduce, CallbackKind, ClockSample, WatchdogEntry, WatchdogLimits, WatchdogOutcome,
@@ -189,6 +189,13 @@ fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
 /// Fixed RNG seed applied once when active automation enters gameplay.
 pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 
+/// What the main-menu readiness record reports as having become ready.
+pub const MAIN_MENU_READINESS_SUBJECT: &str = "main_menu";
+
+/// The production observation that proves main-menu readiness: the restart
+/// menu finished initialization and accepts input.
+pub const MAIN_MENU_READINESS_OBSERVATION: &str = "restart_menu_first_frame_initialized";
+
 // ===========================================================================
 //  Coordinator state (global, single-threaded in RUST_OWNS_MAIN mode)
 // ===========================================================================
@@ -209,7 +216,6 @@ struct CoordInner {
     input_seen: u64,
     present_seen: u64,
     last_observed: Instant,
-    trace_seq: u64,
     accepted_player_inputs: u64,
     pending_player_input: Option<PendingAcceptedPlayerInput>,
     verified_battle_frames: u64,
@@ -308,7 +314,6 @@ impl Coordinator {
                 input_seen: 0,
                 present_seen: 0,
                 last_observed: now,
-                trace_seq: 0,
                 accepted_player_inputs: 0,
                 pending_player_input: None,
                 verified_battle_frames: 0,
@@ -350,13 +355,13 @@ impl Coordinator {
     /// Return one atomic semantic snapshot for the backend publication.
     ///
     /// The backend calls this after presenting pixels but before the corresponding coordinator
-    /// presentation callback. `trace_seq` is the length of the exact committed trace prefix;
-    /// both semantic counters are protected by the same lock as trace publication.
+    /// presentation callback. The ordered commit's next sequence is the length of the exact
+    /// reserved trace prefix; both semantic counters are protected by the coordinator lock.
     pub fn native_window_semantic_snapshot() -> Option<(u64, u64, u64)> {
         let coord = Self::get()?;
         let inner = coord.inner.lock();
         Some((
-            inner.trace_seq,
+            coord.runtime.commit.next_sequence(),
             inner.accepted_player_inputs,
             inner.verified_battle_frames,
         ))
@@ -1274,8 +1279,8 @@ impl Coordinator {
         let word = crate::mainloop::ffi::get_current_activity().0;
         let evidence = activity_evidence(assertion, word);
         let passed = evidence.passed;
-        let seq = inner.trace_seq;
-        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let reservation = self.runtime.commit.reserve();
+        let seq = reservation.sequence();
         let record = TraceRecord {
             schema: TraceRecord::SCHEMA,
             run: 1,
@@ -1295,8 +1300,11 @@ impl Coordinator {
             seed_application: None,
             presentation: None,
             activity: Some(evidence),
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
-        let reservation = self.runtime.commit.reserve_sequence(seq);
         match record.to_jsonl() {
             Ok(jsonl) => reservation.commit_record(jsonl),
             Err(_) => {
@@ -1465,10 +1473,10 @@ impl Coordinator {
         let transition =
             scheduler_reduce(&inner.sched_state, &config, SchedulerEvent::MainMenuReady);
         inner.sched_state = transition.new_state;
-        coord.write_trace_labeled(
+        coord.write_readiness_trace(
             &mut inner,
-            RecordKind::SemanticAssertion,
-            "main_menu_ready".to_string(),
+            MAIN_MENU_READINESS_SUBJECT,
+            MAIN_MENU_READINESS_OBSERVATION,
         );
         if inner.sched_state.is_terminal() {
             let class = map_scheduler_terminal(inner.sched_state.terminal);
@@ -1868,8 +1876,8 @@ impl Coordinator {
 
     /// Write a trace record through the ordered commit.
     fn write_trace(&self, inner: &mut CoordInner, kind: RecordKind) {
-        let seq = inner.trace_seq;
-        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let reservation = self.runtime.commit.reserve();
+        let seq = reservation.sequence();
 
         let record = TraceRecord {
             schema: TraceRecord::SCHEMA,
@@ -1886,17 +1894,20 @@ impl Coordinator {
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
-            let res = self.runtime.commit.reserve_sequence(seq);
-            res.commit_record(jsonl);
+            reservation.commit_record(jsonl);
         }
     }
 
     fn write_terminal_trace(&self, inner: &mut CoordInner) {
-        let seq = inner.trace_seq;
-        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let reservation = self.runtime.commit.reserve();
+        let seq = reservation.sequence();
         let terminal_reason = inner
             .terminal_class
             .and_then(|class| serde_json::to_value(class).ok())
@@ -1916,19 +1927,20 @@ impl Coordinator {
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
         if let Ok(jsonl) = record.to_jsonl() {
-            self.runtime
-                .commit
-                .reserve_sequence(seq)
-                .commit_record(jsonl);
+            reservation.commit_record(jsonl);
         }
     }
 
     /// Write a trace record with a semantic/evidence label.
     fn write_trace_labeled(&self, inner: &mut CoordInner, kind: RecordKind, label: String) {
-        let seq = inner.trace_seq;
-        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let reservation = self.runtime.commit.reserve();
+        let seq = reservation.sequence();
 
         let record = TraceRecord {
             schema: TraceRecord::SCHEMA,
@@ -1945,11 +1957,49 @@ impl Coordinator {
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
 
         if let Ok(jsonl) = record.to_jsonl() {
-            let res = self.runtime.commit.reserve_sequence(seq);
-            res.commit_record(jsonl);
+            reservation.commit_record(jsonl);
+        }
+    }
+
+    /// Write a readiness trace record carrying what became ready and the
+    /// observation that proved it.
+    fn write_readiness_trace(&self, inner: &mut CoordInner, subject: &str, observation: &str) {
+        let reservation = self.runtime.commit.reserve();
+        let seq = reservation.sequence();
+
+        let record = TraceRecord {
+            schema: TraceRecord::SCHEMA,
+            run: 1,
+            sequence: seq,
+            input_seen: inner.input_seen,
+            present_seen: inner.present_seen,
+            elapsed_ms: self.started_at.elapsed().as_millis() as u64,
+            kind: RecordKind::Readiness,
+            label: None,
+            from: None,
+            to: None,
+            terminal_reason: None,
+            seed_application: None,
+            presentation: None,
+            activity: None,
+            readiness: Some(ReadinessEvidence {
+                subject: subject.to_string(),
+                observation: observation.to_string(),
+            }),
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
+        };
+
+        if let Ok(jsonl) = record.to_jsonl() {
+            reservation.commit_record(jsonl);
         }
     }
 
@@ -1958,8 +2008,8 @@ impl Coordinator {
         inner: &mut CoordInner,
         frame: &crate::automation::capture::PresentedFrame,
     ) -> bool {
-        let seq = inner.trace_seq;
-        inner.trace_seq = inner.trace_seq.saturating_add(1);
+        let reservation = self.runtime.commit.reserve();
+        let seq = reservation.sequence();
         let record = TraceRecord {
             schema: TraceRecord::SCHEMA,
             run: 1,
@@ -1975,8 +2025,11 @@ impl Coordinator {
             seed_application: None,
             presentation: Some(frame.presentation_evidence()),
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
-        let reservation = self.runtime.commit.reserve_sequence(seq);
         match record.to_jsonl() {
             Ok(jsonl) => {
                 reservation.commit_record(jsonl);
@@ -2011,8 +2064,9 @@ impl Coordinator {
             return self.capture_failure(inner, format!("durable PNG publication failed: {error}"));
         }
 
+        let reservation = self.runtime.commit.reserve();
         let mut record = crate::automation::capture::capture_trace_record(
-            inner.trace_seq,
+            reservation.sequence(),
             self.started_at.elapsed().as_millis() as u64,
             generation,
             label,
@@ -2021,8 +2075,6 @@ impl Coordinator {
         record.input_seen = inner.input_seen;
         record.present_seen = inner.present_seen;
         record.presentation = Some(frame.presentation_evidence());
-        inner.trace_seq = inner.trace_seq.saturating_add(1);
-        let reservation = self.runtime.commit.reserve_sequence(record.sequence);
         match record.to_jsonl() {
             Ok(jsonl) => reservation.commit_record(jsonl),
             Err(error) => {
@@ -2080,8 +2132,8 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
         return fallback;
     };
     let mut inner = coord.inner.lock();
-    let seq = inner.trace_seq;
-    inner.trace_seq = inner.trace_seq.saturating_add(1);
+    let reservation = coord.runtime.commit.reserve();
+    let seq = reservation.sequence();
     let record = TraceRecord {
         schema: TraceRecord::SCHEMA,
         run: 1,
@@ -2100,8 +2152,11 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
         }),
         presentation: None,
         activity: None,
+        readiness: None,
+        command_acknowledgement: None,
+        checkpoint: None,
+        failure: None,
     };
-    let reservation = coord.runtime.commit.reserve_sequence(seq);
     match record.to_jsonl() {
         Ok(jsonl) => reservation.commit_record(jsonl),
         Err(_) => {

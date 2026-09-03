@@ -13,6 +13,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-TRANSPORT-001..003
 
+use crate::automation::trace::{
+    AckOutcome, CommandAcknowledgement, OrderedCommit, RecordKind, TraceRecord,
+};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -52,6 +55,16 @@ impl CommandId {
     pub fn as_u8(self) -> u8 {
         self as u8
     }
+
+    /// Stable wire name recorded in retained trace evidence.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::TapDown => "tap_down",
+            Self::QuitSmoke => "quit_smoke",
+            Self::Ping => "ping",
+        }
+    }
 }
 
 /// Typed acknowledgement for a transport command.
@@ -80,6 +93,71 @@ pub enum AckKind {
 pub struct AckRecord {
     pub kind: AckKind,
     pub command_id: CommandId,
+}
+
+/// Runtime context retained with a command acknowledgement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AckTraceContext {
+    pub run: u64,
+    pub input_seen: u64,
+    pub present_seen: u64,
+    pub elapsed_ms: u64,
+}
+
+impl From<AckKind> for AckOutcome {
+    fn from(kind: AckKind) -> Self {
+        match kind {
+            AckKind::Accepted => Self::Accepted,
+            AckKind::RejectedBadNonce => Self::RejectedBadNonce,
+            AckKind::RejectedReplay => Self::RejectedReplay,
+            AckKind::RejectedUnknownCommand => Self::RejectedUnknownCommand,
+            AckKind::RejectedPushFailed => Self::RejectedPushFailed,
+        }
+    }
+}
+
+/// Construct a command-acknowledgement trace record from a produced ack.
+///
+/// The nonce recorded is the one carried by the received packet, so a
+/// rejected packet identifies exactly which nonce failed.
+///
+/// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
+/// @requirement REQ-TRANSPORT-001, REQ-TRACE-001
+#[must_use]
+pub fn ack_trace_record(
+    sequence: u64,
+    context: AckTraceContext,
+    command_id: u8,
+    nonce: &[u8; 32],
+    ack: &AckRecord,
+) -> TraceRecord {
+    TraceRecord {
+        schema: TraceRecord::SCHEMA,
+        run: context.run,
+        sequence,
+        input_seen: context.input_seen,
+        present_seen: context.present_seen,
+        elapsed_ms: context.elapsed_ms,
+        kind: RecordKind::CommandAcknowledgement,
+        label: None,
+        from: None,
+        to: None,
+        terminal_reason: None,
+        seed_application: None,
+        presentation: None,
+        activity: None,
+        readiness: None,
+        command_acknowledgement: Some(CommandAcknowledgement {
+            command: CommandId::from_u8(command_id).map_or_else(
+                || format!("unknown_{command_id}"),
+                |command| command.name().to_string(),
+            ),
+            nonce: nonce.iter().map(|byte| format!("{byte:02x}")).collect(),
+            outcome: ack.kind.into(),
+        }),
+        checkpoint: None,
+        failure: None,
+    }
 }
 
 // ===========================================================================
@@ -133,6 +211,10 @@ pub struct TransportState {
     socket_path: Option<PathBuf>,
     /// Whether transport is enabled (proof-smoke only).
     enabled: bool,
+    /// Ordered commit acknowledgements are published through, when
+    /// acknowledgement evidence is retained. A clone shares the run's one
+    /// ordered publish path.
+    trace: Option<OrderedCommit>,
 }
 
 impl TransportState {
@@ -148,7 +230,17 @@ impl TransportState {
             peer_credentials_supported,
             socket_path: None,
             enabled: false,
+            trace: None,
         }
+    }
+
+    /// Attach the ordered commit that acknowledgement trace records are
+    /// published through.
+    ///
+    /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
+    /// @requirement REQ-TRANSPORT-001, REQ-TRACE-001
+    pub fn attach_trace(&mut self, commit: OrderedCommit) {
+        self.trace = Some(commit);
     }
 
     /// Enable the transport (proof-smoke only).
@@ -177,12 +269,25 @@ impl TransportState {
 
     /// Validate and authenticate a received packet.
     ///
-    /// Returns an `AckRecord` indicating acceptance or rejection.
-    /// Does NOT perform any I/O — this is the pure authentication model.
+    /// Returns an `AckRecord` indicating acceptance or rejection, and
+    /// persists the acknowledgement through the attached ordered commit so
+    /// a lost or rejected acknowledgement stays visible in retained
+    /// evidence. The authentication itself performs no I/O.
     ///
     /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
-    /// @requirement REQ-TRANSPORT-001
-    pub fn authenticate(&mut self, packet: &TransportPacket) -> AckRecord {
+    /// @requirement REQ-TRANSPORT-001, REQ-TRACE-001
+    pub fn authenticate(
+        &mut self,
+        packet: &TransportPacket,
+        context: AckTraceContext,
+    ) -> AckRecord {
+        let ack = self.authenticate_packet(packet);
+        self.emit_ack_trace(packet, context, &ack);
+        ack
+    }
+
+    /// Validate and authenticate without trace side effects.
+    fn authenticate_packet(&mut self, packet: &TransportPacket) -> AckRecord {
         // Check version.
         if packet.version != PROTOCOL_VERSION {
             return AckRecord {
@@ -234,6 +339,26 @@ impl TransportState {
     #[must_use]
     pub fn check_path_length(path: &str) -> bool {
         path.len() < MAX_SOCKET_PATH_LEN
+    }
+
+    /// Publish the acknowledgement record through the attached ordered
+    /// commit, reserving a sequence on the run's one ordered publish path.
+    fn emit_ack_trace(&self, packet: &TransportPacket, context: AckTraceContext, ack: &AckRecord) {
+        let Some(commit) = &self.trace else {
+            return;
+        };
+        let reservation = commit.reserve();
+        let record = ack_trace_record(
+            reservation.sequence(),
+            context,
+            packet.command_id,
+            &packet.nonce,
+            ack,
+        );
+        match record.to_jsonl() {
+            Ok(jsonl) => reservation.commit_record(jsonl),
+            Err(_) => reservation.cancel(),
+        }
     }
 }
 
@@ -314,6 +439,15 @@ mod tests {
         n
     }
 
+    fn trace_context() -> AckTraceContext {
+        AckTraceContext {
+            run: 7,
+            input_seen: 11,
+            present_seen: 13,
+            elapsed_ms: 17,
+        }
+    }
+
     fn make_packet(nonce: [u8; 32], cmd: u8) -> TransportPacket {
         TransportPacket {
             version: PROTOCOL_VERSION,
@@ -341,7 +475,7 @@ mod tests {
     fn valid_packet_accepted() {
         let mut state = TransportState::new(test_nonce(), false);
         let packet = make_packet(test_nonce(), CommandId::TapDown.as_u8());
-        let ack = state.authenticate(&packet);
+        let ack = state.authenticate(&packet, trace_context());
         assert_eq!(ack.kind, AckKind::Accepted);
         assert_eq!(ack.command_id, CommandId::TapDown);
     }
@@ -351,7 +485,7 @@ mod tests {
         let mut state = TransportState::new(test_nonce(), false);
         let bad_nonce = [99u8; 32];
         let packet = make_packet(bad_nonce, CommandId::TapDown.as_u8());
-        let ack = state.authenticate(&packet);
+        let ack = state.authenticate(&packet, trace_context());
         assert_eq!(ack.kind, AckKind::RejectedBadNonce);
     }
 
@@ -361,11 +495,11 @@ mod tests {
         let packet = make_packet(test_nonce(), CommandId::TapDown.as_u8());
 
         // First packet: accepted.
-        let ack1 = state.authenticate(&packet);
+        let ack1 = state.authenticate(&packet, trace_context());
         assert_eq!(ack1.kind, AckKind::Accepted);
 
         // Second packet with same nonce: replay.
-        let ack2 = state.authenticate(&packet);
+        let ack2 = state.authenticate(&packet, trace_context());
         assert_eq!(ack2.kind, AckKind::RejectedReplay);
     }
 
@@ -373,7 +507,7 @@ mod tests {
     fn unknown_command_rejected() {
         let mut state = TransportState::new(test_nonce(), false);
         let packet = make_packet(test_nonce(), 99);
-        let ack = state.authenticate(&packet);
+        let ack = state.authenticate(&packet, trace_context());
         assert_eq!(ack.kind, AckKind::RejectedUnknownCommand);
     }
 
@@ -382,7 +516,7 @@ mod tests {
         let mut state = TransportState::new(test_nonce(), false);
         let mut packet = make_packet(test_nonce(), CommandId::Ping.as_u8());
         packet.version = 2;
-        let ack = state.authenticate(&packet);
+        let ack = state.authenticate(&packet, trace_context());
         assert_eq!(ack.kind, AckKind::RejectedUnknownCommand);
     }
 
@@ -494,5 +628,102 @@ mod tests {
     fn packets_per_pump_is_bounded() {
         const _: () = assert!(PACKETS_PER_PUMP > 0);
         const _: () = assert!(PACKETS_PER_PUMP <= 64);
+    }
+
+    // --- Acknowledgement trace evidence (REQ-TRACE-001) ---
+
+    fn publish_records(commit: &crate::automation::trace::OrderedCommit) -> Vec<TraceRecord> {
+        let mut sink = Vec::new();
+        commit.publish_all(&mut sink).unwrap();
+        let text = String::from_utf8(sink).unwrap();
+        text.lines()
+            .map(TraceRecord::from_jsonl)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn accepted_command_emits_acknowledgement_record() {
+        let commit = OrderedCommit::new();
+        let mut state = TransportState::new(test_nonce(), false);
+        state.attach_trace(commit.clone());
+        let packet = make_packet(test_nonce(), CommandId::TapDown.as_u8());
+
+        let ack = state.authenticate(&packet, trace_context());
+        assert_eq!(ack.kind, AckKind::Accepted);
+
+        let records = publish_records(&commit);
+        assert_eq!(records.len(), 1);
+        let evidence = records[0].command_acknowledgement.as_ref().unwrap();
+        assert_eq!(records[0].kind, RecordKind::CommandAcknowledgement);
+        assert_eq!(records[0].schema, TraceRecord::SCHEMA);
+        assert_eq!(records[0].run, 7);
+        assert_eq!(records[0].input_seen, 11);
+        assert_eq!(records[0].present_seen, 13);
+        assert_eq!(records[0].elapsed_ms, 17);
+        assert_eq!(evidence.command, "tap_down");
+        assert_eq!(evidence.nonce, format!("2a{}", "0".repeat(62)));
+        assert_eq!(evidence.outcome, AckOutcome::Accepted);
+    }
+
+    #[test]
+    fn rejected_command_emits_acknowledgement_record() {
+        let commit = OrderedCommit::new();
+        let mut state = TransportState::new(test_nonce(), false);
+        state.attach_trace(commit.clone());
+        let bad_nonce = [99u8; 32];
+        let packet = make_packet(bad_nonce, CommandId::QuitSmoke.as_u8());
+
+        let ack = state.authenticate(&packet, trace_context());
+        assert_eq!(ack.kind, AckKind::RejectedBadNonce);
+
+        let records = publish_records(&commit);
+        assert_eq!(records.len(), 1);
+        let evidence = records[0].command_acknowledgement.as_ref().unwrap();
+        assert_eq!(records[0].kind, RecordKind::CommandAcknowledgement);
+        assert_eq!(evidence.command, "quit_smoke");
+        // The recorded nonce is the one that failed, so the rejection is
+        // attributable.
+        assert_eq!(evidence.nonce, "63".repeat(32));
+        assert_eq!(evidence.outcome, AckOutcome::RejectedBadNonce);
+    }
+
+    #[test]
+    fn ack_records_preserve_order_relative_to_input_ticks() {
+        let commit = OrderedCommit::new();
+        let mut state = TransportState::new(test_nonce(), false);
+        state.attach_trace(commit.clone());
+
+        // Reserve an input-tick slot, authenticate, then reserve the following
+        // input tick. Commit the surrounding records in reverse so publication
+        // order proves the ordered commit, not completion order.
+        let before = commit.reserve_sequence(0);
+        let packet = make_packet(test_nonce(), CommandId::TapDown.as_u8());
+        let ack = state.authenticate(&packet, trace_context());
+        assert_eq!(ack.kind, AckKind::Accepted);
+        let after = commit.reserve();
+
+        let before_record = crate::automation::input::input_trace_record(0, 1, 0, 1, 0);
+        let after_record = crate::automation::input::input_trace_record(2, 3, 2, 1, 1);
+
+        after.commit_record(after_record.to_jsonl().unwrap());
+        before.commit_record(before_record.to_jsonl().unwrap());
+
+        let records = publish_records(&commit);
+        assert_eq!(records.len(), 3);
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| &record.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                &RecordKind::InputTick,
+                &RecordKind::CommandAcknowledgement,
+                &RecordKind::InputTick
+            ]
+        );
+        for (sequence, record) in records.iter().enumerate() {
+            assert_eq!(record.sequence, sequence as u64);
+        }
     }
 }

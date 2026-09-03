@@ -60,7 +60,9 @@ pub use child_session::{
     ChildSessionModel, HangClassification, ProcessIdentity, ProofResult, ProofType, SessionResult,
     SessionState,
 };
-pub use coordinator::{Coordinator, AUTOMATION_SEED};
+pub use coordinator::{
+    Coordinator, AUTOMATION_SEED, MAIN_MENU_READINESS_OBSERVATION, MAIN_MENU_READINESS_SUBJECT,
+};
 pub use error::AutomationError;
 pub use input::{
     combine_stops, menu_key_to_index, observe_main_menu_transition, observe_menu_key,
@@ -110,8 +112,11 @@ pub use script::{
     WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
-pub use trace::{PresentationEvidence, RecordKind, SeedDomain, TraceRecord};
+pub use trace::{
+    AckOutcome, CheckpointEvidence, CommandAcknowledgement, FailureEvidence, PresentationEvidence,
+    ReadinessEvidence, RecordKind, SeedDomain, TraceRecord,
+};
 pub use transport::{
-    AckKind, AckRecord, CommandId, TransportCounters, TransportPacket, TransportState,
-    MAX_SOCKET_PATH_LEN, PACKETS_PER_PUMP, PROTOCOL_VERSION,
+    ack_trace_record, AckKind, AckRecord, AckTraceContext, CommandId, TransportCounters,
+    TransportPacket, TransportState, MAX_SOCKET_PATH_LEN, PACKETS_PER_PUMP, PROTOCOL_VERSION,
 };
