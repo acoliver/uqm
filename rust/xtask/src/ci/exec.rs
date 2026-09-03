@@ -3297,7 +3297,7 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use uqm_rust::automation::child_session::{
-        ChildSession, ChildSessionConfig, ChildSessionError,
+        command_executable_digest, ChildSession, ChildSessionConfig, ChildSessionError,
     };
 
     fn limits() -> Limits {
@@ -3868,13 +3868,14 @@ mod tests {
             .env("UQM_TEST_NESTED_HELPER", "1")
             .env("UQM_TEST_NESTED_PID_FILE", &pid_file);
         let config = ChildSessionConfig {
+            output_root: pid_file.parent().expect("PID file parent").to_path_buf(),
             stdout_log: pid_file.with_extension("stdout.log"),
             stderr_log: pid_file.with_extension("stderr.log"),
             stdout_budget: 1_024,
             stderr_budget: 1_024,
             timeout: Duration::from_secs(30),
             grace: Duration::from_millis(100),
-            executable_digest: "nested-test".into(),
+            executable_digest: command_executable_digest(&command).expect("controller digest"),
         };
         let _nested = ChildSession::spawn(command, config).expect("spawn nested ChildSession");
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -3940,13 +3941,14 @@ mod tests {
         let mut command = Command::new("sh");
         command.args(["-c", "trap '' TERM; while :; do sleep 1; done"]);
         let config = ChildSessionConfig {
+            output_root: directory.clone(),
             stdout_log: directory.join("lifecycle.stdout.log"),
             stderr_log: directory.join("lifecycle.stderr.log"),
             stdout_budget: 1_024,
             stderr_budget: 1_024,
             timeout: Duration::from_millis(100),
             grace: Duration::from_millis(50),
-            executable_digest: "nested-lifecycle-test".into(),
+            executable_digest: command_executable_digest(&command).expect("shell digest"),
         };
         let session = ChildSession::spawn(command, config).expect("register nested ChildSession");
         let pid = session.pid() as libc::pid_t;

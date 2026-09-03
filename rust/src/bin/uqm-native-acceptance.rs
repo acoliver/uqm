@@ -7,6 +7,8 @@ use std::process::Command;
 #[cfg(test)]
 use std::time::Duration;
 #[cfg(test)]
+use uqm_rust::automation::command_executable_digest;
+#[cfg(test)]
 use uqm_rust::automation::native_window::NativeInventoryLimits;
 use uqm_rust::automation::native_window::{
     native_window_trace_semantic_snapshot, validate_native_linked_build_semantics,
@@ -214,6 +216,7 @@ impl BoundedNativeObserver {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
+                output_root: self.scratch_root.clone(),
                 stdout_log: stdout_log.clone(),
                 stderr_log: stderr_log.clone(),
                 stdout_budget: self.contract.observer_response_budget_bytes,
@@ -1335,6 +1338,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
+                output_root: root.to_path_buf(),
                 stdout_log: root.join("stdout.log"),
                 stderr_log: root.join("stderr.log"),
                 stdout_budget: runtime_contract.child_stdout_budget_bytes,
@@ -1538,7 +1542,7 @@ fn finalize_run(inputs: FinalizeRun<'_>) -> Result<(), String> {
         Ok(receipt) => (receipt, None),
         Err(failure) => {
             let error = format!("{failure}");
-            (failure.receipt, Some((failure.error, error)))
+            (*failure.receipt, Some((failure.error, error)))
         }
     };
     let child_cleanup = NativeChildCleanupReceipt {
@@ -3637,13 +3641,14 @@ mod tests {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
+                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join("stdout.log"),
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
                 stderr_budget: 1024,
                 timeout: Duration::from_secs(30),
                 grace: Duration::from_millis(10),
-                executable_digest: "a".repeat(64),
+                executable_digest: command_executable_digest(&Command::new("/bin/sleep")).unwrap(),
             },
         )
         .unwrap();
@@ -3715,13 +3720,14 @@ mod tests {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
+                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join("stdout.log"),
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
                 stderr_budget: 1024,
                 timeout: Duration::from_millis(20),
                 grace: Duration::from_millis(10),
-                executable_digest: "a".repeat(64),
+                executable_digest: command_executable_digest(&Command::new("/bin/sleep")).unwrap(),
             },
         )
         .unwrap();
@@ -3775,7 +3781,11 @@ mod tests {
         let error = observer.run_helper(command, "test", 1).unwrap_err();
 
         assert!(error.to_string().contains("term=true, kill=true"));
-        assert!(started.elapsed() < Duration::from_secs(2));
+        // The escalation itself is asserted above by term=true, kill=true. This
+        // bound only proves the call returns rather than hanging, and it must
+        // absorb the one-time hash of this process's image that the first run
+        // lock acquisition performs.
+        assert!(started.elapsed() < Duration::from_secs(10));
         observer.finish().unwrap();
         assert!(!scratch.path().exists());
     }
@@ -3990,8 +4000,8 @@ mod tests {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
+                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join("stdout.log"),
-
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
                 stderr_budget: 1024,

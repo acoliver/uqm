@@ -307,7 +307,7 @@ fn supervise_child(
     content: &Path,
     script: &Path,
     evidence: &RunEvidence,
-) -> Result<ChildSessionReceipt, (ChildSessionError, ChildSessionReceipt)> {
+) -> Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)> {
     let run_root = evidence.output_root.join("run");
     let mut command = Command::new(executable);
     command
@@ -320,6 +320,7 @@ fn supervise_child(
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
     let config = ChildSessionConfig {
+        output_root: evidence.output_root.clone(),
         stdout_log: evidence.output_root.join("stdout.log"),
         stderr_log: evidence.output_root.join("stderr.log"),
         stdout_budget: LOG_BUDGET,
@@ -334,7 +335,7 @@ fn supervise_child(
             eprintln!("child spawn failed before a trustworthy process receipt existed: {error}");
             return Err((
                 error,
-                unavailable_receipt(&evidence.provenance.executable_sha256),
+                Box::new(unavailable_receipt(&evidence.provenance.executable_sha256)),
             ));
         }
     };
@@ -345,13 +346,13 @@ fn supervise_child(
 
 fn complete_run(
     evidence: &mut RunEvidence,
-    child_result: Result<ChildSessionReceipt, (ChildSessionError, ChildSessionReceipt)>,
+    child_result: Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)>,
 ) -> Result<(), String> {
     let (session_contract, process) = match child_result {
         Ok(receipt) => (None, ProcessReceipt::from(receipt)),
         Err((error, receipt)) if receipt.identity.pid != 0 => (
             Some(classify_session_error(&error)),
-            ProcessReceipt::from(receipt),
+            ProcessReceipt::from(*receipt),
         ),
         Err((error, _)) => return Err(error.to_string()),
     };
