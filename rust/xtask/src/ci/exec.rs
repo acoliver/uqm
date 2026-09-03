@@ -610,6 +610,15 @@ fn describe_process(pid: libc::pid_t) -> String {
     }
 }
 
+/// The parent PID recorded in a `/proc/<pid>/status` file.
+#[cfg(target_os = "linux")]
+fn linux_process_parent(status: &str) -> Option<i32> {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("PPid:"))
+        .and_then(|value| value.trim().parse().ok())
+}
+
 #[cfg(target_os = "linux")]
 fn linux_process_state_and_group(stat: &str, path: &Path) -> Result<(char, i32), String> {
     let after_comm = stat
@@ -932,7 +941,14 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                         ));
                     }
                     // SAFETY: proc_pidinfo initialized the complete structure.
-                    if macos_process_matches_uid(unsafe { &info.assume_init() }, uid) {
+                    let info = unsafe { info.assume_init() };
+                    if !survivor_could_be_ours(
+                        i32::try_from(info.pbi_ppid).unwrap_or(0),
+                        macos_executable_path(pid).as_deref(),
+                    ) {
+                        continue;
+                    }
+                    if macos_process_matches_uid(&info, uid) {
                         return Ok(false);
                     }
                 }
@@ -1011,10 +1027,58 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
         };
         let (real, effective) = linux_process_real_and_effective_uids(&status, &status_path)?;
         if real == uid || effective == uid {
+            let parent = linux_process_parent(&status).unwrap_or(0);
+            let executable = std::fs::read_link(entry.path().join("exe"))
+                .ok()
+                .map(|path| path.to_string_lossy().into_owned());
+            if !survivor_could_be_ours(parent, executable.as_deref()) {
+                continue;
+            }
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+/// The executable image a PID is running, when the kernel will name it.
+#[cfg(target_os = "macos")]
+fn macos_executable_path(pid: libc::pid_t) -> Option<String> {
+    let mut path = [0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: path is writable for its full length.
+    let written = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), path.len() as u32) };
+    usize::try_from(written)
+        .ok()
+        .filter(|length| *length > 0 && *length <= path.len())
+        .and_then(|length| String::from_utf8(path[..length].to_vec()).ok())
+}
+
+/// Images that belong to the operating system rather than to any gate.
+///
+/// Nothing this repository invokes lives under these prefixes, so a process
+/// running one of them was not started by a gate.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const SESSION_DAEMON_PREFIXES: &[&str] = &["/usr/sbin/", "/usr/libexec/", "/System/"];
+
+/// Whether a process owned by the dedicated identity could have come from this run.
+///
+/// Containment asks whether a command leaked a process. macOS starts per-session
+/// daemons such as `/usr/sbin/distnoted` under whichever uid first touches the
+/// session; they are adopted by launchd and descend from no gate. Treating them
+/// as leaks fails runs for something the run never did.
+///
+/// The test is deliberately narrow: only a process reparented to init AND
+/// running a system image is excused. An orphaned process running one of our
+/// own tools is still a leak, which is the case worth catching.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn survivor_could_be_ours(parent: i32, executable: Option<&str>) -> bool {
+    if parent != 1 {
+        return true;
+    }
+    executable.is_none_or(|path| {
+        !SESSION_DAEMON_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
+    })
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -3295,6 +3359,42 @@ fn parse_dedicated_containment_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn a_session_daemon_adopted_by_init_is_not_a_leak() {
+        // The exact process that failed macos-x86_64 five times.
+        assert!(!survivor_could_be_ours(1, Some("/usr/sbin/distnoted")));
+        assert!(!survivor_could_be_ours(1, Some("/usr/libexec/secinitd")));
+        assert!(!survivor_could_be_ours(
+            1,
+            Some("/System/Library/Frameworks/x")
+        ));
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn an_orphaned_process_running_our_own_tool_is_still_a_leak() {
+        assert!(survivor_could_be_ours(1, Some("/usr/bin/git")));
+        assert!(survivor_could_be_ours(1, Some("/bin/sh")));
+        assert!(survivor_could_be_ours(
+            1,
+            Some("/Users/runner/work/uqm/uqm/rust/target/debug/uqm")
+        ));
+        assert!(
+            survivor_could_be_ours(1, None),
+            "an unnameable image must never be excused"
+        );
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn a_live_descendant_is_always_a_leak_whatever_it_runs() {
+        // Still parented to something in this session, so it is ours by
+        // descent regardless of the image it happens to be running.
+        assert!(survivor_could_be_ours(4321, Some("/usr/sbin/distnoted")));
+        assert!(survivor_could_be_ours(2, Some("/usr/libexec/secinitd")));
+    }
     #[cfg(unix)]
     use uqm_rust::automation::child_session::{
         ChildSession, ChildSessionConfig, ChildSessionError,
