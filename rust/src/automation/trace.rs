@@ -35,6 +35,10 @@ pub enum RecordKind {
     MenuTransition,
     SemanticAssertion,
     SeedApplication,
+    Readiness,
+    CommandAcknowledgement,
+    Checkpoint,
+    Failure,
     Terminal,
 }
 
@@ -97,6 +101,57 @@ pub struct ActivityEvidence {
     pub passed: bool,
 }
 
+/// Typed readiness evidence: what became ready, and the observation that
+/// proved it ready.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ReadinessEvidence {
+    pub subject: String,
+    pub observation: String,
+}
+
+/// The outcome of an authenticated transport command.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AckOutcome {
+    Accepted,
+    RejectedBadNonce,
+    RejectedReplay,
+    RejectedUnknownCommand,
+    RejectedPushFailed,
+}
+
+/// Typed command-acknowledgement evidence.
+///
+/// Carries the command identity, the packet nonce, and the acknowledgement
+/// outcome, so a lost or rejected acknowledgement stays visible in retained
+/// evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CommandAcknowledgement {
+    pub command: String,
+    pub nonce: String,
+    pub outcome: AckOutcome,
+}
+
+/// Typed checkpoint evidence with a stable checkpoint id.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CheckpointEvidence {
+    pub id: String,
+}
+
+/// Typed non-terminal failure evidence.
+///
+/// A failure record reports a fault the run survived; the run still ends
+/// with exactly one terminal record, so the two must stay distinguishable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FailureEvidence {
+    pub classification: String,
+    pub detail: String,
+}
+
 /// A typed JSONL trace record. Each record is independently serializable as
 /// one JSON object on one line.
 ///
@@ -126,11 +181,20 @@ pub struct TraceRecord {
     pub presentation: Option<PresentationEvidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity: Option<ActivityEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readiness: Option<ReadinessEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command_acknowledgement: Option<CommandAcknowledgement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkpoint: Option<CheckpointEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<FailureEvidence>,
 }
 
 impl TraceRecord {
-    /// Current schema version.
-    pub const SCHEMA: u16 = 1;
+    /// Current schema version. Version 2 added the readiness, command
+    /// acknowledgement, checkpoint, and failure records to the version 1 set.
+    pub const SCHEMA: u16 = 2;
 
     /// Serialize this record as one JSON line followed by a newline.
     ///
@@ -162,6 +226,7 @@ impl TraceRecord {
 // ===========================================================================
 
 /// Internal state of the ordered commit object.
+#[derive(Debug)]
 struct OrderedCommitState {
     /// The next sequence number to publish.
     next_to_publish: u64,
@@ -174,6 +239,7 @@ struct OrderedCommitState {
 }
 
 /// An entry submitted to the ordered commit object.
+#[derive(Debug)]
 enum SubmitEntry {
     /// A record waiting to be published.
     Record(String),
@@ -194,6 +260,12 @@ pub struct Reservation {
 }
 
 impl Reservation {
+    /// The sequence number held by this reservation.
+    #[must_use]
+    pub const fn sequence(&self) -> u64 {
+        self.sequence
+    }
+
     /// Commit a record payload for this reservation.
     pub fn commit_record(mut self, jsonl: String) {
         self.committed = Some(jsonl);
@@ -221,6 +293,7 @@ impl Drop for Reservation {
 }
 
 /// Inner shared state behind the ordered commit object.
+#[derive(Debug)]
 struct OrderedCommitInner {
     state: Mutex<OrderedCommitState>,
     cv: Condvar,
@@ -294,19 +367,34 @@ impl OrderedCommitInner {
         self.state.lock().sink_failed
     }
 
-    fn next_sequence(&self) -> u64 {
+    fn reserve_next_sequence(&self) -> u64 {
         let mut state = self.state.lock();
-        let seq = state.next_to_reserve;
-        state.next_to_reserve = seq.checked_add(1).unwrap_or(seq);
-        seq
+        let sequence = state.next_to_reserve;
+        state.next_to_reserve = sequence.checked_add(1).unwrap_or(sequence);
+        sequence
+    }
+
+    fn reserve_sequence(&self, sequence: u64) {
+        let mut state = self.state.lock();
+        state.next_to_reserve = state
+            .next_to_reserve
+            .max(sequence.checked_add(1).unwrap_or(sequence));
+    }
+
+    fn next_sequence(&self) -> u64 {
+        self.state.lock().next_to_reserve
     }
 }
 
 /// The ordered commit object. Manages sequence reservation, publication, and
 /// RAII cancellation.
 ///
+/// Cloning shares the same publication state, so a clone is another handle
+/// on the one ordered publish path rather than a second sink.
+///
 /// @plan PLAN-20260723-RUNTIME-AUTOMATION.P03
 /// @requirement REQ-IO-001
+#[derive(Debug, Clone)]
 pub struct OrderedCommit {
     inner: Arc<OrderedCommitInner>,
 }
@@ -332,9 +420,9 @@ impl OrderedCommit {
     /// on commit or drop.
     #[must_use]
     pub fn reserve(&self) -> Reservation {
-        let seq = self.inner.next_sequence();
+        let sequence = self.inner.reserve_next_sequence();
         Reservation {
-            sequence: seq,
+            sequence,
             committed: None,
             commit: Some(Arc::clone(&self.inner)),
         }
@@ -343,6 +431,7 @@ impl OrderedCommit {
     /// Reserve a specific sequence number (for checked-add callers).
     #[must_use]
     pub fn reserve_sequence(&self, sequence: u64) -> Reservation {
+        self.inner.reserve_sequence(sequence);
         Reservation {
             sequence,
             committed: None,
@@ -405,6 +494,10 @@ mod tests {
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
         let jsonl = rec.to_jsonl().unwrap();
         assert!(jsonl.ends_with('\n'));
@@ -429,6 +522,10 @@ mod tests {
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
         let jsonl = rec.to_jsonl().unwrap();
         assert!(jsonl.contains("NewGame"));
@@ -457,6 +554,10 @@ mod tests {
                 }),
                 presentation: None,
                 activity: None,
+                readiness: None,
+                command_acknowledgement: None,
+                checkpoint: None,
+                failure: None,
             },
             TraceRecord {
                 schema: TraceRecord::SCHEMA,
@@ -478,6 +579,10 @@ mod tests {
                     height: 240,
                 }),
                 activity: None,
+                readiness: None,
+                command_acknowledgement: None,
+                checkpoint: None,
+                failure: None,
             },
             TraceRecord {
                 schema: TraceRecord::SCHEMA,
@@ -499,6 +604,10 @@ mod tests {
                     equals: 2,
                     passed: true,
                 }),
+                readiness: None,
+                command_acknowledgement: None,
+                checkpoint: None,
+                failure: None,
             },
         ];
 
@@ -546,6 +655,10 @@ mod tests {
                 seed_application: None,
                 presentation: None,
                 activity: None,
+                readiness: None,
+                command_acknowledgement: None,
+                checkpoint: None,
+                failure: None,
             })
             .collect();
         let lines: Vec<_> = recs.iter().map(|r| r.to_jsonl().unwrap()).collect();
@@ -559,8 +672,143 @@ mod tests {
     #[test]
     fn record_rejects_missing_newline_independent_parse() {
         // Each line is independent; missing fields cause parse failure.
-        let bad = r#"{"schema":1}"#;
+        let bad = r#"{"schema":2}"#;
         assert!(TraceRecord::from_jsonl(bad).is_err());
+    }
+
+    #[test]
+    fn schema_version_is_two() {
+        // The record set gained readiness, command acknowledgement,
+        // checkpoint, and failure records, so retained evidence must
+        // declare schema 2.
+        const _: () = assert!(TraceRecord::SCHEMA == 2);
+        assert_eq!(TraceRecord::SCHEMA, 2);
+    }
+
+    #[test]
+    fn readiness_checkpoint_and_failure_records_roundtrip() {
+        let records = [
+            TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 0,
+                input_seen: 0,
+                present_seen: 0,
+                elapsed_ms: 10,
+                kind: RecordKind::Readiness,
+                label: None,
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: None,
+                presentation: None,
+                activity: None,
+                readiness: Some(ReadinessEvidence {
+                    subject: "main_menu".into(),
+                    observation: "restart_menu_first_frame_initialized".into(),
+                }),
+                command_acknowledgement: None,
+                checkpoint: None,
+                failure: None,
+            },
+            TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 1,
+                input_seen: 3,
+                present_seen: 5,
+                elapsed_ms: 400,
+                kind: RecordKind::Checkpoint,
+                label: None,
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: None,
+                presentation: None,
+                activity: None,
+                readiness: None,
+                command_acknowledgement: None,
+                checkpoint: Some(CheckpointEvidence {
+                    id: "after_main_menu".into(),
+                }),
+                failure: None,
+            },
+            TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 2,
+                input_seen: 4,
+                present_seen: 6,
+                elapsed_ms: 500,
+                kind: RecordKind::Failure,
+                label: None,
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: None,
+                presentation: None,
+                activity: None,
+                readiness: None,
+                command_acknowledgement: None,
+                checkpoint: None,
+                failure: Some(FailureEvidence {
+                    classification: "capture_encode".into(),
+                    detail: "PNG encoder rejected a zero-size frame".into(),
+                }),
+            },
+        ];
+
+        for record in &records {
+            let parsed = TraceRecord::from_jsonl(&record.to_jsonl().unwrap()).unwrap();
+            assert_eq!(parsed, *record);
+        }
+
+        // A failure record is retained evidence of a survived fault, so it
+        // must stay distinguishable from the single end-of-run terminal
+        // record: different kind tag, and no terminal reason of its own.
+        let failure_jsonl = records[2].to_jsonl().unwrap();
+        assert!(failure_jsonl.contains(r#""kind":"failure""#));
+        assert!(!failure_jsonl.contains("terminal_reason"));
+        assert_ne!(records[2].kind, RecordKind::Terminal);
+        assert_ne!(records[2].kind, RecordKind::RunEnd);
+    }
+
+    #[test]
+    fn command_acknowledgement_records_roundtrip_every_outcome() {
+        for outcome in [
+            AckOutcome::Accepted,
+            AckOutcome::RejectedBadNonce,
+            AckOutcome::RejectedReplay,
+            AckOutcome::RejectedUnknownCommand,
+            AckOutcome::RejectedPushFailed,
+        ] {
+            let record = TraceRecord {
+                schema: TraceRecord::SCHEMA,
+                run: 1,
+                sequence: 0,
+                input_seen: 0,
+                present_seen: 0,
+                elapsed_ms: 1,
+                kind: RecordKind::CommandAcknowledgement,
+                label: None,
+                from: None,
+                to: None,
+                terminal_reason: None,
+                seed_application: None,
+                presentation: None,
+                activity: None,
+                readiness: None,
+                command_acknowledgement: Some(CommandAcknowledgement {
+                    command: "tap_down".into(),
+                    nonce: "2a".repeat(32),
+                    outcome,
+                }),
+                checkpoint: None,
+                failure: None,
+            };
+            let parsed = TraceRecord::from_jsonl(&record.to_jsonl().unwrap()).unwrap();
+            assert_eq!(parsed, record);
+        }
     }
 
     // --- OrderedCommit: sequential publication ---
@@ -697,7 +945,25 @@ mod tests {
 
         let mut sink = Vec::new();
         oc.publish_all(&mut sink).unwrap();
+
         let output = String::from_utf8(sink).unwrap();
         assert_eq!(output, "rec0\nrec2\n");
+    }
+
+    #[test]
+    fn next_sequence_observes_without_reserving() {
+        let commit = OrderedCommit::new();
+        assert_eq!(commit.next_sequence(), 0);
+        assert_eq!(commit.next_sequence(), 0);
+
+        let first = commit.reserve_sequence(0);
+        assert_eq!(commit.next_sequence(), 1);
+        let second = commit.reserve();
+        assert_eq!(second.sequence(), 1);
+        assert_eq!(commit.next_sequence(), 2);
+
+        first.cancel();
+        second.cancel();
+        commit.publish_all(&mut Vec::new()).unwrap();
     }
 }

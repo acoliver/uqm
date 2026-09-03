@@ -1611,6 +1611,10 @@ mod tests {
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         }
     }
 

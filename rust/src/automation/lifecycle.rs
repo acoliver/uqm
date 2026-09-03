@@ -228,6 +228,10 @@ pub fn write_lifecycle_trace(
             seed_application: None,
             presentation: None,
             activity: None,
+            readiness: None,
+            command_acknowledgement: None,
+            checkpoint: None,
+            failure: None,
         };
         let jsonl = record.to_jsonl()?;
         let res = commit.reserve_sequence(*sequence);

@@ -380,6 +380,10 @@ pub fn present_trace_record(
         seed_application: None,
         presentation: None,
         activity: None,
+        readiness: None,
+        command_acknowledgement: None,
+        checkpoint: None,
+        failure: None,
     }
 }
 
@@ -409,6 +413,10 @@ pub fn capture_trace_record(
         seed_application: None,
         presentation: None,
         activity: None,
+        readiness: None,
+        command_acknowledgement: None,
+        checkpoint: None,
+        failure: None,
     }
 }
 
