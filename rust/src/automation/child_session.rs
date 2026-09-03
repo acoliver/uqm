@@ -1058,6 +1058,27 @@ mod os {
         released: bool,
     }
 
+    /// Where a run root's ownership guard and owner record live.
+    ///
+    /// Both sit next to the root, named after it, so the root itself stays a
+    /// pure evidence tree. A root without a parent keeps them inside itself,
+    /// which only arises for a filesystem root.
+    fn lock_paths(root: &Path) -> (PathBuf, PathBuf) {
+        match (root.parent(), root.file_name()) {
+            (Some(parent), Some(name)) => {
+                let name = name.to_string_lossy();
+                (
+                    parent.join(format!(".{name}{RUN_LOCK_GUARD_NAME}")),
+                    parent.join(format!(".{name}{RUN_LOCK_RECORD_NAME}")),
+                )
+            }
+            _ => (
+                root.join(RUN_LOCK_GUARD_NAME),
+                root.join(RUN_LOCK_RECORD_NAME),
+            ),
+        }
+    }
+
     impl RunLock {
         pub fn acquire(
             root: &Path,
@@ -1075,8 +1096,11 @@ mod os {
                     operation: "resolve output root",
                     error,
                 })?;
-            let guard_path = root.join(RUN_LOCK_GUARD_NAME);
-            let record_path = root.join(RUN_LOCK_RECORD_NAME);
+            // Ownership metadata is control plane, not evidence, so it is kept
+            // beside the run root rather than inside it. A run root is an
+            // inventoried evidence tree and must contain nothing it did not
+            // produce.
+            let (guard_path, record_path) = lock_paths(&root);
             let guard = OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -2772,7 +2796,7 @@ mod os {
             ));
 
             first.release().expect("release ownership");
-            assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
+            assert!(!lock_paths(root.path()).1.exists());
         }
 
         #[test]
@@ -2795,12 +2819,8 @@ mod os {
                 owner: previous_owner.clone(),
                 run_executable_digest: run_digest.clone(),
             };
-            atomic_publish_json(
-                &root.path().join(RUN_LOCK_RECORD_NAME),
-                &stale,
-                "publish stale fixture",
-            )
-            .expect("publish stale fixture");
+            atomic_publish_json(&lock_paths(root.path()).1, &stale, "publish stale fixture")
+                .expect("publish stale fixture");
 
             let mut lock = RunLock::acquire(root.path(), &run_digest).expect("recover stale owner");
             let recovery = lock.recovery().expect("observable recovery").clone();
@@ -2819,7 +2839,7 @@ mod os {
 
             lock.release().expect("release ownership");
             assert!(recovery.record_path.is_file());
-            assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
+            assert!(!lock_paths(root.path()).1.exists());
         }
 
         #[test]
@@ -2833,7 +2853,7 @@ mod os {
                 owner: forged_owner.clone(),
                 run_executable_digest: command_executable_digest(&command).expect("shell digest"),
             };
-            let record_path = root.path().join(RUN_LOCK_RECORD_NAME);
+            let record_path = lock_paths(root.path()).1;
             atomic_publish_json(&record_path, &record, "publish ambiguous fixture")
                 .expect("publish ambiguous fixture");
 
@@ -2855,7 +2875,7 @@ mod os {
         #[test]
         fn malformed_owner_record_fails_closed_and_is_preserved() {
             let root = TempDir::new().expect("tempdir");
-            let record_path = root.path().join(RUN_LOCK_RECORD_NAME);
+            let record_path = lock_paths(root.path()).1;
             std::fs::write(&record_path, b"{not-json").expect("publish malformed fixture");
 
             let error = acquire_error(&root);
@@ -2870,6 +2890,25 @@ mod os {
         }
 
         #[test]
+        fn ownership_metadata_stays_out_of_the_run_root() {
+            let parent = TempDir::new().expect("tempdir");
+            let run_root = parent.path().join("output");
+            std::fs::create_dir(&run_root).expect("create run root");
+
+            let mut owner = RunLock::acquire(&run_root, &run_digest()).expect("owner");
+            let inside: Vec<_> = std::fs::read_dir(&run_root)
+                .expect("read run root")
+                .map(|entry| entry.expect("entry").file_name())
+                .collect();
+            assert!(
+                inside.is_empty(),
+                "a run root is an inventoried evidence tree and must hold no ownership files: {inside:?}"
+            );
+
+            owner.release().expect("release ownership");
+        }
+
+        #[test]
         fn ownership_is_released_when_the_owner_unwinds() {
             let root = TempDir::new().expect("tempdir");
             let digest = run_digest();
@@ -2878,7 +2917,7 @@ mod os {
                 panic!("run failed while holding ownership");
             }));
             assert!(panicked.is_err(), "the fixture must unwind");
-            assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
+            assert!(!lock_paths(root.path()).1.exists());
 
             let mut next = RunLock::acquire(root.path(), &digest)
                 .expect("an unwound owner must leave the root acquirable");
