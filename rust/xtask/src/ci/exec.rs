@@ -3868,7 +3868,6 @@ mod tests {
             .env("UQM_TEST_NESTED_HELPER", "1")
             .env("UQM_TEST_NESTED_PID_FILE", &pid_file);
         let config = ChildSessionConfig {
-            output_root: pid_file.parent().expect("PID file parent").to_path_buf(),
             stdout_log: pid_file.with_extension("stdout.log"),
             stderr_log: pid_file.with_extension("stderr.log"),
             stdout_budget: 1_024,
@@ -3941,7 +3940,6 @@ mod tests {
         let mut command = Command::new("sh");
         command.args(["-c", "trap '' TERM; while :; do sleep 1; done"]);
         let config = ChildSessionConfig {
-            output_root: directory.clone(),
             stdout_log: directory.join("lifecycle.stdout.log"),
             stderr_log: directory.join("lifecycle.stderr.log"),
             stdout_budget: 1_024,

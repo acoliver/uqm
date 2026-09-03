@@ -1433,7 +1433,6 @@ pub fn capture_native_window(
     let session = ChildSession::spawn(
         command,
         ChildSessionConfig {
-            output_root: scratch.clone(),
             stdout_log: scratch.join("stdout.log"),
             stderr_log: scratch.join("stderr.log"),
             stdout_budget: contract.observer_response_budget_bytes,

@@ -7,7 +7,7 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use uqm_rust::automation::{
-    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionReceipt, RecordKind,
+    ChildSession, ChildSessionConfig, ChildSessionError, ChildSessionReceipt, RecordKind, RunLock,
     SeedDomain, TeardownReceipt, TerminalClass, TraceRecord, AUTOMATION_SEED,
 };
 
@@ -228,6 +228,13 @@ fn run_proof(
         &content,
         output_root,
     )?;
+    // The run owns its output root for as long as it is producing evidence
+    // there. Ownership is released when this guard drops, on every path.
+    let _ownership = RunLock::acquire(
+        &evidence.output_root,
+        &evidence.provenance.executable_sha256,
+    )
+    .map_err(|error| error.to_string())?;
     let receipt = supervise_child(
         &repo_root,
         &evidence.output_root.join("snapshots/uqm"),
@@ -320,7 +327,6 @@ fn supervise_child(
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
     let config = ChildSessionConfig {
-        output_root: evidence.output_root.clone(),
         stdout_log: evidence.output_root.join("stdout.log"),
         stderr_log: evidence.output_root.join("stderr.log"),
         stdout_budget: LOG_BUDGET,

@@ -54,7 +54,7 @@ pub use capture::{
 #[cfg(unix)]
 pub use child_session::{
     command_executable_digest, ChildSession, ChildSessionConfig, ChildSessionError,
-    ChildSessionFailure, ChildSessionReceipt, RunLockRecovery, StreamKind,
+    ChildSessionFailure, ChildSessionReceipt, RunLock, RunLockRecovery, StreamKind,
 };
 pub use child_session::{
     ChildSessionModel, HangClassification, ProcessIdentity, ProofResult, ProofType, SessionResult,

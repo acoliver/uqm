@@ -1049,7 +1049,7 @@ mod os {
     }
 
     #[derive(Debug)]
-    struct RunLock {
+    pub struct RunLock {
         guard: File,
         guard_path: PathBuf,
         record_path: PathBuf,
@@ -1059,7 +1059,10 @@ mod os {
     }
 
     impl RunLock {
-        fn acquire(root: &Path, run_executable_digest: &str) -> Result<Self, ChildSessionError> {
+        pub fn acquire(
+            root: &Path,
+            run_executable_digest: &str,
+        ) -> Result<Self, ChildSessionError> {
             std::fs::create_dir_all(root).map_err(|error| ChildSessionError::RunLockIo {
                 path: root.to_path_buf(),
                 operation: "create output root",
@@ -1145,7 +1148,7 @@ mod os {
             Ok(run_lock)
         }
 
-        fn release(&mut self) -> Result<(), ChildSessionError> {
+        pub fn release(&mut self) -> Result<(), ChildSessionError> {
             if self.released {
                 return Ok(());
             }
@@ -1184,6 +1187,15 @@ mod os {
             }
             self.released = true;
             Ok(())
+        }
+    }
+
+    impl RunLock {
+        /// Recovery performed while taking ownership, if a stale owner record
+        /// had to be reclaimed.
+        #[must_use]
+        pub fn recovery(&self) -> Option<&RunLockRecovery> {
+            self.recovery.as_ref()
         }
     }
 
@@ -1945,7 +1957,6 @@ mod os {
 
     #[derive(Debug, Clone)]
     pub struct ChildSessionConfig {
-        pub output_root: PathBuf,
         pub stdout_log: PathBuf,
         pub stderr_log: PathBuf,
         pub stdout_budget: u64,
@@ -1972,7 +1983,6 @@ mod os {
     }
 
     pub struct ChildSession {
-        run_lock: RunLock,
         child: Child,
         anchor: LeaderAnchor,
         identity: ProcessIdentity,
@@ -1991,7 +2001,6 @@ mod os {
             config: ChildSessionConfig,
         ) -> Result<Self, ChildSessionError> {
             let verified_digest = verified_command_digest(&command, &config.executable_digest)?;
-            let run_lock = RunLock::acquire(&config.output_root, &verified_digest)?;
             let stdout_file = create_log(&config.stdout_log, StreamKind::Stdout)?;
             let stderr_file = match create_log(&config.stderr_log, StreamKind::Stderr) {
                 Ok(file) => file,
@@ -2140,7 +2149,6 @@ mod os {
                 }
             };
             Ok(Self {
-                run_lock,
                 child,
                 anchor,
                 identity,
@@ -2157,11 +2165,6 @@ mod os {
         #[must_use]
         pub fn identity(&self) -> &ProcessIdentity {
             &self.identity
-        }
-
-        #[must_use]
-        pub fn lock_recovery(&self) -> Option<&RunLockRecovery> {
-            self.run_lock.recovery.as_ref()
         }
 
         #[must_use]
@@ -2213,7 +2216,7 @@ mod os {
             );
             let orphan_ok = outcome.group_empty;
             let receipt = receipt_from(&self.identity, &outcome, &stdout, &stderr, orphan_ok);
-            let mut failure = outcome
+            let failure = outcome
                 .failure
                 .or_else(|| reader_error(stdout, StreamKind::Stdout))
                 .or_else(|| reader_error(stderr, StreamKind::Stderr))
@@ -2222,9 +2225,6 @@ mod os {
                         pid: self.identity.pid,
                     })
                 });
-            if let Err(error) = self.run_lock.release() {
-                remember_first_failure(&mut failure, error);
-            }
             match failure {
                 Some(error) => Err(ChildSessionFailure {
                     error,
@@ -2722,7 +2722,6 @@ mod os {
 
         fn config_for(root: &TempDir, name: &str, command: &Command) -> ChildSessionConfig {
             ChildSessionConfig {
-                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join(format!("{name}.stdout.log")),
                 stderr_log: root.path().join(format!("{name}.stderr.log")),
                 stdout_budget: 1 << 20,
@@ -2731,6 +2730,20 @@ mod os {
                 grace: Duration::from_secs(1),
                 executable_digest: command_executable_digest(command)
                     .expect("resolve shell executable digest"),
+            }
+        }
+
+        fn run_digest() -> String {
+            command_executable_digest(&Command::new("/bin/sh")).expect("shell digest")
+        }
+
+        fn acquire_error(root: &TempDir) -> ChildSessionError {
+            match RunLock::acquire(root.path(), &run_digest()) {
+                Ok(lock) => {
+                    drop(lock);
+                    panic!("ownership was granted where it must fail closed");
+                }
+                Err(error) => error,
             }
         }
 
@@ -2770,20 +2783,17 @@ mod os {
         #[test]
         fn second_acquisition_against_live_owner_fails_with_conflict() {
             let root = TempDir::new().expect("tempdir");
-            let first_command = shell_command("sleep 0.1");
-            let first_config = config_for(&root, "first", &first_command);
-            let first = ChildSession::spawn(first_command, first_config).expect("first session");
+            let digest = run_digest();
+            let mut first = RunLock::acquire(root.path(), &digest).expect("first owner");
 
-            let second_command = shell_command("exit 0");
-            let second_config = config_for(&root, "second", &second_command);
-            let error = spawn_error(second_command, second_config);
+            let error = acquire_error(&root);
             assert!(matches!(
                 error,
                 ChildSessionError::RunLockConflict { owner, .. }
                     if owner.pid == std::process::id()
             ));
 
-            first.finish().expect("finish first session");
+            first.release().expect("release ownership");
             assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
         }
 
@@ -2801,12 +2811,11 @@ mod os {
             departed.wait().expect("reap owner fixture");
             assert!(!process_exists(previous_owner.pid).expect("test owner absence"));
 
-            let command = shell_command("exit 0");
-            let run_digest = command_executable_digest(&command).expect("shell digest");
+            let run_digest = run_digest();
             let stale = RunLockRecord {
                 schema: RUN_LOCK_SCHEMA.to_string(),
                 owner: previous_owner.clone(),
-                run_executable_digest: run_digest,
+                run_executable_digest: run_digest.clone(),
             };
             atomic_publish_json(
                 &root.path().join(RUN_LOCK_RECORD_NAME),
@@ -2815,12 +2824,8 @@ mod os {
             )
             .expect("publish stale fixture");
 
-            let config = config_for(&root, "recovered", &command);
-            let session = ChildSession::spawn(command, config).expect("recover stale owner");
-            let recovery = session
-                .lock_recovery()
-                .expect("observable recovery")
-                .clone();
+            let mut lock = RunLock::acquire(root.path(), &run_digest).expect("recover stale owner");
+            let recovery = lock.recovery().expect("observable recovery").clone();
             assert_eq!(recovery.previous_owner, previous_owner);
             assert!(recovery.record_path.is_file());
             let recovery_bytes =
@@ -2834,7 +2839,7 @@ mod os {
                 previous_owner.pid
             );
 
-            session.finish().expect("finish recovered session");
+            lock.release().expect("release ownership");
             assert!(recovery.record_path.is_file());
             assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
         }
@@ -2854,8 +2859,7 @@ mod os {
             atomic_publish_json(&record_path, &record, "publish ambiguous fixture")
                 .expect("publish ambiguous fixture");
 
-            let config = config_for(&root, "ambiguous", &command);
-            let error = spawn_error(command, config);
+            let error = acquire_error(&root);
             assert!(matches!(
                 error,
                 ChildSessionError::RunLockAmbiguous {
@@ -2875,10 +2879,8 @@ mod os {
             let root = TempDir::new().expect("tempdir");
             let record_path = root.path().join(RUN_LOCK_RECORD_NAME);
             std::fs::write(&record_path, b"{not-json").expect("publish malformed fixture");
-            let command = shell_command("exit 0");
-            let config = config_for(&root, "malformed", &command);
 
-            let error = spawn_error(command, config);
+            let error = acquire_error(&root);
             assert!(matches!(
                 error,
                 ChildSessionError::RunLockAmbiguous { owner: None, .. }
@@ -2890,27 +2892,20 @@ mod os {
         }
 
         #[test]
-        fn lock_is_released_when_log_setup_fails() {
+        fn ownership_is_released_when_the_owner_unwinds() {
             let root = TempDir::new().expect("tempdir");
-            let failing_command = shell_command("exit 0");
-            let failing_config = config_for(&root, "failing", &failing_command);
-            std::fs::write(&failing_config.stdout_log, b"occupied").expect("occupy stdout log");
-
-            let error = spawn_error(failing_command, failing_config);
-            assert!(matches!(
-                error,
-                ChildSessionError::LogOpen {
-                    stream: StreamKind::Stdout,
-                    ..
-                }
-            ));
+            let digest = run_digest();
+            let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _owner = RunLock::acquire(root.path(), &digest).expect("owner");
+                panic!("run failed while holding ownership");
+            }));
+            assert!(panicked.is_err(), "the fixture must unwind");
             assert!(!root.path().join(RUN_LOCK_RECORD_NAME).exists());
 
-            let next_command = shell_command("exit 0");
-            let next_config = config_for(&root, "next", &next_command);
-            let next = ChildSession::spawn(next_command, next_config)
-                .expect("failure path must release output root");
-            next.finish().expect("finish next session");
+            let mut next = RunLock::acquire(root.path(), &digest)
+                .expect("an unwound owner must leave the root acquirable");
+            assert!(next.recovery().is_none(), "no stale record to recover");
+            next.release().expect("release ownership");
         }
     }
 
@@ -2978,7 +2973,8 @@ pub use os::process_start_micros;
 #[cfg(unix)]
 pub use os::{
     capture_identity, command_executable_digest, ChildSession, ChildSessionConfig,
-    ChildSessionError, ChildSessionFailure, ChildSessionReceipt, RunLockRecovery, StreamKind,
+    ChildSessionError, ChildSessionFailure, ChildSessionReceipt, RunLock, RunLockRecovery,
+    StreamKind,
 };
 
 // ===========================================================================
@@ -3315,7 +3311,6 @@ mod os_tests {
     fn make_config(dir: &TempDir, timeout: Duration, grace: Duration) -> ChildSessionConfig {
         let command = Command::new("sh");
         ChildSessionConfig {
-            output_root: dir.path().to_path_buf(),
             stdout_log: dir.path().join("out.log"),
             stderr_log: dir.path().join("err.log"),
             stdout_budget: 1 << 20,
@@ -3644,7 +3639,6 @@ mod os_tests {
         std::fs::write(&log_path, "pre-existing").expect("write");
         let cmd = Command::new("true");
         let config = ChildSessionConfig {
-            output_root: dir.path().to_path_buf(),
             stdout_log: log_path,
             stderr_log: dir.path().join("err.log"),
             stdout_budget: 1 << 20,
@@ -3763,12 +3757,9 @@ mod os_tests {
         // proves the readers are not blocked.
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_millis(500));
         let command = command_with_pipe_holding_descendant(&pid_file, true);
+        let started = std::time::Instant::now();
         let session = ChildSession::spawn(command, config).expect("spawn");
 
-        // Timed from here: the claim under test is that teardown does not block
-        // on the descendant holding the pipe. Spawn is excluded because it pays
-        // a one-time hash of this process's own image for the run lock record.
-        let started = std::time::Instant::now();
         let receipt = session.finish().expect("finish");
         let descendant_pid = read_pid(&pid_file);
 

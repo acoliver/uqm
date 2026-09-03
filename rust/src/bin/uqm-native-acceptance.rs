@@ -216,7 +216,6 @@ impl BoundedNativeObserver {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
-                output_root: self.scratch_root.clone(),
                 stdout_log: stdout_log.clone(),
                 stderr_log: stderr_log.clone(),
                 stdout_budget: self.contract.observer_response_budget_bytes,
@@ -1338,7 +1337,6 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
-                output_root: root.to_path_buf(),
                 stdout_log: root.join("stdout.log"),
                 stderr_log: root.join("stderr.log"),
                 stdout_budget: runtime_contract.child_stdout_budget_bytes,
@@ -3641,7 +3639,6 @@ mod tests {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
-                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join("stdout.log"),
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
@@ -3720,7 +3717,6 @@ mod tests {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
-                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join("stdout.log"),
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
@@ -3781,11 +3777,7 @@ mod tests {
         let error = observer.run_helper(command, "test", 1).unwrap_err();
 
         assert!(error.to_string().contains("term=true, kill=true"));
-        // The escalation itself is asserted above by term=true, kill=true. This
-        // bound only proves the call returns rather than hanging, and it must
-        // absorb the one-time hash of this process's image that the first run
-        // lock acquisition performs.
-        assert!(started.elapsed() < Duration::from_secs(10));
+        assert!(started.elapsed() < Duration::from_secs(2));
         observer.finish().unwrap();
         assert!(!scratch.path().exists());
     }
@@ -4000,7 +3992,6 @@ mod tests {
         let session = ChildSession::spawn(
             command,
             ChildSessionConfig {
-                output_root: root.path().to_path_buf(),
                 stdout_log: root.path().join("stdout.log"),
                 stderr_log: root.path().join("stderr.log"),
                 stdout_budget: 1024,
