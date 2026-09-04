@@ -4255,10 +4255,10 @@ mod os_tests {
             |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
         )
         .expect_err("inspection failure must be retained");
-        assert!(matches!(
-            error,
-            super::os::ChildSessionError::ProcessGroup(_)
-        ));
+        assert!(
+            matches!(error, super::os::ChildSessionError::ProcessGroup(_)),
+            "the retained failure must be the inspection error, got {error:?}"
+        );
         assert_exact_child_reaped(pid);
     }
 
