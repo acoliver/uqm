@@ -421,23 +421,14 @@ fn configure_process_group(
 #[cfg(not(unix))]
 fn configure_process_group(_command: &mut Command, _registration_timeout: Duration) {}
 
-#[cfg(target_os = "macos")]
-fn macos_process_is_terminal(pid: i32) -> Result<bool, String> {
-    // A process that has exited but has not been reaped is terminal. The kernel
-    // process record reports that state; proc_pidinfo refuses such a process,
-    // which is why membership is decided from the record instead.
-    match macos_process_record(pid) {
-        Some(record) => Ok(record.terminal),
-        None => Ok(true),
-    }
-}
-
 /// One process as the kernel reports it.
 #[cfg(target_os = "macos")]
 struct MacosProcessRecord {
     group: i32,
     terminal: bool,
     start_micros: u64,
+    parent: i32,
+    command: String,
 }
 
 /// Read a process record from the kernel.
@@ -455,6 +446,9 @@ fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
     const START_MICROSECONDS_OFFSET: usize = 8;
     const STATE_OFFSET: usize = 36;
     const PID_OFFSET: usize = 40;
+    const COMMAND_OFFSET: usize = 243;
+    const COMMAND_CAPACITY: usize = 17;
+    const PARENT_OFFSET: usize = 560;
     const GROUP_OFFSET: usize = 564;
     const MINIMUM_RECORD: usize = GROUP_OFFSET + std::mem::size_of::<i32>();
     const ZOMBIE_STATE: u8 = 5;
@@ -508,12 +502,19 @@ fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
     };
     let start_seconds = unsigned_field(START_SECONDS_OFFSET);
     let start_microseconds = u64::from(field(START_MICROSECONDS_OFFSET).unsigned_abs());
+    let command: Vec<u8> = record[COMMAND_OFFSET..COMMAND_OFFSET + COMMAND_CAPACITY]
+        .iter()
+        .take_while(|byte| **byte != 0)
+        .copied()
+        .collect();
     Some(MacosProcessRecord {
         group: field(GROUP_OFFSET),
         terminal: record[STATE_OFFSET] == ZOMBIE_STATE,
         start_micros: start_seconds
             .saturating_mul(1_000_000)
             .saturating_add(start_microseconds),
+        parent: field(PARENT_OFFSET),
+        command: String::from_utf8_lossy(&command).into_owned(),
     })
 }
 
@@ -602,38 +603,16 @@ fn describe_process(pid: libc::pid_t) -> String {
     // rather than the one it ran, so report the kernel's own view beside it.
     // The parent decides whether this is ours by descent, so name it: without
     // it a survivor message cannot be acted on.
-    let parent = macos_process_parent(pid);
     match macos_process_record(pid) {
         Some(record) => format!(
-            "{pid} ({name}, parent {}, group {}, {})",
-            parent.map_or_else(|| "unknown".to_string(), |value| value.to_string()),
+            "{pid} ({name}, command {}, parent {}, group {}, {})",
+            record.command,
+            record.parent,
             record.group,
             if record.terminal { "exited" } else { "live" }
         ),
         None => format!("{pid} ({name}, absent from the process table)"),
     }
-}
-
-/// The parent PID of a process, when the kernel will name it.
-#[cfg(target_os = "macos")]
-fn macos_process_parent(pid: libc::pid_t) -> Option<i32> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>()).ok()?;
-    // SAFETY: info is writable for expected bytes.
-    let observed = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            expected,
-        )
-    };
-    if observed != expected {
-        return None;
-    }
-    // SAFETY: proc_pidinfo initialized the complete structure.
-    i32::try_from(unsafe { info.assume_init() }.pbi_ppid).ok()
 }
 
 /// Whether a `/proc` read failed because the process it names has gone.
@@ -962,14 +941,24 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                         )
                     };
                     if observed == 0 {
-                        match macos_process_is_terminal(pid) {
-                            Ok(true) => continue,
-                            Ok(false) => return Ok(false),
-                            Err(error) => {
-                                return Err(format!(
-                                    "cannot inspect process {pid} for dedicated uid {uid}: {error}"
-                                ));
+                        // PROC_PIDTBSDINFO is refused for a process of another
+                        // uid, which is every survivor this check inspects, so
+                        // the kernel's own process record has to answer both
+                        // questions instead: whether it has exited, and whether
+                        // it could be ours.
+                        match macos_process_record(pid) {
+                            Some(record) if record.terminal => continue,
+                            Some(record) => {
+                                if !survivor_could_be_ours(
+                                    record.parent,
+                                    None,
+                                    Some(record.command.as_str()),
+                                ) {
+                                    continue;
+                                }
+                                return Ok(false);
                             }
+                            None => continue,
                         }
                     }
                     if observed != expected {
@@ -3577,7 +3566,11 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_process_inspection_distinguishes_live_terminal_and_vanished() {
-        assert!(!macos_process_is_terminal(std::process::id() as i32).unwrap());
+        assert!(
+            !macos_process_record(std::process::id() as i32)
+                .expect("record for this process")
+                .terminal
+        );
 
         // SAFETY: the child exits immediately without touching shared process state.
         let child = unsafe { libc::fork() };
@@ -3593,17 +3586,15 @@ mod tests {
 
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         let terminal = loop {
-            match macos_process_is_terminal(child) {
-                Ok(true) => break true,
-                Ok(false) if std::time::Instant::now() < deadline => {
+            match macos_process_record(child) {
+                Some(record) if record.terminal => break true,
+                Some(_) if std::time::Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(10));
                 }
-                Ok(false) => break false,
-                Err(error) => {
-                    // SAFETY: child is this process's direct child.
-                    unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) };
-                    panic!("{error}");
-                }
+                Some(_) => break false,
+                // A reaped child leaves the table entirely, which is terminal
+                // by a stronger measure than the zombie state.
+                None => break true,
             }
         };
         // SAFETY: child is this process's direct child.
@@ -3612,7 +3603,7 @@ mod tests {
             child
         );
         assert!(terminal, "exited child was not classified as terminal");
-        assert!(macos_process_is_terminal(i32::MAX).unwrap());
+        assert!(macos_process_record(i32::MAX).is_none());
     }
 
     #[cfg(target_os = "macos")]
