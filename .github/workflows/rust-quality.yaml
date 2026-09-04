@@ -969,7 +969,10 @@ jobs:
           set -uo pipefail
           evidence="${RUNNER_TEMP}/s4-command-evidence"
           mkdir -p "${evidence}"
-          if [[ "${UQM_CI_BASE_SHA}" =~ ^0{40}$ ]]; then
+          if [[ "${UQM_CI_BASE_SHA}" =~ ^0{40}$ ]] \
+            || ! git rev-parse --verify --quiet "${UQM_CI_BASE_SHA}^{commit}" >/dev/null; then
+            printf 'push base %s is absent or unreachable; comparing against HEAD^\n' \
+              "${UQM_CI_BASE_SHA}" >&2
             if ! resolved_base="$(git rev-parse HEAD^)"; then
               printf 'cannot resolve push comparison base\n' >&2
               exit 1
