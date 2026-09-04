@@ -679,20 +679,33 @@ mod tests {
             0o555
         );
 
-        let captured = super::super::exec::run_captured_with_limits(
-            temp.path(),
-            resolved.execution_path(),
-            &[],
-            &[],
-            super::super::exec::Limits {
-                timeout: Duration::from_secs(5),
-                termination_grace: Duration::from_secs(1),
-                pipe_drain_timeout: Duration::from_secs(1),
-                stdout_bytes: 1024,
-                stderr_bytes: 1024,
-                executable_bytes: 1024,
-            },
-        );
+        // The kernel reports ETXTBSY while any process still holds a write
+        // descriptor for the image being executed. A concurrently forked
+        // descendant of this multi-threaded test binary can hold an inherited
+        // one for the newly staged file, and releases it at its own exec, so
+        // the condition is transient rather than a property of the staging.
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        let captured = loop {
+            let captured = super::super::exec::run_captured_with_limits(
+                temp.path(),
+                resolved.execution_path(),
+                &[],
+                &[],
+                super::super::exec::Limits {
+                    timeout: Duration::from_secs(5),
+                    termination_grace: Duration::from_secs(1),
+                    pipe_drain_timeout: Duration::from_secs(1),
+                    stdout_bytes: 1024,
+                    stderr_bytes: 1024,
+                    executable_bytes: 1024,
+                },
+            );
+            let busy = captured.failure_detail("tool").contains("Text file busy");
+            if !busy || std::time::Instant::now() >= deadline {
+                break captured;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        };
 
         assert!(captured.succeeded(), "{}", captured.failure_detail("tool"));
         assert_eq!(captured.stdout, b"retained");

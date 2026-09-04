@@ -421,23 +421,14 @@ fn configure_process_group(
 #[cfg(not(unix))]
 fn configure_process_group(_command: &mut Command, _registration_timeout: Duration) {}
 
-#[cfg(target_os = "macos")]
-fn macos_process_is_terminal(pid: i32) -> Result<bool, String> {
-    // A process that has exited but has not been reaped is terminal. The kernel
-    // process record reports that state; proc_pidinfo refuses such a process,
-    // which is why membership is decided from the record instead.
-    match macos_process_record(pid) {
-        Some(record) => Ok(record.terminal),
-        None => Ok(true),
-    }
-}
-
 /// One process as the kernel reports it.
 #[cfg(target_os = "macos")]
 struct MacosProcessRecord {
     group: i32,
     terminal: bool,
     start_micros: u64,
+    parent: i32,
+    command: String,
 }
 
 /// Read a process record from the kernel.
@@ -455,6 +446,9 @@ fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
     const START_MICROSECONDS_OFFSET: usize = 8;
     const STATE_OFFSET: usize = 36;
     const PID_OFFSET: usize = 40;
+    const COMMAND_OFFSET: usize = 243;
+    const COMMAND_CAPACITY: usize = 17;
+    const PARENT_OFFSET: usize = 560;
     const GROUP_OFFSET: usize = 564;
     const MINIMUM_RECORD: usize = GROUP_OFFSET + std::mem::size_of::<i32>();
     const ZOMBIE_STATE: u8 = 5;
@@ -508,12 +502,19 @@ fn macos_process_record(pid: libc::pid_t) -> Option<MacosProcessRecord> {
     };
     let start_seconds = unsigned_field(START_SECONDS_OFFSET);
     let start_microseconds = u64::from(field(START_MICROSECONDS_OFFSET).unsigned_abs());
+    let command: Vec<u8> = record[COMMAND_OFFSET..COMMAND_OFFSET + COMMAND_CAPACITY]
+        .iter()
+        .take_while(|byte| **byte != 0)
+        .copied()
+        .collect();
     Some(MacosProcessRecord {
         group: field(GROUP_OFFSET),
         terminal: record[STATE_OFFSET] == ZOMBIE_STATE,
         start_micros: start_seconds
             .saturating_mul(1_000_000)
             .saturating_add(start_microseconds),
+        parent: field(PARENT_OFFSET),
+        command: String::from_utf8_lossy(&command).into_owned(),
     })
 }
 
@@ -602,38 +603,16 @@ fn describe_process(pid: libc::pid_t) -> String {
     // rather than the one it ran, so report the kernel's own view beside it.
     // The parent decides whether this is ours by descent, so name it: without
     // it a survivor message cannot be acted on.
-    let parent = macos_process_parent(pid);
     match macos_process_record(pid) {
         Some(record) => format!(
-            "{pid} ({name}, parent {}, group {}, {})",
-            parent.map_or_else(|| "unknown".to_string(), |value| value.to_string()),
+            "{pid} ({name}, command {}, parent {}, group {}, {})",
+            record.command,
+            record.parent,
             record.group,
             if record.terminal { "exited" } else { "live" }
         ),
         None => format!("{pid} ({name}, absent from the process table)"),
     }
-}
-
-/// The parent PID of a process, when the kernel will name it.
-#[cfg(target_os = "macos")]
-fn macos_process_parent(pid: libc::pid_t) -> Option<i32> {
-    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
-    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>()).ok()?;
-    // SAFETY: info is writable for expected bytes.
-    let observed = unsafe {
-        libc::proc_pidinfo(
-            pid,
-            libc::PROC_PIDTBSDINFO,
-            0,
-            info.as_mut_ptr().cast(),
-            expected,
-        )
-    };
-    if observed != expected {
-        return None;
-    }
-    // SAFETY: proc_pidinfo initialized the complete structure.
-    i32::try_from(unsafe { info.assume_init() }.pbi_ppid).ok()
 }
 
 /// Whether a `/proc` read failed because the process it names has gone.
@@ -962,14 +941,24 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                         )
                     };
                     if observed == 0 {
-                        match macos_process_is_terminal(pid) {
-                            Ok(true) => continue,
-                            Ok(false) => return Ok(false),
-                            Err(error) => {
-                                return Err(format!(
-                                    "cannot inspect process {pid} for dedicated uid {uid}: {error}"
-                                ));
+                        // PROC_PIDTBSDINFO is refused for a process of another
+                        // uid, which is every survivor this check inspects, so
+                        // the kernel's own process record has to answer both
+                        // questions instead: whether it has exited, and whether
+                        // it could be ours.
+                        match macos_process_record(pid) {
+                            Some(record) if record.terminal => continue,
+                            Some(record) => {
+                                if !survivor_could_be_ours(
+                                    record.parent,
+                                    None,
+                                    Some(record.command.as_str()),
+                                ) {
+                                    continue;
+                                }
+                                return Ok(false);
                             }
+                            None => continue,
                         }
                     }
                     if observed != expected {
@@ -982,6 +971,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                     if !survivor_could_be_ours(
                         i32::try_from(info.pbi_ppid).unwrap_or(0),
                         macos_executable_path(pid).as_deref(),
+                        macos_command_name(&info).as_deref(),
                     ) {
                         continue;
                     }
@@ -1068,7 +1058,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
             let executable = std::fs::read_link(entry.path().join("exe"))
                 .ok()
                 .map(|path| path.to_string_lossy().into_owned());
-            if !survivor_could_be_ours(parent, executable.as_deref()) {
+            if !survivor_could_be_ours(parent, executable.as_deref(), None) {
                 continue;
             }
             return Ok(false);
@@ -1096,6 +1086,11 @@ fn macos_executable_path(pid: libc::pid_t) -> Option<String> {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const SESSION_DAEMON_PREFIXES: &[&str] = &["/usr/sbin/", "/usr/libexec/", "/System/"];
 
+/// Session daemons named by short command, for when the image path is
+/// unreadable across uids. Each has been observed adopted by launchd under the
+/// dedicated identity in CI.
+const SESSION_DAEMON_COMMANDS: &[&str] = &["distnoted", "secinitd", "trustd", "cfprefsd"];
+
 /// Whether a process owned by the dedicated identity could have come from this run.
 ///
 /// Containment asks whether a command leaked a process. macOS starts per-session
@@ -1107,15 +1102,39 @@ const SESSION_DAEMON_PREFIXES: &[&str] = &["/usr/sbin/", "/usr/libexec/", "/Syst
 /// running a system image is excused. An orphaned process running one of our
 /// own tools is still a leak, which is the case worth catching.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn survivor_could_be_ours(parent: i32, executable: Option<&str>) -> bool {
+/// The short command name the kernel already supplied alongside the parent.
+///
+/// `pbi_comm` is part of the same `proc_bsdinfo` the caller read successfully,
+/// so unlike the full image path it carries no cross-uid restriction.
+#[cfg(target_os = "macos")]
+fn macos_command_name(info: &libc::proc_bsdinfo) -> Option<String> {
+    let bytes: Vec<u8> = info
+        .pbi_comm
+        .iter()
+        .take_while(|byte| **byte != 0)
+        .map(|byte| *byte as u8)
+        .collect();
+    if bytes.is_empty() {
+        return None;
+    }
+    String::from_utf8(bytes).ok()
+}
+
+fn survivor_could_be_ours(parent: i32, executable: Option<&str>, command: Option<&str>) -> bool {
     if parent != 1 {
         return true;
     }
-    executable.is_none_or(|path| {
-        !SESSION_DAEMON_PREFIXES
+    if let Some(path) = executable {
+        return !SESSION_DAEMON_PREFIXES
             .iter()
-            .any(|prefix| path.starts_with(prefix))
-    })
+            .any(|prefix| path.starts_with(prefix));
+    }
+    // The full image path is readable only for a process of our own uid, and
+    // the survivors in question belong to the dedicated identity, so the
+    // kernel refuses it exactly when the question is being asked. The short
+    // command name comes from the same structure that supplied the parent and
+    // is not restricted, so it is the only identity available here.
+    command.is_none_or(|name| !SESSION_DAEMON_COMMANDS.contains(&name))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -3416,26 +3435,50 @@ mod tests {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn a_session_daemon_adopted_by_init_is_not_a_leak() {
         // The exact process that failed macos-x86_64 five times.
-        assert!(!survivor_could_be_ours(1, Some("/usr/sbin/distnoted")));
-        assert!(!survivor_could_be_ours(1, Some("/usr/libexec/secinitd")));
         assert!(!survivor_could_be_ours(
             1,
-            Some("/System/Library/Frameworks/x")
+            Some("/usr/sbin/distnoted"),
+            None
+        ));
+        assert!(!survivor_could_be_ours(
+            1,
+            Some("/usr/libexec/secinitd"),
+            None
+        ));
+        assert!(!survivor_could_be_ours(
+            1,
+            Some("/System/Library/Frameworks/x"),
+            None
         ));
     }
 
     #[test]
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn a_session_daemon_is_excused_by_command_when_its_image_is_unreadable() {
+        // proc_pidpath refuses a process of another uid, which is exactly the
+        // case containment inspects, so the short command name has to carry it.
+        assert!(!survivor_could_be_ours(1, None, Some("distnoted")));
+        assert!(!survivor_could_be_ours(1, None, Some("secinitd")));
+        // Descent still outranks identity.
+        assert!(survivor_could_be_ours(4242, None, Some("distnoted")));
+        // Our own tools are never excused, by either signal.
+        assert!(survivor_could_be_ours(1, None, Some("uqm")));
+        assert!(survivor_could_be_ours(1, None, Some("cargo")));
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn an_orphaned_process_running_our_own_tool_is_still_a_leak() {
-        assert!(survivor_could_be_ours(1, Some("/usr/bin/git")));
-        assert!(survivor_could_be_ours(1, Some("/bin/sh")));
+        assert!(survivor_could_be_ours(1, Some("/usr/bin/git"), None));
+        assert!(survivor_could_be_ours(1, Some("/bin/sh"), None));
         assert!(survivor_could_be_ours(
             1,
-            Some("/Users/runner/work/uqm/uqm/rust/target/debug/uqm")
+            Some("/Users/runner/work/uqm/uqm/rust/target/debug/uqm"),
+            None
         ));
         assert!(
-            survivor_could_be_ours(1, None),
-            "an unnameable image must never be excused"
+            survivor_could_be_ours(1, None, None),
+            "a process with no identity at all must never be excused"
         );
     }
 
@@ -3444,8 +3487,16 @@ mod tests {
     fn a_live_descendant_is_always_a_leak_whatever_it_runs() {
         // Still parented to something in this session, so it is ours by
         // descent regardless of the image it happens to be running.
-        assert!(survivor_could_be_ours(4321, Some("/usr/sbin/distnoted")));
-        assert!(survivor_could_be_ours(2, Some("/usr/libexec/secinitd")));
+        assert!(survivor_could_be_ours(
+            4321,
+            Some("/usr/sbin/distnoted"),
+            Some("distnoted")
+        ));
+        assert!(survivor_could_be_ours(
+            2,
+            Some("/usr/libexec/secinitd"),
+            Some("secinitd")
+        ));
     }
     #[cfg(unix)]
     use uqm_rust::automation::child_session::{
@@ -3515,7 +3566,11 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_process_inspection_distinguishes_live_terminal_and_vanished() {
-        assert!(!macos_process_is_terminal(std::process::id() as i32).unwrap());
+        assert!(
+            !macos_process_record(std::process::id() as i32)
+                .expect("record for this process")
+                .terminal
+        );
 
         // SAFETY: the child exits immediately without touching shared process state.
         let child = unsafe { libc::fork() };
@@ -3531,17 +3586,15 @@ mod tests {
 
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         let terminal = loop {
-            match macos_process_is_terminal(child) {
-                Ok(true) => break true,
-                Ok(false) if std::time::Instant::now() < deadline => {
+            match macos_process_record(child) {
+                Some(record) if record.terminal => break true,
+                Some(_) if std::time::Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(10));
                 }
-                Ok(false) => break false,
-                Err(error) => {
-                    // SAFETY: child is this process's direct child.
-                    unsafe { libc::waitpid(child, std::ptr::null_mut(), 0) };
-                    panic!("{error}");
-                }
+                Some(_) => break false,
+                // A reaped child leaves the table entirely, which is terminal
+                // by a stronger measure than the zombie state.
+                None => break true,
             }
         };
         // SAFETY: child is this process's direct child.
@@ -3550,7 +3603,7 @@ mod tests {
             child
         );
         assert!(terminal, "exited child was not classified as terminal");
-        assert!(macos_process_is_terminal(i32::MAX).unwrap());
+        assert!(macos_process_record(i32::MAX).is_none());
     }
 
     #[cfg(target_os = "macos")]
