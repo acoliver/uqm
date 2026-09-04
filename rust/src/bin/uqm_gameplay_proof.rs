@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
+use uqm_rust::automation::interrupt;
 use uqm_rust::automation::{
     verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
     ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
@@ -229,6 +230,10 @@ fn run_proof(
         &content,
         output_root,
     )?;
+    // Record interruptions before anything is spawned, so a signal arriving at
+    // any point after this tears the run down rather than orphaning it.
+    interrupt::install().map_err(|error| error.to_string())?;
+
     // The run owns its output root for as long as it is producing evidence
     // there. Ownership is released when this guard drops, on every path.
     let _ownership = RunLock::acquire(
@@ -354,8 +359,14 @@ fn supervise_child(
             ));
         }
     };
+    // An interruption arriving at the supervisor becomes an observer failure,
+    // which routes into the same targeted stop-and-reap path as any other
+    // failure. Dying on the signal would leave the game running.
     session
-        .finish()
+        .finish_observing(|_| match interrupt::interrupted() {
+            Some(signal) => Err(interrupt::interruption_error(signal)),
+            None => Ok(()),
+        })
         .map_err(|failure| (failure.error, failure.receipt))
 }
 

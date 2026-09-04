@@ -29,6 +29,8 @@ pub mod error;
 pub mod identity;
 pub mod input;
 pub mod input_ffi;
+#[cfg(unix)]
+pub mod interrupt;
 pub mod lifecycle;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
