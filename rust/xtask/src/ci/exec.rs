@@ -982,6 +982,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                     if !survivor_could_be_ours(
                         i32::try_from(info.pbi_ppid).unwrap_or(0),
                         macos_executable_path(pid).as_deref(),
+                        macos_command_name(&info).as_deref(),
                     ) {
                         continue;
                     }
@@ -1068,7 +1069,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
             let executable = std::fs::read_link(entry.path().join("exe"))
                 .ok()
                 .map(|path| path.to_string_lossy().into_owned());
-            if !survivor_could_be_ours(parent, executable.as_deref()) {
+            if !survivor_could_be_ours(parent, executable.as_deref(), None) {
                 continue;
             }
             return Ok(false);
@@ -1096,6 +1097,11 @@ fn macos_executable_path(pid: libc::pid_t) -> Option<String> {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const SESSION_DAEMON_PREFIXES: &[&str] = &["/usr/sbin/", "/usr/libexec/", "/System/"];
 
+/// Session daemons named by short command, for when the image path is
+/// unreadable across uids. Each has been observed adopted by launchd under the
+/// dedicated identity in CI.
+const SESSION_DAEMON_COMMANDS: &[&str] = &["distnoted", "secinitd", "trustd", "cfprefsd"];
+
 /// Whether a process owned by the dedicated identity could have come from this run.
 ///
 /// Containment asks whether a command leaked a process. macOS starts per-session
@@ -1107,15 +1113,39 @@ const SESSION_DAEMON_PREFIXES: &[&str] = &["/usr/sbin/", "/usr/libexec/", "/Syst
 /// running a system image is excused. An orphaned process running one of our
 /// own tools is still a leak, which is the case worth catching.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn survivor_could_be_ours(parent: i32, executable: Option<&str>) -> bool {
+/// The short command name the kernel already supplied alongside the parent.
+///
+/// `pbi_comm` is part of the same `proc_bsdinfo` the caller read successfully,
+/// so unlike the full image path it carries no cross-uid restriction.
+#[cfg(target_os = "macos")]
+fn macos_command_name(info: &libc::proc_bsdinfo) -> Option<String> {
+    let bytes: Vec<u8> = info
+        .pbi_comm
+        .iter()
+        .take_while(|byte| **byte != 0)
+        .map(|byte| *byte as u8)
+        .collect();
+    if bytes.is_empty() {
+        return None;
+    }
+    String::from_utf8(bytes).ok()
+}
+
+fn survivor_could_be_ours(parent: i32, executable: Option<&str>, command: Option<&str>) -> bool {
     if parent != 1 {
         return true;
     }
-    executable.is_none_or(|path| {
-        !SESSION_DAEMON_PREFIXES
+    if let Some(path) = executable {
+        return !SESSION_DAEMON_PREFIXES
             .iter()
-            .any(|prefix| path.starts_with(prefix))
-    })
+            .any(|prefix| path.starts_with(prefix));
+    }
+    // The full image path is readable only for a process of our own uid, and
+    // the survivors in question belong to the dedicated identity, so the
+    // kernel refuses it exactly when the question is being asked. The short
+    // command name comes from the same structure that supplied the parent and
+    // is not restricted, so it is the only identity available here.
+    command.is_none_or(|name| !SESSION_DAEMON_COMMANDS.contains(&name))
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -3416,26 +3446,50 @@ mod tests {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn a_session_daemon_adopted_by_init_is_not_a_leak() {
         // The exact process that failed macos-x86_64 five times.
-        assert!(!survivor_could_be_ours(1, Some("/usr/sbin/distnoted")));
-        assert!(!survivor_could_be_ours(1, Some("/usr/libexec/secinitd")));
         assert!(!survivor_could_be_ours(
             1,
-            Some("/System/Library/Frameworks/x")
+            Some("/usr/sbin/distnoted"),
+            None
+        ));
+        assert!(!survivor_could_be_ours(
+            1,
+            Some("/usr/libexec/secinitd"),
+            None
+        ));
+        assert!(!survivor_could_be_ours(
+            1,
+            Some("/System/Library/Frameworks/x"),
+            None
         ));
     }
 
     #[test]
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn a_session_daemon_is_excused_by_command_when_its_image_is_unreadable() {
+        // proc_pidpath refuses a process of another uid, which is exactly the
+        // case containment inspects, so the short command name has to carry it.
+        assert!(!survivor_could_be_ours(1, None, Some("distnoted")));
+        assert!(!survivor_could_be_ours(1, None, Some("secinitd")));
+        // Descent still outranks identity.
+        assert!(survivor_could_be_ours(4242, None, Some("distnoted")));
+        // Our own tools are never excused, by either signal.
+        assert!(survivor_could_be_ours(1, None, Some("uqm")));
+        assert!(survivor_could_be_ours(1, None, Some("cargo")));
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn an_orphaned_process_running_our_own_tool_is_still_a_leak() {
-        assert!(survivor_could_be_ours(1, Some("/usr/bin/git")));
-        assert!(survivor_could_be_ours(1, Some("/bin/sh")));
+        assert!(survivor_could_be_ours(1, Some("/usr/bin/git"), None));
+        assert!(survivor_could_be_ours(1, Some("/bin/sh"), None));
         assert!(survivor_could_be_ours(
             1,
-            Some("/Users/runner/work/uqm/uqm/rust/target/debug/uqm")
+            Some("/Users/runner/work/uqm/uqm/rust/target/debug/uqm"),
+            None
         ));
         assert!(
-            survivor_could_be_ours(1, None),
-            "an unnameable image must never be excused"
+            survivor_could_be_ours(1, None, None),
+            "a process with no identity at all must never be excused"
         );
     }
 
@@ -3444,8 +3498,16 @@ mod tests {
     fn a_live_descendant_is_always_a_leak_whatever_it_runs() {
         // Still parented to something in this session, so it is ours by
         // descent regardless of the image it happens to be running.
-        assert!(survivor_could_be_ours(4321, Some("/usr/sbin/distnoted")));
-        assert!(survivor_could_be_ours(2, Some("/usr/libexec/secinitd")));
+        assert!(survivor_could_be_ours(
+            4321,
+            Some("/usr/sbin/distnoted"),
+            Some("distnoted")
+        ));
+        assert!(survivor_could_be_ours(
+            2,
+            Some("/usr/libexec/secinitd"),
+            Some("secinitd")
+        ));
     }
     #[cfg(unix)]
     use uqm_rust::automation::child_session::{
