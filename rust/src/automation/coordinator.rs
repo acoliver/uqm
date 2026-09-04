@@ -212,6 +212,11 @@ const SEMANTIC_LOOKAHEAD: usize = 4;
 /// is effectively uncontended (single-threaded), but the Mutex ensures
 /// memory safety and Sync-ness.
 struct CoordInner {
+    /// Whether readiness has been observed, which starts the idle watchdog and
+    /// stops the startup one.
+    ready: bool,
+    /// When progress was last admitted, for the idle watchdog.
+    last_progress: Instant,
     sched_state: SchedulerState,
     input_seen: u64,
     present_seen: u64,
@@ -287,6 +292,8 @@ impl Coordinator {
             max_input_ticks: budgets.max_input_ticks,
             max_presentations: budgets.max_presentations,
             max_wallclock: Duration::from_secs(budgets.max_wallclock_seconds),
+            max_startup: Duration::from_secs(budgets.startup_seconds()),
+            max_idle: Duration::from_secs(budgets.idle_seconds()),
         };
 
         let now = Instant::now();
@@ -311,6 +318,8 @@ impl Coordinator {
             runtime,
             inner: Mutex::new(CoordInner {
                 sched_state: SchedulerState::initial(),
+                ready: false,
+                last_progress: now,
                 input_seen: 0,
                 present_seen: 0,
                 last_observed: now,
@@ -999,6 +1008,8 @@ impl Coordinator {
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
             elapsed,
+            ready: inner.ready,
+            idle: now.saturating_duration_since(inner.last_progress),
             clock: ClockSample {
                 started_at: self.started_at,
                 last_observed: inner.last_observed,
@@ -1017,6 +1028,8 @@ impl Coordinator {
             self.set_terminal(&mut inner, class);
             return true;
         }
+        // Admitted: this callback is progress for the idle watchdog.
+        inner.last_progress = now;
 
         if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
         {
@@ -1368,6 +1381,8 @@ impl Coordinator {
             input_seen: inner.input_seen,
             present_seen: inner.present_seen,
             elapsed,
+            ready: inner.ready,
+            idle: now.saturating_duration_since(inner.last_progress),
             clock: ClockSample {
                 started_at: self.started_at,
                 last_observed: inner.last_observed,
@@ -1382,7 +1397,7 @@ impl Coordinator {
         inner.present_seen = wd_result.candidate_present_seen;
 
         match wd_result.outcome {
-            WatchdogOutcome::Admit => {}
+            WatchdogOutcome::Admit => inner.last_progress = now,
             WatchdogOutcome::InputCounterOverflow
             | WatchdogOutcome::PresentationCounterOverflow => {
                 self.set_terminal(&mut inner, TerminalClass::CounterOverflow);
@@ -1398,6 +1413,14 @@ impl Coordinator {
             }
             WatchdogOutcome::WallTimeout => {
                 self.set_terminal(&mut inner, TerminalClass::WallTimeout);
+                return true;
+            }
+            WatchdogOutcome::StartupTimeout => {
+                self.set_terminal(&mut inner, TerminalClass::StartupTimeout);
+                return true;
+            }
+            WatchdogOutcome::IdleTimeout => {
+                self.set_terminal(&mut inner, TerminalClass::IdleTimeout);
                 return true;
             }
             WatchdogOutcome::ClockRegression => {
@@ -1473,6 +1496,9 @@ impl Coordinator {
         let transition =
             scheduler_reduce(&inner.sched_state, &config, SchedulerEvent::MainMenuReady);
         inner.sched_state = transition.new_state;
+        // Readiness ends the startup budget and starts the idle one.
+        inner.ready = true;
+        inner.last_progress = Instant::now();
         coord.write_readiness_trace(
             &mut inner,
             MAIN_MENU_READINESS_SUBJECT,
@@ -2207,6 +2233,8 @@ fn watchdog_terminal_class(outcome: WatchdogOutcome) -> Option<TerminalClass> {
         WatchdogOutcome::PresentationTimeout => Some(TerminalClass::PresentationTimeout),
         WatchdogOutcome::WallTimeout => Some(TerminalClass::WallTimeout),
         WatchdogOutcome::ClockRegression => Some(TerminalClass::ClockRegression),
+        WatchdogOutcome::StartupTimeout => Some(TerminalClass::StartupTimeout),
+        WatchdogOutcome::IdleTimeout => Some(TerminalClass::IdleTimeout),
     }
 }
 

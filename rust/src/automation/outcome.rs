@@ -52,6 +52,10 @@ pub enum TerminalClass {
     PoisonedMutex = 12,
     /// Cooperative stop requested (clean shutdown, not a hard hang).
     CooperativeStop = 13,
+    /// Readiness was never reached within the startup budget.
+    StartupTimeout = 14,
+    /// A ready run stopped making progress within the idle budget.
+    IdleTimeout = 15,
 }
 
 impl TerminalClass {
@@ -72,6 +76,8 @@ impl TerminalClass {
             11 => Some(Self::PanicFallback),
             12 => Some(Self::PoisonedMutex),
             13 => Some(Self::CooperativeStop),
+            14 => Some(Self::StartupTimeout),
+            15 => Some(Self::IdleTimeout),
             _ => None,
         }
     }

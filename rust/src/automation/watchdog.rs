@@ -37,6 +37,16 @@ pub struct WatchdogLimits {
     pub max_input_ticks: u64,
     pub max_presentations: u64,
     pub max_wallclock: Duration,
+    /// How long a run may take to reach readiness.
+    ///
+    /// A run that never becomes ready makes no progress to measure, so the
+    /// total wall budget would let it hang for the entire run.
+    pub max_startup: Duration,
+    /// How long a ready run may go without progress.
+    ///
+    /// Distinct from the wall budget: a run that stops advancing halfway
+    /// through should fail when it stalls, not when its whole budget expires.
+    pub max_idle: Duration,
 }
 
 /// Monotonic clock sample for regression detection.
@@ -67,6 +77,10 @@ pub struct WatchdogEntry {
     pub present_seen: u64,
     /// Elapsed time since run start.
     pub elapsed: Duration,
+    /// Whether the run has reached readiness.
+    pub ready: bool,
+    /// Elapsed time since the last admitted progress.
+    pub idle: Duration,
     /// Clock samples for regression detection.
     pub clock: ClockSample,
 }
@@ -91,7 +105,11 @@ pub enum WatchdogOutcome {
     WallTimeout,
     /// Clock moved backwards (order 5).
     ClockRegression,
-    /// All limits satisfied — action work is allowed (order 6).
+    /// Readiness was not reached within `max_startup` (order 6).
+    StartupTimeout,
+    /// A ready run made no progress within `max_idle` (order 7).
+    IdleTimeout,
+    /// All limits satisfied — action work is allowed (order 8).
     Admit,
 }
 
@@ -209,7 +227,25 @@ pub fn watchdog_reduce(entry: &WatchdogEntry, limits: &WatchdogLimits) -> Watchd
         };
     }
 
-    // Order 6: admit
+    // Order 6: a run that has not become ready within its startup budget
+    if !entry.ready && entry.elapsed >= limits.max_startup {
+        return WatchdogTransition {
+            candidate_input_seen,
+            candidate_present_seen,
+            outcome: WatchdogOutcome::StartupTimeout,
+        };
+    }
+
+    // Order 7: a ready run that has stopped making progress
+    if entry.ready && entry.idle >= limits.max_idle {
+        return WatchdogTransition {
+            candidate_input_seen,
+            candidate_present_seen,
+            outcome: WatchdogOutcome::IdleTimeout,
+        };
+    }
+
+    // Order 8: admit
     WatchdogTransition {
         candidate_input_seen,
         candidate_present_seen,
@@ -225,6 +261,103 @@ pub fn watchdog_reduce(entry: &WatchdogEntry, limits: &WatchdogLimits) -> Watchd
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_run_that_never_becomes_ready_fails_on_the_startup_budget() {
+        let now = base();
+        let clock = clock_at(now, now);
+        let mut entry = input_entry(0, Duration::from_secs(31), clock);
+        entry.ready = false;
+        let limits = WatchdogLimits {
+            max_startup: Duration::from_secs(30),
+            ..limits()
+        };
+
+        // The wall budget is 60s and would not fire for another half minute.
+        assert_eq!(
+            watchdog_reduce(&entry, &limits).outcome,
+            WatchdogOutcome::StartupTimeout
+        );
+    }
+
+    #[test]
+    fn readiness_ends_the_startup_budget() {
+        let now = base();
+        let clock = clock_at(now, now);
+        let mut entry = input_entry(0, Duration::from_secs(31), clock);
+        entry.ready = true;
+        let limits = WatchdogLimits {
+            max_startup: Duration::from_secs(30),
+            ..limits()
+        };
+
+        assert_eq!(
+            watchdog_reduce(&entry, &limits).outcome,
+            WatchdogOutcome::Admit,
+            "a ready run is past its startup budget, not subject to it"
+        );
+    }
+
+    #[test]
+    fn a_ready_run_that_stops_progressing_fails_on_the_idle_budget() {
+        let now = base();
+        let clock = clock_at(now, now);
+        let mut entry = input_entry(0, Duration::from_secs(5), clock);
+        entry.ready = true;
+        entry.idle = Duration::from_secs(10);
+        let limits = WatchdogLimits {
+            max_idle: Duration::from_secs(10),
+            ..limits()
+        };
+
+        // Only 5s of a 60s wall budget has elapsed: without an idle budget
+        // this stall would go unnoticed for another 55 seconds.
+        assert_eq!(
+            watchdog_reduce(&entry, &limits).outcome,
+            WatchdogOutcome::IdleTimeout
+        );
+    }
+
+    #[test]
+    fn a_run_before_readiness_is_not_judged_idle() {
+        let now = base();
+        let clock = clock_at(now, now);
+        let mut entry = input_entry(0, Duration::from_secs(5), clock);
+        entry.ready = false;
+        entry.idle = Duration::from_secs(600);
+        let limits = WatchdogLimits {
+            max_startup: Duration::from_secs(30),
+            max_idle: Duration::from_secs(10),
+            ..limits()
+        };
+
+        assert_eq!(
+            watchdog_reduce(&entry, &limits).outcome,
+            WatchdogOutcome::Admit,
+            "idleness only means something once there is progress to make"
+        );
+    }
+
+    #[test]
+    fn the_existing_limits_still_outrank_the_new_ones() {
+        let now = base();
+        let clock = clock_at(now, now);
+        // Simultaneously over the wall, startup and idle budgets.
+        let mut entry = input_entry(0, Duration::from_secs(3600), clock);
+        entry.ready = false;
+        entry.idle = Duration::from_secs(3600);
+        let limits = WatchdogLimits {
+            max_startup: Duration::from_secs(1),
+            max_idle: Duration::from_secs(1),
+            ..limits()
+        };
+
+        assert_eq!(
+            watchdog_reduce(&entry, &limits).outcome,
+            WatchdogOutcome::WallTimeout,
+            "the wall budget keeps its established priority"
+        );
+    }
+
     const MAX_INPUT: u64 = 3;
     const MAX_PRESENT: u64 = 3;
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -234,6 +367,8 @@ mod tests {
             max_input_ticks: MAX_INPUT,
             max_presentations: MAX_PRESENT,
             max_wallclock: TIMEOUT,
+            max_startup: TIMEOUT,
+            max_idle: TIMEOUT,
         }
     }
 
@@ -256,6 +391,8 @@ mod tests {
             input_seen,
             present_seen: 0,
             elapsed,
+            ready: true,
+            idle: Duration::ZERO,
             clock,
         }
     }
@@ -266,6 +403,8 @@ mod tests {
             input_seen: 0,
             present_seen,
             elapsed,
+            ready: true,
+            idle: Duration::ZERO,
             clock,
         }
     }
@@ -332,6 +471,8 @@ mod tests {
             input_seen: MAX_INPUT - 1,
             present_seen: MAX_PRESENT - 1,
             elapsed: Duration::ZERO,
+            ready: true,
+            idle: Duration::ZERO,
             clock: ok_clock(),
         };
         let t = watchdog_reduce(&entry, &limits());
@@ -348,6 +489,8 @@ mod tests {
             input_seen: 0,
             present_seen: MAX_PRESENT - 1,
             elapsed: TIMEOUT,
+            ready: true,
+            idle: Duration::ZERO,
             clock: ok_clock(),
         };
         let t = watchdog_reduce(&entry, &limits());
@@ -364,6 +507,8 @@ mod tests {
             input_seen: 0,
             present_seen: 0,
             elapsed: TIMEOUT,
+            ready: true,
+            idle: Duration::ZERO,
             clock: ClockSample {
                 started_at: s,
                 last_observed: s + Duration::from_secs(10),
