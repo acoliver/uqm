@@ -600,14 +600,60 @@ fn describe_process(pid: libc::pid_t) -> String {
         .unwrap_or_else(|| "no executable path".to_string());
     // proc_pidpath can name the image a departing process was spawned from
     // rather than the one it ran, so report the kernel's own view beside it.
+    // The parent decides whether this is ours by descent, so name it: without
+    // it a survivor message cannot be acted on.
+    let parent = macos_process_parent(pid);
     match macos_process_record(pid) {
         Some(record) => format!(
-            "{pid} ({name}, group {}, {})",
+            "{pid} ({name}, parent {}, group {}, {})",
+            parent.map_or_else(|| "unknown".to_string(), |value| value.to_string()),
             record.group,
             if record.terminal { "exited" } else { "live" }
         ),
         None => format!("{pid} ({name}, absent from the process table)"),
     }
+}
+
+/// The parent PID of a process, when the kernel will name it.
+#[cfg(target_os = "macos")]
+fn macos_process_parent(pid: libc::pid_t) -> Option<i32> {
+    let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let expected = i32::try_from(std::mem::size_of::<libc::proc_bsdinfo>()).ok()?;
+    // SAFETY: info is writable for expected bytes.
+    let observed = unsafe {
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info.as_mut_ptr().cast(),
+            expected,
+        )
+    };
+    if observed != expected {
+        return None;
+    }
+    // SAFETY: proc_pidinfo initialized the complete structure.
+    i32::try_from(unsafe { info.assume_init() }.pbi_ppid).ok()
+}
+
+/// Whether a `/proc` read failed because the process it names has gone.
+///
+/// A process that exits mid-scan is not an inspection failure: it is the
+/// absence the scan is looking for. Linux reports this as `ENOENT` when the
+/// directory entry has been removed and as `ESRCH` when the entry survives the
+/// process, and only the first maps onto `ErrorKind::NotFound`.
+#[cfg(target_os = "linux")]
+fn process_vanished(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(libc::ESRCH)
+}
+
+/// The parent PID recorded in a `/proc/<pid>/status` file.
+#[cfg(target_os = "linux")]
+fn linux_process_parent(status: &str) -> Option<i32> {
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("PPid:"))
+        .and_then(|value| value.trim().parse().ok())
 }
 
 #[cfg(target_os = "linux")]
@@ -648,7 +694,7 @@ fn group_member_other_than(
         let stat_path = entry.path().join("stat");
         let stat = match std::fs::read_to_string(&stat_path) {
             Ok(stat) => stat,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) if process_vanished(&error) => continue,
             Err(error) => {
                 return Err(format!("cannot inspect {}: {error}", stat_path.display()));
             }
@@ -932,7 +978,14 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
                         ));
                     }
                     // SAFETY: proc_pidinfo initialized the complete structure.
-                    if macos_process_matches_uid(unsafe { &info.assume_init() }, uid) {
+                    let info = unsafe { info.assume_init() };
+                    if !survivor_could_be_ours(
+                        i32::try_from(info.pbi_ppid).unwrap_or(0),
+                        macos_executable_path(pid).as_deref(),
+                    ) {
+                        continue;
+                    }
+                    if macos_process_matches_uid(&info, uid) {
                         return Ok(false);
                     }
                 }
@@ -992,7 +1045,7 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
         let stat_path = entry.path().join("stat");
         let stat = match std::fs::read_to_string(&stat_path) {
             Ok(stat) => stat,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) if process_vanished(&error) => continue,
             Err(error) => {
                 return Err(format!("cannot inspect {}: {error}", stat_path.display()));
             }
@@ -1004,17 +1057,65 @@ fn privileged_uid_is_empty(uid: &str) -> Result<bool, String> {
         let status_path = entry.path().join("status");
         let status = match std::fs::read_to_string(&status_path) {
             Ok(status) => status,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) if process_vanished(&error) => continue,
             Err(error) => {
                 return Err(format!("cannot inspect {}: {error}", status_path.display()));
             }
         };
         let (real, effective) = linux_process_real_and_effective_uids(&status, &status_path)?;
         if real == uid || effective == uid {
+            let parent = linux_process_parent(&status).unwrap_or(0);
+            let executable = std::fs::read_link(entry.path().join("exe"))
+                .ok()
+                .map(|path| path.to_string_lossy().into_owned());
+            if !survivor_could_be_ours(parent, executable.as_deref()) {
+                continue;
+            }
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+/// The executable image a PID is running, when the kernel will name it.
+#[cfg(target_os = "macos")]
+fn macos_executable_path(pid: libc::pid_t) -> Option<String> {
+    let mut path = [0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: path is writable for its full length.
+    let written = unsafe { libc::proc_pidpath(pid, path.as_mut_ptr().cast(), path.len() as u32) };
+    usize::try_from(written)
+        .ok()
+        .filter(|length| *length > 0 && *length <= path.len())
+        .and_then(|length| String::from_utf8(path[..length].to_vec()).ok())
+}
+
+/// Images that belong to the operating system rather than to any gate.
+///
+/// Nothing this repository invokes lives under these prefixes, so a process
+/// running one of them was not started by a gate.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const SESSION_DAEMON_PREFIXES: &[&str] = &["/usr/sbin/", "/usr/libexec/", "/System/"];
+
+/// Whether a process owned by the dedicated identity could have come from this run.
+///
+/// Containment asks whether a command leaked a process. macOS starts per-session
+/// daemons such as `/usr/sbin/distnoted` under whichever uid first touches the
+/// session; they are adopted by launchd and descend from no gate. Treating them
+/// as leaks fails runs for something the run never did.
+///
+/// The test is deliberately narrow: only a process reparented to init AND
+/// running a system image is excused. An orphaned process running one of our
+/// own tools is still a leak, which is the case worth catching.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn survivor_could_be_ours(parent: i32, executable: Option<&str>) -> bool {
+    if parent != 1 {
+        return true;
+    }
+    executable.is_none_or(|path| {
+        !SESSION_DAEMON_PREFIXES
+            .iter()
+            .any(|prefix| path.starts_with(prefix))
+    })
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -3295,6 +3396,57 @@ fn parse_dedicated_containment_config(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_process_that_exits_mid_scan_is_absence_not_failure() {
+        use std::io::{Error, ErrorKind};
+
+        // Both kernel reports for "it is gone", one of which does not map onto
+        // NotFound and previously failed the whole containment scan.
+        assert!(process_vanished(&Error::from(ErrorKind::NotFound)));
+        assert!(process_vanished(&Error::from_raw_os_error(libc::ESRCH)));
+
+        // A real inspection failure must still fail.
+        assert!(!process_vanished(&Error::from_raw_os_error(libc::EACCES)));
+        assert!(!process_vanished(&Error::from(ErrorKind::PermissionDenied)));
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn a_session_daemon_adopted_by_init_is_not_a_leak() {
+        // The exact process that failed macos-x86_64 five times.
+        assert!(!survivor_could_be_ours(1, Some("/usr/sbin/distnoted")));
+        assert!(!survivor_could_be_ours(1, Some("/usr/libexec/secinitd")));
+        assert!(!survivor_could_be_ours(
+            1,
+            Some("/System/Library/Frameworks/x")
+        ));
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn an_orphaned_process_running_our_own_tool_is_still_a_leak() {
+        assert!(survivor_could_be_ours(1, Some("/usr/bin/git")));
+        assert!(survivor_could_be_ours(1, Some("/bin/sh")));
+        assert!(survivor_could_be_ours(
+            1,
+            Some("/Users/runner/work/uqm/uqm/rust/target/debug/uqm")
+        ));
+        assert!(
+            survivor_could_be_ours(1, None),
+            "an unnameable image must never be excused"
+        );
+    }
+
+    #[test]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn a_live_descendant_is_always_a_leak_whatever_it_runs() {
+        // Still parented to something in this session, so it is ours by
+        // descent regardless of the image it happens to be running.
+        assert!(survivor_could_be_ours(4321, Some("/usr/sbin/distnoted")));
+        assert!(survivor_could_be_ours(2, Some("/usr/libexec/secinitd")));
+    }
     #[cfg(unix)]
     use uqm_rust::automation::child_session::{
         ChildSession, ChildSessionConfig, ChildSessionError,
