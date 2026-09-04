@@ -1111,6 +1111,20 @@ mod os {
         }
     }
 
+    /// Every control-plane path a run publishes beside its root.
+    ///
+    /// Named so a finished run can prove it released each one, rather than
+    /// each caller rebuilding the paths and drifting from the truth.
+    #[must_use]
+    pub fn ownership_artifacts(root: &Path) -> Vec<(&'static str, PathBuf)> {
+        let (guard, owner) = lock_paths(root);
+        vec![
+            ("run lock guard", guard),
+            ("run owner record", owner),
+            ("owned process record", owned_process_path(root)),
+        ]
+    }
+
     fn owned_process_path(root: &Path) -> PathBuf {
         match (root.parent(), root.file_name()) {
             (Some(parent), Some(name)) => parent.join(format!(
@@ -3343,10 +3357,10 @@ pub use os::parse_linux_proc_start_micros;
 pub use os::process_start_micros;
 #[cfg(unix)]
 pub use os::{
-    capture_identity, clear_owned_process, command_executable_digest, record_owned_process,
-    scan_stale_owned_process, verified_command_digest, ChildSession, ChildSessionConfig,
-    ChildSessionError, ChildSessionFailure, ChildSessionReceipt, OwnedProcessRecord, RunLock,
-    RunLockRecovery, StaleProcessScan, StreamKind,
+    capture_identity, clear_owned_process, command_executable_digest, ownership_artifacts,
+    record_owned_process, scan_stale_owned_process, verified_command_digest, ChildSession,
+    ChildSessionConfig, ChildSessionError, ChildSessionFailure, ChildSessionReceipt,
+    OwnedProcessRecord, RunLock, RunLockRecovery, StaleProcessScan, StreamKind,
 };
 
 // ===========================================================================
