@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "name": "linked-playable-v1",
+  "budgets": {
+    "max_input_ticks": 2500,
+    "max_presentations": 5000,
+    "max_wallclock_seconds": 240
+  },
+  "steps": [
+    {
+      "action": "wait_for_main_menu_ready"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "NewGame",
+      "to": "LoadGame"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "down",
+      "value": 1,
+      "hold": 1,
+      "settle": 3
+    },
+    {
+      "action": "assert_main_menu_transition",
+      "from": "LoadGame",
+      "to": "SuperMelee"
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 10
+    },
+    {
+      "action": "tap_menu_key",
+      "key": "select",
+      "value": 1,
+      "hold": 1,
+      "settle": 10
+    },
+    {
+      "action": "wait_input_ticks",
+      "count": 40
+    },
+    {
+      "action": "assert_activity",
+      "mask": 767,
+      "equals": 512
+    },
+    {
+      "action": "tap_player_key",
+      "key": "weapon",
+      "value": 1,
+      "hold": 3,
+      "settle": 20
+    },
+    {
+      "action": "wait_for_battle_frames",
+      "minimum": 1,
+      "max_ticks": 500
+    },
+    {
+      "action": "capture",
+      "label": "linked-battle-start"
+    },
+    {
+      "action": "tap_player_key",
+      "key": "right",
+      "value": 1,
+      "hold": 1,
+      "settle": 1
+    },
+    {
+      "action": "tap_player_key",
+      "key": "right",
+      "value": 1,
+      "hold": 1,
+      "settle": 1
+    },
+    {
+      "action": "tap_player_key",
+      "key": "right",
+      "value": 1,
+      "hold": 1,
+      "settle": 1
+    },
+    {
+      "action": "tap_player_key",
+      "key": "right",
+      "value": 1,
+      "hold": 300,
+      "settle": 1
+    },
+    {
+      "action": "assert_battle_frames",
+      "minimum": 300
+    },
+    {
+      "action": "wait_presentations",
+      "count": 1
+    },
+    {
+      "action": "capture",
+      "label": "linked-playable-final",
+      "expect_change": true
+    },
+    {
+      "action": "finish"
+    }
+  ]
+}
