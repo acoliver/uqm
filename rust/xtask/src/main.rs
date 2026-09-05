@@ -852,6 +852,15 @@ fn run_native_window_acceptance(
     linked_build_proof: &LinkedBuildProof,
 ) -> Result<(), String> {
     let Some(evidence_root) = env::var_os("UQM_CI_NATIVE_ACCEPTANCE_EVIDENCE_ROOT") else {
+        // Silence here is indistinguishable from a passing acceptance: the
+        // command exits 0 having only built. Say which binding is missing, as
+        // the platform guard above does, and name the session requirement the
+        // run would hit next so it can be discovered without reading this file.
+        println!(
+            "native window acceptance skipped: UQM_CI_NATIVE_ACCEPTANCE_EVIDENCE_ROOT is not set. \
+             A local run also needs UQM_CI_NATIVE_CONTENT_ROOT and a logged-in Aqua session, \
+             because the acceptance drives a real window."
+        );
         return Ok(());
     };
     let content_root = env::var_os("UQM_CI_NATIVE_CONTENT_ROOT").ok_or_else(|| {
