@@ -278,6 +278,30 @@ pub struct Budgets {
     /// Wall-clock timeout in seconds. The run is terminal when
     /// `elapsed >= timeout`.
     pub max_wallclock_seconds: u64,
+    /// Seconds a run may take to reach readiness, if it declares one.
+    ///
+    /// Optional so existing scripts keep their exact bytes, and defaulted to
+    /// the wall budget so an undeclared startup budget changes no behaviour.
+    #[serde(default)]
+    pub max_startup_seconds: Option<u64>,
+    /// Seconds a ready run may go without progress, if it declares a limit.
+    #[serde(default)]
+    pub max_idle_seconds: Option<u64>,
+}
+
+impl Budgets {
+    /// The startup budget, defaulting to the wall budget.
+    #[must_use]
+    pub fn startup_seconds(&self) -> u64 {
+        self.max_startup_seconds
+            .unwrap_or(self.max_wallclock_seconds)
+    }
+
+    /// The idle budget, defaulting to the wall budget.
+    #[must_use]
+    pub fn idle_seconds(&self) -> u64 {
+        self.max_idle_seconds.unwrap_or(self.max_wallclock_seconds)
+    }
 }
 
 /// A `wait_input_ticks` step: consume exactly `count` admitted input
@@ -1080,6 +1104,27 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
             field: "max_wallclock_seconds",
             reason: "budget must be positive".to_string(),
         });
+    }
+    for (field, declared) in [
+        ("max_startup_seconds", doc.budgets.max_startup_seconds),
+        ("max_idle_seconds", doc.budgets.max_idle_seconds),
+    ] {
+        if let Some(seconds) = declared {
+            if seconds == 0 {
+                return Err(AutomationError::InvalidValue {
+                    path: path.to_string(),
+                    field,
+                    reason: "budget must be positive".to_string(),
+                });
+            }
+            if seconds > doc.budgets.max_wallclock_seconds {
+                return Err(AutomationError::InvalidValue {
+                    path: path.to_string(),
+                    field,
+                    reason: "budget cannot outlast the wall-clock budget".to_string(),
+                });
+            }
+        }
     }
 
     // REQ-SCRIPT-002: steps nonempty.
