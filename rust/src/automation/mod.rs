@@ -31,6 +31,7 @@ pub mod input;
 pub mod input_ffi;
 #[cfg(unix)]
 pub mod interrupt;
+pub mod inventory;
 pub mod lifecycle;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
