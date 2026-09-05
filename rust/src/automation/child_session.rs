@@ -1864,7 +1864,18 @@ mod os {
                 )
             };
             if result == -1 {
-                return Err(io::Error::last_os_error());
+                let error = io::Error::last_os_error();
+                // A leader that no longer exists as a child is the absence this
+                // observation is looking for, not a failure to observe. Cleanup
+                // already treats ESRCH that way everywhere else it asks the
+                // kernel about this process; ECHILD is the same answer from
+                // waitid. Reporting it as an observer failure displaces the
+                // failure the caller was actually trying to record.
+                if error.raw_os_error() == Some(libc::ECHILD) {
+                    self.observed = true;
+                    return Ok(true);
+                }
+                return Err(error);
             }
             // SAFETY: waitid initialized info on success.
             let info = unsafe { info.assume_init() };
@@ -4174,6 +4185,43 @@ mod os_tests {
         let child = command.spawn().expect("spawn isolated cleanup child");
         let anchor = super::os::LeaderAnchor::new(child.id(), None).expect("create leader anchor");
         (child, anchor)
+    }
+
+    /// A leader reaped before cleanup runs must not displace the failure the
+    /// caller was trying to report.
+    ///
+    /// This is the condition behind the intermittent coverage failure on
+    /// macOS: waitid answers ECHILD for an already-reaped child, and treating
+    /// that as an observer failure means the group inspector never runs, so
+    /// its error is never recorded.
+    #[test]
+    fn a_leader_reaped_before_cleanup_still_reports_the_inspection_failure() {
+        let (mut child, mut anchor) = partial_cleanup_child("10");
+        // Something else reaped the leader first.
+        child.kill().expect("kill cleanup child");
+        child.wait().expect("reap cleanup child");
+
+        assert!(
+            anchor
+                .observe()
+                .expect("a departed leader is not an observation failure"),
+            "a reaped leader must read as observed"
+        );
+
+        let error = super::os::cleanup_partial_spawn_with_inspector(
+            &mut child,
+            &mut anchor,
+            Some(NestedGroupProtocol::new(-1, -1, -1)),
+            Duration::from_millis(50),
+            None,
+            None,
+            |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
+        )
+        .expect_err("inspection failure must be retained");
+        assert!(
+            matches!(error, super::os::ChildSessionError::ProcessGroup(_)),
+            "the retained failure must be the inspection error, got {error:?}"
+        );
     }
 
     fn assert_exact_child_reaped(pid: u32) {
