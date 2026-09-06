@@ -50,6 +50,10 @@ Its teardown receipt is `trace/local-teardown-complete.json`:
 
 The CI child record in `window/native-acceptance.json` reports the same outcome from the other direction: `exit_code: 0`, no `SIGTERM` and no `SIGKILL` sent, output drained, initial process group empty, config root removed, materialized content removed. That is the containment and teardown work from this issue verifying its own cleanup.
 
+## Logs
+
+`harness-logs/` holds the harness and gameplay logs from the same CI run: the child's stdout and stderr, and the Rust bridge log. Build and test logs for the whole gate run stay in the CI artifact, which is far too large to retain here; this directory keeps the gameplay evidence that the acceptance itself produced, plus `local-replay-stderr.log` from the independent local replay.
+
 ## Replaying this
 
 ```
