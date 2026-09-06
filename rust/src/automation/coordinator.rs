@@ -283,6 +283,16 @@ impl Coordinator {
     /// This is called from `main.rs` after `setup_automation` succeeds.
     /// It activates the runtime model and writes the run_start trace.
     pub fn init(script: ValidatedScript, output_root: PathBuf) {
+        // Every proof bundle records what the run was attempting, written
+        // before any step executes so a run that dies partway is still
+        // attributable to a scenario. A failure to record it is not allowed to
+        // fail the run, but it is never silent.
+        if let Err(error) =
+            crate::automation::lifecycle::write_resolved_scenario(&output_root, &script.resolved())
+        {
+            eprintln!("automation: cannot record the resolved scenario: {error}");
+        }
+
         let budgets = script.budgets();
         let start_scene = script.start_scene();
         let actions = script.steps().to_vec();

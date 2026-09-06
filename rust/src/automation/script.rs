@@ -16,7 +16,7 @@
 use crate::automation::error::AutomationError;
 use crate::automation::scenario::AutomationScene;
 use crate::mainloop::restart_menu::types::RestartMenuItem;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::Path;
 
@@ -684,6 +684,15 @@ pub struct RootDocument {
     pub start_scene: Option<AutomationScene>,
     pub budgets: Budgets,
     pub steps: Vec<Action>,
+    /// Deterministic identity, introduced at schema version 2.
+    ///
+    /// Absent in a version 1 document and supplied by migration, so existing
+    /// scripts keep their exact bytes and their existing behaviour.
+    #[serde(default)]
+    pub seed: Option<u64>,
+    /// Fixture isolation identity, introduced at schema version 2.
+    #[serde(default)]
+    pub fixture: Option<String>,
 }
 
 // ===========================================================================
@@ -705,9 +714,43 @@ pub struct ValidatedScript {
     pub(crate) budgets: Budgets,
     pub(crate) steps: Vec<Action>,
     pub(crate) transitions: Vec<MainMenuTransition>,
+    pub(crate) seed: u64,
+    pub(crate) fixture: String,
 }
 
 impl ValidatedScript {
+    /// The deterministic seed this run must apply.
+    #[must_use]
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    /// The fixture identity isolating this run's profile and save slots.
+    #[must_use]
+    pub fn fixture(&self) -> &str {
+        &self.fixture
+    }
+
+    /// The immutable resolved scenario, as recorded in a proof bundle.
+    ///
+    /// This is the post-migration shape actually executed, not the bytes on
+    /// disk, so a bundle produced from a version 1 file records the identity
+    /// the run really used rather than the absence the file declared.
+    #[must_use]
+    pub fn resolved(&self) -> ResolvedScenario {
+        ResolvedScenario {
+            schema: RESOLVED_SCENARIO_SCHEMA.to_string(),
+            scenario_version: CURRENT_SCHEMA_VERSION,
+            name: self.name.clone(),
+            fixture: self.fixture.clone(),
+            seed: self.seed,
+            step_count: self.steps.len() as u64,
+            max_input_ticks: self.budgets.max_input_ticks,
+            max_presentations: self.budgets.max_presentations,
+            max_wallclock_seconds: self.budgets.max_wallclock_seconds,
+        }
+    }
+
     /// The human-readable script name.
     #[must_use]
     pub fn name(&self) -> &str {
@@ -1064,14 +1107,109 @@ pub fn validate_script(
     validate_document(doc, &path_str)
 }
 
-fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, AutomationError> {
-    // REQ-SCRIPT-002: closed versioned root — version must be 1.
-    if doc.version != 1 {
+/// Schema identifier for the resolved scenario recorded in a proof bundle.
+pub const RESOLVED_SCENARIO_SCHEMA: &str = "uqm-resolved-scenario-v1";
+
+/// The immutable scenario a run actually executed, plus its replay identity.
+///
+/// A proof bundle records this rather than the source file, because the file
+/// may be an older schema version whose identity was supplied by migration.
+/// Two runs that agree on [`ResolvedScenario::replay_identity`] executed the
+/// same steps under the same fixture and seed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResolvedScenario {
+    pub schema: String,
+    pub scenario_version: u64,
+    pub name: String,
+    pub fixture: String,
+    pub seed: u64,
+    pub step_count: u64,
+    pub max_input_ticks: u64,
+    pub max_presentations: u64,
+    pub max_wallclock_seconds: u64,
+}
+
+impl ResolvedScenario {
+    /// A stable digest over every field that changes what a run does.
+    ///
+    /// Field order is fixed here rather than taken from serialization, so the
+    /// identity cannot drift if the struct is ever reordered.
+    #[must_use]
+    pub fn replay_identity(&self) -> String {
+        let material = format!(
+            "{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}\x1f{}",
+            self.schema,
+            self.scenario_version,
+            self.name,
+            self.fixture,
+            self.seed,
+            self.step_count,
+            self.max_input_ticks,
+            self.max_presentations,
+            self.max_wallclock_seconds,
+        );
+        crate::automation::identity::digest_hex(&crate::automation::identity::sha256_bytes(
+            material.as_bytes(),
+        ))
+    }
+}
+
+/// The schema version this build writes and validates against.
+pub const CURRENT_SCHEMA_VERSION: u64 = 2;
+
+/// The oldest schema version this build can still read.
+pub const MINIMUM_SCHEMA_VERSION: u64 = 1;
+
+/// Migrate a parsed document forward to [`CURRENT_SCHEMA_VERSION`].
+///
+/// A version 1 document declared no deterministic identity, so migration
+/// supplies the documented defaults rather than inventing values: seed 0 and
+/// the fixture named by the scenario itself. That keeps every existing script
+/// byte-identical on disk and behaviourally unchanged, while giving the
+/// resolved scenario a complete identity to record.
+///
+/// Rejecting a future version is deliberate: a newer document may contain
+/// steps this build cannot execute, and silently ignoring them would let a
+/// run claim to have proved something it never attempted.
+fn migrate_document(mut doc: RootDocument, path: &str) -> Result<RootDocument, AutomationError> {
+    if doc.version < MINIMUM_SCHEMA_VERSION || doc.version > CURRENT_SCHEMA_VERSION {
         return Err(AutomationError::UnsupportedVersion {
             path: path.to_string(),
             found: doc.version.to_string(),
         });
     }
+    if doc.version == 1 {
+        if doc.seed.is_none() {
+            doc.seed = Some(0);
+        }
+        if doc.fixture.is_none() {
+            doc.fixture = Some(doc.name.clone());
+        }
+        doc.version = CURRENT_SCHEMA_VERSION;
+    }
+    // A version 2 document must state its own identity; defaulting it here
+    // would make an omission indistinguishable from a deliberate zero.
+    if doc.seed.is_none() {
+        return Err(AutomationError::MissingField {
+            path: path.to_string(),
+            field: "seed",
+        });
+    }
+    if doc.fixture.as_ref().is_none_or(|f| f.trim().is_empty()) {
+        return Err(AutomationError::MissingField {
+            path: path.to_string(),
+            field: "fixture",
+        });
+    }
+    Ok(doc)
+}
+
+fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, AutomationError> {
+    // REQ-SCRIPT-002: closed versioned root. Every supported version is
+    // migrated forward to CURRENT_SCHEMA_VERSION before validation, so the
+    // rest of this function only ever sees the current shape.
+    let doc = migrate_document(doc, path)?;
 
     // REQ-SCRIPT-002: name present (deny_unknown_fields + missing field
     // handles absence at deserialization; here we reject empty names).
@@ -1166,12 +1304,17 @@ fn validate_document(doc: RootDocument, path: &str) -> Result<ValidatedScript, A
         path,
     )?;
 
+    // migrate_document guarantees both are present.
+    let seed = doc.seed.unwrap_or_default();
+    let fixture = doc.fixture.unwrap_or_default();
     Ok(ValidatedScript {
         name: doc.name,
         start_scene: doc.start_scene,
         budgets: doc.budgets,
         steps,
         transitions,
+        seed,
+        fixture,
     })
 }
 
@@ -1726,11 +1869,107 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsupported_version() {
-        let txt = r#"{"version":2,"name":"x","budgets":{"max_input_ticks":1,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+    fn rejects_a_version_this_build_cannot_execute() {
+        // A newer document may contain steps this build does not implement.
+        // Accepting it would let a run claim to prove something it skipped.
+        let txt = r#"{"version":3,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
         let doc = parse_script(txt.as_bytes(), p()).unwrap();
         let err = validate_script(doc, p()).unwrap_err();
         assert!(matches!(err, AutomationError::UnsupportedVersion { .. }));
+    }
+
+    #[test]
+    fn rejects_version_zero() {
+        let txt = r#"{"version":0,"name":"x","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let err = validate_script(doc, p()).unwrap_err();
+        assert!(matches!(err, AutomationError::UnsupportedVersion { .. }));
+    }
+
+    #[test]
+    fn migrates_a_version_one_document_to_a_complete_identity() {
+        // Version 1 declared no identity, so migration supplies it. The file
+        // on disk is unchanged; what the run executes gains a seed and a
+        // fixture so the bundle can record what was actually run.
+        let txt = r#"{"version":1,"name":"legacy","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let script = validate_script(doc, p()).unwrap();
+        assert_eq!(script.seed(), 0);
+        assert_eq!(script.fixture(), "legacy");
+        assert_eq!(script.resolved().scenario_version, CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn a_version_two_document_must_state_its_own_identity() {
+        // Defaulting here would make an omission indistinguishable from a
+        // deliberate zero, which is exactly what determinism must not blur.
+        let missing_seed = r#"{"version":2,"name":"x","fixture":"f","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let doc = parse_script(missing_seed.as_bytes(), p()).unwrap();
+        assert!(matches!(
+            validate_script(doc, p()).unwrap_err(),
+            AutomationError::MissingField { field: "seed", .. }
+        ));
+
+        let blank_fixture = r#"{"version":2,"name":"x","seed":7,"fixture":"  ","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let doc = parse_script(blank_fixture.as_bytes(), p()).unwrap();
+        assert!(matches!(
+            validate_script(doc, p()).unwrap_err(),
+            AutomationError::MissingField {
+                field: "fixture",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn accepts_a_version_two_document_and_keeps_its_identity() {
+        let txt = r#"{"version":2,"name":"x","seed":42,"fixture":"iso","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let script = validate_script(doc, p()).unwrap();
+        assert_eq!(script.seed(), 42);
+        assert_eq!(script.fixture(), "iso");
+    }
+
+    #[test]
+    fn replay_identity_is_stable_and_separates_differing_runs() {
+        let base = r#"{"version":2,"name":"x","seed":1,"fixture":"f","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let a = validate_script(parse_script(base.as_bytes(), p()).unwrap(), p()).unwrap();
+        let b = validate_script(parse_script(base.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(
+            a.resolved().replay_identity(),
+            b.resolved().replay_identity(),
+            "the same scenario must replay under the same identity"
+        );
+
+        let other_seed = base.replace(r#""seed":1"#, r#""seed":2"#);
+        let c = validate_script(parse_script(other_seed.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_ne!(
+            a.resolved().replay_identity(),
+            c.resolved().replay_identity(),
+            "a different seed is a different run"
+        );
+
+        let other_fixture = base.replace(r#""fixture":"f""#, r#""fixture":"g""#);
+        let d = validate_script(parse_script(other_fixture.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_ne!(
+            a.resolved().replay_identity(),
+            d.resolved().replay_identity(),
+            "a different fixture is a different run"
+        );
+    }
+
+    #[test]
+    fn a_migrated_document_replays_as_the_version_it_executes() {
+        // The identity reflects what ran, not the bytes on disk, so a v1 file
+        // and the equivalent v2 file describe the same run.
+        let legacy = r#"{"version":1,"name":"same","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let explicit = r#"{"version":2,"name":"same","seed":0,"fixture":"same","budgets":{"max_input_ticks":2,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let a = validate_script(parse_script(legacy.as_bytes(), p()).unwrap(), p()).unwrap();
+        let b = validate_script(parse_script(explicit.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(
+            a.resolved().replay_identity(),
+            b.resolved().replay_identity()
+        );
     }
 
     #[test]
