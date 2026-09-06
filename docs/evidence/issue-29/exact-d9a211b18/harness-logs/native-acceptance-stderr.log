@@ -1,0 +1,1259 @@
+The Ur-Quan Masters v0.8.0 (compiled Sep  5 2026 00:00:00)
+This software comes with ABSOLUTELY NO WARRANTY;
+for details see the included 'COPYING' file.
+
+Netplay protocol version 0.4. Netplay opponent must have UQM 0.6.9 or later.
+2026-09-05T17:24:15.292926Z  INFO Initializing base SDL functionality.
+2026-09-05T17:24:16.335699Z  INFO Using SDL version 2.32.70 (compiled with 2.32.70)
+[Info] Rust memory management initialized.
+Rust thread system initialized
+RUST_UIO: uio_mountDir: mount_point="/", source_path='(null)', in_path='/Users/runner/work/_temp/s4-command-evidence/bundle/run-0/payloads/native-window.acceptance/./config', source_dir=0x0, flags=4, relative=0x0
+RUST_UIO: uio_mountDir: mount_point="/", source_path='(null)', in_path='/Users/runner/work/_temp/s4-command-evidence/bundle/run-0/payloads/native-window.acceptance/./inputs/content', source_dir=0x0, flags=6, relative=0x0
+RUST_UIO: uio_mountDir: mount_point="/", source_path='uqm-0.8.0-content.uqm', in_path='/', source_dir=0x600001c5c1e0, flags=10, relative=0x60000384bb80
+2026-09-05T17:24:16.405151Z  INFO 0 available addon packs.
+Using Rust graphics driver
+Rust graphics: got 3 screen surfaces, ScreenWidth=320 ScreenHeight=240
+Custom gamma correction is not available in the SDL2 engine.
+Unable to set gamma correction.
+0 joysticks were found.
+2026-09-05T17:24:16.984437Z  WARN LoadResourceIndex: failed to open file
+2026-09-05T17:24:16.986544Z  WARN LoadResourceIndex: failed to open file
+initAudio: Using Rust mixer backend
+Initializing sound decoders.
+Sound decoders initialized.
+[audio_heart] InitSound called
+[audio_heart] InitSound: success
+[mixer_pump] thread started, opening cpal output stream...
+[audio_heart] Registering Rust SNDRES/MUSICRES callbacks
+Loading resource index 'uqm.rmp'
+No RMP index files were loaded for addon '3domusic'
+No RMP index files were loaded for addon '3dovoice'
+No RMP index files were loaded for addon 'remix'
+No RMP index files were loaded for addon '3dovideo'
+[mixer_pump] using device: "Apple Virtual Sound Device"
+[mixer_pump] device default config: channels=2 sample_rate=48000 sample_format=F32
+[mixer_pump] started — feeding mixer output to cpal
+[mixer_pump_cb#0] output.len()=942
+[MIXER_MIX] state=Some, freq=44100, chansize=2, channels=2
+[mixer_pump_cb#1] output.len()=940
+[mixer_pump_cb#2] output.len()=942
+[MIXER_MIX] state=Some, freq=44100, chansize=2, channels=2
+[MIXER_MIX] state=Some, freq=44100, chansize=2, channels=2
+[DEBUG] LoadMaster: sp=1 icon=0x600002d6e680 melee=0x600002d667c0
+[DEBUG] LoadMaster: sp=2 icon=0x600002d6cbc0 melee=0x600002d6e280
+[DEBUG] LoadMaster: sp=3 icon=0x600002d66780 melee=0x600002d66cc0
+[DEBUG] LoadMaster: sp=4 icon=0x600002d6fa80 melee=0x600002d6e380
+[DEBUG] LoadMaster: sp=5 icon=0x600002d6f640 melee=0x600002d6fb40
+[DEBUG] LoadMaster: sp=6 icon=0x600002d6b2c0 melee=0x600002d694c0
+[DEBUG] LoadMaster: sp=7 icon=0x600002d68fc0 melee=0x600002d7ce00
+[DEBUG] LoadMaster: sp=8 icon=0x600002d558c0 melee=0x600002d47dc0
+[DEBUG] LoadMaster: sp=9 icon=0x600002d795c0 melee=0x600002d6b4c0
+[DEBUG] LoadMaster: sp=10 icon=0x600002d6fd00 melee=0x600002d73900
+[DEBUG] LoadMaster: sp=11 icon=0x600002d1e4c0 melee=0x600002d1db80
+[DEBUG] LoadMaster: sp=12 icon=0x600002d1dd00 melee=0x600002d10280
+[DEBUG] LoadMaster: sp=13 icon=0x600002d12b80 melee=0x600002d1ec80
+[DEBUG] LoadMaster: sp=14 icon=0x600002d61180 melee=0x600002d61980
+[DEBUG] LoadMaster: sp=15 icon=0x600002d14080 melee=0x600002d141c0
+[DEBUG] LoadMaster: sp=16 icon=0x600002d14440 melee=0x600002d14340
+[DEBUG] LoadMaster: sp=17 icon=0x600002d145c0 melee=0x600002d14800
+[DEBUG] LoadMaster: sp=18 icon=0x600002d66840 melee=0x600002d66b40
+[DEBUG] LoadMaster: sp=19 icon=0x600002d663c0 melee=0x600002d664c0
+[DEBUG] LoadMaster: sp=20 icon=0x600002d66240 melee=0x600002d665c0
+[DEBUG] LoadMaster: sp=21 icon=0x600002d66700 melee=0x600002d10100
+[DEBUG] LoadMaster: sp=22 icon=0x600002d08080 melee=0x600002d08140
+[DEBUG] LoadMaster: sp=23 icon=0x600002d620c0 melee=0x600002d62ac0
+[DEBUG] LoadMaster: sp=24 icon=0x600002d083c0 melee=0x600002d082c0
+[DEBUG] LoadMaster: sp=25 icon=0x600002d08540 melee=0x600002d08700
+[audio_heart] rust_load_sound_bank called: base/ui/menu.snd
+LoadSoundFile: loading bank base/ui/menu.snd
+LoadSoundFile: loading sound base/ui/menusnd01.wav
+LoadSoundFile: decoder menusnd01.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 1971 bytes for menusnd01.wav
+[BUF_DATA#0] handle=1 src_fmt=0x170101 freq=8363 mixer_freq=44100 data_len=3942 nonzero=Some(1) first16=[0, 240, 0, 19, 0, 0, 0, 8, 0, 7, 0, 232, 0, 207, 0, 13]
+LoadSoundFile: loading sound base/ui/menusnd02.wav
+LoadSoundFile: decoder menusnd02.wav rate=4181 format=Mono8
+LoadSoundFile: decoded 1955 bytes for menusnd02.wav
+[BUF_DATA#1] handle=2 src_fmt=0x170101 freq=4181 mixer_freq=44100 data_len=3910 nonzero=Some(3) first16=[0, 0, 0, 3, 0, 124, 0, 8, 0, 153, 0, 1, 0, 137, 0, 8]
+LoadSoundFile: loading sound base/ui/menusnd03.wav
+LoadSoundFile: decoder menusnd03.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 1576 bytes for menusnd03.wav
+[BUF_DATA#2] handle=3 src_fmt=0x170101 freq=8363 mixer_freq=44100 data_len=3152 nonzero=Some(3) first16=[0, 0, 0, 1, 0, 2, 0, 2, 0, 4, 0, 5, 0, 5, 0, 0]
+LoadSoundFile: loading sound base/ui/menusnd04.wav
+LoadSoundFile: decoder menusnd04.wav rate=2090 format=Mono8
+LoadSoundFile: decoded 2399 bytes for menusnd04.wav
+[BUF_DATA#3] handle=4 src_fmt=0x170101 freq=2090 mixer_freq=44100 data_len=4798 nonzero=Some(9) first16=[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 255, 0, 255]
+LoadSoundFile(base/ui/menu.snd): loaded 4 sounds
+[audio_heart] rust_load_sound_bank result: 0x600003823180
+fps 0.34, effective 0.00
+fps 0.23, effective 0.23
+2026-09-05T17:24:22.718519Z  WARN Trying to get undefined resource 'music.mainmenu'
+fps 14.74, effective 14.74
+fps 28.97, effective 28.97
+[PlaySoundEffect] S=0x600001c4db60 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=1 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(1) first_queued=Some(1) gain=0.3735294
+fps 1.36, effective 1.36
+[automation] menu_transition from=0 to=1 queued (phase=TapReleasePending)
+fps 4.72, effective 4.72
+[MIXER_EXHAUST#0] handle=7 pos=3942 buf_size=3942 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+fps 3.98, effective 3.98
+fps 3.54, effective 3.54
+fps 4.97, effective 4.97
+[automation] replaying pending menu_transition from=0 to=1
+fps 3.37, effective 3.37
+[PlaySoundEffect] S=0x600001c4db60 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=1 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(1) first_queued=Some(1) gain=0.3735294
+fps 4.77, effective 4.77
+[automation] menu_transition from=1 to=2 queued (phase=TapReleasePending)
+fps 6.77, effective 6.77
+[MIXER_EXHAUST#1] handle=7 pos=3942 buf_size=3942 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+fps 7.00, effective 7.00
+fps 4.52, effective 4.52
+fps 4.69, effective 4.69
+[automation] replaying pending menu_transition from=1 to=2
+fps 3.89, effective 3.89
+[PlaySoundEffect] S=0x600001c4db78 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+fps 3.85, effective 3.85
+fps 22.70, effective 22.70
+[MIXER_EXHAUST#2] handle=7 pos=3910 buf_size=3910 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+[audio_heart] rust_load_sound_bank called: base/battle/battle.snd
+LoadSoundFile: loading bank base/battle/battle.snd
+LoadSoundFile: loading sound base/battle/getcrew.wav
+LoadSoundFile: decoder getcrew.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 2937 bytes for getcrew.wav
+[BUF_DATA#4] handle=5 src_fmt=0x170101 freq=8363 mixer_freq=44100 data_len=5874 nonzero=Some(3) first16=[0, 0, 0, 2, 0, 2, 0, 202, 0, 202, 0, 6, 0, 192, 0, 192]
+LoadSoundFile: loading sound base/battle/shipdies.wav
+LoadSoundFile: decoder shipdies.wav rate=4181 format=Mono8
+LoadSoundFile: decoded 6887 bytes for shipdies.wav
+LoadSoundFile: loading sound base/battle/boom1.wav
+LoadSoundFile: decoder boom1.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 945 bytes for boom1.wav
+LoadSoundFile: loading sound base/battle/boom23.wav
+LoadSoundFile: decoder boom23.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 2147 bytes for boom23.wav
+LoadSoundFile: loading sound base/battle/boom45.wav
+LoadSoundFile: decoder boom45.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 4621 bytes for boom45.wav
+LoadSoundFile: loading sound base/battle/boom67.wav
+LoadSoundFile: decoder boom67.wav rate=4181 format=Mono8
+LoadSoundFile: decoded 4791 bytes for boom67.wav
+LoadSoundFile(base/battle/battle.snd): loaded 6 sounds
+[audio_heart] rust_load_sound_bank result: 0x600003819700
+fps 1.46, effective 1.46
+2026-09-05T17:24:26.935213Z  WARN Trying to get undefined resource 'music.meleemenu'
+[audio_heart] PLRPlaySong called: ptr=0x0 continuous=1 priority=1
+[audio_heart] PLRPlaySong: null ptr, returning
+fps 46.67, effective 46.67
+fps 44.21, effective 44.21
+fps 3.35, effective 3.35
+fps 3.13, effective 3.13
+fps 4.20, effective 4.20
+fps 4.38, effective 4.38
+fps 6.18, effective 6.18
+fps 6.83, effective 6.83
+fps 3.91, effective 3.91
+fps 4.00, effective 4.00
+fps 3.36, effective 3.36
+[PlaySoundEffect] S=0x600001c4db78 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+fps 6.89, effective 6.89
+[MIXER_EXHAUST#3] handle=7 pos=3910 buf_size=3910 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+[audio_heart] rust_load_music called: base/battle/battle.mod
+LoadMusicFile: loading base/battle/battle.mod
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=107.5s
+[audio_heart] rust_load_music result: 0x600003a44b00
+rust_ships: RaceDesc/RACE_DESC layout mismatch detected (expected — RaceDesc is not #[repr(C)]). Switching to accessor-function mode.
+Mismatches:
+  RACE_DESC size: C=384 Rust=288
+  ship_info: C=0 Rust=16
+  characteristics: C=80 Rust=274
+  ship_data: C=96 Rust=64
+  ship_data.ship: C=136 Rust=48
+  ship_info.crew_level: C=4 Rust=38
+  ship_info.max_crew: C=6 Rust=40
+Accessor functions will be used for all cross-language RaceDesc field access.
+InitGalaxy(): transition_width = 4096, transition_height = 3840
+BATTLE_DEBUG: About to call selectAllShips, CHECK_ABORT=0, IN_BATTLE=1
+fps 1.29, effective 1.29
+fps 1.42, effective 1.42
+fps 31.11, effective 62.22
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.61, effective 6.61
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 10.63, effective 10.63
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.00, effective 6.00
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.40, effective 8.40
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+[PlaySoundEffect] S=0x600001c4db78 ch=0 pri=2 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+fps 10.12, effective 10.12
+fps 24.71, effective 24.71
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.27, effective 6.27
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 7.64, effective 7.64
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+[MIXER_EXHAUST#4] handle=7 pos=3910 buf_size=3910 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+fps 5.79, effective 5.79
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.89, effective 6.89
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 7.24, effective 7.24
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.60, effective 5.60
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.83, effective 6.83
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.32, effective 8.32
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.04, effective 6.04
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.79, effective 5.79
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.60, effective 5.60
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 10.50, effective 10.50
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.92, effective 5.92
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.72, effective 6.72
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 9.88, effective 9.88
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.61, effective 6.61
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.68, effective 5.68
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 7.00, effective 7.00
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.16, effective 8.16
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 7.57, effective 7.57
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.61, effective 6.61
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.83, effective 5.83
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 7.78, effective 7.78
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 1.03, effective 1.03
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.40, effective 8.40
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.28, effective 5.28
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.79, effective 5.79
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.08, effective 8.08
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.75, effective 5.75
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.18, effective 6.18
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.77, effective 6.77
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 7.92, effective 7.92
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 10.63, effective 10.63
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.66, effective 8.66
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.41, effective 6.41
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.15, effective 5.15
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.18, effective 6.18
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.57, effective 8.57
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.96, effective 5.96
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.15, effective 5.15
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 8.57, effective 8.57
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 6.27, effective 6.27
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 10.24, effective 10.24
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+fps 5.79, effective 5.79
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+[PlaySoundEffect] S=0x600001c4db78 ch=0 pri=2 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+fps 20.00, effective 20.00
+[audio_heart] rust_load_music called: base/ships/chmmr/avatar.mod
+LoadMusicFile: loading base/ships/chmmr/avatar.mod
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=7.7s
+[audio_heart] rust_load_music result: 0x600003a79670
+[audio_heart] rust_load_sound_bank called: base/ships/chmmr/avatar.snd
+LoadSoundFile: loading bank base/ships/chmmr/avatar.snd
+LoadSoundFile: loading sound base/ships/chmmr/primary.wav
+LoadSoundFile: decoder primary.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 7501 bytes for primary.wav
+LoadSoundFile: loading sound base/ships/chmmr/secondary.wav
+LoadSoundFile: decoder secondary.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 1859 bytes for secondary.wav
+LoadSoundFile(base/ships/chmmr/avatar.snd): loaded 2 sounds
+[audio_heart] rust_load_sound_bank result: 0x600003812760
+[audio_heart] rust_load_music called: base/ships/kohrah/marauder.mod
+LoadMusicFile: loading base/ships/kohrah/marauder.mod
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=7.7s
+[audio_heart] rust_load_music result: 0x600003a45db0
+[audio_heart] rust_load_sound_bank called: base/ships/kohrah/marauder.snd
+LoadSoundFile: loading bank base/ships/kohrah/marauder.snd
+LoadSoundFile: loading sound base/ships/kohrah/primary.wav
+LoadSoundFile: decoder primary.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 11995 bytes for primary.wav
+LoadSoundFile: loading sound base/ships/kohrah/secondary.wav
+LoadSoundFile: decoder secondary.wav rate=4201 format=Mono8
+LoadSoundFile: decoded 5337 bytes for secondary.wav
+LoadSoundFile(base/ships/kohrah/marauder.snd): loaded 2 sounds
+[audio_heart] rust_load_sound_bank result: 0x600003809100
+BATTLE_DEBUG: selectAllShips returned TRUE, calling BattleSong
+[audio_heart] PLRPlaySong called: ptr=0x600003a44b00 continuous=1 priority=1
+[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song
+[mixer] source_play: handle=12 state=Playing next_queued=Some(11) first_queued=Some(11) gain=0
+[audio_heart] PLRPlaySong: success
+BATTLE_DEBUG: About to call DoInput for battle loop
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.00, effective 7.00
+[MIXER_EXHAUST#5] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 20.00, effective 20.00
+[MIXER_EXHAUST#6] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#7] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.68, effective 5.68
+[MIXER_EXHAUST#8] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+[MIXER_EXHAUST#9] handle=7 pos=3910 buf_size=3910 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+[MIXER_EXHAUST#10] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.35, effective 12.35
+[MIXER_EXHAUST#11] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.24, effective 10.24
+[MIXER_EXHAUST#12] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.05, effective 11.05
+[MIXER_EXHAUST#13] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+[MIXER_EXHAUST#14] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+[MIXER_EXHAUST#15] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.20, effective 11.20
+[MIXER_EXHAUST#16] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.05, effective 11.05
+[MIXER_EXHAUST#17] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+[MIXER_EXHAUST#18] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+[MIXER_EXHAUST#19] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.67, effective 6.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.94, effective 8.94
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.20, effective 11.20
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.00, effective 14.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.84, effective 8.84
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.27, effective 15.27
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.46, effective 6.46
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.17, effective 12.17
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.16, effective 8.16
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.15, effective 16.15
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.33, effective 13.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.75, effective 8.75
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.00, effective 15.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.15, effective 5.15
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.00, effective 14.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.47, effective 16.47
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.83, effective 6.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.12, effective 10.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.48, effective 14.48
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.71, effective 5.71
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.80, effective 16.80
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.03, effective 9.03
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.55, effective 9.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.48, effective 14.48
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.15, effective 16.15
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.56, effective 15.56
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.13, effective 6.13
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.77, effective 9.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.94, effective 6.94
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.37, effective 10.37
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.43, effective 7.43
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.20, effective 4.20
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.18, effective 6.18
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 19.09, effective 19.09
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.22, effective 4.22
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.17, effective 12.17
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.17, effective 12.17
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.17, effective 12.17
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.12, effective 10.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.85, effective 15.85
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.00, effective 15.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.08, effective 8.08
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.03, effective 9.03
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.77, effective 9.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.77, effective 9.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.00, effective 5.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600000a4d590 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=7 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(7) first_queued=Some(7) gain=0.3735294
+fps 12.35, effective 12.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.54, effective 12.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.00, effective 14.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.24, effective 4.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.55, effective 9.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.00, effective 10.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.83, effective 11.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.77, effective 9.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.50, effective 7.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.50, effective 7.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 18.67, effective 18.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.84, effective 8.84
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.48, effective 14.48
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.43, effective 7.43
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.83, effective 11.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.56, effective 15.56
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.24, effective 14.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.24, effective 7.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.83, effective 5.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.63, effective 10.63
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.33, effective 13.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.56, effective 15.56
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 18.26, effective 18.26
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.05, effective 11.05
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.09, effective 5.09
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.24, effective 14.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.13, effective 9.13
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.54, effective 4.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.24, effective 14.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.15, effective 16.15
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.00, effective 14.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.75, effective 5.75
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.47, effective 16.47
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.42, effective 4.42
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.35, effective 12.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 3.70, effective 3.70
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.24, effective 10.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 8.84, effective 8.84
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 9.23, effective 9.23
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 11.83, effective 11.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 5.56, effective 5.56
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d590 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=7 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(7) first_queued=Some(7) gain=0.3735294
+fps 8.94, effective 8.94
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 14.00, effective 14.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 8.84, effective 8.84
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d590 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=7 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(7) first_queued=Some(7) gain=0.3735294
+fps 8.94, effective 8.94
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 10.50, effective 10.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600000a4d590 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=7 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(7) first_queued=Some(7) gain=0.3735294
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.24, effective 14.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 9.33, effective 9.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600000a4d590 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=7 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(7) first_queued=Some(7) gain=0.3735294
+fps 5.53, effective 5.53
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d590 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=7 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(7) first_queued=Some(7) gain=0.3735294
+fps 10.24, effective 10.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.33, effective 9.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 14.24, effective 14.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.08, effective 8.08
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.24, effective 10.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.44, effective 9.44
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.53, effective 5.53
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 15.00, effective 15.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.12, effective 10.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.00, effective 15.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.54, effective 12.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 15.27, effective 15.27
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.66, effective 9.66
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.63, effective 10.63
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.35, effective 12.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.20, effective 11.20
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.24, effective 10.24
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 19.53, effective 19.53
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.61, effective 6.61
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.77, effective 13.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.37, effective 10.37
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.56, effective 15.56
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 4.69, effective 4.69
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.30, effective 7.30
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.00, effective 10.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.00, effective 12.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.05, effective 11.05
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 12.35, effective 12.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.27, effective 15.27
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.86, effective 4.86
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.44, effective 9.44
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 10.63, effective 10.63
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.33, effective 13.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.77, effective 13.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.71, effective 7.71
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 10.63, effective 10.63
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.83, effective 11.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.37, effective 10.37
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.32, effective 8.32
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.83, effective 11.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.05, effective 11.05
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.61, effective 6.61
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 15.85, effective 15.85
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.03, effective 9.03
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.23, effective 9.23
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.88, effective 9.88
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.77, effective 13.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 7.43, effective 7.43
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.48, effective 14.48
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 5.92, effective 5.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 17.87, effective 17.87
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.92, effective 5.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 12.54, effective 12.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 9.03, effective 9.03
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.55, effective 9.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.27, effective 15.27
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 19.53, effective 19.53
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.48, effective 14.48
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 7.43, effective 7.43
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.85, effective 15.85
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.83, effective 4.83
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.44, effective 9.44
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+fps 13.33, effective 13.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.64, effective 7.64
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.06, effective 7.06
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.78, effective 7.78
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 13.12, effective 13.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 15.00, effective 15.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.54, effective 12.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 17.87, effective 17.87
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 6.94, effective 6.94
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.17, effective 12.17
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600003630600 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=139 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.3735294
+[PlaySoundEffect] S=0x600000a4d5a8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=8 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(8) first_queued=Some(8) gain=0.3735294
+fps 10.77, effective 10.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x600000a4d578 ch=1 pri=3 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=6 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(6) first_queued=Some(6) gain=0.3735294
+fps 18.67, effective 18.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.50, effective 10.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 5.68, effective 5.68
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.75, effective 8.75
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 17.87, effective 17.87
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.80, effective 16.80
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 4.14, effective 4.14
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 6.36, effective 6.36
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 17.87, effective 17.87
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.77, effective 9.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.37, effective 10.37
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.54, effective 12.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.77, effective 9.77
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.92, effective 12.92
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.17, effective 12.17
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.12, effective 10.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.66, effective 8.66
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.75, effective 8.75
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.37, effective 10.37
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.55, effective 9.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.13, effective 9.13
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.63, effective 10.63
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.44, effective 9.44
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.20, effective 11.20
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.55, effective 9.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.33, effective 13.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.00, effective 10.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.13, effective 9.13
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.33, effective 13.33
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.78, effective 7.78
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[audio_heart] PLRPlaySong called: ptr=0x600003a79670 continuous=0 priority=3
+[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song
+[mixer] source_play: handle=12 state=Playing next_queued=Some(75) first_queued=Some(75) gain=0
+[audio_heart] PLRPlaySong: success
+fps 7.30, effective 7.30
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.51, effective 11.51
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.63, effective 10.63
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.74, effective 14.74
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.91, effective 10.91
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.50, effective 7.50
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.67, effective 11.67
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.20, effective 11.20
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.54, effective 12.54
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.00, effective 14.00
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 17.14, effective 17.14
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 8.40, effective 8.40
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 10.37, effective 10.37
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 13.55, effective 13.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.35, effective 12.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.55, effective 9.55
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 12.73, effective 12.73
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 11.35, effective 11.35
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 14.48, effective 14.48
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.44, effective 9.44
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.30, effective 7.30
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 16.15, effective 16.15
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 7.12, effective 7.12
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 0.99, effective 0.99
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+fps 9.33, effective 9.33
+[automation] scheduler terminal: Some(FinishComplete) -> class=Success
+BATTLE_DEBUG: DoInput returned, CHECK_ABORT=1
+rust_bridge_uninit_ships: crew_retrieved=0
+rust_bridge_uninit_ships: teardown complete
+fps 13.77, effective 13.77
+fps 1.85, effective 1.85
+fps 1.88, effective 1.88
+[mixer_pump] stopped
+[Info] Rust memory management deinitialized.

@@ -1,0 +1,849 @@
+The Ur-Quan Masters v0.8.0 (compiled Sep  5 2026 00:00:00)
+This software comes with ABSOLUTELY NO WARRANTY;
+for details see the included 'COPYING' file.
+
+Netplay protocol version 0.4. Netplay opponent must have UQM 0.6.9 or later.
+2026-09-05T17:50:19.654724Z  INFO Initializing base SDL functionality.
+2026-09-05T17:50:19.757697Z  INFO Using SDL version 2.32.10 (compiled with 2.32.10)
+[Info] Rust memory management initialized.
+Rust thread system initialized
+RUST_UIO: uio_mountDir: mount_point="/", source_path='(null)', in_path='/Users/acoliver/.uqm/', source_dir=0x0, flags=4, relative=0x0
+RUST_UIO: uio_mountDir: mount_point="/", source_path='(null)', in_path='/Volumes/XS1000/acoliver/projects/uqm/sc2/content', source_dir=0x0, flags=6, relative=0x0
+RUST_UIO: uio_mountDir: mount_point="/", source_path='uqm-0.8.0-content.uqm', in_path='/', source_dir=0x871084720, flags=10, relative=0x870832de0
+RUST_UIO: uio_mountDir: mount_point="addons", source_path='uqm-remix-disc4-1.uqm', in_path='/', source_dir=0x871084720, flags=10, relative=0x870832de0
+2026-09-05T17:50:19.950943Z  INFO     1. 3domusic
+2026-09-05T17:50:19.952019Z  INFO     2. 3dovideo
+2026-09-05T17:50:19.952565Z  INFO     3. 3dovoice
+2026-09-05T17:50:19.954411Z  INFO     4. remix
+2026-09-05T17:50:19.954950Z  INFO     5. uqm-remix-disc4-1.uqm
+2026-09-05T17:50:19.955047Z  INFO 5 available addon packs.
+Using Rust graphics driver
+Rust graphics: got 3 screen surfaces, ScreenWidth=320 ScreenHeight=240
+Custom gamma correction is not available in the SDL2 engine.
+Unable to set gamma correction.
+0 joysticks were found.
+2026-09-05T17:50:20.032290Z  WARN LoadResourceIndex: failed to open file
+initAudio: Using Rust mixer backend
+Initializing sound decoders.
+Sound decoders initialized.
+[audio_heart] InitSound called
+[audio_heart] InitSound: success
+[mixer_pump] thread started, opening cpal output stream...
+[audio_heart] Registering Rust SNDRES/MUSICRES callbacks
+Loading resource index 'uqm.rmp'
+Loading resource index '3domusic.rmp'
+Loading resource index '3dovoice.rmp'
+Loading resource index 'remix4.rmp'
+Loading resource index '3dovideo.rmp'
+[DEBUG] LoadMaster: sp=1 icon=0x870cae480 melee=0x870cae540
+[DEBUG] LoadMaster: sp=2 icon=0x870cae500 melee=0x870cae440
+[DEBUG] LoadMaster: sp=3 icon=0x870cae780 melee=0x870cae9c0
+[mixer_pump] using device: "MacBook Pro Speakers"
+[DEBUG] LoadMaster: sp=4 icon=0x870caf100 melee=0x870caf280
+[DEBUG] LoadMaster: sp=5 icon=0x870caf440 melee=0x870caf400
+[DEBUG] LoadMaster: sp=6 icon=0x870caf340 melee=0x870caf300
+[mixer_pump] device default config: channels=2 sample_rate=48000 sample_format=F32
+[DEBUG] LoadMaster: sp=7 icon=0x870caf1c0 melee=0x870caf3c0
+[DEBUG] LoadMaster: sp=8 icon=0x870caf140 melee=0x870caf200
+[DEBUG] LoadMaster: sp=9 icon=0x870caf2c0 melee=0x870caf240
+[DEBUG] LoadMaster: sp=10 icon=0x870caf480 melee=0x870caf4c0
+[DEBUG] LoadMaster: sp=11 icon=0x870caf500 melee=0x870caf540
+[DEBUG] LoadMaster: sp=12 icon=0x870caf580 melee=0x870caf5c0
+[DEBUG] LoadMaster: sp=13 icon=0x870caf600 melee=0x870caf640
+[DEBUG] LoadMaster: sp=14 icon=0x870caf680 melee=0x870caf6c0
+[DEBUG] LoadMaster: sp=15 icon=0x870caf700 melee=0x870caf740
+[mixer_pump] started — feeding mixer output to cpal
+[DEBUG] LoadMaster: sp=16 icon=0x870caf800 melee=0x870caf840
+[DEBUG] LoadMaster: sp=17 icon=0x870caf7c0 melee=0x870caf880
+[mixer_pump_cb#0] output.len()=942
+[MIXER_MIX] state=Some, freq=44100, chansize=2, channels=2
+[DEBUG] LoadMaster: sp=18 icon=0x870caf940 melee=0x870caf8c0
+[DEBUG] LoadMaster: sp=19 icon=0x870caf9c0 melee=0x870caf980
+[DEBUG] LoadMaster: sp=20 icon=0x870cafa00 melee=0x870cafa40
+[mixer_pump_cb#1] output.len()=940
+[DEBUG] LoadMaster: sp=21 icon=0x870cafa80 melee=0x870cafac0
+[DEBUG] LoadMaster: sp=22 icon=0x870cafb00 melee=0x870cafb40
+[DEBUG] LoadMaster: sp=23 icon=0x870cafb80 melee=0x870cafbc0
+[mixer_pump_cb#2] output.len()=942
+[MIXER_MIX] state=Some, freq=44100, chansize=2, channels=2
+[DEBUG] LoadMaster: sp=24 icon=0x870cafc00 melee=0x870cafc40
+[DEBUG] LoadMaster: sp=25 icon=0x870cafc80 melee=0x870cafcc0
+[MIXER_MIX] state=Some, freq=44100, chansize=2, channels=2
+[audio_heart] rust_load_sound_bank called: base/ui/menu.snd
+LoadSoundFile: loading bank base/ui/menu.snd
+LoadSoundFile: loading sound base/ui/menusnd01.wav
+LoadSoundFile: decoder menusnd01.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 1971 bytes for menusnd01.wav
+[BUF_DATA#0] handle=1 src_fmt=0x170101 freq=8363 mixer_freq=44100 data_len=3942 nonzero=Some(1) first16=[0, 240, 0, 19, 0, 0, 0, 8, 0, 7, 0, 232, 0, 207, 0, 13]
+LoadSoundFile: loading sound base/ui/menusnd02.wav
+LoadSoundFile: decoder menusnd02.wav rate=4181 format=Mono8
+LoadSoundFile: decoded 1955 bytes for menusnd02.wav
+[BUF_DATA#1] handle=2 src_fmt=0x170101 freq=4181 mixer_freq=44100 data_len=3910 nonzero=Some(3) first16=[0, 0, 0, 3, 0, 124, 0, 8, 0, 153, 0, 1, 0, 137, 0, 8]
+LoadSoundFile: loading sound base/ui/menusnd03.wav
+LoadSoundFile: decoder menusnd03.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 1576 bytes for menusnd03.wav
+[BUF_DATA#2] handle=3 src_fmt=0x170101 freq=8363 mixer_freq=44100 data_len=3152 nonzero=Some(3) first16=[0, 0, 0, 1, 0, 2, 0, 2, 0, 4, 0, 5, 0, 5, 0, 0]
+LoadSoundFile: loading sound base/ui/menusnd04.wav
+LoadSoundFile: decoder menusnd04.wav rate=2090 format=Mono8
+LoadSoundFile: decoded 2399 bytes for menusnd04.wav
+[BUF_DATA#3] handle=4 src_fmt=0x170101 freq=2090 mixer_freq=44100 data_len=4798 nonzero=Some(9) first16=[0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 255, 0, 255]
+LoadSoundFile(base/ui/menu.snd): loaded 4 sounds
+[audio_heart] rust_load_sound_bank result: 0x870e6f320
+[audio_heart] rust_load_music called: addons/remix/4/01_-_Main_Menu_-_Control_the_Stars.ogg
+LoadMusicFile: loading addons/remix/4/01_-_Main_Menu_-_Control_the_Stars.ogg
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=148.9s
+[audio_heart] rust_load_music result: 0x870c39830
+[audio_heart] PLRPlaySong called: ptr=0x870c39830 continuous=1 priority=1
+[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song
+[BUF_DATA#4] handle=5 src_fmt=0x170202 freq=44100 mixer_freq=44100 data_len=16384 nonzero=None first16=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+[mixer] source_play: handle=12 state=Playing next_queued=Some(5) first_queued=Some(5) gain=0.47058827
+[audio_heart] PLRPlaySong: success
+[MIXER_EXHAUST#0] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#1] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#2] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#3] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#4] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[PlaySoundEffect] S=0x871284180 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=1 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(1) first_queued=Some(1) gain=0.3735294
+[automation] menu_transition from=0 to=1 queued (phase=TapReleasePending)
+[MIXER_EXHAUST#5] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#6] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#7] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#8] handle=7 pos=3942 buf_size=3942 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+[automation] replaying pending menu_transition from=0 to=1
+[PlaySoundEffect] S=0x871284180 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=1 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(1) first_queued=Some(1) gain=0.3735294
+[automation] menu_transition from=1 to=2 queued (phase=TapReleasePending)
+[MIXER_EXHAUST#9] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#10] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#11] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[automation] replaying pending menu_transition from=1 to=2
+[MIXER_EXHAUST#12] handle=7 pos=3942 buf_size=3942 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+[PlaySoundEffect] S=0x871284198 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+[MIXER_EXHAUST#13] handle=7 pos=3910 buf_size=3910 left=false buf_sampsize=2 mixer_sampsize=4 buf_org_chans=1 processed_count=0
+[audio_heart] rust_load_sound_bank called: base/battle/battle.snd
+LoadSoundFile: loading bank base/battle/battle.snd
+LoadSoundFile: loading sound base/battle/getcrew.wav
+LoadSoundFile: decoder getcrew.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 2937 bytes for getcrew.wav
+LoadSoundFile: loading sound base/battle/shipdies.wav
+LoadSoundFile: decoder shipdies.wav rate=4181 format=Mono8
+LoadSoundFile: decoded 6887 bytes for shipdies.wav
+LoadSoundFile: loading sound base/battle/boom1.wav
+LoadSoundFile: decoder boom1.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 945 bytes for boom1.wav
+LoadSoundFile: loading sound base/battle/boom23.wav
+LoadSoundFile: decoder boom23.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 2147 bytes for boom23.wav
+LoadSoundFile: loading sound base/battle/boom45.wav
+LoadSoundFile: decoder boom45.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 4621 bytes for boom45.wav
+LoadSoundFile: loading sound base/battle/boom67.wav
+LoadSoundFile: decoder boom67.wav rate=4181 format=Mono8
+LoadSoundFile: decoded 4791 bytes for boom67.wav
+LoadSoundFile(base/battle/battle.snd): loaded 6 sounds
+[audio_heart] rust_load_sound_bank result: 0x870e6f360
+[audio_heart] rust_load_music called: addons/remix/4/14_-_Super_Melee_Menu_-_Fight!.ogg
+LoadMusicFile: loading addons/remix/4/14_-_Super_Melee_Menu_-_Fight!.ogg
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=57.6s
+[audio_heart] rust_load_music result: 0x870e7ded0
+[audio_heart] PLRPlaySong called: ptr=0x870e7ded0 continuous=1 priority=1
+[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song
+[mixer] source_play: handle=12 state=Playing next_queued=Some(75) first_queued=Some(75) gain=0.47058827
+[audio_heart] PLRPlaySong: success
+[MIXER_EXHAUST#14] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#15] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#16] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#17] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#18] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[MIXER_EXHAUST#19] handle=12 pos=16384 buf_size=16384 left=false buf_sampsize=4 mixer_sampsize=4 buf_org_chans=2 processed_count=0
+[PlaySoundEffect] S=0x871284198 ch=0 pri=0 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+[audio_heart] rust_load_music called: addons/3domusic/battle.ogg
+LoadMusicFile: loading addons/3domusic/battle.ogg
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=105.0s
+[audio_heart] rust_load_music result: 0x870c39370
+rust_ships: RaceDesc/RACE_DESC layout mismatch detected (expected — RaceDesc is not #[repr(C)]). Switching to accessor-function mode.
+Mismatches:
+  RACE_DESC size: C=384 Rust=288
+  ship_info: C=0 Rust=16
+  characteristics: C=80 Rust=274
+  ship_data: C=96 Rust=64
+  ship_data.ship: C=136 Rust=48
+  ship_info.crew_level: C=4 Rust=38
+  ship_info.max_crew: C=6 Rust=40
+Accessor functions will be used for all cross-language RaceDesc field access.
+InitGalaxy(): transition_width = 4096, transition_height = 3840
+BATTLE_DEBUG: About to call selectAllShips, CHECK_ABORT=0, IN_BATTLE=1
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+[PlaySoundEffect] S=0x871284198 ch=0 pri=2 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+PICKMELE_DEBUG: DoGetMelee checking CHECK_ABORT=0
+[PlaySoundEffect] S=0x871284198 ch=0 pri=2 sound_disabled=0
+[play_sample] ch=0 handle=7 buf_id=2 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=7 state=Playing next_queued=Some(2) first_queued=Some(2) gain=0.3735294
+[audio_heart] rust_load_music called: base/ships/chmmr/avatar.mod
+LoadMusicFile: loading base/ships/chmmr/avatar.mod
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=7.7s
+[audio_heart] rust_load_music result: 0x870e7f2e0
+[audio_heart] rust_load_sound_bank called: base/ships/chmmr/avatar.snd
+LoadSoundFile: loading bank base/ships/chmmr/avatar.snd
+LoadSoundFile: loading sound base/ships/chmmr/primary.wav
+LoadSoundFile: decoder primary.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 7501 bytes for primary.wav
+LoadSoundFile: loading sound base/ships/chmmr/secondary.wav
+LoadSoundFile: decoder secondary.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 1859 bytes for secondary.wav
+LoadSoundFile(base/ships/chmmr/avatar.snd): loaded 2 sounds
+[audio_heart] rust_load_sound_bank result: 0x870e6fb80
+[audio_heart] rust_load_music called: base/ships/kohrah/marauder.mod
+LoadMusicFile: loading base/ships/kohrah/marauder.mod
+LoadMusicFile: decoder rate=44100 format=Stereo16 length=7.7s
+[audio_heart] rust_load_music result: 0x870e7fa40
+[audio_heart] rust_load_sound_bank called: base/ships/kohrah/marauder.snd
+LoadSoundFile: loading bank base/ships/kohrah/marauder.snd
+LoadSoundFile: loading sound base/ships/kohrah/primary.wav
+LoadSoundFile: decoder primary.wav rate=8363 format=Mono8
+LoadSoundFile: decoded 11995 bytes for primary.wav
+LoadSoundFile: loading sound base/ships/kohrah/secondary.wav
+LoadSoundFile: decoder secondary.wav rate=4201 format=Mono8
+LoadSoundFile: decoded 5337 bytes for secondary.wav
+LoadSoundFile(base/ships/kohrah/marauder.snd): loaded 2 sounds
+[audio_heart] rust_load_sound_bank result: 0x870bc3dc0
+BATTLE_DEBUG: selectAllShips returned TRUE, calling BattleSong
+[audio_heart] PLRPlaySong called: ptr=0x870c39370 continuous=1 priority=1
+[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song
+[mixer] source_play: handle=12 state=Playing next_queued=Some(139) first_queued=Some(139) gain=0.47058827
+[audio_heart] PLRPlaySong: success
+BATTLE_DEBUG: About to call DoInput for battle loop
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x8721c11b0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=71 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(71) first_queued=Some(71) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11b0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=71 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(71) first_queued=Some(71) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11b0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=71 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(71) first_queued=Some(71) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x8721c11b0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=71 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(71) first_queued=Some(71) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x8721c11b0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=71 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(71) first_queued=Some(71) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11b0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=71 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(71) first_queued=Some(71) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x870d917a0 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=267 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(267) first_queued=Some(267) gain=0.3735294
+[PlaySoundEffect] S=0x8721c11c8 ch=1 pri=2 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=72 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(72) first_queued=Some(72) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[PlaySoundEffect] S=0x8721c1198 ch=1 pri=3 sound_disabled=0
+[play_sample] ch=1 handle=8 buf_id=70 set_result=Ok(()) queued_after=1 state=0x1
+[mixer] source_play: handle=8 state=Playing next_queued=Some(70) first_queued=Some(70) gain=0.3735294
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[audio_heart] PLRPlaySong called: ptr=0x870e7f2e0 continuous=0 priority=3
+[audio_heart] PLRPlaySong: got music_ref, calling plr_play_song
+[mixer] source_play: handle=12 state=Playing next_queued=Some(203) first_queued=Some(203) gain=0.47058827
+[audio_heart] PLRPlaySong: success
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+BATTLE_DEBUG: DoBattle called, first_time=0, CHECK_ABORT=0
+[automation] scheduler terminal: Some(FinishComplete) -> class=Success
+BATTLE_DEBUG: DoInput returned, CHECK_ABORT=1
+rust_bridge_uninit_ships: crew_retrieved=0
+rust_bridge_uninit_ships: teardown complete
+[mixer_pump] stopped
+[Info] Rust memory management deinitialized.
