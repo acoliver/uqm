@@ -4293,11 +4293,15 @@ mod os_tests {
         let (mut child, mut anchor) = partial_cleanup_child("10");
         let pid = child.id();
         let invalid_protocol = NestedGroupProtocol::new(-1, -1, -1);
+        // The inspector is reached only once the leader has exited, so the
+        // grace has to outlast SIGTERM taking effect. At 50ms a loaded machine
+        // reaches the deadline first, skips the inspection entirely, and the
+        // failure this asserts on is never recorded.
         let error = super::os::cleanup_partial_spawn_with_inspector(
             &mut child,
             &mut anchor,
             Some(invalid_protocol),
-            Duration::from_millis(50),
+            Duration::from_secs(30),
             None,
             None,
             |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
