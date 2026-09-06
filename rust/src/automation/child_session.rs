@@ -1864,7 +1864,18 @@ mod os {
                 )
             };
             if result == -1 {
-                return Err(io::Error::last_os_error());
+                let error = io::Error::last_os_error();
+                // A leader that no longer exists as a child is the absence this
+                // observation is looking for, not a failure to observe. Cleanup
+                // already treats ESRCH that way everywhere else it asks the
+                // kernel about this process; ECHILD is the same answer from
+                // waitid. Reporting it as an observer failure displaces the
+                // failure the caller was actually trying to record.
+                if error.raw_os_error() == Some(libc::ECHILD) {
+                    self.observed = true;
+                    return Ok(true);
+                }
+                return Err(error);
             }
             // SAFETY: waitid initialized info on success.
             let info = unsafe { info.assume_init() };
@@ -4176,6 +4187,43 @@ mod os_tests {
         (child, anchor)
     }
 
+    /// A leader reaped before cleanup runs must not displace the failure the
+    /// caller was trying to report.
+    ///
+    /// This is the condition behind the intermittent coverage failure on
+    /// macOS: waitid answers ECHILD for an already-reaped child, and treating
+    /// that as an observer failure means the group inspector never runs, so
+    /// its error is never recorded.
+    #[test]
+    fn a_leader_reaped_before_cleanup_still_reports_the_inspection_failure() {
+        let (mut child, mut anchor) = partial_cleanup_child("10");
+        // Something else reaped the leader first.
+        child.kill().expect("kill cleanup child");
+        child.wait().expect("reap cleanup child");
+
+        assert!(
+            anchor
+                .observe()
+                .expect("a departed leader is not an observation failure"),
+            "a reaped leader must read as observed"
+        );
+
+        let error = super::os::cleanup_partial_spawn_with_inspector(
+            &mut child,
+            &mut anchor,
+            Some(NestedGroupProtocol::new(-1, -1, -1)),
+            Duration::from_millis(50),
+            None,
+            None,
+            |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
+        )
+        .expect_err("inspection failure must be retained");
+        assert!(
+            matches!(error, super::os::ChildSessionError::ProcessGroup(_)),
+            "the retained failure must be the inspection error, got {error:?}"
+        );
+    }
+
     fn assert_exact_child_reaped(pid: u32) {
         let mut status = 0;
         let result = unsafe { libc::waitpid(pid as libc::pid_t, &mut status, libc::WNOHANG) };
@@ -4245,11 +4293,15 @@ mod os_tests {
         let (mut child, mut anchor) = partial_cleanup_child("10");
         let pid = child.id();
         let invalid_protocol = NestedGroupProtocol::new(-1, -1, -1);
+        // The inspector is reached only once the leader has exited, so the
+        // grace has to outlast SIGTERM taking effect. At 50ms a loaded machine
+        // reaches the deadline first, skips the inspection entirely, and the
+        // failure this asserts on is never recorded.
         let error = super::os::cleanup_partial_spawn_with_inspector(
             &mut child,
             &mut anchor,
             Some(invalid_protocol),
-            Duration::from_millis(50),
+            Duration::from_secs(30),
             None,
             None,
             |_, _| Err(std::io::Error::from_raw_os_error(libc::EIO)),
