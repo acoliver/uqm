@@ -640,9 +640,24 @@ fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(
     Ok(())
 }
 
+/// Where a bundle keeps its run documents.
+///
+/// A full LCAR bundle nests them under `run/` beside its snapshots; a bare
+/// scenario bundle writes them at the top level. Both are produced by this
+/// repository, so a reader that understands only one of them silently fails
+/// on half the evidence.
+fn run_dir(bundle: &Path) -> PathBuf {
+    let nested = bundle.join("run");
+    if nested.join("resolved-scenario.json").is_file() {
+        nested
+    } else {
+        bundle.to_path_buf()
+    }
+}
+
 /// The replay identity a bundle recorded.
 fn recorded_identity(bundle: &Path) -> Result<String, String> {
-    let path = bundle.join("resolved-scenario.json");
+    let path = run_dir(bundle).join("resolved-scenario.json");
     let text = std::fs::read_to_string(&path)
         .map_err(|error| format!("read {}: {error}", path.display()))?;
     let value: serde_json::Value = serde_json::from_str(&text)
@@ -655,7 +670,8 @@ fn recorded_identity(bundle: &Path) -> Result<String, String> {
 
 /// Summarise a produced bundle, including the scenario it actually replayed.
 fn report_bundle(bundle: &Path) -> Result<(), String> {
-    let resolved_path = bundle.join("resolved-scenario.json");
+    let run = run_dir(bundle);
+    let resolved_path = run.join("resolved-scenario.json");
     let resolved = std::fs::read_to_string(&resolved_path)
         .map_err(|error| format!("read {}: {error}", resolved_path.display()))?;
     let resolved: serde_json::Value = serde_json::from_str(&resolved)
@@ -679,7 +695,7 @@ fn report_bundle(bundle: &Path) -> Result<(), String> {
     println!("seed\t{}", scenario["seed"]);
     println!("steps\t{}", scenario["step_count"]);
 
-    let teardown_path = bundle.join("teardown-complete.json");
+    let teardown_path = run.join("teardown-complete.json");
     match std::fs::read_to_string(&teardown_path) {
         Ok(text) => {
             let teardown: serde_json::Value = serde_json::from_str(&text)
