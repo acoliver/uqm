@@ -13,6 +13,15 @@ use uqm_rust::automation::{
     TraceRecord, AUTOMATION_SEED,
 };
 
+const USAGE: &str = "usage: uqm-gameplay-proof \
+run REPO_ROOT PRODUCTION_MANIFEST SCRIPT OUTPUT_ROOT | \
+validate LCAR_MANIFEST | \
+validate-negative-fixtures | \
+compare-battle FIRST_LCAR SECOND_LCAR | \
+list [DOMAIN] | \
+select CHANGED_PATH... | \
+report BUNDLE_DIR";
+
 const SCHEMA: &str = "uqm-lcar-v1";
 
 /// Every LCAR schema this build can validate.
@@ -206,7 +215,11 @@ fn run() -> Result<(), String> {
         Some("compare-battle") if args.len() == 4 => {
             compare_battle_proofs(Path::new(&args[2]), Path::new(&args[3]))
         }
-        _ => Err("usage: uqm-gameplay-proof run REPO_ROOT PRODUCTION_MANIFEST SCRIPT OUTPUT_ROOT | validate LCAR_MANIFEST | validate-negative-fixtures | compare-battle FIRST_LCAR SECOND_LCAR".into()),
+        Some("list") if args.len() == 2 => list_scenarios(None),
+        Some("list") if args.len() == 3 => list_scenarios(Some(&args[2])),
+        Some("select") if args.len() >= 2 => select_scenarios(&args[2..]),
+        Some("report") if args.len() == 3 => report_bundle(Path::new(&args[2])),
+        _ => Err(USAGE.into()),
     }
 }
 
@@ -536,6 +549,95 @@ fn validate_manifest(path: &Path) -> Result<(), String> {
     validate_provenance(root, &manifest)?;
     validate_command(root, &manifest)?;
     validate_result(root, &manifest)
+}
+
+/// Print the published matrix, optionally for one domain.
+fn list_scenarios(domain: Option<&str>) -> Result<(), String> {
+    use uqm_rust::automation::suite::{Domain, MATRIX};
+
+    if let Some(name) = domain {
+        let selected = Domain::ALL
+            .iter()
+            .find(|candidate| candidate.name() == name)
+            .ok_or_else(|| {
+                format!(
+                    "unknown domain {name:?}; known domains: {}",
+                    Domain::ALL
+                        .iter()
+                        .map(|domain| domain.name())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+        for scenario in uqm_rust::automation::suite::scenarios_for(*selected) {
+            println!("{scenario}");
+        }
+        return Ok(());
+    }
+
+    for row in MATRIX {
+        let domains = row
+            .domains
+            .iter()
+            .map(|domain| domain.name())
+            .collect::<Vec<_>>()
+            .join(",");
+        let tag = match row.fixture {
+            Some(kind) => format!("fixture:{kind:?}"),
+            None if row.composed_journey => format!("journey:{domains}"),
+            None => domains,
+        };
+        println!("{}\t{tag}", row.scenario);
+    }
+    Ok(())
+}
+
+/// Print the scenarios that must run for the given changed paths.
+fn select_scenarios(paths: &[String]) -> Result<(), String> {
+    for scenario in uqm_rust::automation::suite::select_for_changed_paths(paths) {
+        println!("{scenario}");
+    }
+    Ok(())
+}
+
+/// Summarise a produced bundle, including the scenario it actually replayed.
+fn report_bundle(bundle: &Path) -> Result<(), String> {
+    let resolved_path = bundle.join("resolved-scenario.json");
+    let resolved = std::fs::read_to_string(&resolved_path)
+        .map_err(|error| format!("read {}: {error}", resolved_path.display()))?;
+    let resolved: serde_json::Value = serde_json::from_str(&resolved)
+        .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?;
+
+    // The scenario facts are nested under "scenario"; the identity that binds
+    // them sits beside it.
+    let scenario = &resolved["scenario"];
+    for (label, value) in [
+        ("scenario", scenario["name"].as_str()),
+        ("fixture", scenario["fixture"].as_str()),
+        ("schema", scenario["schema"].as_str()),
+        ("replay_identity", resolved["replay_identity"].as_str()),
+    ] {
+        println!(
+            "{label}\t{}",
+            value.ok_or_else(|| format!("{} lacks {label}", resolved_path.display()))?
+        );
+    }
+    println!("scenario_version\t{}", scenario["scenario_version"]);
+    println!("seed\t{}", scenario["seed"]);
+    println!("steps\t{}", scenario["step_count"]);
+
+    let teardown_path = bundle.join("teardown-complete.json");
+    match std::fs::read_to_string(&teardown_path) {
+        Ok(text) => {
+            let teardown: serde_json::Value = serde_json::from_str(&text)
+                .map_err(|error| format!("parse {}: {error}", teardown_path.display()))?;
+            println!("terminal\t{}", teardown["terminal"].as_str().unwrap_or("?"));
+        }
+        // A bundle without teardown is the signature of a run that died, which
+        // is worth reporting plainly rather than failing to summarise.
+        Err(_) => println!("terminal\tabsent: the run did not reach teardown"),
+    }
+    Ok(())
 }
 
 fn validate_manifest_identity(path: &Path, manifest: &LcarManifest) -> Result<(), String> {
