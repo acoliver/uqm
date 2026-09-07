@@ -235,6 +235,13 @@ fn run_proof(
     script: &Path,
     output_root: &Path,
 ) -> Result<(), String> {
+    // Record interruptions before the first byte of work. Preparing evidence
+    // copies the executable and snapshots the whole content tree, which takes
+    // long enough that a signal arriving during it is likely rather than
+    // theoretical. Installing after that leaves the longest phase of the run
+    // under the default disposition, where a signal kills the process outright
+    // and the bundle it leaves behind says nothing about why it stopped.
+    interrupt::install().map_err(|error| error.to_string())?;
     let repo_root = fs::canonicalize(repo_root)
         .map_err(|error| format!("canonicalize repository {}: {error}", repo_root.display()))?;
     let production_value = read_json_value(production_path)?;
@@ -257,9 +264,15 @@ fn run_proof(
         &content,
         output_root,
     )?;
-    // Record interruptions before anything is spawned, so a signal arriving at
-    // any point after this tears the run down rather than orphaning it.
-    interrupt::install().map_err(|error| error.to_string())?;
+    // An interruption that arrived while evidence was being prepared stops the
+    // run here, before a child exists, and says so. Continuing would spawn the
+    // game after the operator already asked for it to stop.
+    if let Some(signal) = interrupt::interrupted() {
+        record_interrupted_preparation(&evidence, signal)?;
+        return Err(format!(
+            "interrupted by signal {signal} while preparing evidence"
+        ));
+    }
 
     // The run owns its output root for as long as it is producing evidence
     // there. Ownership is released when this guard drops, on every path.
@@ -638,6 +651,30 @@ fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(
     println!("replay_identity\t{produced}");
     println!("replays\t{}", prior.display());
     Ok(())
+}
+
+/// Record that a run stopped, before any child existed, because of a signal.
+///
+/// A bundle with no explanation is indistinguishable from a machine that
+/// vanished, so an interrupted run leaves a document naming the signal rather
+/// than a directory of half-copied snapshots.
+fn record_interrupted_preparation(evidence: &RunEvidence, signal: i32) -> Result<(), String> {
+    let run = evidence.output_root.join("run");
+    fs::create_dir_all(&run).map_err(|error| format!("create {}: {error}", run.display()))?;
+    let document = serde_json::json!({
+        "schema": "uqm-interrupted-preparation-v1",
+        "terminal": "interrupted",
+        "signal": signal,
+        "phase": "prepare-evidence",
+        "detail": "the run was interrupted before the game was started, so no child process existed to tear down",
+    });
+    let path = run.join("teardown-complete.json");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&document)
+            .map_err(|error| format!("serialize interruption receipt: {error}"))?,
+    )
+    .map_err(|error| format!("write {}: {error}", path.display()))
 }
 
 /// Where a bundle keeps its run documents.
