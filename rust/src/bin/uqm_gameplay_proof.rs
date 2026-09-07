@@ -20,7 +20,8 @@ validate-negative-fixtures | \
 compare-battle FIRST_LCAR SECOND_LCAR | \
 list [DOMAIN] | \
 select CHANGED_PATH... | \
-report BUNDLE_DIR";
+report BUNDLE_DIR | \
+replay REPO_ROOT PRIOR_BUNDLE OUTPUT_ROOT";
 
 const SCHEMA: &str = "uqm-lcar-v1";
 
@@ -219,6 +220,11 @@ fn run() -> Result<(), String> {
         Some("list") if args.len() == 3 => list_scenarios(Some(&args[2])),
         Some("select") if args.len() >= 2 => select_scenarios(&args[2..]),
         Some("report") if args.len() == 3 => report_bundle(Path::new(&args[2])),
+        Some("replay") if args.len() == 5 => replay_bundle(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            Path::new(&args[4]),
+        ),
         _ => Err(USAGE.into()),
     }
 }
@@ -598,6 +604,53 @@ fn select_scenarios(paths: &[String]) -> Result<(), String> {
         println!("{scenario}");
     }
     Ok(())
+}
+
+/// Re-run the scenario a bundle recorded and prove it reproduces.
+///
+/// The prior bundle is the source of truth. Its snapshotted production
+/// manifest and script are the exact inputs the first run consumed, so a
+/// replay cannot quietly drift onto a different scenario or a rebuilt
+/// executable and still call itself a replay. The run counts as a replay only
+/// when the identity it produces equals the identity that was recorded.
+fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(), String> {
+    let recorded = recorded_identity(prior)?;
+    let manifest = prior.join("snapshots/production-manifest.json");
+    let script = prior.join("snapshots/script.json");
+    for (label, path) in [("production manifest", &manifest), ("script", &script)] {
+        if !path.exists() {
+            return Err(format!(
+                "{} has no snapshotted {label} at {}, so it cannot be replayed",
+                prior.display(),
+                path.display()
+            ));
+        }
+    }
+
+    run_proof(repo_root, &manifest, &script, output_root)?;
+
+    let produced = recorded_identity(output_root)?;
+    if produced != recorded {
+        return Err(format!(
+            "replay produced a different run: recorded {recorded}, produced {produced}"
+        ));
+    }
+    println!("replay_identity\t{produced}");
+    println!("replays\t{}", prior.display());
+    Ok(())
+}
+
+/// The replay identity a bundle recorded.
+fn recorded_identity(bundle: &Path) -> Result<String, String> {
+    let path = bundle.join("resolved-scenario.json");
+    let text = std::fs::read_to_string(&path)
+        .map_err(|error| format!("read {}: {error}", path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|error| format!("parse {}: {error}", path.display()))?;
+    value["replay_identity"]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| format!("{} lacks replay_identity", path.display()))
 }
 
 /// Summarise a produced bundle, including the scenario it actually replayed.
