@@ -21,7 +21,8 @@ compare-battle FIRST_LCAR SECOND_LCAR | \
 list [DOMAIN] | \
 select CHANGED_PATH... | \
 report BUNDLE_DIR | \
-replay REPO_ROOT PRIOR_BUNDLE OUTPUT_ROOT";
+replay REPO_ROOT PRIOR_BUNDLE OUTPUT_ROOT | \
+gallery SUITE_ROOT";
 
 const SCHEMA: &str = "uqm-lcar-v1";
 
@@ -220,6 +221,7 @@ fn run() -> Result<(), String> {
         Some("list") if args.len() == 3 => list_scenarios(Some(&args[2])),
         Some("select") if args.len() >= 2 => select_scenarios(&args[2..]),
         Some("report") if args.len() == 3 => report_bundle(Path::new(&args[2])),
+        Some("gallery") if args.len() == 3 => build_gallery(Path::new(&args[2])),
         Some("replay") if args.len() == 5 => replay_bundle(
             Path::new(&args[2]),
             Path::new(&args[3]),
@@ -617,6 +619,110 @@ fn select_scenarios(paths: &[String]) -> Result<(), String> {
         println!("{scenario}");
     }
     Ok(())
+}
+
+/// Index every capture a suite produced, with the scenario that produced it.
+///
+/// A suite that runs thirty-two scenarios produces captures nobody will open
+/// one directory at a time. The index gives each image a scenario, a size and
+/// a digest, so a reviewer can see what was actually presented and a later run
+/// can be compared against it rather than described.
+///
+/// Writes `gallery.json` at the suite root and prints a readable summary.
+fn build_gallery(suite: &Path) -> Result<(), String> {
+    // A single-scenario run is its own bundle. Descending into it as well
+    // would find its own run/ directory and count the same captures twice.
+    let mut bundles: Vec<PathBuf> = Vec::new();
+    if run_dir(suite).join("captures").is_dir() {
+        bundles.push(suite.to_path_buf());
+    } else {
+        let entries =
+            fs::read_dir(suite).map_err(|error| format!("read {}: {error}", suite.display()))?;
+        for entry in entries {
+            let path = entry
+                .map_err(|error| format!("read {}: {error}", suite.display()))?
+                .path();
+            if path.is_dir() && run_dir(&path).join("captures").is_dir() {
+                bundles.push(path);
+            }
+        }
+        bundles.sort();
+    }
+    if bundles.is_empty() {
+        return Err(format!(
+            "{} contains no scenario bundle with captures",
+            suite.display()
+        ));
+    }
+
+    let mut images = Vec::new();
+    for bundle in &bundles {
+        let run = run_dir(bundle);
+        let scenario = scenario_name(&run).unwrap_or_else(|| {
+            bundle
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        });
+        let captures = run.join("captures");
+        let mut files: Vec<PathBuf> = fs::read_dir(&captures)
+            .map_err(|error| format!("read {}: {error}", captures.display()))?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_file())
+            .collect();
+        files.sort();
+        for file in files {
+            let bytes =
+                fs::read(&file).map_err(|error| format!("read {}: {error}", file.display()))?;
+            let name = file
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string();
+            images.push(serde_json::json!({
+                "scenario": scenario,
+                "checkpoint": name.trim_end_matches(".png"),
+                "path": file.strip_prefix(suite).unwrap_or(&file).display().to_string(),
+                "byte_length": bytes.len(),
+                "sha256": format!("{:x}", Sha256::digest(&bytes)),
+            }));
+        }
+    }
+
+    let gallery = serde_json::json!({
+        "schema": "uqm-autoplay-gallery-v1",
+        "scenarios": bundles.len(),
+        "captures": images.len(),
+        "images": images,
+    });
+    let path = suite.join("gallery.json");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&gallery)
+            .map_err(|error| format!("serialize gallery: {error}"))?,
+    )
+    .map_err(|error| format!("write {}: {error}", path.display()))?;
+
+    println!("scenarios\t{}", bundles.len());
+    println!("captures\t{}", images.len());
+    for image in &images {
+        println!(
+            "{}\t{}\t{}",
+            image["scenario"].as_str().unwrap_or("?"),
+            image["checkpoint"].as_str().unwrap_or("?"),
+            image["sha256"].as_str().unwrap_or("?")
+        );
+    }
+    Ok(())
+}
+
+/// The scenario a run recorded, if it got far enough to record one.
+fn scenario_name(run: &Path) -> Option<String> {
+    let text = fs::read_to_string(run.join("resolved-scenario.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value["scenario"]["name"].as_str().map(str::to_owned)
 }
 
 /// Re-run the scenario a bundle recorded and prove it reproduces.
