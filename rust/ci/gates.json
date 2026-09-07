@@ -726,6 +726,7 @@
     "coverage",
     "cache",
     "workflow",
-    "artifact"
+    "artifact",
+    "autoplay"
   ]
 }

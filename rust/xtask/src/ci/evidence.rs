@@ -9534,20 +9534,19 @@ fn validate_mutation_execution(
                 .collect(),
             authority.supervision.builtin_timeout_seconds * 1_000,
         )]),
-        "ownership" | "link" | "security" | "coverage" | "cache" | "workflow" | "artifact" => {
-            Some(vec![(
-                "mutations".to_string(),
-                "internal-validator".to_string(),
-                ".".to_string(),
-                None,
-                vec![
-                    "uqm-xtask-internal".to_string(),
-                    super::mutations::INTERNAL_VALIDATOR_COMMAND.to_string(),
-                    target.to_string(),
-                ],
-                authority.supervision.builtin_timeout_seconds * 1_000,
-            )])
-        }
+        "ownership" | "link" | "security" | "coverage" | "cache" | "workflow" | "artifact"
+        | "autoplay" => Some(vec![(
+            "mutations".to_string(),
+            "internal-validator".to_string(),
+            ".".to_string(),
+            None,
+            vec![
+                "uqm-xtask-internal".to_string(),
+                super::mutations::INTERNAL_VALIDATOR_COMMAND.to_string(),
+                target.to_string(),
+            ],
+            authority.supervision.builtin_timeout_seconds * 1_000,
+        )]),
         _ => None,
     };
     let baseline = item

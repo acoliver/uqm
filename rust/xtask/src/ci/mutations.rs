@@ -273,6 +273,7 @@ pub fn collect(root: &Path) -> Result<MutationsReceipt, CiError> {
                 MutationTarget::Cache => cache_mutation(root, &authority),
                 MutationTarget::Workflow => workflow_mutation(root, &authority),
                 MutationTarget::Artifact => artifact_mutation(root, &authority),
+                MutationTarget::Autoplay => autoplay_mutation(root, &authority),
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -821,6 +822,21 @@ pub(crate) fn expected_causal_contract(
                     ],
                 )
             }
+            "autoplay" => {
+                // A suite labelled "full" that no longer carries the full set
+                // is the failure this gate exists to catch: CI keeps reporting
+                // that it proved everything while proving one scenario.
+                let full = super::plan::derive_autoplay(None);
+                let mut trimmed = full.clone();
+                trimmed.scenarios.truncate(1);
+                (
+                    "ci-plan.json",
+                    serde_json::to_vec_pretty(&full).ok()?,
+                    serde_json::to_vec_pretty(&trimmed).ok()?,
+                    "autoplay-suite",
+                    &["autoplay-suite", "full"],
+                )
+            }
             _ => return None,
         };
     let (recipe, diagnostic) = causal_contract(path, &baseline, &mutant, class, fragments);
@@ -876,8 +892,40 @@ fn validate_internal_fixture(
         "cache" => validate_cache_mutant(fixture, authority),
         "workflow" => validate_workflow_mutant(root, fixture, authority),
         "artifact" => validate_artifact_mutant(),
+        "autoplay" => validate_autoplay_mutant(fixture, authority),
         _ => Err(format!("unsupported internal mutation target '{target}'")),
     }
+}
+
+/// Validate the retained autoplay mutation fixture.
+///
+/// A plan may legitimately select a subset, but only under the
+/// `changed-paths` policy. A plan that still calls itself `full` while
+/// carrying fewer scenarios than the suite has is claiming coverage it does
+/// not have, and that is what this rejects.
+fn validate_autoplay_mutant(
+    fixture: &Path,
+    authority: &authority::Authority,
+) -> Result<(), String> {
+    let bytes = super::bounded_io::read_regular_nofollow(
+        &fixture.join("ci-plan.json"),
+        authority.actions.evidence_snapshot_member_limit_bytes,
+    )
+    .map_err(|error| format!("cannot read internal mutation fixture ci-plan.json: {error}"))?;
+    let plan: super::plan::AutoplayPlan = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("invalid autoplay mutation fixture: {error}"))?;
+    let complete = super::plan::derive_autoplay(None);
+    if plan.policy == "full" && plan.scenarios != complete.scenarios {
+        return Err(format!(
+            "autoplay-suite: a full policy must carry the complete suite, but this plan claims full with {} of {} scenarios",
+            plan.scenarios.len(),
+            complete.scenarios.len()
+        ));
+    }
+    if plan.scenarios.is_empty() {
+        return Err("autoplay-suite: a plan must select at least one scenario".into());
+    }
+    Ok(())
 }
 
 /// Validate the retained ownership mutation fixture.
@@ -1947,6 +1995,19 @@ fn coverage_mutation(
         authority,
         MutationTarget::Coverage,
         "75% line coverage computed from a synthetic lcov report",
+        &[],
+    )
+}
+
+fn autoplay_mutation(
+    root: &Path,
+    authority: &authority::Authority,
+) -> Result<MutationCase, CiError> {
+    internal_mutation_case(
+        root,
+        authority,
+        MutationTarget::Autoplay,
+        "a plan that still calls its suite full after the suite was trimmed",
         &[],
     )
 }

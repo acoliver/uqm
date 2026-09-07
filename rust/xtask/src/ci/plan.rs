@@ -249,6 +249,20 @@ mod tests {
         assert_eq!(plan.authority_contract, Some(raw));
     }
     #[test]
+    fn a_full_policy_must_carry_the_whole_suite() {
+        // This is the shape the autoplay mutation gate plants: a plan that
+        // keeps the reassuring label while the suite behind it shrank.
+        let full = derive_autoplay(None);
+        let mut trimmed = full.clone();
+        trimmed.scenarios.truncate(1);
+        assert_eq!(trimmed.policy, "full");
+        assert_ne!(
+            trimmed.scenarios, full.scenarios,
+            "the mutation must actually change the suite, or the gate proves nothing"
+        );
+    }
+
+    #[test]
     fn unknown_changed_paths_ask_for_everything() {
         // Three ways of not knowing, one answer.
         let full = derive_autoplay(None);
