@@ -548,6 +548,7 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: ${{ fromJSON(needs.plan.outputs.tools).rust.version }}
       NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}
+      UQM_CI_AUTOPLAY_SCENARIOS: ${{ join(fromJSON(needs.plan.outputs.autoplay).scenarios, ' ') }}
     needs: plan
     strategy:
       fail-fast: false

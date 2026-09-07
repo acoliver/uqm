@@ -868,50 +868,8 @@ fn run_native_window_acceptance(
     })?;
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
-    let script = root.join(&authority.native_acceptance.script);
-    let script_bytes = read_regular_file_nofollow_bounded(
-        &script,
-        authority.native_acceptance.script_byte_length,
-    )?;
-    if script_bytes.len() as u64 != authority.native_acceptance.script_byte_length
-        || hex_sha256(&script_bytes) != authority.native_acceptance.script_sha256
-    {
-        return Err("native acceptance script differs from machine authority".to_string());
-    }
-    let script_value: serde_json::Value = serde_json::from_slice(&script_bytes)
-        .map_err(|error| format!("parse native acceptance script budget: {error}"))?;
-    let script_wallclock_ms = script_value
-        .pointer("/budgets/max_wallclock_seconds")
-        .and_then(serde_json::Value::as_u64)
-        .and_then(|seconds| seconds.checked_mul(1_000))
-        .ok_or_else(|| "native acceptance script has no valid wallclock budget".to_string())?;
-    let required_outer_ms = script_wallclock_ms
-        .checked_add(
-            authority
-                .native_acceptance
-                .runtime_contract
-                .observer_timeout_ms,
-        )
-        .and_then(|value| {
-            value.checked_add(
-                authority
-                    .native_acceptance
-                    .runtime_contract
-                    .outer_child_kill_grace_ms,
-            )
-        })
-        .ok_or_else(|| "native acceptance outer deadline calculation overflowed".to_string())?;
-    if authority
-        .native_acceptance
-        .runtime_contract
-        .outer_child_timeout_ms
-        <= required_outer_ms
-    {
-        return Err(
-            "native acceptance outer timeout does not cover script, startup, and cleanup"
-                .to_string(),
-        );
-    }
+    let requested = env::var("UQM_CI_AUTOPLAY_SCENARIOS").ok();
+    let selected = selected_acceptance_scripts(&authority, requested.as_deref())?;
     let target = ci_cargo_target_dir()?.unwrap_or_else(|| root.join("rust/target"));
     let (controller, linked_executable) = native_acceptance_executables(&target)?;
     let linked_bytes = read_regular_file_nofollow_bounded(
@@ -925,30 +883,150 @@ fn run_native_window_acceptance(
     let acceptance_policy =
         serde_json::to_string(&authority.native_acceptance.acceptance_policy)
             .map_err(|error| format!("serialize native acceptance policy: {error}"))?;
-    let mut command = Command::new(controller);
-    command.current_dir(root).args([
-        "__ci-native-acceptance",
-        "run",
-        &linked_executable.display().to_string(),
-        &PathBuf::from(content_root).display().to_string(),
-        &script.display().to_string(),
-        &PathBuf::from(evidence_root).display().to_string(),
-        &linked_length,
-        &linked_sha256,
-        &runtime_contract,
-        &acceptance_policy,
-        &linked_build_proof.directory.path().display().to_string(),
-        &authority
-            .actions
-            .evidence_snapshot_member_limit_bytes
-            .to_string(),
-    ]);
-    // The Aqua child inherits only an allowlisted environment, so the trusted
-    // controller's precreated-root binding must be forwarded explicitly.
-    if let Ok(precreated) = env::var(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV) {
-        command.env(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV, precreated);
+    let evidence_root = PathBuf::from(evidence_root);
+    let content_root = PathBuf::from(content_root);
+
+    // Each scenario gets its own evidence directory so a suite failure names
+    // the scenario that failed rather than overwriting the one before it.
+    let single = selected.len() == 1;
+    for pinned in &selected {
+        let script = root.join(&pinned.path);
+        let script_bytes = read_regular_file_nofollow_bounded(&script, pinned.byte_length)?;
+        if script_bytes.len() as u64 != pinned.byte_length
+            || hex_sha256(&script_bytes) != pinned.sha256
+        {
+            return Err(format!(
+                "native acceptance script {} differs from machine authority",
+                pinned.path
+            ));
+        }
+        let script_value: serde_json::Value = serde_json::from_slice(&script_bytes)
+            .map_err(|error| format!("parse {} budget: {error}", pinned.path))?;
+        let script_wallclock_ms = script_value
+            .pointer("/budgets/max_wallclock_seconds")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|seconds| seconds.checked_mul(1_000))
+            .ok_or_else(|| format!("{} has no valid wallclock budget", pinned.path))?;
+        let required_outer_ms = script_wallclock_ms
+            .checked_add(
+                authority
+                    .native_acceptance
+                    .runtime_contract
+                    .observer_timeout_ms,
+            )
+            .and_then(|value| {
+                value.checked_add(
+                    authority
+                        .native_acceptance
+                        .runtime_contract
+                        .outer_child_kill_grace_ms,
+                )
+            })
+            .ok_or_else(|| format!("{} outer deadline calculation overflowed", pinned.path))?;
+        if authority
+            .native_acceptance
+            .runtime_contract
+            .outer_child_timeout_ms
+            <= required_outer_ms
+        {
+            return Err(format!(
+                "native acceptance outer timeout does not cover script, startup, and cleanup for {}",
+                pinned.path
+            ));
+        }
+
+        // One scenario keeps the historical evidence layout so existing
+        // consumers of the acceptance bundle are unaffected.
+        let scenario_evidence = if single {
+            evidence_root.clone()
+        } else {
+            let stem = Path::new(&pinned.path)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .ok_or_else(|| format!("{} has no file stem", pinned.path))?;
+            let directory = evidence_root.join(stem);
+            fs::create_dir_all(&directory)
+                .map_err(|error| format!("create {}: {error}", directory.display()))?;
+            directory
+        };
+
+        let mut command = Command::new(&controller);
+        command.current_dir(root).args([
+            "__ci-native-acceptance",
+            "run",
+            &linked_executable.display().to_string(),
+            &content_root.display().to_string(),
+            &script.display().to_string(),
+            &scenario_evidence.display().to_string(),
+            &linked_length,
+            &linked_sha256,
+            &runtime_contract,
+            &acceptance_policy,
+            &linked_build_proof.directory.path().display().to_string(),
+            &authority
+                .actions
+                .evidence_snapshot_member_limit_bytes
+                .to_string(),
+        ]);
+        // The Aqua child inherits only an allowlisted environment, so the
+        // trusted controller's precreated-root binding must be forwarded.
+        if let Ok(precreated) = env::var(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV) {
+            command.env(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV, precreated);
+        }
+        run_aqua_command(
+            &mut command,
+            &format!("Direct linked native-window acceptance: {}", pinned.path),
+        )?;
     }
-    run_aqua_command(&mut command, "Direct linked native-window acceptance")
+    Ok(())
+}
+
+/// The scenarios this acceptance run must prove.
+///
+/// The plan job decides the suite and passes it in. Nothing outside the pinned
+/// inventory can be selected: an unpinned name is refused rather than resolved,
+/// so a head revision cannot introduce a scenario for CI to execute. With no
+/// selection the run proves the single scenario the authority names, which is
+/// what it did before a suite existed.
+fn selected_acceptance_scripts(
+    authority: &ci::authority::Authority,
+    requested: Option<&str>,
+) -> Result<Vec<ci::authority::PinnedScript>, String> {
+    let pinned = &authority.native_acceptance.scenario_scripts;
+    let Some(requested) = requested else {
+        let named = &authority.native_acceptance.script;
+        return pinned
+            .iter()
+            .find(|entry| &entry.path == named)
+            .cloned()
+            .map(|entry| vec![entry])
+            .ok_or_else(|| format!("authority scenario {named} is not pinned"));
+    };
+    let mut selected: Vec<ci::authority::PinnedScript> = Vec::new();
+    for name in requested
+        .split([',', '\n', ' '])
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+    {
+        // A bare scenario name and a repository path both resolve, because the
+        // plan speaks in names and the authority speaks in paths.
+        let path = if name.contains('/') {
+            name.to_string()
+        } else {
+            format!("rust/scripts/{name}.json")
+        };
+        let entry = pinned
+            .iter()
+            .find(|entry| entry.path == path)
+            .ok_or_else(|| format!("scenario {name} is not pinned by the authority"))?;
+        if !selected.iter().any(|existing| existing.path == entry.path) {
+            selected.push(entry.clone());
+        }
+    }
+    if selected.is_empty() {
+        return Err("UQM_CI_AUTOPLAY_SCENARIOS selected no scenarios".to_string());
+    }
+    Ok(selected)
 }
 
 fn native_acceptance_executables(target: &Path) -> Result<(PathBuf, PathBuf), String> {
@@ -2776,6 +2854,52 @@ mod tests {
         assert!(
             read_manifest_artifact(root.path(), &artifact("rust/target/linked-leaf"), 64,).is_err()
         );
+    }
+
+    #[test]
+    fn selection_refuses_a_scenario_the_authority_does_not_pin() {
+        // The property that makes the inventory a boundary rather than a list.
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("rust dir")
+            .parent()
+            .expect("repository root")
+            .to_path_buf();
+        let authority = ci::authority::load_authority(&root).expect("authority");
+
+        let refused = selected_acceptance_scripts(&authority, Some("quit-v1,not-a-real-scenario"));
+        let error = refused.expect_err("an unpinned scenario must be refused");
+        assert!(
+            error.contains("not-a-real-scenario"),
+            "the refusal must name the scenario: {error}"
+        );
+    }
+
+    #[test]
+    fn selection_resolves_names_and_paths_and_defaults_to_the_named_scenario() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("rust dir")
+            .parent()
+            .expect("repository root")
+            .to_path_buf();
+        let authority = ci::authority::load_authority(&root).expect("authority");
+
+        let selected = selected_acceptance_scripts(
+            &authority,
+            Some("quit-v1 rust/scripts/battle-v1.json quit-v1"),
+        )
+        .expect("selection");
+        assert_eq!(
+            selected.len(),
+            2,
+            "a repeated scenario must not be run twice: {selected:?}"
+        );
+
+        // With nothing selected the run proves what it always proved.
+        let default = selected_acceptance_scripts(&authority, None).expect("default selection");
+        assert_eq!(default.len(), 1);
+        assert_eq!(default[0].path, authority.native_acceptance.script);
     }
 
     #[test]
