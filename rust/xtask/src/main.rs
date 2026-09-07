@@ -886,6 +886,27 @@ fn run_native_window_acceptance(
     let evidence_root = PathBuf::from(evidence_root);
     let content_root = PathBuf::from(content_root);
 
+    // Say what is about to run, and on whose instruction. A suite that shrank
+    // to its default is otherwise indistinguishable in the log from a suite
+    // that was meant to be one scenario, which is how thirty-two scenarios
+    // once reported success having proved one.
+    match requested.as_deref() {
+        Some(_) => println!(
+            "native window acceptance: {} scenario(s) selected by the plan: {}",
+            selected.len(),
+            selected
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        None => println!(
+            "native window acceptance: no suite was requested, proving the single \
+             authority scenario {}",
+            authority.native_acceptance.script
+        ),
+    }
+
     // Each scenario gets its own evidence directory so a suite failure names
     // the scenario that failed rather than overwriting the one before it.
     let single = selected.len() == 1;
