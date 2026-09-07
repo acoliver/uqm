@@ -977,8 +977,54 @@ fn run_native_window_acceptance(
             &mut command,
             &format!("Direct linked native-window acceptance: {}", pinned.path),
         )?;
+
+        // A suite produces evidence per scenario, so the budget that a single
+        // run could never approach is now reachable. Check it as the suite
+        // grows rather than after the upload fails, and name the scenario that
+        // crossed the line rather than reporting a total nobody can act on.
+        let (bytes, files) = measure_tree(&evidence_root)?;
+        if bytes > authority.actions.evidence_snapshot_aggregate_limit_bytes {
+            return Err(format!(
+                "autoplay evidence reached {bytes} bytes after {}, over the {} byte aggregate limit",
+                pinned.path, authority.actions.evidence_snapshot_aggregate_limit_bytes
+            ));
+        }
+        if files > u64::from(authority.actions.evidence_snapshot_member_count_limit) {
+            return Err(format!(
+                "autoplay evidence reached {files} files after {}, over the {} member limit",
+                pinned.path, authority.actions.evidence_snapshot_member_count_limit
+            ));
+        }
     }
     Ok(())
+}
+
+/// Total byte length and file count beneath a directory.
+///
+/// Symbolic links are counted but not followed, so a link cannot inflate the
+/// measurement or walk the run out of its own evidence tree.
+fn measure_tree(root: &Path) -> Result<(u64, u64), String> {
+    let mut bytes = 0u64;
+    let mut files = 0u64;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory)
+            .map_err(|error| format!("read {}: {error}", directory.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("read {}: {error}", directory.display()))?;
+            let metadata = entry
+                .path()
+                .symlink_metadata()
+                .map_err(|error| format!("stat {}: {error}", entry.path().display()))?;
+            if metadata.is_dir() {
+                pending.push(entry.path());
+            } else {
+                bytes = bytes.saturating_add(metadata.len());
+                files = files.saturating_add(1);
+            }
+        }
+    }
+    Ok((bytes, files))
 }
 
 /// The scenarios this acceptance run must prove.
@@ -2853,6 +2899,33 @@ mod tests {
         .is_err());
         assert!(
             read_manifest_artifact(root.path(), &artifact("rust/target/linked-leaf"), 64,).is_err()
+        );
+    }
+
+    #[test]
+    fn measuring_evidence_counts_files_and_does_not_follow_links() {
+        let temporary = tempfile::tempdir().expect("tempdir");
+        let root = temporary.path();
+        fs::write(root.join("a.bin"), vec![0u8; 100]).expect("write a");
+        fs::create_dir(root.join("nested")).expect("nested");
+        fs::write(root.join("nested/b.bin"), vec![0u8; 50]).expect("write b");
+
+        let (bytes, files) = measure_tree(root).expect("measure");
+        assert_eq!(bytes, 150, "nested files must be included");
+        assert_eq!(files, 2);
+
+        // A link to a large tree must not be walked into, or a run could be
+        // measured as enormous, or escape its own evidence directory.
+        let outside = temporary.path().parent().expect("parent").to_path_buf();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).expect("symlink");
+        let (linked_bytes, linked_files) = measure_tree(root).expect("measure with link");
+        assert_eq!(
+            linked_files, 3,
+            "the link itself counts as one entry: {linked_files}"
+        );
+        assert!(
+            linked_bytes < 10_000,
+            "the link must not be followed, but measured {linked_bytes} bytes"
         );
     }
 
