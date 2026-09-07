@@ -1229,6 +1229,7 @@ fn reduce_capture_and_assertion(
         // reducer advances it. Keeping it callback-bound prevents an earlier
         // action from chaining past the semantic check.
         (Action::AssertScene(_), ActionPhase::WaitingForInput)
+        | (Action::AssertMode(_), ActionPhase::WaitingForInput)
         | (Action::AssertDispatch(_), ActionPhase::WaitingForInput)
         | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
         | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput)

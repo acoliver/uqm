@@ -1165,6 +1165,41 @@ impl Coordinator {
             }
         }
 
+        if let Some(Action::AssertMode(assertion)) = self.actions.get(inner.sched_state.step_index)
+        {
+            match crate::automation::mode::require_live() {
+                Ok(observed) if observed == assertion.mode => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!("mode_verified:{}", observed.name()),
+                ),
+                Ok(observed) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        format!(
+                            "mode_mismatch:expected={}:observed={}",
+                            assertion.mode.name(),
+                            observed.name()
+                        ),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+                Err(error) => {
+                    // An observation that names no mode, or more than one, is
+                    // never resolved by picking a nearest match.
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        format!("mode_ambiguous:{error}"),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+
         if let Some(Action::AssertDispatch(assertion)) =
             self.actions.get(inner.sched_state.step_index)
         {

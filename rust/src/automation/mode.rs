@@ -64,6 +64,25 @@ pub enum GameMode {
     Quit,
 }
 
+impl<'de> serde::Deserialize<'de> for GameMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let name = <String as serde::Deserialize>::deserialize(deserializer)?;
+        Self::from_name(&name).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "unknown mode '{name}'; expected one of: {}",
+                Self::ALL
+                    .iter()
+                    .map(|mode| mode.name())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        })
+    }
+}
+
 impl GameMode {
     /// Every mode, so a caller can prove it handled the whole table.
     pub const ALL: [Self; 10] = [
@@ -338,6 +357,44 @@ pub fn observe(observations: Observations) -> ModeObservation {
             candidates: Vec::new(),
         },
     }
+}
+
+/// Observe the live game.
+///
+/// Every field comes from a signal the game already publishes, so the table is
+/// the same authority a human and a script both see rather than a parallel
+/// model that can drift.
+///
+/// Starbase has no activity state of its own in a live run: `IN_STARBASE` is
+/// reserved for save summaries, and docking presents the commander as a scene.
+/// The scene is therefore the observation, which is why this is read here
+/// rather than inferred from the activity word.
+#[must_use]
+pub fn live() -> Observations {
+    use crate::automation::scenario::{active_scene, AutomationScene};
+    use crate::automation::ui_observation::{planet_menu_phase, PlanetMenuPhase};
+
+    let phase = planet_menu_phase();
+    Observations {
+        activity: crate::mainloop::ffi::get_current_activity().0,
+        surface: if phase == PlanetMenuPhase::LandingSite {
+            SurfacePresence::OnSurface
+        } else {
+            SurfacePresence::InOrbit
+        },
+        docked_at_starbase: active_scene() == Some(AutomationScene::StarbaseCommander),
+        in_planet_orbit: phase != PlanetMenuPhase::Inactive,
+    }
+}
+
+/// Observe the live game and require an unambiguous mode.
+///
+/// # Errors
+///
+/// Returns the ambiguity description when the observation does not name
+/// exactly one mode.
+pub fn require_live() -> Result<GameMode, String> {
+    observe(live()).require()
 }
 
 /// One published row of the mode table.
