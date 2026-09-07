@@ -44,6 +44,7 @@ pub mod scenario;
 pub mod scheduler;
 pub mod script;
 pub mod setup;
+pub mod suite;
 pub mod sync_model;
 pub mod trace;
 pub mod transport;
