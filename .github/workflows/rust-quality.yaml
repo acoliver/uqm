@@ -24,6 +24,7 @@ jobs:
       native_acceptance: ${{ steps.plan.outputs.native_acceptance }}
       retention_days: ${{ steps.plan_authority.outputs.retention_days }}
       workflow: ${{ steps.plan.outputs.workflow }}
+      autoplay: ${{ steps.plan.outputs.autoplay }}
     steps:
       - name: Seed plan transport fallback
         shell: bash
@@ -188,12 +189,18 @@ jobs:
             '.authority_contract.native_acceptance | select(type == "object")' "${plan}")"
           workflow="$(jq -cer \
             '.authority_contract.workflow | select(type == "object")' "${plan}")"
+          autoplay="$(jq -cer \
+            '.autoplay
+             | select(type == "object")
+             | select(.policy == "full" or .policy == "changed-paths")
+             | select(.scenarios | type == "array" and length > 0)' "${plan}")"
           {
             printf 'matrix=%s\n' "${matrix}"
             printf 'tools=%s\n' "${tools}"
             printf 'actions=%s\n' "${actions}"
             printf 'native_acceptance=%s\n' "${native_acceptance}"
             printf 'workflow=%s\n' "${workflow}"
+            printf 'autoplay=%s\n' "${autoplay}"
           } >> "${GITHUB_OUTPUT}"
       - name: Finalize plan transport evidence
         if: always()

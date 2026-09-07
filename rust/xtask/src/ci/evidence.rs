@@ -17593,6 +17593,7 @@ mod tests {
                     }
                 })
                 .collect(),
+            autoplay: super::super::plan::derive_autoplay(None),
         };
         fs::write(
             temp.path().join("ci-plan.json"),

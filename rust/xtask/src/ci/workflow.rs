@@ -909,7 +909,11 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         && plan.get_str(&["outputs", "tools"]) == Some("${{ steps.plan.outputs.tools }}")
         && plan.get_str(&["outputs", "native_acceptance"])
             == Some("${{ steps.plan.outputs.native_acceptance }}")
-        && plan.get_str(&["outputs", "workflow"]) == Some("${{ steps.plan.outputs.workflow }}");
+        && plan.get_str(&["outputs", "workflow"]) == Some("${{ steps.plan.outputs.workflow }}")
+        // The autoplay suite is derived once by the plan job so every tuple
+        // proves the same scenarios. If this output stops being published the
+        // gates lose their suite silently, so its absence is a failure here.
+        && plan.get_str(&["outputs", "autoplay"]) == Some("${{ steps.plan.outputs.autoplay }}");
     if ordered
         && authority_fetch
         && controller_is_base_owned
@@ -2991,6 +2995,50 @@ mod tests {
         assert!(results.iter().all(|result| result.passed), "{results:#?}");
     }
 
+    /// The smallest autoplay block the published plan contract accepts.
+    fn valid_autoplay() -> serde_json::Value {
+        serde_json::json!({
+            "policy": "full",
+            "reason": "test fixture",
+            "scenarios": ["quit-v1"],
+        })
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trusted_plan_validator_rejects_a_plan_without_a_usable_autoplay_suite() {
+        // Each of these is a way the suite could arrive meaningless. The
+        // publisher must refuse them rather than hand the gates an empty or
+        // unlabelled suite that would pass by running nothing.
+        let authority_value = serde_json::to_value(authority()).unwrap();
+        let tuples: serde_json::Value = serde_json::from_str(TRUSTED_PLAN_TUPLES_JSON).unwrap();
+        for broken in [
+            serde_json::json!(null),
+            serde_json::json!({"policy": "full", "reason": "r", "scenarios": []}),
+            serde_json::json!({"policy": "whatever", "reason": "r", "scenarios": ["quit-v1"]}),
+        ] {
+            let mut plan = serde_json::json!({
+                "schema": super::super::plan::PLAN_SCHEMA,
+                "authority": super::super::authority::AUTHORITY_RELATIVE,
+                "authority_contract": authority_value.clone(),
+                "tuples": tuples.clone(),
+            });
+            if !broken.is_null() {
+                plan["autoplay"] = broken.clone();
+            }
+            let encoded = serde_json::to_vec(&plan).unwrap();
+            let (output, published) = run_trusted_plan_validator(Some(&encoded), &authority_value);
+            assert!(
+                !output.status.success(),
+                "a plan whose autoplay is {broken} was published"
+            );
+            assert!(
+                !published.contains("autoplay="),
+                "a rejected plan still published an autoplay suite: {published}"
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn trusted_plan_validator_publishes_only_the_exact_four_tuples() {
@@ -3001,6 +3049,7 @@ mod tests {
             "authority": super::super::authority::AUTHORITY_RELATIVE,
             "authority_contract": authority_value.clone(),
             "tuples": tuples,
+            "autoplay": valid_autoplay(),
         }))
         .unwrap();
         let (output, published) = run_trusted_plan_validator(Some(&plan), &authority_value);
@@ -3032,6 +3081,7 @@ mod tests {
             "authority": super::super::authority::AUTHORITY_RELATIVE,
             "authority_contract": authority_value,
             "tuples": tuples,
+            "autoplay": valid_autoplay(),
         }))
         .unwrap();
         let authority_value = serde_json::to_value(authority).unwrap();

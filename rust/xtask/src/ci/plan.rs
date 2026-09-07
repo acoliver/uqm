@@ -26,6 +26,22 @@ pub struct PlanTuple {
     pub expected_uname: String,
 }
 
+/// Which autoplay scenarios this run must prove, and why that set.
+///
+/// The plan job derives this once so every gate tuple proves the same set. A
+/// run that cannot establish its changed paths asks for everything, because
+/// the alternative is a narrower suite chosen on no evidence.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AutoplayPlan {
+    /// `changed-paths` when a diff was available, `full` otherwise.
+    pub policy: String,
+    /// Why this policy applied, in terms a reviewer can check.
+    pub reason: String,
+    /// The scenarios to run, sorted, never empty.
+    pub scenarios: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Plan {
@@ -33,6 +49,56 @@ pub struct Plan {
     pub authority: String,
     pub authority_contract: Option<serde_json::Value>,
     pub tuples: Vec<PlanTuple>,
+    pub autoplay: AutoplayPlan,
+}
+
+/// Derive the autoplay suite for a set of changed paths.
+///
+/// `changed` is `None` when the run could not determine its own diff, which
+/// includes scheduled and manual runs. That is not treated as "nothing
+/// changed"; it is treated as "unknown", and unknown means the full suite.
+#[must_use]
+pub fn derive_autoplay(changed: Option<&[String]>) -> AutoplayPlan {
+    use uqm_rust::automation::suite::{path_is_mapped, required_suite, select_for_changed_paths};
+
+    let Some(changed) = changed else {
+        return AutoplayPlan {
+            policy: "full".into(),
+            reason: "the run did not establish its changed paths".into(),
+            scenarios: to_owned(required_suite()),
+        };
+    };
+    if changed.is_empty() {
+        return AutoplayPlan {
+            policy: "full".into(),
+            reason: "the run reported no changed paths".into(),
+            scenarios: to_owned(required_suite()),
+        };
+    }
+    let unmapped: Vec<&String> = changed
+        .iter()
+        .filter(|path| !path_is_mapped(path))
+        .collect();
+    if let Some(first) = unmapped.first() {
+        return AutoplayPlan {
+            policy: "full".into(),
+            reason: format!(
+                "{} of {} changed paths map to no domain, beginning with {first}",
+                unmapped.len(),
+                changed.len()
+            ),
+            scenarios: to_owned(required_suite()),
+        };
+    }
+    AutoplayPlan {
+        policy: "changed-paths".into(),
+        reason: format!("all {} changed paths map to known domains", changed.len()),
+        scenarios: to_owned(select_for_changed_paths(changed)),
+    }
+}
+
+fn to_owned(scenarios: Vec<&'static str>) -> Vec<String> {
+    scenarios.into_iter().map(str::to_owned).collect()
 }
 
 impl Plan {
@@ -69,7 +135,33 @@ pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
     let mut plan = build_plan(&matrix, &authority.runner_mapping, AUTHORITY_RELATIVE)
         .map_err(|error| CiError::new("ci.plan.matrix", error))?;
     plan.authority_contract = Some(authority_contract);
+    plan.autoplay = derive_autoplay(changed_paths(root).as_deref());
     Ok(plan)
+}
+
+/// The paths this run changed against its merge base, or `None` if unknown.
+///
+/// A failure to read the diff is deliberately indistinguishable from a
+/// scheduled run: both are "unknown", and both widen to the full suite.
+fn changed_paths(root: &Path) -> Option<Vec<String>> {
+    let base = std::env::var("UQM_AUTOPLAY_DIFF_BASE").ok()?;
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["diff", "--name-only", &base])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    Some(
+        text.lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect(),
+    )
 }
 
 fn write_plan(root: &Path, plan: &Plan) -> Result<(), CiError> {
@@ -125,6 +217,9 @@ pub fn build_plan(
         authority: authority.to_string(),
         authority_contract: None,
         tuples: plan_tuples,
+        // build_plan derives tuple identity only; derive_plan fills the
+        // autoplay suite once it knows the run's changed paths.
+        autoplay: derive_autoplay(None),
     })
 }
 
@@ -153,6 +248,50 @@ mod tests {
             serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
         assert_eq!(plan.authority_contract, Some(raw));
     }
+    #[test]
+    fn unknown_changed_paths_ask_for_everything() {
+        // Three ways of not knowing, one answer.
+        let full = derive_autoplay(None);
+        assert_eq!(full.policy, "full");
+        let empty = derive_autoplay(Some(&[]));
+        assert_eq!(empty.policy, "full");
+        let unmapped = derive_autoplay(Some(&["docs/readme.md".to_string()]));
+        assert_eq!(unmapped.policy, "full");
+        assert_eq!(full.scenarios, unmapped.scenarios);
+        assert!(!full.scenarios.is_empty());
+    }
+
+    #[test]
+    fn one_unmapped_path_widens_an_otherwise_mapped_change() {
+        let plan = derive_autoplay(Some(&[
+            "rust/src/battle/x.rs".to_string(),
+            "docs/readme.md".to_string(),
+        ]));
+        assert_eq!(plan.policy, "full");
+        assert!(
+            plan.reason.contains("docs/readme.md"),
+            "the reason must name the path that widened the suite: {}",
+            plan.reason
+        );
+    }
+
+    #[test]
+    fn fully_mapped_changes_select_a_subset() {
+        let plan = derive_autoplay(Some(&["rust/src/battle/x.rs".to_string()]));
+        assert_eq!(plan.policy, "changed-paths");
+        assert!(!plan.scenarios.is_empty());
+        assert!(plan.scenarios.len() < derive_autoplay(None).scenarios.len());
+    }
+
+    #[test]
+    fn every_selected_scenario_is_a_real_scenario() {
+        let all = derive_autoplay(None).scenarios;
+        let subset = derive_autoplay(Some(&["rust/src/battle/x.rs".to_string()])).scenarios;
+        for scenario in subset {
+            assert!(all.contains(&scenario), "{scenario} is not in the suite");
+        }
+    }
+
     #[test]
     fn plan_uses_all_four_authority_tuples() {
         let plan = build_plan(
