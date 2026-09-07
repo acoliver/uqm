@@ -178,6 +178,20 @@ impl PlayerKey {
         }
     }
 
+    /// The canonical lowercase name, the inverse of [`Self::from_name`].
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Thrust => "thrust",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Weapon => "weapon",
+            Self::Special => "special",
+            Self::Escape => "escape",
+        }
+    }
+
     #[must_use]
     pub const fn index(self) -> u8 {
         self as u8
