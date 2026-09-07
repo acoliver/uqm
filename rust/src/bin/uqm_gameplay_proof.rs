@@ -56,6 +56,7 @@ enum ArtifactRole {
     StderrLog,
     Trace,
     TeardownReceipt,
+    ResolvedScenario,
     Capture,
     ProductionManifestSnapshot,
     ExecutableSnapshot,
@@ -1242,6 +1243,7 @@ fn role_for_path(path: &str) -> Result<ArtifactRole, String> {
         "stderr.log" => ArtifactRole::StderrLog,
         "run/trace.jsonl" => ArtifactRole::Trace,
         "run/teardown-complete.json" => ArtifactRole::TeardownReceipt,
+        "run/resolved-scenario.json" => ArtifactRole::ResolvedScenario,
         "snapshots/production-manifest.json" => ArtifactRole::ProductionManifestSnapshot,
         "snapshots/uqm" => ArtifactRole::ExecutableSnapshot,
         "snapshots/script.json" => ArtifactRole::ScriptSnapshot,
@@ -1255,8 +1257,11 @@ fn role_for_path(path: &str) -> Result<ArtifactRole, String> {
     Ok(role)
 }
 
-fn mandatory_roles() -> [ArtifactRole; 8] {
+fn mandatory_roles() -> [ArtifactRole; 9] {
     [
+        // Every bundle must say what the run was attempting, otherwise a
+        // proof cannot be tied to the scenario it claims to prove.
+        ArtifactRole::ResolvedScenario,
         ArtifactRole::StdoutLog,
         ArtifactRole::StderrLog,
         ArtifactRole::ProductionManifestSnapshot,
@@ -1617,6 +1622,23 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn the_resolved_scenario_is_a_known_and_required_artifact() {
+        // The proof refuses artifacts it cannot classify, which is how this
+        // file first surfaced. Classify it, and require it: a bundle that
+        // cannot say what it was attempting proves nothing in particular.
+        assert!(matches!(
+            role_for_path("run/resolved-scenario.json"),
+            Ok(ArtifactRole::ResolvedScenario)
+        ));
+        assert!(mandatory_roles().contains(&ArtifactRole::ResolvedScenario));
+    }
+
+    #[test]
+    fn an_unclassifiable_artifact_is_still_refused() {
+        assert!(role_for_path("run/whatever.json").is_err());
+    }
+
     struct Fixture {
         _temp: tempfile::TempDir,
         path: PathBuf,
@@ -1736,6 +1758,24 @@ mod tests {
             trace_durable: true,
         };
         write_new_json(&root.join("run/teardown-complete.json"), &teardown).unwrap();
+        write_new_json(
+            &root.join("run/resolved-scenario.json"),
+            &json!({
+                "scenario": {
+                    "schema": "uqm-resolved-scenario-v1",
+                    "scenario_version": 2,
+                    "name": "fixture",
+                    "fixture": "fixture",
+                    "seed": 0,
+                    "step_count": 1,
+                    "max_input_ticks": 2,
+                    "max_presentations": 2,
+                    "max_wallclock_seconds": 1
+                },
+                "replay_identity": "0".repeat(64)
+            }),
+        )
+        .unwrap();
         let artifacts = collect_artifacts(root).unwrap();
         let canonical_root = fs::canonicalize(root).unwrap();
         let manifest = LcarManifest {

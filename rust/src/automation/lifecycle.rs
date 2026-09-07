@@ -82,6 +82,26 @@ pub struct TeardownReceipt {
     pub trace_durable: bool,
 }
 
+/// Durably publish the resolved scenario and its replay identity.
+///
+/// Written before the run starts rather than at teardown: a bundle from a run
+/// that died partway must still say what it was attempting, otherwise the
+/// failure cannot be attributed to a scenario.
+pub fn write_resolved_scenario(
+    output_root: &Path,
+    scenario: &crate::automation::script::ResolvedScenario,
+) -> Result<DurableResult, AutomationError> {
+    let record = serde_json::json!({
+        "scenario": scenario,
+        "replay_identity": scenario.replay_identity(),
+    });
+    let content = serde_json::to_vec(&record).map_err(|error| AutomationError::InvalidJson {
+        path: output_root.display().to_string(),
+        reason: error.to_string(),
+    })?;
+    write_durable(output_root, "resolved-scenario", "json", &content)
+}
+
 /// Durably publish a typed child teardown receipt.
 pub fn write_teardown_receipt(
     output_root: &Path,
