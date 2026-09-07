@@ -14,6 +14,13 @@ use uqm_rust::automation::{
 };
 
 const SCHEMA: &str = "uqm-lcar-v1";
+
+/// Every LCAR schema this build can validate.
+///
+/// Named as a set rather than compared to one constant so a bundle carrying an
+/// unknown version is rejected by name, and so adding a version is a visible
+/// change here rather than a silent widening.
+const SUPPORTED_SCHEMAS: &[&str] = &[SCHEMA];
 const FAILURE_FILE: &str = "failure-lcar-v1.json";
 const PASS_FILE: &str = "lcar-v1.json";
 const PRODUCTION_SCHEMA: &str = "uqm-deterministic-artifacts-v4";
@@ -537,17 +544,64 @@ fn validate_manifest_identity(path: &Path, manifest: &LcarManifest) -> Result<()
     } else {
         FAILURE_FILE
     };
-    if path.file_name().and_then(|name| name.to_str()) != Some(expected_name)
-        || manifest.schema != SCHEMA
-        || !is_hex(&manifest.git_head, 40)
-        || manifest.seed != AUTOMATION_SEED
-        || manifest.renderer != "sdl2-software-dummy"
-        || manifest.profile != "release"
-        || manifest.features != PRODUCTION_FEATURES
-        || !supported_target(&manifest.target)
-        || manifest.process.executable_sha256 != manifest.provenance.executable_sha256
-    {
-        return Err("LCAR identity or production contract is invalid".into());
+    // One reason per rejection. A single message covering every check cannot
+    // tell a stale bundle from a wrong binary from a corrupt field, which is
+    // the distinction a reviewer needs first.
+    if path.file_name().and_then(|name| name.to_str()) != Some(expected_name) {
+        return Err(format!(
+            "LCAR result file is named {:?} but a manifest with passed={} must be {expected_name}",
+            path.file_name().unwrap_or_default(),
+            manifest.passed
+        ));
+    }
+    if !SUPPORTED_SCHEMAS.contains(&manifest.schema.as_str()) {
+        return Err(format!(
+            "unsupported LCAR schema {:?}; this build validates: {}",
+            manifest.schema,
+            SUPPORTED_SCHEMAS.join(", ")
+        ));
+    }
+    if !is_hex(&manifest.git_head, 40) {
+        return Err(format!(
+            "LCAR git head {:?} is not a full 40-hex commit",
+            manifest.git_head
+        ));
+    }
+    if manifest.seed != AUTOMATION_SEED {
+        return Err(format!(
+            "LCAR seed {} is not the deterministic seed {AUTOMATION_SEED}",
+            manifest.seed
+        ));
+    }
+    if manifest.renderer != "sdl2-software-dummy" {
+        return Err(format!(
+            "LCAR renderer {:?} is not the accepted renderer sdl2-software-dummy",
+            manifest.renderer
+        ));
+    }
+    if manifest.profile != "release" {
+        return Err(format!(
+            "LCAR profile {:?} is not release",
+            manifest.profile
+        ));
+    }
+    if manifest.features != PRODUCTION_FEATURES {
+        return Err(format!(
+            "LCAR features {:?} are not the production features {PRODUCTION_FEATURES:?}",
+            manifest.features
+        ));
+    }
+    if !supported_target(&manifest.target) {
+        return Err(format!(
+            "LCAR target {:?} is not in the supported matrix",
+            manifest.target
+        ));
+    }
+    if manifest.process.executable_sha256 != manifest.provenance.executable_sha256 {
+        return Err(format!(
+            "LCAR was produced by a different binary than it claims: process {} but provenance {}",
+            manifest.process.executable_sha256, manifest.provenance.executable_sha256
+        ));
     }
     let expected_env = BTreeMap::from([
         ("SDL_AUDIODRIVER".into(), "dummy".into()),
@@ -1858,6 +1912,69 @@ mod tests {
     fn valid_fixture_passes_offline_validation() {
         let fixture = fixture();
         validate_manifest(&fixture.path).unwrap();
+    }
+
+    /// Each rejection category #32 names must be distinguishable by its message.
+    ///
+    /// Asserting only that validation failed would pass even if every cause
+    /// collapsed back into one opaque string, which is what this replaced.
+    /// A named rejection case: what to break, and the phrase that must name it.
+    type RejectionCase<'a> = (&'a str, &'a dyn Fn(&mut serde_json::Value), &'a str);
+
+    #[test]
+    fn each_rejection_names_its_own_cause() {
+        let cases: [RejectionCase<'_>; 6] = [
+            (
+                "unknown schema",
+                &|value| value["schema"] = json!("uqm-lcar-v99"),
+                "unsupported LCAR schema",
+            ),
+            (
+                "corrupt commit",
+                &|value| value["git_head"] = json!("not-a-commit"),
+                "not a full 40-hex commit",
+            ),
+            (
+                "wrong seed",
+                &|value| value["seed"] = json!(1234),
+                "not the deterministic seed",
+            ),
+            (
+                "wrong renderer",
+                &|value| value["renderer"] = json!("opengl"),
+                "not the accepted renderer",
+            ),
+            (
+                "wrong profile",
+                &|value| value["profile"] = json!("debug"),
+                "is not release",
+            ),
+            (
+                "wrong binary",
+                &|value| {
+                    value["process"]["executable_sha256"] = json!("0".repeat(64));
+                },
+                "produced by a different binary",
+            ),
+        ];
+
+        for (name, mutate, expected) in cases {
+            let fixture = fixture();
+            mutate_manifest(&fixture, mutate);
+            let error =
+                validate_manifest(&fixture.path).expect_err(&format!("{name} must be rejected"));
+            assert!(
+                error.contains(expected),
+                "{name}: expected a message containing {expected:?}, got {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_supported_schema_set_is_what_the_writer_emits() {
+        // A validator that accepts a version nothing writes, or rejects the
+        // one it does, is worse than no version check.
+        assert!(SUPPORTED_SCHEMAS.contains(&SCHEMA));
     }
 
     #[test]
