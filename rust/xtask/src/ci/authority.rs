@@ -622,8 +622,24 @@ pub struct NativeAcceptanceAuthority {
     pub script: String,
     pub script_sha256: String,
     pub script_byte_length: u64,
+    /// Every scenario script the autoplay suite may execute, pinned.
+    ///
+    /// The suite that runs is chosen per run, but what may run is fixed here,
+    /// in the base-owned authority, by content hash. Selection can therefore
+    /// narrow the set but never reach outside it, which is what keeps a head
+    /// revision from introducing a script for CI to execute.
+    pub scenario_scripts: Vec<PinnedScript>,
     pub acceptance_policy: uqm_rust::automation::native_window::NativeAcceptancePolicy,
     pub runtime_contract: NativeRuntimeAuthority,
+}
+
+/// One scenario script, pinned by content.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedScript {
+    pub path: String,
+    pub sha256: String,
+    pub byte_length: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -871,6 +887,7 @@ pub fn validate_authority(authority: &Authority) -> Result<(), String> {
     validate_complexity_and_coverage(authority)?;
     validate_cache_and_supervision(authority)?;
     validate_native_acceptance(authority)?;
+    validate_scenario_scripts(authority)?;
     validate_package_and_bootstrap(authority)?;
     validate_gate_inventory(authority)?;
     Ok(())
@@ -1240,6 +1257,51 @@ fn validate_cache_and_supervision(authority: &Authority) -> Result<(), String> {
     Ok(())
 }
 
+/// Every scenario script must be pinned, exactly once, with a well-formed digest.
+///
+/// This validates the shape of the inventory. Whether each digest matches the
+/// file on disk is checked separately, against the real tree, because an
+/// inventory that agrees only with itself proves nothing.
+fn validate_scenario_scripts(authority: &Authority) -> Result<(), String> {
+    let pinned = &authority.native_acceptance.scenario_scripts;
+    if pinned.is_empty() {
+        return Err("authority native_acceptance must pin at least one scenario script".into());
+    }
+    let mut seen = BTreeSet::new();
+    for entry in pinned {
+        if !entry.path.starts_with("rust/scripts/") || !entry.path.ends_with(".json") {
+            return Err(format!(
+                "authority pins a scenario script outside rust/scripts: {}",
+                entry.path
+            ));
+        }
+        if entry.path.contains("..") {
+            return Err(format!("authority pins a traversing path: {}", entry.path));
+        }
+        if !valid_sha256(&entry.sha256) {
+            return Err(format!(
+                "authority pins {} with a malformed digest",
+                entry.path
+            ));
+        }
+        if entry.byte_length == 0 {
+            return Err(format!("authority pins {} as empty", entry.path));
+        }
+        if !seen.insert(entry.path.as_str()) {
+            return Err(format!("authority pins {} more than once", entry.path));
+        }
+    }
+    // The scenario the native gate runs today must itself be pinned, or the
+    // inventory and the gate disagree about what is allowed to execute.
+    if !seen.contains(authority.native_acceptance.script.as_str()) {
+        return Err(format!(
+            "authority native_acceptance script {} is not in the pinned inventory",
+            authority.native_acceptance.script
+        ));
+    }
+    Ok(())
+}
+
 fn validate_native_acceptance(authority: &Authority) -> Result<(), String> {
     let native = &authority.native_acceptance;
     let content_transport = &native.content_transport;
@@ -1515,6 +1577,53 @@ mod tests {
             authority.native_acceptance.script_byte_length
         );
         assert_eq!(digest, authority.native_acceptance.script_sha256);
+
+        // The inventory must describe the tree, not itself.
+        {
+            use std::collections::BTreeSet;
+            let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .expect("rust dir")
+                .parent()
+                .expect("repository root")
+                .to_path_buf();
+            let mut pinned = BTreeSet::new();
+            for entry in &authority.native_acceptance.scenario_scripts {
+                let path = root.join(&entry.path);
+                let bytes = std::fs::read(&path).unwrap_or_else(|error| {
+                    panic!("{} is pinned but unreadable: {error}", entry.path)
+                });
+                let digest = Sha256::digest(&bytes)
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>();
+                assert_eq!(digest, entry.sha256, "{} digest drifted", entry.path);
+                assert_eq!(
+                    bytes.len() as u64,
+                    entry.byte_length,
+                    "{} length drifted",
+                    entry.path
+                );
+                pinned.insert(entry.path.clone());
+            }
+            // A scenario the suite can select but the authority does not pin
+            // would be a scenario CI is asked to run and forbidden to run.
+            for file in std::fs::read_dir(root.join("rust/scripts")).expect("scripts") {
+                let file = file.expect("entry").path();
+                if file.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let name = file
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .expect("name");
+                let relative = format!("rust/scripts/{name}");
+                assert!(
+                    pinned.contains(&relative),
+                    "{relative} exists but is not pinned by the authority"
+                );
+            }
+        }
 
         let script: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         let steps = script["steps"].as_array().unwrap();
