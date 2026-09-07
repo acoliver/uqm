@@ -6299,6 +6299,9 @@ fn validate_bootstrap_lcar(
         "final_config_snapshot",
         "trace",
         "teardown_receipt",
+        // A bundle must say what the run was attempting, or the proof cannot
+        // be tied to the scenario it claims to prove.
+        "resolved_scenario",
     ];
     let roles_valid = mandatory.iter().all(|role| roles.get(*role) == Some(&1))
         && roles.get("capture").is_some_and(|count| *count > 0);
@@ -7029,6 +7032,7 @@ fn valid_lcar_artifact_role(role: &str, path: &str) -> bool {
         "stderr.log" => role == "stderr_log",
         "run/trace.jsonl" => role == "trace",
         "run/teardown-complete.json" => role == "teardown_receipt",
+        "run/resolved-scenario.json" => role == "resolved_scenario",
         "snapshots/production-manifest.json" => role == "production_manifest_snapshot",
         "snapshots/uqm" => role == "executable_snapshot",
         "snapshots/script.json" => role == "script_snapshot",
@@ -14161,6 +14165,25 @@ mod tests {
                 "capture",
                 "run/captures/menu-after-select.png",
                 png([255, 255, 255]),
+            ),
+            (
+                "resolved_scenario",
+                "run/resolved-scenario.json",
+                serde_json::to_vec(&serde_json::json!({
+                    "scenario": {
+                        "schema": "uqm-resolved-scenario-v1",
+                        "scenario_version": 2,
+                        "name": "fixture",
+                        "fixture": "fixture",
+                        "seed": 0,
+                        "step_count": 1,
+                        "max_input_ticks": 2,
+                        "max_presentations": 2,
+                        "max_wallclock_seconds": 1
+                    },
+                    "replay_identity": "0".repeat(64)
+                }))
+                .expect("resolved scenario fixture"),
             ),
             (
                 "teardown_receipt",
