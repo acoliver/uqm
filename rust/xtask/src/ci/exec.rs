@@ -2181,6 +2181,9 @@ struct UidContainmentConfig {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+/// The environment binding carrying the plan-selected autoplay suite.
+pub const AUTOPLAY_SCENARIOS_ENV: &str = "UQM_CI_AUTOPLAY_SCENARIOS";
+
 fn containment_environment_allows(name: &str) -> bool {
     matches!(
         name,
@@ -2219,6 +2222,11 @@ fn containment_environment_allows(name: &str) -> bool {
             | "CARGO_TARGET_DIR"
             | "RUSTUP_HOME"
             | "RUSTUP_TOOLCHAIN"
+            // The autoplay suite the plan selected. Forwarding it cannot widen
+            // what executes: the acceptance resolves every name against the
+            // authority's pinned inventory and refuses anything absent from
+            // it, so the worst a tampered value can do is name nothing.
+            | AUTOPLAY_SCENARIOS_ENV
     ) || name.starts_with("LC_")
 }
 
@@ -3743,6 +3751,23 @@ mod tests {
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn the_autoplay_suite_survives_environment_filtering() {
+        // The suite was selected, published and read, and still only one
+        // scenario ran, because the binding did not survive the allowlist
+        // between the job and the process that reads it. A green gate that
+        // proved one scenario while reporting thirty-two is the failure this
+        // guards against.
+        assert!(
+            containment_environment_allows(AUTOPLAY_SCENARIOS_ENV),
+            "{AUTOPLAY_SCENARIOS_ENV} must survive environment filtering"
+        );
+        assert!(current_aqua_environment_allows(AUTOPLAY_SCENARIOS_ENV));
+
+        // Nothing else acquires passage by accident.
+        assert!(!containment_environment_allows("UQM_CI_ANYTHING_ELSE"));
+    }
+
     #[test]
     fn dedicated_containment_config_fails_closed_without_process_environment_mutation() {
         let missing = Err(std::env::VarError::NotPresent);

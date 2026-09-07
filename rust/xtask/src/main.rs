@@ -973,6 +973,9 @@ fn run_native_window_acceptance(
         if let Ok(precreated) = env::var(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV) {
             command.env(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV, precreated);
         }
+        if let Some(requested) = requested.as_deref() {
+            command.env(ci::exec::AUTOPLAY_SCENARIOS_ENV, requested);
+        }
         run_aqua_command(
             &mut command,
             &format!("Direct linked native-window acceptance: {}", pinned.path),
