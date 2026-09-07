@@ -194,6 +194,80 @@ const fn fixture(scenario: &'static str, kind: FixtureKind) -> ScenarioRow {
     }
 }
 
+/// Which domains a changed source path can affect.
+///
+/// The mapping is deliberately coarse. A path that maps to nothing is not
+/// assumed harmless: [`select_for_changed_paths`] answers with the complete
+/// required suite, because an unmapped path is a path nobody has reasoned
+/// about, and guessing it is safe is how a regression ships.
+#[must_use]
+pub fn domains_for_path(path: &str) -> &'static [Domain] {
+    // Longest-prefix first, so a specific rule wins over a general one.
+    const RULES: &[(&str, &[Domain])] = &[
+        ("rust/src/automation/", &[]), // harness: affects everything, handled below
+        ("rust/src/comm/", &[Domain::CommunicationChoices]),
+        (
+            "rust/src/planets/",
+            &[Domain::NavigationOrbitScan, Domain::PlanetSideResults],
+        ),
+        ("rust/src/battle/", &[Domain::BattleOutcomes]),
+        ("rust/src/save/", &[Domain::SaveLoad]),
+        ("rust/src/load/", &[Domain::SaveLoad]),
+        (
+            "rust/src/mainloop/restart_menu/",
+            &[Domain::BootMenu, Domain::Quit],
+        ),
+        ("rust/src/starbase/", &[Domain::Starbase]),
+        ("rust/scripts/", &[]), // scenarios themselves: run everything
+    ];
+    RULES
+        .iter()
+        .filter(|(prefix, _)| path.starts_with(prefix))
+        .max_by_key(|(prefix, _)| prefix.len())
+        .map_or(&[], |(_, domains)| *domains)
+}
+
+/// Whether a path is mapped at all.
+#[must_use]
+pub fn path_is_mapped(path: &str) -> bool {
+    !domains_for_path(path).is_empty()
+}
+
+/// The scenarios that must run for a set of changed paths.
+///
+/// Returns every gameplay scenario when any path is unmapped, which includes
+/// harness and scenario changes because those can affect any domain.
+#[must_use]
+pub fn select_for_changed_paths(paths: &[String]) -> Vec<&'static str> {
+    if paths.is_empty() || paths.iter().any(|path| !path_is_mapped(path)) {
+        return required_suite();
+    }
+    let mut selected: Vec<&'static str> = Vec::new();
+    for path in paths {
+        for domain in domains_for_path(path) {
+            for scenario in scenarios_for(*domain) {
+                if !selected.contains(&scenario) {
+                    selected.push(scenario);
+                }
+            }
+        }
+    }
+    selected.sort_unstable();
+    selected
+}
+
+/// Every scenario that proves gameplay, which is the full required suite.
+#[must_use]
+pub fn required_suite() -> Vec<&'static str> {
+    let mut all: Vec<&'static str> = MATRIX
+        .iter()
+        .filter(|row| row.fixture.is_none())
+        .map(|row| row.scenario)
+        .collect();
+    all.sort_unstable();
+    all
+}
+
 /// The scenarios covering a domain.
 #[must_use]
 pub fn scenarios_for(domain: Domain) -> Vec<&'static str> {
@@ -323,6 +397,68 @@ mod tests {
                 "{} carries no assertion and proves nothing",
                 row.scenario
             );
+        }
+    }
+
+    #[test]
+    fn an_unmapped_path_selects_the_complete_suite() {
+        // The important half of the policy. A path nobody has classified is a
+        // path nobody has reasoned about, so it must not narrow the suite.
+        let selected = select_for_changed_paths(&["rust/src/nowhere/thing.rs".to_string()]);
+        assert_eq!(selected, required_suite());
+
+        // One unmapped path among mapped ones still widens to everything.
+        let mixed = select_for_changed_paths(&[
+            "rust/src/battle/x.rs".to_string(),
+            "docs/whatever.md".to_string(),
+        ]);
+        assert_eq!(mixed, required_suite());
+    }
+
+    #[test]
+    fn no_changed_paths_selects_the_complete_suite() {
+        assert_eq!(select_for_changed_paths(&[]), required_suite());
+    }
+
+    #[test]
+    fn a_mapped_path_selects_its_domains_and_nothing_else() {
+        let selected = select_for_changed_paths(&["rust/src/battle/frame.rs".to_string()]);
+        assert!(selected.contains(&"battle-v1"));
+        assert!(
+            !selected.contains(&"load-save-v1"),
+            "a battle change must not drag in save/load: {selected:?}"
+        );
+        assert!(selected.len() < required_suite().len());
+    }
+
+    #[test]
+    fn the_longest_matching_prefix_wins() {
+        // rust/src/mainloop/restart_menu/ is more specific than any shorter
+        // rule that might later be added above it.
+        let domains = domains_for_path("rust/src/mainloop/restart_menu/input.rs");
+        assert!(domains.contains(&Domain::Quit));
+        assert!(domains.contains(&Domain::BootMenu));
+    }
+
+    #[test]
+    fn selection_never_returns_a_fixture() {
+        // Fixtures prove supervision, not gameplay, so a gameplay selection
+        // that includes one is a selection that will look busier than it is.
+        let fixtures: Vec<&str> = MATRIX
+            .iter()
+            .filter(|row| row.fixture.is_some())
+            .map(|row| row.scenario)
+            .collect();
+        for scenario in required_suite() {
+            assert!(!fixtures.contains(&scenario), "{scenario} is a fixture");
+        }
+    }
+
+    #[test]
+    fn every_selected_scenario_has_a_file() {
+        let on_disk = scenarios_on_disk();
+        for scenario in required_suite() {
+            assert!(on_disk.contains(scenario), "{scenario} has no file");
         }
     }
 
