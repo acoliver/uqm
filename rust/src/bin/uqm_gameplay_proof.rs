@@ -685,7 +685,7 @@ fn record_interrupted_preparation(evidence: &RunEvidence, signal: i32) -> Result
 /// on half the evidence.
 fn run_dir(bundle: &Path) -> PathBuf {
     let nested = bundle.join("run");
-    if nested.join("resolved-scenario.json").is_file() {
+    if nested.is_dir() {
         nested
     } else {
         bundle.to_path_buf()
@@ -709,10 +709,21 @@ fn recorded_identity(bundle: &Path) -> Result<String, String> {
 fn report_bundle(bundle: &Path) -> Result<(), String> {
     let run = run_dir(bundle);
     let resolved_path = run.join("resolved-scenario.json");
-    let resolved = std::fs::read_to_string(&resolved_path)
-        .map_err(|error| format!("read {}: {error}", resolved_path.display()))?;
-    let resolved: serde_json::Value = serde_json::from_str(&resolved)
-        .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?;
+    let resolved: Option<serde_json::Value> = match std::fs::read_to_string(&resolved_path) {
+        Ok(text) => Some(
+            serde_json::from_str(&text)
+                .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?,
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(format!("read {}: {error}", resolved_path.display())),
+    };
+    let Some(resolved) = resolved else {
+        // The run stopped before it resolved a scenario. Say so plainly and
+        // report whatever terminal state it did record, because a bundle from
+        // a run that died is the one worth reading.
+        println!("scenario\tunresolved: the run stopped before resolving a scenario");
+        return report_terminal(&run);
+    };
 
     // The scenario facts are nested under "scenario"; the identity that binds
     // them sits beside it.
@@ -732,12 +743,27 @@ fn report_bundle(bundle: &Path) -> Result<(), String> {
     println!("seed\t{}", scenario["seed"]);
     println!("steps\t{}", scenario["step_count"]);
 
+    report_terminal(&run)
+}
+
+/// Report whatever terminal state a run recorded, including none.
+fn report_terminal(run: &Path) -> Result<(), String> {
     let teardown_path = run.join("teardown-complete.json");
     match std::fs::read_to_string(&teardown_path) {
         Ok(text) => {
             let teardown: serde_json::Value = serde_json::from_str(&text)
                 .map_err(|error| format!("parse {}: {error}", teardown_path.display()))?;
             println!("terminal\t{}", teardown["terminal"].as_str().unwrap_or("?"));
+            // An interrupted run records why it stopped; a completed one does
+            // not carry these, so they are printed when present rather than
+            // demanded.
+            for field in ["signal", "phase", "detail"] {
+                match teardown.get(field) {
+                    Some(serde_json::Value::String(text)) => println!("{field}\t{text}"),
+                    Some(serde_json::Value::Number(number)) => println!("{field}\t{number}"),
+                    _ => {}
+                }
+            }
         }
         // A bundle without teardown is the signature of a run that died, which
         // is worth reporting plainly rather than failing to summarise.
