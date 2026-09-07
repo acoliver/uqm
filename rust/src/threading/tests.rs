@@ -26,13 +26,31 @@ use std::time::Duration;
 // Thread Tests
 // ============================================================================
 
+/// Serialises the tests that own the global thread system.
+///
+/// `init_thread_system` and `uninit_thread_system` mutate process-wide state,
+/// so two of these running concurrently can observe each other's transitions.
+/// That is what made `test_thread_system_init` fail intermittently: it asserts
+/// the system is uninitialised immediately after uninitialising it, which a
+/// concurrent initialisation invalidates.
+static THREAD_SYSTEM: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Take the lock, ignoring poisoning from an unrelated failing test.
+fn hold_thread_system() -> std::sync::MutexGuard<'static, ()> {
+    THREAD_SYSTEM
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 /// Test basic thread spawn and join
 ///
 /// Validates that we can spawn a thread, have it do work, and join it.
 /// The C implementation uses CreateThread_Core -> NativeCreateThread -> SDL_CreateThread
 /// and WaitThread -> NativeWaitThread -> SDL_WaitThread.
+
 #[test]
 fn test_thread_spawn_and_join() {
+    let _guard = hold_thread_system();
     // Initialize thread system (C: InitThreadSystem)
     let _ = init_thread_system();
     // Spawn a thread that does some work
@@ -58,6 +76,7 @@ fn test_thread_spawn_and_join() {
 /// The C implementation passes return values through WaitThread's status parameter.
 #[test]
 fn test_thread_spawn_with_return_value() {
+    let _guard = hold_thread_system();
     let _ = init_thread_system();
     // Spawn a thread that computes and returns a value
     let thread = Thread::spawn(Some("compute_thread"), || {
@@ -123,6 +142,7 @@ fn test_thread_c_int_return_multiple_values() {
 /// The C implementation maintains threads in a thread queue (threadQueue).
 #[test]
 fn test_multiple_threads_concurrent() {
+    let _guard = hold_thread_system();
     let _ = init_thread_system();
     let counter = Arc::new(AtomicUsize::new(0));
     let num_threads = 4;
@@ -157,6 +177,7 @@ fn test_multiple_threads_concurrent() {
 /// The C implementation uses NAMED_SYNCHRO to track thread names.
 #[test]
 fn test_thread_name() {
+    let _guard = hold_thread_system();
     let _ = init_thread_system();
     let thread = Thread::spawn(Some("named_thread"), || {
         // Thread does nothing
@@ -559,6 +580,7 @@ fn test_task_id_uniqueness() {
 /// The C implementation uses InitThreadSystem and UnInitThreadSystem.
 #[test]
 fn test_thread_system_init() {
+    let _guard = hold_thread_system();
     // May already be initialized by other tests, so uninit first
     uninit_thread_system();
     assert!(!is_thread_system_initialized());

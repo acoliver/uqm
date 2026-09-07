@@ -178,6 +178,20 @@ impl PlayerKey {
         }
     }
 
+    /// The canonical lowercase name, the inverse of [`Self::from_name`].
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Thrust => "thrust",
+            Self::Down => "down",
+            Self::Left => "left",
+            Self::Right => "right",
+            Self::Weapon => "weapon",
+            Self::Special => "special",
+            Self::Escape => "escape",
+        }
+    }
+
     #[must_use]
     pub const fn index(self) -> u8 {
         self as u8
@@ -494,6 +508,17 @@ pub enum PlanetMenuPhaseName {
     LandingSite,
 }
 
+/// An `assert_mode` step verifies the live gameplay mode.
+///
+/// The mode is derived from the game's own observations, so this asserts what
+/// the game is doing rather than what the screen looks like. An observation
+/// that names no mode, or more than one, fails the run.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ModeAssertion {
+    pub mode: crate::automation::mode::GameMode,
+}
+
 /// An `assert_scene` step verifies the expected deterministic scene dispatch chain.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -632,6 +657,7 @@ pub enum Action {
     Capture(CaptureStep),
     AssertActivity(ActivityAssertion),
     AssertScene(SceneAssertion),
+    AssertMode(ModeAssertion),
     AssertDispatch(DispatchAssertion),
     WaitForDispatch(WaitForDispatchStep),
     AssertGameOptions(GameOptionsAssertion),
@@ -1970,6 +1996,27 @@ mod tests {
             a.resolved().replay_identity(),
             b.resolved().replay_identity()
         );
+    }
+
+    #[test]
+    fn accepts_assert_mode_action() {
+        let txt = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_mode","mode":"battle"},{"action":"finish"}]}"#;
+        let doc = parse_script(txt.as_bytes(), p()).unwrap();
+        let script = validate_script(doc, p()).unwrap();
+        assert!(matches!(
+            script.steps().first(),
+            Some(Action::AssertMode(ModeAssertion {
+                mode: crate::automation::mode::GameMode::Battle
+            }))
+        ));
+    }
+
+    #[test]
+    fn rejects_an_unknown_mode_before_launch() {
+        // An unknown mode must fail parsing, not at the moment the step runs.
+        let txt = r#"{"version":1,"name":"m","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"assert_mode","mode":"teleporting"},{"action":"finish"}]}"#;
+        let error = parse_script(txt.as_bytes(), p()).unwrap_err();
+        assert!(format!("{error}").contains("unknown mode"), "{error}");
     }
 
     #[test]
