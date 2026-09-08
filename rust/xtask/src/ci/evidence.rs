@@ -6013,7 +6013,14 @@ fn validate_failure_lcar_inventory(
                     && matching[0].sha256 == hash
                     && matching[0].byte_length == bytes
                     && (bytes > 0
-                        || matches!(role, "stdout_log" | "stderr_log" | "content_snapshot_file"))
+                        || matches!(
+                            role,
+                            "stdout_log"
+                                | "stderr_log"
+                                | "content_snapshot_file"
+                                | "final_config_snapshot_file"
+                                | "retained_config_file"
+                        ))
                     && read_lcar_artifact(root, path).is_ok_and(|content| {
                         content.len() as u64 == bytes && hex_sha256(&content) == hash
                     })
@@ -6088,7 +6095,14 @@ fn validate_success_lcar_inventory(
                     && artifact.get("bytes").and_then(|value| value.as_u64())
                         == Some(matching[0].byte_length)
                     && (matching[0].byte_length > 0
-                        || matches!(role, "stdout_log" | "stderr_log" | "content_snapshot_file"))
+                        || matches!(
+                            role,
+                            "stdout_log"
+                                | "stderr_log"
+                                | "content_snapshot_file"
+                                | "final_config_snapshot_file"
+                                | "retained_config_file"
+                        ))
                     && read_lcar_artifact(root, path).is_ok_and(|content| {
                         content.len() as u64 == bytes && hex_sha256(&content) == hash
                     })
@@ -6366,7 +6380,7 @@ fn validate_bootstrap_lcar(
         })
     });
     let config_valid = role_paths.get("final_config_snapshot").is_some_and(|path| {
-        validate_lcar_retained_tree(root, path, artifacts, "retained_config_file", "config/")
+        validate_lcar_final_config(root, path, artifacts, manifest.get("cleanup"))
     });
     if !snapshots_valid || !trees_valid || !config_valid {
         contracts.push("evidence.builtin.bootstrap-proof.lcar.snapshots".to_string());
@@ -6620,7 +6634,7 @@ fn validate_bootstrap_failure_lcar(
             })
         });
     let config_valid = role_paths.get("final_config_snapshot").is_some_and(|path| {
-        validate_lcar_retained_tree(root, path, artifacts, "retained_config_file", "config/")
+        validate_lcar_final_config(root, path, artifacts, manifest.get("cleanup"))
     });
     if !snapshots_valid || !config_valid {
         contracts.push("evidence.builtin.bootstrap-proof.failure_lcar.snapshots".to_string());
@@ -7071,6 +7085,7 @@ fn valid_lcar_artifact_role(role: &str, path: &str) -> bool {
         "snapshots/content-identity.json" => role == "content_identity_snapshot",
         "snapshots/config-initial.json" => role == "initial_config_snapshot",
         "snapshots/config-final.json" => role == "final_config_snapshot",
+        _ if path.starts_with("snapshots/config-final/") => role == "final_config_snapshot_file",
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => role == "capture",
         _ if path.starts_with("config/") => role == "retained_config_file",
         _ if path.starts_with("snapshots/sc2/content/") => role == "content_snapshot_file",
@@ -7449,6 +7464,46 @@ fn validate_lcar_capture_changes(
     }
     true
 }
+fn validate_lcar_final_config(
+    root: &Path,
+    snapshot_path: &str,
+    artifacts: Option<&Vec<serde_json::Value>>,
+    cleanup: Option<&serde_json::Value>,
+) -> bool {
+    if !validate_lcar_retained_tree(
+        root,
+        snapshot_path,
+        artifacts,
+        "final_config_snapshot_file",
+        "snapshots/config-final/",
+    ) {
+        return false;
+    }
+    let Some(artifacts) = artifacts else {
+        return false;
+    };
+    artifacts
+        .iter()
+        .filter(|entry| entry["role"] == "retained_config_file")
+        .all(|entry| {
+            cleanup
+                .and_then(|value| value.get("config_root_removed"))
+                .and_then(|value| value.as_bool())
+                == Some(false)
+                && entry["path"]
+                    .as_str()
+                    .and_then(|path| path.strip_prefix("config/"))
+                    .is_some_and(|relative| {
+                        artifacts.iter().any(|retained| {
+                            retained["role"] == "final_config_snapshot_file"
+                                && retained["path"] == format!("snapshots/config-final/{relative}")
+                                && retained["sha256"] == entry["sha256"]
+                                && retained["bytes"] == entry["bytes"]
+                        })
+                    })
+        })
+}
+
 fn validate_lcar_retained_tree(
     root: &Path,
     snapshot_path: &str,
@@ -14150,6 +14205,203 @@ mod tests {
         contracts
     }
 
+    fn retain_final_config_fixture(
+        root: &Path,
+        index: &mut EvidenceIndex,
+        lcar: &mut serde_json::Value,
+        command: &[String],
+    ) {
+        let mut entries = Vec::new();
+        for (relative, bytes) in [
+            ("empty", b"".as_slice()),
+            ("nested/settings.cfg", b"final profile".as_slice()),
+        ] {
+            let path = format!("snapshots/config-final/{relative}");
+            let hash = hex_sha256(bytes);
+            entries
+                .push(serde_json::json!({"path": relative, "sha256": hash, "bytes": bytes.len()}));
+            lcar["artifacts"].as_array_mut().unwrap().push(serde_json::json!({"role": "final_config_snapshot_file", "path": path, "sha256": hash, "bytes": bytes.len()}));
+            write_bundle_entry(
+                root,
+                &mut index.entries,
+                &format!("payloads/bootstrap-proof.lcar-artifact/{path}"),
+                "bootstrap-proof.lcar-artifact",
+                command,
+                bytes,
+            );
+            let entry = index.entries.last_mut().unwrap();
+            entry.producing_gate = "bootstrap-proof".into();
+            entry.mime = "application/octet-stream".into();
+        }
+        let snapshot = lcar_tree_fixture("final_config", serde_json::json!(entries));
+        lcar["provenance"]["final_config_tree_sha256"] = snapshot["tree_sha256"].clone();
+        rewrite_lcar_artifact(
+            root,
+            &mut index.entries,
+            lcar,
+            "snapshots/config-final.json",
+            &serde_json::to_vec(&snapshot).unwrap(),
+        );
+        lcar["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+        rewrite_bundle_entry(
+            root,
+            &mut index.entries,
+            "bootstrap-proof.lcar",
+            &serde_json::to_vec(lcar).unwrap(),
+        );
+    }
+
+    #[test]
+    fn bootstrap_final_config_snapshot_survives_runtime_cleanup() {
+        let temp = tempfile::tempdir().unwrap();
+        let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(temp.path());
+        retain_final_config_fixture(temp.path(), &mut index, &mut lcar, &command);
+        assert_eq!(
+            lcar_fixture_contracts(temp.path(), &index, &command),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn bootstrap_final_config_rejects_tampering_in_success_and_failure_bundles() {
+        for mutation in [
+            "none",
+            "tamper",
+            "rehash",
+            "missing",
+            "missing_reindexed",
+            "extra",
+            "extra_reindexed",
+            "tree_hash",
+            "length",
+            "order",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(root);
+            retain_final_config_fixture(root, &mut index, &mut lcar, &command);
+            assert!(lcar_fixture_contracts(root, &index, &command).is_empty());
+            let relative = "snapshots/config-final/nested/settings.cfg";
+            let physical = root.join(format!("payloads/bootstrap-proof.lcar-artifact/{relative}"));
+            match mutation {
+                "none" => {}
+                "tamper" => fs::write(&physical, b"tampered").unwrap(),
+                "rehash" => rewrite_lcar_artifact(
+                    root,
+                    &mut index.entries,
+                    &mut lcar,
+                    relative,
+                    b"tampered",
+                ),
+                "missing" | "missing_reindexed" => {
+                    let path = "snapshots/config-final/empty";
+                    fs::remove_file(
+                        root.join(format!("payloads/bootstrap-proof.lcar-artifact/{path}")),
+                    )
+                    .unwrap();
+                    if mutation == "missing_reindexed" {
+                        lcar["artifacts"]
+                            .as_array_mut()
+                            .unwrap()
+                            .retain(|entry| entry["path"] != path);
+                        index.entries.retain(|entry| {
+                            entry.path != format!("payloads/bootstrap-proof.lcar-artifact/{path}")
+                        });
+                    }
+                }
+                "extra" | "extra_reindexed" => {
+                    let path = "snapshots/config-final/extra";
+                    fs::write(
+                        root.join(format!("payloads/bootstrap-proof.lcar-artifact/{path}")),
+                        b"",
+                    )
+                    .unwrap();
+                    if mutation == "extra_reindexed" {
+                        lcar["artifacts"].as_array_mut().unwrap().push(serde_json::json!({"role": "final_config_snapshot_file", "path": path, "sha256": hex_sha256(b""), "bytes": 0}));
+                        write_bundle_entry(
+                            root,
+                            &mut index.entries,
+                            &format!("payloads/bootstrap-proof.lcar-artifact/{path}"),
+                            "bootstrap-proof.lcar-artifact",
+                            &command,
+                            b"",
+                        );
+                        let entry = index.entries.last_mut().unwrap();
+                        entry.producing_gate = "bootstrap-proof".into();
+                        entry.mime = "application/octet-stream".into();
+                    }
+                }
+                _ => {
+                    let bytes = read_lcar_artifact(root, "snapshots/config-final.json").unwrap();
+                    let mut snapshot: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    match mutation {
+                        "tree_hash" => {
+                            snapshot["entries"][1]["sha256"] = serde_json::json!("a".repeat(64))
+                        }
+                        "length" => snapshot["entries"][1]["bytes"] = serde_json::json!(999),
+                        "order" => snapshot["entries"].as_array_mut().unwrap().reverse(),
+                        _ => unreachable!(),
+                    }
+                    let snapshot = lcar_tree_fixture("final_config", snapshot["entries"].clone());
+                    lcar["provenance"]["final_config_tree_sha256"] =
+                        snapshot["tree_sha256"].clone();
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "snapshots/config-final.json",
+                        &serde_json::to_vec(&snapshot).unwrap(),
+                    );
+                }
+            }
+            lcar["artifacts"]
+                .as_array_mut()
+                .unwrap()
+                .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+            publish_lcar_fixture(root, &mut index, &lcar);
+            assert_eq!(
+                lcar_fixture_contracts(root, &index, &command).is_empty(),
+                mutation == "none",
+                "{mutation}"
+            );
+            lcar["passed"] = serde_json::json!(false);
+            lcar["first_failed_contract"] = serde_json::json!("missing_teardown");
+            let teardown = "run/teardown-complete.json";
+            fs::remove_file(
+                root.join(format!("payloads/bootstrap-proof.lcar-artifact/{teardown}")),
+            )
+            .unwrap();
+            lcar["artifacts"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|entry| entry["path"] != teardown);
+            index.entries.retain(|entry| {
+                entry.path != format!("payloads/bootstrap-proof.lcar-artifact/{teardown}")
+            });
+            write_bundle_entry(
+                root,
+                &mut index.entries,
+                "payloads/bootstrap-proof.failure-lcar/failure-lcar-v2.json",
+                "bootstrap-proof.failure-lcar",
+                &command,
+                &serde_json::to_vec(&lcar).unwrap(),
+            );
+            index.entries.last_mut().unwrap().producing_gate = "bootstrap-proof".into();
+            let authority =
+                serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+            let mut contracts = Vec::new();
+            validate_bootstrap_failure_lcar(root, &index, &authority, &command, &mut contracts);
+            assert_eq!(
+                contracts.is_empty(),
+                mutation == "none",
+                "{mutation}: {contracts:?}"
+            );
+        }
+    }
+
     #[test]
     fn bootstrap_v2_rejects_rehashed_input_tampering() {
         for mutation in [
@@ -14433,6 +14685,7 @@ mod tests {
         let original = temp.path().join("original");
         let relocated = temp.path().join("relocated");
         let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(&original);
+        retain_final_config_fixture(&original, &mut index, &mut lcar, &command);
         let historical = original.join("payloads/bootstrap-proof.lcar-artifact");
         for operand in lcar["command"].as_array_mut().unwrap() {
             *operand = serde_json::json!(operand
@@ -15725,6 +15978,28 @@ mod tests {
         let retained_config_entry = config_cleanup_index.entries.last_mut().unwrap();
         retained_config_entry.producing_gate = "bootstrap-proof".into();
         retained_config_entry.mime = "application/octet-stream".into();
+        config_cleanup_lcar["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "role": "final_config_snapshot_file", "path": "snapshots/config-final/settings.cfg",
+                "sha256": config_hash, "bytes": config_bytes.len()
+            }));
+        config_cleanup_lcar["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+        write_bundle_entry(
+            &root,
+            &mut config_cleanup_index.entries,
+            "payloads/bootstrap-proof.lcar-artifact/snapshots/config-final/settings.cfg",
+            "bootstrap-proof.lcar-artifact",
+            &run_command,
+            config_bytes,
+        );
+        let snapshot_entry = config_cleanup_index.entries.last_mut().unwrap();
+        snapshot_entry.producing_gate = "bootstrap-proof".into();
+        snapshot_entry.mime = "application/octet-stream".into();
         rewrite_bundle_entry(
             &root,
             &mut config_cleanup_index.entries,
@@ -15767,6 +16042,10 @@ mod tests {
         .any(|contract| contract == "evidence.builtin.bootstrap-proof.failure_lcar.snapshots"));
         fs::remove_file(root.join("payloads/bootstrap-proof.lcar-artifact/config/settings.cfg"))
             .unwrap();
+        fs::remove_file(
+            root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/config-final/settings.cfg"),
+        )
+        .unwrap();
         fs::write(
             root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/config-final.json"),
             serde_json::to_vec(&lcar_tree_fixture("final_config", serde_json::json!([]))).unwrap(),

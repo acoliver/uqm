@@ -149,21 +149,49 @@ are checked before spawning.
 The supported initial configuration is a fresh empty directory. Its tree
 snapshot must have no entries, and replay recreates that empty configuration.
 Arbitrary starting profiles and save states are not supported by this bootstrap
-replay path. The producer records the final configuration tree identity before
-removing the working `config/` directory; it does not copy those file bytes to a
-separate snapshot directory. Files left by failed cleanup have the
-`retained_config_file` role under `config/`. Final configuration is not reused as
-replay input.
+replay path. After child supervision ends, the producer copies the final
+configuration into `snapshots/config-final/` and records its identity in
+`snapshots/config-final.json`. These are immutable outcome evidence, distinct
+from the mutable working `config/` directory. The runner creates new files,
+marks the copied data read-only, syncs them and their directories, and verifies
+both the copied tree and the source tree before removing `config/`. Final
+configuration is never reused as replay input, including after bundle relocation.
+
+Configuration reads use descriptor-relative no-follow opens for every relative
+path component. Symlinks and nonregular files are rejected, including a symlink
+at the config root. Reads reject changed lengths or modification times and use
+the runner's existing 64 MiB log-byte budget as a per-file bound. The file list,
+file bytes and final tree are rechecked before cleanup. Read-only permissions
+and digest validation do not establish protection against a concurrent same-UID
+writer; that native-input isolation requirement remains unresolved.
+
+The same retention-before-cleanup sequence applies when a supervised child
+fails or cannot be spawned, and when a prepared run is interrupted. Retention
+failure leaves the mutable profile in place rather than deleting the only
+remaining bytes. Cleanup failure can leave a subset of files under `config/`.
+When represented in an LCAR inventory, those files have `retained_config_file`
+roles and must match the corresponding retained snapshot entries. They cannot
+substitute for the final snapshot, and cannot coexist with a receipt claiming
+that the mutable root was removed.
 
 Tree snapshots use `uqm-tree-identity-v1`, with `root_role`, `tree_sha256` and
 ordered `entries` containing `path`, `sha256`, `bytes`. For each sorted entry,
 the tree digest hashes path bytes, a NUL byte, digest text, a NUL byte, decimal
 byte length and a newline. Retained content files must exactly match the content
-tree, including empty files. S4 also checks retained final-config files against
-the final-config tree. Since successful cleanup removes those files, a nonempty
-final-config tree cannot satisfy that S4 comparison after successful cleanup.
-The fixture checks do not establish a live configuration-writing run through
-this producer/consumer boundary.
+tree, including empty files. Both producer and S4 validators require an exact
+match between the final-config tree entries and the `final_config_snapshot_file`
+inventory under `snapshots/config-final/`. Paths, digests and lengths must match;
+recomputing artifact hashes does not excuse a mismatch with the tree. Empty
+files are retained and inventoried. An empty final tree needs no file artifacts
+or physical snapshot directory after transport. Directory entries are not part
+of tree identity. Neither runtime leftovers nor files elsewhere in the bundle
+can satisfy a missing final snapshot entry.
+
+Regression fixtures exercise nonempty and empty final configuration through
+producer finalization and S4 validation, rejection of rehashed inconsistencies,
+retention and cleanup failures, and detached replay preparation using only
+initial inputs. These tests do not establish a live configuration-writing game
+run through this producer/consumer boundary.
 
 All historical command operands must refer to one recorded bundle root:
 `snapshots/uqm`, `--contentdir=<root>/snapshots/sc2/content`,
@@ -202,7 +230,8 @@ must not traverse or repeat, and must match their declared role.
 | `content_identity_snapshot` | `snapshots/content-identity.json` |
 | `content_snapshot_file` | `snapshots/sc2/content/<relative-path>` |
 | `initial_config_snapshot`, `final_config_snapshot` | `snapshots/config-initial.json`, `snapshots/config-final.json` |
-| `retained_config_file` | `config/<relative-path>` when cleanup leaves files |
+| `final_config_snapshot_file` | `snapshots/config-final/<relative-path>`, including zero-byte files |
+| `retained_config_file` | `config/<relative-path>` when cleanup leaves files; a subset of the final snapshot |
 
 The inventory must account for every retained file except its result manifest.
 Extra `.tmp` files are not excluded. Missing files, changed bytes or lengths,
@@ -221,6 +250,21 @@ bindings in addition to the v2 input checks.
 `teardown_evidence`, or `config_cleanup`. Offline acceptance of a failure manifest
 means that its failure evidence is consistent, not that gameplay passed.
 Failures before sufficient evidence exists do not guarantee a valid LCAR bundle.
+A retention or cleanup error stops publication of either LCAR result. The runner
+instead attempts to write `config-finalization-failure.json`, schema
+`uqm-config-finalization-failure-v1`, with `passed: false`. It records the first
+child/evidence failure if one already occurred, otherwise `config_retention` or
+`config_cleanup`, plus the separate finalization failure and its detail. It
+retains the actual process receipt when available; a pre-spawn failure has no
+process receipt. `config_root_removed` records observed absence, not successful
+retention. An inspection error produces null for that fact and records the error.
+Text details are bounded to 4,096 characters each. Failure to publish the
+diagnostic is returned together with the original failure rather than swallowed.
+This diagnostic and any partial snapshot are not an accepted LCAR bundle.
+`config_retention` cannot validate as an LCAR failure contract because the final
+configuration evidence is incomplete. Complete filesystem loss cannot guarantee
+local diagnostic publication.
+
 The replay command accepts passing v2 bundles only, not failure bundles, legacy
 LCAR v1, or native acceptance/suite layouts.
 

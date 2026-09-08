@@ -64,6 +64,7 @@ enum FailedContract {
     MissingTeardown,
     SemanticEvidence,
     TeardownEvidence,
+    ConfigRetention,
     ConfigCleanup,
 }
 
@@ -83,6 +84,7 @@ enum ArtifactRole {
     ContentSnapshotFile,
     InitialConfigSnapshot,
     FinalConfigSnapshot,
+    FinalConfigSnapshotFile,
     RetainedConfigFile,
 }
 
@@ -170,7 +172,7 @@ struct LcarManifest {
     artifacts: Vec<ArtifactEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct TreeSnapshot {
     schema: String,
@@ -179,7 +181,7 @@ struct TreeSnapshot {
     entries: Vec<TreeEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct TreeEntry {
     path: String,
@@ -277,10 +279,12 @@ fn execute_prepared(repo_root: &Path, evidence: &mut RunEvidence) -> Result<(), 
     // run here, before a child exists, and says so. Continuing would spawn the
     // game after the operator already asked for it to stop.
     if let Some(signal) = interrupt::interrupted() {
+        let detail = format!("interrupted by signal {signal} while preparing evidence");
+        if let Err(failure) = finalize_config_evidence(evidence) {
+            return record_config_diagnostic(evidence, None, None, Some(&failure), Some(&detail));
+        }
         record_interrupted_preparation(evidence, signal)?;
-        return Err(format!(
-            "interrupted by signal {signal} while preparing evidence"
-        ));
+        return Err(detail);
     }
 
     // The run owns its output root for as long as it is producing evidence
@@ -427,29 +431,48 @@ fn complete_run(
     evidence: &mut RunEvidence,
     child_result: Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)>,
 ) -> Result<(), String> {
+    complete_run_with(evidence, child_result, finalize_config_evidence)
+}
+
+fn complete_run_with(
+    evidence: &mut RunEvidence,
+    child_result: Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)>,
+    finalize: impl FnOnce(&mut RunEvidence) -> Result<(), ConfigFinalizationFailure>,
+) -> Result<(), String> {
     let (session_contract, process) = match child_result {
         Ok(receipt) => (None, ProcessReceipt::from(receipt)),
         Err((error, receipt)) if receipt.identity.pid != 0 => (
             Some(classify_session_error(&error)),
             ProcessReceipt::from(*receipt),
         ),
-        Err((error, _)) => return Err(error.to_string()),
+        Err((error, _)) => {
+            let failure = finalize(evidence).err();
+            return record_config_diagnostic(
+                evidence,
+                Some(classify_session_error(&error)),
+                None,
+                failure.as_ref(),
+                Some(&error.to_string()),
+            );
+        }
     };
-    let cleanup_error = finalize_config_evidence(evidence).err();
+    let first_failed_contract =
+        session_contract.or(inspect_child_evidence(evidence, &process).err());
+    if let Err(failure) = finalize(evidence) {
+        return record_config_diagnostic(
+            evidence,
+            first_failed_contract,
+            Some(&process),
+            Some(&failure),
+            None,
+        );
+    }
     let cleanup = CleanupReceipt {
         exact_child_reaped: process.exit_code.is_some() || process.signal.is_some(),
         orphan_check_passed: process.orphan_check_passed,
         output_drained: process.output_drained,
-        config_root_removed: !evidence.config_root.exists(),
+        config_root_removed: config_root_removed(&evidence.config_root)?,
     };
-    let evidence_contract = inspect_child_evidence(evidence, &process).err();
-    let first_failed_contract = session_contract
-        .or_else(|| {
-            cleanup_error
-                .as_ref()
-                .map(|_| FailedContract::ConfigCleanup)
-        })
-        .or(evidence_contract);
     let passed = first_failed_contract.is_none();
     let artifacts = collect_artifacts(&evidence.output_root)?;
     let mut manifest = LcarManifest {
@@ -479,30 +502,175 @@ fn complete_run(
         Ok(())
     } else {
         Err(format!(
-            "gameplay proof failed at {:?}; evidence: {}{}",
+            "gameplay proof failed at {:?}; evidence: {}",
             manifest.first_failed_contract,
-            manifest_path.display(),
-            cleanup_error
-                .as_ref()
-                .map(|error| format!("; cleanup detail: {error}"))
-                .unwrap_or_default()
+            manifest_path.display()
         ))
     }
 }
 
-fn finalize_config_evidence(evidence: &mut RunEvidence) -> Result<(), String> {
-    let final_config = snapshot_tree(&evidence.config_root, "final_config")?;
-    evidence.provenance.final_config_tree_sha256 = final_config.tree_sha256.clone();
+fn record_config_diagnostic(
+    evidence: &RunEvidence,
+    earlier: Option<FailedContract>,
+    process: Option<&ProcessReceipt>,
+    failure: Option<&ConfigFinalizationFailure>,
+    child_error: Option<&str>,
+) -> Result<(), String> {
+    let removed = config_root_removed(&evidence.config_root);
+    let first = earlier.or(failure.map(|failure| failure.contract));
+    let bounded = |text: &str| text.chars().take(4096).collect::<String>();
+    let document = serde_json::json!({
+        "schema": "uqm-config-finalization-failure-v1",
+        "passed": false,
+        "first_failed_contract": first,
+        "process": process,
+        "config_root_removed": removed.as_ref().ok(),
+        "config_inspection_error": removed.as_ref().err().map(|error| bounded(error)),
+        "finalization_failed_contract": failure.map(|failure| failure.contract),
+        "finalization_detail": failure.map(|failure| bounded(&failure.detail)),
+        "child_error": child_error.map(bounded),
+    });
+    let detail = format!("proof stopped at {first:?}; finalization: {failure:?}; child: {child_error:?}; config inspection: {removed:?}");
+    write_new_json(
+        &evidence
+            .output_root
+            .join("config-finalization-failure.json"),
+        &document,
+    )
+    .map_err(|error| format!("{detail}; diagnostic publication failed: {error}"))?;
+    Err(detail)
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigFinalizationFailure {
+    contract: FailedContract,
+    detail: String,
+}
+
+fn finalize_config_evidence(evidence: &mut RunEvidence) -> Result<(), ConfigFinalizationFailure> {
+    finalize_config_with(evidence, write_config_snapshot_file, |path| {
+        fs::remove_dir_all(path)
+    })
+}
+
+fn finalize_config_with(
+    evidence: &mut RunEvidence,
+    write: impl FnMut(&Path, &[u8]) -> Result<(), String>,
+    remove: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), ConfigFinalizationFailure> {
+    let final_config =
+        retain_final_config(evidence, write).map_err(|detail| ConfigFinalizationFailure {
+            contract: FailedContract::ConfigRetention,
+            detail,
+        })?;
+    evidence.provenance.final_config_tree_sha256 = final_config.tree_sha256;
+    remove(&evidence.config_root).map_err(|error| ConfigFinalizationFailure {
+        contract: FailedContract::ConfigCleanup,
+        detail: format!("remove mutable config root: {error}"),
+    })?;
+    if !config_root_removed(&evidence.config_root).map_err(|detail| ConfigFinalizationFailure {
+        contract: FailedContract::ConfigCleanup,
+        detail,
+    })? {
+        return Err(ConfigFinalizationFailure {
+            contract: FailedContract::ConfigCleanup,
+            detail: "mutable config root remains after cleanup".into(),
+        });
+    }
+    uqm_rust::automation::artifact::sync_directory(&evidence.output_root).map_err(|error| {
+        ConfigFinalizationFailure {
+            contract: FailedContract::ConfigCleanup,
+            detail: format!("sync mutable config removal: {error}"),
+        }
+    })?;
+    Ok(())
+}
+
+fn config_root_removed(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(format!("inspect mutable config root: {error}")),
+    }
+}
+
+fn retain_final_config(
+    evidence: &RunEvidence,
+    mut write: impl FnMut(&Path, &[u8]) -> Result<(), String>,
+) -> Result<TreeSnapshot, String> {
+    let destination = evidence.output_root.join("snapshots/config-final");
+    let paths = collect_paths(&evidence.config_root)?;
+    fs::create_dir(&destination)
+        .map_err(|error| format!("create final config snapshot: {error}"))?;
+    let mut entries = Vec::new();
+    for path in paths {
+        let relative = relative_path(&evidence.config_root, &path)?;
+        let bytes = uqm_rust::automation::artifact::read_regular_relative_nofollow(
+            &evidence.output_root,
+            &Path::new("config").join(&relative),
+            LOG_BUDGET,
+        )
+        .map_err(|error| format!("read final config {relative}: {error}"))?;
+        let target = destination.join(&relative);
+        let parent = target
+            .parent()
+            .ok_or_else(|| "final config file lacks parent".to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create final config directory: {error}"))?;
+        write(&target, &bytes)?;
+        for directory in parent
+            .ancestors()
+            .take_while(|path| path.starts_with(&destination))
+        {
+            uqm_rust::automation::artifact::sync_directory(directory)
+                .map_err(|error| format!("sync final config directory: {error}"))?;
+        }
+        entries.push(TreeEntry {
+            path: relative,
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            bytes: bytes.len() as u64,
+        });
+    }
+    let snapshot = TreeSnapshot {
+        schema: "uqm-tree-identity-v1".into(),
+        root_role: "final_config".into(),
+        tree_sha256: tree_digest(&entries),
+        entries,
+    };
+    // Check the stored bytes and the source again before deleting the mutable profile.
+    if snapshot_tree(&destination, "final_config")? != snapshot
+        || snapshot_tree(&evidence.config_root, "final_config")? != snapshot
+    {
+        return Err("final config changed while retaining its snapshot".into());
+    }
     write_new_json(
         &evidence.output_root.join("snapshots/config-final.json"),
-        &final_config,
+        &snapshot,
     )?;
-    fs::remove_dir_all(&evidence.config_root)
-        .map_err(|error| format!("remove mutable config root: {error}"))?;
-    if evidence.config_root.exists() {
-        return Err("mutable config root remains after cleanup".into());
-    }
-    Ok(())
+    uqm_rust::automation::artifact::sync_directory(&destination)
+        .map_err(|error| format!("sync final config snapshot: {error}"))?;
+    uqm_rust::automation::artifact::sync_directory(&evidence.output_root.join("snapshots"))
+        .map_err(|error| format!("sync snapshots: {error}"))?;
+    Ok(snapshot)
+}
+
+fn write_config_snapshot_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("create final config file: {error}"))?;
+    file.write_all(bytes)
+        .map_err(|error| format!("write final config file: {error}"))?;
+    let mut permissions = file
+        .metadata()
+        .map_err(|error| format!("stat final config file: {error}"))?
+        .permissions();
+    permissions.set_readonly(true);
+    file.set_permissions(permissions)
+        .map_err(|error| format!("seal final config file: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("sync final config file: {error}"))
 }
 
 fn inspect_child_evidence(
@@ -1220,6 +1388,7 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
         return Err("retained content does not match content identity snapshot".into());
     }
     let production_path = artifact_path(root, manifest, ArtifactRole::ProductionManifestSnapshot)?;
+    validate_final_config_files(root, manifest, &final_config)?;
     let production = parse_production(&read_json_value(&production_path)?)?;
     validate_production(&production, false)?;
     if production.git_head != manifest.git_head
@@ -1229,6 +1398,60 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
         || production.executable.sha256 != manifest.provenance.executable_sha256
     {
         return Err("retained production snapshot does not bind the LCAR identity".into());
+    }
+    Ok(())
+}
+
+fn validate_final_config_files(
+    root: &Path,
+    manifest: &LcarManifest,
+    snapshot: &TreeSnapshot,
+) -> Result<(), String> {
+    let expected: BTreeMap<_, _> = snapshot
+        .entries
+        .iter()
+        .map(|entry| {
+            (
+                format!("snapshots/config-final/{}", entry.path),
+                (entry.sha256.clone(), entry.bytes),
+            )
+        })
+        .collect();
+    let actual: BTreeMap<_, _> = manifest
+        .artifacts
+        .iter()
+        .filter(|entry| entry.role == ArtifactRole::FinalConfigSnapshotFile)
+        .map(|entry| (entry.path.clone(), (entry.sha256.clone(), entry.bytes)))
+        .collect();
+    if expected != actual {
+        return Err("retained final config does not match final config identity snapshot".into());
+    }
+    for entry in manifest
+        .artifacts
+        .iter()
+        .filter(|entry| entry.role == ArtifactRole::RetainedConfigFile)
+    {
+        let relative = entry
+            .path
+            .strip_prefix("config/")
+            .ok_or_else(|| "retained config path is invalid".to_string())?;
+        if manifest.cleanup.config_root_removed
+            || expected.get(&format!("snapshots/config-final/{relative}"))
+                != Some(&(entry.sha256.clone(), entry.bytes))
+        {
+            return Err("mutable config leftovers differ from retained final config".into());
+        }
+    }
+    for (path, (digest, length)) in actual {
+        let bytes = uqm_rust::automation::artifact::read_regular_relative_nofollow(
+            root,
+            Path::new(&path),
+            length,
+        )
+        .map_err(|error| format!("read retained final config: {error}"))?;
+        if bytes.len() as u64 != length || format!("{:x}", Sha256::digest(bytes)) != digest {
+            return Err("retained final config bytes differ from identity snapshot".into());
+        }
     }
     Ok(())
 }
@@ -1281,7 +1504,7 @@ fn validate_command(manifest: &LcarManifest) -> Result<(), String> {
 fn validate_result(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
     if manifest.cleanup.orphan_check_passed != manifest.process.orphan_check_passed
         || manifest.cleanup.output_drained != manifest.process.output_drained
-        || manifest.cleanup.config_root_removed != !root.join("config").exists()
+        || manifest.cleanup.config_root_removed != config_root_removed(&root.join("config"))?
     {
         return Err("parent cleanup facts do not match retained evidence".into());
     }
@@ -1312,6 +1535,9 @@ fn validate_failure_contract(
     contract: FailedContract,
 ) -> Result<(), String> {
     match contract {
+        FailedContract::ConfigRetention => Err(
+            "incomplete config retention cannot form an LCAR proof; inspect its diagnostic".into(),
+        ),
         FailedContract::Timeout if !(manifest.process.term_sent || manifest.process.kill_sent) => {
             Err("timeout failure lacks stop evidence".into())
         }
@@ -1728,12 +1954,19 @@ fn snapshot_tree(root: &Path, root_role: &str) -> Result<TreeSnapshot, String> {
     let paths = collect_paths(root)?;
     let mut entries = Vec::with_capacity(paths.len());
     for path in paths {
-        let metadata =
-            fs::metadata(&path).map_err(|error| format!("metadata {}: {error}", path.display()))?;
+        let relative = relative_path(root, &path)?;
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("metadata {}: {error}", path.display()))?;
+        let bytes = uqm_rust::automation::artifact::read_regular_relative_nofollow(
+            root,
+            Path::new(&relative),
+            metadata.len(),
+        )
+        .map_err(|error| format!("read snapshot {}: {error}", path.display()))?;
         entries.push(TreeEntry {
-            path: relative_path(root, &path)?,
-            sha256: hash_file(&path)?,
-            bytes: metadata.len(),
+            path: relative,
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            bytes: bytes.len() as u64,
         });
     }
     let tree_sha256 = tree_digest(&entries);
@@ -1758,13 +1991,18 @@ fn validate_tree_snapshot(
         return Err(format!("{role} tree snapshot identity is invalid"));
     }
     let mut paths = BTreeSet::new();
+    let mut previous: Option<&str> = None;
     for entry in &snapshot.entries {
         validate_relative_path(&entry.path)?;
-        if !paths.insert(&entry.path) || !is_hex(&entry.sha256, 64) {
+        if !paths.insert(&entry.path)
+            || !is_hex(&entry.sha256, 64)
+            || previous.is_some_and(|path| path >= entry.path.as_str())
+        {
             return Err(format!(
                 "{role} tree snapshot has duplicate/malformed entries"
             ));
         }
+        previous = Some(&entry.path);
     }
     Ok(())
 }
@@ -1816,6 +2054,7 @@ fn role_for_path(path: &str) -> Result<ArtifactRole, String> {
         "snapshots/content-identity.json" => ArtifactRole::ContentIdentitySnapshot,
         "snapshots/config-initial.json" => ArtifactRole::InitialConfigSnapshot,
         "snapshots/config-final.json" => ArtifactRole::FinalConfigSnapshot,
+        _ if path.starts_with("snapshots/config-final/") => ArtifactRole::FinalConfigSnapshotFile,
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => ArtifactRole::Capture,
         _ if path.starts_with("config/") => ArtifactRole::RetainedConfigFile,
         _ if path.starts_with("snapshots/sc2/content/") => ArtifactRole::ContentSnapshotFile,
@@ -1843,7 +2082,11 @@ fn mandatory_roles() -> [ArtifactRole; 9] {
 fn allows_empty(role: ArtifactRole) -> bool {
     matches!(
         role,
-        ArtifactRole::StdoutLog | ArtifactRole::StderrLog | ArtifactRole::ContentSnapshotFile
+        ArtifactRole::StdoutLog
+            | ArtifactRole::StderrLog
+            | ArtifactRole::ContentSnapshotFile
+            | ArtifactRole::FinalConfigSnapshotFile
+            | ArtifactRole::RetainedConfigFile
     )
 }
 
@@ -1879,6 +2122,15 @@ fn collect_paths(root: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn collect_files(root: &Path, current: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
+    if !fs::symlink_metadata(current)
+        .map_err(|error| format!("inspect directory: {error}"))?
+        .is_dir()
+    {
+        return Err(format!(
+            "snapshot directory is not a real directory: {}",
+            current.display()
+        ));
+    }
     for entry in fs::read_dir(current)
         .map_err(|error| format!("read directory {}: {error}", current.display()))?
     {
@@ -2284,10 +2536,15 @@ mod tests {
             tree_sha256: format!("{:x}", Sha256::digest([])),
             entries: vec![],
         };
-        let final_config = TreeSnapshot {
-            root_role: "final_config".into(),
-            ..initial.clone()
-        };
+        fs::create_dir_all(root.join("snapshots/config-final/nested")).unwrap();
+        write_config_snapshot_file(
+            &root.join("snapshots/config-final/nested/settings.cfg"),
+            b"final profile",
+        )
+        .unwrap();
+        write_config_snapshot_file(&root.join("snapshots/config-final/empty"), b"").unwrap();
+        let final_config =
+            snapshot_tree(&root.join("snapshots/config-final"), "final_config").unwrap();
         write_new_json(&root.join("snapshots/content-identity.json"), &content).unwrap();
         write_new_json(&root.join("snapshots/config-initial.json"), &initial).unwrap();
         write_new_json(&root.join("snapshots/config-final.json"), &final_config).unwrap();
@@ -2420,6 +2677,421 @@ mod tests {
         Fixture { _temp: temp, path }
     }
 
+    fn pending_config(fixture: &Fixture) -> RunEvidence {
+        let root = fixture.path.parent().unwrap();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        fs::remove_file(&fixture.path).unwrap();
+        fs::remove_file(root.join("snapshots/config-final.json")).unwrap();
+        fs::remove_dir_all(root.join("snapshots/config-final")).unwrap();
+        fs::create_dir(root.join("config")).unwrap();
+        RunEvidence {
+            output_root: fs::canonicalize(root).unwrap(),
+            config_root: root.join("config"),
+            production: parse_production(
+                &read_json_value(&root.join("snapshots/production-manifest.json")).unwrap(),
+            )
+            .unwrap(),
+            seed: manifest.seed,
+            command: manifest.command,
+            environment: manifest.environment,
+            provenance: manifest.provenance,
+        }
+    }
+
+    #[test]
+    fn final_config_bytes_survive_successful_cleanup() {
+        let fixture = fixture();
+        let mut evidence = pending_config(&fixture);
+        fs::create_dir(evidence.config_root.join("nested")).unwrap();
+        fs::write(
+            evidence.config_root.join("nested/settings.cfg"),
+            b"final profile",
+        )
+        .unwrap();
+        fs::write(evidence.config_root.join("empty"), b"").unwrap();
+        let receipt = config_fixture_receipt(&evidence);
+        complete_run(&mut evidence, Ok(receipt)).unwrap();
+        validate_manifest(&fixture.path).unwrap();
+        assert!(!evidence.config_root.exists());
+        assert_eq!(
+            fs::read(
+                evidence
+                    .output_root
+                    .join("snapshots/config-final/nested/settings.cfg")
+            )
+            .unwrap(),
+            b"final profile"
+        );
+        assert_eq!(
+            fs::read(evidence.output_root.join("snapshots/config-final/empty")).unwrap(),
+            b""
+        );
+    }
+
+    fn config_fixture_receipt(evidence: &RunEvidence) -> ChildSessionReceipt {
+        let mut receipt = unavailable_receipt(&evidence.provenance.executable_sha256);
+        receipt.identity.pid = 42;
+        receipt.identity.start_time = "fixture-start".into();
+        receipt.exit_code = Some(0);
+        receipt.output_drained = true;
+        receipt.orphan_check_passed = true;
+        receipt
+    }
+
+    #[test]
+    fn failed_child_final_config_is_retained_and_validates_after_cleanup() {
+        for cleanup_fails in [false, true] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            fs::write(
+                evidence.config_root.join("settings.cfg"),
+                b"failed run profile",
+            )
+            .unwrap();
+            let mut receipt = config_fixture_receipt(&evidence);
+            receipt.exit_code = Some(1);
+            receipt.term_sent = true;
+            let child_result = Err((
+                ChildSessionError::Timeout {
+                    term_sent: true,
+                    kill_sent: false,
+                },
+                Box::new(receipt),
+            ));
+            let result = complete_run_with(&mut evidence, child_result, |evidence| {
+                finalize_config_with(evidence, write_config_snapshot_file, |path| {
+                    if cleanup_fails {
+                        Err(std::io::Error::from_raw_os_error(libc::EACCES))
+                    } else {
+                        fs::remove_dir_all(path)
+                    }
+                })
+            });
+            assert!(result.is_err());
+            assert!(!fixture.path.exists());
+            assert_eq!(
+                fs::read(
+                    evidence
+                        .output_root
+                        .join("snapshots/config-final/settings.cfg")
+                )
+                .unwrap(),
+                b"failed run profile"
+            );
+            if cleanup_fails {
+                let diagnostic = read_json_value(
+                    &evidence
+                        .output_root
+                        .join("config-finalization-failure.json"),
+                )
+                .unwrap();
+                assert_eq!(diagnostic["first_failed_contract"], "timeout");
+                assert_eq!(diagnostic["finalization_failed_contract"], "config_cleanup");
+                assert_eq!(diagnostic["config_root_removed"], false);
+            } else {
+                assert!(!evidence.config_root.exists());
+                validate_manifest(&evidence.output_root.join(FAILURE_FILE)).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn empty_final_config_validates_without_a_retained_directory() {
+        let fixture = fixture();
+        let mut evidence = pending_config(&fixture);
+        let receipt = config_fixture_receipt(&evidence);
+        complete_run(&mut evidence, Ok(receipt)).unwrap();
+        fs::remove_dir(evidence.output_root.join("snapshots/config-final")).unwrap();
+        validate_manifest(&fixture.path).unwrap();
+    }
+
+    #[test]
+    fn final_config_rehashed_inconsistency_missing_and_extra_files_are_rejected() {
+        for mutation in [
+            "tamper",
+            "rehash",
+            "missing",
+            "missing_reindexed",
+            "extra",
+            "extra_reindexed",
+            "tree_hash",
+            "length",
+            "order",
+        ] {
+            let fixture = fixture();
+            let root = fixture.path.parent().unwrap();
+            let path = root.join("snapshots/config-final/nested/settings.cfg");
+            let mut manifest: LcarManifest = read_json(&fixture.path).unwrap();
+            match mutation {
+                "tamper" | "rehash" => {
+                    fs::remove_file(&path).unwrap();
+                    fs::write(&path, b"changed profile").unwrap();
+                }
+                "missing" | "missing_reindexed" => {
+                    fs::remove_file(root.join("snapshots/config-final/empty")).unwrap();
+                }
+                "extra" | "extra_reindexed" => {
+                    fs::write(root.join("snapshots/config-final/extra"), b"").unwrap();
+                }
+                _ => {
+                    let tree_path = root.join("snapshots/config-final.json");
+                    let mut snapshot: TreeSnapshot = read_json(&tree_path).unwrap();
+                    match mutation {
+                        "tree_hash" => snapshot.entries[1].sha256 = "a".repeat(64),
+                        "length" => snapshot.entries[1].bytes += 1,
+                        "order" => snapshot.entries.reverse(),
+                        _ => unreachable!(),
+                    }
+                    snapshot.tree_sha256 = tree_digest(&snapshot.entries);
+                    manifest.provenance.final_config_tree_sha256 = snapshot.tree_sha256.clone();
+                    fs::write(tree_path, serde_json::to_vec(&snapshot).unwrap()).unwrap();
+                }
+            }
+            if !matches!(mutation, "tamper" | "missing" | "extra") {
+                manifest.artifacts = collect_artifacts(root).unwrap();
+            }
+            assert!(
+                validate_loaded_manifest(&fixture.path, &manifest).is_err(),
+                "{mutation}"
+            );
+        }
+    }
+
+    #[test]
+    fn final_config_disk_and_cleanup_failures_do_not_publish_proof() {
+        for boundary in ["write", "cleanup", "earlier_child", "diagnostic"] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            fs::write(evidence.config_root.join("settings.cfg"), b"retain me").unwrap();
+            if boundary == "diagnostic" {
+                fs::create_dir(
+                    evidence
+                        .output_root
+                        .join("config-finalization-failure.json"),
+                )
+                .unwrap();
+            }
+            let mut receipt = config_fixture_receipt(&evidence);
+            if boundary == "earlier_child" {
+                receipt.exit_code = Some(3);
+            }
+            let result = complete_run_with(&mut evidence, Ok(receipt), |evidence| {
+                finalize_config_with(
+                    evidence,
+                    |path, bytes| {
+                        if matches!(boundary, "write" | "diagnostic") {
+                            let mut file = OpenOptions::new()
+                                .create_new(true)
+                                .write(true)
+                                .open(path)
+                                .unwrap();
+                            file.write_all(&bytes[..1]).unwrap();
+                            return Err(std::io::Error::from_raw_os_error(libc::ENOSPC).to_string());
+                        }
+                        write_config_snapshot_file(path, bytes)
+                    },
+                    |_| Err(std::io::Error::from_raw_os_error(libc::EACCES)),
+                )
+            });
+            let error = result.unwrap_err();
+            assert!(evidence.config_root.is_dir());
+            assert!(!fixture.path.exists());
+            assert!(!evidence.output_root.join(FAILURE_FILE).exists());
+            if boundary == "diagnostic" {
+                assert!(error.contains("diagnostic publication failed"), "{error}");
+                assert!(error.contains("ConfigRetention"), "{error}");
+                continue;
+            }
+            let diagnostic = read_json_value(
+                &evidence
+                    .output_root
+                    .join("config-finalization-failure.json"),
+            )
+            .unwrap();
+            assert_eq!(diagnostic["passed"], false);
+            assert_eq!(diagnostic["config_root_removed"], false);
+            let first = match boundary {
+                "write" => "config_retention",
+                "earlier_child" => "teardown_evidence",
+                _ => "config_cleanup",
+            };
+            assert_eq!(diagnostic["first_failed_contract"], first);
+            assert!(
+                fs::metadata(
+                    evidence
+                        .output_root
+                        .join("config-finalization-failure.json")
+                )
+                .unwrap()
+                .len()
+                    < 16384
+            );
+        }
+    }
+
+    #[test]
+    fn final_config_failure_diagnostics_bound_external_text() {
+        let fixture = fixture();
+        let evidence = pending_config(&fixture);
+        let failure = ConfigFinalizationFailure {
+            contract: FailedContract::ConfigRetention,
+            detail: "x".repeat(20000),
+        };
+        assert!(record_config_diagnostic(
+            &evidence,
+            Some(FailedContract::Timeout),
+            None,
+            Some(&failure),
+            None
+        )
+        .is_err());
+        let diagnostic = read_json_value(
+            &evidence
+                .output_root
+                .join("config-finalization-failure.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            diagnostic["finalization_detail"].as_str().unwrap().len(),
+            4096
+        );
+        assert_eq!(diagnostic["first_failed_contract"], "timeout");
+        assert_eq!(
+            diagnostic["finalization_failed_contract"],
+            "config_retention"
+        );
+        assert!(!fixture.path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn final_config_source_symlinks_and_read_failures_preserve_runtime_state() {
+        use std::os::unix::fs::symlink;
+        for boundary in ["file", "directory", "root", "missing", "destination"] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            let outside = tempfile::tempdir().unwrap();
+            fs::write(outside.path().join("secret"), b"must not copy").unwrap();
+            match boundary {
+                "file" => symlink(
+                    outside.path().join("secret"),
+                    evidence.config_root.join("secret"),
+                )
+                .unwrap(),
+                "directory" => {
+                    symlink(outside.path(), evidence.config_root.join("external")).unwrap()
+                }
+                "root" => {
+                    fs::remove_dir(&evidence.config_root).unwrap();
+                    symlink(outside.path(), &evidence.config_root).unwrap();
+                }
+                "missing" => fs::remove_dir(&evidence.config_root).unwrap(),
+                "destination" => fs::write(
+                    evidence.output_root.join("snapshots/config-final"),
+                    b"collision",
+                )
+                .unwrap(),
+                _ => unreachable!(),
+            }
+            let receipt = config_fixture_receipt(&evidence);
+            assert!(
+                complete_run(&mut evidence, Ok(receipt)).is_err(),
+                "{boundary}"
+            );
+            assert!(!fixture.path.exists());
+            let diagnostic = read_json_value(
+                &evidence
+                    .output_root
+                    .join("config-finalization-failure.json"),
+            )
+            .unwrap();
+            assert_eq!(diagnostic["first_failed_contract"], "config_retention");
+            assert_eq!(diagnostic["config_root_removed"], boundary == "missing");
+            assert_eq!(
+                fs::read(outside.path().join("secret")).unwrap(),
+                b"must not copy"
+            );
+        }
+    }
+
+    #[test]
+    fn final_config_source_changes_during_copy_stop_before_cleanup() {
+        for boundary in ["read", "change", "oversize"] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            let source = evidence.config_root.clone();
+            fs::write(source.join("a"), b"first").unwrap();
+            fs::write(source.join("b"), b"second").unwrap();
+            if boundary == "oversize" {
+                OpenOptions::new()
+                    .write(true)
+                    .open(source.join("b"))
+                    .unwrap()
+                    .set_len(LOG_BUDGET + 1)
+                    .unwrap();
+            }
+            let receipt = config_fixture_receipt(&evidence);
+            let error = complete_run_with(&mut evidence, Ok(receipt), |evidence| {
+                finalize_config_with(
+                    evidence,
+                    |path, bytes| {
+                        write_config_snapshot_file(path, bytes)?;
+                        if path.file_name().unwrap() == "a" {
+                            match boundary {
+                                "read" => fs::remove_file(source.join("b")).unwrap(),
+                                "change" => fs::write(source.join("a"), b"changed source").unwrap(),
+                                _ => {}
+                            }
+                        }
+                        Ok(())
+                    },
+                    |path| fs::remove_dir_all(path),
+                )
+            })
+            .unwrap_err();
+            assert!(error.contains("ConfigRetention"), "{error}");
+            assert!(source.is_dir());
+            assert!(!fixture.path.exists());
+            let diagnostic = read_json_value(
+                &evidence
+                    .output_root
+                    .join("config-finalization-failure.json"),
+            )
+            .unwrap();
+            assert_eq!(diagnostic["first_failed_contract"], "config_retention");
+            assert_eq!(diagnostic["config_root_removed"], false);
+        }
+    }
+
+    #[test]
+    fn spawn_failure_still_retains_and_cleans_config_without_claiming_a_child() {
+        let fixture = fixture();
+        let mut evidence = pending_config(&fixture);
+        fs::write(evidence.config_root.join("settings.cfg"), b"retain me").unwrap();
+        let receipt = unavailable_receipt(&evidence.provenance.executable_sha256);
+        let error = ChildSessionError::Spawn(std::io::Error::other("spawn fixture"));
+        assert!(complete_run(&mut evidence, Err((error, Box::new(receipt)))).is_err());
+        assert!(!evidence.config_root.exists());
+        assert_eq!(
+            fs::read(
+                evidence
+                    .output_root
+                    .join("snapshots/config-final/settings.cfg")
+            )
+            .unwrap(),
+            b"retain me"
+        );
+        let diagnostic = read_json_value(
+            &evidence
+                .output_root
+                .join("config-finalization-failure.json"),
+        )
+        .unwrap();
+        assert!(diagnostic["process"].is_null());
+        assert_eq!(diagnostic["config_root_removed"], true);
+        assert!(!fixture.path.exists());
+    }
+
     fn mutate_manifest(fixture: &Fixture, mutation: impl FnOnce(&mut serde_json::Value)) {
         let mut value = read_json_value(&fixture.path).unwrap();
         mutation(&mut value);
@@ -2441,7 +3113,12 @@ mod tests {
     #[test]
     fn replay_untouched_inputs_reach_preparation_using_only_retained_bytes() {
         let fixture = fixture();
-        let prior = fixture.path.parent().unwrap();
+        let original = fixture.path.parent().unwrap();
+        let relocated = tempfile::tempdir().unwrap();
+        let prior = relocated.path().join("prior");
+        fs::rename(original, &prior).unwrap();
+        assert!(!original.exists());
+        let prior = prior.as_path();
         let destination = tempfile::tempdir().unwrap();
         with_verified_replay(prior, |manifest| {
             let production_path =
@@ -2457,6 +3134,13 @@ mod tests {
                 &destination.path().join("replay"),
             )?;
             verify_replay_copy(&evidence, manifest)?;
+            assert!(collect_paths(&evidence.config_root).unwrap().is_empty());
+            assert!(!evidence.output_root.join("snapshots/config-final").exists());
+            assert!(
+                !read_tree_snapshot(prior, manifest, ArtifactRole::FinalConfigSnapshot)?
+                    .entries
+                    .is_empty()
+            );
             assert_eq!(
                 fs::read(evidence.output_root.join("snapshots/uqm")).unwrap(),
                 b"executable"
