@@ -19,6 +19,8 @@ cargo run --locked --manifest-path rust/xtask/Cargo.toml -- verify
 The separately scoped `capture-dependencies` command performs a target-scoped bootstrap build and writes a review candidate under `rust/target`; it never edits or broadens production authority. Production and `verify` always fail closed on both missing and stale dependency declarations.
 
 `doctor` validates the host tuple, source manifest, git-tracked status of every native input, monotonic trend, and all target prerequisites. `matrix` is an intentional pure-inspection exception that only prints the checked-in machine-readable matrix. `test` validates the matrix and tracked-input contract but intentionally skips external production-package probes before running workspace tests.
+`production` performs one build and records that command. It is suitable for a local game run, but does not establish determinism. `verify` requires `prove`, which performs two clean builds and compares their identities and all five artifacts. The supported proof sequence is `prove` followed by `verify`; `package` performs both. Running `production` again replaces the manifest with single-build evidence, so a subsequent `verify` rejects it and identifies the missing stage. Editing the recorded command cannot supply the missing proof. Verification still checks both build vectors against the live artifacts and source/toolchain identity (#211).
+
 
 ## Explicit transitional native inputs
 
@@ -63,7 +65,7 @@ Production uses sorted source and archive input order, unique fixed member names
 ```sh
 git clean -ndx                   # review only; do not remove user files
 cargo run --locked --manifest-path rust/xtask/Cargo.toml -- doctor
-cargo run --locked --manifest-path rust/xtask/Cargo.toml -- production
+cargo run --locked --manifest-path rust/xtask/Cargo.toml -- prove
 rust/ownership/verify-production.sh
 ```
 

@@ -2280,9 +2280,34 @@ mod os {
 
     impl ChildSession {
         pub fn spawn(
-            mut command: Command,
+            command: Command,
             config: ChildSessionConfig,
         ) -> Result<Self, ChildSessionError> {
+            Self::spawn_inner(command, config, true)
+        }
+
+        /// Supervise a leaf candidate without giving its image access to the controller protocol.
+        pub fn spawn_leaf(
+            command: Command,
+            config: ChildSessionConfig,
+        ) -> Result<Self, ChildSessionError> {
+            Self::spawn_inner(command, config, false)
+        }
+
+        fn spawn_inner(
+            mut command: Command,
+            config: ChildSessionConfig,
+            inherit_protocol: bool,
+        ) -> Result<Self, ChildSessionError> {
+            if !inherit_protocol {
+                for name in [
+                    super::NESTED_GROUP_REGISTRATION_FD_ENV,
+                    super::NESTED_GROUP_TOKEN_READ_FD_ENV,
+                    super::NESTED_GROUP_TOKEN_WRITE_FD_ENV,
+                ] {
+                    command.env_remove(name);
+                }
+            }
             let stdout_file = create_log(&config.stdout_log, StreamKind::Stdout)?;
             let stderr_file = match create_log(&config.stderr_log, StreamKind::Stderr) {
                 Ok(file) => file,
@@ -2309,6 +2334,13 @@ mod os {
                         }
                         protocol.make_inheritable()?;
                         protocol.exchange(NestedGroupOperation::Register, libc::getpid())?;
+                        if !inherit_protocol {
+                            for descriptor in protocol.descriptors() {
+                                if libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) == -1 {
+                                    return Err(io::Error::last_os_error());
+                                }
+                            }
+                        }
                     } else if libc::setsid() == -1 {
                         return Err(io::Error::last_os_error());
                     }

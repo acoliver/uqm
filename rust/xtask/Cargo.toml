@@ -3,6 +3,7 @@ name = "uqm-xtask"
 version = "0.8.0"
 edition = "2021"
 publish = false
+default-run = "uqm-xtask"
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }

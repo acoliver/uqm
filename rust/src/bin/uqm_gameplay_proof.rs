@@ -10,7 +10,7 @@ use uqm_rust::automation::interrupt;
 use uqm_rust::automation::{
     verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
     ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
-    TraceRecord, AUTOMATION_SEED,
+    TraceRecord,
 };
 
 const USAGE: &str = "usage: uqm-gameplay-proof \
@@ -20,9 +20,11 @@ validate-negative-fixtures | \
 compare-battle FIRST_LCAR SECOND_LCAR | \
 list [DOMAIN] | \
 select CHANGED_PATH... | \
-report BUNDLE_DIR";
+report BUNDLE_DIR | \
+replay REPO_ROOT PRIOR_BUNDLE OUTPUT_ROOT | \
+gallery SUITE_ROOT";
 
-const SCHEMA: &str = "uqm-lcar-v1";
+const SCHEMA: &str = "uqm-lcar-v2";
 
 /// Every LCAR schema this build can validate.
 ///
@@ -30,8 +32,8 @@ const SCHEMA: &str = "uqm-lcar-v1";
 /// unknown version is rejected by name, and so adding a version is a visible
 /// change here rather than a silent widening.
 const SUPPORTED_SCHEMAS: &[&str] = &[SCHEMA];
-const FAILURE_FILE: &str = "failure-lcar-v1.json";
-const PASS_FILE: &str = "lcar-v1.json";
+const FAILURE_FILE: &str = "failure-lcar-v2.json";
+const PASS_FILE: &str = "lcar-v2.json";
 const PRODUCTION_SCHEMA: &str = "uqm-deterministic-artifacts-v4";
 const PRODUCTION_FEATURES: [&str; 2] = ["audio_heart", "linked_c_archive"];
 const LOG_BUDGET: u64 = 64 * 1024 * 1024;
@@ -62,6 +64,7 @@ enum FailedContract {
     MissingTeardown,
     SemanticEvidence,
     TeardownEvidence,
+    ConfigRetention,
     ConfigCleanup,
 }
 
@@ -78,8 +81,10 @@ enum ArtifactRole {
     ExecutableSnapshot,
     ScriptSnapshot,
     ContentIdentitySnapshot,
+    ContentSnapshotFile,
     InitialConfigSnapshot,
     FinalConfigSnapshot,
+    FinalConfigSnapshotFile,
     RetainedConfigFile,
 }
 
@@ -160,13 +165,14 @@ struct LcarManifest {
     features: Vec<String>,
     renderer: String,
     seed: u32,
+    input_identity: String,
     provenance: Provenance,
     process: ProcessReceipt,
     cleanup: CleanupReceipt,
     artifacts: Vec<ArtifactEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct TreeSnapshot {
     schema: String,
@@ -175,7 +181,7 @@ struct TreeSnapshot {
     entries: Vec<TreeEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(deny_unknown_fields)]
 struct TreeEntry {
     path: String,
@@ -187,6 +193,7 @@ struct RunEvidence {
     output_root: PathBuf,
     config_root: PathBuf,
     production: ProductionManifest,
+    seed: u32,
     command: Vec<String>,
     environment: BTreeMap<String, String>,
     provenance: Provenance,
@@ -219,6 +226,12 @@ fn run() -> Result<(), String> {
         Some("list") if args.len() == 3 => list_scenarios(Some(&args[2])),
         Some("select") if args.len() >= 2 => select_scenarios(&args[2..]),
         Some("report") if args.len() == 3 => report_bundle(Path::new(&args[2])),
+        Some("gallery") if args.len() == 3 => build_gallery(Path::new(&args[2])),
+        Some("replay") if args.len() == 5 => replay_bundle(
+            Path::new(&args[2]),
+            Path::new(&args[3]),
+            Path::new(&args[4]),
+        ),
         _ => Err(USAGE.into()),
     }
 }
@@ -229,6 +242,13 @@ fn run_proof(
     script: &Path,
     output_root: &Path,
 ) -> Result<(), String> {
+    // Record interruptions before the first byte of work. Preparing evidence
+    // copies the executable and snapshots the whole content tree, which takes
+    // long enough that a signal arriving during it is likely rather than
+    // theoretical. Installing after that leaves the longest phase of the run
+    // under the default disposition, where a signal kills the process outright
+    // and the bundle it leaves behind says nothing about why it stopped.
+    interrupt::install().map_err(|error| error.to_string())?;
     let repo_root = fs::canonicalize(repo_root)
         .map_err(|error| format!("canonicalize repository {}: {error}", repo_root.display()))?;
     let production_value = read_json_value(production_path)?;
@@ -251,9 +271,21 @@ fn run_proof(
         &content,
         output_root,
     )?;
-    // Record interruptions before anything is spawned, so a signal arriving at
-    // any point after this tears the run down rather than orphaning it.
-    interrupt::install().map_err(|error| error.to_string())?;
+    execute_prepared(&repo_root, &mut evidence)
+}
+
+fn execute_prepared(repo_root: &Path, evidence: &mut RunEvidence) -> Result<(), String> {
+    // An interruption that arrived while evidence was being prepared stops the
+    // run here, before a child exists, and says so. Continuing would spawn the
+    // game after the operator already asked for it to stop.
+    if let Some(signal) = interrupt::interrupted() {
+        let detail = format!("interrupted by signal {signal} while preparing evidence");
+        if let Err(failure) = finalize_config_evidence(evidence) {
+            return record_config_diagnostic(evidence, None, None, Some(&failure), Some(&detail));
+        }
+        record_interrupted_preparation(evidence, signal)?;
+        return Err(detail);
+    }
 
     // The run owns its output root for as long as it is producing evidence
     // there. Ownership is released when this guard drops, on every path.
@@ -263,13 +295,13 @@ fn run_proof(
     )
     .map_err(|error| error.to_string())?;
     let receipt = supervise_child(
-        &repo_root,
+        repo_root,
         &evidence.output_root.join("snapshots/uqm"),
-        &content,
+        &evidence.output_root.join("snapshots/sc2/content"),
         &evidence.output_root.join("snapshots/script.json"),
-        &evidence,
+        evidence,
     );
-    complete_run(&mut evidence, receipt)
+    complete_run(evidence, receipt)
 }
 
 fn prepare_evidence(
@@ -293,7 +325,9 @@ fn prepare_evidence(
     copy_new(production_path, &snapshots.join("production-manifest.json"))?;
     copy_new(executable, &snapshots.join("uqm"))?;
     copy_new(script, &snapshots.join("script.json"))?;
-    let content_snapshot = snapshot_tree(content, "content")?;
+    let content_snapshot = retain_content(content, &snapshots.join("sc2/content"))?;
+    let content = snapshots.join("sc2/content");
+    let seed = read_validated_script(&snapshots.join("script.json"))?.seed();
     write_new_json(&snapshots.join("content-identity.json"), &content_snapshot)?;
     let initial_config = snapshot_tree(&config_root, "initial_config")?;
     write_new_json(&snapshots.join("config-initial.json"), &initial_config)?;
@@ -329,6 +363,7 @@ fn prepare_evidence(
         output_root,
         config_root,
         production: production.clone(),
+        seed,
         command,
         environment,
         provenance,
@@ -351,6 +386,7 @@ fn supervise_child(
         .arg(format!("--automation-output={}", run_root.display()))
         .args(["--res=640x480", "--windowed", "--scroll=pc"])
         .current_dir(repo_root)
+        .env_clear()
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
     // The run must not proceed under a digest nobody checked: the declared
@@ -395,32 +431,51 @@ fn complete_run(
     evidence: &mut RunEvidence,
     child_result: Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)>,
 ) -> Result<(), String> {
+    complete_run_with(evidence, child_result, finalize_config_evidence)
+}
+
+fn complete_run_with(
+    evidence: &mut RunEvidence,
+    child_result: Result<ChildSessionReceipt, (ChildSessionError, Box<ChildSessionReceipt>)>,
+    finalize: impl FnOnce(&mut RunEvidence) -> Result<(), ConfigFinalizationFailure>,
+) -> Result<(), String> {
     let (session_contract, process) = match child_result {
         Ok(receipt) => (None, ProcessReceipt::from(receipt)),
         Err((error, receipt)) if receipt.identity.pid != 0 => (
             Some(classify_session_error(&error)),
             ProcessReceipt::from(*receipt),
         ),
-        Err((error, _)) => return Err(error.to_string()),
+        Err((error, _)) => {
+            let failure = finalize(evidence).err();
+            return record_config_diagnostic(
+                evidence,
+                Some(classify_session_error(&error)),
+                None,
+                failure.as_ref(),
+                Some(&error.to_string()),
+            );
+        }
     };
-    let cleanup_error = finalize_config_evidence(evidence).err();
+    let first_failed_contract =
+        session_contract.or(inspect_child_evidence(evidence, &process).err());
+    if let Err(failure) = finalize(evidence) {
+        return record_config_diagnostic(
+            evidence,
+            first_failed_contract,
+            Some(&process),
+            Some(&failure),
+            None,
+        );
+    }
     let cleanup = CleanupReceipt {
         exact_child_reaped: process.exit_code.is_some() || process.signal.is_some(),
         orphan_check_passed: process.orphan_check_passed,
         output_drained: process.output_drained,
-        config_root_removed: !evidence.config_root.exists(),
+        config_root_removed: config_root_removed(&evidence.config_root)?,
     };
-    let evidence_contract = inspect_child_evidence(evidence, &process).err();
-    let first_failed_contract = session_contract
-        .or_else(|| {
-            cleanup_error
-                .as_ref()
-                .map(|_| FailedContract::ConfigCleanup)
-        })
-        .or(evidence_contract);
     let passed = first_failed_contract.is_none();
     let artifacts = collect_artifacts(&evidence.output_root)?;
-    let manifest = LcarManifest {
+    let mut manifest = LcarManifest {
         schema: SCHEMA.into(),
         passed,
         first_failed_contract,
@@ -431,12 +486,14 @@ fn complete_run(
         profile: evidence.production.profile.clone(),
         features: evidence.production.features.clone(),
         renderer: "sdl2-software-dummy".into(),
-        seed: AUTOMATION_SEED,
+        seed: evidence.seed,
+        input_identity: String::new(),
         provenance: evidence.provenance.clone(),
         process,
         cleanup,
         artifacts,
     };
+    manifest.input_identity = input_identity(&evidence.output_root, &manifest)?;
     let name = if passed { PASS_FILE } else { FAILURE_FILE };
     let manifest_path = evidence.output_root.join(name);
     write_atomic_new_json(&manifest_path, &manifest)?;
@@ -445,30 +502,175 @@ fn complete_run(
         Ok(())
     } else {
         Err(format!(
-            "gameplay proof failed at {:?}; evidence: {}{}",
+            "gameplay proof failed at {:?}; evidence: {}",
             manifest.first_failed_contract,
-            manifest_path.display(),
-            cleanup_error
-                .as_ref()
-                .map(|error| format!("; cleanup detail: {error}"))
-                .unwrap_or_default()
+            manifest_path.display()
         ))
     }
 }
 
-fn finalize_config_evidence(evidence: &mut RunEvidence) -> Result<(), String> {
-    let final_config = snapshot_tree(&evidence.config_root, "final_config")?;
-    evidence.provenance.final_config_tree_sha256 = final_config.tree_sha256.clone();
+fn record_config_diagnostic(
+    evidence: &RunEvidence,
+    earlier: Option<FailedContract>,
+    process: Option<&ProcessReceipt>,
+    failure: Option<&ConfigFinalizationFailure>,
+    child_error: Option<&str>,
+) -> Result<(), String> {
+    let removed = config_root_removed(&evidence.config_root);
+    let first = earlier.or(failure.map(|failure| failure.contract));
+    let bounded = |text: &str| text.chars().take(4096).collect::<String>();
+    let document = serde_json::json!({
+        "schema": "uqm-config-finalization-failure-v1",
+        "passed": false,
+        "first_failed_contract": first,
+        "process": process,
+        "config_root_removed": removed.as_ref().ok(),
+        "config_inspection_error": removed.as_ref().err().map(|error| bounded(error)),
+        "finalization_failed_contract": failure.map(|failure| failure.contract),
+        "finalization_detail": failure.map(|failure| bounded(&failure.detail)),
+        "child_error": child_error.map(bounded),
+    });
+    let detail = format!("proof stopped at {first:?}; finalization: {failure:?}; child: {child_error:?}; config inspection: {removed:?}");
+    write_new_json(
+        &evidence
+            .output_root
+            .join("config-finalization-failure.json"),
+        &document,
+    )
+    .map_err(|error| format!("{detail}; diagnostic publication failed: {error}"))?;
+    Err(detail)
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigFinalizationFailure {
+    contract: FailedContract,
+    detail: String,
+}
+
+fn finalize_config_evidence(evidence: &mut RunEvidence) -> Result<(), ConfigFinalizationFailure> {
+    finalize_config_with(evidence, write_config_snapshot_file, |path| {
+        fs::remove_dir_all(path)
+    })
+}
+
+fn finalize_config_with(
+    evidence: &mut RunEvidence,
+    write: impl FnMut(&Path, &[u8]) -> Result<(), String>,
+    remove: impl FnOnce(&Path) -> std::io::Result<()>,
+) -> Result<(), ConfigFinalizationFailure> {
+    let final_config =
+        retain_final_config(evidence, write).map_err(|detail| ConfigFinalizationFailure {
+            contract: FailedContract::ConfigRetention,
+            detail,
+        })?;
+    evidence.provenance.final_config_tree_sha256 = final_config.tree_sha256;
+    remove(&evidence.config_root).map_err(|error| ConfigFinalizationFailure {
+        contract: FailedContract::ConfigCleanup,
+        detail: format!("remove mutable config root: {error}"),
+    })?;
+    if !config_root_removed(&evidence.config_root).map_err(|detail| ConfigFinalizationFailure {
+        contract: FailedContract::ConfigCleanup,
+        detail,
+    })? {
+        return Err(ConfigFinalizationFailure {
+            contract: FailedContract::ConfigCleanup,
+            detail: "mutable config root remains after cleanup".into(),
+        });
+    }
+    uqm_rust::automation::artifact::sync_directory(&evidence.output_root).map_err(|error| {
+        ConfigFinalizationFailure {
+            contract: FailedContract::ConfigCleanup,
+            detail: format!("sync mutable config removal: {error}"),
+        }
+    })?;
+    Ok(())
+}
+
+fn config_root_removed(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(format!("inspect mutable config root: {error}")),
+    }
+}
+
+fn retain_final_config(
+    evidence: &RunEvidence,
+    mut write: impl FnMut(&Path, &[u8]) -> Result<(), String>,
+) -> Result<TreeSnapshot, String> {
+    let destination = evidence.output_root.join("snapshots/config-final");
+    let paths = collect_paths(&evidence.config_root)?;
+    fs::create_dir(&destination)
+        .map_err(|error| format!("create final config snapshot: {error}"))?;
+    let mut entries = Vec::new();
+    for path in paths {
+        let relative = relative_path(&evidence.config_root, &path)?;
+        let bytes = uqm_rust::automation::artifact::read_regular_relative_nofollow(
+            &evidence.output_root,
+            &Path::new("config").join(&relative),
+            LOG_BUDGET,
+        )
+        .map_err(|error| format!("read final config {relative}: {error}"))?;
+        let target = destination.join(&relative);
+        let parent = target
+            .parent()
+            .ok_or_else(|| "final config file lacks parent".to_string())?;
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("create final config directory: {error}"))?;
+        write(&target, &bytes)?;
+        for directory in parent
+            .ancestors()
+            .take_while(|path| path.starts_with(&destination))
+        {
+            uqm_rust::automation::artifact::sync_directory(directory)
+                .map_err(|error| format!("sync final config directory: {error}"))?;
+        }
+        entries.push(TreeEntry {
+            path: relative,
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            bytes: bytes.len() as u64,
+        });
+    }
+    let snapshot = TreeSnapshot {
+        schema: "uqm-tree-identity-v1".into(),
+        root_role: "final_config".into(),
+        tree_sha256: tree_digest(&entries),
+        entries,
+    };
+    // Check the stored bytes and the source again before deleting the mutable profile.
+    if snapshot_tree(&destination, "final_config")? != snapshot
+        || snapshot_tree(&evidence.config_root, "final_config")? != snapshot
+    {
+        return Err("final config changed while retaining its snapshot".into());
+    }
     write_new_json(
         &evidence.output_root.join("snapshots/config-final.json"),
-        &final_config,
+        &snapshot,
     )?;
-    fs::remove_dir_all(&evidence.config_root)
-        .map_err(|error| format!("remove mutable config root: {error}"))?;
-    if evidence.config_root.exists() {
-        return Err("mutable config root remains after cleanup".into());
-    }
-    Ok(())
+    uqm_rust::automation::artifact::sync_directory(&destination)
+        .map_err(|error| format!("sync final config snapshot: {error}"))?;
+    uqm_rust::automation::artifact::sync_directory(&evidence.output_root.join("snapshots"))
+        .map_err(|error| format!("sync snapshots: {error}"))?;
+    Ok(snapshot)
+}
+
+fn write_config_snapshot_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("create final config file: {error}"))?;
+    file.write_all(bytes)
+        .map_err(|error| format!("write final config file: {error}"))?;
+    let mut permissions = file
+        .metadata()
+        .map_err(|error| format!("stat final config file: {error}"))?
+        .permissions();
+    permissions.set_readonly(true);
+    file.set_permissions(permissions)
+        .map_err(|error| format!("seal final config file: {error}"))?;
+    file.sync_all()
+        .map_err(|error| format!("sync final config file: {error}"))
 }
 
 fn inspect_child_evidence(
@@ -541,14 +743,113 @@ fn unavailable_receipt(executable_digest: &str) -> ChildSessionReceipt {
 
 fn validate_manifest(path: &Path) -> Result<(), String> {
     let manifest: LcarManifest = read_json(path)?;
+    validate_loaded_manifest(path, &manifest)
+}
+
+fn validate_loaded_manifest(path: &Path, manifest: &LcarManifest) -> Result<(), String> {
     let root = path
         .parent()
         .ok_or_else(|| "LCAR manifest has no parent".to_string())?;
-    validate_manifest_identity(path, &manifest)?;
-    validate_inventory(root, &manifest)?;
-    validate_provenance(root, &manifest)?;
-    validate_command(root, &manifest)?;
-    validate_result(root, &manifest)
+    validate_manifest_identity(path, manifest)?;
+    validate_inventory(root, manifest)?;
+    validate_provenance(root, manifest)?;
+    validate_command(manifest)?;
+    validate_scenario_binding(root, manifest)?;
+    if manifest.input_identity != input_identity(root, manifest)? {
+        return Err("LCAR replay input identity does not match retained inputs".into());
+    }
+    validate_result(root, manifest)
+}
+
+fn read_validated_script(
+    path: &Path,
+) -> Result<uqm_rust::automation::script::ValidatedScript, String> {
+    let bytes =
+        fs::read(path).map_err(|error| format!("read script {}: {error}", path.display()))?;
+    let doc = uqm_rust::automation::script::parse_script(&bytes, path)
+        .map_err(|error| error.to_string())?;
+    uqm_rust::automation::script::validate_script(doc, path).map_err(|error| error.to_string())
+}
+
+fn input_identity(root: &Path, manifest: &LcarManifest) -> Result<String, String> {
+    let script = read_validated_script(&artifact_path(
+        root,
+        manifest,
+        ArtifactRole::ScriptSnapshot,
+    )?)?;
+    let material = serde_json::json!({
+        "schema": "uqm-replay-input-v1",
+        "scenario_identity": script.resolved().replay_identity().map_err(|error| error.to_string())?,
+        "seed": manifest.seed,
+        "git_head": manifest.git_head,
+        "target": manifest.target,
+        "profile": manifest.profile,
+        "features": manifest.features,
+        "renderer": manifest.renderer,
+        "environment": manifest.environment,
+        "production_manifest_sha256": manifest.provenance.production_manifest_sha256,
+        "executable_sha256": manifest.provenance.executable_sha256,
+        "script_sha256": manifest.provenance.script_sha256,
+        "content_tree_sha256": manifest.provenance.content_tree_sha256,
+        "initial_config_tree_sha256": manifest.provenance.initial_config_tree_sha256,
+    });
+    let bytes = serde_json::to_vec(&material).map_err(|error| error.to_string())?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn validate_scenario_binding(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
+    let script = read_validated_script(&artifact_path(
+        root,
+        manifest,
+        ArtifactRole::ScriptSnapshot,
+    )?)?;
+    let record: uqm_rust::automation::lifecycle::ResolvedScenarioRecord = read_json(
+        &artifact_path(root, manifest, ArtifactRole::ResolvedScenario)?,
+    )?;
+    record.validate().map_err(|error| error.to_string())?;
+    if record.scenario != script.resolved() {
+        return Err("resolved scenario differs from the retained script inputs".into());
+    }
+    if manifest.seed != script.seed() {
+        return Err("LCAR seed differs from the resolved script seed".into());
+    }
+    if manifest
+        .artifacts
+        .iter()
+        .any(|entry| entry.role == ArtifactRole::Trace)
+    {
+        for record in parse_trace(&artifact_path(root, manifest, ArtifactRole::Trace)?)? {
+            match (&record.kind, &record.seed_application) {
+                (RecordKind::SeedApplication, Some(application))
+                    if application.seed == script.seed() => {}
+                (RecordKind::SeedApplication, _) | (_, Some(_)) => {
+                    return Err(
+                        "trace RNG seed application differs from the resolved script seed".into(),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+fn retain_content(source: &Path, destination: &Path) -> Result<TreeSnapshot, String> {
+    let expected = snapshot_tree(source, "content")?;
+    fs::create_dir_all(destination).map_err(|error| format!("create retained content: {error}"))?;
+    for entry in &expected.entries {
+        let target = destination.join(&entry.path);
+        let parent = target
+            .parent()
+            .ok_or_else(|| "content entry has no parent".to_string())?;
+        fs::create_dir_all(parent).map_err(|error| format!("create content directory: {error}"))?;
+        copy_new(&source.join(&entry.path), &target)?;
+    }
+    let copied = snapshot_tree(destination, "content")?;
+    if copied.tree_sha256 != expected.tree_sha256 {
+        return Err("content changed while retaining replay inputs".into());
+    }
+    Ok(copied)
 }
 
 /// Print the published matrix, optionally for one domain.
@@ -600,38 +901,293 @@ fn select_scenarios(paths: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Summarise a produced bundle, including the scenario it actually replayed.
-fn report_bundle(bundle: &Path) -> Result<(), String> {
-    let resolved_path = bundle.join("resolved-scenario.json");
-    let resolved = std::fs::read_to_string(&resolved_path)
-        .map_err(|error| format!("read {}: {error}", resolved_path.display()))?;
-    let resolved: serde_json::Value = serde_json::from_str(&resolved)
-        .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?;
+/// Index every capture a suite produced, with the scenario that produced it.
+///
+/// A suite that runs thirty-two scenarios produces captures nobody will open
+/// one directory at a time. The index gives each image a scenario, a size and
+/// a digest, so a reviewer can see what was actually presented and a later run
+/// can be compared against it rather than described.
+///
+/// Writes `gallery.json` at the suite root and prints a readable summary.
+fn build_gallery(suite: &Path) -> Result<(), String> {
+    // A single-scenario run is its own bundle. Descending into it as well
+    // would find its own run/ directory and count the same captures twice.
+    let mut bundles: Vec<PathBuf> = Vec::new();
+    if run_dir(suite).join("captures").is_dir() {
+        bundles.push(suite.to_path_buf());
+    } else {
+        let entries =
+            fs::read_dir(suite).map_err(|error| format!("read {}: {error}", suite.display()))?;
+        for entry in entries {
+            let path = entry
+                .map_err(|error| format!("read {}: {error}", suite.display()))?
+                .path();
+            if path.is_dir() && run_dir(&path).join("captures").is_dir() {
+                bundles.push(path);
+            }
+        }
+        bundles.sort();
+    }
+    if bundles.is_empty() {
+        return Err(format!(
+            "{} contains no scenario bundle with captures",
+            suite.display()
+        ));
+    }
 
-    // The scenario facts are nested under "scenario"; the identity that binds
-    // them sits beside it.
-    let scenario = &resolved["scenario"];
-    for (label, value) in [
-        ("scenario", scenario["name"].as_str()),
-        ("fixture", scenario["fixture"].as_str()),
-        ("schema", scenario["schema"].as_str()),
-        ("replay_identity", resolved["replay_identity"].as_str()),
-    ] {
+    let mut images = Vec::new();
+    for bundle in &bundles {
+        let run = run_dir(bundle);
+        let scenario = scenario_name(&run).unwrap_or_else(|| {
+            bundle
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("unknown")
+                .to_string()
+        });
+        let captures = run.join("captures");
+        let mut files: Vec<PathBuf> = fs::read_dir(&captures)
+            .map_err(|error| format!("read {}: {error}", captures.display()))?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.is_file())
+            .collect();
+        files.sort();
+        for file in files {
+            let bytes =
+                fs::read(&file).map_err(|error| format!("read {}: {error}", file.display()))?;
+            let name = file
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string();
+            images.push(serde_json::json!({
+                "scenario": scenario,
+                "checkpoint": name.trim_end_matches(".png"),
+                "path": file.strip_prefix(suite).unwrap_or(&file).display().to_string(),
+                "byte_length": bytes.len(),
+                "sha256": format!("{:x}", Sha256::digest(&bytes)),
+            }));
+        }
+    }
+
+    let gallery = serde_json::json!({
+        "schema": "uqm-autoplay-gallery-v1",
+        "scenarios": bundles.len(),
+        "captures": images.len(),
+        "images": images,
+    });
+    let path = suite.join("gallery.json");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&gallery)
+            .map_err(|error| format!("serialize gallery: {error}"))?,
+    )
+    .map_err(|error| format!("write {}: {error}", path.display()))?;
+
+    println!("scenarios\t{}", bundles.len());
+    println!("captures\t{}", images.len());
+    for image in &images {
         println!(
-            "{label}\t{}",
-            value.ok_or_else(|| format!("{} lacks {label}", resolved_path.display()))?
+            "{}\t{}\t{}",
+            image["scenario"].as_str().unwrap_or("?"),
+            image["checkpoint"].as_str().unwrap_or("?"),
+            image["sha256"].as_str().unwrap_or("?")
         );
     }
-    println!("scenario_version\t{}", scenario["scenario_version"]);
-    println!("seed\t{}", scenario["seed"]);
-    println!("steps\t{}", scenario["step_count"]);
+    Ok(())
+}
 
-    let teardown_path = bundle.join("teardown-complete.json");
+/// The scenario a run recorded, if it got far enough to record one.
+fn scenario_name(run: &Path) -> Option<String> {
+    let text = fs::read_to_string(run.join("resolved-scenario.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value["scenario"]["name"].as_str().map(str::to_owned)
+}
+
+/// Replay only verified retained inputs. Outcome comparison is separate from
+/// input identity and excludes pixels and callback/wall-clock timing.
+fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(), String> {
+    with_verified_replay(prior, |manifest| {
+        interrupt::install().map_err(|error| error.to_string())?;
+        let repo_root = fs::canonicalize(repo_root)
+            .map_err(|error| format!("canonicalize replay repository: {error}"))?;
+        let production_path =
+            artifact_path(prior, manifest, ArtifactRole::ProductionManifestSnapshot)?;
+        let production = parse_production(&read_json_value(&production_path)?)?;
+        validate_production(&production, true)?;
+        verify_source_binding(&repo_root, &production.git_head)?;
+        let prior_outcome = replay_outcome(prior)?;
+        let mut evidence = prepare_evidence(
+            &repo_root,
+            &production_path,
+            &production,
+            &artifact_path(prior, manifest, ArtifactRole::ExecutableSnapshot)?,
+            &artifact_path(prior, manifest, ArtifactRole::ScriptSnapshot)?,
+            &prior.join("snapshots/sc2/content"),
+            output_root,
+        )?;
+        // Check the newly copied bytes too, before starting a child. The source
+        // bundle may have been changed during preparation by an external writer.
+        verify_replay_copy(&evidence, manifest)?;
+        execute_prepared(&repo_root, &mut evidence)?;
+        let produced: LcarManifest = read_json(&output_root.join(PASS_FILE))?;
+        if produced.input_identity != manifest.input_identity {
+            return Err("replay input identity differs from the verified prior bundle".into());
+        }
+        if replay_outcome(output_root)? != prior_outcome {
+            return Err("replay inputs match but semantic outcomes differ".into());
+        }
+        println!("input_identity\t{}", produced.input_identity);
+        println!("semantic_outcome\tmatched (timing and pixels not compared)");
+        println!("replays\t{}", prior.display());
+        Ok(())
+    })
+}
+
+/// The execution callback cannot be reached with an invalid prior inventory.
+fn with_verified_replay<T>(
+    prior: &Path,
+    execute: impl FnOnce(&LcarManifest) -> Result<T, String>,
+) -> Result<T, String> {
+    let path = prior.join(PASS_FILE);
+    let manifest: LcarManifest = read_json(&path)?;
+    validate_loaded_manifest(&path, &manifest)?;
+    if !manifest.passed {
+        return Err("replay requires a passing prior bundle".into());
+    }
+    execute(&manifest)
+}
+
+fn verify_replay_copy(evidence: &RunEvidence, prior: &LcarManifest) -> Result<(), String> {
+    let copied = &evidence.provenance;
+    let original = &prior.provenance;
+    if copied.production_manifest_sha256 != original.production_manifest_sha256
+        || copied.executable_sha256 != original.executable_sha256
+        || copied.script_sha256 != original.script_sha256
+        || copied.content_tree_sha256 != original.content_tree_sha256
+        || copied.initial_config_tree_sha256 != original.initial_config_tree_sha256
+        || evidence.seed != prior.seed
+    {
+        return Err("replay snapshot changed while preparing verified inputs".into());
+    }
+    Ok(())
+}
+
+fn replay_outcome(root: &Path) -> Result<Vec<TraceRecord>, String> {
+    let mut outcome = Vec::new();
+    for mut record in parse_trace(&root.join("run/trace.jsonl"))? {
+        if matches!(
+            record.kind,
+            RecordKind::SeedApplication
+                | RecordKind::SemanticAssertion
+                | RecordKind::MenuTransition
+                | RecordKind::Checkpoint
+                | RecordKind::Terminal
+        ) {
+            record.elapsed_ms = 0;
+            record.sequence = outcome.len() as u64;
+            record.input_seen = 0;
+            record.present_seen = 0;
+            record.presentation = None;
+            outcome.push(record);
+        }
+    }
+    Ok(outcome)
+}
+
+/// Record that a run stopped, before any child existed, because of a signal.
+///
+/// A bundle with no explanation is indistinguishable from a machine that
+/// vanished, so an interrupted run leaves a document naming the signal rather
+/// than a directory of half-copied snapshots.
+fn record_interrupted_preparation(evidence: &RunEvidence, signal: i32) -> Result<(), String> {
+    let run = evidence.output_root.join("run");
+    fs::create_dir_all(&run).map_err(|error| format!("create {}: {error}", run.display()))?;
+    let document = serde_json::json!({
+        "schema": "uqm-interrupted-preparation-v1",
+        "terminal": "interrupted",
+        "signal": signal,
+        "phase": "prepare-evidence",
+        "detail": "the run was interrupted before the game was started, so no child process existed to tear down",
+    });
+    let path = run.join("teardown-complete.json");
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&document)
+            .map_err(|error| format!("serialize interruption receipt: {error}"))?,
+    )
+    .map_err(|error| format!("write {}: {error}", path.display()))
+}
+
+/// Where a bundle keeps its run documents.
+///
+/// A full LCAR bundle nests them under `run/` beside its snapshots; a bare
+/// scenario bundle writes them at the top level. Both are produced by this
+/// repository, so a reader that understands only one of them silently fails
+/// on half the evidence.
+fn run_dir(bundle: &Path) -> PathBuf {
+    let nested = bundle.join("run");
+    if nested.is_dir() {
+        nested
+    } else {
+        bundle.to_path_buf()
+    }
+}
+
+/// Summarise a produced bundle, including the scenario it actually replayed.
+fn report_bundle(bundle: &Path) -> Result<(), String> {
+    let run = run_dir(bundle);
+    let resolved_path = run.join("resolved-scenario.json");
+    let resolved: Option<uqm_rust::automation::lifecycle::ResolvedScenarioRecord> =
+        match std::fs::read_to_string(&resolved_path) {
+            Ok(text) => Some(
+                serde_json::from_str(&text)
+                    .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?,
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(format!("read {}: {error}", resolved_path.display())),
+        };
+    let Some(resolved) = resolved else {
+        // The run stopped before it resolved a scenario. Say so plainly and
+        // report whatever terminal state it did record, because a bundle from
+        // a run that died is the one worth reading.
+        println!("scenario\tunresolved: the run stopped before resolving a scenario");
+        return report_terminal(&run);
+    };
+
+    resolved.validate().map_err(|error| error.to_string())?;
+    let scenario = &resolved.scenario;
+    println!("scenario\t{}", scenario.name);
+    println!("fixture\t{}", scenario.fixture);
+    println!("schema\t{}", scenario.schema);
+    println!("scenario_input_identity\t{}", resolved.replay_identity);
+    println!("scenario_version\t{}", scenario.scenario_version);
+    println!("seed\t{}", scenario.seed);
+    println!("requested_seed\t{}", scenario.requested_seed);
+    println!("steps\t{}", scenario.step_count);
+
+    report_terminal(&run)
+}
+
+/// Report whatever terminal state a run recorded, including none.
+fn report_terminal(run: &Path) -> Result<(), String> {
+    let teardown_path = run.join("teardown-complete.json");
     match std::fs::read_to_string(&teardown_path) {
         Ok(text) => {
             let teardown: serde_json::Value = serde_json::from_str(&text)
                 .map_err(|error| format!("parse {}: {error}", teardown_path.display()))?;
             println!("terminal\t{}", teardown["terminal"].as_str().unwrap_or("?"));
+            // An interrupted run records why it stopped; a completed one does
+            // not carry these, so they are printed when present rather than
+            // demanded.
+            for field in ["signal", "phase", "detail"] {
+                match teardown.get(field) {
+                    Some(serde_json::Value::String(text)) => println!("{field}\t{text}"),
+                    Some(serde_json::Value::Number(number)) => println!("{field}\t{number}"),
+                    _ => {}
+                }
+            }
         }
         // A bundle without teardown is the signature of a run that died, which
         // is worth reporting plainly rather than failing to summarise.
@@ -667,12 +1223,6 @@ fn validate_manifest_identity(path: &Path, manifest: &LcarManifest) -> Result<()
         return Err(format!(
             "LCAR git head {:?} is not a full 40-hex commit",
             manifest.git_head
-        ));
-    }
-    if manifest.seed != AUTOMATION_SEED {
-        return Err(format!(
-            "LCAR seed {} is not the deterministic seed {AUTOMATION_SEED}",
-            manifest.seed
         ));
     }
     if manifest.renderer != "sdl2-software-dummy" {
@@ -716,6 +1266,18 @@ fn validate_manifest_identity(path: &Path, manifest: &LcarManifest) -> Result<()
 }
 
 fn validate_inventory(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
+    let conflicting_result = if manifest.passed {
+        FAILURE_FILE
+    } else {
+        PASS_FILE
+    };
+    if root
+        .join(conflicting_result)
+        .try_exists()
+        .map_err(|error| format!("inspect conflicting result: {error}"))?
+    {
+        return Err("LCAR bundle contains conflicting result manifests".into());
+    }
     if manifest.artifacts.is_empty() {
         return Err("LCAR artifact inventory is empty".into());
     }
@@ -723,6 +1285,9 @@ fn validate_inventory(root: &Path, manifest: &LcarManifest) -> Result<(), String
     let mut roles = BTreeMap::<ArtifactRole, usize>::new();
     for entry in &manifest.artifacts {
         validate_relative_path(&entry.path)?;
+        if role_for_path(&entry.path)? != entry.role {
+            return Err(format!("artifact role does not match path: {}", entry.path));
+        }
         if !paths.insert(entry.path.clone()) {
             return Err(format!("duplicate artifact path: {}", entry.path));
         }
@@ -815,7 +1380,15 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
         "final_config",
         &manifest.provenance.final_config_tree_sha256,
     )?;
+    if !initial.entries.is_empty() {
+        return Err("initial config must be the fresh empty profile this runner executes".into());
+    }
+    let retained_content = snapshot_tree(&root.join("snapshots/sc2/content"), "content")?;
+    if retained_content.tree_sha256 != content.tree_sha256 {
+        return Err("retained content does not match content identity snapshot".into());
+    }
     let production_path = artifact_path(root, manifest, ArtifactRole::ProductionManifestSnapshot)?;
+    validate_final_config_files(root, manifest, &final_config)?;
     let production = parse_production(&read_json_value(&production_path)?)?;
     validate_production(&production, false)?;
     if production.git_head != manifest.git_head
@@ -829,41 +1402,101 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
     Ok(())
 }
 
-fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
-    let root = fs::canonicalize(root)
-        .map_err(|error| format!("canonicalize LCAR root {}: {error}", root.display()))?;
-    if manifest.command.len() != 8
-        || manifest.command[0]
-            != artifact_path(&root, manifest, ArtifactRole::ExecutableSnapshot)?
-                .display()
-                .to_string()
-        || manifest.command[1] != format!("--contentdir={}", command_content(&manifest.command[1])?)
-        || manifest.command[2] != format!("--configdir={}", root.join("config").display())
-        || !manifest.command[3].starts_with("--automation-script=")
-        || manifest.command[4] != format!("--automation-output={}", root.join("run").display())
-        || manifest.command[5] != "--res=640x480"
-        || manifest.command[6] != "--windowed"
-        || manifest.command[7] != "--scroll=pc"
-    {
-        return Err("recorded gameplay command is not the exact supported command".into());
+fn validate_final_config_files(
+    root: &Path,
+    manifest: &LcarManifest,
+    snapshot: &TreeSnapshot,
+) -> Result<(), String> {
+    let expected: BTreeMap<_, _> = snapshot
+        .entries
+        .iter()
+        .map(|entry| {
+            (
+                format!("snapshots/config-final/{}", entry.path),
+                (entry.sha256.clone(), entry.bytes),
+            )
+        })
+        .collect();
+    let actual: BTreeMap<_, _> = manifest
+        .artifacts
+        .iter()
+        .filter(|entry| entry.role == ArtifactRole::FinalConfigSnapshotFile)
+        .map(|entry| (entry.path.clone(), (entry.sha256.clone(), entry.bytes)))
+        .collect();
+    if expected != actual {
+        return Err("retained final config does not match final config identity snapshot".into());
     }
-    let content = command_content(&manifest.command[1])?;
-    if !content.ends_with("sc2/content")
-        || Path::new(content)
+    for entry in manifest
+        .artifacts
+        .iter()
+        .filter(|entry| entry.role == ArtifactRole::RetainedConfigFile)
+    {
+        let relative = entry
+            .path
+            .strip_prefix("config/")
+            .ok_or_else(|| "retained config path is invalid".to_string())?;
+        if manifest.cleanup.config_root_removed
+            || expected.get(&format!("snapshots/config-final/{relative}"))
+                != Some(&(entry.sha256.clone(), entry.bytes))
+        {
+            return Err("mutable config leftovers differ from retained final config".into());
+        }
+    }
+    for (path, (digest, length)) in actual {
+        let bytes = uqm_rust::automation::artifact::read_regular_relative_nofollow(
+            root,
+            Path::new(&path),
+            length,
+        )
+        .map_err(|error| format!("read retained final config: {error}"))?;
+        if bytes.len() as u64 != length || format!("{:x}", Sha256::digest(bytes)) != digest {
+            return Err("retained final config bytes differ from identity snapshot".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_command(manifest: &LcarManifest) -> Result<(), String> {
+    let executable = manifest
+        .command
+        .first()
+        .ok_or_else(|| "recorded command is empty".to_string())?;
+    let executable = Path::new(executable);
+    if !executable.is_absolute()
+        || executable
             .components()
-            .any(|c| c == Component::ParentDir)
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
     {
-        return Err("recorded content command path is invalid".into());
+        return Err("recorded executable path is not absolute and normalized".into());
     }
-    let script = manifest.command[3]
-        .strip_prefix("--automation-script=")
-        .ok_or_else(|| "script command argument is malformed".to_string())?;
-    if script
-        != artifact_path(&root, manifest, ArtifactRole::ScriptSnapshot)?
-            .display()
-            .to_string()
-    {
-        return Err("recorded automation script is not the retained immutable snapshot".into());
+    // Commands describe the original run location. Revalidate that all operands
+    // refer to that one bundle, without opening those old absolute paths when a
+    // transported bundle is validated elsewhere.
+    let recorded_root = executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| "recorded executable lacks a bundle root".to_string())?;
+    let expected = vec![
+        recorded_root.join("snapshots/uqm").display().to_string(),
+        format!(
+            "--contentdir={}",
+            recorded_root.join("snapshots/sc2/content").display()
+        ),
+        format!("--configdir={}", recorded_root.join("config").display()),
+        format!(
+            "--automation-script={}",
+            recorded_root.join("snapshots/script.json").display()
+        ),
+        format!(
+            "--automation-output={}",
+            recorded_root.join("run").display()
+        ),
+        "--res=640x480".into(),
+        "--windowed".into(),
+        "--scroll=pc".into(),
+    ];
+    if manifest.command != expected {
+        return Err("recorded gameplay command is not the exact supported snapshot command".into());
     }
     Ok(())
 }
@@ -871,7 +1504,7 @@ fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> 
 fn validate_result(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
     if manifest.cleanup.orphan_check_passed != manifest.process.orphan_check_passed
         || manifest.cleanup.output_drained != manifest.process.output_drained
-        || manifest.cleanup.config_root_removed != !root.join("config").exists()
+        || manifest.cleanup.config_root_removed != config_root_removed(&root.join("config"))?
     {
         return Err("parent cleanup facts do not match retained evidence".into());
     }
@@ -902,6 +1535,9 @@ fn validate_failure_contract(
     contract: FailedContract,
 ) -> Result<(), String> {
     match contract {
+        FailedContract::ConfigRetention => Err(
+            "incomplete config retention cannot form an LCAR proof; inspect its diagnostic".into(),
+        ),
         FailedContract::Timeout if !(manifest.process.term_sent || manifest.process.kill_sent) => {
             Err("timeout failure lacks stop evidence".into())
         }
@@ -1318,12 +1954,19 @@ fn snapshot_tree(root: &Path, root_role: &str) -> Result<TreeSnapshot, String> {
     let paths = collect_paths(root)?;
     let mut entries = Vec::with_capacity(paths.len());
     for path in paths {
-        let metadata =
-            fs::metadata(&path).map_err(|error| format!("metadata {}: {error}", path.display()))?;
+        let relative = relative_path(root, &path)?;
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("metadata {}: {error}", path.display()))?;
+        let bytes = uqm_rust::automation::artifact::read_regular_relative_nofollow(
+            root,
+            Path::new(&relative),
+            metadata.len(),
+        )
+        .map_err(|error| format!("read snapshot {}: {error}", path.display()))?;
         entries.push(TreeEntry {
-            path: relative_path(root, &path)?,
-            sha256: hash_file(&path)?,
-            bytes: metadata.len(),
+            path: relative,
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            bytes: bytes.len() as u64,
         });
     }
     let tree_sha256 = tree_digest(&entries);
@@ -1348,13 +1991,18 @@ fn validate_tree_snapshot(
         return Err(format!("{role} tree snapshot identity is invalid"));
     }
     let mut paths = BTreeSet::new();
+    let mut previous: Option<&str> = None;
     for entry in &snapshot.entries {
         validate_relative_path(&entry.path)?;
-        if !paths.insert(&entry.path) || !is_hex(&entry.sha256, 64) {
+        if !paths.insert(&entry.path)
+            || !is_hex(&entry.sha256, 64)
+            || previous.is_some_and(|path| path >= entry.path.as_str())
+        {
             return Err(format!(
                 "{role} tree snapshot has duplicate/malformed entries"
             ));
         }
+        previous = Some(&entry.path);
     }
     Ok(())
 }
@@ -1376,7 +2024,7 @@ fn collect_artifacts(root: &Path) -> Result<Vec<ArtifactEntry>, String> {
     let mut entries = Vec::new();
     for path in collect_paths(root)? {
         let relative = relative_path(root, &path)?;
-        if is_lcar_name(&relative) || relative.ends_with(".tmp") {
+        if is_lcar_name(&relative) {
             continue;
         }
         let role = role_for_path(&relative)?;
@@ -1406,8 +2054,10 @@ fn role_for_path(path: &str) -> Result<ArtifactRole, String> {
         "snapshots/content-identity.json" => ArtifactRole::ContentIdentitySnapshot,
         "snapshots/config-initial.json" => ArtifactRole::InitialConfigSnapshot,
         "snapshots/config-final.json" => ArtifactRole::FinalConfigSnapshot,
+        _ if path.starts_with("snapshots/config-final/") => ArtifactRole::FinalConfigSnapshotFile,
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => ArtifactRole::Capture,
         _ if path.starts_with("config/") => ArtifactRole::RetainedConfigFile,
+        _ if path.starts_with("snapshots/sc2/content/") => ArtifactRole::ContentSnapshotFile,
         _ => return Err(format!("unexpected evidence artifact: {path}")),
     };
     Ok(role)
@@ -1430,7 +2080,14 @@ fn mandatory_roles() -> [ArtifactRole; 9] {
 }
 
 fn allows_empty(role: ArtifactRole) -> bool {
-    matches!(role, ArtifactRole::StdoutLog | ArtifactRole::StderrLog)
+    matches!(
+        role,
+        ArtifactRole::StdoutLog
+            | ArtifactRole::StderrLog
+            | ArtifactRole::ContentSnapshotFile
+            | ArtifactRole::FinalConfigSnapshotFile
+            | ArtifactRole::RetainedConfigFile
+    )
 }
 
 fn collect_relative_files(root: &Path) -> Result<BTreeSet<String>, String> {
@@ -1440,7 +2097,7 @@ fn collect_relative_files(root: &Path) -> Result<BTreeSet<String>, String> {
         .filter(|result| {
             result
                 .as_ref()
-                .map(|path| !is_lcar_name(path) && !path.ends_with(".tmp"))
+                .map(|path| !is_lcar_name(path))
                 .unwrap_or(true)
         })
         .collect()
@@ -1465,6 +2122,15 @@ fn collect_paths(root: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn collect_files(root: &Path, current: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
+    if !fs::symlink_metadata(current)
+        .map_err(|error| format!("inspect directory: {error}"))?
+        .is_dir()
+    {
+        return Err(format!(
+            "snapshot directory is not a real directory: {}",
+            current.display()
+        ));
+    }
     for entry in fs::read_dir(current)
         .map_err(|error| format!("read directory {}: {error}", current.display()))?
     {
@@ -1543,12 +2209,6 @@ fn validate_relative_path(path: &str) -> Result<(), String> {
         return Err(format!("artifact path is not normalized: {path}"));
     }
     Ok(())
-}
-
-fn command_content(argument: &str) -> Result<&str, String> {
-    argument
-        .strip_prefix("--contentdir=")
-        .ok_or_else(|| "content command argument is malformed".into())
 }
 
 fn is_lcar_name(path: &str) -> bool {
@@ -1667,6 +2327,9 @@ fn compare_battle_proofs(first: &Path, second: &Path) -> Result<(), String> {
     validate_manifest(second)?;
     let first_manifest: LcarManifest = read_json(first)?;
     let second_manifest: LcarManifest = read_json(second)?;
+    if first_manifest.input_identity != second_manifest.input_identity {
+        return Err("battle comparison requires identical verified replay inputs".into());
+    }
     if !first_manifest.passed || !second_manifest.passed {
         return Err("battle comparison requires two passing LCAR manifests".into());
     }
@@ -1712,8 +2375,8 @@ fn battle_evidence_digest(
                 presentation.count = 0;
             }
             if let Some(seed) = &record.seed_application {
-                if seed.seed != AUTOMATION_SEED {
-                    return Err("battle trace contains a noncanonical RNG seed".into());
+                if seed.seed != manifest.seed {
+                    return Err("battle trace seed differs from its resolved input".into());
                 }
                 match seed.domain {
                     SeedDomain::SuperMeleeMenu => menu_seed_seen = true,
@@ -1831,7 +2494,15 @@ mod tests {
         fs::write(root.join("stdout.log"), b"").unwrap();
         fs::write(root.join("stderr.log"), b"").unwrap();
         fs::write(root.join("snapshots/uqm"), b"executable").unwrap();
-        fs::write(root.join("snapshots/script.json"), b"{}\n").unwrap();
+        write_new_json(&root.join("snapshots/script.json"), &json!({
+            "version": 2, "name": "fixture", "fixture": "fixture", "seed": 42,
+            "budgets": {"max_input_ticks": 10, "max_presentations": 10, "max_wallclock_seconds": 10},
+            "steps": [{"action":"wait_presentations","count":1},
+                {"action":"assert_battle_frames","minimum":1},
+                {"action":"capture","label":"frame"}, {"action":"finish"}]
+        })).unwrap();
+        fs::create_dir_all(root.join("snapshots/sc2/content")).unwrap();
+        fs::write(root.join("snapshots/sc2/content/test-data"), b"content").unwrap();
         let target = if cfg!(target_arch = "aarch64") {
             if cfg!(target_os = "macos") {
                 "aarch64-apple-darwin"
@@ -1858,20 +2529,22 @@ mod tests {
             &production,
         )
         .unwrap();
-        let content = TreeSnapshot {
+        let content = snapshot_tree(&root.join("snapshots/sc2/content"), "content").unwrap();
+        let initial = TreeSnapshot {
             schema: "uqm-tree-identity-v1".into(),
-            root_role: "content".into(),
+            root_role: "initial_config".into(),
             tree_sha256: format!("{:x}", Sha256::digest([])),
             entries: vec![],
         };
-        let initial = TreeSnapshot {
-            root_role: "initial_config".into(),
-            ..content.clone()
-        };
-        let final_config = TreeSnapshot {
-            root_role: "final_config".into(),
-            ..content.clone()
-        };
+        fs::create_dir_all(root.join("snapshots/config-final/nested")).unwrap();
+        write_config_snapshot_file(
+            &root.join("snapshots/config-final/nested/settings.cfg"),
+            b"final profile",
+        )
+        .unwrap();
+        write_config_snapshot_file(&root.join("snapshots/config-final/empty"), b"").unwrap();
+        let final_config =
+            snapshot_tree(&root.join("snapshots/config-final"), "final_config").unwrap();
         write_new_json(&root.join("snapshots/content-identity.json"), &content).unwrap();
         write_new_json(&root.join("snapshots/config-initial.json"), &initial).unwrap();
         write_new_json(&root.join("snapshots/config-final.json"), &final_config).unwrap();
@@ -1897,7 +2570,13 @@ mod tests {
             height: 1,
         });
         records.push(capture);
-        records.push(record(4, RecordKind::RunEnd));
+        let mut seed = record(4, RecordKind::SeedApplication);
+        seed.seed_application = Some(uqm_rust::automation::trace::SeedApplication {
+            domain: SeedDomain::SuperMeleeBattle,
+            seed: 42,
+        });
+        records.push(seed);
+        records.push(record(5, RecordKind::RunEnd));
         let trace = records
             .iter()
             .map(|record| record.to_jsonl().unwrap())
@@ -1914,34 +2593,26 @@ mod tests {
             trace_durable: true,
         };
         write_new_json(&root.join("run/teardown-complete.json"), &teardown).unwrap();
-        write_new_json(
-            &root.join("run/resolved-scenario.json"),
-            &json!({
-                "scenario": {
-                    "schema": "uqm-resolved-scenario-v1",
-                    "scenario_version": 2,
-                    "name": "fixture",
-                    "fixture": "fixture",
-                    "seed": 0,
-                    "step_count": 1,
-                    "max_input_ticks": 2,
-                    "max_presentations": 2,
-                    "max_wallclock_seconds": 1
-                },
-                "replay_identity": "0".repeat(64)
-            }),
+        uqm_rust::automation::lifecycle::write_resolved_scenario(
+            &root.join("run"),
+            &read_validated_script(&root.join("snapshots/script.json"))
+                .unwrap()
+                .resolved(),
         )
         .unwrap();
         let artifacts = collect_artifacts(root).unwrap();
         let canonical_root = fs::canonicalize(root).unwrap();
-        let manifest = LcarManifest {
+        let mut manifest = LcarManifest {
             schema: SCHEMA.into(),
             passed: true,
             first_failed_contract: None,
             git_head: "a".repeat(40),
             command: vec![
                 canonical_root.join("snapshots/uqm").display().to_string(),
-                "--contentdir=/repo/sc2/content".into(),
+                format!(
+                    "--contentdir={}",
+                    canonical_root.join("snapshots/sc2/content").display()
+                ),
                 format!("--configdir={}", canonical_root.join("config").display()),
                 format!(
                     "--automation-script={}",
@@ -1966,7 +2637,8 @@ mod tests {
                 .map(|feature| (*feature).into())
                 .collect(),
             renderer: "sdl2-software-dummy".into(),
-            seed: AUTOMATION_SEED,
+            seed: 42,
+            input_identity: String::new(),
             provenance: Provenance {
                 production_manifest_sha256: hash_file(
                     &root.join("snapshots/production-manifest.json"),
@@ -1999,15 +2671,706 @@ mod tests {
             },
             artifacts,
         };
+        manifest.input_identity = input_identity(root, &manifest).unwrap();
         let path = root.join(PASS_FILE);
         write_new_json(&path, &manifest).unwrap();
         Fixture { _temp: temp, path }
+    }
+
+    fn pending_config(fixture: &Fixture) -> RunEvidence {
+        let root = fixture.path.parent().unwrap();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        fs::remove_file(&fixture.path).unwrap();
+        fs::remove_file(root.join("snapshots/config-final.json")).unwrap();
+        fs::remove_dir_all(root.join("snapshots/config-final")).unwrap();
+        fs::create_dir(root.join("config")).unwrap();
+        RunEvidence {
+            output_root: fs::canonicalize(root).unwrap(),
+            config_root: root.join("config"),
+            production: parse_production(
+                &read_json_value(&root.join("snapshots/production-manifest.json")).unwrap(),
+            )
+            .unwrap(),
+            seed: manifest.seed,
+            command: manifest.command,
+            environment: manifest.environment,
+            provenance: manifest.provenance,
+        }
+    }
+
+    #[test]
+    fn final_config_bytes_survive_successful_cleanup() {
+        let fixture = fixture();
+        let mut evidence = pending_config(&fixture);
+        fs::create_dir(evidence.config_root.join("nested")).unwrap();
+        fs::write(
+            evidence.config_root.join("nested/settings.cfg"),
+            b"final profile",
+        )
+        .unwrap();
+        fs::write(evidence.config_root.join("empty"), b"").unwrap();
+        let receipt = config_fixture_receipt(&evidence);
+        complete_run(&mut evidence, Ok(receipt)).unwrap();
+        validate_manifest(&fixture.path).unwrap();
+        assert!(!evidence.config_root.exists());
+        assert_eq!(
+            fs::read(
+                evidence
+                    .output_root
+                    .join("snapshots/config-final/nested/settings.cfg")
+            )
+            .unwrap(),
+            b"final profile"
+        );
+        assert_eq!(
+            fs::read(evidence.output_root.join("snapshots/config-final/empty")).unwrap(),
+            b""
+        );
+    }
+
+    fn config_fixture_receipt(evidence: &RunEvidence) -> ChildSessionReceipt {
+        let mut receipt = unavailable_receipt(&evidence.provenance.executable_sha256);
+        receipt.identity.pid = 42;
+        receipt.identity.start_time = "fixture-start".into();
+        receipt.exit_code = Some(0);
+        receipt.output_drained = true;
+        receipt.orphan_check_passed = true;
+        receipt
+    }
+
+    #[test]
+    fn failed_child_final_config_is_retained_and_validates_after_cleanup() {
+        for cleanup_fails in [false, true] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            fs::write(
+                evidence.config_root.join("settings.cfg"),
+                b"failed run profile",
+            )
+            .unwrap();
+            let mut receipt = config_fixture_receipt(&evidence);
+            receipt.exit_code = Some(1);
+            receipt.term_sent = true;
+            let child_result = Err((
+                ChildSessionError::Timeout {
+                    term_sent: true,
+                    kill_sent: false,
+                },
+                Box::new(receipt),
+            ));
+            let result = complete_run_with(&mut evidence, child_result, |evidence| {
+                finalize_config_with(evidence, write_config_snapshot_file, |path| {
+                    if cleanup_fails {
+                        Err(std::io::Error::from_raw_os_error(libc::EACCES))
+                    } else {
+                        fs::remove_dir_all(path)
+                    }
+                })
+            });
+            assert!(result.is_err());
+            assert!(!fixture.path.exists());
+            assert_eq!(
+                fs::read(
+                    evidence
+                        .output_root
+                        .join("snapshots/config-final/settings.cfg")
+                )
+                .unwrap(),
+                b"failed run profile"
+            );
+            if cleanup_fails {
+                let diagnostic = read_json_value(
+                    &evidence
+                        .output_root
+                        .join("config-finalization-failure.json"),
+                )
+                .unwrap();
+                assert_eq!(diagnostic["first_failed_contract"], "timeout");
+                assert_eq!(diagnostic["finalization_failed_contract"], "config_cleanup");
+                assert_eq!(diagnostic["config_root_removed"], false);
+            } else {
+                assert!(!evidence.config_root.exists());
+                validate_manifest(&evidence.output_root.join(FAILURE_FILE)).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn empty_final_config_validates_without_a_retained_directory() {
+        let fixture = fixture();
+        let mut evidence = pending_config(&fixture);
+        let receipt = config_fixture_receipt(&evidence);
+        complete_run(&mut evidence, Ok(receipt)).unwrap();
+        fs::remove_dir(evidence.output_root.join("snapshots/config-final")).unwrap();
+        validate_manifest(&fixture.path).unwrap();
+    }
+
+    #[test]
+    fn final_config_rehashed_inconsistency_missing_and_extra_files_are_rejected() {
+        for mutation in [
+            "tamper",
+            "rehash",
+            "missing",
+            "missing_reindexed",
+            "extra",
+            "extra_reindexed",
+            "tree_hash",
+            "length",
+            "order",
+        ] {
+            let fixture = fixture();
+            let root = fixture.path.parent().unwrap();
+            let path = root.join("snapshots/config-final/nested/settings.cfg");
+            let mut manifest: LcarManifest = read_json(&fixture.path).unwrap();
+            match mutation {
+                "tamper" | "rehash" => {
+                    fs::remove_file(&path).unwrap();
+                    fs::write(&path, b"changed profile").unwrap();
+                }
+                "missing" | "missing_reindexed" => {
+                    fs::remove_file(root.join("snapshots/config-final/empty")).unwrap();
+                }
+                "extra" | "extra_reindexed" => {
+                    fs::write(root.join("snapshots/config-final/extra"), b"").unwrap();
+                }
+                _ => {
+                    let tree_path = root.join("snapshots/config-final.json");
+                    let mut snapshot: TreeSnapshot = read_json(&tree_path).unwrap();
+                    match mutation {
+                        "tree_hash" => snapshot.entries[1].sha256 = "a".repeat(64),
+                        "length" => snapshot.entries[1].bytes += 1,
+                        "order" => snapshot.entries.reverse(),
+                        _ => unreachable!(),
+                    }
+                    snapshot.tree_sha256 = tree_digest(&snapshot.entries);
+                    manifest.provenance.final_config_tree_sha256 = snapshot.tree_sha256.clone();
+                    fs::write(tree_path, serde_json::to_vec(&snapshot).unwrap()).unwrap();
+                }
+            }
+            if !matches!(mutation, "tamper" | "missing" | "extra") {
+                manifest.artifacts = collect_artifacts(root).unwrap();
+            }
+            assert!(
+                validate_loaded_manifest(&fixture.path, &manifest).is_err(),
+                "{mutation}"
+            );
+        }
+    }
+
+    #[test]
+    fn final_config_disk_and_cleanup_failures_do_not_publish_proof() {
+        for boundary in ["write", "cleanup", "earlier_child", "diagnostic"] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            fs::write(evidence.config_root.join("settings.cfg"), b"retain me").unwrap();
+            if boundary == "diagnostic" {
+                fs::create_dir(
+                    evidence
+                        .output_root
+                        .join("config-finalization-failure.json"),
+                )
+                .unwrap();
+            }
+            let mut receipt = config_fixture_receipt(&evidence);
+            if boundary == "earlier_child" {
+                receipt.exit_code = Some(3);
+            }
+            let result = complete_run_with(&mut evidence, Ok(receipt), |evidence| {
+                finalize_config_with(
+                    evidence,
+                    |path, bytes| {
+                        if matches!(boundary, "write" | "diagnostic") {
+                            let mut file = OpenOptions::new()
+                                .create_new(true)
+                                .write(true)
+                                .open(path)
+                                .unwrap();
+                            file.write_all(&bytes[..1]).unwrap();
+                            return Err(std::io::Error::from_raw_os_error(libc::ENOSPC).to_string());
+                        }
+                        write_config_snapshot_file(path, bytes)
+                    },
+                    |_| Err(std::io::Error::from_raw_os_error(libc::EACCES)),
+                )
+            });
+            let error = result.unwrap_err();
+            assert!(evidence.config_root.is_dir());
+            assert!(!fixture.path.exists());
+            assert!(!evidence.output_root.join(FAILURE_FILE).exists());
+            if boundary == "diagnostic" {
+                assert!(error.contains("diagnostic publication failed"), "{error}");
+                assert!(error.contains("ConfigRetention"), "{error}");
+                continue;
+            }
+            let diagnostic = read_json_value(
+                &evidence
+                    .output_root
+                    .join("config-finalization-failure.json"),
+            )
+            .unwrap();
+            assert_eq!(diagnostic["passed"], false);
+            assert_eq!(diagnostic["config_root_removed"], false);
+            let first = match boundary {
+                "write" => "config_retention",
+                "earlier_child" => "teardown_evidence",
+                _ => "config_cleanup",
+            };
+            assert_eq!(diagnostic["first_failed_contract"], first);
+            assert!(
+                fs::metadata(
+                    evidence
+                        .output_root
+                        .join("config-finalization-failure.json")
+                )
+                .unwrap()
+                .len()
+                    < 16384
+            );
+        }
+    }
+
+    #[test]
+    fn final_config_failure_diagnostics_bound_external_text() {
+        let fixture = fixture();
+        let evidence = pending_config(&fixture);
+        let failure = ConfigFinalizationFailure {
+            contract: FailedContract::ConfigRetention,
+            detail: "x".repeat(20000),
+        };
+        assert!(record_config_diagnostic(
+            &evidence,
+            Some(FailedContract::Timeout),
+            None,
+            Some(&failure),
+            None
+        )
+        .is_err());
+        let diagnostic = read_json_value(
+            &evidence
+                .output_root
+                .join("config-finalization-failure.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            diagnostic["finalization_detail"].as_str().unwrap().len(),
+            4096
+        );
+        assert_eq!(diagnostic["first_failed_contract"], "timeout");
+        assert_eq!(
+            diagnostic["finalization_failed_contract"],
+            "config_retention"
+        );
+        assert!(!fixture.path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn final_config_source_symlinks_and_read_failures_preserve_runtime_state() {
+        use std::os::unix::fs::symlink;
+        for boundary in ["file", "directory", "root", "missing", "destination"] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            let outside = tempfile::tempdir().unwrap();
+            fs::write(outside.path().join("secret"), b"must not copy").unwrap();
+            match boundary {
+                "file" => symlink(
+                    outside.path().join("secret"),
+                    evidence.config_root.join("secret"),
+                )
+                .unwrap(),
+                "directory" => {
+                    symlink(outside.path(), evidence.config_root.join("external")).unwrap()
+                }
+                "root" => {
+                    fs::remove_dir(&evidence.config_root).unwrap();
+                    symlink(outside.path(), &evidence.config_root).unwrap();
+                }
+                "missing" => fs::remove_dir(&evidence.config_root).unwrap(),
+                "destination" => fs::write(
+                    evidence.output_root.join("snapshots/config-final"),
+                    b"collision",
+                )
+                .unwrap(),
+                _ => unreachable!(),
+            }
+            let receipt = config_fixture_receipt(&evidence);
+            assert!(
+                complete_run(&mut evidence, Ok(receipt)).is_err(),
+                "{boundary}"
+            );
+            assert!(!fixture.path.exists());
+            let diagnostic = read_json_value(
+                &evidence
+                    .output_root
+                    .join("config-finalization-failure.json"),
+            )
+            .unwrap();
+            assert_eq!(diagnostic["first_failed_contract"], "config_retention");
+            assert_eq!(diagnostic["config_root_removed"], boundary == "missing");
+            assert_eq!(
+                fs::read(outside.path().join("secret")).unwrap(),
+                b"must not copy"
+            );
+        }
+    }
+
+    #[test]
+    fn final_config_source_changes_during_copy_stop_before_cleanup() {
+        for boundary in ["read", "change", "oversize"] {
+            let fixture = fixture();
+            let mut evidence = pending_config(&fixture);
+            let source = evidence.config_root.clone();
+            fs::write(source.join("a"), b"first").unwrap();
+            fs::write(source.join("b"), b"second").unwrap();
+            if boundary == "oversize" {
+                OpenOptions::new()
+                    .write(true)
+                    .open(source.join("b"))
+                    .unwrap()
+                    .set_len(LOG_BUDGET + 1)
+                    .unwrap();
+            }
+            let receipt = config_fixture_receipt(&evidence);
+            let error = complete_run_with(&mut evidence, Ok(receipt), |evidence| {
+                finalize_config_with(
+                    evidence,
+                    |path, bytes| {
+                        write_config_snapshot_file(path, bytes)?;
+                        if path.file_name().unwrap() == "a" {
+                            match boundary {
+                                "read" => fs::remove_file(source.join("b")).unwrap(),
+                                "change" => fs::write(source.join("a"), b"changed source").unwrap(),
+                                _ => {}
+                            }
+                        }
+                        Ok(())
+                    },
+                    |path| fs::remove_dir_all(path),
+                )
+            })
+            .unwrap_err();
+            assert!(error.contains("ConfigRetention"), "{error}");
+            assert!(source.is_dir());
+            assert!(!fixture.path.exists());
+            let diagnostic = read_json_value(
+                &evidence
+                    .output_root
+                    .join("config-finalization-failure.json"),
+            )
+            .unwrap();
+            assert_eq!(diagnostic["first_failed_contract"], "config_retention");
+            assert_eq!(diagnostic["config_root_removed"], false);
+        }
+    }
+
+    #[test]
+    fn spawn_failure_still_retains_and_cleans_config_without_claiming_a_child() {
+        let fixture = fixture();
+        let mut evidence = pending_config(&fixture);
+        fs::write(evidence.config_root.join("settings.cfg"), b"retain me").unwrap();
+        let receipt = unavailable_receipt(&evidence.provenance.executable_sha256);
+        let error = ChildSessionError::Spawn(std::io::Error::other("spawn fixture"));
+        assert!(complete_run(&mut evidence, Err((error, Box::new(receipt)))).is_err());
+        assert!(!evidence.config_root.exists());
+        assert_eq!(
+            fs::read(
+                evidence
+                    .output_root
+                    .join("snapshots/config-final/settings.cfg")
+            )
+            .unwrap(),
+            b"retain me"
+        );
+        let diagnostic = read_json_value(
+            &evidence
+                .output_root
+                .join("config-finalization-failure.json"),
+        )
+        .unwrap();
+        assert!(diagnostic["process"].is_null());
+        assert_eq!(diagnostic["config_root_removed"], true);
+        assert!(!fixture.path.exists());
     }
 
     fn mutate_manifest(fixture: &Fixture, mutation: impl FnOnce(&mut serde_json::Value)) {
         let mut value = read_json_value(&fixture.path).unwrap();
         mutation(&mut value);
         fs::write(&fixture.path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn replay_rejects_tampered_prior_before_source_check_or_spawn() {
+        let fixture = fixture();
+        let prior = fixture.path.parent().unwrap();
+        fs::write(prior.join("snapshots/script.json"), b"tampered").unwrap();
+        let output = prior.join("must-not-be-created");
+        let error =
+            replay_bundle(Path::new("/nonexistent-replay-repo"), prior, &output).unwrap_err();
+        assert!(error.contains("artifact identity mismatch"), "{error}");
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn replay_untouched_inputs_reach_preparation_using_only_retained_bytes() {
+        let fixture = fixture();
+        let original = fixture.path.parent().unwrap();
+        let relocated = tempfile::tempdir().unwrap();
+        let prior = relocated.path().join("prior");
+        fs::rename(original, &prior).unwrap();
+        assert!(!original.exists());
+        let prior = prior.as_path();
+        let destination = tempfile::tempdir().unwrap();
+        with_verified_replay(prior, |manifest| {
+            let production_path =
+                artifact_path(prior, manifest, ArtifactRole::ProductionManifestSnapshot)?;
+            let production = parse_production(&read_json_value(&production_path)?)?;
+            let evidence = prepare_evidence(
+                Path::new("/unused-repository"),
+                &production_path,
+                &production,
+                &artifact_path(prior, manifest, ArtifactRole::ExecutableSnapshot)?,
+                &artifact_path(prior, manifest, ArtifactRole::ScriptSnapshot)?,
+                &prior.join("snapshots/sc2/content"),
+                &destination.path().join("replay"),
+            )?;
+            verify_replay_copy(&evidence, manifest)?;
+            assert!(collect_paths(&evidence.config_root).unwrap().is_empty());
+            assert!(!evidence.output_root.join("snapshots/config-final").exists());
+            assert!(
+                !read_tree_snapshot(prior, manifest, ArtifactRole::FinalConfigSnapshot)?
+                    .entries
+                    .is_empty()
+            );
+            assert_eq!(
+                fs::read(evidence.output_root.join("snapshots/uqm")).unwrap(),
+                b"executable"
+            );
+            assert_eq!(
+                fs::read(evidence.output_root.join("snapshots/sc2/content/test-data")).unwrap(),
+                b"content"
+            );
+            assert_eq!(evidence.seed, 42);
+            assert_eq!(
+                evidence.command[1],
+                format!(
+                    "--contentdir={}",
+                    evidence.output_root.join("snapshots/sc2/content").display()
+                )
+            );
+            let mut changed = manifest.clone();
+            changed.seed = 43;
+            assert!(verify_replay_copy(&evidence, &changed).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn replay_untouched_relocated_bundle_remains_verifiable() {
+        let fixture = fixture();
+        let destination = tempfile::tempdir().unwrap();
+        let original = fixture.path.parent().unwrap();
+        for source in collect_paths(original).unwrap() {
+            let target = destination
+                .path()
+                .join(source.strip_prefix(original).unwrap());
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::copy(source, target).unwrap();
+        }
+        with_verified_replay(destination.path(), |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn replay_uninventoried_temporary_files_and_conflicting_results_are_rejected() {
+        for path in ["unrecorded.tmp", FAILURE_FILE] {
+            let fixture = fixture();
+            let root = fixture.path.parent().unwrap();
+            fs::write(root.join(path), b"unexpected evidence").unwrap();
+            let mut executed = false;
+            assert!(
+                with_verified_replay(root, |_| {
+                    executed = true;
+                    Ok(())
+                })
+                .is_err(),
+                "{path}"
+            );
+            assert!(!executed);
+        }
+    }
+
+    #[test]
+    fn replay_tampered_inventory_never_reaches_execution_callback() {
+        for path in [
+            "snapshots/uqm",
+            "snapshots/script.json",
+            "snapshots/sc2/content/test-data",
+            "snapshots/config-initial.json",
+            "run/resolved-scenario.json",
+            "run/trace.jsonl",
+        ] {
+            let fixture = fixture();
+            let prior = fixture.path.parent().unwrap();
+            fs::write(prior.join(path), b"tampered input").unwrap();
+            let mut executed = false;
+            let result = with_verified_replay(prior, |_| {
+                executed = true;
+                Ok(())
+            });
+            assert!(result.is_err(), "{path}");
+            assert!(!executed, "{path}");
+        }
+    }
+
+    fn refresh_inventory(fixture: &Fixture) -> LcarManifest {
+        let mut manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        manifest.artifacts = collect_artifacts(fixture.path.parent().unwrap()).unwrap();
+        manifest
+    }
+
+    #[test]
+    fn replay_rehashed_same_count_script_mutation_is_not_the_recorded_scenario() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let path = root.join("snapshots/script.json");
+        let mut script = read_json_value(&path).unwrap();
+        script["steps"][1]["minimum"] = json!(2);
+        fs::write(&path, serde_json::to_vec(&script).unwrap()).unwrap();
+        let mut manifest = refresh_inventory(&fixture);
+        manifest.provenance.script_sha256 = hash_file(&path).unwrap();
+        manifest.input_identity = input_identity(root, &manifest).unwrap();
+        fs::write(&fixture.path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let error = with_verified_replay(root, |_| -> Result<(), String> {
+            panic!("must not execute")
+        })
+        .unwrap_err();
+        assert!(error.contains("resolved scenario differs"), "{error}");
+    }
+
+    #[test]
+    fn replay_zero_request_binds_the_nonzero_seed_that_is_actually_applied() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let old: LcarManifest = read_json(&fixture.path).unwrap();
+        let script_path = root.join("snapshots/script.json");
+        let mut source = read_json_value(&script_path).unwrap();
+        source["seed"] = json!(0);
+        fs::write(&script_path, serde_json::to_vec(&source).unwrap()).unwrap();
+        let scenario = read_validated_script(&script_path).unwrap().resolved();
+        assert_eq!(scenario.requested_seed, 0);
+        assert_eq!(scenario.seed, 1);
+        let record = uqm_rust::automation::lifecycle::ResolvedScenarioRecord {
+            replay_identity: scenario.replay_identity().unwrap(),
+            scenario,
+        };
+        fs::write(
+            root.join("run/resolved-scenario.json"),
+            serde_json::to_vec(&record).unwrap(),
+        )
+        .unwrap();
+        let trace_path = root.join("run/trace.jsonl");
+        let mut records = parse_trace(&trace_path).unwrap();
+        records[4].seed_application.as_mut().unwrap().seed = 1;
+        fs::write(
+            &trace_path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        let mut manifest = refresh_inventory(&fixture);
+        manifest.seed = 1;
+        manifest.provenance.script_sha256 = hash_file(&script_path).unwrap();
+        manifest.input_identity = input_identity(root, &manifest).unwrap();
+        assert_ne!(manifest.input_identity, old.input_identity);
+        fs::write(&fixture.path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        with_verified_replay(root, |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn replay_rehashed_wrong_applied_seed_is_rejected() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let path = root.join("run/trace.jsonl");
+        let mut records = parse_trace(&path).unwrap();
+        records[4].seed_application.as_mut().unwrap().seed = 43;
+        fs::write(
+            &path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        let manifest = refresh_inventory(&fixture);
+        fs::write(&fixture.path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let error = with_verified_replay(root, |_| -> Result<(), String> {
+            panic!("must not execute")
+        })
+        .unwrap_err();
+        assert!(
+            error.contains("trace RNG seed application differs"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn replay_input_identity_binds_provenance_but_not_outcomes() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        let expected = input_identity(root, &manifest).unwrap();
+        for mutate in [
+            (|m: &mut LcarManifest| m.seed += 1) as fn(&mut LcarManifest),
+            |m| m.provenance.executable_sha256 = "0".repeat(64),
+            |m| m.provenance.script_sha256 = "0".repeat(64),
+            |m| m.provenance.content_tree_sha256 = "0".repeat(64),
+            |m| m.provenance.initial_config_tree_sha256 = "0".repeat(64),
+            |m| m.provenance.production_manifest_sha256 = "0".repeat(64),
+        ] {
+            let mut changed = manifest.clone();
+            mutate(&mut changed);
+            assert_ne!(expected, input_identity(root, &changed).unwrap());
+        }
+        let mut changed_outcome = manifest;
+        changed_outcome.provenance.final_config_tree_sha256 = "0".repeat(64);
+        changed_outcome.process.exit_code = Some(1);
+        assert_eq!(expected, input_identity(root, &changed_outcome).unwrap());
+    }
+
+    #[test]
+    fn replay_outcomes_compare_semantics_without_claiming_pixel_or_timing_equality() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let expected = replay_outcome(root).unwrap();
+        let trace_path = root.join("run/trace.jsonl");
+        let mut records = parse_trace(&trace_path).unwrap();
+        for record in &mut records {
+            record.elapsed_ms += 100;
+            record.present_seen += 10;
+            record.input_seen += 20;
+        }
+        fs::write(
+            &trace_path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        fs::write(root.join("run/captures/frame.png"), b"different pixels").unwrap();
+        assert_eq!(expected, replay_outcome(root).unwrap());
+        records[2].label = Some("different_semantic_outcome".into());
+        fs::write(
+            &trace_path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        assert_ne!(expected, replay_outcome(root).unwrap());
     }
 
     #[test]
@@ -2039,7 +3402,7 @@ mod tests {
             (
                 "wrong seed",
                 &|value| value["seed"] = json!(1234),
-                "not the deterministic seed",
+                "LCAR seed differs from the resolved script seed",
             ),
             (
                 "wrong renderer",

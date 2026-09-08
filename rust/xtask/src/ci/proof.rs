@@ -3,7 +3,7 @@
 //! validation, and teardown.
 //!
 //! The S3 `uqm-gameplay-proof` binary supervises the packaged game under SDL
-//! dummy drivers and emits `lcar-v1.json`. The internal PNG captures are
+//! dummy drivers and emits `lcar-v2.json`. The internal PNG captures are
 //! presented-framebuffer evidence from that session; they are not OS-window
 //! screenshots and this gate never claims otherwise.
 
@@ -161,7 +161,7 @@ fn run_bootstrap_steps(
         },
     );
     if let Err(error) = run_result {
-        let failure_lcar = output_dir.join("failure-lcar-v1.json");
+        let failure_lcar = output_dir.join("failure-lcar-v2.json");
         if failure_lcar.is_file() {
             let retention = retain_lcar_bundle(
                 session,
@@ -184,7 +184,7 @@ fn run_bootstrap_steps(
         return Err(error);
     }
 
-    let lcar = output_dir.join("lcar-v1.json");
+    let lcar = output_dir.join("lcar-v2.json");
     retain_lcar_bundle(
         session,
         gate,
@@ -300,6 +300,22 @@ fn retain_lcar_bundle(
             mime: "application/octet-stream",
             bytes,
         });
+    }
+
+    let expected = paths
+        .into_iter()
+        .chain(std::iter::once(lcar_name.to_string()))
+        .collect::<std::collections::BTreeSet<_>>();
+    let actual = snapshot
+        .files()
+        .into_iter()
+        .map(|file| file.relative_path)
+        .collect::<std::collections::BTreeSet<_>>();
+    if actual != expected {
+        return Err(CiError::new(
+            "bootstrap-proof.lcar",
+            "LCAR inventory does not account for every output file",
+        ));
     }
 
     let publisher =
@@ -529,7 +545,7 @@ mod tests {
         let output = tempfile::tempdir().unwrap();
         let evidence = tempfile::tempdir().unwrap();
         fs::write(output.path().join("present.log"), b"present").unwrap();
-        let lcar = output.path().join("failure-lcar-v1.json");
+        let lcar = output.path().join("failure-lcar-v2.json");
         fs::write(
             &lcar,
             serde_json::to_vec(&serde_json::json!({
@@ -568,7 +584,7 @@ mod tests {
         fs::write(output.path().join("present.log"), b"present").unwrap();
         fs::create_dir(output.path().join("blocked")).unwrap();
         fs::write(output.path().join("blocked/artifact.log"), b"blocked").unwrap();
-        let lcar = output.path().join("failure-lcar-v1.json");
+        let lcar = output.path().join("failure-lcar-v2.json");
         fs::write(
             &lcar,
             serde_json::to_vec(&serde_json::json!({
@@ -600,10 +616,59 @@ mod tests {
         assert!(session.entries.is_empty());
         assert!(!evidence
             .path()
-            .join("payloads/bootstrap-proof.failure-lcar/failure-lcar-v1.json")
+            .join("payloads/bootstrap-proof.failure-lcar/failure-lcar-v2.json")
             .exists());
         assert!(!artifact_root.join("present.log").exists());
         assert!(artifact_root.join("blocked").is_file());
+    }
+
+    #[test]
+    fn lcar_v2_retention_accounts_for_empty_content_and_rejects_extra_files() {
+        let project_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap();
+        for extra in [None, Some("extra.tmp"), Some("lcar-v2.json")] {
+            let output = tempfile::tempdir().unwrap();
+            let evidence = tempfile::tempdir().unwrap();
+            let content_path = "snapshots/sc2/content/empty";
+            fs::create_dir_all(output.path().join("snapshots/sc2/content")).unwrap();
+            fs::write(output.path().join(content_path), b"").unwrap();
+            let lcar = output.path().join("failure-lcar-v2.json");
+            fs::write(&lcar, serde_json::to_vec(&serde_json::json!({
+                "schema": "uqm-lcar-v2",
+                "artifacts": [{"role": "content_snapshot_file", "path": content_path, "sha256": super::super::evidence::hex_sha256(b""), "bytes": 0}]
+            })).unwrap()).unwrap();
+            if let Some(extra) = extra {
+                fs::write(output.path().join(extra), b"{}").unwrap();
+            }
+            let (mut session, gate) = session(project_root, evidence.path());
+            let command = vec!["proof".into(), "run".into()];
+            let result = retain_lcar_bundle(
+                &mut session,
+                &gate,
+                &command,
+                output.path(),
+                &lcar,
+                "bootstrap-proof.failure-lcar",
+            );
+            if extra.is_some() {
+                assert!(result.is_err());
+                assert!(session.entries.is_empty());
+                assert!(!evidence.path().join("payloads").exists());
+            } else {
+                result.unwrap();
+                assert_eq!(session.entries.len(), 2);
+                let content = session
+                    .entries
+                    .iter()
+                    .find(|entry| entry.path.ends_with(content_path))
+                    .unwrap();
+                assert_eq!(content.byte_length, 0);
+                assert_eq!(content.sha256, super::super::evidence::hex_sha256(b""));
+                assert_eq!(fs::read(evidence.path().join(&content.path)).unwrap(), b"");
+            }
+        }
     }
 
     #[cfg(unix)]

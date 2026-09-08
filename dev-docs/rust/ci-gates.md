@@ -44,10 +44,12 @@ compares each literal with authority and rejects any drift.
 
 Pull requests use `pull_request_target`, so GitHub executes the workflow body from
 the base revision. The pre-checkout plan step fetches `rust/ci/gates.json` from both
-the exact pull-request head and exact base commit and requires byte equality. It then
-builds the supervisor and xtask from the exact base commit, then checks out the
-pull-request head with persisted credentials disabled. The base-owned xtask evaluates
-the pull-request working tree. Probe and harness shell programs that decide gate results
+the exact pull-request head and workflow revision. Bootstrap uses base policy only.
+The workflow builds the supervisor and xtask from that workflow revision, then runs
+`ci admit-policy BASE CANDIDATE OUTPUT` with the base-owned executable before
+candidate policy can become the execution authority. It checks out the pull-request
+head with persisted credentials disabled. The base-owned xtask evaluates the
+pull-request working tree. Probe and harness shell programs that decide gate results
 are compiled into that base-owned xtask. The controller stages those retained bytes in a runner-owned temporary root outside
 the dedicated identity's writable evidence tree. It revalidates each selected
 controller and script by no-follow type, owner, exact mode, name, and digest
@@ -61,11 +63,11 @@ the matrix output:
 `macos/x86_64/macos-x86_64/macos-15-intel/x86_64`,
 `linux/aarch64/linux-aarch64/ubuntu-24.04-arm/aarch64`, and
 `linux/x86_64/linux-x86_64/ubuntu-24.04/x86_64`. It also requires the emitted
-authority contract to equal the retained, base-matched authority snapshot. This
+authority contract to equal the retained, base-admitted authority snapshot. This
 literal tuple set prevents pull-request code from selecting another `runs-on` label.
 Matrix values enter Bash only through quoted step environment variables.
 
-Gate-tool versions and installation identities come from the base-matched authority.
+Gate-tool versions and installation identities come from the base-admitted authority.
 The workflow checks the installed Rust compiler's full release commit. It downloads the
 `cargo-audit` and `cargo-llvm-cov` crate archives under authority-owned bounds and verifies
 each authority SHA-256 before extraction. Extraction rejects links, special files, path
@@ -99,14 +101,51 @@ After untrusted gates return, a base-owned supervised check revalidates the exac
 source SHA, tracked and untracked state, and authority bytes, retaining
 `source-revalidation.result.json`.
 
-Normal pull requests cannot change gate authority and production code together. An
-authority update first needs a separately reviewed base-policy change, after which
-production changes can target those bytes. Initial deployment is a one-time bootstrap:
-a maintainer must install this workflow and authority on the protected base branch
-after detached review because the previous base has neither file. Branch-protection
-administration must reserve the merge-required `Required S4 gates` context for
-`pull_request_target`; push runs publish `Required S4 gates (non-merge)` and cannot
-satisfy that context.
+Candidate-policy admission preserves every base field except two bounded additions:
+the known `autoplay` mutation and scenario pins already embedded in the installed
+controller's inventory. Existing pins cannot be removed, changed or reordered.
+The singleton policy used by base `212bd046ad7dccc7b695d378deac1b1c148d8be9`
+may gain `scenario_scripts`, but its original script pin must remain. Commands,
+tools, tuples, content, acceptance predicates, runtime limits, permissions and
+transport limits cannot change through this rule. Unknown fields are rejected.
+The plan and each gate job independently admit policy; rejection does not replace
+the installed policy. Supervised admission logs retain the decision and both hashes.
+Source revalidation compares the checkout with the admitted candidate bytes.
+
+Issue #210's controller-policy migration and Issue #34's runner are delivered
+together in PR #209, as authorized. This implementation does not make a candidate
+controller trusted in its own `pull_request_target` run. The currently installed
+base still performs its old byte comparison and lacks the suite consumer and
+admission command. Candidate-controller tests against the retained base policy
+are migration evidence, not evidence that the new controller is installed on main.
+Hosted validation must identify the actual workflow/controller revision and must
+not relabel a push result as merge-context acceptance. No branch-protection,
+permission, secret or checkout-reference bypass is part of this migration.
+`Required S4 gates` remains the merge-context name; push runs retain the
+`Required S4 gates (non-merge)` name.
+
+Autoplay selection is bound to a typed `uqm-s4-selection-v1` document. The base-owned
+plan controller records event, exact source/controller/base revisions, merge base,
+raw NUL-delimited changed paths, policy digest and the derived ordered scenario set.
+Only `pull_request_target` may use changed-path selection. Empty, unmapped or
+non-UTF-8 paths select the original complete 32-scenario suite. Push, schedule and
+manual runs always select that complete suite. A Git inspection failure is an error,
+not permission to execute a smaller suite. The existing workflow now declares a
+daily schedule and manual trigger without adding another gate or tuple matrix.
+
+Gate entry independently recomputes selection from the workflow event and exact
+Git revisions, then requires equality with the plan output. It retains the binding
+inside `source-preflight.json` before untrusted execution and supplies the resulting
+script names explicitly to the native child. Ambient requested names cannot narrow
+that set. Successful S4 validation requires the exact ordered suite, all completed
+native proofs, shared descriptor/build identity, linked source and policy equality,
+and unchanged script/content/runtime checks. Flat successful native bundles are no
+longer accepted; failure transport retains its existing diagnostic layouts.
+Offline replay checks the retained event-derived selection without repository state.
+To bind downloaded evidence to an independently known workflow, provide
+`UQM_CI_EVENT_NAME`, `UQM_CI_EXPECTED_SHA`, `UQM_CI_CONTROLLER_SHA` and, for PRs,
+`UQM_CI_EVENT_BASE_SHA` to `ci validate-evidence`. Without these external inputs,
+offline validation establishes retained consistency, not GitHub event authenticity.
 
 Run focused authority checks from the repository root:
 

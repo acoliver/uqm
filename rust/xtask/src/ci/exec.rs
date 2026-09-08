@@ -331,19 +331,49 @@ impl LeaderAnchor {
     }
 }
 
+/// How long a containment handshake may take before it has failed.
+#[cfg(unix)]
+const FD_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[cfg(unix)]
 fn fd_io(fd: RawFd, bytes: &mut [u8], write: bool) -> Result<(), std::io::Error> {
-    let deadline = Instant::now()
-        .checked_add(Duration::from_secs(5))
-        .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EOVERFLOW))?;
+    fd_io_within(fd, bytes, write, Some(FD_HANDSHAKE_TIMEOUT))
+}
+
+/// Move exactly `bytes.len()` bytes across `fd`.
+///
+/// A timeout belongs to a handshake whose peer is already committed to
+/// answering. `None` belongs to a channel whose next message may legitimately
+/// never arrive: waiting then ends when the peer closes its end, which is the
+/// event such a caller is actually waiting for. Bounding that wait instead
+/// makes the reader abandon a channel that is still owned and still open.
+#[cfg(unix)]
+fn fd_io_within(
+    fd: RawFd,
+    bytes: &mut [u8],
+    write: bool,
+    timeout: Option<Duration>,
+) -> Result<(), std::io::Error> {
+    let deadline = timeout
+        .map(|timeout| {
+            Instant::now()
+                .checked_add(timeout)
+                .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EOVERFLOW))
+        })
+        .transpose()?;
     let mut offset = 0;
     while offset < bytes.len() {
-        let now = Instant::now();
-        if now >= deadline {
-            return Err(std::io::Error::from_raw_os_error(libc::ETIMEDOUT));
-        }
-        let remaining = deadline.saturating_duration_since(now).as_millis();
-        let remaining = i32::try_from(remaining).unwrap_or(i32::MAX).max(1);
+        let remaining = match deadline {
+            Some(deadline) => {
+                let now = Instant::now();
+                if now >= deadline {
+                    return Err(std::io::Error::from_raw_os_error(libc::ETIMEDOUT));
+                }
+                let remaining = deadline.saturating_duration_since(now).as_millis();
+                i32::try_from(remaining).unwrap_or(i32::MAX).max(1)
+            }
+            None => -1,
+        };
         let mut descriptor = libc::pollfd {
             fd,
             events: if write { libc::POLLOUT } else { libc::POLLIN },
@@ -1631,7 +1661,14 @@ fn anchor_child(
     }
     loop {
         let mut bytes = [0_u8; 4];
-        if fd_io(command_read, &mut bytes, false).is_err() {
+        // The next command arrives when the supervised command finishes, which
+        // is an arbitrary distance away: this anchor exists to hold the group
+        // open for exactly that long. So the wait ends when the monitor closes
+        // the command channel, not when a handshake bound elapses. A bounded
+        // wait here made the anchor abandon a live registration, after which
+        // the monitor had nothing left to signal and the registered processes
+        // outlived the owner whose death was supposed to remove them.
+        if fd_io_within(command_read, &mut bytes, false, None).is_err() {
             unsafe { libc::_exit(126) }
         }
         let signal = i32::from_ne_bytes(bytes);
@@ -2181,6 +2218,9 @@ struct UidContainmentConfig {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+/// The environment binding carrying the plan-selected autoplay suite.
+pub const AUTOPLAY_SCENARIOS_ENV: &str = "UQM_CI_AUTOPLAY_SCENARIOS";
+
 fn containment_environment_allows(name: &str) -> bool {
     matches!(
         name,
@@ -2219,6 +2259,11 @@ fn containment_environment_allows(name: &str) -> bool {
             | "CARGO_TARGET_DIR"
             | "RUSTUP_HOME"
             | "RUSTUP_TOOLCHAIN"
+            // The autoplay suite the plan selected. Forwarding it cannot widen
+            // what executes: the acceptance resolves every name against the
+            // authority's pinned inventory and refuses anything absent from
+            // it, so the worst a tampered value can do is name nothing.
+            | AUTOPLAY_SCENARIOS_ENV
     ) || name.starts_with("LC_")
 }
 
@@ -3743,6 +3788,111 @@ mod tests {
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn run_in_containment_test_environment(test_name: &str) -> bool {
+        const MARKER: &str = "UQM_TEST_CONTAINMENT_ENVIRONMENT";
+        if std::env::var(MARKER).as_deref() == Ok(test_name) {
+            return true;
+        }
+
+        // Re-exec isolates inherited inputs without mutating the parallel test runner.
+        // SAFETY: geteuid has no preconditions.
+        let uid = if unsafe { libc::geteuid() } == 59_999 {
+            "60000"
+        } else {
+            "59999"
+        };
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                &format!("ci::exec::tests::{test_name}"),
+                "--nocapture",
+            ])
+            .env_clear()
+            .env(MARKER, test_name)
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", "/controller-home")
+            .env("TMPDIR", "/controller-tmp")
+            .env("USER", "controller")
+            .env("LOGNAME", "controller")
+            .env(AUTOPLAY_SCENARIOS_ENV, "battle-v1 main-menu-v1")
+            .env(DEDICATED_CONTAINMENT_UID_ENV, uid)
+            .env(DEDICATED_CONTAINMENT_HOME_ENV, "/containment-home")
+            .env(DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment");
+        for denied in [
+            "GITHUB_ENV",
+            "GITHUB_PATH",
+            "GITHUB_TOKEN",
+            "ACTIONS_RUNTIME_TOKEN",
+            "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+            "CARGO_REGISTRIES_CRATES_IO_TOKEN",
+            "RUSTC_WRAPPER",
+            "BASH_ENV",
+            "UQM_CI_BASE_SHA",
+            "UQM_CI_ANYTHING_ELSE",
+            "UQM_CI_AUTOPLAY_SCENARIOS_SECRET",
+            "UQM_SECRET",
+        ] {
+            command.env(denied, "must-not-reach-child");
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{test_name}: {output:?}");
+        assert!(String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 passed"));
+        false
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn the_autoplay_suite_survives_environment_filtering() {
+        if !run_in_containment_test_environment("the_autoplay_suite_survives_environment_filtering")
+        {
+            return;
+        }
+        let command =
+            dedicated_contained_command("/usr/bin/env", &["argument with spaces".into()], &[])
+                .unwrap();
+        assert_eq!(command.get_program(), "/usr/bin/sudo");
+        let arguments = command
+            .get_args()
+            .map(|argument| argument.to_str().unwrap())
+            .collect::<Vec<_>>();
+        let uid = std::env::var(DEDICATED_CONTAINMENT_UID_ENV).unwrap();
+        assert_eq!(
+            &arguments[..7],
+            [
+                "-n",
+                "/bin/bash",
+                "-c",
+                DEDICATED_UID_WRAPPER,
+                "uqm-dedicated-containment",
+                &uid,
+                "6",
+            ]
+        );
+        assert_eq!(
+            &arguments[7..],
+            [
+                "HOME=/containment-home",
+                "LOGNAME=uqm_s4_containment",
+                "PATH=/usr/bin:/bin",
+                "TMPDIR=/containment-home",
+                "UQM_CI_AUTOPLAY_SCENARIOS=battle-v1 main-menu-v1",
+                "USER=uqm_s4_containment",
+                "/usr/bin/env",
+                "argument with spaces",
+            ]
+        );
+        assert_eq!(
+            command.get_envs().collect::<Vec<_>>(),
+            [(
+                std::ffi::OsStr::new("PATH"),
+                Some(std::ffi::OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin"))
+            )]
+        );
+    }
+
     #[test]
     fn dedicated_containment_config_fails_closed_without_process_environment_mutation() {
         let missing = Err(std::env::VarError::NotPresent);
@@ -3817,41 +3967,51 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn current_aqua_environment_is_clean_and_preserves_nested_containment_bindings() {
-        let inherited = [
-            ("PATH", "/usr/bin:/bin"),
-            ("GITHUB_TOKEN", "secret"),
-            ("UQM_SECRET", "secret"),
-            (DEDICATED_CONTAINMENT_UID_ENV, "59999"),
-            (DEDICATED_CONTAINMENT_HOME_ENV, "/tmp/containment"),
-            (DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment"),
-        ]
-        .into_iter()
-        .map(|(name, value)| (name.into(), value.into()));
-        let environment =
-            filter_inherited_environment(inherited, current_aqua_environment_allows).unwrap();
-
-        assert_eq!(environment.get("PATH").unwrap(), "/usr/bin:/bin");
+        if !run_in_containment_test_environment(
+            "current_aqua_environment_is_clean_and_preserves_nested_containment_bindings",
+        ) {
+            return;
+        }
+        let mut command = current_aqua_command("/usr/bin/env", &[], &[]).unwrap();
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let environment = stdout
+            .lines()
+            .map(|line| line.split_once('=').unwrap())
+            .collect::<BTreeMap<_, _>>();
+        let uid = std::env::var(DEDICATED_CONTAINMENT_UID_ENV).unwrap();
         assert_eq!(
-            environment.get(DEDICATED_CONTAINMENT_UID_ENV).unwrap(),
-            "59999"
+            environment,
+            BTreeMap::from([
+                ("PATH", "/usr/bin:/bin"),
+                ("HOME", "/controller-home"),
+                ("TMPDIR", "/controller-tmp"),
+                ("USER", "controller"),
+                ("LOGNAME", "controller"),
+                (AUTOPLAY_SCENARIOS_ENV, "battle-v1 main-menu-v1"),
+                (DEDICATED_CONTAINMENT_UID_ENV, uid.as_str()),
+                (DEDICATED_CONTAINMENT_HOME_ENV, "/containment-home"),
+                (DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment"),
+            ])
         );
-        assert_eq!(
-            environment.get(DEDICATED_CONTAINMENT_HOME_ENV).unwrap(),
-            "/tmp/containment"
-        );
-        assert_eq!(
-            environment.get(DEDICATED_CONTAINMENT_USER_ENV).unwrap(),
-            "uqm_s4_containment"
-        );
-        assert!(!environment.contains_key("GITHUB_TOKEN"));
-        assert!(!environment.contains_key("UQM_SECRET"));
-
-        assert!(current_aqua_command(
-            "/usr/bin/true",
-            &[],
-            &[(DEDICATED_CONTAINMENT_UID_ENV.into(), "60000".into())],
-        )
-        .is_err());
+        for name in [
+            DEDICATED_CONTAINMENT_UID_ENV,
+            DEDICATED_CONTAINMENT_HOME_ENV,
+            DEDICATED_CONTAINMENT_USER_ENV,
+        ] {
+            let error = current_aqua_command(
+                "/usr/bin/env",
+                &[],
+                &[(name.into(), "untrusted-override".into())],
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+            assert_eq!(
+                error.to_string(),
+                format!("current-Aqua child cannot override trusted containment binding {name}")
+            );
+        }
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -4133,6 +4293,125 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn native_leaf_candidate_has_no_controller_protocol_capability() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = std::env::current_exe().unwrap();
+        let mut limits = limits_for_current_executable();
+        limits.timeout = Duration::from_secs(120);
+        limits.stdout_bytes = 65536;
+        limits.stderr_bytes = 65536;
+        let captured = run_captured_with_limits(
+            Path::new("."),
+            executable.to_str().unwrap(),
+            &[
+                "--exact".into(),
+                "ci::exec::tests::native_leaf_controller_process".into(),
+                "--nocapture".into(),
+            ],
+            &[(
+                "UQM_NATIVE_LEAF_TEST".into(),
+                directory.path().display().to_string(),
+            )],
+            limits,
+        );
+        assert!(captured.succeeded(), "{captured:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_leaf_controller_process() {
+        let Some(directory) = std::env::var_os("UQM_NATIVE_LEAF_TEST") else {
+            return;
+        };
+        let directory = PathBuf::from(directory);
+        let protocol = NestedGroupProtocol::inherited().unwrap().unwrap();
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "ci::exec::tests::native_leaf_image_process",
+                "--nocapture",
+            ])
+            .env(
+                "UQM_NATIVE_LEAF_DESCRIPTORS",
+                serde_json::to_string(&protocol.descriptors()).unwrap(),
+            );
+        let config = ChildSessionConfig {
+            stdout_log: directory.join("leaf.out"),
+            stderr_log: directory.join("leaf.err"),
+            stdout_budget: 4096,
+            stderr_budget: 4096,
+            timeout: Duration::from_secs(20),
+            grace: Duration::from_millis(100),
+            executable_digest: "leaf-fixture".into(),
+        };
+        let receipt = ChildSession::spawn_leaf(command, config)
+            .unwrap()
+            .finish()
+            .unwrap();
+        assert_eq!(
+            receipt.exit_code,
+            Some(0),
+            "stdout: {}\nstderr: {}",
+            std::fs::read_to_string(directory.join("leaf.out")).unwrap(),
+            std::fs::read_to_string(directory.join("leaf.err")).unwrap()
+        );
+        assert!(receipt.orphan_check_passed);
+        assert!(receipt.output_drained);
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "trap '' TERM; printf ready; while :; do :; done"]);
+        let session = ChildSession::spawn_leaf(
+            command,
+            ChildSessionConfig {
+                stdout_log: directory.join("timeout.out"),
+                stderr_log: directory.join("timeout.err"),
+                stdout_budget: 4096,
+                stderr_budget: 4096,
+                timeout: Duration::from_millis(300),
+                grace: Duration::from_millis(100),
+                executable_digest: "leaf-timeout-fixture".into(),
+            },
+        )
+        .unwrap();
+        let pid = session.pid() as libc::pid_t;
+        let failure = session.finish().unwrap_err();
+        assert!(matches!(
+            failure.error,
+            ChildSessionError::Timeout {
+                term_sent: true,
+                kill_sent: true
+            }
+        ));
+        assert_eq!(failure.receipt.signal, Some(libc::SIGKILL));
+        assert!(failure.receipt.output_drained);
+        assert!(failure.receipt.orphan_check_passed);
+        assert!(!process_exists(pid));
+        assert_eq!(
+            std::fs::read(directory.join("timeout.out")).unwrap(),
+            b"ready"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_leaf_image_process() {
+        let Ok(descriptors) = std::env::var("UQM_NATIVE_LEAF_DESCRIPTORS") else {
+            return;
+        };
+        let descriptors: [i32; 3] = serde_json::from_str(&descriptors).unwrap();
+        assert!(NestedGroupProtocol::inherited().unwrap().is_none());
+        for descriptor in descriptors {
+            // SAFETY: F_GETFD inspects descriptor state without dereferencing memory.
+            assert_eq!(unsafe { libc::fcntl(descriptor, libc::F_GETFD) }, -1);
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::EBADF)
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn nested_child_session_lifecycle_process() {
         let Some(directory) = std::env::var_os("UQM_TEST_CHILD_SESSION_LIFECYCLE") else {
             return;
@@ -4169,6 +4448,42 @@ mod tests {
         assert!(!process_exists(pid));
     }
 
+    /// The descriptor a helper watches to learn that its owner is gone.
+    #[cfg(unix)]
+    const HELPER_LIFELINE_FD_ENV: &str = "UQM_TEST_HELPER_LIFELINE_FD";
+
+    /// Block until the process that spawned this helper no longer exists.
+    ///
+    /// The lifeline is a pipe whose only writer is the owner. The kernel closes
+    /// that end when the owner goes, whether it exited, unwound out of a failed
+    /// assertion, or was killed outright without running a single destructor.
+    /// Reading it is therefore how a helper observes an owner it can no longer
+    /// be reached by: it needs no signal it is free to ignore, no cooperating
+    /// supervisor and no external reaper.
+    #[cfg(unix)]
+    fn wait_for_owner() {
+        let lifeline = std::env::var(HELPER_LIFELINE_FD_ENV)
+            .expect("owned helper was spawned without a lifeline")
+            .parse::<RawFd>()
+            .expect("owned helper lifeline descriptor is not a descriptor");
+        loop {
+            let mut byte = [0_u8; 1];
+            // SAFETY: byte is writable storage and lifeline is the inherited
+            // read end of the owner's pipe.
+            let read = unsafe { libc::read(lifeline, byte.as_mut_ptr().cast(), 1) };
+            if read == 0 {
+                return;
+            }
+            assert_eq!(read, -1, "owner lifeline carried unexpected data");
+            let error = std::io::Error::last_os_error();
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::Interrupted,
+                "owner lifeline read failed: {error}"
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn anchor_target_helper_process() {
@@ -4179,39 +4494,271 @@ mod tests {
             thread::sleep(Duration::from_millis(100));
             return;
         }
+        // Ignoring SIGTERM is the whole point of this fixture: a supervisor
+        // that only asks politely proves nothing about cleanup. Ownership is
+        // established by the lifeline below and by the group kill the owner
+        // performs, neither of which this process can decline.
         unsafe {
             libc::signal(libc::SIGTERM, libc::SIG_IGN);
         }
-        loop {
-            thread::sleep(Duration::from_secs(1));
+        wait_for_owner();
+    }
+
+    /// A helper process that cannot outlive the test that spawned it.
+    ///
+    /// These helpers ignore `SIGTERM`, lead their own process groups and run
+    /// the test binary's own image, so nothing in the session will ever collect
+    /// one that is abandoned: it is reparented to init and stays there. Two
+    /// independent mechanisms keep that from happening, and neither asks the
+    /// helper to cooperate. The owner kills the helper's whole process group
+    /// and reaps it from `Drop`, which runs while a failing assertion unwinds;
+    /// and the helper independently exits when the lifeline held open by this
+    /// struct reports that its owner is gone, which is what remains when the
+    /// owner is killed and never unwinds at all.
+    #[cfg(unix)]
+    struct OwnedHelper {
+        child: std::process::Child,
+        lifeline_write: Option<RawFd>,
+        reaped: bool,
+    }
+
+    #[cfg(unix)]
+    impl OwnedHelper {
+        /// Spawn one of this binary's helper tests as an owned process.
+        fn spawn(test_name: &str, environment: &[(&str, std::ffi::OsString)]) -> Self {
+            use std::os::unix::process::CommandExt as _;
+
+            let (lifeline_read, lifeline_write) = pipe_cloexec().expect("owner lifeline");
+            let executable = std::env::current_exe().expect("test executable");
+            let mut command = Command::new(executable);
+            command
+                .args(["--exact", test_name, "--nocapture"])
+                .env(HELPER_LIFELINE_FD_ENV, lifeline_read.to_string())
+                .process_group(0)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            for (name, value) in environment {
+                command.env(name, value);
+            }
+            // SAFETY: fcntl and close are async-signal-safe, and the child
+            // touches nothing else between fork and exec.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::fcntl(lifeline_read, libc::F_SETFD, 0) == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    libc::close(lifeline_write);
+                    Ok(())
+                });
+            }
+            let child = command.spawn();
+            close_fd(lifeline_read);
+            match child {
+                Ok(child) => Self {
+                    child,
+                    lifeline_write: Some(lifeline_write),
+                    reaped: false,
+                },
+                Err(error) => {
+                    close_fd(lifeline_write);
+                    panic!("cannot spawn owned helper {test_name}: {error}");
+                }
+            }
+        }
+
+        fn spawn_anchor_target(mode: &str) -> Self {
+            Self::spawn(
+                "ci::exec::tests::anchor_target_helper_process",
+                &[("UQM_TEST_ANCHOR_TARGET", mode.into())],
+            )
+        }
+
+        fn pid(&self) -> libc::pid_t {
+            libc::pid_t::try_from(self.child.id()).expect("helper identifier fits in a PID")
+        }
+
+        fn release_lifeline(&mut self) {
+            if let Some(lifeline) = self.lifeline_write.take() {
+                close_fd(lifeline);
+            }
+        }
+
+        fn reap(&mut self) -> Result<(), String> {
+            let pid = self.pid();
+            self.child
+                .wait()
+                .map_err(|error| format!("cannot reap owned helper {pid}: {error}"))?;
+            self.reaped = true;
+            Ok(())
+        }
+
+        /// Wait for a helper that ends on its own, and reap it.
+        fn wait(&mut self) -> Result<(), String> {
+            if self.reaped {
+                return Err(format!("owned helper {} was already reaped", self.pid()));
+            }
+            self.reap()
+        }
+
+        /// Kill the helper's whole process group and reap it.
+        fn terminate(&mut self) -> Result<(), String> {
+            if self.reaped {
+                return Ok(());
+            }
+            self.release_lifeline();
+            let pid = self.pid();
+            // SAFETY: the helper leads its own process group, so the negated
+            // PID names that group and nothing else, and an unreaped child
+            // cannot have had its identity reused.
+            if unsafe { libc::kill(-pid, libc::SIGKILL) } == -1 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    return Err(format!("cannot kill owned helper group {pid}: {error}"));
+                }
+            }
+            self.reap()
         }
     }
 
     #[cfg(unix)]
-    fn spawn_test_group(mode: &str) -> std::process::Child {
-        use std::os::unix::process::CommandExt as _;
-        let executable = std::env::current_exe().expect("test executable");
-        let mut command = Command::new(executable);
-        command
-            .args([
-                "--exact",
-                "ci::exec::tests::anchor_target_helper_process",
-                "--nocapture",
-            ])
-            .env("UQM_TEST_ANCHOR_TARGET", mode)
-            .process_group(0)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn process-group leader")
+    impl Drop for OwnedHelper {
+        fn drop(&mut self) {
+            let released = self.terminate();
+            self.release_lifeline();
+            if let Err(error) = released {
+                // Panicking while already unwinding aborts the process, which
+                // would bury the failure this helper was spawned to expose.
+                if std::thread::panicking() {
+                    eprintln!("{error}");
+                } else {
+                    panic!("{error}");
+                }
+            }
+        }
+    }
+
+    /// A test that fails must still take its helper with it.
+    ///
+    /// The helper ignores `SIGTERM`, leads its own process group and runs this
+    /// binary's own image, so an abandoned one is reparented to init and stays
+    /// there indefinitely; two of them were found on a development machine
+    /// hours after the test binaries that spawned them had exited. The body
+    /// below unwinds exactly as a failed assertion does, which is the path that
+    /// abandoned them.
+    #[cfg(unix)]
+    #[test]
+    fn a_failing_test_takes_its_helper_with_it() {
+        use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+        use std::sync::Arc;
+
+        let identity = Arc::new(AtomicI32::new(0));
+        let started = Arc::new(AtomicBool::new(false));
+        let recorded_identity = Arc::clone(&identity);
+        let recorded_start = Arc::clone(&started);
+        let outcome = std::panic::catch_unwind(move || {
+            let helper = OwnedHelper::spawn_anchor_target("wait");
+            recorded_identity.store(helper.pid(), Ordering::SeqCst);
+            recorded_start.store(process_is_live(helper.pid()), Ordering::SeqCst);
+            panic!("the test that owns this helper failed");
+        });
+        assert!(outcome.is_err(), "the owning test was supposed to fail");
+        let pid = identity.load(Ordering::SeqCst);
+        assert!(pid > 0, "the failing test never spawned a helper");
+        assert!(started.load(Ordering::SeqCst), "helper {pid} never ran");
+        assert!(
+            !process_exists(pid),
+            "helper {pid} survived the test that owned it"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn abandoning_owner_process() {
+        let Some(published) = std::env::var_os("UQM_TEST_ABANDONED_HELPER_PID_FILE") else {
+            return;
+        };
+        let helper = OwnedHelper::spawn_anchor_target("wait");
+        publish_pid_file(Path::new(&published), helper.pid());
+        // This process is about to be killed outright, so nothing here runs a
+        // destructor and this helper is never released. Whether it survives is
+        // left entirely to the helper, which is the point.
+        wait_for_owner();
+    }
+
+    /// An owner that is killed outright runs no destructor at all.
+    ///
+    /// What remains is the helper's own exit path, which must not depend on a
+    /// signal the helper ignores, on this test process, or on anything outside
+    /// its own descent from the owner that spawned it.
+    #[cfg(unix)]
+    #[test]
+    fn a_killed_owner_still_takes_its_helper_with_it() {
+        let directory = tempfile::tempdir().expect("test directory");
+        let published = directory.path().join("abandoned.pid");
+        let mut owner = OwnedHelper::spawn(
+            "ci::exec::tests::abandoning_owner_process",
+            &[(
+                "UQM_TEST_ABANDONED_HELPER_PID_FILE",
+                published.clone().into(),
+            )],
+        );
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !published.is_file() {
+            assert!(
+                Instant::now() < deadline,
+                "the owner never published its helper"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        let helper_pid = std::fs::read_to_string(&published)
+            .expect("read abandoned helper PID")
+            .parse::<libc::pid_t>()
+            .expect("parse abandoned helper PID");
+        assert!(process_is_live(helper_pid), "the helper never ran");
+        // SAFETY: the owner is an unreaped child of this process, so its
+        // identity cannot have been reused.
+        assert_eq!(unsafe { libc::kill(owner.pid(), libc::SIGKILL) }, 0);
+        owner.wait().expect("reap the killed owner");
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while process_is_live(helper_pid) {
+            assert!(
+                Instant::now() < deadline,
+                "helper {helper_pid} survived the owner that abandoned it"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// A registration lasts as long as the command it supervises.
+    ///
+    /// The anchor is what keeps a registered process group reachable, so an
+    /// anchor that gives up while its command channel is merely quiet leaves
+    /// the monitor with nothing to clean up. The registered processes then
+    /// outlive the owner whose death was supposed to remove them, which is the
+    /// intermittent surviving-process failure this reproduces directly.
+    #[cfg(unix)]
+    #[test]
+    fn a_registered_anchor_outlives_a_quiet_command_channel() {
+        let mut leader = OwnedHelper::spawn_anchor_target("wait");
+        let leader_pid = leader.pid();
+        let start = monitor_process_start(leader_pid).expect("leader start identity");
+        let anchor = MonitorAnchor::spawn(leader_pid, start, -1, -1).expect("stable anchor");
+        thread::sleep(FD_HANDSHAKE_TIMEOUT + Duration::from_millis(500));
+        anchor
+            .signal_group(libc::SIGCONT)
+            .expect("an idle anchor must still reach the group it holds");
+        // SAFETY: getpgid only inspects the process the anchor reported.
+        assert_eq!(unsafe { libc::getpgid(anchor.pid) }, leader_pid);
+        anchor.release().expect("reap monitor-owned anchor");
+        leader.terminate().expect("release test helper");
     }
 
     #[cfg(unix)]
     #[test]
     fn monitor_anchor_survives_leader_exit_until_explicit_reap() {
-        let mut leader = spawn_test_group("exit");
-        let leader_pid = leader.id() as libc::pid_t;
+        let mut leader = OwnedHelper::spawn_anchor_target("exit");
+        let leader_pid = leader.pid();
         let start = monitor_process_start(leader_pid).expect("leader start identity");
         let anchor = MonitorAnchor::spawn(leader_pid, start, -1, -1).expect("stable anchor");
         leader.wait().expect("reap leader");
@@ -4226,9 +4773,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn identity_mismatch_never_signals_an_unrelated_reused_group() {
-        let mut candidate = spawn_test_group("wait");
-        let mut unrelated = spawn_test_group("wait");
-        let candidate_pid = candidate.id() as libc::pid_t;
+        let mut candidate = OwnedHelper::spawn_anchor_target("wait");
+        let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
+        let candidate_pid = candidate.pid();
         let start = monitor_process_start(candidate_pid).expect("candidate start identity");
         let error = MonitorAnchor::spawn_checked(candidate_pid, start, -1, -1, || {
             Some(start.wrapping_add(1))
@@ -4236,10 +4783,9 @@ mod tests {
         .expect_err("changed identity must reject registration");
         assert!(error.contains("changed identity"));
         assert!(process_exists(candidate_pid));
-        assert!(process_exists(unrelated.id() as libc::pid_t));
-        for child in [&mut candidate, &mut unrelated] {
-            child.kill().expect("kill test process");
-            child.wait().expect("reap test process");
+        assert!(process_exists(unrelated.pid()));
+        for helper in [&mut candidate, &mut unrelated] {
+            helper.terminate().expect("release test helper");
         }
     }
 
@@ -4288,7 +4834,7 @@ mod tests {
                 .as_nanos()
         ));
         std::fs::create_dir(&directory).expect("create test directory");
-        let mut unrelated = spawn_test_group("wait");
+        let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
         let executable = std::env::current_exe().expect("test executable");
         let mut test_limits = limits_for_current_executable();
         test_limits.timeout = Duration::from_secs(120);
@@ -4312,11 +4858,12 @@ mod tests {
             "nested lifecycle failed: {captured:?}"
         );
         assert!(
-            process_exists(unrelated.id() as libc::pid_t),
+            process_exists(unrelated.pid()),
             "nested cleanup signaled an unrelated process group"
         );
-        unrelated.kill().expect("kill unrelated test process");
-        unrelated.wait().expect("reap unrelated test process");
+        unrelated
+            .terminate()
+            .expect("release unrelated test helper");
         std::fs::remove_dir_all(directory).expect("remove test directory");
     }
     #[cfg(unix)]
@@ -4333,22 +4880,15 @@ mod tests {
         std::fs::create_dir(&directory).expect("create test directory");
         let nested_pid_file = directory.join("nested.pid");
         let outer_pid_file = directory.join("outer.pid");
-        let mut unrelated = spawn_test_group("wait");
-        let executable = std::env::current_exe().expect("test executable");
-        let mut supervisor = Command::new(executable)
-            .args([
-                "--exact",
-                "ci::exec::tests::outer_supervisor_helper_process",
-                "--nocapture",
-            ])
-            .env("UQM_TEST_OUTER_SUPERVISOR", "1")
-            .env("UQM_TEST_NESTED_PID_FILE", &nested_pid_file)
-            .env("UQM_TEST_OUTER_PID_FILE", &outer_pid_file)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn outer supervisor");
+        let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
+        let mut supervisor = OwnedHelper::spawn(
+            "ci::exec::tests::outer_supervisor_helper_process",
+            &[
+                ("UQM_TEST_OUTER_SUPERVISOR", "1".into()),
+                ("UQM_TEST_NESTED_PID_FILE", nested_pid_file.clone().into()),
+                ("UQM_TEST_OUTER_PID_FILE", outer_pid_file.clone().into()),
+            ],
+        );
         let deadline = Instant::now() + Duration::from_secs(30);
         while !nested_pid_file.is_file() || !outer_pid_file.is_file() {
             assert!(Instant::now() < deadline, "nested group did not register");
@@ -4362,10 +4902,12 @@ mod tests {
             .expect("read outer PID")
             .parse::<i32>()
             .expect("parse outer PID");
-        assert_eq!(
-            unsafe { libc::kill(supervisor.id() as i32, libc::SIGKILL) },
-            0
-        );
+        // Kill the supervisor itself rather than its group: the registered
+        // processes must be removed by the monitor that owns them, which is
+        // what this test is about.
+        // SAFETY: the supervisor is an unreaped child of this process, so its
+        // identity cannot have been reused.
+        assert_eq!(unsafe { libc::kill(supervisor.pid(), libc::SIGKILL) }, 0);
         supervisor.wait().expect("reap outer supervisor");
 
         let cleanup_deadline = Instant::now() + Duration::from_secs(30);
@@ -4379,11 +4921,12 @@ mod tests {
             );
         }
         assert!(
-            process_exists(unrelated.id() as libc::pid_t),
+            process_exists(unrelated.pid()),
             "outer-controller cleanup signaled an unrelated process group"
         );
-        unrelated.kill().expect("kill unrelated test process");
-        unrelated.wait().expect("reap unrelated test process");
+        unrelated
+            .terminate()
+            .expect("release unrelated test helper");
         let _ = std::fs::remove_dir_all(directory);
     }
 

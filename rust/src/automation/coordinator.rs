@@ -186,7 +186,7 @@ fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
     }
 }
 
-/// Fixed RNG seed applied once when active automation enters gameplay.
+/// Default RNG seed for scripts that predate explicit seed selection.
 pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 
 /// What the main-menu readiness record reports as having become ready.
@@ -218,6 +218,7 @@ struct CoordInner {
     /// When progress was last admitted, for the idle watchdog.
     last_progress: Instant,
     sched_state: SchedulerState,
+    checkpoint_step: usize,
     input_seen: u64,
     present_seen: u64,
     last_observed: Instant,
@@ -230,6 +231,7 @@ struct CoordInner {
     /// was not in WaitingSemantic. Replayed when the scheduler enters
     /// WaitingSemantic.
     pending_transitions: Vec<(u8, u8)>,
+    pending_main_menu_ready: bool,
     /// The label of the currently armed capture step, if any.
     /// Used when the capture completes to write a PNG artifact.
     armed_capture_label: Option<String>,
@@ -261,8 +263,12 @@ struct CoordInner {
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
 pub struct Coordinator {
+    /// Validated seed returned at each automation-owned RNG initialization.
+    seed: u32,
     /// The validated script actions.
     actions: Vec<Action>,
+    native_checkpoint_identity: Option<String>,
+    native_trace: Option<Mutex<super::native_trace::NativeTraceJournal>>,
     /// The typed main-menu transition assertions from the script.
     transitions: Vec<crate::automation::script::MainMenuTransition>,
     /// Watchdog limits from the script budgets.
@@ -283,13 +289,38 @@ impl Coordinator {
     /// This is called from `main.rs` after `setup_automation` succeeds.
     /// It activates the runtime model and writes the run_start trace.
     pub fn init(script: ValidatedScript, output_root: PathBuf) {
-        // Every proof bundle records what the run was attempting, written
-        // before any step executes so a run that dies partway is still
-        // attributable to a scenario. A failure to record it is not allowed to
-        // fail the run, but it is never silent.
-        if let Err(error) =
+        #[cfg(feature = "debug-process")]
+        let native_limit = super::native_window::active_native_window_config()
+            .map(|config| config.runtime_contract.inventory_limits.member_bytes);
+        #[cfg(not(feature = "debug-process"))]
+        let native_limit = None;
+        Self::init_with_native_checkpoints(script, output_root, native_limit);
+    }
+
+    fn init_with_native_checkpoints(
+        script: ValidatedScript,
+        output_root: PathBuf,
+        native_limit: Option<u64>,
+    ) {
+        let native_trace = native_limit
+            .map(|limit| {
+                super::native_trace::NativeTraceJournal::create(&output_root, limit).map(Mutex::new)
+            })
+            .transpose();
+        let checkpoint_plan = native_limit
+            .is_some()
+            .then(|| super::native_checkpoint::NativeCheckpointPlan::derive(&[], &script))
+            .transpose();
+        let native_checkpoint_identity = checkpoint_plan
+            .as_ref()
+            .ok()
+            .and_then(|plan| plan.as_ref())
+            .map(|plan| plan.resolved_sha256.clone());
+        // Missing input identity must stop automation before any step executes.
+        let resolved_result =
             crate::automation::lifecycle::write_resolved_scenario(&output_root, &script.resolved())
-        {
+                .map_err(|error| error.to_string());
+        if let Err(error) = &resolved_result {
             eprintln!("automation: cannot record the resolved scenario: {error}");
         }
 
@@ -319,8 +350,15 @@ impl Coordinator {
         let (_, consumed_communication_completions) =
             crate::automation::ui_observation::communication_lifecycle();
 
+        let native_trace_failed = native_trace.is_err();
+        if let Err(error) = &native_trace {
+            eprintln!("automation: cannot create native trace journal: {error}");
+        }
         let coord = Coordinator {
+            seed: script.seed(),
             actions,
+            native_checkpoint_identity,
+            native_trace: native_trace.ok().flatten(),
             transitions,
             watchdog_limits,
             started_at: now,
@@ -328,6 +366,7 @@ impl Coordinator {
             runtime,
             inner: Mutex::new(CoordInner {
                 sched_state: SchedulerState::initial(),
+                checkpoint_step: 0,
                 ready: false,
                 last_progress: now,
                 input_seen: 0,
@@ -339,6 +378,7 @@ impl Coordinator {
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
+                pending_main_menu_ready: false,
                 armed_capture_label: None,
                 pending_start_scene: PendingStartScene::new(start_scene),
                 consumed_communication_completions,
@@ -357,6 +397,9 @@ impl Coordinator {
         {
             let mut init_inner = coord.inner.lock();
             coord.write_trace(&mut init_inner, RecordKind::RunStart);
+            if resolved_result.is_err() || checkpoint_plan.is_err() || native_trace_failed {
+                coord.set_terminal(&mut init_inner, TerminalClass::TraceFailure);
+            }
         }
 
         let _ = COORDINATOR.set(coord);
@@ -665,7 +708,7 @@ impl Coordinator {
                 self.write_trace_labeled(
                     inner,
                     RecordKind::SemanticAssertion,
-                    "communication_replay_active".to_owned(),
+                    format!("communication_replay_active:generation={generation}"),
                 );
             }
         } else if let Some(Action::SelectCommunicationResponse(select)) =
@@ -957,33 +1000,28 @@ impl Coordinator {
 
     /// Replay menu transitions that arrived before the scheduler was ready.
     fn replay_pending_transitions(&self, inner: &mut CoordInner) {
-        if inner.sched_state.phase == crate::automation::scheduler::ActionPhase::WaitingSemantic
+        while inner.sched_state.phase == ActionPhase::WaitingSemantic
             && !inner.pending_transitions.is_empty()
+            && !inner.sched_state.is_terminal()
+            && !self.native_checkpoint_pending(inner)
         {
-            let config2 = SchedulerConfig {
+            let (from, to) = inner.pending_transitions.remove(0);
+            let config = SchedulerConfig {
                 actions: &self.actions,
                 transitions: &self.transitions,
             };
-            let pending: Vec<(u8, u8)> = std::mem::take(&mut inner.pending_transitions);
-            for (from, to) in pending {
-                eprintln!("[automation] replaying pending menu_transition from={from} to={to}");
-                let t2 = scheduler_reduce(
-                    &inner.sched_state,
-                    &config2,
-                    SchedulerEvent::MenuTransition { from, to },
-                );
-                inner.sched_state = t2.new_state;
-                let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch)
-                {
-                    format!("menu_transition_failed:from={from}:to={to}")
-                } else {
-                    format!("menu_transition_passed:from={from}:to={to}")
-                };
-                self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
-                if inner.sched_state.is_terminal() {
-                    break;
-                }
-            }
+            let transition = scheduler_reduce(
+                &inner.sched_state,
+                &config,
+                SchedulerEvent::MenuTransition { from, to },
+            );
+            inner.sched_state = transition.new_state;
+            let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch) {
+                format!("menu_transition_failed:from={from}:to={to}")
+            } else {
+                format!("menu_transition_passed:from={from}:to={to}")
+            };
+            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
         }
     }
 
@@ -1041,6 +1079,14 @@ impl Coordinator {
         // Admitted: this callback is progress for the idle watchdog.
         inner.last_progress = now;
 
+        // Keep the next action behind the committed-presentation barrier.
+        if self.native_checkpoint_pending(&inner) {
+            return false;
+        }
+        if inner.pending_main_menu_ready {
+            inner.pending_main_menu_ready = false;
+            return self.apply_main_menu_ready(&mut inner);
+        }
         if self.verify_runtime_assertions(&mut inner) || self.verify_activity_assertion(&mut inner)
         {
             return true;
@@ -1381,6 +1427,59 @@ impl Coordinator {
     //  Present callback processing (called from present observation hook)
     // -----------------------------------------------------------------------
 
+    fn flush_native_trace(&self) -> std::io::Result<()> {
+        if let Some(journal) = &self.native_trace {
+            journal.lock().publish(&self.runtime.commit)?;
+        }
+        Ok(())
+    }
+
+    fn native_checkpoint_pending(&self, inner: &CoordInner) -> bool {
+        self.native_checkpoint_identity.is_some()
+            && self.actions[inner.checkpoint_step..inner.sched_state.step_index]
+                .iter()
+                .any(|action| super::native_checkpoint::checkpoint_class(action).is_some())
+    }
+
+    fn commit_native_checkpoints(
+        &self,
+        inner: &mut CoordInner,
+        frame: &crate::automation::capture::PresentedFrame,
+    ) -> bool {
+        let Some(identity) = &self.native_checkpoint_identity else {
+            return false;
+        };
+        for index in inner.checkpoint_step..inner.sched_state.step_index {
+            if super::native_checkpoint::checkpoint_class(&self.actions[index]).is_none() {
+                continue;
+            }
+            let id = super::native_checkpoint::checkpoint_id(identity, index);
+            let reservation = self.runtime.commit.reserve();
+            let mut record = super::capture::capture_trace_record(
+                reservation.sequence(),
+                self.started_at.elapsed().as_millis() as u64,
+                CaptureGeneration(frame.generation),
+                &id,
+            );
+            record.run = 1;
+            record.kind = RecordKind::Checkpoint;
+            record.input_seen = inner.input_seen;
+            record.present_seen = inner.present_seen;
+            record.presentation = Some(frame.presentation_evidence());
+            record.checkpoint = Some(super::trace::CheckpointEvidence { id });
+            match record.to_jsonl() {
+                Ok(line) => reservation.commit_record(line),
+                Err(error) => {
+                    reservation.cancel();
+                    self.capture_failure(inner, error);
+                    return true;
+                }
+            }
+        }
+        inner.checkpoint_step = inner.sched_state.step_index;
+        false
+    }
+
     /// Process a committed present callback. Returns true if the game loop
     /// should stop.
     pub fn process_present(frame: Option<crate::automation::capture::PresentedFrame>) -> bool {
@@ -1390,6 +1489,12 @@ impl Coordinator {
         #[cfg(feature = "debug-process")]
         let committed_presentation = frame.as_ref().map(|frame| frame.count);
         let stop = coord.process_present_inner(frame);
+        if let Err(error) = coord.flush_native_trace() {
+            Self::external_trace_failure(format!(
+                "native trace prefix publication failed: {error}"
+            ));
+            return true;
+        }
         #[cfg(feature = "debug-process")]
         if let Some(committed_presentation) = committed_presentation {
             if let Err(error) = crate::automation::native_window::publish_native_window_presentation(
@@ -1483,6 +1588,12 @@ impl Coordinator {
             return true;
         }
 
+        if self.native_checkpoint_pending(&inner) {
+            if self.write_presentation_trace(&mut inner, &frame) {
+                return true;
+            }
+            return self.commit_native_checkpoints(&mut inner, &frame);
+        }
         let config = SchedulerConfig {
             actions: &self.actions,
             transitions: &self.transitions,
@@ -1503,6 +1614,9 @@ impl Coordinator {
         if !self.apply_effects(&mut inner, &transition.effects, Some(&frame)) {
             inner.sched_state =
                 scheduler_state_after_effects(previous_state, transition.new_state, false);
+            return true;
+        }
+        if self.commit_native_checkpoints(&mut inner, &frame) {
             return true;
         }
 
@@ -1534,9 +1648,19 @@ impl Coordinator {
         if inner.terminal_class.is_some() {
             return true;
         }
+        if coord.native_checkpoint_pending(&inner) {
+            inner.pending_main_menu_ready = true;
+            inner.ready = true;
+            inner.last_progress = Instant::now();
+            return false;
+        }
+        coord.apply_main_menu_ready(&mut inner)
+    }
+
+    fn apply_main_menu_ready(&self, inner: &mut CoordInner) -> bool {
         let config = SchedulerConfig {
-            actions: &coord.actions,
-            transitions: &coord.transitions,
+            actions: &self.actions,
+            transitions: &self.transitions,
         };
         let transition =
             scheduler_reduce(&inner.sched_state, &config, SchedulerEvent::MainMenuReady);
@@ -1544,14 +1668,14 @@ impl Coordinator {
         // Readiness ends the startup budget and starts the idle one.
         inner.ready = true;
         inner.last_progress = Instant::now();
-        coord.write_readiness_trace(
-            &mut inner,
+        self.write_readiness_trace(
+            inner,
             MAIN_MENU_READINESS_SUBJECT,
             MAIN_MENU_READINESS_OBSERVATION,
         );
         if inner.sched_state.is_terminal() {
             let class = map_scheduler_terminal(inner.sched_state.terminal);
-            coord.set_terminal(&mut inner, class);
+            self.set_terminal(inner, class);
             return true;
         }
         false
@@ -1568,54 +1692,16 @@ impl Coordinator {
 
     fn process_menu_transition_inner(&self, from_index: u8, to_index: u8) -> bool {
         let mut inner = self.inner.lock();
-
         if inner.terminal_class.is_some() {
             return true;
         }
-
-        let config = SchedulerConfig {
-            actions: &self.actions,
-            transitions: &self.transitions,
-        };
-
-        // If the scheduler is not in WaitingSemantic, queue the transition.
-        // It will be replayed when the scheduler enters WaitingSemantic.
-        if inner.sched_state.phase != crate::automation::scheduler::ActionPhase::WaitingSemantic {
-            eprintln!(
-                "[automation] menu_transition from={} to={} queued (phase={:?})",
-                from_index, to_index, inner.sched_state.phase
-            );
-            inner.pending_transitions.push((from_index, to_index));
-            return false;
+        inner.pending_transitions.push((from_index, to_index));
+        self.replay_pending_transitions(&mut inner);
+        if inner.sched_state.is_terminal() {
+            let class = map_scheduler_terminal(inner.sched_state.terminal);
+            self.set_terminal(&mut inner, class);
+            return true;
         }
-
-        // Process pending transitions first.
-        let mut to_process: Vec<(u8, u8)> = std::mem::take(&mut inner.pending_transitions);
-        to_process.push((from_index, to_index));
-
-        for (from, to) in to_process {
-            eprintln!("[automation] menu_transition from={from} to={to} processing");
-            let transition = scheduler_reduce(
-                &inner.sched_state,
-                &config,
-                SchedulerEvent::MenuTransition { from, to },
-            );
-            inner.sched_state = transition.new_state;
-
-            let label = if inner.sched_state.terminal == Some(TerminalOutcome::SemanticMismatch) {
-                format!("menu_transition_failed:from={from}:to={to}")
-            } else {
-                format!("menu_transition_passed:from={from}:to={to}")
-            };
-            self.write_trace_labeled(&mut inner, RecordKind::SemanticAssertion, label);
-
-            if inner.sched_state.is_terminal() {
-                let class = map_scheduler_terminal(inner.sched_state.terminal);
-                self.set_terminal(&mut inner, class);
-                return true;
-            }
-        }
-
         false
     }
 
@@ -1658,13 +1744,18 @@ impl Coordinator {
         validate_runtime_finalization(self.runtime.finalize())?;
         let status = active_automation_status(terminal, game_result)?;
 
-        let mut trace = Vec::new();
-        self.runtime
-            .commit
-            .publish_all(&mut trace)
-            .map_err(|error| format!("cannot publish ordered automation trace: {error}"))?;
-        crate::automation::artifact::write_durable(&self.output_root, "trace", "jsonl", &trace)
-            .map_err(|error| format!("cannot durably publish automation trace: {error}"))?;
+        if self.native_trace.is_some() {
+            self.flush_native_trace()
+                .map_err(|error| format!("cannot finalize native trace: {error}"))?;
+        } else {
+            let mut trace = Vec::new();
+            self.runtime
+                .commit
+                .publish_all(&mut trace)
+                .map_err(|error| format!("cannot publish ordered automation trace: {error}"))?;
+            crate::automation::artifact::write_durable(&self.output_root, "trace", "jsonl", &trace)
+                .map_err(|error| format!("cannot durably publish automation trace: {error}"))?;
+        }
 
         let teardown = crate::automation::lifecycle::TeardownReceipt {
             schema: "uqm-teardown-v1".into(),
@@ -2219,7 +2310,7 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
         terminal_reason: None,
         seed_application: Some(SeedApplication {
             domain,
-            seed: AUTOMATION_SEED,
+            seed: coord.seed,
         }),
         presentation: None,
         activity: None,
@@ -2235,7 +2326,7 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
             coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
         }
     }
-    AUTOMATION_SEED
+    coord.seed
 }
 
 fn validate_runtime_finalization(result: FinalizationResult) -> Result<(), String> {
@@ -2436,6 +2527,247 @@ mod tests {
             SchedulerState::initial(),
             true,
         ));
+    }
+
+    #[test]
+    fn native_checkpoint_barrier_queues_readiness_until_prior_commit() {
+        const CHILD: &str = "UQM_NATIVE_READY_BARRIER_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::native_checkpoint_barrier_queues_readiness_until_prior_commit", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let source = br#"{"version":1,"name":"readiness-barrier","budgets":{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"wait_for_main_menu_ready"},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let plan =
+            super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
+        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
+        let coord = Coordinator::get().unwrap();
+        assert!(!Coordinator::process_main_menu_ready());
+        assert!(!Coordinator::process_main_menu_ready());
+        assert_eq!(coord.inner.lock().sched_state.step_index, 1);
+        assert!(coord.inner.lock().pending_main_menu_ready);
+        for count in 1..=2 {
+            assert!(!Coordinator::process_present(Some(
+                super::super::capture::PresentedFrame {
+                    count,
+                    generation: 0,
+                    width: 1,
+                    height: 1,
+                    rgba: vec![1, 2, 3, 255]
+                }
+            )));
+            let records: Vec<_> = std::fs::read_to_string(temp.path().join("trace.jsonl"))
+                .unwrap()
+                .lines()
+                .map(|line| TraceRecord::from_jsonl(line).unwrap())
+                .collect();
+            assert_eq!(plan.committed(&records).unwrap().len() as u64, count);
+            assert_eq!(coord.process_input_inner(), count == 2);
+        }
+        assert!(!coord.inner.lock().pending_main_menu_ready);
+        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+    }
+
+    #[test]
+    fn native_checkpoint_barrier_holds_next_action_until_committed_presentation() {
+        const CHILD: &str = "UQM_NATIVE_CHECKPOINT_BARRIER_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::native_checkpoint_barrier_holds_next_action_until_committed_presentation", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let source = br#"{"version":1,"name":"barrier-test","budgets":{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"wait_for_main_menu_ready"},{"action":"assert_main_menu_transition","from":"NewGame","to":"LoadGame"},{"action":"assert_main_menu_transition","from":"LoadGame","to":"NewGame"},{"action":"capture","label":"menu"},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let plan =
+            super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
+        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
+        let coord = Coordinator::get().unwrap();
+        assert!(!Coordinator::process_main_menu_ready());
+        for _ in 0..3 {
+            assert!(!coord.process_input_inner());
+            assert_eq!(coord.inner.lock().sched_state.step_index, 1);
+            assert!(coord.inner.lock().armed_capture_label.is_none());
+        }
+        let frame = |count, generation| super::super::capture::PresentedFrame {
+            count,
+            generation,
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        assert!(!Coordinator::process_menu_transition(0, 1));
+        assert!(!Coordinator::process_menu_transition(1, 0));
+        assert!(!Coordinator::process_present(Some(frame(1, 0))));
+        let live_trace = std::fs::read_to_string(temp.path().join("trace.jsonl")).unwrap();
+        let live_records: Vec<_> = live_trace
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .collect();
+        assert_eq!(
+            live_records.len() as u64,
+            Coordinator::native_window_semantic_snapshot().unwrap().0
+        );
+        assert_eq!(plan.committed(&live_records).unwrap().len(), 1);
+        assert!(!coord.process_input_inner());
+        assert_eq!(coord.inner.lock().sched_state.step_index, 2);
+        assert_eq!(coord.inner.lock().pending_transitions.len(), 1);
+        assert!(!coord.process_input_inner());
+        assert_eq!(coord.inner.lock().sched_state.step_index, 2);
+        assert!(!Coordinator::process_present(Some(frame(2, 0))));
+        assert!(!coord.process_input_inner());
+        assert_eq!(coord.inner.lock().sched_state.step_index, 3);
+        assert!(coord.inner.lock().pending_transitions.is_empty());
+        assert!(!Coordinator::process_present(Some(frame(3, 0))));
+        assert!(!coord.process_input_inner());
+        assert_eq!(
+            coord.inner.lock().armed_capture_label.as_deref(),
+            Some("menu")
+        );
+        assert!(!Coordinator::process_present(Some(frame(4, 1))));
+        assert!(coord.process_input_inner());
+        assert_eq!(
+            coord.inner.lock().terminal_class,
+            Some(TerminalClass::Success)
+        );
+        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        let trace = std::fs::read(temp.path().join("trace.jsonl")).unwrap();
+        let records: Vec<_> = std::str::from_utf8(&trace)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .collect();
+        assert_eq!(plan.committed(&records).unwrap().len(), 4);
+        let generations: Vec<_> = records
+            .iter()
+            .filter(|record| record.kind == RecordKind::Checkpoint)
+            .map(|record| record.presentation.as_ref().unwrap().count)
+            .collect();
+        assert_eq!(generations, [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn replay_seed_is_applied_at_each_rng_boundary() {
+        const CHILD: &str = "UQM_REPLAY_SEED_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            for seed in [0, 42, u32::MAX] {
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "automation::coordinator::tests::replay_seed_is_applied_at_each_rng_boundary", "--nocapture"])
+                    .env(CHILD, seed.to_string())
+                    .output().unwrap();
+                assert!(
+                    output.status.success(),
+                    "{}\n{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        }
+        let seed: u32 = std::env::var(CHILD).unwrap().parse().unwrap();
+        let applied_seed = seed.max(1);
+        let temp = tempfile::tempdir().unwrap();
+        let bytes = br#"{"version":2,"name":"seed-test","seed":42,"fixture":"seed-test","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let mut doc = crate::automation::script::parse_script(bytes, "seed-test.json").unwrap();
+        doc.seed = Some(u64::from(seed));
+        let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
+        assert_eq!(
+            rust_automation_seed_value(SeedDomain::NEW_GAME_ID, 999),
+            999
+        );
+        Coordinator::init(script, temp.path().to_path_buf());
+        let mut expected = Vec::new();
+        for domain in [
+            SeedDomain::SUPER_MELEE_MENU_ID,
+            SeedDomain::SUPER_MELEE_BATTLE_ID,
+            SeedDomain::NEW_GAME_ID,
+        ] {
+            assert_eq!(rust_automation_seed_value(domain, 999), applied_seed);
+            expected.push(SeedApplication {
+                domain: SeedDomain::from_ffi(domain).unwrap(),
+                seed: applied_seed,
+            });
+        }
+        let mut trace = Vec::new();
+        Coordinator::get()
+            .unwrap()
+            .runtime
+            .commit
+            .publish_all(&mut trace)
+            .unwrap();
+        let applications: Vec<_> = std::str::from_utf8(&trace)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .filter_map(|record| record.seed_application)
+            .collect();
+        assert_eq!(applications, expected);
+        let record: crate::automation::lifecycle::ResolvedScenarioRecord = serde_json::from_slice(
+            &std::fs::read(temp.path().join("resolved-scenario.json")).unwrap(),
+        )
+        .unwrap();
+        record.validate().unwrap();
+        assert_eq!(record.scenario.seed, applied_seed);
+        assert_eq!(record.scenario.requested_seed, seed);
+    }
+
+    #[test]
+    fn replay_stops_if_resolved_input_receipt_cannot_be_published() {
+        const CHILD: &str = "UQM_REPLAY_RECEIPT_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::replay_stops_if_resolved_input_receipt_cannot_be_published", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("resolved-scenario.json"), b"existing").unwrap();
+        let doc = crate::automation::script::parse_script(
+            br#"{"version":1,"name":"receipt","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#,
+            "receipt.json",
+        ).unwrap();
+        Coordinator::init(
+            crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
+            temp.path().to_path_buf(),
+        );
+        assert_eq!(
+            Coordinator::get().unwrap().inner.lock().terminal_class,
+            Some(TerminalClass::TraceFailure)
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("resolved-scenario.json")).unwrap(),
+            b"existing"
+        );
     }
 
     #[test]

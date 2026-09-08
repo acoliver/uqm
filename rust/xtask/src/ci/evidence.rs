@@ -1004,10 +1004,15 @@ fn validate_successful_workflow_subprocess_receipts(
             "bootstrap-apt-install.result.json",
             "bootstrap-rustup.result.json",
             "bootstrap-xtask-build.result.json",
+            "policy-admission.result.json",
             "ci-plan.result.json",
         ]
     } else if job == "gates" && step_succeeded("authoritative-gates") {
-        &["xtask-build.result.json", "ci-run.result.json"]
+        &[
+            "xtask-build.result.json",
+            "policy-admission.result.json",
+            "ci-run.result.json",
+        ]
     } else {
         &[]
     };
@@ -1156,10 +1161,20 @@ fn validate_plan_payload(
         return;
     };
     let expected_authority = serde_json::to_value(authority).ok();
+    let policy_bytes = read_bundle_file(root, "authority-snapshot.json").ok();
     let valid = plan.as_ref().is_some_and(|plan| {
         plan.schema == super::plan::PLAN_SCHEMA
             && plan.authority == super::authority::AUTHORITY_RELATIVE
             && plan.authority_contract.as_ref() == expected_authority.as_ref()
+            && plan.selection.as_ref().is_some_and(|binding| {
+                binding.autoplay == plan.autoplay
+                    && binding.bind_environment().is_ok()
+                    && policy_bytes.as_deref().is_some_and(|policy| {
+                        binding
+                            .selected(authority, &index.source_sha, policy)
+                            .is_ok()
+                    })
+            })
             && plan.tuples.len() == authority.runner_mapping.len()
             && plan
                 .tuples
@@ -1920,7 +1935,7 @@ impl EvidenceSnapshot {
             .collect()
     }
 
-    fn scoped<T>(&self, action: impl FnOnce() -> T) -> T {
+    pub(crate) fn scoped<T>(&self, action: impl FnOnce() -> T) -> T {
         ACTIVE_SNAPSHOTS.with(|active| active.borrow_mut().push(self.active.clone()));
         let _guard = ActiveSnapshotGuard;
         action()
@@ -4388,6 +4403,12 @@ fn validate_failed_native_acceptance_evidence(
     {
         contracts.push("evidence.native_window.failure.inventory".to_string());
     }
+    if actual_paths.iter().any(|path| path == "suite-index.json") {
+        if crate::native_suite::validate_failure_diagnostics(&acceptance_root, authority).is_err() {
+            contracts.push("evidence.native_window.failure.suite".to_string());
+        }
+        return contracts;
+    }
     let manifest_path = "payloads/native-window.acceptance/native-acceptance-failure.json";
     let manifest: Option<NativeAcceptanceFailureEnvelope> = read_bundle_file(root, manifest_path)
         .ok()
@@ -4514,75 +4535,26 @@ fn validate_native_acceptance_evidence(
             contracts.push("evidence.native_window.entry_identity".to_string());
         }
     }
-    let manifest: Option<uqm_rust::automation::NativeAcceptanceManifest> = read_bundle_file(
-        root,
-        "payloads/native-window.acceptance/native-acceptance.json",
-    )
-    .ok()
-    .and_then(|bytes| serde_json::from_slice(&bytes).ok());
-    match manifest {
-        Some(manifest) => {
-            if uqm_rust::automation::validate_native_acceptance_bundle(&acceptance_root, &manifest)
-                .is_err()
-            {
-                contracts.push("evidence.native_window.receipt".to_string());
-            }
-            let linked_receipt = read_bundle_file(
-                root,
-                "payloads/native-window.acceptance/inputs/linked-build/linked-build-receipt.json",
-            );
-            let nested_authority = read_bundle_file(
-                root,
-                "payloads/native-window.acceptance/inputs/linked-build/gates.json",
-            );
-            let outer_authority = read_bundle_file(root, "payloads/authority.snapshot/gates.json");
-            contracts.extend(linked_outer_correlation_contracts(
-                linked_receipt.as_deref().ok(),
-                nested_authority.as_deref().ok(),
-                outer_authority.as_deref().ok(),
+    let selected = super::controller::retained_selection(root, authority, &index.source_sha);
+    let policy = read_bundle_file(root, "payloads/authority.snapshot/gates.json");
+    match (selected, policy) {
+        (Ok(selected), Ok(policy)) => {
+            if let Err(error) = crate::native_suite::validate_success(
+                &acceptance_root,
+                &selected,
+                authority,
                 &index.source_sha,
-            ));
-            let content = &authority.native_acceptance;
-            if manifest.runtime_contract != authority.native_runtime_contract()
-                || manifest.acceptance_policy != content.acceptance_policy
-            {
-                contracts.push("evidence.native_window.authority_contract".to_string());
-            }
-            if manifest.content_package.relative_path
-                != format!("inputs/content/packages/{}", content.content_filename)
-                || manifest.content_package.byte_length != content.content_byte_length
-                || manifest.content_package.sha256 != content.content_sha256
-            {
-                contracts.push("evidence.native_window.content_package".to_string());
-            }
-            let version_bytes = format!("{}\n", content.content_version).into_bytes();
-            let version_input = manifest
-                .retained_files
-                .iter()
-                .find(|input| input.relative_path == "inputs/content/version");
-            if version_input.is_none_or(|input| {
-                input.byte_length != version_bytes.len() as u64
-                    || input.sha256 != hex_sha256(&version_bytes)
-            }) {
-                contracts.push("evidence.native_window.content_version".to_string());
-            }
-            let expected_script = Path::new(&content.script)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| format!("inputs/{name}"));
-            if expected_script.as_deref() != Some(manifest.script.relative_path.as_str())
-                || manifest.script.byte_length != content.script_byte_length
-                || manifest.script.sha256 != content.script_sha256
-            {
-                contracts.push("evidence.native_window.script".to_string());
+                &policy,
+            ) {
+                contracts.push(format!("evidence.native_window.suite ({error})"));
             }
         }
-        None => contracts.push("evidence.native_window.manifest".to_string()),
+        _ => contracts.push("evidence.native_window.selection".into()),
     }
     contracts
 }
 
-fn linked_outer_correlation_contracts(
+pub(crate) fn linked_outer_correlation_contracts(
     linked_receipt: Option<&[u8]>,
     nested_authority: Option<&[u8]>,
     outer_authority: Option<&[u8]>,
@@ -5944,6 +5916,18 @@ struct LcarInventory {
     role_lengths: BTreeMap<String, u64>,
 }
 
+fn lcar_retained_inventory_matches(root: &Path, expected: &BTreeSet<String>) -> bool {
+    let artifact_root = root.join("payloads/bootstrap-proof.lcar-artifact");
+    active_rejected_paths(&artifact_root).is_ok_and(|paths| paths.is_empty())
+        && regular_file_inventory(&artifact_root).is_ok_and(|files| {
+            files
+                .into_iter()
+                .map(|file| file.relative_path)
+                .collect::<BTreeSet<_>>()
+                == *expected
+        })
+}
+
 fn validate_failure_lcar_inventory(
     root: &Path,
     artifacts: Option<&Vec<serde_json::Value>>,
@@ -6000,12 +5984,23 @@ fn validate_failure_lcar_inventory(
                 matching.len() == 1
                     && matching[0].sha256 == hash
                     && matching[0].byte_length == bytes
-                    && (bytes > 0 || matches!(role, "stdout_log" | "stderr_log"))
+                    && (bytes > 0
+                        || matches!(
+                            role,
+                            "stdout_log"
+                                | "stderr_log"
+                                | "content_snapshot_file"
+                                | "final_config_snapshot_file"
+                                | "retained_config_file"
+                        ))
+                    && read_lcar_artifact(root, path).is_ok_and(|content| {
+                        content.len() as u64 == bytes && hex_sha256(&content) == hash
+                    })
                     && (role != "capture" || validate_lcar_capture(root, path))
             })
     });
     LcarInventory {
-        valid,
+        valid: valid && lcar_retained_inventory_matches(root, &paths),
         roles,
         role_hashes,
         role_paths,
@@ -6071,12 +6066,23 @@ fn validate_success_lcar_inventory(
                         == Some(matching[0].sha256.as_str())
                     && artifact.get("bytes").and_then(|value| value.as_u64())
                         == Some(matching[0].byte_length)
-                    && (matching[0].byte_length > 0 || matches!(role, "stdout_log" | "stderr_log"))
+                    && (matching[0].byte_length > 0
+                        || matches!(
+                            role,
+                            "stdout_log"
+                                | "stderr_log"
+                                | "content_snapshot_file"
+                                | "final_config_snapshot_file"
+                                | "retained_config_file"
+                        ))
+                    && read_lcar_artifact(root, path).is_ok_and(|content| {
+                        content.len() as u64 == bytes && hex_sha256(&content) == hash
+                    })
                     && (role != "capture" || validate_lcar_capture(root, path))
             })
     });
     LcarInventory {
-        valid,
+        valid: valid && lcar_retained_inventory_matches(root, &paths),
         roles,
         role_hashes,
         role_paths,
@@ -6120,12 +6126,13 @@ fn valid_lcar_identity(
             "features",
             "renderer",
             "seed",
+            "input_identity",
             "provenance",
             "process",
             "cleanup",
             "artifacts",
         ],
-    ) && manifest.get("schema").and_then(|value| value.as_str()) == Some("uqm-lcar-v1")
+    ) && manifest.get("schema").and_then(|value| value.as_str()) == Some("uqm-lcar-v2")
         && manifest.get("passed").and_then(|value| value.as_bool())
             == Some(expected_failure.is_none())
         && failure_matches
@@ -6138,8 +6145,14 @@ fn valid_lcar_identity(
             == Some(authority.package.profile.as_str())
         && manifest.get("features") == Some(&serde_json::json!(authority.package.features))
         && manifest.get("renderer").and_then(|value| value.as_str()) == Some("sdl2-software-dummy")
-        && manifest.get("seed").and_then(|value| value.as_u64())
-            == Some(u64::from(uqm_rust::automation::AUTOMATION_SEED))
+        && manifest
+            .get("seed")
+            .and_then(|value| value.as_u64())
+            .is_some_and(|seed| seed > 0 && u32::try_from(seed).is_ok())
+        && manifest
+            .get("input_identity")
+            .and_then(|value| value.as_str())
+            .is_some_and(|digest| is_hex(digest, 64))
         && manifest.get("environment") == Some(&environment)
 }
 
@@ -6338,11 +6351,14 @@ fn validate_bootstrap_lcar(
                 .is_some_and(|digest| validate_lcar_tree_snapshot(root, path, root_role, digest))
         })
     });
-    let config_valid = role_paths
-        .get("final_config_snapshot")
-        .is_some_and(|path| validate_lcar_retained_config(root, path, artifacts));
+    let config_valid = role_paths.get("final_config_snapshot").is_some_and(|path| {
+        validate_lcar_final_config(root, path, artifacts, manifest.get("cleanup"))
+    });
     if !snapshots_valid || !trees_valid || !config_valid {
         contracts.push("evidence.builtin.bootstrap-proof.lcar.snapshots".to_string());
+    }
+    if !validate_lcar_inputs(root, index, authority, &manifest, &role_paths) {
+        contracts.push("evidence.builtin.bootstrap-proof.lcar.inputs".to_string());
     }
     if !validate_lcar_command(&manifest, &role_paths) {
         contracts.push("evidence.builtin.bootstrap-proof.lcar.command".to_string());
@@ -6544,6 +6560,7 @@ fn validate_bootstrap_failure_lcar(
         role_lengths,
     } = validate_failure_lcar_inventory(root, artifacts, &retained, run_command);
     let mandatory = [
+        "resolved_scenario",
         "stdout_log",
         "stderr_log",
         "production_manifest_snapshot",
@@ -6588,11 +6605,14 @@ fn validate_bootstrap_failure_lcar(
                     })
             })
         });
-    let config_valid = role_paths
-        .get("final_config_snapshot")
-        .is_some_and(|path| validate_lcar_retained_config(root, path, artifacts));
+    let config_valid = role_paths.get("final_config_snapshot").is_some_and(|path| {
+        validate_lcar_final_config(root, path, artifacts, manifest.get("cleanup"))
+    });
     if !snapshots_valid || !config_valid {
         contracts.push("evidence.builtin.bootstrap-proof.failure_lcar.snapshots".to_string());
+    }
+    if !validate_lcar_inputs(root, index, authority, &manifest, &role_paths) {
+        contracts.push("evidence.builtin.bootstrap-proof.failure_lcar.inputs".to_string());
     }
     if !validate_lcar_command(&manifest, &role_paths) {
         contracts.push("evidence.builtin.bootstrap-proof.failure_lcar.command".to_string());
@@ -6786,7 +6806,6 @@ enum OfflineSeedDomain {
 struct OfflineSeedApplication {
     #[allow(dead_code)]
     domain: OfflineSeedDomain,
-    #[allow(dead_code)]
     seed: u32,
 }
 
@@ -6867,7 +6886,6 @@ struct OfflineTraceRecord {
     #[allow(dead_code)]
     terminal_reason: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
     seed_application: Option<OfflineSeedApplication>,
     #[serde(default)]
     #[allow(dead_code)]
@@ -7039,10 +7057,127 @@ fn valid_lcar_artifact_role(role: &str, path: &str) -> bool {
         "snapshots/content-identity.json" => role == "content_identity_snapshot",
         "snapshots/config-initial.json" => role == "initial_config_snapshot",
         "snapshots/config-final.json" => role == "final_config_snapshot",
+        _ if path.starts_with("snapshots/config-final/") => role == "final_config_snapshot_file",
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => role == "capture",
         _ if path.starts_with("config/") => role == "retained_config_file",
+        _ if path.starts_with("snapshots/sc2/content/") => role == "content_snapshot_file",
         _ => false,
     }
+}
+
+fn validate_lcar_inputs(
+    root: &Path,
+    index: &EvidenceIndex,
+    authority: &Authority,
+    manifest: &serde_json::Value,
+    roles: &BTreeMap<String, String>,
+) -> bool {
+    let read_role = |role: &str| read_lcar_artifact(root, roles.get(role)?).ok();
+    let Some(script_bytes) = read_role("script_snapshot") else {
+        return false;
+    };
+    let script_path = "snapshots/script.json";
+    let script = uqm_rust::automation::script::parse_script(&script_bytes, script_path)
+        .and_then(|doc| uqm_rust::automation::script::validate_script(doc, script_path));
+    let Ok(script) = script else {
+        return false;
+    };
+    let record = read_role("resolved_scenario").and_then(|bytes| {
+        serde_json::from_slice::<uqm_rust::automation::lifecycle::ResolvedScenarioRecord>(&bytes)
+            .ok()
+    });
+    let Some(record) = record else {
+        return false;
+    };
+    if record.validate().is_err()
+        || record.scenario != script.resolved()
+        || manifest.get("seed").and_then(serde_json::Value::as_u64)
+            != Some(u64::from(script.seed()))
+    {
+        return false;
+    }
+    let initial: Option<serde_json::Value> =
+        read_role("initial_config_snapshot").and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    let fresh_config = initial
+        .as_ref()
+        .and_then(|value| value.get("entries"))
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(Vec::is_empty);
+    let content_matches = roles.get("content_identity_snapshot").is_some_and(|path| {
+        validate_lcar_retained_tree(
+            root,
+            path,
+            manifest
+                .get("artifacts")
+                .and_then(serde_json::Value::as_array),
+            "content_snapshot_file",
+            "snapshots/sc2/content/",
+        )
+    });
+    let production: Option<serde_json::Value> = read_role("production_manifest_snapshot")
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+    fresh_config
+        && content_matches
+        && production
+            .as_ref()
+            .is_some_and(|production| valid_package_manifest_content(index, authority, production))
+        && roles
+            .get("trace")
+            .is_none_or(|path| validate_lcar_seed_applications(root, path, script.seed()))
+        && lcar_input_identity(manifest, &record.replay_identity).is_some_and(|digest| {
+            manifest
+                .get("input_identity")
+                .and_then(serde_json::Value::as_str)
+                == Some(digest.as_str())
+        })
+}
+
+fn validate_lcar_seed_applications(root: &Path, path: &str, seed: u32) -> bool {
+    let Ok(bytes) = read_lcar_artifact(root, path) else {
+        return false;
+    };
+    let Ok(text) = std::str::from_utf8(&bytes) else {
+        return false;
+    };
+    !text.is_empty()
+        && text.ends_with('\n')
+        && text.lines().all(|line| {
+            serde_json::from_str::<OfflineTraceRecord>(line).is_ok_and(|record| {
+                match (record.kind, record.seed_application) {
+                    (OfflineRecordKind::SeedApplication, Some(application)) => {
+                        application.seed == seed
+                    }
+                    (OfflineRecordKind::SeedApplication, None) | (_, Some(_)) => false,
+                    _ => true,
+                }
+            })
+        })
+}
+
+fn lcar_input_identity(manifest: &serde_json::Value, scenario_identity: &str) -> Option<String> {
+    let provenance = manifest.get("provenance")?;
+    // This is the producer's versioned input material, not the result receipt.
+    // JSON object serialization sorts these keys; resolved scenario hashing
+    // instead uses the public typed receipt's struct serialization.
+    let material = serde_json::json!({
+        "schema": "uqm-replay-input-v1",
+        "scenario_identity": scenario_identity,
+        "seed": manifest.get("seed")?,
+        "git_head": manifest.get("git_head")?,
+        "target": manifest.get("target")?,
+        "profile": manifest.get("profile")?,
+        "features": manifest.get("features")?,
+        "renderer": manifest.get("renderer")?,
+        "environment": manifest.get("environment")?,
+        "production_manifest_sha256": provenance.get("production_manifest_sha256")?,
+        "executable_sha256": provenance.get("executable_sha256")?,
+        "script_sha256": provenance.get("script_sha256")?,
+        "content_tree_sha256": provenance.get("content_tree_sha256")?,
+        "initial_config_tree_sha256": provenance.get("initial_config_tree_sha256")?,
+    });
+    serde_json::to_vec(&material)
+        .ok()
+        .map(|bytes| hex_sha256(&bytes))
 }
 
 fn validate_lcar_command(
@@ -7063,17 +7198,20 @@ fn validate_lcar_command(
     let Some(output_root) = executable.parent().and_then(Path::parent) else {
         return false;
     };
-    let content = command[1].strip_prefix("--contentdir=").map(Path::new);
     executable.is_absolute()
+        && !executable.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
         && role_paths.get("executable_snapshot").map(String::as_str) == Some("snapshots/uqm")
         && command[0] == output_root.join("snapshots/uqm").to_string_lossy()
-        && content.is_some_and(|path| {
-            path.is_absolute()
-                && path.ends_with("sc2/content")
-                && !path
-                    .components()
-                    .any(|component| component == std::path::Component::ParentDir)
-        })
+        && command[1]
+            == format!(
+                "--contentdir={}",
+                output_root.join("snapshots/sc2/content").display()
+            )
         && command[2] == format!("--configdir={}", output_root.join("config").display())
         && command[3]
             == format!(
@@ -7298,10 +7436,52 @@ fn validate_lcar_capture_changes(
     }
     true
 }
-fn validate_lcar_retained_config(
+fn validate_lcar_final_config(
     root: &Path,
     snapshot_path: &str,
     artifacts: Option<&Vec<serde_json::Value>>,
+    cleanup: Option<&serde_json::Value>,
+) -> bool {
+    if !validate_lcar_retained_tree(
+        root,
+        snapshot_path,
+        artifacts,
+        "final_config_snapshot_file",
+        "snapshots/config-final/",
+    ) {
+        return false;
+    }
+    let Some(artifacts) = artifacts else {
+        return false;
+    };
+    artifacts
+        .iter()
+        .filter(|entry| entry["role"] == "retained_config_file")
+        .all(|entry| {
+            cleanup
+                .and_then(|value| value.get("config_root_removed"))
+                .and_then(|value| value.as_bool())
+                == Some(false)
+                && entry["path"]
+                    .as_str()
+                    .and_then(|path| path.strip_prefix("config/"))
+                    .is_some_and(|relative| {
+                        artifacts.iter().any(|retained| {
+                            retained["role"] == "final_config_snapshot_file"
+                                && retained["path"] == format!("snapshots/config-final/{relative}")
+                                && retained["sha256"] == entry["sha256"]
+                                && retained["bytes"] == entry["bytes"]
+                        })
+                    })
+        })
+}
+
+fn validate_lcar_retained_tree(
+    root: &Path,
+    snapshot_path: &str,
+    artifacts: Option<&Vec<serde_json::Value>>,
+    role: &str,
+    prefix: &str,
 ) -> bool {
     let snapshot: Option<serde_json::Value> = read_lcar_artifact(root, snapshot_path)
         .ok()
@@ -7310,12 +7490,12 @@ fn validate_lcar_retained_config(
         .as_ref()
         .and_then(|value| value.get("entries"))
         .and_then(|value| value.as_array())
-        .map(|entries| {
+        .and_then(|entries| {
             entries
                 .iter()
-                .filter_map(|entry| {
+                .map(|entry| {
                     Some((
-                        format!("config/{}", entry.get("path")?.as_str()?),
+                        format!("{prefix}{}", entry.get("path")?.as_str()?),
                         (
                             entry.get("sha256")?.as_str()?.to_string(),
                             entry.get("bytes")?.as_u64()?,
@@ -7324,13 +7504,11 @@ fn validate_lcar_retained_config(
                 })
                 .collect()
         });
-    let actual: Option<BTreeMap<String, (String, u64)>> = artifacts.map(|entries| {
+    let actual: Option<BTreeMap<String, (String, u64)>> = artifacts.and_then(|entries| {
         entries
             .iter()
-            .filter(|entry| {
-                entry.get("role").and_then(|value| value.as_str()) == Some("retained_config_file")
-            })
-            .filter_map(|entry| {
+            .filter(|entry| entry.get("role").and_then(|value| value.as_str()) == Some(role))
+            .map(|entry| {
                 Some((
                     entry.get("path")?.as_str()?.to_string(),
                     (
@@ -7555,7 +7733,7 @@ fn validate_failed_bootstrap_payloads(
                 index,
                 "bootstrap-proof.lcar",
                 "bootstrap-proof",
-                "payloads/bootstrap-proof.lcar/lcar-v1.json",
+                "payloads/bootstrap-proof.lcar/lcar-v2.json",
                 command,
                 contracts,
             );
@@ -7574,7 +7752,7 @@ fn validate_failed_bootstrap_payloads(
                     && entry.path == "bootstrap-proof/run.stderr.log"
             })
             .and_then(|entry| read_bundle_file(root, &entry.path).ok())
-            .is_some_and(|bytes| String::from_utf8_lossy(&bytes).contains("failure-lcar-v1.json"));
+            .is_some_and(|bytes| String::from_utf8_lossy(&bytes).contains("failure-lcar-v2.json"));
         if failure_reported != (failure_lcar_count == 1) {
             contracts.push("evidence.builtin.bootstrap-proof.failure_lcar.presence".to_string());
         }
@@ -7584,7 +7762,7 @@ fn validate_failed_bootstrap_payloads(
                     index,
                     "bootstrap-proof.failure-lcar",
                     "bootstrap-proof",
-                    "payloads/bootstrap-proof.failure-lcar/failure-lcar-v1.json",
+                    "payloads/bootstrap-proof.failure-lcar/failure-lcar-v2.json",
                     command,
                     contracts,
                 );
@@ -9161,7 +9339,7 @@ fn validate_successful_builtin_gate(
                     index,
                     "bootstrap-proof.lcar",
                     gate,
-                    "payloads/bootstrap-proof.lcar/lcar-v1.json",
+                    "payloads/bootstrap-proof.lcar/lcar-v2.json",
                     run_command,
                     &mut contracts,
                 );
@@ -9171,7 +9349,7 @@ fn validate_successful_builtin_gate(
                         validate.len() == 3
                             && validate[0] == run_command[0]
                             && Path::new(&validate[2])
-                                == Path::new(&run_command[5]).join("lcar-v1.json")
+                                == Path::new(&run_command[5]).join("lcar-v2.json")
                     });
                 if !correlated {
                     contracts.push("evidence.builtin.bootstrap-proof.command_chain".to_string());
@@ -9218,7 +9396,7 @@ fn validate_bootstrap_validate_command(command: &[String]) -> bool {
         && Path::new(&command[0]).ends_with("rust/target/debug/uqm-gameplay-proof")
         && command[1] == "validate"
         && Path::new(&command[2]).is_absolute()
-        && Path::new(&command[2]).ends_with("bootstrap-proof/proof-workspace/output/lcar-v1.json")
+        && Path::new(&command[2]).ends_with("bootstrap-proof/proof-workspace/output/lcar-v2.json")
 }
 
 fn validate_passed_collection_receipt(
@@ -9534,20 +9712,19 @@ fn validate_mutation_execution(
                 .collect(),
             authority.supervision.builtin_timeout_seconds * 1_000,
         )]),
-        "ownership" | "link" | "security" | "coverage" | "cache" | "workflow" | "artifact" => {
-            Some(vec![(
-                "mutations".to_string(),
-                "internal-validator".to_string(),
-                ".".to_string(),
-                None,
-                vec![
-                    "uqm-xtask-internal".to_string(),
-                    super::mutations::INTERNAL_VALIDATOR_COMMAND.to_string(),
-                    target.to_string(),
-                ],
-                authority.supervision.builtin_timeout_seconds * 1_000,
-            )])
-        }
+        "ownership" | "link" | "security" | "coverage" | "cache" | "workflow" | "artifact"
+        | "autoplay" => Some(vec![(
+            "mutations".to_string(),
+            "internal-validator".to_string(),
+            ".".to_string(),
+            None,
+            vec![
+                "uqm-xtask-internal".to_string(),
+                super::mutations::INTERNAL_VALIDATOR_COMMAND.to_string(),
+                target.to_string(),
+            ],
+            authority.supervision.builtin_timeout_seconds * 1_000,
+        )]),
         _ => None,
     };
     let baseline = item
@@ -10721,6 +10898,190 @@ mod tests {
             bytes,
             "format",
         ));
+    }
+
+    #[test]
+    fn native_suite_failure_offline_transport_checks_selection_and_journal() {
+        let root = tempfile::tempdir().unwrap();
+        let authority: Authority =
+            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let step = gate
+            .steps
+            .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap();
+        let acceptance = root.path().join("payloads/native-window.acceptance");
+        fs::create_dir(root.path().join("payloads")).unwrap();
+        let mut suite = crate::native_suite::SuiteAccounting::create(
+            &acceptance,
+            &authority.native_acceptance.scenario_scripts[..3],
+            false,
+        )
+        .unwrap();
+        suite
+            .fail(
+                crate::native_suite::SuitePhase::Preflight,
+                None,
+                "source mismatch".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        let mut index = valid_index();
+        index.tuple = "macos-aarch64".into();
+        index.entries.clear();
+        for file in regular_file_inventory(&acceptance).unwrap() {
+            let path = format!("payloads/native-window.acceptance/{}", file.relative_path);
+            index.entries.push(
+                entry(
+                    root.path(),
+                    &path,
+                    "native-window.failure",
+                    "application/octet-stream",
+                    "tests",
+                    &step.command,
+                )
+                .unwrap(),
+            );
+        }
+        assert!(
+            validate_failed_native_acceptance_evidence(root.path(), &index, &authority, gate)
+                .is_empty()
+        );
+        fs::write(acceptance.join("suite-events/000000.json"), b"{}").unwrap();
+        assert!(
+            validate_failed_native_acceptance_evidence(root.path(), &index, &authority, gate)
+                .contains(&"evidence.native_window.failure.suite".to_string())
+        );
+    }
+
+    #[test]
+    fn native_success_reader_requires_event_selection_and_rejects_failed_or_flat_layout() {
+        let policy = include_bytes!("../../../ci/gates.json");
+        let authority: Authority = serde_json::from_slice(policy).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let step = gate
+            .steps
+            .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap();
+        for event in [
+            super::super::controller::WorkflowEvent::Push,
+            super::super::controller::WorkflowEvent::PullRequestTarget,
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let pr = event == super::super::controller::WorkflowEvent::PullRequestTarget;
+            let paths = ["rust/src/battle/x.rs".to_string()];
+            let binding = super::super::controller::SelectionBinding {
+                schema: "uqm-s4-selection-v1".into(),
+                event,
+                source_sha: "a".repeat(40),
+                controller_sha: "b".repeat(40),
+                base_sha: pr.then(|| "c".repeat(40)),
+                merge_base_sha: pr.then(|| "d".repeat(40)),
+                changed_paths_z: if pr {
+                    b"rust/src/battle/x.rs\0".to_vec()
+                } else {
+                    Vec::new()
+                },
+                authority_sha256: hex_sha256(policy),
+                autoplay: super::super::controller::event_selection(
+                    event,
+                    pr.then_some(paths.as_slice()),
+                ),
+            };
+            let selected = binding
+                .selected(&authority, &binding.source_sha, policy)
+                .unwrap();
+            let mut index = valid_index();
+            index.source_sha = binding.source_sha.clone();
+            index.tuple = "macos-aarch64".into();
+            index.entries.clear();
+            write_bundle_entry(
+                root.path(),
+                &mut index.entries,
+                "payloads/authority.snapshot/gates.json",
+                "authority.snapshot",
+                &step.command,
+                policy,
+            );
+            let receipt = serde_json::to_vec(&serde_json::json!({"selection":binding})).unwrap();
+            let receipt_path = "payloads/preflight.source/source-preflight.json";
+            write_bundle_entry(
+                root.path(),
+                &mut index.entries,
+                receipt_path,
+                "preflight.source",
+                &step.command,
+                &receipt,
+            );
+            let acceptance = root.path().join("payloads/native-window.acceptance");
+            let mut suite =
+                crate::native_suite::SuiteAccounting::create(&acceptance, &selected, false)
+                    .unwrap();
+            suite
+                .fail(
+                    crate::native_suite::SuitePhase::Preflight,
+                    None,
+                    "fixture failure".into(),
+                )
+                .unwrap();
+            suite.finish().unwrap();
+            for file in regular_file_inventory(&acceptance).unwrap() {
+                let path = format!("payloads/native-window.acceptance/{}", file.relative_path);
+                index.entries.push(
+                    entry(
+                        root.path(),
+                        &path,
+                        "native-window.acceptance",
+                        "application/octet-stream",
+                        "tests",
+                        &step.command,
+                    )
+                    .unwrap(),
+                );
+            }
+            let contracts =
+                validate_native_acceptance_evidence(root.path(), &index, &authority, gate);
+            assert!(
+                contracts
+                    .iter()
+                    .any(|c| c.contains("suite did not complete")),
+                "{contracts:?}"
+            );
+            fs::write(root.path().join(receipt_path), b"{}").unwrap();
+            assert!(
+                validate_native_acceptance_evidence(root.path(), &index, &authority, gate)
+                    .contains(&"evidence.native_window.selection".into())
+            );
+            fs::write(root.path().join(receipt_path), &receipt).unwrap();
+            fs::remove_dir_all(&acceptance).unwrap();
+            fs::create_dir(&acceptance).unwrap();
+            fs::write(acceptance.join("native-acceptance.json"), b"{}").unwrap();
+            index
+                .entries
+                .retain(|entry| entry.role != "native-window.acceptance");
+            let path = "payloads/native-window.acceptance/native-acceptance.json";
+            index.entries.push(
+                entry(
+                    root.path(),
+                    path,
+                    "native-window.acceptance",
+                    "application/octet-stream",
+                    "tests",
+                    &step.command,
+                )
+                .unwrap(),
+            );
+            let contracts =
+                validate_native_acceptance_evidence(root.path(), &index, &authority, gate);
+            assert!(
+                contracts
+                    .iter()
+                    .any(|c| c.starts_with("evidence.native_window.suite")),
+                "{contracts:?}"
+            );
+        }
     }
 
     fn write_bundle_entry(
@@ -13949,7 +14310,7 @@ mod tests {
         let validate_command = vec![
             "/tmp/repository/rust/target/debug/uqm-gameplay-proof".into(),
             "validate".into(),
-            "/tmp/evidence/bootstrap-proof/proof-workspace/output/lcar-v1.json".into(),
+            "/tmp/evidence/bootstrap-proof/proof-workspace/output/lcar-v2.json".into(),
         ];
         write_builtin_step_fixture(
             &root,
@@ -13962,7 +14323,7 @@ mod tests {
         write_bundle_entry(
             &root,
             &mut bootstrap.entries,
-            "payloads/bootstrap-proof.lcar/lcar-v1.json",
+            "payloads/bootstrap-proof.lcar/lcar-v2.json",
             "bootstrap-proof.lcar",
             &run_command,
             b"malformed LCAR rejected by validation",
@@ -13978,6 +14339,785 @@ mod tests {
         .iter()
         .any(|contract| contract == "evidence.builtin.bootstrap-proof.lcar.content"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    fn publish_lcar_fixture(root: &Path, index: &mut EvidenceIndex, lcar: &serde_json::Value) {
+        rewrite_bundle_entry(
+            root,
+            &mut index.entries,
+            "bootstrap-proof.lcar",
+            &serde_json::to_vec(lcar).unwrap(),
+        );
+    }
+
+    fn lcar_fixture_contracts(
+        root: &Path,
+        index: &EvidenceIndex,
+        command: &[String],
+    ) -> Vec<String> {
+        let authority = serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let mut contracts = Vec::new();
+        validate_bootstrap_lcar(root, index, &authority, command, &mut contracts);
+        contracts
+    }
+
+    fn retain_final_config_fixture(
+        root: &Path,
+        index: &mut EvidenceIndex,
+        lcar: &mut serde_json::Value,
+        command: &[String],
+    ) {
+        let mut entries = Vec::new();
+        for (relative, bytes) in [
+            ("empty", b"".as_slice()),
+            ("nested/settings.cfg", b"final profile".as_slice()),
+        ] {
+            let path = format!("snapshots/config-final/{relative}");
+            let hash = hex_sha256(bytes);
+            entries
+                .push(serde_json::json!({"path": relative, "sha256": hash, "bytes": bytes.len()}));
+            lcar["artifacts"].as_array_mut().unwrap().push(serde_json::json!({"role": "final_config_snapshot_file", "path": path, "sha256": hash, "bytes": bytes.len()}));
+            write_bundle_entry(
+                root,
+                &mut index.entries,
+                &format!("payloads/bootstrap-proof.lcar-artifact/{path}"),
+                "bootstrap-proof.lcar-artifact",
+                command,
+                bytes,
+            );
+            let entry = index.entries.last_mut().unwrap();
+            entry.producing_gate = "bootstrap-proof".into();
+            entry.mime = "application/octet-stream".into();
+        }
+        let snapshot = lcar_tree_fixture("final_config", serde_json::json!(entries));
+        lcar["provenance"]["final_config_tree_sha256"] = snapshot["tree_sha256"].clone();
+        rewrite_lcar_artifact(
+            root,
+            &mut index.entries,
+            lcar,
+            "snapshots/config-final.json",
+            &serde_json::to_vec(&snapshot).unwrap(),
+        );
+        lcar["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+        rewrite_bundle_entry(
+            root,
+            &mut index.entries,
+            "bootstrap-proof.lcar",
+            &serde_json::to_vec(lcar).unwrap(),
+        );
+    }
+
+    #[test]
+    fn bootstrap_final_config_snapshot_survives_runtime_cleanup() {
+        let temp = tempfile::tempdir().unwrap();
+        let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(temp.path());
+        retain_final_config_fixture(temp.path(), &mut index, &mut lcar, &command);
+        assert_eq!(
+            lcar_fixture_contracts(temp.path(), &index, &command),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn bootstrap_final_config_rejects_tampering_in_success_and_failure_bundles() {
+        for mutation in [
+            "none",
+            "tamper",
+            "rehash",
+            "missing",
+            "missing_reindexed",
+            "extra",
+            "extra_reindexed",
+            "tree_hash",
+            "length",
+            "order",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(root);
+            retain_final_config_fixture(root, &mut index, &mut lcar, &command);
+            assert!(lcar_fixture_contracts(root, &index, &command).is_empty());
+            let relative = "snapshots/config-final/nested/settings.cfg";
+            let physical = root.join(format!("payloads/bootstrap-proof.lcar-artifact/{relative}"));
+            match mutation {
+                "none" => {}
+                "tamper" => fs::write(&physical, b"tampered").unwrap(),
+                "rehash" => rewrite_lcar_artifact(
+                    root,
+                    &mut index.entries,
+                    &mut lcar,
+                    relative,
+                    b"tampered",
+                ),
+                "missing" | "missing_reindexed" => {
+                    let path = "snapshots/config-final/empty";
+                    fs::remove_file(
+                        root.join(format!("payloads/bootstrap-proof.lcar-artifact/{path}")),
+                    )
+                    .unwrap();
+                    if mutation == "missing_reindexed" {
+                        lcar["artifacts"]
+                            .as_array_mut()
+                            .unwrap()
+                            .retain(|entry| entry["path"] != path);
+                        index.entries.retain(|entry| {
+                            entry.path != format!("payloads/bootstrap-proof.lcar-artifact/{path}")
+                        });
+                    }
+                }
+                "extra" | "extra_reindexed" => {
+                    let path = "snapshots/config-final/extra";
+                    fs::write(
+                        root.join(format!("payloads/bootstrap-proof.lcar-artifact/{path}")),
+                        b"",
+                    )
+                    .unwrap();
+                    if mutation == "extra_reindexed" {
+                        lcar["artifacts"].as_array_mut().unwrap().push(serde_json::json!({"role": "final_config_snapshot_file", "path": path, "sha256": hex_sha256(b""), "bytes": 0}));
+                        write_bundle_entry(
+                            root,
+                            &mut index.entries,
+                            &format!("payloads/bootstrap-proof.lcar-artifact/{path}"),
+                            "bootstrap-proof.lcar-artifact",
+                            &command,
+                            b"",
+                        );
+                        let entry = index.entries.last_mut().unwrap();
+                        entry.producing_gate = "bootstrap-proof".into();
+                        entry.mime = "application/octet-stream".into();
+                    }
+                }
+                _ => {
+                    let bytes = read_lcar_artifact(root, "snapshots/config-final.json").unwrap();
+                    let mut snapshot: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    match mutation {
+                        "tree_hash" => {
+                            snapshot["entries"][1]["sha256"] = serde_json::json!("a".repeat(64))
+                        }
+                        "length" => snapshot["entries"][1]["bytes"] = serde_json::json!(999),
+                        "order" => snapshot["entries"].as_array_mut().unwrap().reverse(),
+                        _ => unreachable!(),
+                    }
+                    let snapshot = lcar_tree_fixture("final_config", snapshot["entries"].clone());
+                    lcar["provenance"]["final_config_tree_sha256"] =
+                        snapshot["tree_sha256"].clone();
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "snapshots/config-final.json",
+                        &serde_json::to_vec(&snapshot).unwrap(),
+                    );
+                }
+            }
+            lcar["artifacts"]
+                .as_array_mut()
+                .unwrap()
+                .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+            publish_lcar_fixture(root, &mut index, &lcar);
+            assert_eq!(
+                lcar_fixture_contracts(root, &index, &command).is_empty(),
+                mutation == "none",
+                "{mutation}"
+            );
+            lcar["passed"] = serde_json::json!(false);
+            lcar["first_failed_contract"] = serde_json::json!("missing_teardown");
+            let teardown = "run/teardown-complete.json";
+            fs::remove_file(
+                root.join(format!("payloads/bootstrap-proof.lcar-artifact/{teardown}")),
+            )
+            .unwrap();
+            lcar["artifacts"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|entry| entry["path"] != teardown);
+            index.entries.retain(|entry| {
+                entry.path != format!("payloads/bootstrap-proof.lcar-artifact/{teardown}")
+            });
+            write_bundle_entry(
+                root,
+                &mut index.entries,
+                "payloads/bootstrap-proof.failure-lcar/failure-lcar-v2.json",
+                "bootstrap-proof.failure-lcar",
+                &command,
+                &serde_json::to_vec(&lcar).unwrap(),
+            );
+            index.entries.last_mut().unwrap().producing_gate = "bootstrap-proof".into();
+            let authority =
+                serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+            let mut contracts = Vec::new();
+            validate_bootstrap_failure_lcar(root, &index, &authority, &command, &mut contracts);
+            assert_eq!(
+                contracts.is_empty(),
+                mutation == "none",
+                "{mutation}: {contracts:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn bootstrap_v2_rejects_rehashed_input_tampering() {
+        for mutation in [
+            "steps",
+            "receipt_identity",
+            "applied_seed",
+            "trace_seed",
+            "trace_payload",
+            "trace_newline",
+            "input_identity",
+            "provenance",
+            "content",
+            "initial_config",
+            "production",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(root);
+            assert!(lcar_fixture_contracts(root, &index, &command).is_empty());
+            let receipt_bytes = read_lcar_artifact(root, "run/resolved-scenario.json").unwrap();
+            let mut receipt: uqm_rust::automation::lifecycle::ResolvedScenarioRecord =
+                serde_json::from_slice(&receipt_bytes).unwrap();
+            match mutation {
+                "steps" => {
+                    let mut value = serde_json::to_value(&receipt.scenario).unwrap();
+                    value["steps"][0]["count"] = serde_json::json!(11);
+                    receipt.scenario = serde_json::from_value(value).unwrap();
+                    receipt.replay_identity = receipt.scenario.replay_identity().unwrap();
+                    receipt.validate().unwrap();
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "run/resolved-scenario.json",
+                        &serde_json::to_vec(&receipt).unwrap(),
+                    );
+                }
+                "receipt_identity" => {
+                    receipt.replay_identity = "a".repeat(64);
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "run/resolved-scenario.json",
+                        &serde_json::to_vec(&receipt).unwrap(),
+                    );
+                }
+                "applied_seed" => {
+                    lcar["seed"] = serde_json::json!(42);
+                    lcar["input_identity"] =
+                        serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+                }
+                "trace_newline" => {
+                    let mut bytes = read_lcar_artifact(root, "run/trace.jsonl").unwrap();
+                    assert_eq!(bytes.pop(), Some(b'\n'));
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "run/trace.jsonl",
+                        &bytes,
+                    );
+                }
+                "trace_seed" | "trace_payload" => {
+                    let bytes = read_lcar_artifact(root, "run/trace.jsonl").unwrap();
+                    let mut records: Vec<serde_json::Value> = std::str::from_utf8(&bytes)
+                        .unwrap()
+                        .lines()
+                        .map(|line| serde_json::from_str(line).unwrap())
+                        .collect();
+                    let last = records.pop().unwrap();
+                    let mut record = last.clone();
+                    record["kind"] = serde_json::json!(if mutation == "trace_seed" {
+                        "seed_application"
+                    } else {
+                        "input_tick"
+                    });
+                    record["seed_application"] =
+                        serde_json::json!({"domain": "super_melee_menu", "seed": 42});
+                    records.push(record);
+                    records.push(last);
+                    for (sequence, record) in records.iter_mut().enumerate() {
+                        record["sequence"] = serde_json::json!(sequence);
+                    }
+                    let text = records
+                        .iter()
+                        .map(serde_json::Value::to_string)
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n";
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "run/trace.jsonl",
+                        text.as_bytes(),
+                    );
+                }
+                "input_identity" => lcar["input_identity"] = serde_json::json!("a".repeat(64)),
+                "provenance" => {
+                    lcar["provenance"]["content_tree_sha256"] = serde_json::json!("a".repeat(64));
+                    lcar["input_identity"] =
+                        serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+                }
+                "content" => rewrite_lcar_artifact(
+                    root,
+                    &mut index.entries,
+                    &mut lcar,
+                    "snapshots/sc2/content/version",
+                    b"changed content",
+                ),
+                "initial_config" => {
+                    let tree = lcar_tree_fixture(
+                        "initial_config",
+                        serde_json::json!([{"path": "settings.cfg", "bytes": 0, "sha256": hex_sha256(b"")} ]),
+                    );
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "snapshots/config-initial.json",
+                        &serde_json::to_vec(&tree).unwrap(),
+                    );
+                    lcar["provenance"]["initial_config_tree_sha256"] = tree["tree_sha256"].clone();
+                    lcar["input_identity"] =
+                        serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+                }
+                "production" => {
+                    let mut production: serde_json::Value = serde_json::from_slice(
+                        &read_lcar_artifact(root, "snapshots/production-manifest.json").unwrap(),
+                    )
+                    .unwrap();
+                    production["git_head"] = serde_json::json!("b".repeat(40));
+                    let bytes = serde_json::to_vec(&production).unwrap();
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "snapshots/production-manifest.json",
+                        &bytes,
+                    );
+                    rewrite_bundle_entry(
+                        root,
+                        &mut index.entries,
+                        "bootstrap-proof.package-manifest",
+                        &bytes,
+                    );
+                    lcar["provenance"]["production_manifest_sha256"] =
+                        serde_json::json!(hex_sha256(&bytes));
+                    lcar["input_identity"] =
+                        serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+                }
+                _ => unreachable!(),
+            }
+            publish_lcar_fixture(root, &mut index, &lcar);
+            assert!(
+                !lcar_fixture_contracts(root, &index, &command).is_empty(),
+                "accepted {mutation}"
+            );
+            lcar["passed"] = serde_json::json!(false);
+            lcar["first_failed_contract"] = serde_json::json!("nonzero_child");
+            lcar["process"]["exit_code"] = serde_json::json!(1);
+            write_bundle_entry(
+                root,
+                &mut index.entries,
+                "payloads/bootstrap-proof.failure-lcar/failure-lcar-v2.json",
+                "bootstrap-proof.failure-lcar",
+                &command,
+                &serde_json::to_vec(&lcar).unwrap(),
+            );
+            index.entries.last_mut().unwrap().producing_gate = "bootstrap-proof".into();
+            let authority =
+                serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+            let mut contracts = Vec::new();
+            validate_bootstrap_failure_lcar(root, &index, &authority, &command, &mut contracts);
+            assert!(
+                !contracts.is_empty(),
+                "failure envelope accepted {mutation}"
+            );
+        }
+    }
+
+    #[test]
+    fn bootstrap_v2_selected_and_applied_seeds_match_the_typed_script() {
+        for seed in [0_u32, 42, u32::MAX] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(root);
+            let mut doc: serde_json::Value =
+                serde_json::from_slice(include_bytes!("../../../scripts/main-menu-v1.json"))
+                    .unwrap();
+            doc["version"] = serde_json::json!(2);
+            doc["seed"] = serde_json::json!(seed);
+            doc["fixture"] = serde_json::json!("seed-fixture");
+            let bytes = serde_json::to_vec(&doc).unwrap();
+            let script = uqm_rust::automation::script::validate_script(
+                uqm_rust::automation::script::parse_script(&bytes, "script.json").unwrap(),
+                "script.json",
+            )
+            .unwrap();
+            let scenario = script.resolved();
+            assert_eq!(scenario.requested_seed, seed);
+            assert_eq!(scenario.seed, seed.max(1));
+            let receipt = uqm_rust::automation::lifecycle::ResolvedScenarioRecord {
+                replay_identity: scenario.replay_identity().unwrap(),
+                scenario,
+            };
+            rewrite_bundle_entry(root, &mut index.entries, "bootstrap-proof.profile", &bytes);
+            rewrite_lcar_artifact(
+                root,
+                &mut index.entries,
+                &mut lcar,
+                "snapshots/script.json",
+                &bytes,
+            );
+            rewrite_lcar_artifact(
+                root,
+                &mut index.entries,
+                &mut lcar,
+                "run/resolved-scenario.json",
+                &serde_json::to_vec(&receipt).unwrap(),
+            );
+            let trace = read_lcar_artifact(root, "run/trace.jsonl").unwrap();
+            let mut records: Vec<serde_json::Value> = std::str::from_utf8(&trace)
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            let last = records.pop().unwrap();
+            for domain in ["super_melee_menu", "super_melee_battle", "new_game"] {
+                let mut record = last.clone();
+                record["kind"] = serde_json::json!("seed_application");
+                record["sequence"] = serde_json::json!(records.len());
+                record["seed_application"] =
+                    serde_json::json!({"domain": domain, "seed": script.seed()});
+                records.push(record);
+            }
+            let mut last = last;
+            last["sequence"] = serde_json::json!(records.len());
+            records.push(last);
+            let trace = records
+                .iter()
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n";
+            rewrite_lcar_artifact(
+                root,
+                &mut index.entries,
+                &mut lcar,
+                "run/trace.jsonl",
+                trace.as_bytes(),
+            );
+            lcar["seed"] = serde_json::json!(script.seed());
+            lcar["provenance"]["script_sha256"] = serde_json::json!(hex_sha256(&bytes));
+            lcar["input_identity"] =
+                serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+            publish_lcar_fixture(root, &mut index, &lcar);
+            // The authority profile pin is a separate check. This tests the
+            // consumer contract for an explicitly selected validated script.
+            assert_eq!(
+                lcar_fixture_contracts(root, &index, &command),
+                Vec::<String>::new()
+            );
+            let wrong = trace.replace(&format!("\"seed\":{}", script.seed()), "\"seed\":2");
+            rewrite_lcar_artifact(
+                root,
+                &mut index.entries,
+                &mut lcar,
+                "run/trace.jsonl",
+                wrong.as_bytes(),
+            );
+            publish_lcar_fixture(root, &mut index, &lcar);
+            assert!(!lcar_fixture_contracts(root, &index, &command).is_empty());
+        }
+    }
+
+    #[test]
+    fn bootstrap_v2_relocated_bundle_never_substitutes_workspace_inputs() {
+        let temp = tempfile::tempdir().unwrap();
+        let original = temp.path().join("original");
+        let relocated = temp.path().join("relocated");
+        let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(&original);
+        retain_final_config_fixture(&original, &mut index, &mut lcar, &command);
+        let historical = original.join("payloads/bootstrap-proof.lcar-artifact");
+        for operand in lcar["command"].as_array_mut().unwrap() {
+            *operand = serde_json::json!(operand
+                .as_str()
+                .unwrap()
+                .replace("/tmp/bootstrap-output", &historical.display().to_string()));
+        }
+        publish_lcar_fixture(&original, &mut index, &lcar);
+        fs::rename(&original, &relocated).unwrap();
+        assert!(!original.exists());
+        assert_eq!(
+            lcar_fixture_contracts(&relocated, &index, &command),
+            Vec::<String>::new()
+        );
+        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        for (position, operand) in [
+            (
+                1,
+                format!("--contentdir={}", workspace.join("sc2/content").display()),
+            ),
+            (
+                3,
+                format!(
+                    "--automation-script={}",
+                    workspace.join("rust/scripts/main-menu-v1.json").display()
+                ),
+            ),
+            (1, "--contentdir=/elsewhere/snapshots/sc2/content".into()),
+            (0, "/elsewhere/snapshots/uqm".into()),
+            (0, "/elsewhere/../snapshots/uqm".into()),
+        ] {
+            let mut forged = lcar.clone();
+            forged["command"][position] = serde_json::json!(operand);
+            publish_lcar_fixture(&relocated, &mut index, &forged);
+            assert!(lcar_fixture_contracts(&relocated, &index, &command)
+                .iter()
+                .any(|contract| contract.ends_with(".command")));
+        }
+        publish_lcar_fixture(&relocated, &mut index, &lcar);
+        let path = relocated.join("payloads/bootstrap-proof.lcar-artifact/snapshots/script.json");
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            fs::read(workspace.join("rust/scripts/main-menu-v1.json")).unwrap()
+        );
+        fs::remove_file(path).unwrap();
+        assert!(!lcar_fixture_contracts(&relocated, &index, &command).is_empty());
+    }
+
+    #[test]
+    fn bootstrap_v2_content_inventory_is_exact_even_for_empty_files() {
+        for mutation in [
+            "extra_file",
+            "extra_indexed_file",
+            "missing_empty",
+            "wrong_role",
+            "outside_path",
+            "non_normal_path",
+            "wrong_tree_role",
+            "wrong_tree_hash",
+            "duplicate_tree_path",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(root);
+            assert_eq!(
+                lcar_fixture_contracts(root, &index, &command),
+                Vec::<String>::new()
+            );
+            match mutation {
+                "extra_file" | "extra_indexed_file" => {
+                    let path = "snapshots/sc2/content/extra.tmp";
+                    let full = format!("payloads/bootstrap-proof.lcar-artifact/{path}");
+                    fs::write(root.join(&full), b"").unwrap();
+                    if mutation == "extra_indexed_file" {
+                        write_bundle_entry(
+                            root,
+                            &mut index.entries,
+                            &full,
+                            "bootstrap-proof.lcar-artifact",
+                            &command,
+                            b"",
+                        );
+                        index.entries.last_mut().unwrap().producing_gate = "bootstrap-proof".into();
+                        lcar["artifacts"].as_array_mut().unwrap().push(serde_json::json!({"role": "content_snapshot_file", "path": path, "sha256": hex_sha256(b""), "bytes": 0}));
+                        lcar["artifacts"]
+                            .as_array_mut()
+                            .unwrap()
+                            .sort_by(|a, b| a["path"].as_str().cmp(&b["path"].as_str()));
+                    }
+                }
+                "missing_empty" => fs::remove_file(
+                    root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/sc2/content/empty"),
+                )
+                .unwrap(),
+                "wrong_role" | "outside_path" | "non_normal_path" => {
+                    let entry = lcar["artifacts"]
+                        .as_array_mut()
+                        .unwrap()
+                        .iter_mut()
+                        .find(|entry| entry["path"] == "snapshots/sc2/content/empty")
+                        .unwrap();
+                    if mutation == "wrong_role" {
+                        entry["role"] = serde_json::json!("stdout_log");
+                    } else {
+                        entry["path"] = serde_json::json!(if mutation == "outside_path" {
+                            "snapshots/sc2/content/../../outside"
+                        } else {
+                            "snapshots/sc2/content/./empty"
+                        });
+                    }
+                }
+                "wrong_tree_role" | "wrong_tree_hash" | "duplicate_tree_path" => {
+                    let mut tree: serde_json::Value = serde_json::from_slice(
+                        &read_lcar_artifact(root, "snapshots/content-identity.json").unwrap(),
+                    )
+                    .unwrap();
+                    match mutation {
+                        "wrong_tree_role" => {
+                            tree["root_role"] = serde_json::json!("initial_config")
+                        }
+                        "wrong_tree_hash" => {
+                            tree["tree_sha256"] = serde_json::json!("a".repeat(64))
+                        }
+                        _ => {
+                            let duplicate = tree["entries"][0].clone();
+                            tree["entries"].as_array_mut().unwrap().push(duplicate);
+                            tree = lcar_tree_fixture("content", tree["entries"].clone());
+                        }
+                    }
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "snapshots/content-identity.json",
+                        &serde_json::to_vec(&tree).unwrap(),
+                    );
+                    lcar["provenance"]["content_tree_sha256"] = tree["tree_sha256"].clone();
+                    let receipt: uqm_rust::automation::lifecycle::ResolvedScenarioRecord =
+                        serde_json::from_slice(
+                            &read_lcar_artifact(root, "run/resolved-scenario.json").unwrap(),
+                        )
+                        .unwrap();
+                    lcar["input_identity"] =
+                        serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+                }
+                _ => unreachable!(),
+            }
+            publish_lcar_fixture(root, &mut index, &lcar);
+            assert!(
+                !lcar_fixture_contracts(root, &index, &command).is_empty(),
+                "accepted {mutation}"
+            );
+        }
+    }
+
+    #[test]
+    fn bootstrap_v2_rehashed_script_and_receipt_cannot_replace_the_authority_profile() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let (mut index, mut lcar, command, _) = successful_bootstrap_bundle(root);
+        let authority = serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        assert_eq!(
+            validate_successful_builtin_gate(root, &index, &authority, "bootstrap-proof"),
+            Vec::<String>::new()
+        );
+        let mut doc: serde_json::Value =
+            serde_json::from_slice(&read_lcar_artifact(root, "snapshots/script.json").unwrap())
+                .unwrap();
+        doc["steps"][0]["count"] = serde_json::json!(11);
+        let bytes = serde_json::to_vec(&doc).unwrap();
+        let script = uqm_rust::automation::script::validate_script(
+            uqm_rust::automation::script::parse_script(&bytes, "script.json").unwrap(),
+            "script.json",
+        )
+        .unwrap();
+        let scenario = script.resolved();
+        let receipt = uqm_rust::automation::lifecycle::ResolvedScenarioRecord {
+            replay_identity: scenario.replay_identity().unwrap(),
+            scenario,
+        };
+        rewrite_bundle_entry(root, &mut index.entries, "bootstrap-proof.profile", &bytes);
+        rewrite_lcar_artifact(
+            root,
+            &mut index.entries,
+            &mut lcar,
+            "snapshots/script.json",
+            &bytes,
+        );
+        rewrite_lcar_artifact(
+            root,
+            &mut index.entries,
+            &mut lcar,
+            "run/resolved-scenario.json",
+            &serde_json::to_vec(&receipt).unwrap(),
+        );
+        lcar["provenance"]["script_sha256"] = serde_json::json!(hex_sha256(&bytes));
+        lcar["input_identity"] =
+            serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
+        publish_lcar_fixture(root, &mut index, &lcar);
+        assert_eq!(
+            lcar_fixture_contracts(root, &index, &command),
+            Vec::<String>::new()
+        );
+        assert!(
+            validate_successful_builtin_gate(root, &index, &authority, "bootstrap-proof")
+                .iter()
+                .any(|contract| contract == "evidence.builtin.bootstrap-proof.profile_content")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bootstrap_v2_retained_content_never_follows_symlinks() {
+        use std::os::unix::fs::symlink;
+        for directory in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().join("bundle");
+            let (index, _, command, _) = successful_bootstrap_bundle(&root);
+            let retained =
+                root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/sc2/content");
+            let outside = temp.path().join("outside");
+            if directory {
+                fs::rename(&retained, &outside).unwrap();
+                symlink(&outside, &retained).unwrap();
+            } else {
+                fs::rename(retained.join("version"), &outside).unwrap();
+                symlink(&outside, retained.join("version")).unwrap();
+            }
+            let contracts =
+                with_snapshot(&root, || lcar_fixture_contracts(&root, &index, &command)).unwrap();
+            assert!(contracts
+                .iter()
+                .any(|contract| contract.ends_with(".inventory")));
+        }
+    }
+
+    fn lcar_tree_fixture(role: &str, entries: serde_json::Value) -> serde_json::Value {
+        let mut material = String::new();
+        for entry in entries.as_array().unwrap() {
+            material.push_str(&format!(
+                "{}\0{}\0{}\n",
+                entry["path"].as_str().unwrap(),
+                entry["sha256"].as_str().unwrap(),
+                entry["bytes"].as_u64().unwrap()
+            ));
+        }
+        serde_json::json!({"schema": "uqm-tree-identity-v1", "root_role": role, "tree_sha256": hex_sha256(material.as_bytes()), "entries": entries})
+    }
+
+    fn lcar_input_fixture(manifest: &serde_json::Value, scenario_identity: &str) -> String {
+        let mut material = serde_json::json!({"schema": "uqm-replay-input-v1", "scenario_identity": scenario_identity});
+        for field in [
+            "seed",
+            "git_head",
+            "target",
+            "profile",
+            "features",
+            "renderer",
+            "environment",
+        ] {
+            material[field] = manifest[field].clone();
+        }
+        for field in [
+            "production_manifest_sha256",
+            "executable_sha256",
+            "script_sha256",
+            "content_tree_sha256",
+            "initial_config_tree_sha256",
+        ] {
+            material[field] = manifest["provenance"][field].clone();
+        }
+        hex_sha256(&serde_json::to_vec(&material).unwrap())
     }
 
     fn successful_bootstrap_bundle(
@@ -14067,6 +15207,21 @@ mod tests {
             );
             index.entries.last_mut().unwrap().producing_gate = "bootstrap-proof".into();
         }
+        let script = uqm_rust::automation::script::validate_script(
+            uqm_rust::automation::script::parse_script(profile, "fixture.json").unwrap(),
+            "fixture.json",
+        )
+        .unwrap();
+        let scenario = script.resolved();
+        let resolved_record = uqm_rust::automation::lifecycle::ResolvedScenarioRecord {
+            replay_identity: scenario.replay_identity().unwrap(),
+            scenario,
+        };
+        let content_entries = serde_json::json!([
+            {"path": "empty", "sha256": hex_sha256(b""), "bytes": 0},
+            {"path": "version", "sha256": hex_sha256(b"content fixture"), "bytes": 15}
+        ]);
+        let content_snapshot = lcar_tree_fixture("content", content_entries);
         let empty_tree_hash = hex_sha256(b"");
         let tree = |root_role: &str| {
             serde_json::to_vec(&serde_json::json!({
@@ -14169,21 +15324,7 @@ mod tests {
             (
                 "resolved_scenario",
                 "run/resolved-scenario.json",
-                serde_json::to_vec(&serde_json::json!({
-                    "scenario": {
-                        "schema": "uqm-resolved-scenario-v1",
-                        "scenario_version": 2,
-                        "name": "fixture",
-                        "fixture": "fixture",
-                        "seed": 0,
-                        "step_count": 1,
-                        "max_input_ticks": 2,
-                        "max_presentations": 2,
-                        "max_wallclock_seconds": 1
-                    },
-                    "replay_identity": "0".repeat(64)
-                }))
-                .expect("resolved scenario fixture"),
+                serde_json::to_vec(&resolved_record).unwrap(),
             ),
             (
                 "teardown_receipt",
@@ -14204,12 +15345,22 @@ mod tests {
             (
                 "content_identity_snapshot",
                 "snapshots/content-identity.json",
-                tree("content"),
+                serde_json::to_vec(&content_snapshot).unwrap(),
             ),
             (
                 "production_manifest_snapshot",
                 "snapshots/production-manifest.json",
                 package_manifest.clone(),
+            ),
+            (
+                "content_snapshot_file",
+                "snapshots/sc2/content/empty",
+                Vec::new(),
+            ),
+            (
+                "content_snapshot_file",
+                "snapshots/sc2/content/version",
+                b"content fixture".to_vec(),
             ),
             ("script_snapshot", "snapshots/script.json", profile.to_vec()),
             ("executable_snapshot", "snapshots/uqm", executable.to_vec()),
@@ -14257,14 +15408,14 @@ mod tests {
             .unwrap()
             .sha256
             .clone();
-        let lcar = serde_json::json!({
-            "schema": "uqm-lcar-v1",
+        let mut lcar = serde_json::json!({
+            "schema": "uqm-lcar-v2",
             "passed": true,
             "first_failed_contract": null,
             "git_head": index.source_sha,
             "command": [
                 "/tmp/bootstrap-output/snapshots/uqm",
-                "--contentdir=/tmp/repository/sc2/content",
+                "--contentdir=/tmp/bootstrap-output/snapshots/sc2/content",
                 "--configdir=/tmp/bootstrap-output/config",
                 "--automation-script=/tmp/bootstrap-output/snapshots/script.json",
                 "--automation-output=/tmp/bootstrap-output/run",
@@ -14277,12 +15428,12 @@ mod tests {
             "profile": authority.package.profile,
             "features": authority.package.features,
             "renderer": "sdl2-software-dummy",
-            "seed": uqm_rust::automation::AUTOMATION_SEED,
+            "seed": script.seed(),
             "provenance": {
                 "production_manifest_sha256": package_hash,
                 "executable_sha256": executable_hash,
                 "script_sha256": profile_hash,
-                "content_tree_sha256": empty_tree_hash,
+                "content_tree_sha256": content_snapshot["tree_sha256"],
                 "initial_config_tree_sha256": empty_tree_hash,
                 "final_config_tree_sha256": empty_tree_hash
             },
@@ -14307,10 +15458,12 @@ mod tests {
             },
             "artifacts": artifacts
         });
+        lcar["input_identity"] =
+            serde_json::json!(lcar_input_fixture(&lcar, &resolved_record.replay_identity));
         write_bundle_entry(
             root,
             &mut index.entries,
-            "payloads/bootstrap-proof.lcar/lcar-v1.json",
+            "payloads/bootstrap-proof.lcar/lcar-v2.json",
             "bootstrap-proof.lcar",
             &run_command,
             &serde_json::to_vec(&lcar).unwrap(),
@@ -14340,7 +15493,7 @@ mod tests {
         let validate_command = vec![
             run_command[0].clone(),
             "validate".into(),
-            "/tmp/evidence/bootstrap-proof/proof-workspace/output/lcar-v1.json".into(),
+            "/tmp/evidence/bootstrap-proof/proof-workspace/output/lcar-v2.json".into(),
         ];
         for (step, command) in [
             ("build-runner", build.as_slice()),
@@ -14636,7 +15789,7 @@ mod tests {
             (Some(1), None, None),
         );
         let run_stderr =
-            b"proof failed; retained /tmp/evidence/bootstrap-proof/proof-workspace/output/failure-lcar-v1.json\n";
+            b"proof failed; retained /tmp/evidence/bootstrap-proof/proof-workspace/output/failure-lcar-v2.json\n";
         rewrite_bundle_path(
             &root,
             &mut failed_run.entries,
@@ -14650,7 +15803,7 @@ mod tests {
         write_bundle_entry(
             &root,
             &mut failed_run.entries,
-            "payloads/bootstrap-proof.failure-lcar/failure-lcar-v1.json",
+            "payloads/bootstrap-proof.failure-lcar/failure-lcar-v2.json",
             "bootstrap-proof.failure-lcar",
             &run_command,
             &serde_json::to_vec(&failure_lcar).unwrap(),
@@ -14873,6 +16026,10 @@ mod tests {
         missing_teardown_index.entries.retain(|entry| {
             entry.path != "payloads/bootstrap-proof.lcar-artifact/run/teardown-complete.json"
         });
+        fs::remove_file(
+            root.join("payloads/bootstrap-proof.lcar-artifact/run/teardown-complete.json"),
+        )
+        .unwrap();
         rewrite_bundle_entry(
             &root,
             &mut missing_teardown_index.entries,
@@ -14906,6 +16063,11 @@ mod tests {
         )
         .iter()
         .any(|contract| contract == "evidence.builtin.bootstrap-proof.failure_lcar.result"));
+        fs::write(
+            root.join("payloads/bootstrap-proof.lcar-artifact/run/teardown-complete.json"),
+            &teardown,
+        )
+        .unwrap();
         let config_bytes = b"retained cleanup state\n";
         let config_hash = hex_sha256(config_bytes);
         let mut config_tree_hasher = Sha256::new();
@@ -14972,6 +16134,28 @@ mod tests {
         let retained_config_entry = config_cleanup_index.entries.last_mut().unwrap();
         retained_config_entry.producing_gate = "bootstrap-proof".into();
         retained_config_entry.mime = "application/octet-stream".into();
+        config_cleanup_lcar["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "role": "final_config_snapshot_file", "path": "snapshots/config-final/settings.cfg",
+                "sha256": config_hash, "bytes": config_bytes.len()
+            }));
+        config_cleanup_lcar["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+        write_bundle_entry(
+            &root,
+            &mut config_cleanup_index.entries,
+            "payloads/bootstrap-proof.lcar-artifact/snapshots/config-final/settings.cfg",
+            "bootstrap-proof.lcar-artifact",
+            &run_command,
+            config_bytes,
+        );
+        let snapshot_entry = config_cleanup_index.entries.last_mut().unwrap();
+        snapshot_entry.producing_gate = "bootstrap-proof".into();
+        snapshot_entry.mime = "application/octet-stream".into();
         rewrite_bundle_entry(
             &root,
             &mut config_cleanup_index.entries,
@@ -15012,6 +16196,17 @@ mod tests {
         )
         .iter()
         .any(|contract| contract == "evidence.builtin.bootstrap-proof.failure_lcar.snapshots"));
+        fs::remove_file(root.join("payloads/bootstrap-proof.lcar-artifact/config/settings.cfg"))
+            .unwrap();
+        fs::remove_file(
+            root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/config-final/settings.cfg"),
+        )
+        .unwrap();
+        fs::write(
+            root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/config-final.json"),
+            serde_json::to_vec(&lcar_tree_fixture("final_config", serde_json::json!([]))).unwrap(),
+        )
+        .unwrap();
         let mut forged_inventory = failure_lcar.clone();
         forged_inventory["artifacts"].as_array_mut().unwrap().pop();
         rewrite_bundle_entry(
@@ -17388,6 +18583,7 @@ mod tests {
                 "tools-component-llvm-tools-preview.result.json",
                 "native-content.result.json",
                 "xtask-build.result.json",
+                "policy-admission.result.json",
                 "source-revalidation.result.json",
             ],
         );
@@ -17525,7 +18721,11 @@ mod tests {
         add_successful_workflow_receipts(
             temporary.path(),
             &mut index,
-            &["xtask-build.result.json", "ci-run.result.json"],
+            &[
+                "xtask-build.result.json",
+                "policy-admission.result.json",
+                "ci-run.result.json",
+            ],
         );
         let validate = |index: &TransportIndex| {
             let mut contracts = Vec::new();
@@ -17593,6 +18793,20 @@ mod tests {
                     }
                 })
                 .collect(),
+            autoplay: super::super::plan::derive_autoplay(None),
+            selection: Some(super::super::controller::SelectionBinding {
+                schema: "uqm-s4-selection-v1".into(),
+                event: super::super::controller::WorkflowEvent::Push,
+                source_sha: "a".repeat(40),
+                controller_sha: "b".repeat(40),
+                base_sha: None,
+                merge_base_sha: None,
+                changed_paths_z: Vec::new(),
+                authority_sha256: hex_sha256(
+                    &fs::read(temp.path().join("authority-snapshot.json")).unwrap(),
+                ),
+                autoplay: super::super::plan::derive_autoplay(None),
+            }),
         };
         fs::write(
             temp.path().join("ci-plan.json"),
@@ -17622,6 +18836,7 @@ mod tests {
                 "bootstrap-apt-install.result.json",
                 "bootstrap-rustup.result.json",
                 "bootstrap-xtask-build.result.json",
+                "policy-admission.result.json",
                 "ci-plan.result.json",
             ],
         );
@@ -19057,7 +20272,7 @@ mod tests {
                 format!("--configdir={collection}/config"),
                 format!("--contentdir={collection}/inputs/content"),
                 format!("--automation-script={collection}/inputs/linked-playable-v1.json"),
-                format!("--automation-output={collection}/automation"),
+                format!("--automation-output={collection}/runtime-automation"),
                 format!("--native-window-proof={collection}/native-window-proof.json"),
             ],
             environment: std::collections::BTreeMap::from([(
@@ -19156,6 +20371,20 @@ mod tests {
             ) {
                 entry.producing_gate = gate.id.clone();
             }
+        }
+        for prerequisite in gate
+            .steps
+            .iter()
+            .take_while(|candidate| candidate.id != step.id)
+        {
+            write_builtin_step_fixture(
+                bundle.path(),
+                &mut entries,
+                &gate.id,
+                &prerequisite.id,
+                &prerequisite.command,
+                (Some(0), None, None),
+            );
         }
         write_builtin_step_fixture(
             bundle.path(),
@@ -19510,7 +20739,7 @@ mod tests {
                 "--configdir=/collection/config".to_string(),
                 "--contentdir=/collection/inputs/content".to_string(),
                 "--automation-script=/collection/inputs/linked-playable-v1.json".to_string(),
-                "--automation-output=/collection/automation".to_string(),
+                "--automation-output=/collection/runtime-automation".to_string(),
                 "--native-window-proof=/collection/native-window-proof.json".to_string(),
             ],
             environment: std::collections::BTreeMap::from([(
@@ -19683,6 +20912,11 @@ mod tests {
         }
         proof
             .record_screenshot(NativeScreenshot {
+                original_os_capture: uqm_rust::automation::NativeRetainedInput {
+                    relative_path: "screenshots/stable.os.png".into(),
+                    byte_length: 128,
+                    sha256: "a".repeat(64),
+                },
                 stage: NativeScreenshotStage::Stable,
                 binding: binding.clone(),
                 post_capture_observation: NativeWindowObservation {
@@ -19723,6 +20957,11 @@ mod tests {
                 .unwrap();
         }
         let screenshot = |committed_presentation, input_events, battle_frames| NativeScreenshot {
+            original_os_capture: uqm_rust::automation::NativeRetainedInput {
+                relative_path: "screenshots/playable.os.png".into(),
+                byte_length: 128,
+                sha256: "a".repeat(64),
+            },
             stage: NativeScreenshotStage::Playable,
             binding: binding.clone(),
             post_capture_observation: NativeWindowObservation {

@@ -9,7 +9,7 @@
 //! The coordinator is a process-wide singleton, so this lives in its own
 //! test binary where it can be initialised once and driven deterministically.
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use uqm_rust::automation::coordinator::{
     Coordinator, MAIN_MENU_READINESS_OBSERVATION, MAIN_MENU_READINESS_SUBJECT,
@@ -31,20 +31,19 @@ const SCRIPT: &str = r#"{
   ]
 }"#;
 
-fn coordinator_started() -> bool {
+fn coordinator_started(output_root: &Path) -> bool {
     let document = parse_script(SCRIPT.as_bytes(), "readiness-trace.json")
         .expect("the script fixture must parse");
     let script = validate_script(document, "readiness-trace.json").expect("and must validate");
-    let output_root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("readiness-trace");
-    std::fs::create_dir_all(&output_root).expect("evidence root");
-    Coordinator::init(script, output_root);
+    Coordinator::init(script, output_root.to_path_buf());
     Coordinator::is_active()
 }
 
 #[test]
 fn main_menu_ready_emits_readiness_record() {
+    let evidence = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).expect("fresh evidence root");
     assert!(
-        coordinator_started(),
+        coordinator_started(evidence.path()),
         "a validated script must activate the coordinator"
     );
 

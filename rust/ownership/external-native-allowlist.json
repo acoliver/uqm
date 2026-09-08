@@ -68,6 +68,16 @@
   ],
   "direct_libraries": [
     {
+      "id": "sandbox",
+      "purpose": "Per-process kernel restrictions for native automation candidates, protecting controller-owned shared input and diagnostic evidence.",
+      "license": "platform-system-library",
+      "provenance": "Apple macOS SDK sandbox.h and operating-system libsandbox.1.dylib.",
+      "security_owner": "automation",
+      "update_policy": "Supplied and patched by macOS. Reject native launches if profile installation fails; do not vendor or patch the library.",
+      "toolchain_impact": "Linked from the macOS SDK. Used only by the Rust native automation OS adapter.",
+      "targets": ["macos-aarch64", "macos-x86_64"]
+    },
+    {
       "id": "z",
       "purpose": "zlib decompression, required by libpng and by packaged content.",
       "license": "Zlib",

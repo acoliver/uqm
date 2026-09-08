@@ -223,6 +223,7 @@ pub(crate) fn validate_semantics(
         rule_no_direct_gate_commands(document),
         rule_no_cache_action(document),
         rule_always_uploaded_evidence(document),
+        rule_autoplay_runner(document, authority),
         rule_content_addressed_transport(document, authority),
     ]
 }
@@ -317,11 +318,11 @@ fn rule_checkout_contract(document: &Yaml) -> RuleResult {
             }
         }
     }
-    if source_checkouts == 2 && controller_checkouts == 2 && failures.is_empty() {
+    if source_checkouts == 3 && controller_checkouts == 3 && failures.is_empty() {
         RuleResult {
             rule: rule.into(),
             passed: true,
-            detail: "two source checkouts pin the exact PR head and two controller checkouts pin the exact base commit; merge aggregation executes without a source checkout".into(),
+            detail: "three source checkouts pin the exact PR head and three controller checkouts pin the exact base commit; merge aggregation executes without a source checkout".into(),
         }
     } else {
         fail(
@@ -771,6 +772,7 @@ fn rule_precontainment_isolation(document: &Yaml) -> RuleResult {
     };
     let steps = job_steps(gates);
     let isolated_steps = [
+        "Admit candidate policy with base-owned controller",
         "Install native prerequisites",
         "Install pinned gate tools",
         "Provision authority-pinned native acceptance content",
@@ -822,11 +824,46 @@ fn valid_plan_authority_fetch(step: &Yaml) -> bool {
         )
         && run.contains("\"${SOURCE_REPOSITORY}\" \"${SOURCE_SHA}\"")
         && run.contains("\"${BASE_REPOSITORY}\" \"${BASE_SHA}\"")
-        && run.contains("cmp --silent \"${authority}.source\" \"${authority}.base\"")
+        && run.contains("cp \"${authority}.base\" \"${authority}\"")
         && run.contains("uqm-s4-ci-authority-v1")
         && run.contains(". == floor")
         && run.contains(". >= 1")
         && run.contains(". <= 90")
+}
+
+fn valid_event_policy_binding(document: &Yaml) -> bool {
+    let expected = [
+        ("UQM_CI_EVENT_NAME", "${{ github.event_name }}"),
+        ("UQM_CI_CONTROLLER_SHA", "${{ github.workflow_sha }}"),
+        (
+            "UQM_CI_EXPECTED_SHA",
+            "${{ github.event.pull_request.head.sha || github.sha }}",
+        ),
+        (
+            "UQM_CI_EVENT_BASE_SHA",
+            "${{ github.event.pull_request.base.sha || '' }}",
+        ),
+    ];
+    let event_bound = expected
+        .iter()
+        .all(|(key, value)| document.get_str(&["env", key]) == Some(*value));
+    let Some(gates) = document.get("jobs").and_then(|jobs| jobs.get("gates")) else {
+        return false;
+    };
+    event_bound
+        && gates.get_str(&["env", "UQM_CI_SELECTION_JSON"])
+            == Some("${{ needs.plan.outputs.selection }}")
+        && job_steps(gates).iter().any(|step| {
+            step.get_str(&["name"]) == Some("Admit candidate policy with base-owned controller")
+                && step.get_str(&["working-directory"]) == Some("${{ runner.temp }}")
+                && step.get_str(&["run"]).is_some_and(|run| {
+                    run.contains("\"${RUNNER_TEMP}/s4-gates-controller\" ci admit-policy")
+                        && run
+                            .contains("\"${RUNNER_TEMP}/s4-controller-source/rust/ci/gates.json\"")
+                        && run.contains("\"${GITHUB_WORKSPACE}/rust/ci/gates.json\"")
+                        && run.contains("\"${RUNNER_TEMP}/s4-gates-authority.json\"")
+                })
+        })
 }
 
 fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
@@ -873,6 +910,8 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
                     && run.contains(
                         "mv \"${GITHUB_WORKSPACE}/.s4-controller-source\" \"${controller}\"",
                     )
+                    && run.contains("supervise policy-admission \"${CARGO_TARGET_DIR}/debug/uqm-xtask\" ci admit-policy")
+                    && run.contains("\"${authority}.base\" \"${authority}.source\" \"${authority}\"")
                     && !run.contains("--manifest-path rust/xtask/Cargo.toml")
             })
         });
@@ -897,6 +936,10 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         step.get_str(&["id"]) == Some("plan")
             && run.contains(&format!("trusted_tuples='{TRUSTED_PLAN_TUPLES_JSON}'"))
             && run.contains(r#"--slurpfile authority "${authority}""#)
+            && run.contains("and .autoplay == .selection.autoplay")
+            && run.contains("and .selection.event == env.UQM_CI_EVENT_NAME")
+            && run.contains("and .selection.source_sha == env.UQM_CI_EXPECTED_SHA")
+            && run.contains("and .selection.controller_sha == env.UQM_CI_CONTROLLER_SHA")
             && run.contains("jq -e")
             && run.contains("jq -cer --argjson trusted_tuples")
             && matches!(
@@ -909,7 +952,13 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         && plan.get_str(&["outputs", "tools"]) == Some("${{ steps.plan.outputs.tools }}")
         && plan.get_str(&["outputs", "native_acceptance"])
             == Some("${{ steps.plan.outputs.native_acceptance }}")
-        && plan.get_str(&["outputs", "workflow"]) == Some("${{ steps.plan.outputs.workflow }}");
+        && plan.get_str(&["outputs", "workflow"]) == Some("${{ steps.plan.outputs.workflow }}")
+        // The autoplay suite is derived once by the plan job so every tuple
+        // proves the same scenarios. If this output stops being published the
+        // gates lose their suite silently, so its absence is a failure here.
+        && plan.get_str(&["outputs", "autoplay"]) == Some("${{ steps.plan.outputs.autoplay }}")
+        && plan.get_str(&["outputs", "selection"]) == Some("${{ steps.plan.outputs.selection }}")
+        && valid_event_policy_binding(document);
     if ordered
         && authority_fetch
         && controller_is_base_owned
@@ -1729,7 +1778,10 @@ fn rule_always_uploaded_evidence(document: &Yaml) -> RuleResult {
                     .is_some_and(|uses| uses.starts_with("actions/upload-artifact@"))
             })
             .collect();
-        let expected_uploads = if matches!(id.as_str(), "plan" | "gates" | "required-gates") {
+        let expected_uploads = if matches!(
+            id.as_str(),
+            "plan" | "gates" | "autoplay" | "required-gates"
+        ) {
             4
         } else {
             2
@@ -1762,6 +1814,216 @@ fn rule_always_uploaded_evidence(document: &Yaml) -> RuleResult {
     }
 }
 
+/// The autoplay job must actually drive the runner the issue asks CI to run.
+///
+/// The plan job derives the autoplay selection but nothing consumed it, so the
+/// suite could be "in CI" while never executing. This pins the parts a reader
+/// cannot verify by eye: that the job runs the real `native run` command with
+/// an explicit artifacts destination and content directory, that it reports and
+/// catalogues the bundle it produced, that the selection it runs is the one the
+/// plan bound rather than a locally chosen subset, that an interrupted run is
+/// recovered into the failure bundle instead of vanishing, and that the job
+/// cannot be skipped or have its evidence dropped.
+fn rule_autoplay_runner(document: &Yaml, authority: &super::authority::Authority) -> RuleResult {
+    let rule = "workflow.autoplay_runner";
+    let Some(job) = document.get("jobs").and_then(|jobs| jobs.get("autoplay")) else {
+        return fail(rule, "workflow lacks the autoplay job");
+    };
+    let steps = job_steps(job);
+    let named = |name| {
+        steps
+            .iter()
+            .copied()
+            .find(|step| step.get_str(&["name"]) == Some(name))
+    };
+    let mut failures = Vec::new();
+
+    // The authority declares one platform for native acceptance; the runner is
+    // whichever tuple that platform maps to, not a hand-picked label.
+    let platform = authority.native_acceptance.platform.as_str();
+    let Some(mapping) = authority
+        .runner_mapping
+        .iter()
+        .find(|mapping| mapping.os == platform)
+    else {
+        return fail(
+            rule,
+            &format!("authority declares no runner for native acceptance platform {platform}"),
+        );
+    };
+    if job.get_str(&["runs-on"]) != Some(mapping.runner.as_str()) {
+        failures.push(format!(
+            "autoplay must run on {}, the runner the authority maps to native acceptance platform {platform}",
+            mapping.runner
+        ));
+    }
+
+    // A job that can be skipped proves nothing on the runs that skip it.
+    if job.get("if").is_some() {
+        failures.push("autoplay job carries a condition and can be skipped".into());
+    }
+    if job.get("continue-on-error").is_some() {
+        failures.push("autoplay job tolerates its own failure".into());
+    }
+    if job.get_str(&["needs"]) != Some("plan") {
+        failures.push("autoplay job does not consume the plan job".into());
+    }
+    if job.get_str(&["timeout-minutes"])
+        != Some("${{ fromJSON(needs.plan.outputs.workflow).gates_job_timeout_minutes }}")
+    {
+        failures.push("autoplay timeout is not bound to the published workflow contract".into());
+    }
+
+    // The selection is the plan's, and the job proves it before running.
+    if job.get_str(&["env", "AUTOPLAY_JSON"]) != Some("${{ needs.plan.outputs.autoplay }}") {
+        failures.push("autoplay job does not bind the plan's autoplay selection".into());
+    }
+    if job.get_str(&["env", "UQM_CI_SELECTION_JSON"]) != Some("${{ needs.plan.outputs.selection }}")
+    {
+        failures.push("autoplay job does not bind the plan's selection".into());
+    }
+    if job.get_str(&["env", "NATIVE_ACCEPTANCE_JSON"])
+        != Some("${{ needs.plan.outputs.native_acceptance }}")
+    {
+        failures.push("autoplay job does not bind the authority's native acceptance".into());
+    }
+
+    let Some(run_step) = named("Execute the bound autoplay suite") else {
+        return fail(rule, "autoplay job never executes the suite");
+    };
+    if run_step.get("if").is_some() || run_step.get("continue-on-error").is_some() {
+        failures.push("the autoplay run step can be skipped or tolerated".into());
+    }
+    let run = run_step.get_str(&["run"]).unwrap_or_default();
+    for required in [
+        r#""${XTASK}" native run"#,
+        r#"--artifacts "${artifacts}""#,
+        r#"--content "${content_root}""#,
+        r#"--scenarios "${scenarios}""#,
+        r#"--platform "${platform}""#,
+        r#"scenarios="$(jq -er '.scenarios | join(",")' <<<"${AUTOPLAY_JSON}")""#,
+        r#"test "$(jq -cer '.autoplay' <<<"${UQM_CI_SELECTION_JSON}")" = "$(jq -cer '.' <<<"${AUTOPLAY_JSON}")""#,
+        r#"artifacts="${EVIDENCE_DIR}/bundle""#,
+    ] {
+        if !run.contains(required) {
+            failures.push(format!("autoplay run step omits {required}"));
+        }
+    }
+    // A capture route that cannot run must fail the job, not pass quietly.
+    for forbidden in ["|| true", "exit 0", "continue-on-error"] {
+        if run.contains(forbidden) {
+            failures.push(format!(
+                "autoplay run step swallows failure with {forbidden}"
+            ));
+        }
+    }
+
+    // An interrupted run leaves a journal; recovery finalizes it into the
+    // failure bundle so the evidence root is not lost.
+    let Some(recovery) = named("Recover an interrupted autoplay journal") else {
+        return fail(rule, "autoplay job never recovers an interrupted journal");
+    };
+    if recovery.get_str(&["if"]) != Some("always()") {
+        failures.push("interrupted-journal recovery does not always run".into());
+    }
+    let recovery_run = recovery.get_str(&["run"]).unwrap_or_default();
+    for required in [
+        r#"journal="${artifacts}/suite-status.json""#,
+        r#"jq -er '.finalized' "${journal}""#,
+        r#""${XTASK}" native run"#,
+        r#"--artifacts "${artifacts}""#,
+    ] {
+        if !recovery_run.contains(required) {
+            failures.push(format!("interrupted-journal recovery omits {required}"));
+        }
+    }
+
+    // The exit result and the checkpoint catalog reach the job summary.
+    for (name, command) in [
+        (
+            "Report the autoplay bundle",
+            r#""${XTASK}" native report "${artifacts}""#,
+        ),
+        (
+            "Publish the autoplay checkpoint gallery",
+            r#""${XTASK}" native gallery "${artifacts}" --output "${gallery}""#,
+        ),
+    ] {
+        let Some(step) = named(name) else {
+            failures.push(format!("autoplay job lacks the {name} step"));
+            continue;
+        };
+        if step.get_str(&["if"]) != Some("always()") {
+            failures.push(format!("{name} does not always run"));
+        }
+        let body = step.get_str(&["run"]).unwrap_or_default();
+        if !body.contains(command) {
+            failures.push(format!("{name} does not invoke {command}"));
+        }
+        if !body.contains(r#">> "${GITHUB_STEP_SUMMARY}""#) {
+            failures.push(format!("{name} does not reach the job summary"));
+        }
+        if !body.contains(r#"exit "${status}""#) {
+            failures.push(format!("{name} does not surface its own exit result"));
+        }
+    }
+
+    // Success and failure evidence both upload, and retention is applied.
+    let uploads: Vec<_> = steps
+        .iter()
+        .copied()
+        .filter(|step| {
+            step.uses()
+                .is_some_and(|uses| uses.starts_with("actions/upload-artifact@"))
+        })
+        .collect();
+    if uploads.len() != 4
+        || !uploads.iter().all(|step| {
+            step.get_str(&["if"])
+                .is_some_and(|condition| condition.starts_with("always()"))
+                && step.get_str(&["with", "if-no-files-found"]) == Some("error")
+        })
+    {
+        failures.push("autoplay evidence and receipt do not both always upload".into());
+    }
+    // Each artifact uploads twice: once with the resolved retention window and
+    // once without, for the run whose authority never resolved. Both halves are
+    // required, so dropping the retention window cannot pass as "still uploads".
+    let retained = uploads
+        .iter()
+        .filter(|step| {
+            step.get_str(&["if"]) == Some("always() && needs.plan.outputs.retention_days != ''")
+                && step.get_str(&["with", "retention-days"])
+                    == Some("${{ needs.plan.outputs.retention_days }}")
+        })
+        .count();
+    let unretained = uploads
+        .iter()
+        .filter(|step| {
+            step.get_str(&["if"]) == Some("always() && needs.plan.outputs.retention_days == ''")
+                && step.get_str(&["with", "retention-days"]).is_none()
+        })
+        .count();
+    if retained != 2 || unretained != 2 {
+        failures.push(format!(
+            "autoplay uploads do not apply the authority retention window on both artifacts: {retained} retained, {unretained} unretained"
+        ));
+    }
+
+    if failures.is_empty() {
+        RuleResult {
+            rule: rule.into(),
+            passed: true,
+            detail: format!(
+                "autoplay runs the plan-bound selection through native run on {}, reports and catalogues the bundle, recovers an interrupted journal, and always uploads its evidence under the authority retention window",
+                mapping.runner
+            ),
+        }
+    } else {
+        fail(rule, &failures.join("; "))
+    }
+}
+
 fn transport_fallback_valid(id: &str, steps: &[&Yaml]) -> bool {
     let (fallback_job, fallback_root, fallback_tuple) = match id {
         "plan" => ("plan", "${RUNNER_TEMP}/s4-plan-evidence", None),
@@ -1770,6 +2032,7 @@ fn transport_fallback_valid(id: &str, steps: &[&Yaml]) -> bool {
             "${RUNNER_TEMP}/s4-command-evidence",
             Some("${{ matrix.tuple }}"),
         ),
+        "autoplay" => ("autoplay", "${RUNNER_TEMP}/s4-autoplay-evidence", None),
         "required-gates" => (
             "required-gates",
             "${RUNNER_TEMP}/s4-required-evidence",
@@ -1816,7 +2079,7 @@ fn missing_transport_contracts(
                     .iter()
                     .any(|step| step.get_str(&["if"]) == Some("always()"))
         }
-        "gates" => index_steps
+        "gates" | "autoplay" => index_steps
             .iter()
             .any(|step| step.get_str(&["if"]) == Some("always()")),
         "required-gates" => index_steps.iter().any(|step| {
@@ -2025,6 +2288,45 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                         && run.contains("authority-snapshot.json")
                 })
         }),
+        "autoplay" => index_steps.iter().any(|step| {
+            step.get_str(&["if"]) == Some("always()")
+                && [
+                    ("AUTOPLAY_GALLERY_OUTCOME", "steps.autoplay_gallery.outcome"),
+                    (
+                        "AUTOPLAY_RECOVERY_OUTCOME",
+                        "steps.autoplay_recovery.outcome",
+                    ),
+                    ("AUTOPLAY_REPORT_OUTCOME", "steps.autoplay_report.outcome"),
+                    ("AUTOPLAY_RUN_OUTCOME", "steps.autoplay_run.outcome"),
+                    ("CHECKOUT_OUTCOME", "steps.checkout_autoplay.outcome"),
+                    ("NATIVE_CONTENT_OUTCOME", "steps.native_content.outcome"),
+                    ("PREREQUISITES_OUTCOME", "steps.prerequisites.outcome"),
+                    ("XTASK_BUILD_OUTCOME", "steps.xtask_build.outcome"),
+                ]
+                .iter()
+                .all(|(name, identity)| {
+                    step.get_str(&["env", name])
+                        .is_some_and(|value| value.contains(identity))
+                })
+                && step.get_str(&["run"]).is_some_and(|run| {
+                    run.contains("uqm-s4-workflow-setup-results-v1")
+                        && run.contains(r#""job": "autoplay""#)
+                        && substrings_in_order(
+                            run,
+                            &[
+                                r#"{"step": "xtask-build", "outcome": os.environ["XTASK_BUILD_OUTCOME"]}"#,
+                                r#"{"step": "checkout", "outcome": os.environ["CHECKOUT_OUTCOME"]}"#,
+                                r#"{"step": "prerequisites", "outcome": os.environ["PREREQUISITES_OUTCOME"]}"#,
+                                r#"{"step": "native-content", "outcome": os.environ["NATIVE_CONTENT_OUTCOME"]}"#,
+                                r#"{"step": "autoplay-run", "outcome": os.environ["AUTOPLAY_RUN_OUTCOME"]}"#,
+                                r#""step": "autoplay-recovery""#,
+                                r#"{"step": "autoplay-report", "outcome": os.environ["AUTOPLAY_REPORT_OUTCOME"]}"#,
+                                r#""step": "autoplay-gallery""#,
+                            ],
+                        )
+                        && run.contains("authority-snapshot.json")
+                })
+        }),
         "required-gates" => true,
         _ => false,
     }
@@ -2063,6 +2365,15 @@ fn valid_primary_upload(
         }),
         "gates" => steps.iter().any(|step| {
             step.get_str(&["id"]) == Some("upload_gates_authority_unavailable")
+                && step.get_str(&["if"])
+                    == Some("always() && needs.plan.outputs.retention_days == ''")
+                && step.uses() == Some(contract.action)
+                && step.get_str(&["with", "name"]) == Some(artifact_name)
+                && step.get_str(&["with", "path"]) == Some(artifact_path)
+                && step.get_str(&["with", "retention-days"]).is_none()
+        }),
+        "autoplay" => steps.iter().any(|step| {
+            step.get_str(&["id"]) == Some("upload_autoplay_authority_unavailable")
                 && step.get_str(&["if"])
                     == Some("always() && needs.plan.outputs.retention_days == ''")
                 && step.uses() == Some(contract.action)
@@ -2109,6 +2420,16 @@ fn valid_receipt_upload(
                 && step.get_str(&["with", "retention-days"]).is_none()
         }),
         "gates" => steps.iter().any(|step| {
+            step.get_str(&["id"]).is_none()
+                && step.get_str(&["if"])
+                    == Some("always() && needs.plan.outputs.retention_days == ''")
+                && step.uses() == Some(contract.action)
+                && step.get_str(&["with", "name"]) == Some(receipt_name)
+                && step.get_str(&["with", "path"]) == Some(receipt_path)
+                && step.get_str(&["with", "if-no-files-found"]) == Some("error")
+                && step.get_str(&["with", "retention-days"]).is_none()
+        }),
+        "autoplay" => steps.iter().any(|step| {
             step.get_str(&["id"]).is_none()
                 && step.get_str(&["if"])
                     == Some("always() && needs.plan.outputs.retention_days == ''")
@@ -2229,6 +2550,10 @@ fn valid_upload_receipt_script(id: &str, run: &str, retention_receipt: &str) -> 
             run.contains("connect_timeout=\"${CONNECT_TIMEOUT:?")
                 && run.contains("total_timeout=\"${TOTAL_TIMEOUT:?")
         }
+        "autoplay" => {
+            run.contains("'.actions.github_api_connect_timeout_seconds' \"${RUNNER_TEMP}/s4-autoplay-authority.json\"")
+                && run.contains("'.actions.github_api_total_timeout_seconds' \"${RUNNER_TEMP}/s4-autoplay-authority.json\"")
+        }
         _ => {
             run.contains("'.actions.github_api_connect_timeout_seconds' \"${RUNNER_TEMP}/s4-gates-authority.json\"")
                 && run.contains("'.actions.github_api_total_timeout_seconds' \"${RUNNER_TEMP}/s4-gates-authority.json\"")
@@ -2276,6 +2601,12 @@ fn valid_plan_authority_unavailable_script(id: &str, run: &str) -> bool {
             "[[ ! -s \"${authority}\" || -z \"${RETENTION_DAYS}\" ]]",
             r#""retention_days": None"#,
             r#""failure": "exact authority could not be resolved before gate execution""#,
+        ],
+        "autoplay" => &[
+            "uqm-s4-upload-authority-unavailable-v1",
+            "[[ ! -s \"${authority}\" || -z \"${RETENTION_DAYS}\" ]]",
+            r#""retention_days": None"#,
+            r#""failure": "exact authority could not be resolved before autoplay execution""#,
         ],
         "required-gates" => &[
             "uqm-s4-upload-authority-unavailable-v1",
@@ -2345,6 +2676,13 @@ fn rule_content_addressed_transport(
                     "s4-${{ matrix.tuple }}-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}",
                     "${{ runner.temp }}/s4-gate-upload-receipt",
                 ),
+                "autoplay" => (
+                    "upload_autoplay",
+                    "s4-autoplay-${{ github.run_id }}-${{ github.run_attempt }}",
+                    "${{ runner.temp }}/s4-autoplay-evidence",
+                    "s4-autoplay-upload-receipt-${{ github.run_id }}-${{ github.run_attempt }}",
+                    "${{ runner.temp }}/s4-autoplay-upload-receipt",
+                ),
                 "required-gates" => (
                     "upload_required",
                     "s4-required-${{ github.run_id }}-${{ github.run_attempt }}",
@@ -2361,7 +2699,7 @@ fn rule_content_addressed_transport(
         };
         let ordinary_condition = match id.as_str() {
             "plan" => "always() && steps.plan_authority.outputs.retention_days != ''",
-            "gates" => "always() && needs.plan.outputs.retention_days != ''",
+            "gates" | "autoplay" => "always() && needs.plan.outputs.retention_days != ''",
             "required-gates" => "always() && steps.required_authority.outputs.available == 'true'",
             _ => "always()",
         };
@@ -2977,6 +3315,9 @@ mod tests {
             .arg(script)
             .env("RUNNER_TEMP", temporary.path())
             .env("GITHUB_OUTPUT", &output_path)
+            .env("UQM_CI_EVENT_NAME", "push")
+            .env("UQM_CI_EXPECTED_SHA", "a".repeat(40))
+            .env("UQM_CI_CONTROLLER_SHA", "b".repeat(40))
             .output()
             .unwrap();
         let published = fs::read_to_string(output_path).unwrap_or_default();
@@ -2987,8 +3328,52 @@ mod tests {
     fn checked_in_workflow_passes_every_semantic_rule() {
         let document = parse_yaml(WORKFLOW).unwrap();
         let results = validate_semantics(&document, &tuples(), &authority());
-        assert_eq!(results.len(), 19);
+        assert_eq!(results.len(), 20);
         assert!(results.iter().all(|result| result.passed), "{results:#?}");
+    }
+
+    /// The smallest autoplay block the published plan contract accepts.
+    fn valid_autoplay() -> serde_json::Value {
+        serde_json::json!({
+            "policy": "full",
+            "reason": "test fixture",
+            "scenarios": ["quit-v1"],
+        })
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn trusted_plan_validator_rejects_a_plan_without_a_usable_autoplay_suite() {
+        // Each of these is a way the suite could arrive meaningless. The
+        // publisher must refuse them rather than hand the gates an empty or
+        // unlabelled suite that would pass by running nothing.
+        let authority_value = serde_json::to_value(authority()).unwrap();
+        let tuples: serde_json::Value = serde_json::from_str(TRUSTED_PLAN_TUPLES_JSON).unwrap();
+        for broken in [
+            serde_json::json!(null),
+            serde_json::json!({"policy": "full", "reason": "r", "scenarios": []}),
+            serde_json::json!({"policy": "whatever", "reason": "r", "scenarios": ["quit-v1"]}),
+        ] {
+            let mut plan = serde_json::json!({
+                "schema": super::super::plan::PLAN_SCHEMA,
+                "authority": super::super::authority::AUTHORITY_RELATIVE,
+                "authority_contract": authority_value.clone(),
+                "tuples": tuples.clone(),
+            });
+            if !broken.is_null() {
+                plan["autoplay"] = broken.clone();
+            }
+            let encoded = serde_json::to_vec(&plan).unwrap();
+            let (output, published) = run_trusted_plan_validator(Some(&encoded), &authority_value);
+            assert!(
+                !output.status.success(),
+                "a plan whose autoplay is {broken} was published"
+            );
+            assert!(
+                !published.contains("autoplay="),
+                "a rejected plan still published an autoplay suite: {published}"
+            );
+        }
     }
 
     #[cfg(unix)]
@@ -3001,6 +3386,8 @@ mod tests {
             "authority": super::super::authority::AUTHORITY_RELATIVE,
             "authority_contract": authority_value.clone(),
             "tuples": tuples,
+            "autoplay": valid_autoplay(),
+            "selection": {"schema":"uqm-s4-selection-v1", "event":"push", "source_sha":"a".repeat(40), "controller_sha":"b".repeat(40), "autoplay":valid_autoplay()},
         }))
         .unwrap();
         let (output, published) = run_trusted_plan_validator(Some(&plan), &authority_value);
@@ -3032,6 +3419,8 @@ mod tests {
             "authority": super::super::authority::AUTHORITY_RELATIVE,
             "authority_contract": authority_value,
             "tuples": tuples,
+            "autoplay": valid_autoplay(),
+            "selection": {"schema":"uqm-s4-selection-v1", "event":"push", "source_sha":"a".repeat(40), "controller_sha":"b".repeat(40), "autoplay":valid_autoplay()},
         }))
         .unwrap();
         let authority_value = serde_json::to_value(authority).unwrap();
@@ -3117,10 +3506,10 @@ total_timeout=60
     }
 
     #[test]
-    fn base_authority_comparison_removal_is_rejected() {
+    fn base_policy_admission_removal_is_rejected() {
         let mutated = WORKFLOW.replacen(
-            "          cmp --silent \"${authority}.source\" \"${authority}.base\"\n",
-            "          cp \"${authority}.source\" \"${authority}.base\"\n",
+            "supervise policy-admission \"${CARGO_TARGET_DIR}/debug/uqm-xtask\" ci admit-policy",
+            "cp",
             1,
         );
         assert_ne!(mutated, WORKFLOW);
@@ -3168,6 +3557,196 @@ total_timeout=60
         let mutated = WORKFLOW.replacen(
             "always() && steps.required_authority.outputs.available != 'true'",
             "always() && steps.required_authority.outputs.available == 'true'",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn autoplay_job_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen("  autoplay:\n", "  autoplay-disabled:\n", 1);
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_runner_command_substitution_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            r#"            -- "${XTASK}" native run \"#,
+            r#"            -- "${XTASK}" native list \"#,
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_runner_off_platform_tuple_is_rejected() {
+        let mutated =
+            WORKFLOW.replacen("    runs-on: macos-15\n", "    runs-on: ubuntu-24.04\n", 1);
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_selection_rebinding_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "      AUTOPLAY_JSON: ${{ needs.plan.outputs.autoplay }}\n",
+            "      AUTOPLAY_JSON: ${{ needs.plan.outputs.selection }}\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_selection_proof_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                r#"          test "$(jq -cer '.autoplay' <<<"${UQM_CI_SELECTION_JSON}")" = "#,
+                "\"$(jq -cer '.' <<<\"${AUTOPLAY_JSON}\")\"\n",
+            ),
+            "",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_skippable_job_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "  autoplay:\n    name:",
+            "  autoplay:\n    if: github.event_name == 'schedule'\n    name:",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_run_failure_swallow_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                "              --scenarios \"${scenarios}\"\n",
+                "      - name: Recover an interrupted autoplay journal",
+            ),
+            concat!(
+                "              --scenarios \"${scenarios}\" || true\n",
+                "      - name: Recover an interrupted autoplay journal",
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_interruption_recovery_condition_mutation_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "        id: autoplay_recovery\n        if: always()\n",
+            "        id: autoplay_recovery\n        if: success()\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_interruption_journal_probe_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "          journal=\"${artifacts}/suite-status.json\"\n",
+            "          journal=\"${artifacts}/absent.json\"\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_report_summary_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "          } >> \"${GITHUB_STEP_SUMMARY}\"\n          exit \"${status}\"",
+            "          } > /dev/null\n          exit \"${status}\"",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_gallery_command_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "            -- \"${XTASK}\" native gallery \"${artifacts}\" --output \"${gallery}\"\n",
+            "            -- \"${XTASK}\" native list\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+    }
+
+    #[test]
+    fn autoplay_retention_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                "          path: ${{ runner.temp }}/s4-autoplay-evidence\n",
+                "          if-no-files-found: error\n",
+                "          retention-days: ${{ needs.plan.outputs.retention_days }}\n",
+            ),
+            concat!(
+                "          path: ${{ runner.temp }}/s4-autoplay-evidence\n",
+                "          if-no-files-found: error\n",
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn autoplay_failure_evidence_upload_condition_mutation_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                "        id: upload_autoplay\n",
+                "        if: always() && needs.plan.outputs.retention_days != ''",
+            ),
+            concat!(
+                "        id: upload_autoplay\n",
+                "        if: success() && needs.plan.outputs.retention_days != ''",
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
+        assert!(!rule(&mutated, "workflow.always_uploaded_failure_evidence").passed);
+    }
+
+    #[test]
+    fn autoplay_transport_identity_mutation_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                "              \"job\": \"autoplay\",\n",
+                "              \"source_sha\": os.environ[\"SOURCE_SHA\"],\n",
+                "              \"tuple\": None,\n",
+            ),
+            concat!(
+                "              \"job\": \"gates\",\n",
+                "              \"source_sha\": os.environ[\"SOURCE_SHA\"],\n",
+                "              \"tuple\": None,\n",
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn autoplay_transport_evidence_root_mutation_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "          root=\"${RUNNER_TEMP}/s4-autoplay-evidence\"\n",
+            "          root=\"${RUNNER_TEMP}/s4-scratch-evidence\"\n",
             1,
         );
         assert_ne!(mutated, WORKFLOW);
