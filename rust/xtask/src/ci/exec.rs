@@ -331,19 +331,49 @@ impl LeaderAnchor {
     }
 }
 
+/// How long a containment handshake may take before it has failed.
+#[cfg(unix)]
+const FD_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[cfg(unix)]
 fn fd_io(fd: RawFd, bytes: &mut [u8], write: bool) -> Result<(), std::io::Error> {
-    let deadline = Instant::now()
-        .checked_add(Duration::from_secs(5))
-        .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EOVERFLOW))?;
+    fd_io_within(fd, bytes, write, Some(FD_HANDSHAKE_TIMEOUT))
+}
+
+/// Move exactly `bytes.len()` bytes across `fd`.
+///
+/// A timeout belongs to a handshake whose peer is already committed to
+/// answering. `None` belongs to a channel whose next message may legitimately
+/// never arrive: waiting then ends when the peer closes its end, which is the
+/// event such a caller is actually waiting for. Bounding that wait instead
+/// makes the reader abandon a channel that is still owned and still open.
+#[cfg(unix)]
+fn fd_io_within(
+    fd: RawFd,
+    bytes: &mut [u8],
+    write: bool,
+    timeout: Option<Duration>,
+) -> Result<(), std::io::Error> {
+    let deadline = timeout
+        .map(|timeout| {
+            Instant::now()
+                .checked_add(timeout)
+                .ok_or_else(|| std::io::Error::from_raw_os_error(libc::EOVERFLOW))
+        })
+        .transpose()?;
     let mut offset = 0;
     while offset < bytes.len() {
-        let now = Instant::now();
-        if now >= deadline {
-            return Err(std::io::Error::from_raw_os_error(libc::ETIMEDOUT));
-        }
-        let remaining = deadline.saturating_duration_since(now).as_millis();
-        let remaining = i32::try_from(remaining).unwrap_or(i32::MAX).max(1);
+        let remaining = match deadline {
+            Some(deadline) => {
+                let now = Instant::now();
+                if now >= deadline {
+                    return Err(std::io::Error::from_raw_os_error(libc::ETIMEDOUT));
+                }
+                let remaining = deadline.saturating_duration_since(now).as_millis();
+                i32::try_from(remaining).unwrap_or(i32::MAX).max(1)
+            }
+            None => -1,
+        };
         let mut descriptor = libc::pollfd {
             fd,
             events: if write { libc::POLLOUT } else { libc::POLLIN },
@@ -1631,7 +1661,14 @@ fn anchor_child(
     }
     loop {
         let mut bytes = [0_u8; 4];
-        if fd_io(command_read, &mut bytes, false).is_err() {
+        // The next command arrives when the supervised command finishes, which
+        // is an arbitrary distance away: this anchor exists to hold the group
+        // open for exactly that long. So the wait ends when the monitor closes
+        // the command channel, not when a handshake bound elapses. A bounded
+        // wait here made the anchor abandon a live registration, after which
+        // the monitor had nothing left to signal and the registered processes
+        // outlived the owner whose death was supposed to remove them.
+        if fd_io_within(command_read, &mut bytes, false, None).is_err() {
             unsafe { libc::_exit(126) }
         }
         let signal = i32::from_ne_bytes(bytes);
@@ -4411,6 +4448,42 @@ mod tests {
         assert!(!process_exists(pid));
     }
 
+    /// The descriptor a helper watches to learn that its owner is gone.
+    #[cfg(unix)]
+    const HELPER_LIFELINE_FD_ENV: &str = "UQM_TEST_HELPER_LIFELINE_FD";
+
+    /// Block until the process that spawned this helper no longer exists.
+    ///
+    /// The lifeline is a pipe whose only writer is the owner. The kernel closes
+    /// that end when the owner goes, whether it exited, unwound out of a failed
+    /// assertion, or was killed outright without running a single destructor.
+    /// Reading it is therefore how a helper observes an owner it can no longer
+    /// be reached by: it needs no signal it is free to ignore, no cooperating
+    /// supervisor and no external reaper.
+    #[cfg(unix)]
+    fn wait_for_owner() {
+        let lifeline = std::env::var(HELPER_LIFELINE_FD_ENV)
+            .expect("owned helper was spawned without a lifeline")
+            .parse::<RawFd>()
+            .expect("owned helper lifeline descriptor is not a descriptor");
+        loop {
+            let mut byte = [0_u8; 1];
+            // SAFETY: byte is writable storage and lifeline is the inherited
+            // read end of the owner's pipe.
+            let read = unsafe { libc::read(lifeline, byte.as_mut_ptr().cast(), 1) };
+            if read == 0 {
+                return;
+            }
+            assert_eq!(read, -1, "owner lifeline carried unexpected data");
+            let error = std::io::Error::last_os_error();
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::Interrupted,
+                "owner lifeline read failed: {error}"
+            );
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn anchor_target_helper_process() {
@@ -4421,39 +4494,271 @@ mod tests {
             thread::sleep(Duration::from_millis(100));
             return;
         }
+        // Ignoring SIGTERM is the whole point of this fixture: a supervisor
+        // that only asks politely proves nothing about cleanup. Ownership is
+        // established by the lifeline below and by the group kill the owner
+        // performs, neither of which this process can decline.
         unsafe {
             libc::signal(libc::SIGTERM, libc::SIG_IGN);
         }
-        loop {
-            thread::sleep(Duration::from_secs(1));
+        wait_for_owner();
+    }
+
+    /// A helper process that cannot outlive the test that spawned it.
+    ///
+    /// These helpers ignore `SIGTERM`, lead their own process groups and run
+    /// the test binary's own image, so nothing in the session will ever collect
+    /// one that is abandoned: it is reparented to init and stays there. Two
+    /// independent mechanisms keep that from happening, and neither asks the
+    /// helper to cooperate. The owner kills the helper's whole process group
+    /// and reaps it from `Drop`, which runs while a failing assertion unwinds;
+    /// and the helper independently exits when the lifeline held open by this
+    /// struct reports that its owner is gone, which is what remains when the
+    /// owner is killed and never unwinds at all.
+    #[cfg(unix)]
+    struct OwnedHelper {
+        child: std::process::Child,
+        lifeline_write: Option<RawFd>,
+        reaped: bool,
+    }
+
+    #[cfg(unix)]
+    impl OwnedHelper {
+        /// Spawn one of this binary's helper tests as an owned process.
+        fn spawn(test_name: &str, environment: &[(&str, std::ffi::OsString)]) -> Self {
+            use std::os::unix::process::CommandExt as _;
+
+            let (lifeline_read, lifeline_write) = pipe_cloexec().expect("owner lifeline");
+            let executable = std::env::current_exe().expect("test executable");
+            let mut command = Command::new(executable);
+            command
+                .args(["--exact", test_name, "--nocapture"])
+                .env(HELPER_LIFELINE_FD_ENV, lifeline_read.to_string())
+                .process_group(0)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            for (name, value) in environment {
+                command.env(name, value);
+            }
+            // SAFETY: fcntl and close are async-signal-safe, and the child
+            // touches nothing else between fork and exec.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::fcntl(lifeline_read, libc::F_SETFD, 0) == -1 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    libc::close(lifeline_write);
+                    Ok(())
+                });
+            }
+            let child = command.spawn();
+            close_fd(lifeline_read);
+            match child {
+                Ok(child) => Self {
+                    child,
+                    lifeline_write: Some(lifeline_write),
+                    reaped: false,
+                },
+                Err(error) => {
+                    close_fd(lifeline_write);
+                    panic!("cannot spawn owned helper {test_name}: {error}");
+                }
+            }
+        }
+
+        fn spawn_anchor_target(mode: &str) -> Self {
+            Self::spawn(
+                "ci::exec::tests::anchor_target_helper_process",
+                &[("UQM_TEST_ANCHOR_TARGET", mode.into())],
+            )
+        }
+
+        fn pid(&self) -> libc::pid_t {
+            libc::pid_t::try_from(self.child.id()).expect("helper identifier fits in a PID")
+        }
+
+        fn release_lifeline(&mut self) {
+            if let Some(lifeline) = self.lifeline_write.take() {
+                close_fd(lifeline);
+            }
+        }
+
+        fn reap(&mut self) -> Result<(), String> {
+            let pid = self.pid();
+            self.child
+                .wait()
+                .map_err(|error| format!("cannot reap owned helper {pid}: {error}"))?;
+            self.reaped = true;
+            Ok(())
+        }
+
+        /// Wait for a helper that ends on its own, and reap it.
+        fn wait(&mut self) -> Result<(), String> {
+            if self.reaped {
+                return Err(format!("owned helper {} was already reaped", self.pid()));
+            }
+            self.reap()
+        }
+
+        /// Kill the helper's whole process group and reap it.
+        fn terminate(&mut self) -> Result<(), String> {
+            if self.reaped {
+                return Ok(());
+            }
+            self.release_lifeline();
+            let pid = self.pid();
+            // SAFETY: the helper leads its own process group, so the negated
+            // PID names that group and nothing else, and an unreaped child
+            // cannot have had its identity reused.
+            if unsafe { libc::kill(-pid, libc::SIGKILL) } == -1 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    return Err(format!("cannot kill owned helper group {pid}: {error}"));
+                }
+            }
+            self.reap()
         }
     }
 
     #[cfg(unix)]
-    fn spawn_test_group(mode: &str) -> std::process::Child {
-        use std::os::unix::process::CommandExt as _;
-        let executable = std::env::current_exe().expect("test executable");
-        let mut command = Command::new(executable);
-        command
-            .args([
-                "--exact",
-                "ci::exec::tests::anchor_target_helper_process",
-                "--nocapture",
-            ])
-            .env("UQM_TEST_ANCHOR_TARGET", mode)
-            .process_group(0)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn process-group leader")
+    impl Drop for OwnedHelper {
+        fn drop(&mut self) {
+            let released = self.terminate();
+            self.release_lifeline();
+            if let Err(error) = released {
+                // Panicking while already unwinding aborts the process, which
+                // would bury the failure this helper was spawned to expose.
+                if std::thread::panicking() {
+                    eprintln!("{error}");
+                } else {
+                    panic!("{error}");
+                }
+            }
+        }
+    }
+
+    /// A test that fails must still take its helper with it.
+    ///
+    /// The helper ignores `SIGTERM`, leads its own process group and runs this
+    /// binary's own image, so an abandoned one is reparented to init and stays
+    /// there indefinitely; two of them were found on a development machine
+    /// hours after the test binaries that spawned them had exited. The body
+    /// below unwinds exactly as a failed assertion does, which is the path that
+    /// abandoned them.
+    #[cfg(unix)]
+    #[test]
+    fn a_failing_test_takes_its_helper_with_it() {
+        use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+        use std::sync::Arc;
+
+        let identity = Arc::new(AtomicI32::new(0));
+        let started = Arc::new(AtomicBool::new(false));
+        let recorded_identity = Arc::clone(&identity);
+        let recorded_start = Arc::clone(&started);
+        let outcome = std::panic::catch_unwind(move || {
+            let helper = OwnedHelper::spawn_anchor_target("wait");
+            recorded_identity.store(helper.pid(), Ordering::SeqCst);
+            recorded_start.store(process_is_live(helper.pid()), Ordering::SeqCst);
+            panic!("the test that owns this helper failed");
+        });
+        assert!(outcome.is_err(), "the owning test was supposed to fail");
+        let pid = identity.load(Ordering::SeqCst);
+        assert!(pid > 0, "the failing test never spawned a helper");
+        assert!(started.load(Ordering::SeqCst), "helper {pid} never ran");
+        assert!(
+            !process_exists(pid),
+            "helper {pid} survived the test that owned it"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn abandoning_owner_process() {
+        let Some(published) = std::env::var_os("UQM_TEST_ABANDONED_HELPER_PID_FILE") else {
+            return;
+        };
+        let helper = OwnedHelper::spawn_anchor_target("wait");
+        publish_pid_file(Path::new(&published), helper.pid());
+        // This process is about to be killed outright, so nothing here runs a
+        // destructor and this helper is never released. Whether it survives is
+        // left entirely to the helper, which is the point.
+        wait_for_owner();
+    }
+
+    /// An owner that is killed outright runs no destructor at all.
+    ///
+    /// What remains is the helper's own exit path, which must not depend on a
+    /// signal the helper ignores, on this test process, or on anything outside
+    /// its own descent from the owner that spawned it.
+    #[cfg(unix)]
+    #[test]
+    fn a_killed_owner_still_takes_its_helper_with_it() {
+        let directory = tempfile::tempdir().expect("test directory");
+        let published = directory.path().join("abandoned.pid");
+        let mut owner = OwnedHelper::spawn(
+            "ci::exec::tests::abandoning_owner_process",
+            &[(
+                "UQM_TEST_ABANDONED_HELPER_PID_FILE",
+                published.clone().into(),
+            )],
+        );
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !published.is_file() {
+            assert!(
+                Instant::now() < deadline,
+                "the owner never published its helper"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        let helper_pid = std::fs::read_to_string(&published)
+            .expect("read abandoned helper PID")
+            .parse::<libc::pid_t>()
+            .expect("parse abandoned helper PID");
+        assert!(process_is_live(helper_pid), "the helper never ran");
+        // SAFETY: the owner is an unreaped child of this process, so its
+        // identity cannot have been reused.
+        assert_eq!(unsafe { libc::kill(owner.pid(), libc::SIGKILL) }, 0);
+        owner.wait().expect("reap the killed owner");
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while process_is_live(helper_pid) {
+            assert!(
+                Instant::now() < deadline,
+                "helper {helper_pid} survived the owner that abandoned it"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// A registration lasts as long as the command it supervises.
+    ///
+    /// The anchor is what keeps a registered process group reachable, so an
+    /// anchor that gives up while its command channel is merely quiet leaves
+    /// the monitor with nothing to clean up. The registered processes then
+    /// outlive the owner whose death was supposed to remove them, which is the
+    /// intermittent surviving-process failure this reproduces directly.
+    #[cfg(unix)]
+    #[test]
+    fn a_registered_anchor_outlives_a_quiet_command_channel() {
+        let mut leader = OwnedHelper::spawn_anchor_target("wait");
+        let leader_pid = leader.pid();
+        let start = monitor_process_start(leader_pid).expect("leader start identity");
+        let anchor = MonitorAnchor::spawn(leader_pid, start, -1, -1).expect("stable anchor");
+        thread::sleep(FD_HANDSHAKE_TIMEOUT + Duration::from_millis(500));
+        anchor
+            .signal_group(libc::SIGCONT)
+            .expect("an idle anchor must still reach the group it holds");
+        // SAFETY: getpgid only inspects the process the anchor reported.
+        assert_eq!(unsafe { libc::getpgid(anchor.pid) }, leader_pid);
+        anchor.release().expect("reap monitor-owned anchor");
+        leader.terminate().expect("release test helper");
     }
 
     #[cfg(unix)]
     #[test]
     fn monitor_anchor_survives_leader_exit_until_explicit_reap() {
-        let mut leader = spawn_test_group("exit");
-        let leader_pid = leader.id() as libc::pid_t;
+        let mut leader = OwnedHelper::spawn_anchor_target("exit");
+        let leader_pid = leader.pid();
         let start = monitor_process_start(leader_pid).expect("leader start identity");
         let anchor = MonitorAnchor::spawn(leader_pid, start, -1, -1).expect("stable anchor");
         leader.wait().expect("reap leader");
@@ -4468,9 +4773,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn identity_mismatch_never_signals_an_unrelated_reused_group() {
-        let mut candidate = spawn_test_group("wait");
-        let mut unrelated = spawn_test_group("wait");
-        let candidate_pid = candidate.id() as libc::pid_t;
+        let mut candidate = OwnedHelper::spawn_anchor_target("wait");
+        let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
+        let candidate_pid = candidate.pid();
         let start = monitor_process_start(candidate_pid).expect("candidate start identity");
         let error = MonitorAnchor::spawn_checked(candidate_pid, start, -1, -1, || {
             Some(start.wrapping_add(1))
@@ -4478,10 +4783,9 @@ mod tests {
         .expect_err("changed identity must reject registration");
         assert!(error.contains("changed identity"));
         assert!(process_exists(candidate_pid));
-        assert!(process_exists(unrelated.id() as libc::pid_t));
-        for child in [&mut candidate, &mut unrelated] {
-            child.kill().expect("kill test process");
-            child.wait().expect("reap test process");
+        assert!(process_exists(unrelated.pid()));
+        for helper in [&mut candidate, &mut unrelated] {
+            helper.terminate().expect("release test helper");
         }
     }
 
@@ -4530,7 +4834,7 @@ mod tests {
                 .as_nanos()
         ));
         std::fs::create_dir(&directory).expect("create test directory");
-        let mut unrelated = spawn_test_group("wait");
+        let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
         let executable = std::env::current_exe().expect("test executable");
         let mut test_limits = limits_for_current_executable();
         test_limits.timeout = Duration::from_secs(120);
@@ -4554,11 +4858,12 @@ mod tests {
             "nested lifecycle failed: {captured:?}"
         );
         assert!(
-            process_exists(unrelated.id() as libc::pid_t),
+            process_exists(unrelated.pid()),
             "nested cleanup signaled an unrelated process group"
         );
-        unrelated.kill().expect("kill unrelated test process");
-        unrelated.wait().expect("reap unrelated test process");
+        unrelated
+            .terminate()
+            .expect("release unrelated test helper");
         std::fs::remove_dir_all(directory).expect("remove test directory");
     }
     #[cfg(unix)]
@@ -4575,22 +4880,15 @@ mod tests {
         std::fs::create_dir(&directory).expect("create test directory");
         let nested_pid_file = directory.join("nested.pid");
         let outer_pid_file = directory.join("outer.pid");
-        let mut unrelated = spawn_test_group("wait");
-        let executable = std::env::current_exe().expect("test executable");
-        let mut supervisor = Command::new(executable)
-            .args([
-                "--exact",
-                "ci::exec::tests::outer_supervisor_helper_process",
-                "--nocapture",
-            ])
-            .env("UQM_TEST_OUTER_SUPERVISOR", "1")
-            .env("UQM_TEST_NESTED_PID_FILE", &nested_pid_file)
-            .env("UQM_TEST_OUTER_PID_FILE", &outer_pid_file)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("spawn outer supervisor");
+        let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
+        let mut supervisor = OwnedHelper::spawn(
+            "ci::exec::tests::outer_supervisor_helper_process",
+            &[
+                ("UQM_TEST_OUTER_SUPERVISOR", "1".into()),
+                ("UQM_TEST_NESTED_PID_FILE", nested_pid_file.clone().into()),
+                ("UQM_TEST_OUTER_PID_FILE", outer_pid_file.clone().into()),
+            ],
+        );
         let deadline = Instant::now() + Duration::from_secs(30);
         while !nested_pid_file.is_file() || !outer_pid_file.is_file() {
             assert!(Instant::now() < deadline, "nested group did not register");
@@ -4604,10 +4902,12 @@ mod tests {
             .expect("read outer PID")
             .parse::<i32>()
             .expect("parse outer PID");
-        assert_eq!(
-            unsafe { libc::kill(supervisor.id() as i32, libc::SIGKILL) },
-            0
-        );
+        // Kill the supervisor itself rather than its group: the registered
+        // processes must be removed by the monitor that owns them, which is
+        // what this test is about.
+        // SAFETY: the supervisor is an unreaped child of this process, so its
+        // identity cannot have been reused.
+        assert_eq!(unsafe { libc::kill(supervisor.pid(), libc::SIGKILL) }, 0);
         supervisor.wait().expect("reap outer supervisor");
 
         let cleanup_deadline = Instant::now() + Duration::from_secs(30);
@@ -4621,11 +4921,12 @@ mod tests {
             );
         }
         assert!(
-            process_exists(unrelated.id() as libc::pid_t),
+            process_exists(unrelated.pid()),
             "outer-controller cleanup signaled an unrelated process group"
         );
-        unrelated.kill().expect("kill unrelated test process");
-        unrelated.wait().expect("reap unrelated test process");
+        unrelated
+            .terminate()
+            .expect("release unrelated test helper");
         let _ = std::fs::remove_dir_all(directory);
     }
 

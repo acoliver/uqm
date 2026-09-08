@@ -490,6 +490,136 @@ fn validate_transition(previous: &SuiteManifest, next: &SuiteManifest) -> Result
 mod journal_regressions {
     use super::*;
 
+    fn test_authority() -> Authority {
+        serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap()
+    }
+
+    fn test_limits() -> uqm_rust::automation::native_window::NativeInventoryLimits {
+        test_authority().native_runtime_contract().inventory_limits
+    }
+
+    fn pinned(name: &str) -> PinnedScript {
+        PinnedScript {
+            path: format!("rust/scripts/{name}.json"),
+            sha256: "a".repeat(64),
+            byte_length: 12,
+        }
+    }
+
+    fn refused_claim(root: &Path, selected: &[PinnedScript], authority: &Authority) -> String {
+        match from_request(Some(root), selected, authority) {
+            Ok(_) => panic!("a root another run already claimed must not be claimed again"),
+            Err(error) => error,
+        }
+    }
+
+    /// An interrupted run leaves a journal that no reader accepts, and the run
+    /// that finds it must not simply begin again over the top of it.
+    #[test]
+    fn an_interrupted_journal_is_finalized_instead_of_restarted() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a"), pinned("b")];
+        {
+            let mut interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            interrupted.begin(0).unwrap();
+            // The process stops here: no failure recorded, nothing finalized.
+        }
+        assert!(!root.join("suite-manifest.json").exists());
+        let interrupted_status = retained_status(&root).unwrap().unwrap();
+        assert!(!interrupted_status.finalized);
+        assert!(
+            validate_accounting(&root, &selected).is_err(),
+            "an unfinished journal is not a bundle"
+        );
+
+        let recovered = recover_interrupted(&root, &selected, test_limits()).unwrap();
+        assert!(recovered.finalized && !recovered.passed);
+        let failure = recovered.first_failure.clone().unwrap();
+        assert_eq!(failure.phase, SuitePhase::Execute);
+        assert_eq!(failure.scenario, Some(0));
+        assert!(failure.detail.contains("interrupted"), "{}", failure.detail);
+        assert!(
+            matches!(recovered.scenarios[0].state, ScenarioState::Failed { .. })
+                && recovered.scenarios[1].state == ScenarioState::NotRun
+        );
+        // The attempt's duration was measured by a process that is gone, so the
+        // recovery keeps what the journal recorded rather than inventing one.
+        assert_eq!(
+            recovered.scenarios[0].elapsed_ms,
+            interrupted_status.scenarios[0].elapsed_ms
+        );
+        assert!(recovered.elapsed_ms >= interrupted_status.elapsed_ms);
+        assert_eq!(
+            recovered,
+            validate_accounting(&root, &selected).unwrap(),
+            "the recovered bundle must validate as the failure bundle it is"
+        );
+        assert!(
+            recover_interrupted(&root, &selected, test_limits()).is_err(),
+            "a finalized journal is not recoverable a second time"
+        );
+    }
+
+    /// Recovery keeps the interruption attached to the run that was actually
+    /// interrupted, so a journal cannot be adopted by a different request.
+    #[test]
+    fn recovery_refuses_a_journal_requested_for_another_selection() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        {
+            let _interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+        }
+        let error = recover_interrupted(&root, &[pinned("b")], test_limits()).unwrap_err();
+        assert!(error.contains("different selection"), "{error}");
+        // Nothing was published over the retained journal.
+        assert!(!root.join("suite-manifest.json").exists());
+        assert!(!retained_status(&root).unwrap().unwrap().finalized);
+    }
+
+    /// A run interrupted before any scenario was attempted still publishes a
+    /// bundle that says so, rather than one that omits the selection.
+    #[test]
+    fn a_journal_interrupted_before_execution_names_the_phase_it_reached() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        {
+            let _interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+        }
+        let recovered = recover_interrupted(&root, &selected, test_limits()).unwrap();
+        let failure = recovered.first_failure.clone().unwrap();
+        assert_eq!(failure.phase, SuitePhase::Preflight);
+        assert_eq!(failure.scenario, None);
+        assert_eq!(recovered.scenarios[0].state, ScenarioState::NotRun);
+        validate_accounting(&root, &selected).unwrap();
+    }
+
+    /// The claim path is where a restart would actually happen, so it is the
+    /// path that has to refuse one.
+    #[test]
+    fn claiming_an_occupied_root_recovers_it_and_reports_the_interruption() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        {
+            let mut interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            interrupted.begin(0).unwrap();
+        }
+        let authority = test_authority();
+        let error = refused_claim(&root, &selected, &authority);
+        assert!(error.contains("recovered as a failure bundle"), "{error}");
+        let manifest = validate_accounting(&root, &selected).unwrap();
+        assert!(manifest.finalized && !manifest.passed);
+
+        // The recovered bundle is now final, so a later claim refuses it
+        // outright instead of recovering it again.
+        let error = refused_claim(&root, &selected, &authority);
+        assert!(error.contains("already holds a finalized run"), "{error}");
+        assert_eq!(manifest, validate_accounting(&root, &selected).unwrap());
+    }
+
     #[test]
     fn scenario_reservations_exhaust_before_launch_and_keep_failure_index() {
         let temporary = tempfile::tempdir().unwrap();
@@ -688,24 +818,157 @@ mod journal_regressions {
 /// The CI route binds the root through the environment; the runner command
 /// binds it through `--artifacts`. Both reach the same accounting, so a locally
 /// produced bundle has the layout the offline validator already understands.
+///
+/// A root that already holds a journal belongs to a run that got there first.
+/// Starting again over it would either lose that run's evidence or, with the
+/// root refused for being non-empty, leave an unreadable half-bundle behind and
+/// say nothing about why. So an unfinished journal is finalized into the
+/// failure bundle its own run never reached, and this returns that outcome
+/// instead of a fresh suite.
 pub fn from_request(
     evidence_root: Option<&Path>,
     selected: &[PinnedScript],
     authority: &Authority,
 ) -> Result<Option<SuiteAccounting>, String> {
-    evidence_root
-        .map(|root| {
-            SuiteAccounting::create_with_limits(
-                root,
-                selected,
-                matches!(
-                    std::env::var("UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT").as_deref(),
-                    Ok("1")
-                ),
-                authority.native_runtime_contract().inventory_limits,
-            )
-        })
-        .transpose()
+    let Some(root) = evidence_root else {
+        return Ok(None);
+    };
+    let limits = authority.native_runtime_contract().inventory_limits;
+    if let Some(status) = retained_status(root)? {
+        if status.finalized {
+            return Err(format!(
+                "native suite root {} already holds a finalized run; a new run needs its own root",
+                root.display()
+            ));
+        }
+        let recovered = recover_interrupted(root, selected, limits)?;
+        return Err(format!(
+            "native suite root {} held an interrupted run, recovered as a failure bundle rather than restarted: {}",
+            root.display(),
+            recovered
+                .first_failure
+                .map_or_else(|| "no recorded failure".into(), |failure| failure.detail)
+        ));
+    }
+    SuiteAccounting::create_with_limits(
+        root,
+        selected,
+        matches!(
+            std::env::var("UQM_CI_NATIVE_ACCEPTANCE_PRECREATED_ROOT").as_deref(),
+            Ok("1")
+        ),
+        limits,
+    )
+    .map(Some)
+}
+
+/// The journal state a previous run left in `root`, if it left one.
+///
+/// The status document is published with the suite's first transition, before
+/// any child runs, so its presence is what separates a root some run already
+/// claimed from a root that merely has something else in it.
+fn retained_status(root: &Path) -> Result<Option<SuiteManifest>, String> {
+    let bytes = match crate::ci::evidence::read_regular_relative(root, "suite-status.json") {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("read retained suite status: {error}")),
+    };
+    serde_json::from_slice(&bytes)
+        .map(Some)
+        .map_err(|error| format!("parse retained suite status: {error}"))
+}
+
+/// Finalize the journal an interrupted run left behind.
+///
+/// An interrupted run publishes its last transition and then stops, so its
+/// journal is intact but carries no manifest, index or catalog and no offline
+/// reader will accept it. Recovery rebinds that journal to the same selection,
+/// records the interruption against whichever row was active, and publishes the
+/// failure bundle the run never reached. The interrupted attempt keeps the
+/// duration the journal already recorded: it was measured by a process that no
+/// longer exists, and this one cannot measure it after the fact.
+pub fn recover_interrupted(
+    root: &Path,
+    selected: &[PinnedScript],
+    limits: uqm_rust::automation::native_window::NativeInventoryLimits,
+) -> Result<SuiteManifest, String> {
+    let status = retained_status(root)?
+        .ok_or_else(|| format!("native suite root {} holds no journal", root.display()))?;
+    if status.finalized {
+        return Err(format!(
+            "native suite journal in {} is already final",
+            root.display()
+        ));
+    }
+    if status.schema != "uqm-native-suite-v1" {
+        return Err(format!(
+            "retained suite journal schema {:?} is not uqm-native-suite-v1",
+            status.schema
+        ));
+    }
+    let request = crate::ci::evidence::read_regular_relative(root, "suite-request.json")
+        .map_err(|error| format!("read retained suite request: {error}"))?;
+    let expected = serde_json::to_vec_pretty(selected).map_err(|error| error.to_string())?;
+    if request != expected
+        || status.request != crate::retained_identity("suite-request.json", &request)
+        || status
+            .scenarios
+            .iter()
+            .map(|row| row.script.clone())
+            .collect::<Vec<_>>()
+            != selected
+    {
+        return Err(format!(
+            "native suite journal in {} was requested for a different selection",
+            root.display()
+        ));
+    }
+    let budget = uqm_rust::automation::native_artifacts::ArtifactBudget::new(limits);
+    budget.reserve("suite-request.json", request.len() as u64)?;
+    budget.reserve_directory("scenarios")?;
+    let diagnostics =
+        reserve_suite_diagnostics(&budget, limits, status.scenarios.len(), request.len())?;
+    let active = status
+        .scenarios
+        .iter()
+        .position(|row| matches!(row.state, ScenarioState::Attempted));
+    let carried_ms = status.elapsed_ms;
+    let sequence = status
+        .sequence
+        .checked_add(1)
+        .ok_or("retained suite sequence overflow")?;
+    let mut suite = SuiteAccounting {
+        root: root.to_path_buf(),
+        publisher: crate::ci::evidence::EvidencePublisher::open(root)
+            .map_err(|error| error.to_string())?,
+        manifest: SuiteManifest { sequence, ..status },
+        started: std::time::Instant::now(),
+        carried_ms,
+        member_started: None,
+        budget,
+        diagnostics,
+    };
+    // Whatever the interrupted run retained is charged before anything else is
+    // published, so recovery cannot exceed the budget that run was held to.
+    for index in 0..suite.manifest.scenarios.len() {
+        suite.account_scenario(index)?;
+    }
+    let (phase, detail) = match active {
+        Some(index) => (
+            SuitePhase::Execute,
+            format!(
+                "native suite run was interrupted while scenario {index} was attempted; the attempt's duration was never measured"
+            ),
+        ),
+        None => (
+            SuitePhase::Preflight,
+            "native suite run was interrupted before any scenario was attempted".to_string(),
+        ),
+    };
+    let retained_elapsed = active.map(|index| suite.manifest.scenarios[index].elapsed_ms);
+    suite.record_failure(phase, active, detail, retained_elapsed)?;
+    suite.finish()?;
+    validate_accounting(root, selected)
 }
 
 /// The shared store's descriptor, read directly by offline consumers.
@@ -868,6 +1131,10 @@ pub struct SuiteAccounting {
     publisher: crate::ci::evidence::EvidencePublisher,
     manifest: SuiteManifest,
     started: std::time::Instant,
+    /// Elapsed time this process did not measure, carried from a journal it
+    /// took over. Suite duration has to keep rising across the handover, and
+    /// the earlier run's clock is gone with the process that read it.
+    carried_ms: u64,
     member_started: Option<std::time::Instant>,
     budget: uqm_rust::automation::native_artifacts::ArtifactBudget,
     diagnostics: std::collections::BTreeMap<String, u64>,
@@ -957,6 +1224,7 @@ impl SuiteAccounting {
                 passed: false,
             },
             started: std::time::Instant::now(),
+            carried_ms: 0,
             member_started: None,
             budget,
             diagnostics,
@@ -1047,7 +1315,10 @@ impl SuiteAccounting {
     }
 
     fn persist(&mut self) -> Result<(), String> {
-        self.manifest.elapsed_ms = millis(self.started.elapsed())?;
+        self.manifest.elapsed_ms = self
+            .carried_ms
+            .checked_add(millis(self.started.elapsed())?)
+            .ok_or("native suite elapsed milliseconds overflow")?;
         let bytes = serde_json::to_vec_pretty(&self.manifest).map_err(|error| error.to_string())?;
         self.publish(
             &format!("suite-events/{:06}.json", self.manifest.sequence),
@@ -1130,10 +1401,33 @@ impl SuiteAccounting {
         scenario: Option<usize>,
         detail: String,
     ) -> Result<(), String> {
+        self.record_failure(phase, scenario, detail, None)
+    }
+
+    /// `retained_elapsed_ms` is the duration to record for the failed row when
+    /// this process did not measure the attempt. Only recovery of an
+    /// interrupted journal is in that position: the attempt began in a process
+    /// that no longer exists, so its duration is whatever that process recorded
+    /// rather than something this one can invent.
+    fn record_failure(
+        &mut self,
+        phase: SuitePhase,
+        scenario: Option<usize>,
+        detail: String,
+        retained_elapsed_ms: Option<u64>,
+    ) -> Result<(), String> {
         if self.manifest.finalized || self.manifest.first_failure.is_some() || detail.is_empty() {
             return Err("native suite failure must identify its first contract".into());
         }
         if let Some(index) = scenario {
+            let elapsed_ms = match retained_elapsed_ms {
+                Some(retained) => retained,
+                None => millis(
+                    self.member_started
+                        .ok_or("missing scenario start")?
+                        .elapsed(),
+                )?,
+            };
             let row = self
                 .manifest
                 .scenarios
@@ -1145,11 +1439,7 @@ impl SuiteAccounting {
             row.state = ScenarioState::Failed {
                 detail: detail.clone(),
             };
-            row.elapsed_ms = millis(
-                self.member_started
-                    .ok_or("missing scenario start")?
-                    .elapsed(),
-            )?;
+            row.elapsed_ms = elapsed_ms;
             self.member_started = None;
         } else if self.member_started.is_some() {
             return Err("active attempt requires a scenario-bound failure".into());
