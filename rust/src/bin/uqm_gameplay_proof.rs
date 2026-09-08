@@ -10,7 +10,7 @@ use uqm_rust::automation::interrupt;
 use uqm_rust::automation::{
     verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
     ChildSessionReceipt, RecordKind, RunLock, SeedDomain, TeardownReceipt, TerminalClass,
-    TraceRecord, AUTOMATION_SEED,
+    TraceRecord,
 };
 
 const USAGE: &str = "usage: uqm-gameplay-proof \
@@ -24,7 +24,7 @@ report BUNDLE_DIR | \
 replay REPO_ROOT PRIOR_BUNDLE OUTPUT_ROOT | \
 gallery SUITE_ROOT";
 
-const SCHEMA: &str = "uqm-lcar-v1";
+const SCHEMA: &str = "uqm-lcar-v2";
 
 /// Every LCAR schema this build can validate.
 ///
@@ -32,8 +32,8 @@ const SCHEMA: &str = "uqm-lcar-v1";
 /// unknown version is rejected by name, and so adding a version is a visible
 /// change here rather than a silent widening.
 const SUPPORTED_SCHEMAS: &[&str] = &[SCHEMA];
-const FAILURE_FILE: &str = "failure-lcar-v1.json";
-const PASS_FILE: &str = "lcar-v1.json";
+const FAILURE_FILE: &str = "failure-lcar-v2.json";
+const PASS_FILE: &str = "lcar-v2.json";
 const PRODUCTION_SCHEMA: &str = "uqm-deterministic-artifacts-v4";
 const PRODUCTION_FEATURES: [&str; 2] = ["audio_heart", "linked_c_archive"];
 const LOG_BUDGET: u64 = 64 * 1024 * 1024;
@@ -80,6 +80,7 @@ enum ArtifactRole {
     ExecutableSnapshot,
     ScriptSnapshot,
     ContentIdentitySnapshot,
+    ContentSnapshotFile,
     InitialConfigSnapshot,
     FinalConfigSnapshot,
     RetainedConfigFile,
@@ -162,6 +163,7 @@ struct LcarManifest {
     features: Vec<String>,
     renderer: String,
     seed: u32,
+    input_identity: String,
     provenance: Provenance,
     process: ProcessReceipt,
     cleanup: CleanupReceipt,
@@ -189,6 +191,7 @@ struct RunEvidence {
     output_root: PathBuf,
     config_root: PathBuf,
     production: ProductionManifest,
+    seed: u32,
     command: Vec<String>,
     environment: BTreeMap<String, String>,
     provenance: Provenance,
@@ -266,11 +269,15 @@ fn run_proof(
         &content,
         output_root,
     )?;
+    execute_prepared(&repo_root, &mut evidence)
+}
+
+fn execute_prepared(repo_root: &Path, evidence: &mut RunEvidence) -> Result<(), String> {
     // An interruption that arrived while evidence was being prepared stops the
     // run here, before a child exists, and says so. Continuing would spawn the
     // game after the operator already asked for it to stop.
     if let Some(signal) = interrupt::interrupted() {
-        record_interrupted_preparation(&evidence, signal)?;
+        record_interrupted_preparation(evidence, signal)?;
         return Err(format!(
             "interrupted by signal {signal} while preparing evidence"
         ));
@@ -284,13 +291,13 @@ fn run_proof(
     )
     .map_err(|error| error.to_string())?;
     let receipt = supervise_child(
-        &repo_root,
+        repo_root,
         &evidence.output_root.join("snapshots/uqm"),
-        &content,
+        &evidence.output_root.join("snapshots/sc2/content"),
         &evidence.output_root.join("snapshots/script.json"),
-        &evidence,
+        evidence,
     );
-    complete_run(&mut evidence, receipt)
+    complete_run(evidence, receipt)
 }
 
 fn prepare_evidence(
@@ -314,7 +321,9 @@ fn prepare_evidence(
     copy_new(production_path, &snapshots.join("production-manifest.json"))?;
     copy_new(executable, &snapshots.join("uqm"))?;
     copy_new(script, &snapshots.join("script.json"))?;
-    let content_snapshot = snapshot_tree(content, "content")?;
+    let content_snapshot = retain_content(content, &snapshots.join("sc2/content"))?;
+    let content = snapshots.join("sc2/content");
+    let seed = read_validated_script(&snapshots.join("script.json"))?.seed();
     write_new_json(&snapshots.join("content-identity.json"), &content_snapshot)?;
     let initial_config = snapshot_tree(&config_root, "initial_config")?;
     write_new_json(&snapshots.join("config-initial.json"), &initial_config)?;
@@ -350,6 +359,7 @@ fn prepare_evidence(
         output_root,
         config_root,
         production: production.clone(),
+        seed,
         command,
         environment,
         provenance,
@@ -372,6 +382,7 @@ fn supervise_child(
         .arg(format!("--automation-output={}", run_root.display()))
         .args(["--res=640x480", "--windowed", "--scroll=pc"])
         .current_dir(repo_root)
+        .env_clear()
         .env("SDL_VIDEODRIVER", "dummy")
         .env("SDL_AUDIODRIVER", "dummy");
     // The run must not proceed under a digest nobody checked: the declared
@@ -441,7 +452,7 @@ fn complete_run(
         .or(evidence_contract);
     let passed = first_failed_contract.is_none();
     let artifacts = collect_artifacts(&evidence.output_root)?;
-    let manifest = LcarManifest {
+    let mut manifest = LcarManifest {
         schema: SCHEMA.into(),
         passed,
         first_failed_contract,
@@ -452,12 +463,14 @@ fn complete_run(
         profile: evidence.production.profile.clone(),
         features: evidence.production.features.clone(),
         renderer: "sdl2-software-dummy".into(),
-        seed: AUTOMATION_SEED,
+        seed: evidence.seed,
+        input_identity: String::new(),
         provenance: evidence.provenance.clone(),
         process,
         cleanup,
         artifacts,
     };
+    manifest.input_identity = input_identity(&evidence.output_root, &manifest)?;
     let name = if passed { PASS_FILE } else { FAILURE_FILE };
     let manifest_path = evidence.output_root.join(name);
     write_atomic_new_json(&manifest_path, &manifest)?;
@@ -562,14 +575,113 @@ fn unavailable_receipt(executable_digest: &str) -> ChildSessionReceipt {
 
 fn validate_manifest(path: &Path) -> Result<(), String> {
     let manifest: LcarManifest = read_json(path)?;
+    validate_loaded_manifest(path, &manifest)
+}
+
+fn validate_loaded_manifest(path: &Path, manifest: &LcarManifest) -> Result<(), String> {
     let root = path
         .parent()
         .ok_or_else(|| "LCAR manifest has no parent".to_string())?;
-    validate_manifest_identity(path, &manifest)?;
-    validate_inventory(root, &manifest)?;
-    validate_provenance(root, &manifest)?;
-    validate_command(root, &manifest)?;
-    validate_result(root, &manifest)
+    validate_manifest_identity(path, manifest)?;
+    validate_inventory(root, manifest)?;
+    validate_provenance(root, manifest)?;
+    validate_command(manifest)?;
+    validate_scenario_binding(root, manifest)?;
+    if manifest.input_identity != input_identity(root, manifest)? {
+        return Err("LCAR replay input identity does not match retained inputs".into());
+    }
+    validate_result(root, manifest)
+}
+
+fn read_validated_script(
+    path: &Path,
+) -> Result<uqm_rust::automation::script::ValidatedScript, String> {
+    let bytes =
+        fs::read(path).map_err(|error| format!("read script {}: {error}", path.display()))?;
+    let doc = uqm_rust::automation::script::parse_script(&bytes, path)
+        .map_err(|error| error.to_string())?;
+    uqm_rust::automation::script::validate_script(doc, path).map_err(|error| error.to_string())
+}
+
+fn input_identity(root: &Path, manifest: &LcarManifest) -> Result<String, String> {
+    let script = read_validated_script(&artifact_path(
+        root,
+        manifest,
+        ArtifactRole::ScriptSnapshot,
+    )?)?;
+    let material = serde_json::json!({
+        "schema": "uqm-replay-input-v1",
+        "scenario_identity": script.resolved().replay_identity().map_err(|error| error.to_string())?,
+        "seed": manifest.seed,
+        "git_head": manifest.git_head,
+        "target": manifest.target,
+        "profile": manifest.profile,
+        "features": manifest.features,
+        "renderer": manifest.renderer,
+        "environment": manifest.environment,
+        "production_manifest_sha256": manifest.provenance.production_manifest_sha256,
+        "executable_sha256": manifest.provenance.executable_sha256,
+        "script_sha256": manifest.provenance.script_sha256,
+        "content_tree_sha256": manifest.provenance.content_tree_sha256,
+        "initial_config_tree_sha256": manifest.provenance.initial_config_tree_sha256,
+    });
+    let bytes = serde_json::to_vec(&material).map_err(|error| error.to_string())?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+fn validate_scenario_binding(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
+    let script = read_validated_script(&artifact_path(
+        root,
+        manifest,
+        ArtifactRole::ScriptSnapshot,
+    )?)?;
+    let record: uqm_rust::automation::lifecycle::ResolvedScenarioRecord = read_json(
+        &artifact_path(root, manifest, ArtifactRole::ResolvedScenario)?,
+    )?;
+    record.validate().map_err(|error| error.to_string())?;
+    if record.scenario != script.resolved() {
+        return Err("resolved scenario differs from the retained script inputs".into());
+    }
+    if manifest.seed != script.seed() {
+        return Err("LCAR seed differs from the resolved script seed".into());
+    }
+    if manifest
+        .artifacts
+        .iter()
+        .any(|entry| entry.role == ArtifactRole::Trace)
+    {
+        for record in parse_trace(&artifact_path(root, manifest, ArtifactRole::Trace)?)? {
+            match (&record.kind, &record.seed_application) {
+                (RecordKind::SeedApplication, Some(application))
+                    if application.seed == script.seed() => {}
+                (RecordKind::SeedApplication, _) | (_, Some(_)) => {
+                    return Err(
+                        "trace RNG seed application differs from the resolved script seed".into(),
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+fn retain_content(source: &Path, destination: &Path) -> Result<TreeSnapshot, String> {
+    let expected = snapshot_tree(source, "content")?;
+    fs::create_dir_all(destination).map_err(|error| format!("create retained content: {error}"))?;
+    for entry in &expected.entries {
+        let target = destination.join(&entry.path);
+        let parent = target
+            .parent()
+            .ok_or_else(|| "content entry has no parent".to_string())?;
+        fs::create_dir_all(parent).map_err(|error| format!("create content directory: {error}"))?;
+        copy_new(&source.join(&entry.path), &target)?;
+    }
+    let copied = snapshot_tree(destination, "content")?;
+    if copied.tree_sha256 != expected.tree_sha256 {
+        return Err("content changed while retaining replay inputs".into());
+    }
+    Ok(copied)
 }
 
 /// Print the published matrix, optionally for one domain.
@@ -725,38 +837,95 @@ fn scenario_name(run: &Path) -> Option<String> {
     value["scenario"]["name"].as_str().map(str::to_owned)
 }
 
-/// Re-run the scenario a bundle recorded and prove it reproduces.
-///
-/// The prior bundle is the source of truth. Its snapshotted production
-/// manifest and script are the exact inputs the first run consumed, so a
-/// replay cannot quietly drift onto a different scenario or a rebuilt
-/// executable and still call itself a replay. The run counts as a replay only
-/// when the identity it produces equals the identity that was recorded.
+/// Replay only verified retained inputs. Outcome comparison is separate from
+/// input identity and excludes pixels and callback/wall-clock timing.
 fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(), String> {
-    let recorded = recorded_identity(prior)?;
-    let manifest = prior.join("snapshots/production-manifest.json");
-    let script = prior.join("snapshots/script.json");
-    for (label, path) in [("production manifest", &manifest), ("script", &script)] {
-        if !path.exists() {
-            return Err(format!(
-                "{} has no snapshotted {label} at {}, so it cannot be replayed",
-                prior.display(),
-                path.display()
-            ));
+    with_verified_replay(prior, |manifest| {
+        interrupt::install().map_err(|error| error.to_string())?;
+        let repo_root = fs::canonicalize(repo_root)
+            .map_err(|error| format!("canonicalize replay repository: {error}"))?;
+        let production_path =
+            artifact_path(prior, manifest, ArtifactRole::ProductionManifestSnapshot)?;
+        let production = parse_production(&read_json_value(&production_path)?)?;
+        validate_production(&production, true)?;
+        verify_source_binding(&repo_root, &production.git_head)?;
+        let prior_outcome = replay_outcome(prior)?;
+        let mut evidence = prepare_evidence(
+            &repo_root,
+            &production_path,
+            &production,
+            &artifact_path(prior, manifest, ArtifactRole::ExecutableSnapshot)?,
+            &artifact_path(prior, manifest, ArtifactRole::ScriptSnapshot)?,
+            &prior.join("snapshots/sc2/content"),
+            output_root,
+        )?;
+        // Check the newly copied bytes too, before starting a child. The source
+        // bundle may have been changed during preparation by an external writer.
+        verify_replay_copy(&evidence, manifest)?;
+        execute_prepared(&repo_root, &mut evidence)?;
+        let produced: LcarManifest = read_json(&output_root.join(PASS_FILE))?;
+        if produced.input_identity != manifest.input_identity {
+            return Err("replay input identity differs from the verified prior bundle".into());
+        }
+        if replay_outcome(output_root)? != prior_outcome {
+            return Err("replay inputs match but semantic outcomes differ".into());
+        }
+        println!("input_identity\t{}", produced.input_identity);
+        println!("semantic_outcome\tmatched (timing and pixels not compared)");
+        println!("replays\t{}", prior.display());
+        Ok(())
+    })
+}
+
+/// The execution callback cannot be reached with an invalid prior inventory.
+fn with_verified_replay<T>(
+    prior: &Path,
+    execute: impl FnOnce(&LcarManifest) -> Result<T, String>,
+) -> Result<T, String> {
+    let path = prior.join(PASS_FILE);
+    let manifest: LcarManifest = read_json(&path)?;
+    validate_loaded_manifest(&path, &manifest)?;
+    if !manifest.passed {
+        return Err("replay requires a passing prior bundle".into());
+    }
+    execute(&manifest)
+}
+
+fn verify_replay_copy(evidence: &RunEvidence, prior: &LcarManifest) -> Result<(), String> {
+    let copied = &evidence.provenance;
+    let original = &prior.provenance;
+    if copied.production_manifest_sha256 != original.production_manifest_sha256
+        || copied.executable_sha256 != original.executable_sha256
+        || copied.script_sha256 != original.script_sha256
+        || copied.content_tree_sha256 != original.content_tree_sha256
+        || copied.initial_config_tree_sha256 != original.initial_config_tree_sha256
+        || evidence.seed != prior.seed
+    {
+        return Err("replay snapshot changed while preparing verified inputs".into());
+    }
+    Ok(())
+}
+
+fn replay_outcome(root: &Path) -> Result<Vec<TraceRecord>, String> {
+    let mut outcome = Vec::new();
+    for mut record in parse_trace(&root.join("run/trace.jsonl"))? {
+        if matches!(
+            record.kind,
+            RecordKind::SeedApplication
+                | RecordKind::SemanticAssertion
+                | RecordKind::MenuTransition
+                | RecordKind::Checkpoint
+                | RecordKind::Terminal
+        ) {
+            record.elapsed_ms = 0;
+            record.sequence = outcome.len() as u64;
+            record.input_seen = 0;
+            record.present_seen = 0;
+            record.presentation = None;
+            outcome.push(record);
         }
     }
-
-    run_proof(repo_root, &manifest, &script, output_root)?;
-
-    let produced = recorded_identity(output_root)?;
-    if produced != recorded {
-        return Err(format!(
-            "replay produced a different run: recorded {recorded}, produced {produced}"
-        ));
-    }
-    println!("replay_identity\t{produced}");
-    println!("replays\t{}", prior.display());
-    Ok(())
+    Ok(outcome)
 }
 
 /// Record that a run stopped, before any child existed, because of a signal.
@@ -798,31 +967,19 @@ fn run_dir(bundle: &Path) -> PathBuf {
     }
 }
 
-/// The replay identity a bundle recorded.
-fn recorded_identity(bundle: &Path) -> Result<String, String> {
-    let path = run_dir(bundle).join("resolved-scenario.json");
-    let text = std::fs::read_to_string(&path)
-        .map_err(|error| format!("read {}: {error}", path.display()))?;
-    let value: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|error| format!("parse {}: {error}", path.display()))?;
-    value["replay_identity"]
-        .as_str()
-        .map(str::to_owned)
-        .ok_or_else(|| format!("{} lacks replay_identity", path.display()))
-}
-
 /// Summarise a produced bundle, including the scenario it actually replayed.
 fn report_bundle(bundle: &Path) -> Result<(), String> {
     let run = run_dir(bundle);
     let resolved_path = run.join("resolved-scenario.json");
-    let resolved: Option<serde_json::Value> = match std::fs::read_to_string(&resolved_path) {
-        Ok(text) => Some(
-            serde_json::from_str(&text)
-                .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?,
-        ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-        Err(error) => return Err(format!("read {}: {error}", resolved_path.display())),
-    };
+    let resolved: Option<uqm_rust::automation::lifecycle::ResolvedScenarioRecord> =
+        match std::fs::read_to_string(&resolved_path) {
+            Ok(text) => Some(
+                serde_json::from_str(&text)
+                    .map_err(|error| format!("parse {}: {error}", resolved_path.display()))?,
+            ),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(format!("read {}: {error}", resolved_path.display())),
+        };
     let Some(resolved) = resolved else {
         // The run stopped before it resolved a scenario. Say so plainly and
         // report whatever terminal state it did record, because a bundle from
@@ -831,23 +988,16 @@ fn report_bundle(bundle: &Path) -> Result<(), String> {
         return report_terminal(&run);
     };
 
-    // The scenario facts are nested under "scenario"; the identity that binds
-    // them sits beside it.
-    let scenario = &resolved["scenario"];
-    for (label, value) in [
-        ("scenario", scenario["name"].as_str()),
-        ("fixture", scenario["fixture"].as_str()),
-        ("schema", scenario["schema"].as_str()),
-        ("replay_identity", resolved["replay_identity"].as_str()),
-    ] {
-        println!(
-            "{label}\t{}",
-            value.ok_or_else(|| format!("{} lacks {label}", resolved_path.display()))?
-        );
-    }
-    println!("scenario_version\t{}", scenario["scenario_version"]);
-    println!("seed\t{}", scenario["seed"]);
-    println!("steps\t{}", scenario["step_count"]);
+    resolved.validate().map_err(|error| error.to_string())?;
+    let scenario = &resolved.scenario;
+    println!("scenario\t{}", scenario.name);
+    println!("fixture\t{}", scenario.fixture);
+    println!("schema\t{}", scenario.schema);
+    println!("scenario_input_identity\t{}", resolved.replay_identity);
+    println!("scenario_version\t{}", scenario.scenario_version);
+    println!("seed\t{}", scenario.seed);
+    println!("requested_seed\t{}", scenario.requested_seed);
+    println!("steps\t{}", scenario.step_count);
 
     report_terminal(&run)
 }
@@ -907,12 +1057,6 @@ fn validate_manifest_identity(path: &Path, manifest: &LcarManifest) -> Result<()
             manifest.git_head
         ));
     }
-    if manifest.seed != AUTOMATION_SEED {
-        return Err(format!(
-            "LCAR seed {} is not the deterministic seed {AUTOMATION_SEED}",
-            manifest.seed
-        ));
-    }
     if manifest.renderer != "sdl2-software-dummy" {
         return Err(format!(
             "LCAR renderer {:?} is not the accepted renderer sdl2-software-dummy",
@@ -954,6 +1098,18 @@ fn validate_manifest_identity(path: &Path, manifest: &LcarManifest) -> Result<()
 }
 
 fn validate_inventory(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
+    let conflicting_result = if manifest.passed {
+        FAILURE_FILE
+    } else {
+        PASS_FILE
+    };
+    if root
+        .join(conflicting_result)
+        .try_exists()
+        .map_err(|error| format!("inspect conflicting result: {error}"))?
+    {
+        return Err("LCAR bundle contains conflicting result manifests".into());
+    }
     if manifest.artifacts.is_empty() {
         return Err("LCAR artifact inventory is empty".into());
     }
@@ -961,6 +1117,9 @@ fn validate_inventory(root: &Path, manifest: &LcarManifest) -> Result<(), String
     let mut roles = BTreeMap::<ArtifactRole, usize>::new();
     for entry in &manifest.artifacts {
         validate_relative_path(&entry.path)?;
+        if role_for_path(&entry.path)? != entry.role {
+            return Err(format!("artifact role does not match path: {}", entry.path));
+        }
         if !paths.insert(entry.path.clone()) {
             return Err(format!("duplicate artifact path: {}", entry.path));
         }
@@ -1053,6 +1212,13 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
         "final_config",
         &manifest.provenance.final_config_tree_sha256,
     )?;
+    if !initial.entries.is_empty() {
+        return Err("initial config must be the fresh empty profile this runner executes".into());
+    }
+    let retained_content = snapshot_tree(&root.join("snapshots/sc2/content"), "content")?;
+    if retained_content.tree_sha256 != content.tree_sha256 {
+        return Err("retained content does not match content identity snapshot".into());
+    }
     let production_path = artifact_path(root, manifest, ArtifactRole::ProductionManifestSnapshot)?;
     let production = parse_production(&read_json_value(&production_path)?)?;
     validate_production(&production, false)?;
@@ -1067,41 +1233,47 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
     Ok(())
 }
 
-fn validate_command(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
-    let root = fs::canonicalize(root)
-        .map_err(|error| format!("canonicalize LCAR root {}: {error}", root.display()))?;
-    if manifest.command.len() != 8
-        || manifest.command[0]
-            != artifact_path(&root, manifest, ArtifactRole::ExecutableSnapshot)?
-                .display()
-                .to_string()
-        || manifest.command[1] != format!("--contentdir={}", command_content(&manifest.command[1])?)
-        || manifest.command[2] != format!("--configdir={}", root.join("config").display())
-        || !manifest.command[3].starts_with("--automation-script=")
-        || manifest.command[4] != format!("--automation-output={}", root.join("run").display())
-        || manifest.command[5] != "--res=640x480"
-        || manifest.command[6] != "--windowed"
-        || manifest.command[7] != "--scroll=pc"
-    {
-        return Err("recorded gameplay command is not the exact supported command".into());
-    }
-    let content = command_content(&manifest.command[1])?;
-    if !content.ends_with("sc2/content")
-        || Path::new(content)
+fn validate_command(manifest: &LcarManifest) -> Result<(), String> {
+    let executable = manifest
+        .command
+        .first()
+        .ok_or_else(|| "recorded command is empty".to_string())?;
+    let executable = Path::new(executable);
+    if !executable.is_absolute()
+        || executable
             .components()
-            .any(|c| c == Component::ParentDir)
+            .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
     {
-        return Err("recorded content command path is invalid".into());
+        return Err("recorded executable path is not absolute and normalized".into());
     }
-    let script = manifest.command[3]
-        .strip_prefix("--automation-script=")
-        .ok_or_else(|| "script command argument is malformed".to_string())?;
-    if script
-        != artifact_path(&root, manifest, ArtifactRole::ScriptSnapshot)?
-            .display()
-            .to_string()
-    {
-        return Err("recorded automation script is not the retained immutable snapshot".into());
+    // Commands describe the original run location. Revalidate that all operands
+    // refer to that one bundle, without opening those old absolute paths when a
+    // transported bundle is validated elsewhere.
+    let recorded_root = executable
+        .parent()
+        .and_then(Path::parent)
+        .ok_or_else(|| "recorded executable lacks a bundle root".to_string())?;
+    let expected = vec![
+        recorded_root.join("snapshots/uqm").display().to_string(),
+        format!(
+            "--contentdir={}",
+            recorded_root.join("snapshots/sc2/content").display()
+        ),
+        format!("--configdir={}", recorded_root.join("config").display()),
+        format!(
+            "--automation-script={}",
+            recorded_root.join("snapshots/script.json").display()
+        ),
+        format!(
+            "--automation-output={}",
+            recorded_root.join("run").display()
+        ),
+        "--res=640x480".into(),
+        "--windowed".into(),
+        "--scroll=pc".into(),
+    ];
+    if manifest.command != expected {
+        return Err("recorded gameplay command is not the exact supported snapshot command".into());
     }
     Ok(())
 }
@@ -1614,7 +1786,7 @@ fn collect_artifacts(root: &Path) -> Result<Vec<ArtifactEntry>, String> {
     let mut entries = Vec::new();
     for path in collect_paths(root)? {
         let relative = relative_path(root, &path)?;
-        if is_lcar_name(&relative) || relative.ends_with(".tmp") {
+        if is_lcar_name(&relative) {
             continue;
         }
         let role = role_for_path(&relative)?;
@@ -1646,6 +1818,7 @@ fn role_for_path(path: &str) -> Result<ArtifactRole, String> {
         "snapshots/config-final.json" => ArtifactRole::FinalConfigSnapshot,
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => ArtifactRole::Capture,
         _ if path.starts_with("config/") => ArtifactRole::RetainedConfigFile,
+        _ if path.starts_with("snapshots/sc2/content/") => ArtifactRole::ContentSnapshotFile,
         _ => return Err(format!("unexpected evidence artifact: {path}")),
     };
     Ok(role)
@@ -1668,7 +1841,10 @@ fn mandatory_roles() -> [ArtifactRole; 9] {
 }
 
 fn allows_empty(role: ArtifactRole) -> bool {
-    matches!(role, ArtifactRole::StdoutLog | ArtifactRole::StderrLog)
+    matches!(
+        role,
+        ArtifactRole::StdoutLog | ArtifactRole::StderrLog | ArtifactRole::ContentSnapshotFile
+    )
 }
 
 fn collect_relative_files(root: &Path) -> Result<BTreeSet<String>, String> {
@@ -1678,7 +1854,7 @@ fn collect_relative_files(root: &Path) -> Result<BTreeSet<String>, String> {
         .filter(|result| {
             result
                 .as_ref()
-                .map(|path| !is_lcar_name(path) && !path.ends_with(".tmp"))
+                .map(|path| !is_lcar_name(path))
                 .unwrap_or(true)
         })
         .collect()
@@ -1781,12 +1957,6 @@ fn validate_relative_path(path: &str) -> Result<(), String> {
         return Err(format!("artifact path is not normalized: {path}"));
     }
     Ok(())
-}
-
-fn command_content(argument: &str) -> Result<&str, String> {
-    argument
-        .strip_prefix("--contentdir=")
-        .ok_or_else(|| "content command argument is malformed".into())
 }
 
 fn is_lcar_name(path: &str) -> bool {
@@ -1905,6 +2075,9 @@ fn compare_battle_proofs(first: &Path, second: &Path) -> Result<(), String> {
     validate_manifest(second)?;
     let first_manifest: LcarManifest = read_json(first)?;
     let second_manifest: LcarManifest = read_json(second)?;
+    if first_manifest.input_identity != second_manifest.input_identity {
+        return Err("battle comparison requires identical verified replay inputs".into());
+    }
     if !first_manifest.passed || !second_manifest.passed {
         return Err("battle comparison requires two passing LCAR manifests".into());
     }
@@ -1950,8 +2123,8 @@ fn battle_evidence_digest(
                 presentation.count = 0;
             }
             if let Some(seed) = &record.seed_application {
-                if seed.seed != AUTOMATION_SEED {
-                    return Err("battle trace contains a noncanonical RNG seed".into());
+                if seed.seed != manifest.seed {
+                    return Err("battle trace seed differs from its resolved input".into());
                 }
                 match seed.domain {
                     SeedDomain::SuperMeleeMenu => menu_seed_seen = true,
@@ -2069,7 +2242,15 @@ mod tests {
         fs::write(root.join("stdout.log"), b"").unwrap();
         fs::write(root.join("stderr.log"), b"").unwrap();
         fs::write(root.join("snapshots/uqm"), b"executable").unwrap();
-        fs::write(root.join("snapshots/script.json"), b"{}\n").unwrap();
+        write_new_json(&root.join("snapshots/script.json"), &json!({
+            "version": 2, "name": "fixture", "fixture": "fixture", "seed": 42,
+            "budgets": {"max_input_ticks": 10, "max_presentations": 10, "max_wallclock_seconds": 10},
+            "steps": [{"action":"wait_presentations","count":1},
+                {"action":"assert_battle_frames","minimum":1},
+                {"action":"capture","label":"frame"}, {"action":"finish"}]
+        })).unwrap();
+        fs::create_dir_all(root.join("snapshots/sc2/content")).unwrap();
+        fs::write(root.join("snapshots/sc2/content/test-data"), b"content").unwrap();
         let target = if cfg!(target_arch = "aarch64") {
             if cfg!(target_os = "macos") {
                 "aarch64-apple-darwin"
@@ -2096,19 +2277,16 @@ mod tests {
             &production,
         )
         .unwrap();
-        let content = TreeSnapshot {
+        let content = snapshot_tree(&root.join("snapshots/sc2/content"), "content").unwrap();
+        let initial = TreeSnapshot {
             schema: "uqm-tree-identity-v1".into(),
-            root_role: "content".into(),
+            root_role: "initial_config".into(),
             tree_sha256: format!("{:x}", Sha256::digest([])),
             entries: vec![],
         };
-        let initial = TreeSnapshot {
-            root_role: "initial_config".into(),
-            ..content.clone()
-        };
         let final_config = TreeSnapshot {
             root_role: "final_config".into(),
-            ..content.clone()
+            ..initial.clone()
         };
         write_new_json(&root.join("snapshots/content-identity.json"), &content).unwrap();
         write_new_json(&root.join("snapshots/config-initial.json"), &initial).unwrap();
@@ -2135,7 +2313,13 @@ mod tests {
             height: 1,
         });
         records.push(capture);
-        records.push(record(4, RecordKind::RunEnd));
+        let mut seed = record(4, RecordKind::SeedApplication);
+        seed.seed_application = Some(uqm_rust::automation::trace::SeedApplication {
+            domain: SeedDomain::SuperMeleeBattle,
+            seed: 42,
+        });
+        records.push(seed);
+        records.push(record(5, RecordKind::RunEnd));
         let trace = records
             .iter()
             .map(|record| record.to_jsonl().unwrap())
@@ -2152,34 +2336,26 @@ mod tests {
             trace_durable: true,
         };
         write_new_json(&root.join("run/teardown-complete.json"), &teardown).unwrap();
-        write_new_json(
-            &root.join("run/resolved-scenario.json"),
-            &json!({
-                "scenario": {
-                    "schema": "uqm-resolved-scenario-v1",
-                    "scenario_version": 2,
-                    "name": "fixture",
-                    "fixture": "fixture",
-                    "seed": 0,
-                    "step_count": 1,
-                    "max_input_ticks": 2,
-                    "max_presentations": 2,
-                    "max_wallclock_seconds": 1
-                },
-                "replay_identity": "0".repeat(64)
-            }),
+        uqm_rust::automation::lifecycle::write_resolved_scenario(
+            &root.join("run"),
+            &read_validated_script(&root.join("snapshots/script.json"))
+                .unwrap()
+                .resolved(),
         )
         .unwrap();
         let artifacts = collect_artifacts(root).unwrap();
         let canonical_root = fs::canonicalize(root).unwrap();
-        let manifest = LcarManifest {
+        let mut manifest = LcarManifest {
             schema: SCHEMA.into(),
             passed: true,
             first_failed_contract: None,
             git_head: "a".repeat(40),
             command: vec![
                 canonical_root.join("snapshots/uqm").display().to_string(),
-                "--contentdir=/repo/sc2/content".into(),
+                format!(
+                    "--contentdir={}",
+                    canonical_root.join("snapshots/sc2/content").display()
+                ),
                 format!("--configdir={}", canonical_root.join("config").display()),
                 format!(
                     "--automation-script={}",
@@ -2204,7 +2380,8 @@ mod tests {
                 .map(|feature| (*feature).into())
                 .collect(),
             renderer: "sdl2-software-dummy".into(),
-            seed: AUTOMATION_SEED,
+            seed: 42,
+            input_identity: String::new(),
             provenance: Provenance {
                 production_manifest_sha256: hash_file(
                     &root.join("snapshots/production-manifest.json"),
@@ -2237,6 +2414,7 @@ mod tests {
             },
             artifacts,
         };
+        manifest.input_identity = input_identity(root, &manifest).unwrap();
         let path = root.join(PASS_FILE);
         write_new_json(&path, &manifest).unwrap();
         Fixture { _temp: temp, path }
@@ -2246,6 +2424,269 @@ mod tests {
         let mut value = read_json_value(&fixture.path).unwrap();
         mutation(&mut value);
         fs::write(&fixture.path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn replay_rejects_tampered_prior_before_source_check_or_spawn() {
+        let fixture = fixture();
+        let prior = fixture.path.parent().unwrap();
+        fs::write(prior.join("snapshots/script.json"), b"tampered").unwrap();
+        let output = prior.join("must-not-be-created");
+        let error =
+            replay_bundle(Path::new("/nonexistent-replay-repo"), prior, &output).unwrap_err();
+        assert!(error.contains("artifact identity mismatch"), "{error}");
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn replay_untouched_inputs_reach_preparation_using_only_retained_bytes() {
+        let fixture = fixture();
+        let prior = fixture.path.parent().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        with_verified_replay(prior, |manifest| {
+            let production_path =
+                artifact_path(prior, manifest, ArtifactRole::ProductionManifestSnapshot)?;
+            let production = parse_production(&read_json_value(&production_path)?)?;
+            let evidence = prepare_evidence(
+                Path::new("/unused-repository"),
+                &production_path,
+                &production,
+                &artifact_path(prior, manifest, ArtifactRole::ExecutableSnapshot)?,
+                &artifact_path(prior, manifest, ArtifactRole::ScriptSnapshot)?,
+                &prior.join("snapshots/sc2/content"),
+                &destination.path().join("replay"),
+            )?;
+            verify_replay_copy(&evidence, manifest)?;
+            assert_eq!(
+                fs::read(evidence.output_root.join("snapshots/uqm")).unwrap(),
+                b"executable"
+            );
+            assert_eq!(
+                fs::read(evidence.output_root.join("snapshots/sc2/content/test-data")).unwrap(),
+                b"content"
+            );
+            assert_eq!(evidence.seed, 42);
+            assert_eq!(
+                evidence.command[1],
+                format!(
+                    "--contentdir={}",
+                    evidence.output_root.join("snapshots/sc2/content").display()
+                )
+            );
+            let mut changed = manifest.clone();
+            changed.seed = 43;
+            assert!(verify_replay_copy(&evidence, &changed).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn replay_untouched_relocated_bundle_remains_verifiable() {
+        let fixture = fixture();
+        let destination = tempfile::tempdir().unwrap();
+        let original = fixture.path.parent().unwrap();
+        for source in collect_paths(original).unwrap() {
+            let target = destination
+                .path()
+                .join(source.strip_prefix(original).unwrap());
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::copy(source, target).unwrap();
+        }
+        with_verified_replay(destination.path(), |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn replay_uninventoried_temporary_files_and_conflicting_results_are_rejected() {
+        for path in ["unrecorded.tmp", FAILURE_FILE] {
+            let fixture = fixture();
+            let root = fixture.path.parent().unwrap();
+            fs::write(root.join(path), b"unexpected evidence").unwrap();
+            let mut executed = false;
+            assert!(
+                with_verified_replay(root, |_| {
+                    executed = true;
+                    Ok(())
+                })
+                .is_err(),
+                "{path}"
+            );
+            assert!(!executed);
+        }
+    }
+
+    #[test]
+    fn replay_tampered_inventory_never_reaches_execution_callback() {
+        for path in [
+            "snapshots/uqm",
+            "snapshots/script.json",
+            "snapshots/sc2/content/test-data",
+            "snapshots/config-initial.json",
+            "run/resolved-scenario.json",
+            "run/trace.jsonl",
+        ] {
+            let fixture = fixture();
+            let prior = fixture.path.parent().unwrap();
+            fs::write(prior.join(path), b"tampered input").unwrap();
+            let mut executed = false;
+            let result = with_verified_replay(prior, |_| {
+                executed = true;
+                Ok(())
+            });
+            assert!(result.is_err(), "{path}");
+            assert!(!executed, "{path}");
+        }
+    }
+
+    fn refresh_inventory(fixture: &Fixture) -> LcarManifest {
+        let mut manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        manifest.artifacts = collect_artifacts(fixture.path.parent().unwrap()).unwrap();
+        manifest
+    }
+
+    #[test]
+    fn replay_rehashed_same_count_script_mutation_is_not_the_recorded_scenario() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let path = root.join("snapshots/script.json");
+        let mut script = read_json_value(&path).unwrap();
+        script["steps"][1]["minimum"] = json!(2);
+        fs::write(&path, serde_json::to_vec(&script).unwrap()).unwrap();
+        let mut manifest = refresh_inventory(&fixture);
+        manifest.provenance.script_sha256 = hash_file(&path).unwrap();
+        manifest.input_identity = input_identity(root, &manifest).unwrap();
+        fs::write(&fixture.path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let error = with_verified_replay(root, |_| -> Result<(), String> {
+            panic!("must not execute")
+        })
+        .unwrap_err();
+        assert!(error.contains("resolved scenario differs"), "{error}");
+    }
+
+    #[test]
+    fn replay_zero_request_binds_the_nonzero_seed_that_is_actually_applied() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let old: LcarManifest = read_json(&fixture.path).unwrap();
+        let script_path = root.join("snapshots/script.json");
+        let mut source = read_json_value(&script_path).unwrap();
+        source["seed"] = json!(0);
+        fs::write(&script_path, serde_json::to_vec(&source).unwrap()).unwrap();
+        let scenario = read_validated_script(&script_path).unwrap().resolved();
+        assert_eq!(scenario.requested_seed, 0);
+        assert_eq!(scenario.seed, 1);
+        let record = uqm_rust::automation::lifecycle::ResolvedScenarioRecord {
+            replay_identity: scenario.replay_identity().unwrap(),
+            scenario,
+        };
+        fs::write(
+            root.join("run/resolved-scenario.json"),
+            serde_json::to_vec(&record).unwrap(),
+        )
+        .unwrap();
+        let trace_path = root.join("run/trace.jsonl");
+        let mut records = parse_trace(&trace_path).unwrap();
+        records[4].seed_application.as_mut().unwrap().seed = 1;
+        fs::write(
+            &trace_path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        let mut manifest = refresh_inventory(&fixture);
+        manifest.seed = 1;
+        manifest.provenance.script_sha256 = hash_file(&script_path).unwrap();
+        manifest.input_identity = input_identity(root, &manifest).unwrap();
+        assert_ne!(manifest.input_identity, old.input_identity);
+        fs::write(&fixture.path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        with_verified_replay(root, |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn replay_rehashed_wrong_applied_seed_is_rejected() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let path = root.join("run/trace.jsonl");
+        let mut records = parse_trace(&path).unwrap();
+        records[4].seed_application.as_mut().unwrap().seed = 43;
+        fs::write(
+            &path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        let manifest = refresh_inventory(&fixture);
+        fs::write(&fixture.path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let error = with_verified_replay(root, |_| -> Result<(), String> {
+            panic!("must not execute")
+        })
+        .unwrap_err();
+        assert!(
+            error.contains("trace RNG seed application differs"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn replay_input_identity_binds_provenance_but_not_outcomes() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        let expected = input_identity(root, &manifest).unwrap();
+        for mutate in [
+            (|m: &mut LcarManifest| m.seed += 1) as fn(&mut LcarManifest),
+            |m| m.provenance.executable_sha256 = "0".repeat(64),
+            |m| m.provenance.script_sha256 = "0".repeat(64),
+            |m| m.provenance.content_tree_sha256 = "0".repeat(64),
+            |m| m.provenance.initial_config_tree_sha256 = "0".repeat(64),
+            |m| m.provenance.production_manifest_sha256 = "0".repeat(64),
+        ] {
+            let mut changed = manifest.clone();
+            mutate(&mut changed);
+            assert_ne!(expected, input_identity(root, &changed).unwrap());
+        }
+        let mut changed_outcome = manifest;
+        changed_outcome.provenance.final_config_tree_sha256 = "0".repeat(64);
+        changed_outcome.process.exit_code = Some(1);
+        assert_eq!(expected, input_identity(root, &changed_outcome).unwrap());
+    }
+
+    #[test]
+    fn replay_outcomes_compare_semantics_without_claiming_pixel_or_timing_equality() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        let expected = replay_outcome(root).unwrap();
+        let trace_path = root.join("run/trace.jsonl");
+        let mut records = parse_trace(&trace_path).unwrap();
+        for record in &mut records {
+            record.elapsed_ms += 100;
+            record.present_seen += 10;
+            record.input_seen += 20;
+        }
+        fs::write(
+            &trace_path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        fs::write(root.join("run/captures/frame.png"), b"different pixels").unwrap();
+        assert_eq!(expected, replay_outcome(root).unwrap());
+        records[2].label = Some("different_semantic_outcome".into());
+        fs::write(
+            &trace_path,
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        assert_ne!(expected, replay_outcome(root).unwrap());
     }
 
     #[test]
@@ -2277,7 +2718,7 @@ mod tests {
             (
                 "wrong seed",
                 &|value| value["seed"] = json!(1234),
-                "not the deterministic seed",
+                "LCAR seed differs from the resolved script seed",
             ),
             (
                 "wrong renderer",

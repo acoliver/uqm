@@ -3751,21 +3751,109 @@ mod tests {
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    fn run_in_containment_test_environment(test_name: &str) -> bool {
+        const MARKER: &str = "UQM_TEST_CONTAINMENT_ENVIRONMENT";
+        if std::env::var(MARKER).as_deref() == Ok(test_name) {
+            return true;
+        }
+
+        // Re-exec isolates inherited inputs without mutating the parallel test runner.
+        // SAFETY: geteuid has no preconditions.
+        let uid = if unsafe { libc::geteuid() } == 59_999 {
+            "60000"
+        } else {
+            "59999"
+        };
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                &format!("ci::exec::tests::{test_name}"),
+                "--nocapture",
+            ])
+            .env_clear()
+            .env(MARKER, test_name)
+            .env("PATH", "/usr/bin:/bin")
+            .env("HOME", "/controller-home")
+            .env("TMPDIR", "/controller-tmp")
+            .env("USER", "controller")
+            .env("LOGNAME", "controller")
+            .env(AUTOPLAY_SCENARIOS_ENV, "battle-v1 main-menu-v1")
+            .env(DEDICATED_CONTAINMENT_UID_ENV, uid)
+            .env(DEDICATED_CONTAINMENT_HOME_ENV, "/containment-home")
+            .env(DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment");
+        for denied in [
+            "GITHUB_ENV",
+            "GITHUB_PATH",
+            "GITHUB_TOKEN",
+            "ACTIONS_RUNTIME_TOKEN",
+            "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+            "CARGO_REGISTRIES_CRATES_IO_TOKEN",
+            "RUSTC_WRAPPER",
+            "BASH_ENV",
+            "UQM_CI_BASE_SHA",
+            "UQM_CI_ANYTHING_ELSE",
+            "UQM_CI_AUTOPLAY_SCENARIOS_SECRET",
+            "UQM_SECRET",
+        ] {
+            command.env(denied, "must-not-reach-child");
+        }
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{test_name}: {output:?}");
+        assert!(String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("1 passed"));
+        false
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn the_autoplay_suite_survives_environment_filtering() {
-        // The suite was selected, published and read, and still only one
-        // scenario ran, because the binding did not survive the allowlist
-        // between the job and the process that reads it. A green gate that
-        // proved one scenario while reporting thirty-two is the failure this
-        // guards against.
-        assert!(
-            containment_environment_allows(AUTOPLAY_SCENARIOS_ENV),
-            "{AUTOPLAY_SCENARIOS_ENV} must survive environment filtering"
+        if !run_in_containment_test_environment("the_autoplay_suite_survives_environment_filtering")
+        {
+            return;
+        }
+        let command =
+            dedicated_contained_command("/usr/bin/env", &["argument with spaces".into()], &[])
+                .unwrap();
+        assert_eq!(command.get_program(), "/usr/bin/sudo");
+        let arguments = command
+            .get_args()
+            .map(|argument| argument.to_str().unwrap())
+            .collect::<Vec<_>>();
+        let uid = std::env::var(DEDICATED_CONTAINMENT_UID_ENV).unwrap();
+        assert_eq!(
+            &arguments[..7],
+            [
+                "-n",
+                "/bin/bash",
+                "-c",
+                DEDICATED_UID_WRAPPER,
+                "uqm-dedicated-containment",
+                &uid,
+                "6",
+            ]
         );
-        assert!(current_aqua_environment_allows(AUTOPLAY_SCENARIOS_ENV));
-
-        // Nothing else acquires passage by accident.
-        assert!(!containment_environment_allows("UQM_CI_ANYTHING_ELSE"));
+        assert_eq!(
+            &arguments[7..],
+            [
+                "HOME=/containment-home",
+                "LOGNAME=uqm_s4_containment",
+                "PATH=/usr/bin:/bin",
+                "TMPDIR=/containment-home",
+                "UQM_CI_AUTOPLAY_SCENARIOS=battle-v1 main-menu-v1",
+                "USER=uqm_s4_containment",
+                "/usr/bin/env",
+                "argument with spaces",
+            ]
+        );
+        assert_eq!(
+            command.get_envs().collect::<Vec<_>>(),
+            [(
+                std::ffi::OsStr::new("PATH"),
+                Some(std::ffi::OsStr::new("/usr/bin:/bin:/usr/sbin:/sbin"))
+            )]
+        );
     }
 
     #[test]
@@ -3842,41 +3930,51 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn current_aqua_environment_is_clean_and_preserves_nested_containment_bindings() {
-        let inherited = [
-            ("PATH", "/usr/bin:/bin"),
-            ("GITHUB_TOKEN", "secret"),
-            ("UQM_SECRET", "secret"),
-            (DEDICATED_CONTAINMENT_UID_ENV, "59999"),
-            (DEDICATED_CONTAINMENT_HOME_ENV, "/tmp/containment"),
-            (DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment"),
-        ]
-        .into_iter()
-        .map(|(name, value)| (name.into(), value.into()));
-        let environment =
-            filter_inherited_environment(inherited, current_aqua_environment_allows).unwrap();
-
-        assert_eq!(environment.get("PATH").unwrap(), "/usr/bin:/bin");
+        if !run_in_containment_test_environment(
+            "current_aqua_environment_is_clean_and_preserves_nested_containment_bindings",
+        ) {
+            return;
+        }
+        let mut command = current_aqua_command("/usr/bin/env", &[], &[]).unwrap();
+        let output = command.output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let environment = stdout
+            .lines()
+            .map(|line| line.split_once('=').unwrap())
+            .collect::<BTreeMap<_, _>>();
+        let uid = std::env::var(DEDICATED_CONTAINMENT_UID_ENV).unwrap();
         assert_eq!(
-            environment.get(DEDICATED_CONTAINMENT_UID_ENV).unwrap(),
-            "59999"
+            environment,
+            BTreeMap::from([
+                ("PATH", "/usr/bin:/bin"),
+                ("HOME", "/controller-home"),
+                ("TMPDIR", "/controller-tmp"),
+                ("USER", "controller"),
+                ("LOGNAME", "controller"),
+                (AUTOPLAY_SCENARIOS_ENV, "battle-v1 main-menu-v1"),
+                (DEDICATED_CONTAINMENT_UID_ENV, uid.as_str()),
+                (DEDICATED_CONTAINMENT_HOME_ENV, "/containment-home"),
+                (DEDICATED_CONTAINMENT_USER_ENV, "uqm_s4_containment"),
+            ])
         );
-        assert_eq!(
-            environment.get(DEDICATED_CONTAINMENT_HOME_ENV).unwrap(),
-            "/tmp/containment"
-        );
-        assert_eq!(
-            environment.get(DEDICATED_CONTAINMENT_USER_ENV).unwrap(),
-            "uqm_s4_containment"
-        );
-        assert!(!environment.contains_key("GITHUB_TOKEN"));
-        assert!(!environment.contains_key("UQM_SECRET"));
-
-        assert!(current_aqua_command(
-            "/usr/bin/true",
-            &[],
-            &[(DEDICATED_CONTAINMENT_UID_ENV.into(), "60000".into())],
-        )
-        .is_err());
+        for name in [
+            DEDICATED_CONTAINMENT_UID_ENV,
+            DEDICATED_CONTAINMENT_HOME_ENV,
+            DEDICATED_CONTAINMENT_USER_ENV,
+        ] {
+            let error = current_aqua_command(
+                "/usr/bin/env",
+                &[],
+                &[(name.into(), "untrusted-override".into())],
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+            assert_eq!(
+                error.to_string(),
+                format!("current-Aqua child cannot override trusted containment binding {name}")
+            );
+        }
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]

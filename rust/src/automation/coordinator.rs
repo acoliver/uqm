@@ -186,7 +186,7 @@ fn orbit_exit_menu_keys(phase: u64) -> (bool, bool) {
     }
 }
 
-/// Fixed RNG seed applied once when active automation enters gameplay.
+/// Default RNG seed for scripts that predate explicit seed selection.
 pub const AUTOMATION_SEED: u32 = 0x55AA_2317;
 
 /// What the main-menu readiness record reports as having become ready.
@@ -261,6 +261,8 @@ struct CoordInner {
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
 pub struct Coordinator {
+    /// Validated seed returned at each automation-owned RNG initialization.
+    seed: u32,
     /// The validated script actions.
     actions: Vec<Action>,
     /// The typed main-menu transition assertions from the script.
@@ -283,13 +285,11 @@ impl Coordinator {
     /// This is called from `main.rs` after `setup_automation` succeeds.
     /// It activates the runtime model and writes the run_start trace.
     pub fn init(script: ValidatedScript, output_root: PathBuf) {
-        // Every proof bundle records what the run was attempting, written
-        // before any step executes so a run that dies partway is still
-        // attributable to a scenario. A failure to record it is not allowed to
-        // fail the run, but it is never silent.
-        if let Err(error) =
+        // Missing input identity must stop automation before any step executes.
+        let resolved_result =
             crate::automation::lifecycle::write_resolved_scenario(&output_root, &script.resolved())
-        {
+                .map_err(|error| error.to_string());
+        if let Err(error) = &resolved_result {
             eprintln!("automation: cannot record the resolved scenario: {error}");
         }
 
@@ -320,6 +320,7 @@ impl Coordinator {
             crate::automation::ui_observation::communication_lifecycle();
 
         let coord = Coordinator {
+            seed: script.seed(),
             actions,
             transitions,
             watchdog_limits,
@@ -357,6 +358,9 @@ impl Coordinator {
         {
             let mut init_inner = coord.inner.lock();
             coord.write_trace(&mut init_inner, RecordKind::RunStart);
+            if resolved_result.is_err() {
+                coord.set_terminal(&mut init_inner, TerminalClass::TraceFailure);
+            }
         }
 
         let _ = COORDINATOR.set(coord);
@@ -2219,7 +2223,7 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
         terminal_reason: None,
         seed_application: Some(SeedApplication {
             domain,
-            seed: AUTOMATION_SEED,
+            seed: coord.seed,
         }),
         presentation: None,
         activity: None,
@@ -2235,7 +2239,7 @@ pub extern "C" fn rust_automation_seed_value(domain: u32, fallback: u32) -> u32 
             coord.set_terminal(&mut inner, TerminalClass::TraceFailure);
         }
     }
-    AUTOMATION_SEED
+    coord.seed
 }
 
 fn validate_runtime_finalization(result: FinalizationResult) -> Result<(), String> {
@@ -2436,6 +2440,106 @@ mod tests {
             SchedulerState::initial(),
             true,
         ));
+    }
+
+    #[test]
+    fn replay_seed_is_applied_at_each_rng_boundary() {
+        const CHILD: &str = "UQM_REPLAY_SEED_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            for seed in [0, 42, u32::MAX] {
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "automation::coordinator::tests::replay_seed_is_applied_at_each_rng_boundary", "--nocapture"])
+                    .env(CHILD, seed.to_string())
+                    .output().unwrap();
+                assert!(
+                    output.status.success(),
+                    "{}\n{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        }
+        let seed: u32 = std::env::var(CHILD).unwrap().parse().unwrap();
+        let applied_seed = seed.max(1);
+        let temp = tempfile::tempdir().unwrap();
+        let bytes = br#"{"version":2,"name":"seed-test","seed":42,"fixture":"seed-test","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#;
+        let mut doc = crate::automation::script::parse_script(bytes, "seed-test.json").unwrap();
+        doc.seed = Some(u64::from(seed));
+        let script = crate::automation::script::validate_script(doc, "seed-test.json").unwrap();
+        assert_eq!(
+            rust_automation_seed_value(SeedDomain::NEW_GAME_ID, 999),
+            999
+        );
+        Coordinator::init(script, temp.path().to_path_buf());
+        let mut expected = Vec::new();
+        for domain in [
+            SeedDomain::SUPER_MELEE_MENU_ID,
+            SeedDomain::SUPER_MELEE_BATTLE_ID,
+            SeedDomain::NEW_GAME_ID,
+        ] {
+            assert_eq!(rust_automation_seed_value(domain, 999), applied_seed);
+            expected.push(SeedApplication {
+                domain: SeedDomain::from_ffi(domain).unwrap(),
+                seed: applied_seed,
+            });
+        }
+        let mut trace = Vec::new();
+        Coordinator::get()
+            .unwrap()
+            .runtime
+            .commit
+            .publish_all(&mut trace)
+            .unwrap();
+        let applications: Vec<_> = std::str::from_utf8(&trace)
+            .unwrap()
+            .lines()
+            .map(|line| TraceRecord::from_jsonl(line).unwrap())
+            .filter_map(|record| record.seed_application)
+            .collect();
+        assert_eq!(applications, expected);
+        let record: crate::automation::lifecycle::ResolvedScenarioRecord = serde_json::from_slice(
+            &std::fs::read(temp.path().join("resolved-scenario.json")).unwrap(),
+        )
+        .unwrap();
+        record.validate().unwrap();
+        assert_eq!(record.scenario.seed, applied_seed);
+        assert_eq!(record.scenario.requested_seed, seed);
+    }
+
+    #[test]
+    fn replay_stops_if_resolved_input_receipt_cannot_be_published() {
+        const CHILD: &str = "UQM_REPLAY_RECEIPT_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::replay_stops_if_resolved_input_receipt_cannot_be_published", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("resolved-scenario.json"), b"existing").unwrap();
+        let doc = crate::automation::script::parse_script(
+            br#"{"version":1,"name":"receipt","budgets":{"max_input_ticks":2,"max_presentations":2,"max_wallclock_seconds":1},"steps":[{"action":"finish"}]}"#,
+            "receipt.json",
+        ).unwrap();
+        Coordinator::init(
+            crate::automation::script::validate_script(doc, "receipt.json").unwrap(),
+            temp.path().to_path_buf(),
+        );
+        assert_eq!(
+            Coordinator::get().unwrap().inner.lock().terminal_class,
+            Some(TerminalClass::TraceFailure)
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("resolved-scenario.json")).unwrap(),
+            b"existing"
+        );
     }
 
     #[test]
