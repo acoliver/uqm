@@ -83,6 +83,7 @@ struct RequiredResult {
     source_sha: String,
     plan: String,
     gates: String,
+    autoplay: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1276,14 +1277,13 @@ fn validate_required_result(root: &Path, index: &TransportIndex, contracts: &mut
     let valid = result.is_some_and(|result| {
         result.schema == REQUIRED_RESULT_SCHEMA
             && result.source_sha == index.source_sha
-            && matches!(
+            && [
                 result.plan.as_str(),
-                "success" | "failure" | "cancelled" | "skipped"
-            )
-            && matches!(
                 result.gates.as_str(),
-                "success" | "failure" | "cancelled" | "skipped"
-            )
+                result.autoplay.as_str(),
+            ]
+            .iter()
+            .all(|observed| matches!(*observed, "success" | "failure" | "cancelled" | "skipped"))
     });
     if !valid || index.files.len() != 1 || index.files[0].path != "required-result.json" {
         contracts.push("transport.required-gates.result".to_string());
@@ -9511,6 +9511,9 @@ fn expected_collection_identities<'a>(
                 "workflow.no_direct_gate_commands",
                 "workflow.no_cache_action",
                 "workflow.always_uploaded_failure_evidence",
+                "workflow.autoplay_runner",
+                "workflow.autoplay_validate_replay",
+                "workflow.required_aggregate_observes_autoplay",
                 "workflow.content_addressed_transport",
             ],
         )
@@ -12023,6 +12026,9 @@ mod tests {
             "workflow.no_direct_gate_commands",
             "workflow.no_cache_action",
             "workflow.always_uploaded_failure_evidence",
+            "workflow.autoplay_runner",
+            "workflow.autoplay_validate_replay",
+            "workflow.required_aggregate_observes_autoplay",
             "workflow.content_addressed_transport",
         ]
         .into_iter()
@@ -19346,6 +19352,30 @@ mod tests {
     }
 
     #[test]
+    fn workflow_validation_receipt_expects_every_rule_the_checker_emits() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let document = super::super::workflow::parse_yaml(include_str!(
+            "../../../../.github/workflows/rust-quality.yaml"
+        ))
+        .unwrap();
+        let mut emitted = vec!["workflow.actionlint".to_string()];
+        emitted.extend(
+            super::super::workflow::validate_semantics(&document, &[], &authority)
+                .into_iter()
+                .map(|result| result.rule),
+        );
+        let (identity, expected) =
+            expected_collection_identities("workflow.validation", &authority);
+        assert_eq!(identity, "rule");
+        assert_eq!(
+            emitted.iter().map(String::as_str).collect::<Vec<_>>(),
+            expected,
+            "the workflow validation receipt contract drifted from the rules the checker emits"
+        );
+    }
+
+    #[test]
     fn required_transport_validates_aggregate_result_without_a_repository() {
         let temp = tempfile::tempdir().unwrap();
         fs::write(
@@ -19354,7 +19384,8 @@ mod tests {
                 "schema": REQUIRED_RESULT_SCHEMA,
                 "source_sha": "a".repeat(40),
                 "plan": "success",
-                "gates": "success"
+                "gates": "success",
+                "autoplay": "success"
             }))
             .unwrap(),
         )
@@ -19382,21 +19413,42 @@ mod tests {
             .contains(&"transport.required-gates.identity".to_string()));
 
         let valid_result = fs::read(temp.path().join("required-result.json")).unwrap();
-        fs::write(
-            temp.path().join("required-result.json"),
-            serde_json::to_vec_pretty(&serde_json::json!({
+        for forged in [
+            serde_json::json!({
                 "schema": REQUIRED_RESULT_SCHEMA,
                 "source_sha": "a".repeat(40),
                 "plan": "unknown",
+                "gates": "success",
+                "autoplay": "success"
+            }),
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success",
+                "gates": "success",
+                "autoplay": "unknown"
+            }),
+            // An aggregate that never observed autoplay is not a valid result.
+            serde_json::json!({
+                "schema": REQUIRED_RESULT_SCHEMA,
+                "source_sha": "a".repeat(40),
+                "plan": "success",
                 "gates": "success"
-            }))
-            .unwrap(),
-        )
-        .unwrap();
-        let mut bad_outcome = index.clone();
-        bad_outcome.files[0] = transport_file(temp.path(), "required-result.json");
-        assert!(validate_transport_index(temp.path(), &bad_outcome)
-            .contains(&"transport.required-gates.result".to_string()));
+            }),
+        ] {
+            fs::write(
+                temp.path().join("required-result.json"),
+                serde_json::to_vec_pretty(&forged).unwrap(),
+            )
+            .unwrap();
+            let mut bad_outcome = index.clone();
+            bad_outcome.files[0] = transport_file(temp.path(), "required-result.json");
+            assert!(
+                validate_transport_index(temp.path(), &bad_outcome)
+                    .contains(&"transport.required-gates.result".to_string()),
+                "accepted forged aggregate result {forged}"
+            );
+        }
         fs::write(temp.path().join("required-result.json"), valid_result).unwrap();
         index.files[0] = transport_file(temp.path(), "required-result.json");
 

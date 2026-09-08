@@ -1704,6 +1704,31 @@ jobs:
               --content "${content_root}" \
               --platform "${platform}" \
               --scenarios "${scenarios}"
+      - name: Validate the autoplay bundle offline
+        id: autoplay_validate
+        if: always()
+        shell: bash
+        env:
+          XTASK: ${{ runner.temp }}/s4-autoplay-controller
+        run: |
+          set -uo pipefail
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-autoplay-evidence"
+          artifacts="${EVIDENCE_DIR}/bundle"
+          scenarios="$(jq -er '.scenarios | join(",")' <<<"${AUTOPLAY_JSON}")" || exit 1
+          python3 "${RUNNER_TEMP}/s4-autoplay-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-autoplay-authority.json" \
+            --receipt "${EVIDENCE_DIR}/autoplay-validate.result.json" \
+            --stdout "${EVIDENCE_DIR}/autoplay-validate.stdout.log" \
+            --stderr "${EVIDENCE_DIR}/autoplay-validate.stderr.log" \
+            -- "${XTASK}" native validate "${artifacts}" \
+              --scenarios "${scenarios}"
+          status=$?
+          {
+            printf '## Autoplay bundle offline validation\n\n'
+            printf '```\n'
+            printf '```\n'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit "${status}"
       - name: Report the autoplay bundle
         id: autoplay_report
         if: always()
@@ -1753,14 +1778,50 @@ jobs:
             printf '```\n'
           } >> "${GITHUB_STEP_SUMMARY}"
           exit "${status}"
+      - name: Replay the autoplay bundle from its retained inputs
+        id: autoplay_replay
+        if: always()
+        shell: bash
+        env:
+          RUSTUP_HOME: ${{ runner.temp }}/s4-rustup-home
+          UQM_CI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          UQM_CI_EXPECTED_TUPLE: macos-aarch64
+          UQM_CI_NATIVE_CONTENT_ROOT: ${{ runner.temp }}/s4-autoplay-content
+          XTASK: ${{ runner.temp }}/s4-autoplay-controller
+        run: |
+          set -uo pipefail
+          EVIDENCE_DIR="${RUNNER_TEMP}/s4-autoplay-evidence"
+          artifacts="${EVIDENCE_DIR}/bundle"
+          replay="${EVIDENCE_DIR}/replay"
+          scenarios="$(jq -er '.scenarios | join(",")' <<<"${AUTOPLAY_JSON}")" || exit 1
+          test ! -e "${replay}" || exit 1
+          python3 "${RUNNER_TEMP}/s4-autoplay-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-autoplay-authority.json" \
+            --receipt "${EVIDENCE_DIR}/autoplay-replay.result.json" \
+            --stdout "${EVIDENCE_DIR}/autoplay-replay.stdout.log" \
+            --stderr "${EVIDENCE_DIR}/autoplay-replay.stderr.log" \
+            --timeout-profile aggregate-run \
+            -- "${XTASK}" native replay "${artifacts}" \
+              --output "${replay}" \
+              --scenarios "${scenarios}"
+          status=$?
+          {
+            printf '## Autoplay retained-input replay\n\n'
+            printf '```\n'
+            cat "${EVIDENCE_DIR}/autoplay-replay.stdout.log"
+            printf '```\n'
+          } >> "${GITHUB_STEP_SUMMARY}"
+          exit "${status}"
       - name: Finalize transport evidence
         if: always()
         shell: bash
         env:
           AUTOPLAY_GALLERY_OUTCOME: ${{ steps.autoplay_gallery.outcome }}
           AUTOPLAY_RECOVERY_OUTCOME: ${{ steps.autoplay_recovery.outcome }}
+          AUTOPLAY_REPLAY_OUTCOME: ${{ steps.autoplay_replay.outcome }}
           AUTOPLAY_REPORT_OUTCOME: ${{ steps.autoplay_report.outcome }}
           AUTOPLAY_RUN_OUTCOME: ${{ steps.autoplay_run.outcome }}
+          AUTOPLAY_VALIDATE_OUTCOME: ${{ steps.autoplay_validate.outcome }}
           CHECKOUT_OUTCOME: ${{ steps.checkout_autoplay.outcome }}
           JOB_STATUS: ${{ job.status }}
           NATIVE_CONTENT_OUTCOME: ${{ steps.native_content.outcome }}
@@ -1930,11 +1991,16 @@ jobs:
               "step": "autoplay-recovery",
               "outcome": os.environ["AUTOPLAY_RECOVERY_OUTCOME"],
           })
+          steps.append({
+              "step": "autoplay-validate",
+              "outcome": os.environ["AUTOPLAY_VALIDATE_OUTCOME"],
+          })
           steps.append({"step": "autoplay-report", "outcome": os.environ["AUTOPLAY_REPORT_OUTCOME"]})
           steps.append({
               "step": "autoplay-gallery",
               "outcome": os.environ["AUTOPLAY_GALLERY_OUTCOME"],
           })
+          steps.append({"step": "autoplay-replay", "outcome": os.environ["AUTOPLAY_REPLAY_OUTCOME"]})
           setup = {
               "schema": "uqm-s4-workflow-setup-results-v1",
               "job": "autoplay",
@@ -2101,6 +2167,7 @@ jobs:
     needs:
       - plan
       - gates
+      - autoplay
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -2180,13 +2247,14 @@ jobs:
           ACTIONS_JSON: ${{ needs.plan.outputs.actions }}
           PLAN_RESULT: ${{ needs.plan.result }}
           GATES_RESULT: ${{ needs.gates.result }}
+          AUTOPLAY_RESULT: ${{ needs.autoplay.result }}
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           evidence="${RUNNER_TEMP}/s4-required-evidence"
           mkdir -p "${evidence}"
-          printf '{"schema":"uqm-s4-required-result-v1","source_sha":"%s","plan":"%s","gates":"%s"}\n' \
-            "${SOURCE_SHA}" "${PLAN_RESULT}" "${GATES_RESULT}" \
+          printf '{"schema":"uqm-s4-required-result-v1","source_sha":"%s","plan":"%s","gates":"%s","autoplay":"%s"}\n' \
+            "${SOURCE_SHA}" "${PLAN_RESULT}" "${GATES_RESULT}" "${AUTOPLAY_RESULT}" \
             >"${evidence}/required-result.json"
           EVIDENCE_DIR="${evidence}" python3 -P - <<'PY'
           import hashlib
@@ -2341,6 +2409,7 @@ jobs:
           PY
           test "${PLAN_RESULT}" = "success"
           test "${GATES_RESULT}" = "success"
+          test "${AUTOPLAY_RESULT}" = "success"
       - name: Upload aggregate evidence
         id: upload_required
         if: always() && steps.required_authority.outputs.available == 'true'

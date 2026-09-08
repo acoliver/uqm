@@ -224,6 +224,8 @@ pub(crate) fn validate_semantics(
         rule_no_cache_action(document),
         rule_always_uploaded_evidence(document),
         rule_autoplay_runner(document, authority),
+        rule_autoplay_validate_replay(document),
+        rule_required_aggregate_observes_autoplay(document),
         rule_content_addressed_transport(document, authority),
     ]
 }
@@ -2024,6 +2026,262 @@ fn rule_autoplay_runner(document: &Yaml, authority: &super::authority::Authority
     }
 }
 
+/// One supervised autoplay step, described by what a reader cannot verify by eye.
+struct AutoplayStepContract<'a> {
+    name: &'a str,
+    id: &'a str,
+    receipt_stem: &'a str,
+    heading: &'a str,
+    required: &'a [&'a str],
+}
+
+/// The runner implements `validate` and `replay`; CI has to exercise both.
+///
+/// `native run` says a suite executed. Offline validation is the separate
+/// question of whether the retained bundle is internally consistent, and
+/// retained-input replay is the separate question of whether the same inputs
+/// still produce the same satisfied obligations. A runner that ships those
+/// commands and never runs them in CI has two untested paths and no evidence
+/// for either claim. This pins both steps the way the run, report and gallery
+/// steps are pinned: the real command against the produced bundle, the
+/// plan-bound selection, a supervised receipt beside the evidence, the result
+/// in the job summary, and the step's own exit status as the step's result.
+fn rule_autoplay_validate_replay(document: &Yaml) -> RuleResult {
+    let rule = "workflow.autoplay_validate_replay";
+    let Some(job) = document.get("jobs").and_then(|jobs| jobs.get("autoplay")) else {
+        return fail(rule, "workflow lacks the autoplay job");
+    };
+    let steps = job_steps(job);
+    let mut failures = Vec::new();
+
+    let contracts = [
+        AutoplayStepContract {
+            name: "Validate the autoplay bundle offline",
+            id: "autoplay_validate",
+            receipt_stem: "autoplay-validate",
+            heading: r#"printf '## Autoplay bundle offline validation\n\n'"#,
+            required: &[
+                r#""${XTASK}" native validate "${artifacts}""#,
+                r#"artifacts="${EVIDENCE_DIR}/bundle""#,
+                r#"--scenarios "${scenarios}""#,
+            ],
+        },
+        AutoplayStepContract {
+            name: "Replay the autoplay bundle from its retained inputs",
+            id: "autoplay_replay",
+            receipt_stem: "autoplay-replay",
+            heading: r#"printf '## Autoplay retained-input replay\n\n'"#,
+            required: &[
+                r#""${XTASK}" native replay "${artifacts}""#,
+                r#"artifacts="${EVIDENCE_DIR}/bundle""#,
+                r#"replay="${EVIDENCE_DIR}/replay""#,
+                r#"--output "${replay}""#,
+                r#"--scenarios "${scenarios}""#,
+                // A replay executes the suite again, so it gets the suite's
+                // own supervision budget rather than the short builtin one.
+                "--timeout-profile aggregate-run",
+                // A replay into a directory that already holds evidence would
+                // compare a bundle against itself.
+                r#"test ! -e "${replay}""#,
+            ],
+        },
+    ];
+
+    for contract in &contracts {
+        let Some(step) = steps
+            .iter()
+            .copied()
+            .find(|step| step.get_str(&["name"]) == Some(contract.name))
+        else {
+            failures.push(format!("autoplay job lacks the {} step", contract.name));
+            continue;
+        };
+        if step.get_str(&["id"]) != Some(contract.id) {
+            failures.push(format!(
+                "{} does not carry the id the transport records",
+                contract.name
+            ));
+        }
+        if step.get_str(&["if"]) != Some("always()") {
+            failures.push(format!("{} does not always run", contract.name));
+        }
+        if step.get("continue-on-error").is_some() {
+            failures.push(format!("{} tolerates its own failure", contract.name));
+        }
+        let body = step.get_str(&["run"]).unwrap_or_default();
+        let mut expected: Vec<String> = contract
+            .required
+            .iter()
+            .map(|required| (*required).to_string())
+            .collect();
+        expected.extend([
+            // The selection is the plan's, read the same way the run reads it.
+            r#"scenarios="$(jq -er '.scenarios | join(",")' <<<"${AUTOPLAY_JSON}")""#.to_string(),
+            // Supervised, with the receipt and both streams retained beside
+            // the evidence the job uploads.
+            format!(
+                r#"--receipt "${{EVIDENCE_DIR}}/{}.result.json""#,
+                contract.receipt_stem
+            ),
+            format!(
+                r#"--stdout "${{EVIDENCE_DIR}}/{}.stdout.log""#,
+                contract.receipt_stem
+            ),
+            format!(
+                r#"--stderr "${{EVIDENCE_DIR}}/{}.stderr.log""#,
+                contract.receipt_stem
+            ),
+            r#"python3 "${RUNNER_TEMP}/s4-autoplay-workflow-supervisor.py""#.to_string(),
+            // The result reaches the job summary and is the step's result.
+            contract.heading.to_string(),
+            format!(
+                r#"cat "${{EVIDENCE_DIR}}/{}.stdout.log""#,
+                contract.receipt_stem
+            ),
+            r#">> "${GITHUB_STEP_SUMMARY}""#.to_string(),
+            r#"exit "${status}""#.to_string(),
+        ]);
+        for required in &expected {
+            if !body.contains(required.as_str()) {
+                failures.push(format!("{} omits {required}", contract.name));
+            }
+        }
+        for forbidden in ["|| true", "exit 0", "continue-on-error"] {
+            if body.contains(forbidden) {
+                failures.push(format!(
+                    "{} swallows failure with {forbidden}",
+                    contract.name
+                ));
+            }
+        }
+    }
+
+    // Both outcomes reach the retained setup results, so a step that never ran
+    // is visible in the uploaded evidence rather than absent from it.
+    let Some(finalize) = steps
+        .iter()
+        .copied()
+        .find(|step| step.get_str(&["name"]) == Some("Finalize transport evidence"))
+    else {
+        return fail(rule, "autoplay job never finalizes its transport evidence");
+    };
+    for (name, binding) in [
+        (
+            "AUTOPLAY_VALIDATE_OUTCOME",
+            "${{ steps.autoplay_validate.outcome }}",
+        ),
+        (
+            "AUTOPLAY_REPLAY_OUTCOME",
+            "${{ steps.autoplay_replay.outcome }}",
+        ),
+    ] {
+        if finalize.get_str(&["env", name]) != Some(binding) {
+            failures.push(format!("the transport finalizer does not bind {name}"));
+        }
+    }
+
+    if failures.is_empty() {
+        RuleResult {
+            rule: rule.into(),
+            passed: true,
+            detail: "autoplay validates the produced bundle offline and replays it from its retained inputs, both under supervision, in the job summary and in the retained evidence".into(),
+        }
+    } else {
+        fail(rule, &failures.join("; "))
+    }
+}
+
+/// Branch protection keys on the required aggregate, so the aggregate has to
+/// observe every job in the required path.
+///
+/// A failing autoplay job already fails the workflow run, but the run is not
+/// what a protected branch reads: it reads the one aggregate check. Without
+/// this edge the suite could fail on every pull request while the required
+/// check stayed green. The rule pins the dependency, the result bindings, the
+/// recorded aggregate document and the assertion form. The assertion has to be
+/// equality with `success`, because a dependency that was skipped or cancelled
+/// has neither succeeded nor failed and must not be read as a pass.
+fn rule_required_aggregate_observes_autoplay(document: &Yaml) -> RuleResult {
+    let rule = "workflow.required_aggregate_observes_autoplay";
+    let Some(required) = document
+        .get("jobs")
+        .and_then(|jobs| jobs.get("required-gates"))
+    else {
+        return fail(rule, "workflow lacks the required-gates job");
+    };
+    let mut failures = Vec::new();
+
+    let needs: Vec<&str> = required
+        .get("needs")
+        .and_then(Yaml::as_seq)
+        .map(|entries| entries.iter().filter_map(scalar).collect())
+        .unwrap_or_default();
+    for observed in ["plan", "gates", "autoplay"] {
+        if !needs.contains(&observed) {
+            failures.push(format!(
+                "required-gates does not need {observed}, so its result is invisible to the aggregate"
+            ));
+        }
+    }
+
+    let Some(aggregate) = job_steps(required)
+        .into_iter()
+        .find(|step| step.get_str(&["name"]) == Some("Aggregate required results"))
+    else {
+        return fail(rule, "required-gates never aggregates the results it needs");
+    };
+    for (name, binding) in [
+        ("PLAN_RESULT", "${{ needs.plan.result }}"),
+        ("GATES_RESULT", "${{ needs.gates.result }}"),
+        ("AUTOPLAY_RESULT", "${{ needs.autoplay.result }}"),
+    ] {
+        if aggregate.get_str(&["env", name]) != Some(binding) {
+            failures.push(format!("the aggregate does not bind {name} to {binding}"));
+        }
+    }
+
+    let run = aggregate.get_str(&["run"]).unwrap_or_default();
+    // The document is written before anything can fail, so the uploaded
+    // evidence names the result that failed the check.
+    if !substrings_in_order(
+        run,
+        &[
+            r#""plan":"%s","gates":"%s","autoplay":"%s"}\n'"#,
+            r#""${PLAN_RESULT}" "${GATES_RESULT}" "${AUTOPLAY_RESULT}""#,
+            r#">"${evidence}/required-result.json""#,
+            r#"test "${PLAN_RESULT}" = "success""#,
+            r#"test "${GATES_RESULT}" = "success""#,
+            r#"test "${AUTOPLAY_RESULT}" = "success""#,
+        ],
+    ) {
+        failures.push(
+            "the aggregate does not record every observed result and then require each to be success"
+                .into(),
+        );
+    }
+    for forbidden in [
+        "|| true",
+        r#""${AUTOPLAY_RESULT}" != "failure""#,
+        r#""${AUTOPLAY_RESULT}" != 'failure'"#,
+    ] {
+        if run.contains(forbidden) {
+            failures.push(format!(
+                "the aggregate weakens its assertion with {forbidden}"
+            ));
+        }
+    }
+
+    if failures.is_empty() {
+        RuleResult {
+            rule: rule.into(),
+            passed: true,
+            detail: "the required aggregate needs plan, gates and autoplay, records each result before asserting, and passes only when each result is exactly success".into(),
+        }
+    } else {
+        fail(rule, &failures.join("; "))
+    }
+}
+
 fn transport_fallback_valid(id: &str, steps: &[&Yaml]) -> bool {
     let (fallback_job, fallback_root, fallback_tuple) = match id {
         "plan" => ("plan", "${RUNNER_TEMP}/s4-plan-evidence", None),
@@ -2084,10 +2342,15 @@ fn missing_transport_contracts(
             .any(|step| step.get_str(&["if"]) == Some("always()")),
         "required-gates" => index_steps.iter().any(|step| {
             step.get_str(&["run"]).is_some_and(|run| {
-                matches!(
-                    (run.find("index.json"), run.find("test \"${PLAN_RESULT}\"")),
-                    (Some(index), Some(test)) if index < test
-                )
+                run.find("index.json").is_some_and(|index| {
+                    [
+                        "test \"${PLAN_RESULT}\"",
+                        "test \"${GATES_RESULT}\"",
+                        "test \"${AUTOPLAY_RESULT}\"",
+                    ]
+                    .iter()
+                    .all(|assertion| run.find(assertion).is_some_and(|test| index < test))
+                })
             })
         }),
         _ => false,
@@ -2296,8 +2559,13 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                         "AUTOPLAY_RECOVERY_OUTCOME",
                         "steps.autoplay_recovery.outcome",
                     ),
+                    ("AUTOPLAY_REPLAY_OUTCOME", "steps.autoplay_replay.outcome"),
                     ("AUTOPLAY_REPORT_OUTCOME", "steps.autoplay_report.outcome"),
                     ("AUTOPLAY_RUN_OUTCOME", "steps.autoplay_run.outcome"),
+                    (
+                        "AUTOPLAY_VALIDATE_OUTCOME",
+                        "steps.autoplay_validate.outcome",
+                    ),
                     ("CHECKOUT_OUTCOME", "steps.checkout_autoplay.outcome"),
                     ("NATIVE_CONTENT_OUTCOME", "steps.native_content.outcome"),
                     ("PREREQUISITES_OUTCOME", "steps.prerequisites.outcome"),
@@ -2320,8 +2588,10 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                                 r#"{"step": "native-content", "outcome": os.environ["NATIVE_CONTENT_OUTCOME"]}"#,
                                 r#"{"step": "autoplay-run", "outcome": os.environ["AUTOPLAY_RUN_OUTCOME"]}"#,
                                 r#""step": "autoplay-recovery""#,
+                                r#""step": "autoplay-validate""#,
                                 r#"{"step": "autoplay-report", "outcome": os.environ["AUTOPLAY_REPORT_OUTCOME"]}"#,
                                 r#""step": "autoplay-gallery""#,
+                                r#"{"step": "autoplay-replay", "outcome": os.environ["AUTOPLAY_REPLAY_OUTCOME"]}"#,
                             ],
                         )
                         && run.contains("authority-snapshot.json")
@@ -3328,7 +3598,7 @@ mod tests {
     fn checked_in_workflow_passes_every_semantic_rule() {
         let document = parse_yaml(WORKFLOW).unwrap();
         let results = validate_semantics(&document, &tuples(), &authority());
-        assert_eq!(results.len(), 20);
+        assert_eq!(results.len(), 22);
         assert!(results.iter().all(|result| result.passed), "{results:#?}");
     }
 
@@ -3666,9 +3936,18 @@ total_timeout=60
 
     #[test]
     fn autoplay_report_summary_removal_is_rejected() {
+        // Anchored on the report step's own capture: every autoplay step that
+        // reaches the summary closes its block the same way, so a positional
+        // anchor would silently follow whichever step happens to come first.
+        let capture = concat!(
+            r#"            cat "${EVIDENCE_DIR}/autoplay-report.stdout.log""#,
+            "\n",
+            r#"            printf '```\n'"#,
+            "\n",
+        );
         let mutated = WORKFLOW.replacen(
-            "          } >> \"${GITHUB_STEP_SUMMARY}\"\n          exit \"${status}\"",
-            "          } > /dev/null\n          exit \"${status}\"",
+            &[capture, r#"          } >> "${GITHUB_STEP_SUMMARY}""#, "\n"].concat(),
+            &[capture, r#"          } > /dev/null"#, "\n"].concat(),
             1,
         );
         assert_ne!(mutated, WORKFLOW);
@@ -3721,6 +4000,266 @@ total_timeout=60
         assert_ne!(mutated, WORKFLOW);
         assert!(!rule(&mutated, "workflow.autoplay_runner").passed);
         assert!(!rule(&mutated, "workflow.always_uploaded_failure_evidence").passed);
+    }
+
+    #[test]
+    fn autoplay_validates_and_replays_on_the_workflow_it_ships() {
+        let result = rule(WORKFLOW, "workflow.autoplay_validate_replay");
+        assert!(result.passed, "{}", result.detail);
+    }
+
+    #[test]
+    fn autoplay_offline_validation_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "      - name: Validate the autoplay bundle offline\n",
+            "      - name: Skip the autoplay bundle offline validation\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_offline_validation_command_substitution_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                r#"            -- "${XTASK}" native validate "${artifacts}" \"#,
+                "\n"
+            ),
+            concat!(
+                r#"            -- "${XTASK}" native report "${artifacts}" \"#,
+                "\n"
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_offline_validation_summary_removal_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                r#"            cat "${EVIDENCE_DIR}/autoplay-validate.stdout.log""#,
+                "\n",
+            ),
+            "",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_offline_validation_skippable_step_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "        id: autoplay_validate\n        if: always()\n",
+            "        id: autoplay_validate\n        if: success()\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_replay_command_substitution_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                r#"            -- "${XTASK}" native replay "${artifacts}" \"#,
+                "\n"
+            ),
+            concat!(
+                r#"            -- "${XTASK}" native report "${artifacts}" \"#,
+                "\n"
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_replay_evidence_outside_the_uploaded_root_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(r#"          replay="${EVIDENCE_DIR}/replay""#, "\n"),
+            concat!(r#"          replay="${RUNNER_TEMP}/replay""#, "\n"),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_replay_without_the_bound_selection_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                r#"              --output "${replay}" \"#,
+                "\n",
+                r#"              --scenarios "${scenarios}""#,
+                "\n",
+            ),
+            concat!(r#"              --output "${replay}""#, "\n"),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_replay_without_the_suite_supervision_budget_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                r#"            --timeout-profile aggregate-run \"#,
+                "\n",
+                r#"            -- "${XTASK}" native replay "${artifacts}" \"#,
+                "\n",
+            ),
+            concat!(
+                r#"            -- "${XTASK}" native replay "${artifacts}" \"#,
+                "\n"
+            ),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_replay_failure_swallow_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(r#"          test ! -e "${replay}" || exit 1"#, "\n"),
+            concat!(r#"          test ! -e "${replay}" || true"#, "\n"),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+    }
+
+    #[test]
+    fn autoplay_replay_outcome_missing_from_the_transport_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "          AUTOPLAY_REPLAY_OUTCOME: ${{ steps.autoplay_replay.outcome }}\n",
+            "",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.autoplay_validate_replay").passed);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn autoplay_validate_outcome_missing_from_the_retained_results_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(
+                "          steps.append({\n",
+                r#"              "step": "autoplay-validate","#,
+                "\n",
+                r#"              "outcome": os.environ["AUTOPLAY_VALIDATE_OUTCOME"],"#,
+                "\n",
+                "          })\n",
+            ),
+            "",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn required_aggregate_observes_autoplay_on_the_workflow_it_ships() {
+        let result = rule(WORKFLOW, "workflow.required_aggregate_observes_autoplay");
+        assert!(result.passed, "{}", result.detail);
+    }
+
+    #[test]
+    fn required_aggregate_dropping_the_autoplay_dependency_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "      - plan\n      - gates\n      - autoplay\n",
+            "      - plan\n      - gates\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+    }
+
+    #[test]
+    fn required_aggregate_forging_the_autoplay_result_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            "          AUTOPLAY_RESULT: ${{ needs.autoplay.result }}\n",
+            "          AUTOPLAY_RESULT: success\n",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+    }
+
+    #[test]
+    fn required_aggregate_result_document_without_autoplay_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            r#""plan":"%s","gates":"%s","autoplay":"%s"}\n' \"#,
+            r#""plan":"%s","gates":"%s"}\n' \"#,
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+    }
+
+    #[test]
+    fn required_aggregate_result_document_without_the_autoplay_argument_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            r#" "${GATES_RESULT}" "${AUTOPLAY_RESULT}" \"#,
+            r#" "${GATES_RESULT}" \"#,
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+    }
+
+    #[test]
+    fn required_aggregate_dropping_the_autoplay_assertion_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(r#"          test "${AUTOPLAY_RESULT}" = "success""#, "\n"),
+            "",
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
+    }
+
+    #[test]
+    fn required_aggregate_reading_a_skipped_autoplay_as_success_is_rejected() {
+        let mutated = WORKFLOW.replacen(
+            concat!(r#"          test "${AUTOPLAY_RESULT}" = "success""#, "\n"),
+            concat!(r#"          test "${AUTOPLAY_RESULT}" != "failure""#, "\n"),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+    }
+
+    #[test]
+    fn required_aggregate_asserting_before_recording_is_rejected() {
+        let assertions = concat!(
+            r#"          test "${PLAN_RESULT}" = "success""#,
+            "\n",
+            r#"          test "${GATES_RESULT}" = "success""#,
+            "\n",
+            r#"          test "${AUTOPLAY_RESULT}" = "success""#,
+            "\n",
+        );
+        let anchor = concat!(
+            r#"          evidence="${RUNNER_TEMP}/s4-required-evidence""#,
+            "\n",
+        );
+        let mutated = WORKFLOW.replacen(assertions, "", 1).replacen(
+            anchor,
+            &format!("{assertions}{anchor}"),
+            1,
+        );
+        assert_ne!(mutated, WORKFLOW);
+        assert!(!rule(&mutated, "workflow.required_aggregate_observes_autoplay").passed);
+        assert!(!rule(&mutated, "workflow.content_addressed_transport").passed);
     }
 
     #[test]
@@ -4631,6 +5170,7 @@ assert open(short_destination, "rb").read() == payload
             .env("SOURCE_SHA", "a".repeat(40))
             .env("PLAN_RESULT", "success")
             .env("GATES_RESULT", "success")
+            .env("AUTOPLAY_RESULT", "success")
             .output()
             .unwrap();
         assert!(!output.status.success());
@@ -4764,6 +5304,7 @@ assert open(short_destination, "rb").read() == payload
             .env("ACTIONS_JSON", actions)
             .env("PLAN_RESULT", "success")
             .env("GATES_RESULT", "success")
+            .env("AUTOPLAY_RESULT", "success")
             .output()
             .unwrap();
         assert!(!output.status.success());
