@@ -3,6 +3,15 @@ name: Rust quality
 on:
   push:
   pull_request_target:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+env:
+  UQM_CI_EVENT_NAME: ${{ github.event_name }}
+  UQM_CI_CONTROLLER_SHA: ${{ github.workflow_sha }}
+  UQM_CI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  UQM_CI_EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
 
 concurrency:
   group: rust-quality-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -25,6 +34,7 @@ jobs:
       retention_days: ${{ steps.plan_authority.outputs.retention_days }}
       workflow: ${{ steps.plan.outputs.workflow }}
       autoplay: ${{ steps.plan.outputs.autoplay }}
+      selection: ${{ steps.plan.outputs.selection }}
     steps:
       - name: Seed plan transport fallback
         shell: bash
@@ -88,13 +98,11 @@ jobs:
           fetch_authority \
             "${BASE_REPOSITORY}" "${BASE_SHA}" \
             "${RUNNER_TEMP}/s4-plan-base-authority-response.json" "${authority}.base"
-          cmp --silent "${authority}.source" "${authority}.base"
           retention_days="$(jq -er '
             .actions.artifact_retention_days
             | select(type == "number" and . == floor and . >= 1 and . <= 90)' \
-            "${authority}.source")"
-          mv "${authority}.source" "${authority}"
-          rm "${authority}.base"
+            "${authority}.base")"
+          cp "${authority}.base" "${authority}"
           printf 'retention_days=%s\n' "${retention_days}" >> "${GITHUB_OUTPUT}"
       - name: Check out base-owned controller
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -140,6 +148,8 @@ jobs:
           test "$(rustup run "${rust_version}" rustc -vV | sed -n 's/^commit-hash: //p')" = "${rust_commit}"
           supervise bootstrap-xtask-build cargo "+${rust_version}" build --locked \
             --manifest-path "${controller}/rust/xtask/Cargo.toml"
+          supervise policy-admission "${CARGO_TARGET_DIR}/debug/uqm-xtask" ci admit-policy \
+            "${authority}.base" "${authority}.source" "${authority}"
       - name: Check out exact source
         id: checkout_plan
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -154,6 +164,7 @@ jobs:
         env:
           CARGO_HOME: ${{ runner.temp }}/s4-plan-cargo-home
           CARGO_TARGET_DIR: ${{ runner.temp }}/s4-plan-target
+          UQM_CI_AUTHORITY_PATH: ${{ runner.temp }}/s4-plan-evidence/authority-snapshot.json
         run: |
           set -euo pipefail
           export EVIDENCE_DIR="${RUNNER_TEMP}/s4-plan-evidence"
@@ -179,7 +190,12 @@ jobs:
              and .schema == "uqm-s4-plan-v1"
              and .authority == "rust/ci/gates.json"
              and .tuples == $trusted_tuples
-             and .authority_contract == $authority[0]' \
+             and .authority_contract == $authority[0]
+             and .selection.schema == "uqm-s4-selection-v1"
+             and .selection.source_sha == env.UQM_CI_EXPECTED_SHA
+             and .selection.controller_sha == env.UQM_CI_CONTROLLER_SHA
+             and .selection.event == env.UQM_CI_EVENT_NAME
+             and .autoplay == .selection.autoplay' \
             "${plan}" >/dev/null
           matrix="$(jq -cer --argjson trusted_tuples "${trusted_tuples}" \
             'select(.tuples == $trusted_tuples) | {include: .tuples}' "${plan}")"
@@ -201,6 +217,7 @@ jobs:
             printf 'native_acceptance=%s\n' "${native_acceptance}"
             printf 'workflow=%s\n' "${workflow}"
             printf 'autoplay=%s\n' "${autoplay}"
+            printf 'selection=%s\n' "$(jq -cer '.selection' "${plan}")"
           } >> "${GITHUB_OUTPUT}"
       - name: Finalize plan transport evidence
         if: always()
@@ -548,7 +565,7 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: ${{ fromJSON(needs.plan.outputs.tools).rust.version }}
       NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}
-      UQM_CI_AUTOPLAY_SCENARIOS: ${{ join(fromJSON(needs.plan.outputs.autoplay).scenarios, ' ') }}
+      UQM_CI_SELECTION_JSON: ${{ needs.plan.outputs.selection }}
     needs: plan
     strategy:
       fail-fast: false
@@ -674,6 +691,21 @@ jobs:
           clean: true
           fetch-depth: 0
           persist-credentials: false
+      - name: Admit candidate policy with base-owned controller
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
+            --authority "${RUNNER_TEMP}/s4-controller-source/rust/ci/gates.json" \
+            --receipt "${RUNNER_TEMP}/s4-command-evidence/policy-admission.result.json" \
+            --stdout "${RUNNER_TEMP}/s4-command-evidence/policy-admission.stdout.log" \
+            --stderr "${RUNNER_TEMP}/s4-command-evidence/policy-admission.stderr.log" \
+            -- "${RUNNER_TEMP}/s4-gates-controller" ci admit-policy \
+            "${RUNNER_TEMP}/s4-controller-source/rust/ci/gates.json" \
+            "${GITHUB_WORKSPACE}/rust/ci/gates.json" \
+            "${RUNNER_TEMP}/s4-gates-authority.json"
+          chmod 0440 "${RUNNER_TEMP}/s4-gates-authority.json"
       - name: Verify native runner architecture
         id: architecture
         shell: bash

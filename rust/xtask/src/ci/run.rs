@@ -561,9 +561,20 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
         super::load_authority(root).map_err(|error| format!("authority.load: {error}"))?;
     super::authority::validate_authority(&authority)
         .map_err(|error| format!("authority.validate: {error}"))?;
-    let supported_tuples = super::plan::derive_plan(root)
-        .map_err(|error| format!("plan.derive: {error}"))?
-        .tuple_names();
+    let plan = super::plan::derive_plan(root).map_err(|error| format!("plan.derive: {error}"))?;
+    let supported_tuples = plan.tuple_names();
+    let selection = plan
+        .selection
+        .ok_or("controller did not derive event selection")?;
+    if let Ok(published) = env::var("UQM_CI_SELECTION_JSON") {
+        let published: super::controller::SelectionBinding =
+            serde_json::from_str(&published).map_err(|e| format!("invalid plan selection: {e}"))?;
+        if published != selection {
+            return Err("plan selection differs from independently derived gate selection".into());
+        }
+    } else if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
+        return Err("workflow plan selection is missing".into());
+    }
     let gates = selected_gates(&authority, gate_arg)?;
 
     let tuple = format!("{}-{}", env::consts::OS, env::consts::ARCH);
@@ -678,6 +689,7 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
     let source_failure = source_receipt_failure(&preflight_failure, clean);
     let source_receipt = serde_json::json!({
         "schema": "uqm-s4-source-preflight-v2",
+        "selection": selection,
         "source_sha": session.source_sha,
         "detached_state": detached_state
             .as_ref()
@@ -1350,21 +1362,25 @@ fn failed_step_error(
     let contract = format!("{}.{}", gate.id, step.id);
     let mut detail = captured.failure_detail(&step.command[0]);
     if let Some(root) = native_acceptance_root {
-        let manifest = root.join("native-acceptance-failure.json");
-        match fs::symlink_metadata(&manifest) {
-            Ok(_) => {
-                if let Err(error) = retain_native_acceptance_failure(session, gate, step, root) {
-                    detail.push_str(&format!(
-                        "; retaining native-acceptance failure evidence failed at {}: {}",
-                        error.contract, error.detail
-                    ));
+        for filename in ["suite-index.json", "native-acceptance-failure.json"] {
+            let manifest = root.join(filename);
+            match fs::symlink_metadata(&manifest) {
+                Ok(_) => {
+                    if let Err(error) = retain_native_acceptance_failure(session, gate, step, root)
+                    {
+                        detail.push_str(&format!(
+                            "; retaining native-acceptance failure evidence failed at {}: {}",
+                            error.contract, error.detail
+                        ));
+                    }
+                    break;
                 }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => detail.push_str(&format!(
+                    "; cannot inspect optional native-acceptance failure manifest {}: {error}",
+                    manifest.display()
+                )),
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => detail.push_str(&format!(
-                "; cannot inspect optional native-acceptance failure manifest {}: {error}",
-                manifest.display()
-            )),
         }
     }
     CiError::new(contract, detail)
@@ -1539,6 +1555,28 @@ fn execute_process_gate(
                 .join("payloads/native-window.acceptance")
         });
         if let Some(root) = &native_acceptance_root {
+            let selected = super::controller::retained_selection(
+                &session.evidence_root,
+                &session.authority,
+                &session.source_sha,
+            )
+            .map_err(|e| CiError::new("tests.pre.native-acceptance.selection", e))?;
+            let names = selected
+                .iter()
+                .map(|pin| {
+                    Path::new(&pin.path)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| {
+                            CiError::new(
+                                "tests.pre.native-acceptance.selection",
+                                "invalid script name",
+                            )
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .join(" ");
+            env_overrides.push(("UQM_CI_AUTOPLAY_SCENARIOS".into(), names));
             prepare_native_acceptance_root(gate, step, root, &mut env_overrides)?;
         }
         let execute_retained_source = process_command_requires_retained_source(&step.command);
@@ -1640,7 +1678,7 @@ fn execute_process_gate(
     Ok(())
 }
 
-fn validate_native_runtime_authority(
+pub(crate) fn validate_native_runtime_authority(
     authority: &Authority,
     observed: uqm_rust::automation::native_window::NativeWindowRuntimeContract,
 ) -> Result<(), CiError> {
@@ -1659,43 +1697,39 @@ fn retain_native_acceptance(
     step: &Step,
     root: &Path,
 ) -> Result<(), CiError> {
-    let manifest_path = root.join("native-acceptance.json");
-    let snapshot = evidence::EvidenceSnapshot::open(root).map_err(|error| {
-        CiError::new(
-            "tests.post.native-acceptance.native-window-acceptance",
-            format!("cannot snapshot {}: {error}", root.display()),
-        )
-    })?;
-    let manifest_bytes = snapshot.read("native-acceptance.json").map_err(|error| {
-        CiError::new(
-            "tests.post.native-acceptance.native-window-acceptance",
-            format!("cannot read {}: {error}", manifest_path.display()),
-        )
-    })?;
-    let manifest: uqm_rust::automation::NativeAcceptanceManifest =
-        serde_json::from_slice(manifest_bytes).map_err(|error| {
-            CiError::new(
-                "tests.post.native-acceptance.native-window-acceptance",
-                format!("cannot parse {}: {error}", manifest_path.display()),
-            )
-        })?;
-    validate_native_runtime_authority(&session.authority, manifest.runtime_contract)?;
+    let contract = "tests.post.native-acceptance.native-window-acceptance";
+    let snapshot = evidence::EvidenceSnapshot::open(root)
+        .map_err(|e| CiError::new(contract, e.to_string()))?;
     let validation = materialize_native_snapshot(session, &snapshot)?;
-    uqm_rust::automation::validate_native_acceptance_bundle(validation.path(), &manifest).map_err(
-        |error| {
-            CiError::new(
-                "tests.post.native-acceptance.native-window-acceptance",
-                format!("native acceptance bundle failed validation: {error:?}"),
-            )
-        },
-    )?;
+    let result = validate_collected_native_suite(session, validation.path());
     retain_native_acceptance_files(
         session,
         &snapshot,
         "native-window.acceptance",
         gate,
         step,
-        "tests.post.native-acceptance.native-window-acceptance",
+        contract,
+    )?;
+    result.map_err(|error| CiError::new(contract, error))
+}
+
+fn validate_collected_native_suite(session: &RunSession, root: &Path) -> Result<(), String> {
+    let selected = super::controller::retained_selection(
+        &session.evidence_root,
+        &session.authority,
+        &session.source_sha,
+    )?;
+    let policy = evidence::read_regular_relative(
+        &session.evidence_root,
+        "payloads/authority.snapshot/gates.json",
+    )
+    .map_err(|e| e.to_string())?;
+    crate::native_suite::validate_success(
+        root,
+        &selected,
+        &session.authority,
+        &session.source_sha,
+        &policy,
     )
 }
 
@@ -1719,6 +1753,27 @@ fn retain_native_acceptance_failure(
             format!("cannot snapshot {}: {error}", root.display()),
         )
     })?;
+    if snapshot
+        .files()
+        .iter()
+        .any(|file| file.relative_path == "suite-index.json")
+    {
+        let validation = materialize_native_snapshot(session, &snapshot)?;
+        let result = crate::native_suite::validate_failure_diagnostics(
+            validation.path(),
+            &session.authority,
+        );
+        let contract = format!("{}.{}", gate.id, step.id);
+        retain_native_acceptance_files(
+            session,
+            &snapshot,
+            "native-window.failure",
+            gate,
+            step,
+            &contract,
+        )?;
+        return result.map_err(|detail| CiError::new(contract, detail));
+    }
     let manifest_bytes = match snapshot.read("native-acceptance-failure.json") {
         Ok(bytes) => bytes,
         Err(error) => {
@@ -3354,6 +3409,51 @@ mod tests {
         assert_eq!(non_regular.contract, expected_contract);
     }
 
+    #[test]
+    fn successful_child_with_missing_selection_retains_bounded_suite_diagnostics() {
+        let temporary = tempfile::tempdir().unwrap();
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap().clone();
+        let step = gate
+            .steps
+            .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap();
+        let evidence_root = temporary.path().join("evidence");
+        let native = evidence_root.join("payloads/native-window.acceptance");
+        fs::create_dir_all(&native).unwrap();
+        fs::write(
+            native.join("suite-status.json"),
+            b"bounded invalid suite output",
+        )
+        .unwrap();
+        let mut session = RunSession {
+            root: temporary.path().to_path_buf(),
+            authority,
+            evidence_root,
+            tuple: "macos-aarch64".into(),
+            cache_mode: "ambient-dev".into(),
+            source_sha: "a".repeat(40),
+            clean: true,
+            features: Vec::new(),
+            entries: Vec::new(),
+        };
+        let error = retain_native_acceptance(&mut session, &gate, step, &native).unwrap_err();
+        assert_eq!(
+            error.contract,
+            "tests.post.native-acceptance.native-window-acceptance"
+        );
+        assert_eq!(session.entries.len(), 1);
+        let entry = &session.entries[0];
+        assert_eq!(entry.role, "native-window.acceptance");
+        assert_eq!(entry.producing_command, step.command);
+        assert_eq!(
+            fs::read(session.evidence_root.join(&entry.path)).unwrap(),
+            b"bounded invalid suite output"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn native_failure_retention_rejects_partial_diagnostics_and_manifest_symlinks() {
@@ -3413,6 +3513,65 @@ mod tests {
         assert_eq!(error.contract, "tests.native-acceptance");
         assert!(session.entries.is_empty());
     }
+    #[test]
+    fn preflight_suite_failure_retains_every_selected_row_through_s4_transport() {
+        let temp = tempfile::tempdir().unwrap();
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap().clone();
+        let step = gate
+            .steps
+            .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap()
+            .clone();
+        let native_root = temp.path().join("native");
+        let selected = authority.native_acceptance.scenario_scripts[..3].to_vec();
+        let mut suite =
+            crate::native_suite::SuiteAccounting::create(&native_root, &selected, false).unwrap();
+        suite
+            .fail(
+                crate::native_suite::SuitePhase::Preflight,
+                None,
+                "source pin mismatch".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        let evidence_root = temp.path().join("evidence");
+        fs::create_dir(&evidence_root).unwrap();
+        let mut session = RunSession {
+            root: temp.path().to_path_buf(),
+            authority,
+            evidence_root,
+            tuple: "macos-aarch64".into(),
+            cache_mode: "ambient-dev".into(),
+            source_sha: "a".repeat(40),
+            clean: true,
+            features: Vec::new(),
+            entries: Vec::new(),
+        };
+        let retained = session
+            .evidence_root
+            .join("payloads/native-window.acceptance");
+        fs::create_dir(session.evidence_root.join("payloads")).unwrap();
+        fs::rename(&native_root, &retained).unwrap();
+        retain_native_acceptance_failure(&mut session, &gate, &step, &retained).unwrap();
+        assert!(session
+            .entries
+            .iter()
+            .all(|entry| entry.role == "native-window.failure"));
+        assert!(session
+            .entries
+            .iter()
+            .any(|entry| entry.path == "payloads/native-window.acceptance/suite-index.json"));
+        let retained = session
+            .evidence_root
+            .join("payloads/native-window.acceptance");
+        let result = crate::native_suite::validate_accounting(&retained, &selected).unwrap();
+        assert_eq!(result.scenarios.len(), 3);
+        assert!(!result.passed);
+    }
+
     #[test]
     fn complete_native_failure_bundle_is_indexed_with_distinct_role_and_identity() {
         use uqm_rust::automation::{
@@ -3480,7 +3639,7 @@ mod tests {
                 "--configdir=/collection/config".to_string(),
                 "--contentdir=/collection/inputs/content".to_string(),
                 "--automation-script=/collection/inputs/linked-playable-v1.json".to_string(),
-                "--automation-output=/collection/automation".to_string(),
+                "--automation-output=/collection/runtime-automation".to_string(),
                 "--native-window-proof=/collection/native-window-proof.json".to_string(),
             ],
             environment: std::collections::BTreeMap::from([(

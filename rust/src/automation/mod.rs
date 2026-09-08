@@ -34,6 +34,21 @@ pub mod interrupt;
 pub mod inventory;
 pub mod lifecycle;
 pub mod mode;
+#[cfg(all(unix, feature = "debug-process"))]
+pub mod native_artifacts;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_budget;
+#[cfg(feature = "debug-process")]
+mod native_capture;
+#[cfg(feature = "debug-process")]
+mod native_capture_change;
+pub mod native_checkpoint;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_isolation;
+mod native_predicate;
+#[cfg(all(unix, feature = "debug-process"))]
+pub mod native_runner;
+mod native_trace;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
 pub mod navigation;

@@ -50,6 +50,7 @@ pub struct Plan {
     pub authority_contract: Option<serde_json::Value>,
     pub tuples: Vec<PlanTuple>,
     pub autoplay: AutoplayPlan,
+    pub selection: Option<super::controller::SelectionBinding>,
 }
 
 /// Derive the autoplay suite for a set of changed paths.
@@ -134,34 +135,25 @@ pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
         .map_err(|error| CiError::new("ci.plan.matrix", error.to_string()))?;
     let mut plan = build_plan(&matrix, &authority.runner_mapping, AUTHORITY_RELATIVE)
         .map_err(|error| CiError::new("ci.plan.matrix", error))?;
-    plan.authority_contract = Some(authority_contract);
-    plan.autoplay = derive_autoplay(changed_paths(root).as_deref());
-    Ok(plan)
-}
-
-/// The paths this run changed against its merge base, or `None` if unknown.
-///
-/// A failure to read the diff is deliberately indistinguishable from a
-/// scheduled run: both are "unknown", and both widen to the full suite.
-fn changed_paths(root: &Path) -> Option<Vec<String>> {
-    let base = std::env::var("UQM_AUTOPLAY_DIFF_BASE").ok()?;
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(["diff", "--name-only", &base])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8(output.stdout).ok()?;
-    Some(
-        text.lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(str::to_owned)
-            .collect(),
+    let policy = super::bounded_io::read_regular_nofollow(
+        &root.join(AUTHORITY_RELATIVE),
+        super::bounded_io::AUTHORITY_BOOTSTRAP_LIMIT_BYTES,
     )
+    .map_err(|e| CiError::new("ci.plan.policy", e))?;
+    let source_policy: serde_json::Value = serde_json::from_slice(&policy)
+        .map_err(|e| CiError::new("ci.plan.policy", e.to_string()))?;
+    if source_policy != authority_contract {
+        return Err(CiError::new(
+            "ci.plan.policy",
+            "source policy differs from admitted controller policy",
+        ));
+    }
+    let binding = super::controller::derive_binding(root, &authority, &policy)
+        .map_err(|e| CiError::new("ci.plan.selection", e))?;
+    plan.authority_contract = Some(authority_contract);
+    plan.autoplay = binding.autoplay.clone();
+    plan.selection = Some(binding);
+    Ok(plan)
 }
 
 fn write_plan(root: &Path, plan: &Plan) -> Result<(), CiError> {
@@ -220,6 +212,7 @@ pub fn build_plan(
         // build_plan derives tuple identity only; derive_plan fills the
         // autoplay suite once it knows the run's changed paths.
         autoplay: derive_autoplay(None),
+        selection: None,
     })
 }
 

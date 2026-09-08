@@ -1004,10 +1004,15 @@ fn validate_successful_workflow_subprocess_receipts(
             "bootstrap-apt-install.result.json",
             "bootstrap-rustup.result.json",
             "bootstrap-xtask-build.result.json",
+            "policy-admission.result.json",
             "ci-plan.result.json",
         ]
     } else if job == "gates" && step_succeeded("authoritative-gates") {
-        &["xtask-build.result.json", "ci-run.result.json"]
+        &[
+            "xtask-build.result.json",
+            "policy-admission.result.json",
+            "ci-run.result.json",
+        ]
     } else {
         &[]
     };
@@ -1156,10 +1161,20 @@ fn validate_plan_payload(
         return;
     };
     let expected_authority = serde_json::to_value(authority).ok();
+    let policy_bytes = read_bundle_file(root, "authority-snapshot.json").ok();
     let valid = plan.as_ref().is_some_and(|plan| {
         plan.schema == super::plan::PLAN_SCHEMA
             && plan.authority == super::authority::AUTHORITY_RELATIVE
             && plan.authority_contract.as_ref() == expected_authority.as_ref()
+            && plan.selection.as_ref().is_some_and(|binding| {
+                binding.autoplay == plan.autoplay
+                    && binding.bind_environment().is_ok()
+                    && policy_bytes.as_deref().is_some_and(|policy| {
+                        binding
+                            .selected(authority, &index.source_sha, policy)
+                            .is_ok()
+                    })
+            })
             && plan.tuples.len() == authority.runner_mapping.len()
             && plan
                 .tuples
@@ -1920,7 +1935,7 @@ impl EvidenceSnapshot {
             .collect()
     }
 
-    fn scoped<T>(&self, action: impl FnOnce() -> T) -> T {
+    pub(crate) fn scoped<T>(&self, action: impl FnOnce() -> T) -> T {
         ACTIVE_SNAPSHOTS.with(|active| active.borrow_mut().push(self.active.clone()));
         let _guard = ActiveSnapshotGuard;
         action()
@@ -4388,6 +4403,12 @@ fn validate_failed_native_acceptance_evidence(
     {
         contracts.push("evidence.native_window.failure.inventory".to_string());
     }
+    if actual_paths.iter().any(|path| path == "suite-index.json") {
+        if crate::native_suite::validate_failure_diagnostics(&acceptance_root, authority).is_err() {
+            contracts.push("evidence.native_window.failure.suite".to_string());
+        }
+        return contracts;
+    }
     let manifest_path = "payloads/native-window.acceptance/native-acceptance-failure.json";
     let manifest: Option<NativeAcceptanceFailureEnvelope> = read_bundle_file(root, manifest_path)
         .ok()
@@ -4514,75 +4535,26 @@ fn validate_native_acceptance_evidence(
             contracts.push("evidence.native_window.entry_identity".to_string());
         }
     }
-    let manifest: Option<uqm_rust::automation::NativeAcceptanceManifest> = read_bundle_file(
-        root,
-        "payloads/native-window.acceptance/native-acceptance.json",
-    )
-    .ok()
-    .and_then(|bytes| serde_json::from_slice(&bytes).ok());
-    match manifest {
-        Some(manifest) => {
-            if uqm_rust::automation::validate_native_acceptance_bundle(&acceptance_root, &manifest)
-                .is_err()
-            {
-                contracts.push("evidence.native_window.receipt".to_string());
-            }
-            let linked_receipt = read_bundle_file(
-                root,
-                "payloads/native-window.acceptance/inputs/linked-build/linked-build-receipt.json",
-            );
-            let nested_authority = read_bundle_file(
-                root,
-                "payloads/native-window.acceptance/inputs/linked-build/gates.json",
-            );
-            let outer_authority = read_bundle_file(root, "payloads/authority.snapshot/gates.json");
-            contracts.extend(linked_outer_correlation_contracts(
-                linked_receipt.as_deref().ok(),
-                nested_authority.as_deref().ok(),
-                outer_authority.as_deref().ok(),
+    let selected = super::controller::retained_selection(root, authority, &index.source_sha);
+    let policy = read_bundle_file(root, "payloads/authority.snapshot/gates.json");
+    match (selected, policy) {
+        (Ok(selected), Ok(policy)) => {
+            if let Err(error) = crate::native_suite::validate_success(
+                &acceptance_root,
+                &selected,
+                authority,
                 &index.source_sha,
-            ));
-            let content = &authority.native_acceptance;
-            if manifest.runtime_contract != authority.native_runtime_contract()
-                || manifest.acceptance_policy != content.acceptance_policy
-            {
-                contracts.push("evidence.native_window.authority_contract".to_string());
-            }
-            if manifest.content_package.relative_path
-                != format!("inputs/content/packages/{}", content.content_filename)
-                || manifest.content_package.byte_length != content.content_byte_length
-                || manifest.content_package.sha256 != content.content_sha256
-            {
-                contracts.push("evidence.native_window.content_package".to_string());
-            }
-            let version_bytes = format!("{}\n", content.content_version).into_bytes();
-            let version_input = manifest
-                .retained_files
-                .iter()
-                .find(|input| input.relative_path == "inputs/content/version");
-            if version_input.is_none_or(|input| {
-                input.byte_length != version_bytes.len() as u64
-                    || input.sha256 != hex_sha256(&version_bytes)
-            }) {
-                contracts.push("evidence.native_window.content_version".to_string());
-            }
-            let expected_script = Path::new(&content.script)
-                .file_name()
-                .and_then(|name| name.to_str())
-                .map(|name| format!("inputs/{name}"));
-            if expected_script.as_deref() != Some(manifest.script.relative_path.as_str())
-                || manifest.script.byte_length != content.script_byte_length
-                || manifest.script.sha256 != content.script_sha256
-            {
-                contracts.push("evidence.native_window.script".to_string());
+                &policy,
+            ) {
+                contracts.push(format!("evidence.native_window.suite ({error})"));
             }
         }
-        None => contracts.push("evidence.native_window.manifest".to_string()),
+        _ => contracts.push("evidence.native_window.selection".into()),
     }
     contracts
 }
 
-fn linked_outer_correlation_contracts(
+pub(crate) fn linked_outer_correlation_contracts(
     linked_receipt: Option<&[u8]>,
     nested_authority: Option<&[u8]>,
     outer_authority: Option<&[u8]>,
@@ -10926,6 +10898,190 @@ mod tests {
             bytes,
             "format",
         ));
+    }
+
+    #[test]
+    fn native_suite_failure_offline_transport_checks_selection_and_journal() {
+        let root = tempfile::tempdir().unwrap();
+        let authority: Authority =
+            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let step = gate
+            .steps
+            .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap();
+        let acceptance = root.path().join("payloads/native-window.acceptance");
+        fs::create_dir(root.path().join("payloads")).unwrap();
+        let mut suite = crate::native_suite::SuiteAccounting::create(
+            &acceptance,
+            &authority.native_acceptance.scenario_scripts[..3],
+            false,
+        )
+        .unwrap();
+        suite
+            .fail(
+                crate::native_suite::SuitePhase::Preflight,
+                None,
+                "source mismatch".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        let mut index = valid_index();
+        index.tuple = "macos-aarch64".into();
+        index.entries.clear();
+        for file in regular_file_inventory(&acceptance).unwrap() {
+            let path = format!("payloads/native-window.acceptance/{}", file.relative_path);
+            index.entries.push(
+                entry(
+                    root.path(),
+                    &path,
+                    "native-window.failure",
+                    "application/octet-stream",
+                    "tests",
+                    &step.command,
+                )
+                .unwrap(),
+            );
+        }
+        assert!(
+            validate_failed_native_acceptance_evidence(root.path(), &index, &authority, gate)
+                .is_empty()
+        );
+        fs::write(acceptance.join("suite-events/000000.json"), b"{}").unwrap();
+        assert!(
+            validate_failed_native_acceptance_evidence(root.path(), &index, &authority, gate)
+                .contains(&"evidence.native_window.failure.suite".to_string())
+        );
+    }
+
+    #[test]
+    fn native_success_reader_requires_event_selection_and_rejects_failed_or_flat_layout() {
+        let policy = include_bytes!("../../../ci/gates.json");
+        let authority: Authority = serde_json::from_slice(policy).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let step = gate
+            .steps
+            .iter()
+            .find(|step| step.id == "native-acceptance")
+            .unwrap();
+        for event in [
+            super::super::controller::WorkflowEvent::Push,
+            super::super::controller::WorkflowEvent::PullRequestTarget,
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let pr = event == super::super::controller::WorkflowEvent::PullRequestTarget;
+            let paths = ["rust/src/battle/x.rs".to_string()];
+            let binding = super::super::controller::SelectionBinding {
+                schema: "uqm-s4-selection-v1".into(),
+                event,
+                source_sha: "a".repeat(40),
+                controller_sha: "b".repeat(40),
+                base_sha: pr.then(|| "c".repeat(40)),
+                merge_base_sha: pr.then(|| "d".repeat(40)),
+                changed_paths_z: if pr {
+                    b"rust/src/battle/x.rs\0".to_vec()
+                } else {
+                    Vec::new()
+                },
+                authority_sha256: hex_sha256(policy),
+                autoplay: super::super::controller::event_selection(
+                    event,
+                    pr.then_some(paths.as_slice()),
+                ),
+            };
+            let selected = binding
+                .selected(&authority, &binding.source_sha, policy)
+                .unwrap();
+            let mut index = valid_index();
+            index.source_sha = binding.source_sha.clone();
+            index.tuple = "macos-aarch64".into();
+            index.entries.clear();
+            write_bundle_entry(
+                root.path(),
+                &mut index.entries,
+                "payloads/authority.snapshot/gates.json",
+                "authority.snapshot",
+                &step.command,
+                policy,
+            );
+            let receipt = serde_json::to_vec(&serde_json::json!({"selection":binding})).unwrap();
+            let receipt_path = "payloads/preflight.source/source-preflight.json";
+            write_bundle_entry(
+                root.path(),
+                &mut index.entries,
+                receipt_path,
+                "preflight.source",
+                &step.command,
+                &receipt,
+            );
+            let acceptance = root.path().join("payloads/native-window.acceptance");
+            let mut suite =
+                crate::native_suite::SuiteAccounting::create(&acceptance, &selected, false)
+                    .unwrap();
+            suite
+                .fail(
+                    crate::native_suite::SuitePhase::Preflight,
+                    None,
+                    "fixture failure".into(),
+                )
+                .unwrap();
+            suite.finish().unwrap();
+            for file in regular_file_inventory(&acceptance).unwrap() {
+                let path = format!("payloads/native-window.acceptance/{}", file.relative_path);
+                index.entries.push(
+                    entry(
+                        root.path(),
+                        &path,
+                        "native-window.acceptance",
+                        "application/octet-stream",
+                        "tests",
+                        &step.command,
+                    )
+                    .unwrap(),
+                );
+            }
+            let contracts =
+                validate_native_acceptance_evidence(root.path(), &index, &authority, gate);
+            assert!(
+                contracts
+                    .iter()
+                    .any(|c| c.contains("suite did not complete")),
+                "{contracts:?}"
+            );
+            fs::write(root.path().join(receipt_path), b"{}").unwrap();
+            assert!(
+                validate_native_acceptance_evidence(root.path(), &index, &authority, gate)
+                    .contains(&"evidence.native_window.selection".into())
+            );
+            fs::write(root.path().join(receipt_path), &receipt).unwrap();
+            fs::remove_dir_all(&acceptance).unwrap();
+            fs::create_dir(&acceptance).unwrap();
+            fs::write(acceptance.join("native-acceptance.json"), b"{}").unwrap();
+            index
+                .entries
+                .retain(|entry| entry.role != "native-window.acceptance");
+            let path = "payloads/native-window.acceptance/native-acceptance.json";
+            index.entries.push(
+                entry(
+                    root.path(),
+                    path,
+                    "native-window.acceptance",
+                    "application/octet-stream",
+                    "tests",
+                    &step.command,
+                )
+                .unwrap(),
+            );
+            let contracts =
+                validate_native_acceptance_evidence(root.path(), &index, &authority, gate);
+            assert!(
+                contracts
+                    .iter()
+                    .any(|c| c.starts_with("evidence.native_window.suite")),
+                "{contracts:?}"
+            );
+        }
     }
 
     fn write_bundle_entry(
@@ -18427,6 +18583,7 @@ mod tests {
                 "tools-component-llvm-tools-preview.result.json",
                 "native-content.result.json",
                 "xtask-build.result.json",
+                "policy-admission.result.json",
                 "source-revalidation.result.json",
             ],
         );
@@ -18564,7 +18721,11 @@ mod tests {
         add_successful_workflow_receipts(
             temporary.path(),
             &mut index,
-            &["xtask-build.result.json", "ci-run.result.json"],
+            &[
+                "xtask-build.result.json",
+                "policy-admission.result.json",
+                "ci-run.result.json",
+            ],
         );
         let validate = |index: &TransportIndex| {
             let mut contracts = Vec::new();
@@ -18633,6 +18794,19 @@ mod tests {
                 })
                 .collect(),
             autoplay: super::super::plan::derive_autoplay(None),
+            selection: Some(super::super::controller::SelectionBinding {
+                schema: "uqm-s4-selection-v1".into(),
+                event: super::super::controller::WorkflowEvent::Push,
+                source_sha: "a".repeat(40),
+                controller_sha: "b".repeat(40),
+                base_sha: None,
+                merge_base_sha: None,
+                changed_paths_z: Vec::new(),
+                authority_sha256: hex_sha256(
+                    &fs::read(temp.path().join("authority-snapshot.json")).unwrap(),
+                ),
+                autoplay: super::super::plan::derive_autoplay(None),
+            }),
         };
         fs::write(
             temp.path().join("ci-plan.json"),
@@ -18662,6 +18836,7 @@ mod tests {
                 "bootstrap-apt-install.result.json",
                 "bootstrap-rustup.result.json",
                 "bootstrap-xtask-build.result.json",
+                "policy-admission.result.json",
                 "ci-plan.result.json",
             ],
         );
@@ -20097,7 +20272,7 @@ mod tests {
                 format!("--configdir={collection}/config"),
                 format!("--contentdir={collection}/inputs/content"),
                 format!("--automation-script={collection}/inputs/linked-playable-v1.json"),
-                format!("--automation-output={collection}/automation"),
+                format!("--automation-output={collection}/runtime-automation"),
                 format!("--native-window-proof={collection}/native-window-proof.json"),
             ],
             environment: std::collections::BTreeMap::from([(
@@ -20196,6 +20371,20 @@ mod tests {
             ) {
                 entry.producing_gate = gate.id.clone();
             }
+        }
+        for prerequisite in gate
+            .steps
+            .iter()
+            .take_while(|candidate| candidate.id != step.id)
+        {
+            write_builtin_step_fixture(
+                bundle.path(),
+                &mut entries,
+                &gate.id,
+                &prerequisite.id,
+                &prerequisite.command,
+                (Some(0), None, None),
+            );
         }
         write_builtin_step_fixture(
             bundle.path(),
@@ -20550,7 +20739,7 @@ mod tests {
                 "--configdir=/collection/config".to_string(),
                 "--contentdir=/collection/inputs/content".to_string(),
                 "--automation-script=/collection/inputs/linked-playable-v1.json".to_string(),
-                "--automation-output=/collection/automation".to_string(),
+                "--automation-output=/collection/runtime-automation".to_string(),
                 "--native-window-proof=/collection/native-window-proof.json".to_string(),
             ],
             environment: std::collections::BTreeMap::from([(
@@ -20723,6 +20912,11 @@ mod tests {
         }
         proof
             .record_screenshot(NativeScreenshot {
+                original_os_capture: uqm_rust::automation::NativeRetainedInput {
+                    relative_path: "screenshots/stable.os.png".into(),
+                    byte_length: 128,
+                    sha256: "a".repeat(64),
+                },
                 stage: NativeScreenshotStage::Stable,
                 binding: binding.clone(),
                 post_capture_observation: NativeWindowObservation {
@@ -20763,6 +20957,11 @@ mod tests {
                 .unwrap();
         }
         let screenshot = |committed_presentation, input_events, battle_frames| NativeScreenshot {
+            original_os_capture: uqm_rust::automation::NativeRetainedInput {
+                relative_path: "screenshots/playable.os.png".into(),
+                byte_length: 128,
+                sha256: "a".repeat(64),
+            },
             stage: NativeScreenshotStage::Playable,
             binding: binding.clone(),
             post_capture_observation: NativeWindowObservation {

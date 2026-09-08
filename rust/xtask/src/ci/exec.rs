@@ -4256,6 +4256,125 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn native_leaf_candidate_has_no_controller_protocol_capability() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = std::env::current_exe().unwrap();
+        let mut limits = limits_for_current_executable();
+        limits.timeout = Duration::from_secs(120);
+        limits.stdout_bytes = 65536;
+        limits.stderr_bytes = 65536;
+        let captured = run_captured_with_limits(
+            Path::new("."),
+            executable.to_str().unwrap(),
+            &[
+                "--exact".into(),
+                "ci::exec::tests::native_leaf_controller_process".into(),
+                "--nocapture".into(),
+            ],
+            &[(
+                "UQM_NATIVE_LEAF_TEST".into(),
+                directory.path().display().to_string(),
+            )],
+            limits,
+        );
+        assert!(captured.succeeded(), "{captured:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_leaf_controller_process() {
+        let Some(directory) = std::env::var_os("UQM_NATIVE_LEAF_TEST") else {
+            return;
+        };
+        let directory = PathBuf::from(directory);
+        let protocol = NestedGroupProtocol::inherited().unwrap().unwrap();
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "ci::exec::tests::native_leaf_image_process",
+                "--nocapture",
+            ])
+            .env(
+                "UQM_NATIVE_LEAF_DESCRIPTORS",
+                serde_json::to_string(&protocol.descriptors()).unwrap(),
+            );
+        let config = ChildSessionConfig {
+            stdout_log: directory.join("leaf.out"),
+            stderr_log: directory.join("leaf.err"),
+            stdout_budget: 4096,
+            stderr_budget: 4096,
+            timeout: Duration::from_secs(20),
+            grace: Duration::from_millis(100),
+            executable_digest: "leaf-fixture".into(),
+        };
+        let receipt = ChildSession::spawn_leaf(command, config)
+            .unwrap()
+            .finish()
+            .unwrap();
+        assert_eq!(
+            receipt.exit_code,
+            Some(0),
+            "stdout: {}\nstderr: {}",
+            std::fs::read_to_string(directory.join("leaf.out")).unwrap(),
+            std::fs::read_to_string(directory.join("leaf.err")).unwrap()
+        );
+        assert!(receipt.orphan_check_passed);
+        assert!(receipt.output_drained);
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "trap '' TERM; printf ready; while :; do :; done"]);
+        let session = ChildSession::spawn_leaf(
+            command,
+            ChildSessionConfig {
+                stdout_log: directory.join("timeout.out"),
+                stderr_log: directory.join("timeout.err"),
+                stdout_budget: 4096,
+                stderr_budget: 4096,
+                timeout: Duration::from_millis(300),
+                grace: Duration::from_millis(100),
+                executable_digest: "leaf-timeout-fixture".into(),
+            },
+        )
+        .unwrap();
+        let pid = session.pid() as libc::pid_t;
+        let failure = session.finish().unwrap_err();
+        assert!(matches!(
+            failure.error,
+            ChildSessionError::Timeout {
+                term_sent: true,
+                kill_sent: true
+            }
+        ));
+        assert_eq!(failure.receipt.signal, Some(libc::SIGKILL));
+        assert!(failure.receipt.output_drained);
+        assert!(failure.receipt.orphan_check_passed);
+        assert!(!process_exists(pid));
+        assert_eq!(
+            std::fs::read(directory.join("timeout.out")).unwrap(),
+            b"ready"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_leaf_image_process() {
+        let Ok(descriptors) = std::env::var("UQM_NATIVE_LEAF_DESCRIPTORS") else {
+            return;
+        };
+        let descriptors: [i32; 3] = serde_json::from_str(&descriptors).unwrap();
+        assert!(NestedGroupProtocol::inherited().unwrap().is_none());
+        for descriptor in descriptors {
+            // SAFETY: F_GETFD inspects descriptor state without dereferencing memory.
+            assert_eq!(unsafe { libc::fcntl(descriptor, libc::F_GETFD) }, -1);
+            assert_eq!(
+                std::io::Error::last_os_error().raw_os_error(),
+                Some(libc::EBADF)
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn nested_child_session_lifecycle_process() {
         let Some(directory) = std::env::var_os("UQM_TEST_CHILD_SESSION_LIFECYCLE") else {
             return;

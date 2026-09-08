@@ -771,6 +771,7 @@ fn rule_precontainment_isolation(document: &Yaml) -> RuleResult {
     };
     let steps = job_steps(gates);
     let isolated_steps = [
+        "Admit candidate policy with base-owned controller",
         "Install native prerequisites",
         "Install pinned gate tools",
         "Provision authority-pinned native acceptance content",
@@ -822,11 +823,46 @@ fn valid_plan_authority_fetch(step: &Yaml) -> bool {
         )
         && run.contains("\"${SOURCE_REPOSITORY}\" \"${SOURCE_SHA}\"")
         && run.contains("\"${BASE_REPOSITORY}\" \"${BASE_SHA}\"")
-        && run.contains("cmp --silent \"${authority}.source\" \"${authority}.base\"")
+        && run.contains("cp \"${authority}.base\" \"${authority}\"")
         && run.contains("uqm-s4-ci-authority-v1")
         && run.contains(". == floor")
         && run.contains(". >= 1")
         && run.contains(". <= 90")
+}
+
+fn valid_event_policy_binding(document: &Yaml) -> bool {
+    let expected = [
+        ("UQM_CI_EVENT_NAME", "${{ github.event_name }}"),
+        ("UQM_CI_CONTROLLER_SHA", "${{ github.workflow_sha }}"),
+        (
+            "UQM_CI_EXPECTED_SHA",
+            "${{ github.event.pull_request.head.sha || github.sha }}",
+        ),
+        (
+            "UQM_CI_EVENT_BASE_SHA",
+            "${{ github.event.pull_request.base.sha || '' }}",
+        ),
+    ];
+    let event_bound = expected
+        .iter()
+        .all(|(key, value)| document.get_str(&["env", key]) == Some(*value));
+    let Some(gates) = document.get("jobs").and_then(|jobs| jobs.get("gates")) else {
+        return false;
+    };
+    event_bound
+        && gates.get_str(&["env", "UQM_CI_SELECTION_JSON"])
+            == Some("${{ needs.plan.outputs.selection }}")
+        && job_steps(gates).iter().any(|step| {
+            step.get_str(&["name"]) == Some("Admit candidate policy with base-owned controller")
+                && step.get_str(&["working-directory"]) == Some("${{ runner.temp }}")
+                && step.get_str(&["run"]).is_some_and(|run| {
+                    run.contains("\"${RUNNER_TEMP}/s4-gates-controller\" ci admit-policy")
+                        && run
+                            .contains("\"${RUNNER_TEMP}/s4-controller-source/rust/ci/gates.json\"")
+                        && run.contains("\"${GITHUB_WORKSPACE}/rust/ci/gates.json\"")
+                        && run.contains("\"${RUNNER_TEMP}/s4-gates-authority.json\"")
+                })
+        })
 }
 
 fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
@@ -873,6 +909,8 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
                     && run.contains(
                         "mv \"${GITHUB_WORKSPACE}/.s4-controller-source\" \"${controller}\"",
                     )
+                    && run.contains("supervise policy-admission \"${CARGO_TARGET_DIR}/debug/uqm-xtask\" ci admit-policy")
+                    && run.contains("\"${authority}.base\" \"${authority}.source\" \"${authority}\"")
                     && !run.contains("--manifest-path rust/xtask/Cargo.toml")
             })
         });
@@ -897,6 +935,10 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         step.get_str(&["id"]) == Some("plan")
             && run.contains(&format!("trusted_tuples='{TRUSTED_PLAN_TUPLES_JSON}'"))
             && run.contains(r#"--slurpfile authority "${authority}""#)
+            && run.contains("and .autoplay == .selection.autoplay")
+            && run.contains("and .selection.event == env.UQM_CI_EVENT_NAME")
+            && run.contains("and .selection.source_sha == env.UQM_CI_EXPECTED_SHA")
+            && run.contains("and .selection.controller_sha == env.UQM_CI_CONTROLLER_SHA")
             && run.contains("jq -e")
             && run.contains("jq -cer --argjson trusted_tuples")
             && matches!(
@@ -913,7 +955,9 @@ fn rule_trusted_plan_outputs(document: &Yaml) -> RuleResult {
         // The autoplay suite is derived once by the plan job so every tuple
         // proves the same scenarios. If this output stops being published the
         // gates lose their suite silently, so its absence is a failure here.
-        && plan.get_str(&["outputs", "autoplay"]) == Some("${{ steps.plan.outputs.autoplay }}");
+        && plan.get_str(&["outputs", "autoplay"]) == Some("${{ steps.plan.outputs.autoplay }}")
+        && plan.get_str(&["outputs", "selection"]) == Some("${{ steps.plan.outputs.selection }}")
+        && valid_event_policy_binding(document);
     if ordered
         && authority_fetch
         && controller_is_base_owned
@@ -2981,6 +3025,9 @@ mod tests {
             .arg(script)
             .env("RUNNER_TEMP", temporary.path())
             .env("GITHUB_OUTPUT", &output_path)
+            .env("UQM_CI_EVENT_NAME", "push")
+            .env("UQM_CI_EXPECTED_SHA", "a".repeat(40))
+            .env("UQM_CI_CONTROLLER_SHA", "b".repeat(40))
             .output()
             .unwrap();
         let published = fs::read_to_string(output_path).unwrap_or_default();
@@ -3050,6 +3097,7 @@ mod tests {
             "authority_contract": authority_value.clone(),
             "tuples": tuples,
             "autoplay": valid_autoplay(),
+            "selection": {"schema":"uqm-s4-selection-v1", "event":"push", "source_sha":"a".repeat(40), "controller_sha":"b".repeat(40), "autoplay":valid_autoplay()},
         }))
         .unwrap();
         let (output, published) = run_trusted_plan_validator(Some(&plan), &authority_value);
@@ -3082,6 +3130,7 @@ mod tests {
             "authority_contract": authority_value,
             "tuples": tuples,
             "autoplay": valid_autoplay(),
+            "selection": {"schema":"uqm-s4-selection-v1", "event":"push", "source_sha":"a".repeat(40), "controller_sha":"b".repeat(40), "autoplay":valid_autoplay()},
         }))
         .unwrap();
         let authority_value = serde_json::to_value(authority).unwrap();
@@ -3167,10 +3216,10 @@ total_timeout=60
     }
 
     #[test]
-    fn base_authority_comparison_removal_is_rejected() {
+    fn base_policy_admission_removal_is_rejected() {
         let mutated = WORKFLOW.replacen(
-            "          cmp --silent \"${authority}.source\" \"${authority}.base\"\n",
-            "          cp \"${authority}.source\" \"${authority}.base\"\n",
+            "supervise policy-admission \"${CARGO_TARGET_DIR}/debug/uqm-xtask\" ci admit-policy",
+            "cp",
             1,
         );
         assert_ne!(mutated, WORKFLOW);
