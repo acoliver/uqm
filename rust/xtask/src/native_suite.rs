@@ -813,6 +813,504 @@ mod journal_regressions {
     }
 }
 
+/// The fault and teardown matrix the acceptance contract names.
+///
+/// A crash, a timeout, a signal, an output-limit kill and an escaped
+/// descendant each have to leave diagnostics in the retained bundle and each
+/// has to say what became of the process state. These tests drive the
+/// controller-side receipt directly with synthetic supervision rows; they are
+/// fixtures for the accounting, not evidence that a game ran.
+#[cfg(test)]
+mod teardown_regressions {
+    use super::*;
+
+    fn pinned(name: &str) -> PinnedScript {
+        PinnedScript {
+            path: format!("rust/scripts/{name}.json"),
+            sha256: "a".repeat(64),
+            byte_length: 12,
+        }
+    }
+
+    /// A supervision row whose process group was verified empty and whose
+    /// pipes drained, carrying the fault the caller names.
+    fn clean_teardown(class: FaultClass) -> ControllerSupervision {
+        ControllerSupervision {
+            class,
+            detail: format!("{class:?} observed by the controller"),
+            exit_code: match class {
+                FaultClass::Exit => Some(9),
+                FaultClass::Completed => Some(0),
+                _ => None,
+            },
+            signal: (class == FaultClass::Signal).then_some(11),
+            timed_out: class == FaultClass::Timeout,
+            termination_reason: match class {
+                FaultClass::Timeout => "timeout".into(),
+                FaultClass::OutputLimit => "output-limit".into(),
+                FaultClass::EscapedDescendants => "descendant-cleanup".into(),
+                _ => "none".into(),
+            },
+            termination_signal: "none".into(),
+            process_group_cleanup: "verified-empty".into(),
+            pipe_cleanup: "complete".into(),
+            descendant_survivors: (class == FaultClass::EscapedDescendants)
+                .then(|| "pid 4242 uqm".to_string()),
+            stdout_bytes_seen: 12,
+            stderr_bytes_seen: 5,
+            stdout_log: None,
+            stderr_log: None,
+        }
+    }
+
+    fn finalized_failure(
+        root: &Path,
+        selected: &[PinnedScript],
+        supervision: ControllerSupervision,
+        stdout: &[u8],
+        stderr: &[u8],
+    ) -> SuiteManifest {
+        let mut suite = SuiteAccounting::create(root, selected, false).unwrap();
+        suite.begin(0).unwrap();
+        suite
+            .record_supervision(0, supervision, stdout, stderr)
+            .unwrap();
+        suite
+            .fail(
+                SuitePhase::Execute,
+                Some(0),
+                "child did not complete".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        validate_accounting(root, selected).unwrap()
+    }
+
+    fn published_teardown(root: &Path, manifest: &SuiteManifest) -> SuiteTeardown {
+        read_teardown(root, manifest).unwrap()
+    }
+
+    #[test]
+    fn every_child_fault_retains_diagnostics_and_states_its_process_state() {
+        for class in [
+            FaultClass::Exit,
+            FaultClass::Signal,
+            FaultClass::Timeout,
+            FaultClass::OutputLimit,
+            FaultClass::EscapedDescendants,
+            FaultClass::LaunchFailed,
+            FaultClass::SupervisionFailed,
+        ] {
+            let temporary = tempfile::tempdir().unwrap();
+            let root = temporary.path().join("suite");
+            let selected = vec![pinned("a")];
+            let manifest = finalized_failure(
+                &root,
+                &selected,
+                clean_teardown(class),
+                b"child stdout",
+                b"boom!",
+            );
+            let teardown = published_teardown(&root, &manifest);
+            let row = teardown.scenarios[0].supervision.clone().unwrap();
+
+            assert_eq!(row.class, class, "the receipt must keep the observed fault");
+            let stdout = row
+                .stdout_log
+                .as_ref()
+                .expect("a faulted child retains its stdout");
+            let stderr = row
+                .stderr_log
+                .as_ref()
+                .expect("a faulted child retains its stderr");
+            assert_eq!(
+                std::fs::read(root.join(&stdout.relative_path)).unwrap(),
+                b"child stdout"
+            );
+            assert_eq!(
+                std::fs::read(root.join(&stderr.relative_path)).unwrap(),
+                b"boom!"
+            );
+            assert!(
+                !stdout.relative_path.starts_with("scenarios/"),
+                "controller output must not join the child's own bundle inventory"
+            );
+
+            // An escaped descendant is the only one of these that leaves state
+            // behind. A crash, a timeout, a signal or an output-limit kill is a
+            // failed run on a clean host.
+            let expected_clear = class != FaultClass::EscapedDescendants;
+            assert_eq!(
+                teardown.process_state_clear, expected_clear,
+                "{class:?} reported the wrong process state"
+            );
+            assert_eq!(row.process_state_clear(), expected_clear);
+        }
+    }
+
+    #[test]
+    fn a_bounded_fault_log_says_how_much_it_dropped() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let oversize = vec![b'x'; (FAULT_LOG_LIMIT as usize) + 4096];
+        let mut supervision = clean_teardown(FaultClass::Exit);
+        supervision.stdout_bytes_seen = oversize.len() as u64;
+        let manifest = finalized_failure(&root, &selected, supervision, &oversize, b"");
+        let row = published_teardown(&root, &manifest).scenarios[0]
+            .supervision
+            .clone()
+            .unwrap();
+
+        let stdout = row.stdout_log.unwrap();
+        assert_eq!(stdout.byte_length, FAULT_LOG_LIMIT);
+        assert_eq!(
+            row.stdout_bytes_seen,
+            oversize.len() as u64,
+            "the receipt keeps the full observed length beside the retained one"
+        );
+        assert!(
+            row.stderr_log.is_none(),
+            "an empty stream is not retained as an empty file"
+        );
+    }
+
+    #[test]
+    fn a_receipt_cannot_claim_a_process_state_its_rows_do_not_establish() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let manifest = finalized_failure(
+            &root,
+            &selected,
+            clean_teardown(FaultClass::EscapedDescendants),
+            b"out",
+            b"err",
+        );
+        let mut teardown = published_teardown(&root, &manifest);
+        assert!(!teardown.process_state_clear);
+
+        teardown.process_state_clear = true;
+        republish(&root, &teardown);
+
+        let error = validate_accounting(&root, &selected).unwrap_err();
+        assert!(
+            error.contains("its own rows do not establish"),
+            "a forged clean-teardown claim must be refused: {error}"
+        );
+    }
+
+    #[test]
+    fn a_receipt_cannot_hide_the_descendant_that_made_it_dirty() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let manifest = finalized_failure(
+            &root,
+            &selected,
+            clean_teardown(FaultClass::EscapedDescendants),
+            b"out",
+            b"err",
+        );
+        let mut teardown = published_teardown(&root, &manifest);
+        teardown.scenarios[0]
+            .supervision
+            .as_mut()
+            .unwrap()
+            .descendant_survivors = None;
+        republish(&root, &teardown);
+
+        let error = validate_accounting(&root, &selected).unwrap_err();
+        assert!(
+            error.contains("contradicts the fault class"),
+            "an escaped-descendant row without survivors is not that class: {error}"
+        );
+    }
+
+    #[test]
+    fn an_altered_fault_log_is_refused_by_its_recorded_identity() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let manifest = finalized_failure(
+            &root,
+            &selected,
+            clean_teardown(FaultClass::Timeout),
+            b"original",
+            b"err",
+        );
+        let teardown = published_teardown(&root, &manifest);
+        let log = teardown.scenarios[0]
+            .supervision
+            .clone()
+            .unwrap()
+            .stdout_log
+            .unwrap();
+
+        std::fs::write(root.join(&log.relative_path), b"rewritten").unwrap();
+
+        let error = validate_accounting(&root, &selected).unwrap_err();
+        assert!(
+            error.contains("complete inventory mismatch")
+                || error.contains("differs from the retained bytes"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_scenario_that_never_ran_cannot_claim_a_supervised_child() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a"), pinned("b")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite.begin(0).unwrap();
+        suite
+            .record_supervision(0, clean_teardown(FaultClass::Exit), b"out", b"err")
+            .unwrap();
+        suite
+            .fail(SuitePhase::Execute, Some(0), "child exited 9".into())
+            .unwrap();
+        suite.finish().unwrap();
+        let manifest = validate_accounting(&root, &selected).unwrap();
+
+        let mut teardown = published_teardown(&root, &manifest);
+        assert_eq!(teardown.scenarios[1].supervision, None);
+        teardown.scenarios[1].supervision = Some(clean_teardown(FaultClass::Completed));
+        republish(&root, &teardown);
+
+        let error = validate_accounting(&root, &selected).unwrap_err();
+        assert!(
+            error.contains("scenario that never ran"),
+            "an unattempted row cannot acquire a child: {error}"
+        );
+    }
+
+    #[test]
+    fn supervision_belongs_to_the_live_attempt_and_is_recorded_once() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a"), pinned("b")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+
+        assert!(
+            suite
+                .record_supervision(0, clean_teardown(FaultClass::Exit), b"", b"")
+                .is_err(),
+            "a child cannot be recorded before its attempt begins"
+        );
+        suite.begin(0).unwrap();
+        assert!(suite
+            .record_supervision(1, clean_teardown(FaultClass::Exit), b"", b"")
+            .is_err());
+        suite
+            .record_supervision(0, clean_teardown(FaultClass::Exit), b"", b"")
+            .unwrap();
+        assert!(
+            suite
+                .record_supervision(0, clean_teardown(FaultClass::Exit), b"", b"")
+                .is_err(),
+            "a second receipt for one attempt would overwrite the first"
+        );
+    }
+
+    #[test]
+    fn an_internally_contradictory_receipt_is_refused_at_the_source() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite.begin(0).unwrap();
+        let mut supervision = clean_teardown(FaultClass::Timeout);
+        supervision.timed_out = false;
+
+        let error = suite
+            .record_supervision(0, supervision, b"", b"")
+            .unwrap_err();
+
+        assert!(error.contains("contradicts the fault class"), "{error}");
+    }
+
+    #[test]
+    fn a_preflight_failure_leaves_a_clean_receipt_with_no_children() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite
+            .fail(SuitePhase::Preflight, None, "bad pin".into())
+            .unwrap();
+        suite.finish().unwrap();
+        let manifest = validate_accounting(&root, &selected).unwrap();
+
+        let teardown = published_teardown(&root, &manifest);
+        assert_eq!(teardown.scenarios[0].supervision, None);
+        assert!(
+            teardown.process_state_clear,
+            "a run that launched nothing left nothing behind"
+        );
+    }
+
+    #[test]
+    fn an_attempt_that_never_reached_a_child_says_so_rather_than_going_silent() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite.begin(0).unwrap();
+        suite
+            .record_supervision(
+                0,
+                ControllerSupervision::not_launched("evidence capacity exhausted".into()),
+                b"",
+                b"",
+            )
+            .unwrap();
+        suite
+            .fail(
+                SuitePhase::Execute,
+                Some(0),
+                "evidence capacity exhausted".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        let manifest = validate_accounting(&root, &selected).unwrap();
+
+        let teardown = published_teardown(&root, &manifest);
+        let row = teardown.scenarios[0].supervision.clone().unwrap();
+        assert_eq!(row.class, FaultClass::NotLaunched);
+        assert!(
+            teardown.process_state_clear,
+            "no child existed, so no process state was created"
+        );
+    }
+
+    /// Recovery finalizes a journal whose children were supervised by a
+    /// process that no longer exists. It must not sign for their teardown.
+    #[test]
+    fn recovery_never_claims_a_teardown_it_did_not_observe() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        {
+            let mut interrupted = SuiteAccounting::create(&root, &selected, false).unwrap();
+            interrupted.begin(0).unwrap();
+        }
+        let limits: uqm_rust::automation::native_window::NativeInventoryLimits =
+            serde_json::from_slice::<Authority>(include_bytes!("../../ci/gates.json"))
+                .unwrap()
+                .native_runtime_contract()
+                .inventory_limits;
+
+        let recovered = recover_interrupted(&root, &selected, limits).unwrap();
+
+        let teardown = published_teardown(&root, &recovered);
+        assert_eq!(teardown.scenarios[0].supervision, None);
+        assert!(
+            !teardown.process_state_clear,
+            "an interrupted attempt's process state was never observed and is not clear"
+        );
+        assert!(teardown.scope.contains("no longer exists"));
+    }
+
+    /// Storage runs out exactly when a run is going wrong, so the space to
+    /// say so is claimed before any scenario is allowed to spend the budget.
+    #[test]
+    fn an_exhausted_artifact_budget_still_publishes_its_teardown_receipt() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite.begin(0).unwrap();
+        let budget = suite.shared_budget();
+        let remaining = budget.remaining().unwrap();
+        let mut bytes = remaining.aggregate_bytes;
+        let mut claim = 0;
+        while bytes > 0 {
+            let length = bytes.min(remaining.member_bytes);
+            budget.reserve(&format!("exhaust-{claim}"), length).unwrap();
+            bytes -= length;
+            claim += 1;
+        }
+        assert!(
+            suite.scenario_allowance(0).is_err(),
+            "the budget has to actually be exhausted for this to prove anything"
+        );
+
+        suite
+            .record_supervision(
+                0,
+                ControllerSupervision::not_launched("evidence capacity exhausted".into()),
+                b"",
+                b"",
+            )
+            .unwrap();
+        suite
+            .fail(
+                SuitePhase::Execute,
+                Some(0),
+                "evidence capacity exhausted".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+
+        let manifest = validate_accounting(&root, &selected).unwrap();
+        let teardown = published_teardown(&root, &manifest);
+        assert_eq!(
+            teardown.scenarios[0].supervision.as_ref().unwrap().class,
+            FaultClass::NotLaunched
+        );
+        assert!(teardown.process_state_clear);
+    }
+
+    #[test]
+    fn a_finalized_bundle_without_a_teardown_receipt_is_not_a_bundle() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        let selected = vec![pinned("a")];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite
+            .fail(SuitePhase::Preflight, None, "bad pin".into())
+            .unwrap();
+        suite.finish().unwrap();
+        validate_accounting(&root, &selected).unwrap();
+
+        std::fs::remove_file(root.join(TEARDOWN_RELATIVE)).unwrap();
+
+        assert!(
+            validate_accounting(&root, &selected).is_err(),
+            "a bundle that dropped its teardown receipt must not validate"
+        );
+    }
+
+    /// Replace the published receipt and the index that covers it, so the
+    /// mutation is exercised against the teardown rules rather than being
+    /// rejected earlier as an inventory drift.
+    fn republish(root: &Path, teardown: &SuiteTeardown) {
+        let publisher = crate::ci::evidence::EvidencePublisher::open(root).unwrap();
+        publisher
+            .replace(
+                TEARDOWN_RELATIVE,
+                &serde_json::to_vec_pretty(teardown).unwrap(),
+            )
+            .unwrap();
+        let manifest: SuiteManifest = serde_json::from_slice(
+            &crate::ci::evidence::read_regular_relative(root, "suite-manifest.json").unwrap(),
+        )
+        .unwrap();
+        let index = SuiteIndex {
+            schema: "uqm-native-suite-index-v1".into(),
+            passed: manifest.passed,
+            files: inventory(root).unwrap(),
+        };
+        publisher
+            .replace(
+                "suite-index.json",
+                &serde_json::to_vec_pretty(&index).unwrap(),
+            )
+            .unwrap();
+    }
+}
+
 /// Claim a suite root the caller named rather than one the environment did.
 ///
 /// The CI route binds the root through the environment; the runner command
@@ -937,6 +1435,9 @@ pub fn recover_interrupted(
         .sequence
         .checked_add(1)
         .ok_or("retained suite sequence overflow")?;
+    // Recovery supervised none of these children. Every slot stays empty, so
+    // the published receipt cannot claim a teardown this process never saw.
+    let teardown = vec![None; status.scenarios.len()];
     let mut suite = SuiteAccounting {
         root: root.to_path_buf(),
         publisher: crate::ci::evidence::EvidencePublisher::open(root)
@@ -947,6 +1448,7 @@ pub fn recover_interrupted(
         member_started: None,
         budget,
         diagnostics,
+        teardown,
     };
     // Whatever the interrupted run retained is charged before anything else is
     // published, so recovery cannot exceed the budget that run was held to.
@@ -1124,6 +1626,314 @@ struct SuiteIndex {
     passed: bool,
     files: Vec<uqm_rust::automation::NativeRetainedInput>,
 }
+/// The suite-owned teardown receipt every finalized bundle carries.
+pub const TEARDOWN_RELATIVE: &str = "suite-teardown.json";
+
+const TEARDOWN_SCHEMA: &str = "uqm-native-suite-teardown-v1";
+
+/// How much of a faulted child's captured output is retained per stream.
+///
+/// The supervisor already bounds what it reads; this bounds what the bundle
+/// keeps, so 32 faulted scenarios cannot spend the whole artifact budget on
+/// logs. The receipt records the full observed length beside the retained one,
+/// so a truncated log is visibly truncated rather than quietly short.
+const FAULT_LOG_LIMIT: u64 = 64 * 1024;
+
+/// The marker the neutral supervision fields carry when no child was spawned.
+const NOT_LAUNCHED: &str = "not-launched";
+
+/// What the controller observed when the scenario's child returned.
+///
+/// This is the controller's own account of the child process, separate from
+/// the manifest the child writes for itself. A child that dies before it can
+/// write anything still leaves one of these.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FaultClass {
+    /// The attempt failed before any child process existed.
+    NotLaunched,
+    /// The child ran to completion under supervision and exited zero.
+    Completed,
+    /// The child exited nonzero.
+    Exit,
+    /// The child was terminated by a signal it did not choose.
+    Signal,
+    /// The child exceeded its authorized timeout and was terminated.
+    Timeout,
+    /// The child exceeded an authorized output limit and was terminated.
+    OutputLimit,
+    /// The child left descendants in the process group the controller owns.
+    EscapedDescendants,
+    /// The child could not be started at all.
+    LaunchFailed,
+    /// Supervision itself failed, so the child's outcome is not established.
+    SupervisionFailed,
+}
+
+/// The controller's account of one supervised scenario child.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ControllerSupervision {
+    pub class: FaultClass,
+    /// The first contract the child broke, or a statement that it broke none.
+    pub detail: String,
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
+    pub timed_out: bool,
+    pub termination_reason: String,
+    pub termination_signal: String,
+    pub process_group_cleanup: String,
+    pub pipe_cleanup: String,
+    /// The descendants the controller found still owning the group, if any.
+    pub descendant_survivors: Option<String>,
+    pub stdout_bytes_seen: u64,
+    pub stderr_bytes_seen: u64,
+    /// Bounded retained diagnostics, present when the child did not complete.
+    pub stdout_log: Option<uqm_rust::automation::NativeRetainedInput>,
+    pub stderr_log: Option<uqm_rust::automation::NativeRetainedInput>,
+}
+
+impl ControllerSupervision {
+    /// The neutral row for an attempt that failed before any child existed.
+    pub fn not_launched(detail: String) -> Self {
+        Self {
+            class: FaultClass::NotLaunched,
+            detail,
+            exit_code: None,
+            signal: None,
+            timed_out: false,
+            termination_reason: NOT_LAUNCHED.into(),
+            termination_signal: NOT_LAUNCHED.into(),
+            process_group_cleanup: NOT_LAUNCHED.into(),
+            pipe_cleanup: NOT_LAUNCHED.into(),
+            descendant_survivors: None,
+            stdout_bytes_seen: 0,
+            stderr_bytes_seen: 0,
+            stdout_log: None,
+            stderr_log: None,
+        }
+    }
+
+    /// Whether this row leaves no process state behind.
+    ///
+    /// A fault is not a dirty teardown. A child that timed out, was signalled
+    /// or exited nonzero still leaves the host clean when its process group was
+    /// verified empty and its pipes were drained. Only a surviving descendant,
+    /// an unverified group or an undrained pipe makes this false.
+    #[must_use]
+    pub fn process_state_clear(&self) -> bool {
+        if self.class == FaultClass::NotLaunched {
+            return true;
+        }
+        self.descendant_survivors.is_none()
+            && self.pipe_cleanup == "complete"
+            && matches!(
+                self.process_group_cleanup.as_str(),
+                "verified-empty" | "not-supported"
+            )
+    }
+
+    /// Refuse a row whose fields contradict the class it declares.
+    fn self_consistent(&self) -> bool {
+        let neutral = self.termination_reason == NOT_LAUNCHED
+            && self.termination_signal == NOT_LAUNCHED
+            && self.process_group_cleanup == NOT_LAUNCHED
+            && self.pipe_cleanup == NOT_LAUNCHED
+            && self.exit_code.is_none()
+            && self.signal.is_none()
+            && !self.timed_out
+            && self.descendant_survivors.is_none()
+            && self.stdout_log.is_none()
+            && self.stderr_log.is_none();
+        if self.detail.is_empty() {
+            return false;
+        }
+        match self.class {
+            FaultClass::NotLaunched => neutral,
+            FaultClass::Completed => {
+                !neutral
+                    && self.exit_code == Some(0)
+                    && self.signal.is_none()
+                    && !self.timed_out
+                    && self.termination_reason == "none"
+                    && self.descendant_survivors.is_none()
+                    && self.stdout_log.is_none()
+                    && self.stderr_log.is_none()
+            }
+            FaultClass::Timeout => !neutral && self.timed_out,
+            FaultClass::Signal => !neutral && self.signal.is_some(),
+            FaultClass::Exit => {
+                !neutral && self.signal.is_none() && self.exit_code.is_some_and(|code| code != 0)
+            }
+            FaultClass::OutputLimit => !neutral && self.termination_reason == "output-limit",
+            FaultClass::EscapedDescendants => !neutral && self.descendant_survivors.is_some(),
+            FaultClass::LaunchFailed | FaultClass::SupervisionFailed => !neutral,
+        }
+    }
+}
+
+/// One selected scenario's teardown row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TeardownRow {
+    pub scenario: usize,
+    pub directory: String,
+    pub script: PinnedScript,
+    /// Absent when this process did not supervise a child for the row, which
+    /// is either because none was ever attempted or because the attempt
+    /// belonged to a process that no longer exists.
+    pub supervision: Option<ControllerSupervision>,
+}
+
+/// What the suite can say about the process state it leaves behind.
+///
+/// This receipt covers the controller's own children. It does not speak for
+/// host state the controller never owned, and it says so rather than implying
+/// a wider guarantee than it can support.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SuiteTeardown {
+    pub schema: String,
+    /// True only when every attempted row was supervised by this process and
+    /// each one left its process group verified empty with its pipes drained.
+    pub process_state_clear: bool,
+    pub scope: String,
+    pub scenarios: Vec<TeardownRow>,
+}
+
+impl SuiteTeardown {
+    const SCOPE: &'static str =
+        "the controller's own scenario children: process-group emptiness, pipe drain and \
+         escaped-descendant observation. It does not attest to host state this controller never \
+         owned, and an attempt supervised by a process that no longer exists is never claimed as \
+         clear.";
+
+    fn build(manifest: &SuiteManifest, rows: &[Option<ControllerSupervision>]) -> Self {
+        let scenarios: Vec<TeardownRow> = manifest
+            .scenarios
+            .iter()
+            .enumerate()
+            .map(|(scenario, row)| TeardownRow {
+                scenario,
+                directory: row.directory.clone(),
+                script: row.script.clone(),
+                supervision: rows.get(scenario).cloned().flatten(),
+            })
+            .collect();
+        Self {
+            schema: TEARDOWN_SCHEMA.into(),
+            process_state_clear: derive_process_state_clear(manifest, &scenarios),
+            scope: Self::SCOPE.into(),
+            scenarios,
+        }
+    }
+}
+
+/// Whether the controller can honestly claim it left no process state.
+///
+/// An attempted row with no supervision is not clear: the process that would
+/// have observed the teardown is gone, and this one cannot observe it after
+/// the fact. A row that was never attempted created no process state at all.
+fn derive_process_state_clear(manifest: &SuiteManifest, rows: &[TeardownRow]) -> bool {
+    manifest.scenarios.len() == rows.len()
+        && manifest.scenarios.iter().zip(rows).all(|(state, row)| {
+            match (&state.state, &row.supervision) {
+                (ScenarioState::NotRun, None) => true,
+                (_, Some(supervision)) => supervision.process_state_clear(),
+                (_, None) => false,
+            }
+        })
+}
+
+/// Read and check a finalized bundle's teardown receipt.
+///
+/// A receipt is refused when it covers a different selection, when a row
+/// contradicts the class it declares, when a scenario the suite recorded as
+/// completed carries a faulted child, when a row that was never attempted
+/// claims a supervised child, when a retained log is absent or altered, or
+/// when the clean-teardown claim is not the one the rows actually derive.
+fn validate_teardown(
+    snapshot: &crate::ci::evidence::EvidenceSnapshot,
+    manifest: &SuiteManifest,
+) -> Result<SuiteTeardown, String> {
+    let bytes = snapshot
+        .read(TEARDOWN_RELATIVE)
+        .map_err(|error| format!("read {TEARDOWN_RELATIVE}: {error}"))?;
+    let teardown: SuiteTeardown = serde_json::from_slice(bytes)
+        .map_err(|error| format!("parse {TEARDOWN_RELATIVE}: {error}"))?;
+    if teardown.schema != TEARDOWN_SCHEMA
+        || teardown.scope != SuiteTeardown::SCOPE
+        || teardown.scenarios.len() != manifest.scenarios.len()
+    {
+        return Err(
+            "native suite teardown receipt does not describe this suite's selection".into(),
+        );
+    }
+    for (index, (row, accounting)) in teardown
+        .scenarios
+        .iter()
+        .zip(&manifest.scenarios)
+        .enumerate()
+    {
+        if row.scenario != index
+            || row.directory != accounting.directory
+            || row.script != accounting.script
+        {
+            return Err("native suite teardown row does not match its scenario".into());
+        }
+        let Some(supervision) = &row.supervision else {
+            continue;
+        };
+        if accounting.state == ScenarioState::NotRun {
+            return Err(
+                "native suite teardown claims a supervised child for a scenario that never ran"
+                    .into(),
+            );
+        }
+        if !supervision.self_consistent() {
+            return Err(format!(
+                "native suite teardown row {index} contradicts the fault class it declares"
+            ));
+        }
+        if matches!(accounting.state, ScenarioState::Completed { .. })
+            && !matches!(
+                supervision.class,
+                FaultClass::Completed | FaultClass::NotLaunched
+            )
+        {
+            return Err(
+                "native suite recorded a completed scenario whose child did not complete".into(),
+            );
+        }
+        for log in [&supervision.stdout_log, &supervision.stderr_log]
+            .into_iter()
+            .flatten()
+        {
+            let retained = snapshot
+                .read(&log.relative_path)
+                .map_err(|error| format!("read {}: {error}", log.relative_path))?;
+            if crate::retained_identity(&log.relative_path, retained) != *log {
+                return Err(format!(
+                    "native suite teardown log {} differs from the retained bytes",
+                    log.relative_path
+                ));
+            }
+        }
+    }
+    if teardown.process_state_clear != derive_process_state_clear(manifest, &teardown.scenarios) {
+        return Err(
+            "native suite teardown claims a process state its own rows do not establish".into(),
+        );
+    }
+    Ok(teardown)
+}
+
+/// The checked teardown receipt of a finalized bundle, for reporting.
+pub fn read_teardown(bundle: &Path, manifest: &SuiteManifest) -> Result<SuiteTeardown, String> {
+    let snapshot = crate::ci::evidence::EvidenceSnapshot::open(bundle)
+        .map_err(|error| format!("open native suite {}: {error}", bundle.display()))?;
+    snapshot.scoped(|| validate_teardown(&snapshot, manifest))
+}
 
 /// Durable serial accounting. Every transition is published before the next child action.
 pub struct SuiteAccounting {
@@ -1138,6 +1948,9 @@ pub struct SuiteAccounting {
     member_started: Option<std::time::Instant>,
     budget: uqm_rust::automation::native_artifacts::ArtifactBudget,
     diagnostics: std::collections::BTreeMap<String, u64>,
+    /// The controller's account of each scenario child it supervised. A slot
+    /// stays empty when this process never supervised a child for that row.
+    teardown: Vec<Option<ControllerSupervision>>,
 }
 
 impl SuiteAccounting {
@@ -1228,6 +2041,7 @@ impl SuiteAccounting {
             member_started: None,
             budget,
             diagnostics,
+            teardown: vec![None; selected.len()],
         };
         suite.persist()?;
         Ok(suite)
@@ -1235,6 +2049,62 @@ impl SuiteAccounting {
 
     pub fn shared_budget(&self) -> uqm_rust::automation::native_artifacts::ArtifactBudget {
         self.budget.clone()
+    }
+
+    /// Record what the controller observed of one scenario child.
+    ///
+    /// `stdout` and `stderr` are the child's captured streams. They are
+    /// retained, bounded, only when the child did not complete: a successful
+    /// child already published its own bundle, and a faulted one may have
+    /// published nothing at all, which is exactly when its output is the only
+    /// diagnostic left.
+    pub fn record_supervision(
+        &mut self,
+        index: usize,
+        mut supervision: ControllerSupervision,
+        stdout: &[u8],
+        stderr: &[u8],
+    ) -> Result<(), String> {
+        if !matches!(
+            self.manifest.scenarios.get(index).map(|row| &row.state),
+            Some(ScenarioState::Attempted)
+        ) {
+            return Err("controller supervision belongs to the live attempt".into());
+        }
+        if self.teardown[index].is_some() {
+            return Err("controller supervision was already recorded for this attempt".into());
+        }
+        if supervision.class != FaultClass::Completed
+            && supervision.class != FaultClass::NotLaunched
+        {
+            supervision.stdout_log = self.retain_fault_log(index, "stdout", stdout)?;
+            supervision.stderr_log = self.retain_fault_log(index, "stderr", stderr)?;
+        }
+        if !supervision.self_consistent() {
+            return Err(format!(
+                "controller supervision for scenario {index} contradicts the fault class it \
+                 declares: {supervision:?}"
+            ));
+        }
+        self.teardown[index] = Some(supervision);
+        Ok(())
+    }
+
+    fn retain_fault_log(
+        &self,
+        index: usize,
+        stream: &str,
+        bytes: &[u8],
+    ) -> Result<Option<uqm_rust::automation::NativeRetainedInput>, String> {
+        if bytes.is_empty() {
+            return Ok(None);
+        }
+        let relative = fault_log_relative(index, stream);
+        let bound = usize::try_from(FAULT_LOG_LIMIT).map_err(|error| error.to_string())?;
+        let retained = &bytes[..bytes.len().min(bound)];
+        self.publish(&relative, retained)
+            .map_err(|error| format!("publish {relative}: {error}"))?;
+        Ok(Some(crate::retained_identity(&relative, retained)))
     }
 
     fn publish(&self, name: &str, bytes: &[u8]) -> std::io::Result<()> {
@@ -1478,6 +2348,15 @@ impl SuiteAccounting {
             .map_err(|error| error.to_string())?;
         self.publish("suite-manifest.json", &bytes)
             .map_err(|error| error.to_string())?;
+        // The teardown receipt is published before the index so the index
+        // covers it: a bundle cannot carry a teardown claim the inventory does
+        // not account for.
+        self.publish(
+            TEARDOWN_RELATIVE,
+            &serde_json::to_vec_pretty(&SuiteTeardown::build(&self.manifest, &self.teardown))
+                .map_err(|error| error.to_string())?,
+        )
+        .map_err(|error| error.to_string())?;
         let images = gallery_images(&self.manifest, &inventory(&self.root)?);
         self.publish(
             "suite-gallery.json",
@@ -1530,10 +2409,35 @@ fn reserve_suite_diagnostics(
     ] {
         reserved.insert(name.into(), index_bound);
     }
+    // The teardown receipt and the faulted children's bounded logs are
+    // reserved with the rest of the diagnostics, before any scenario is
+    // allowed to spend the budget. A crash is exactly when the storage is
+    // already under pressure, so the space to describe it is claimed first.
+    reserved.insert(
+        TEARDOWN_RELATIVE.into(),
+        (scenarios as u64)
+            .checked_mul(2048)
+            .and_then(|bytes| bytes.checked_add(16384))
+            .ok_or("suite teardown size overflow")?,
+    );
+    for scenario in 0..scenarios {
+        for stream in ["stdout", "stderr"] {
+            reserved.insert(fault_log_relative(scenario, stream), FAULT_LOG_LIMIT);
+        }
+    }
     for (name, bytes) in &reserved {
         budget.reserve(name, *bytes)?;
     }
     Ok(reserved)
+}
+
+/// Where a faulted child's bounded captured stream is retained.
+///
+/// This lives outside `scenarios/`, because a scenario directory's inventory
+/// is bound to the manifest the child published for itself; adding controller
+/// output to it would invalidate the child's own proof.
+fn fault_log_relative(scenario: usize, stream: &str) -> String {
+    format!("suite-faults/{scenario:04}.{stream}.log")
 }
 
 fn millis(duration: std::time::Duration) -> Result<u64, String> {
@@ -1606,6 +2510,7 @@ pub fn validate_accounting(
                 "native suite gallery disagrees with indexed image origins or outcomes".into(),
             );
         }
+        validate_teardown(&snapshot, &manifest)?;
         validate_retained_journal(&snapshot, &manifest, &index)?;
         validate_retained_scenarios(&snapshot, &manifest)?;
         Ok(manifest)

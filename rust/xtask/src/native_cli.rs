@@ -454,15 +454,30 @@ fn validate(root: &Path, options: &Options) -> Result<(), String> {
 }
 
 /// Summarise a retained bundle, including the obligations it did not satisfy.
+///
+/// A failed suite is reported in full and then returned as a failure, so the
+/// caller's exit status says what the report says. Printing "passed false" and
+/// exiting zero would leave a fresh agent to parse prose for the result.
 fn report(options: &Options) -> Result<(), String> {
     options.require_only("report", &["--json"])?;
     let bundle = options.positional_one("report", "BUNDLE")?;
+    report_bundle(&bundle, options.json)
+}
+
+fn report_bundle(bundle: &Path, json: bool) -> Result<(), String> {
+    let options = &Options {
+        json,
+        ..Options::default()
+    };
+    let bundle = bundle.to_path_buf();
     let manifest: crate::native_suite::SuiteManifest = serde_json::from_slice(
         &crate::ci::evidence::read_regular_relative(&bundle, "suite-manifest.json")
             .map_err(|error| format!("read suite-manifest.json: {error}"))?,
     )
     .map_err(|error| format!("parse suite-manifest.json: {error}"))?;
     let gallery = crate::native_gallery::build(&bundle)?;
+    let teardown = crate::native_suite::read_teardown(&bundle, &manifest)?;
+    let index = bundle.join("suite-index.json");
     if options.json {
         println!(
             "{}",
@@ -471,12 +486,15 @@ fn report(options: &Options) -> Result<(), String> {
                 "bundle": bundle.display().to_string(),
                 "suite": manifest,
                 "obligations": gallery.totals,
+                "teardown": teardown,
+                "artifact_index": index.display().to_string(),
             }))
             .map_err(|error| error.to_string())?
         );
-        return Ok(());
+        return suite_result(&manifest);
     }
     println!("bundle\t{}", bundle.display());
+    println!("artifact_index\t{}", index.display());
     println!("passed\t{}", manifest.passed);
     println!("elapsed_ms\t{}", manifest.elapsed_ms);
     if let Some(failure) = &manifest.first_failure {
@@ -485,13 +503,19 @@ fn report(options: &Options) -> Result<(), String> {
             failure.phase, failure.scenario, failure.detail
         );
     }
-    for (scenario, row) in gallery.scenarios.iter().zip(&manifest.scenarios) {
+    for ((scenario, row), teardown_row) in gallery
+        .scenarios
+        .iter()
+        .zip(&manifest.scenarios)
+        .zip(&teardown.scenarios)
+    {
         println!(
-            "scenario\t{}\t{}\t{} ms\tobligations={}",
+            "scenario\t{}\t{}\t{} ms\tobligations={}\tchild={}",
             scenario.script.path,
             scenario.state,
             row.elapsed_ms,
-            scenario.checkpoints.len()
+            scenario.checkpoints.len(),
+            child_summary(teardown_row)
         );
     }
     println!(
@@ -506,7 +530,64 @@ fn report(options: &Options) -> Result<(), String> {
         "renderer_readbacks\t{} (internal renderer captures, not OS screenshots)",
         gallery.totals.renderer_readbacks
     );
-    Ok(())
+    println!(
+        "process_state_clear\t{}\t{}",
+        teardown.process_state_clear, teardown.scope
+    );
+    for row in &teardown.scenarios {
+        let Some(supervision) = &row.supervision else {
+            continue;
+        };
+        for log in [&supervision.stdout_log, &supervision.stderr_log]
+            .into_iter()
+            .flatten()
+        {
+            println!(
+                "child_log\t{}\t{}\t{} bytes",
+                row.script.path, log.relative_path, log.byte_length
+            );
+        }
+    }
+    suite_result(&manifest)
+}
+
+/// The suite's own outcome, as an exit result rather than a printed line.
+///
+/// A caller that has to read prose to learn whether the run passed does not
+/// have an unambiguous result. The failed contract is named here so the exit
+/// status and the report say the same thing.
+fn suite_result(manifest: &crate::native_suite::SuiteManifest) -> Result<(), String> {
+    if manifest.passed {
+        return Ok(());
+    }
+    let failure = manifest.first_failure.as_ref().ok_or(
+        "native suite did not pass and does not name the contract it failed; the bundle is not a \
+         valid report subject",
+    )?;
+    Err(format!(
+        "native autoplay suite failed at {:?}{}: {}",
+        failure.phase,
+        failure
+            .scenario
+            .map_or_else(String::new, |index| format!(" in scenario {index}")),
+        failure.detail
+    ))
+}
+
+/// What the controller observed of one scenario's child, in one column.
+fn child_summary(row: &crate::native_suite::TeardownRow) -> String {
+    match &row.supervision {
+        None => "unsupervised-by-this-process".to_string(),
+        Some(supervision) => format!(
+            "{:?}{}",
+            supervision.class,
+            if supervision.process_state_clear() {
+                ""
+            } else {
+                " (process state not clear)"
+            }
+        ),
+    }
 }
 
 /// Re-execute a recorded run from its retained inputs.
@@ -736,6 +817,77 @@ mod tests {
         let tags = tags_for("battle-v1");
         assert!(!tags.is_empty());
         assert!(!tags.contains(&"unmapped".to_string()));
+    }
+
+    /// A retained failure bundle, produced through the real accounting.
+    fn failed_bundle(root: &Path) -> Vec<crate::ci::authority::PinnedScript> {
+        let selected = vec![crate::ci::authority::PinnedScript {
+            path: "rust/scripts/report-fixture.json".into(),
+            sha256: "a".repeat(64),
+            byte_length: 12,
+        }];
+        let mut suite =
+            crate::native_suite::SuiteAccounting::create(root, &selected, false).unwrap();
+        suite.begin(0).unwrap();
+        suite
+            .record_supervision(
+                0,
+                crate::native_suite::ControllerSupervision::not_launched(
+                    "content package missing".into(),
+                ),
+                b"",
+                b"",
+            )
+            .unwrap();
+        suite
+            .fail(
+                crate::native_suite::SuitePhase::Execute,
+                Some(0),
+                "content package missing".into(),
+            )
+            .unwrap();
+        suite.finish().unwrap();
+        crate::native_suite::validate_accounting(root, &selected).unwrap();
+        selected
+    }
+
+    /// Reporting a failed suite must fail. Printing the outcome and exiting
+    /// zero would make a fresh agent parse prose for the result.
+    #[test]
+    fn reporting_a_failed_suite_returns_that_failure_and_names_the_contract() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("suite");
+        failed_bundle(&root);
+
+        for json in [false, true] {
+            let error = report_bundle(&root, json).unwrap_err();
+            assert!(error.contains("native autoplay suite failed"), "{error}");
+            assert!(error.contains("Execute"), "{error}");
+            assert!(error.contains("in scenario 0"), "{error}");
+            assert!(error.contains("content package missing"), "{error}");
+        }
+    }
+
+    #[test]
+    fn a_passing_suite_reports_success_and_a_bundle_without_a_verdict_is_refused() {
+        let mut manifest = crate::native_suite::SuiteManifest {
+            schema: "uqm-native-suite-v1".into(),
+            sequence: 1,
+            request: crate::retained_identity("suite-request.json", b"[]"),
+            scenarios: Vec::new(),
+            first_failure: None,
+            elapsed_ms: 1,
+            finalized: true,
+            passed: true,
+        };
+        assert!(suite_result(&manifest).is_ok());
+
+        manifest.passed = false;
+        let error = suite_result(&manifest).unwrap_err();
+        assert!(
+            error.contains("does not name the contract it failed"),
+            "{error}"
+        );
     }
 
     #[test]

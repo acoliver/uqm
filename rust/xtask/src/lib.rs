@@ -1086,60 +1086,86 @@ pub(crate) fn execute_native_scenarios(
     )?;
     for (index, pinned) in selected.iter().enumerate() {
         suite.begin(index)?;
-        let script = launch.source.join(&pinned.path);
-        native_suite::admit_script(launch.source, pinned, authority)?;
-        let scenario_evidence = suite.directory(index)?;
-
-        shared.verify()?;
-        let names = native_shared_member_names(pinned, authority)?;
-        let references = shared.references(&names)?;
-        let allowance = suite.scenario_allowance(index)?;
-        let mut command = Command::new(launch.controller);
-        command.env(
-            "UQM_NATIVE_EVIDENCE_ALLOWANCE",
-            serde_json::to_string(&allowance).map_err(|error| error.to_string())?,
-        );
-        command.env(
-            "UQM_NATIVE_SHARED_INPUTS",
-            serde_json::to_string(&references).map_err(|error| error.to_string())?,
-        );
-        command.current_dir(launch.source).args([
-            "__ci-native-acceptance",
-            "run",
-            &launch.linked_executable.display().to_string(),
-            &launch.content_root.display().to_string(),
-            &script.display().to_string(),
-            &scenario_evidence.display().to_string(),
-            &linked_length,
-            &linked_sha256,
-            &runtime_contract,
-            &acceptance_policy,
-            &launch
-                .linked_build_proof
-                .directory
-                .path()
-                .display()
-                .to_string(),
-            &authority
-                .actions
-                .evidence_snapshot_member_limit_bytes
-                .to_string(),
-        ]);
-        // The Aqua child inherits only an allowlisted environment, so the
-        // trusted controller's precreated-root binding must be forwarded.
-        if let Ok(precreated) = env::var(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV) {
-            command.env(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV, precreated);
-        }
-        if let Some(requested) = launch.requested {
-            command.env(ci::exec::AUTOPLAY_SCENARIOS_ENV, requested);
-        }
-        let outcome = run_aqua_command(
-            &mut command,
-            &format!("Direct linked native-window acceptance: {}", pinned.path),
-        );
+        let label = format!("Direct linked native-window acceptance: {}", pinned.path);
+        // Everything up to the spawn either produces the command or fails
+        // without a child ever existing, which the receipt has to distinguish
+        // from a child that ran and died.
+        let prepared = (|| -> Result<Command, String> {
+            let script = launch.source.join(&pinned.path);
+            native_suite::admit_script(launch.source, pinned, authority)?;
+            let scenario_evidence = suite.directory(index)?;
+            shared.verify()?;
+            let names = native_shared_member_names(pinned, authority)?;
+            let references = shared.references(&names)?;
+            let allowance = suite.scenario_allowance(index)?;
+            let mut command = Command::new(launch.controller);
+            command.env(
+                "UQM_NATIVE_EVIDENCE_ALLOWANCE",
+                serde_json::to_string(&allowance).map_err(|error| error.to_string())?,
+            );
+            command.env(
+                "UQM_NATIVE_SHARED_INPUTS",
+                serde_json::to_string(&references).map_err(|error| error.to_string())?,
+            );
+            command.current_dir(launch.source).args([
+                "__ci-native-acceptance",
+                "run",
+                &launch.linked_executable.display().to_string(),
+                &launch.content_root.display().to_string(),
+                &script.display().to_string(),
+                &scenario_evidence.display().to_string(),
+                &linked_length,
+                &linked_sha256,
+                &runtime_contract,
+                &acceptance_policy,
+                &launch
+                    .linked_build_proof
+                    .directory
+                    .path()
+                    .display()
+                    .to_string(),
+                &authority
+                    .actions
+                    .evidence_snapshot_member_limit_bytes
+                    .to_string(),
+            ]);
+            // The Aqua child inherits only an allowlisted environment, so the
+            // trusted controller's precreated-root binding must be forwarded.
+            if let Ok(precreated) = env::var(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV) {
+                command.env(NATIVE_ACCEPTANCE_PRECREATED_ROOT_ENV, precreated);
+            }
+            if let Some(requested) = launch.requested {
+                command.env(ci::exec::AUTOPLAY_SCENARIOS_ENV, requested);
+            }
+            Ok(command)
+        })();
+        let mut command = match prepared {
+            Ok(command) => command,
+            Err(error) => {
+                let receipt = native_suite::ControllerSupervision::not_launched(error.clone());
+                suite.record_supervision(index, receipt, &[], &[])?;
+                return Err(error);
+            }
+        };
+        let captured = match run_aqua_command(&mut command, &label) {
+            Ok(captured) => captured,
+            Err(error) => {
+                let receipt = native_suite::ControllerSupervision::not_launched(error.clone());
+                suite.record_supervision(index, receipt, &[], &[])?;
+                return Err(error);
+            }
+        };
+        let supervision = classify_supervision(&captured, &label);
+        let outcome = if captured.succeeded() {
+            Ok(())
+        } else {
+            Err(supervision.detail.clone())
+        };
+        let retention =
+            suite.record_supervision(index, supervision, &captured.stdout, &captured.stderr);
         let protection = shared.verify();
         let accounting = suite.account_scenario(index);
-        outcome.and(protection).and(accounting)?;
+        outcome.and(retention).and(protection).and(accounting)?;
 
         // A suite produces evidence per scenario, so the budget that a single
         // run could never approach is now reachable. Check it as the suite
@@ -2953,7 +2979,13 @@ fn run_command(command: &mut Command, label: &str) -> Result<(), String> {
         Err(captured.failure_detail(label))
     }
 }
-fn run_aqua_command(command: &mut Command, label: &str) -> Result<(), String> {
+/// Run an Aqua-session child and return everything the supervisor observed.
+///
+/// The outcome is deliberately not collapsed to a message here. A scenario
+/// child that crashes, times out, is signalled or leaves a descendant behind
+/// has to be described in the retained bundle, and the caller cannot describe
+/// what a `String` already threw away.
+fn run_aqua_command(command: &mut Command, label: &str) -> Result<ci::exec::Captured, String> {
     let captured = run_bounded_command_in_session(command, label, CommandSession::CurrentAqua)
         .map_err(|error| format!("{label}: {error}"))?;
     std::io::stdout()
@@ -2962,10 +2994,62 @@ fn run_aqua_command(command: &mut Command, label: &str) -> Result<(), String> {
     std::io::stderr()
         .write_all(&captured.stderr)
         .map_err(|error| format!("cannot write {label} stderr: {error}"))?;
-    if captured.succeeded() {
-        Ok(())
+    Ok(captured)
+}
+
+/// Classify what the controller observed of a scenario child.
+///
+/// Each arm names one fault the acceptance contract requires a diagnostic for.
+/// The order matters: a supervision failure means the child's own outcome was
+/// never established, and a descendant left behind outranks the exit status of
+/// the process that left it.
+fn classify_supervision(
+    captured: &ci::exec::Captured,
+    label: &str,
+) -> native_suite::ControllerSupervision {
+    use native_suite::FaultClass;
+    let class = if captured.launch_error.is_some() {
+        FaultClass::LaunchFailed
+    } else if captured.supervision_error.is_some() {
+        FaultClass::SupervisionFailed
+    } else if captured.descendant_survivors.is_some()
+        || captured.termination_reason == "descendant-cleanup"
+    {
+        FaultClass::EscapedDescendants
+    } else if captured.timed_out || captured.termination_reason == "timeout" {
+        FaultClass::Timeout
+    } else if captured.termination_reason == "output-limit"
+        || captured.stdout_truncated
+        || captured.stderr_truncated
+    {
+        FaultClass::OutputLimit
+    } else if captured.signal.is_some() {
+        FaultClass::Signal
+    } else if captured.succeeded() {
+        FaultClass::Completed
     } else {
-        Err(captured.failure_detail(label))
+        FaultClass::Exit
+    };
+    let detail = if class == FaultClass::Completed {
+        format!("{label} completed under supervision and exited zero")
+    } else {
+        captured.failure_detail(label)
+    };
+    native_suite::ControllerSupervision {
+        class,
+        detail,
+        exit_code: captured.exit_code,
+        signal: captured.signal,
+        timed_out: captured.timed_out,
+        termination_reason: captured.termination_reason.to_string(),
+        termination_signal: captured.termination_signal.to_string(),
+        process_group_cleanup: captured.process_group_cleanup.to_string(),
+        pipe_cleanup: captured.pipe_cleanup.to_string(),
+        descendant_survivors: captured.descendant_survivors.clone(),
+        stdout_bytes_seen: captured.stdout_bytes_seen,
+        stderr_bytes_seen: captured.stderr_bytes_seen,
+        stdout_log: None,
+        stderr_log: None,
     }
 }
 
@@ -3606,6 +3690,128 @@ mod tests {
         assert_eq!(controller, std::env::current_exe().unwrap());
         assert_ne!(controller, target.join("debug/uqm-native-acceptance"));
         assert_eq!(linked, target.join("release/uqm"));
+    }
+
+    /// A child that ran cleanly and one that broke each supervised contract.
+    fn supervised(mutate: impl FnOnce(&mut ci::exec::Captured)) -> ci::exec::Captured {
+        let mut captured = ci::exec::Captured {
+            limits: ci::exec::Limits {
+                timeout: std::time::Duration::from_secs(1),
+                termination_grace: std::time::Duration::from_secs(1),
+                pipe_drain_timeout: std::time::Duration::from_secs(1),
+                stdout_bytes: 16,
+                stderr_bytes: 16,
+                executable_bytes: 16,
+            },
+            stdout: b"out".to_vec(),
+            stderr: b"err".to_vec(),
+            stdout_bytes_seen: 3,
+            stderr_bytes_seen: 3,
+            stdout_truncated: false,
+            stderr_truncated: false,
+            executable_identity: None,
+            exit_code: Some(0),
+            signal: None,
+            launch_error: None,
+            timed_out: false,
+            termination_reason: "none",
+            termination_signal: "none",
+            process_group_cleanup: "verified-empty",
+            pipe_cleanup: "complete",
+            supervision_error: None,
+            descendant_survivors: None,
+        };
+        mutate(&mut captured);
+        captured
+    }
+
+    /// The class a supervised child should reach, and the fault that puts it
+    /// in that state.
+    type FaultCase = (native_suite::FaultClass, fn(&mut ci::exec::Captured));
+
+    /// Every fault the acceptance contract names has to arrive at the receipt
+    /// as its own class, because "the child failed" is not a diagnostic.
+    #[test]
+    fn each_supervised_fault_reaches_the_receipt_as_its_own_class() {
+        use native_suite::FaultClass;
+        let cases: [FaultCase; 8] = [
+            (FaultClass::Completed, |_| {}),
+            (FaultClass::Exit, |captured| {
+                captured.exit_code = Some(7);
+            }),
+            (FaultClass::Signal, |captured| {
+                captured.exit_code = None;
+                captured.signal = Some(libc::SIGSEGV);
+            }),
+            (FaultClass::Timeout, |captured| {
+                captured.timed_out = true;
+                captured.termination_reason = "timeout";
+                captured.exit_code = None;
+                captured.signal = Some(libc::SIGKILL);
+            }),
+            (FaultClass::OutputLimit, |captured| {
+                captured.termination_reason = "output-limit";
+                captured.stdout_truncated = true;
+            }),
+            (FaultClass::EscapedDescendants, |captured| {
+                captured.termination_reason = "descendant-cleanup";
+                captured.descendant_survivors = Some("pid 9 uqm".into());
+            }),
+            (FaultClass::LaunchFailed, |captured| {
+                captured.launch_error = Some("no such executable".into());
+                captured.exit_code = None;
+            }),
+            (FaultClass::SupervisionFailed, |captured| {
+                captured.supervision_error = Some("waitpid failed".into());
+                captured.exit_code = None;
+            }),
+        ];
+        for (expected, mutate) in cases {
+            let captured = supervised(mutate);
+            let receipt = classify_supervision(&captured, "scenario");
+            assert_eq!(receipt.class, expected, "{captured:?}");
+            assert!(!receipt.detail.is_empty());
+            assert_eq!(receipt.exit_code, captured.exit_code);
+            assert_eq!(receipt.signal, captured.signal);
+            assert_eq!(receipt.descendant_survivors, captured.descendant_survivors);
+        }
+    }
+
+    /// A timeout that killed the group cleanly is still a clean teardown; a
+    /// surviving descendant is not, whatever the exit status says.
+    #[test]
+    fn a_fault_is_not_the_same_thing_as_a_dirty_teardown() {
+        let timed_out = classify_supervision(
+            &supervised(|captured| {
+                captured.timed_out = true;
+                captured.termination_reason = "timeout";
+                captured.exit_code = None;
+                captured.signal = Some(libc::SIGKILL);
+            }),
+            "scenario",
+        );
+        assert!(timed_out.process_state_clear());
+
+        let escaped = classify_supervision(
+            &supervised(|captured| {
+                captured.termination_reason = "descendant-cleanup";
+                captured.descendant_survivors = Some("pid 9 uqm".into());
+            }),
+            "scenario",
+        );
+        assert!(!escaped.process_state_clear());
+
+        let undrained = classify_supervision(
+            &supervised(|captured| {
+                captured.exit_code = Some(1);
+                captured.pipe_cleanup = "timed-out";
+            }),
+            "scenario",
+        );
+        assert!(
+            !undrained.process_state_clear(),
+            "an undrained pipe is retained state, not a detail"
+        );
     }
 
     #[test]
