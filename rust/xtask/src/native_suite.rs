@@ -109,13 +109,7 @@ pub fn validate_success(
             uqm_rust::automation::native_artifacts::SharedInputs::open(&scenario, 1024 * 1024)?
                 .ok_or("S4 success requires protected suite shared descriptors")?;
         let identity = (shared.descriptor.clone(), proof.executable.clone());
-        if shared_identity
-            .as_ref()
-            .is_some_and(|prior| prior != &identity)
-        {
-            return Err("native scenarios disagree on shared descriptor or executable".into());
-        }
-        shared_identity = Some(identity);
+        correlate_shared_identity(&mut shared_identity, identity)?;
         let limit = authority.actions.evidence_snapshot_member_limit_bytes;
         let receipt = shared.read(
             &scenario,
@@ -133,6 +127,23 @@ pub fn validate_success(
             return Err(contracts.join(", "));
         }
     }
+    Ok(())
+}
+
+fn correlate_shared_identity(
+    prior: &mut Option<(
+        uqm_rust::automation::NativeRetainedInput,
+        uqm_rust::automation::NativeRetainedInput,
+    )>,
+    current: (
+        uqm_rust::automation::NativeRetainedInput,
+        uqm_rust::automation::NativeRetainedInput,
+    ),
+) -> Result<(), String> {
+    if prior.as_ref().is_some_and(|identity| identity != &current) {
+        return Err("native scenarios disagree on shared descriptor or executable".into());
+    }
+    *prior = Some(current);
     Ok(())
 }
 
@@ -1371,9 +1382,36 @@ fn retained_status(root: &Path) -> Result<Option<SuiteManifest>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(format!("read retained suite status: {error}")),
     };
-    serde_json::from_slice(&bytes)
-        .map(Some)
-        .map_err(|error| format!("parse retained suite status: {error}"))
+    let status: SuiteManifest = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("parse retained suite status: {error}"))?;
+    let selected: Vec<_> = status
+        .scenarios
+        .iter()
+        .map(|row| row.script.clone())
+        .collect();
+    if status.finalized && validate_accounting(root, &selected).is_err() {
+        let intent =
+            crate::ci::evidence::read_regular_relative(root, "suite-finalization-intent.json")
+                .map_err(|error| {
+                    format!("incomplete finalization has no recovery intent: {error}")
+                })?;
+        let prior: SuiteManifest =
+            serde_json::from_slice(&intent).map_err(|error| error.to_string())?;
+        let prior_event = crate::ci::evidence::read_regular_relative(
+            root,
+            &format!("suite-events/{:06}.json", prior.sequence),
+        )
+        .map_err(|error| error.to_string())?;
+        if prior_event != intent
+            || prior.finalized
+            || prior.request != status.request
+            || prior.sequence.checked_add(1) != Some(status.sequence)
+        {
+            return Err("finalization recovery intent contradicts the journal".into());
+        }
+        return Ok(Some(prior));
+    }
+    Ok(Some(status))
 }
 
 /// Finalize the journal an interrupted run left behind.
@@ -1420,6 +1458,43 @@ pub fn recover_interrupted(
             "native suite journal in {} was requested for a different selection",
             root.display()
         ));
+    }
+    let publisher =
+        crate::ci::evidence::EvidencePublisher::open(root).map_err(|error| error.to_string())?;
+    if crate::ci::evidence::read_regular_relative(root, "suite-finalization-intent.json").is_ok() {
+        for name in [
+            "suite-manifest.json",
+            TEARDOWN_RELATIVE,
+            "suite-gallery.json",
+            "suite-gallery.html",
+            "suite-index.json",
+        ] {
+            match publisher.remove(name) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        match publisher.remove(&format!(
+            "suite-events/{:06}.json",
+            status
+                .sequence
+                .checked_add(1)
+                .ok_or("retained suite sequence overflow")?
+        )) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+        publisher
+            .remove("suite-finalization-intent.json")
+            .map_err(|error| error.to_string())?;
+        publisher
+            .replace(
+                "suite-status.json",
+                &serde_json::to_vec_pretty(&status).map_err(|error| error.to_string())?,
+            )
+            .map_err(|error| error.to_string())?;
     }
     let budget = uqm_rust::automation::native_artifacts::ArtifactBudget::new(limits);
     budget.reserve("suite-request.json", request.len() as u64)?;
@@ -1468,7 +1543,9 @@ pub fn recover_interrupted(
         ),
     };
     let retained_elapsed = active.map(|index| suite.manifest.scenarios[index].elapsed_ms);
-    suite.record_failure(phase, active, detail, retained_elapsed)?;
+    if suite.manifest.first_failure.is_none() {
+        suite.record_failure(phase, active, detail, retained_elapsed)?;
+    }
     suite.finish()?;
     validate_accounting(root, selected)
 }
@@ -1881,6 +1958,19 @@ fn validate_teardown(
         {
             return Err("native suite teardown row does not match its scenario".into());
         }
+        if manifest.passed
+            && (!matches!(accounting.state, ScenarioState::Completed { .. })
+                || !matches!(
+                    row.supervision
+                        .as_ref()
+                        .map(|supervision| supervision.class),
+                    Some(FaultClass::Completed)
+                ))
+        {
+            return Err(format!(
+                "passed native suite scenario {index} lacks completed controller supervision"
+            ));
+        }
         let Some(supervision) = &row.supervision else {
             continue;
         };
@@ -1924,6 +2014,9 @@ fn validate_teardown(
         return Err(
             "native suite teardown claims a process state its own rows do not establish".into(),
         );
+    }
+    if manifest.passed && !teardown.process_state_clear {
+        return Err("passed native suite did not establish clean process state".into());
     }
     Ok(teardown)
 }
@@ -2185,6 +2278,13 @@ impl SuiteAccounting {
     }
 
     fn persist(&mut self) -> Result<(), String> {
+        self.persist_with(|_| Ok(()))
+    }
+
+    fn persist_with(
+        &mut self,
+        mut published: impl FnMut(&str) -> Result<(), String>,
+    ) -> Result<(), String> {
         self.manifest.elapsed_ms = self
             .carried_ms
             .checked_add(millis(self.started.elapsed())?)
@@ -2195,8 +2295,10 @@ impl SuiteAccounting {
             &bytes,
         )
         .map_err(|error| error.to_string())?;
+        published("suite-final-event")?;
         self.publish("suite-status.json", &bytes)
             .map_err(|error| error.to_string())?;
+        published("suite-status.json")?;
         self.manifest.sequence = self
             .manifest
             .sequence
@@ -2323,6 +2425,13 @@ impl SuiteAccounting {
     }
 
     pub fn finish(&mut self) -> Result<(), String> {
+        self.finish_with(|_| Ok(()))
+    }
+
+    fn finish_with(
+        &mut self,
+        mut published: impl FnMut(&str) -> Result<(), String>,
+    ) -> Result<(), String> {
         if self.manifest.finalized
             || self
                 .manifest
@@ -2341,13 +2450,19 @@ impl SuiteAccounting {
         if !self.manifest.passed && self.manifest.first_failure.is_none() {
             return Err("native suite cannot silently omit selected scenarios".into());
         }
+        let prior = crate::ci::evidence::read_regular_relative(&self.root, "suite-status.json")
+            .map_err(|error| error.to_string())?;
+        self.publish("suite-finalization-intent.json", &prior)
+            .map_err(|error| error.to_string())?;
+        published("suite-finalization-intent.json")?;
         self.manifest.finalized = true;
-        self.persist()?;
+        self.persist_with(&mut published)?;
         // The final manifest is the final immutable event, not another transition.
         let bytes = crate::ci::evidence::read_regular_relative(&self.root, "suite-status.json")
             .map_err(|error| error.to_string())?;
         self.publish("suite-manifest.json", &bytes)
             .map_err(|error| error.to_string())?;
+        published("suite-manifest.json")?;
         // The teardown receipt is published before the index so the index
         // covers it: a bundle cannot carry a teardown claim the inventory does
         // not account for.
@@ -2357,17 +2472,20 @@ impl SuiteAccounting {
                 .map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;
+        published(TEARDOWN_RELATIVE)?;
         let images = gallery_images(&self.manifest, &inventory(&self.root)?);
         self.publish(
             "suite-gallery.json",
             &serde_json::to_vec_pretty(&images).map_err(|error| error.to_string())?,
         )
         .map_err(|error| error.to_string())?;
+        published("suite-gallery.json")?;
         self.publish(
             "suite-gallery.html",
             &gallery_html(&self.manifest, &images)?,
         )
         .map_err(|error| error.to_string())?;
+        published("suite-gallery.html")?;
         let index = SuiteIndex {
             schema: "uqm-native-suite-index-v1".into(),
             passed: self.manifest.passed,
@@ -2399,7 +2517,11 @@ fn reserve_suite_diagnostics(
     for sequence in 0..(scenarios * 2 + 3) {
         reserved.insert(format!("suite-events/{sequence:06}.json"), event_bound);
     }
-    for name in ["suite-status.json", "suite-manifest.json"] {
+    for name in [
+        "suite-status.json",
+        "suite-manifest.json",
+        "suite-finalization-intent.json",
+    ] {
         reserved.insert(name.into(), event_bound);
     }
     for name in [
@@ -2794,5 +2916,170 @@ mod tests {
         assert!(preflight(root, &[], &authority)
             .unwrap_err()
             .contains("empty"));
+    }
+}
+
+#[cfg(test)]
+mod finalization_regressions {
+    use super::*;
+
+    #[test]
+    fn rehashed_mixed_descriptors_and_executables_do_not_form_one_build() {
+        let descriptor = crate::retained_identity("shared/descriptor.json", b"descriptor A");
+        let executable = crate::retained_identity("inputs/uqm", b"build A");
+        let mut prior = None;
+        correlate_shared_identity(&mut prior, (descriptor.clone(), executable.clone())).unwrap();
+        correlate_shared_identity(&mut prior, (descriptor.clone(), executable.clone())).unwrap();
+        assert!(correlate_shared_identity(
+            &mut prior,
+            (
+                crate::retained_identity("shared/descriptor.json", b"descriptor B"),
+                executable.clone()
+            )
+        )
+        .is_err());
+        assert!(correlate_shared_identity(
+            &mut prior,
+            (
+                descriptor,
+                crate::retained_identity("inputs/uqm", b"build B")
+            )
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn recovery_intent_cannot_rewrite_the_prior_immutable_event() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
+        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("suite");
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite
+            .fail(SuitePhase::Build, None, "original failure".into())
+            .unwrap();
+        suite
+            .finish_with(|name| {
+                if name == "suite-status.json" {
+                    Err("interrupt".into())
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap_err();
+        let path = root.join("suite-finalization-intent.json");
+        let mut intent: SuiteManifest =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        intent.first_failure.as_mut().unwrap().detail = "forged diagnosis".into();
+        std::fs::write(path, serde_json::to_vec_pretty(&intent).unwrap()).unwrap();
+        assert!(recover_interrupted(
+            &root,
+            &selected,
+            authority.native_runtime_contract().inventory_limits
+        )
+        .unwrap_err()
+        .contains("contradicts the journal"));
+    }
+
+    #[test]
+    fn every_interrupted_final_document_recovers_without_execution_or_success() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
+        let selected = vec![authority.native_acceptance.scenario_scripts[0].clone()];
+        let limits = authority.native_runtime_contract().inventory_limits;
+        for boundary in [
+            "suite-finalization-intent.json",
+            "suite-final-event",
+            "suite-status.json",
+            "suite-manifest.json",
+            TEARDOWN_RELATIVE,
+            "suite-gallery.json",
+            "suite-gallery.html",
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().join("suite");
+            let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+            suite
+                .fail(SuitePhase::Build, None, "build interrupted".into())
+                .unwrap();
+            let error = suite
+                .finish_with(|name| {
+                    if name == boundary {
+                        Err("interruption injected".into())
+                    } else {
+                        Ok(())
+                    }
+                })
+                .unwrap_err();
+            assert!(error.contains("injected"));
+            drop(suite);
+            let recovered = recover_interrupted(&root, &selected, limits).unwrap();
+            assert!(recovered.finalized && !recovered.passed, "{boundary}");
+            assert_eq!(recovered.scenarios[0].state, ScenarioState::NotRun);
+            assert!(validate_accounting(&root, &selected).is_ok(), "{boundary}");
+        }
+    }
+
+    #[test]
+    fn success_teardown_requires_a_completed_drained_verified_child() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("suite");
+        let selected = vec![PinnedScript {
+            path: "rust/scripts/fixture.json".into(),
+            sha256: "a".repeat(64),
+            byte_length: 1,
+        }];
+        let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
+        suite
+            .fail(SuitePhase::Build, None, "fixture".into())
+            .unwrap();
+        suite.finish().unwrap();
+        let mut manifest = validate_accounting(&root, &selected).unwrap();
+        manifest.passed = true;
+        manifest.first_failure = None;
+        manifest.scenarios[0].state = ScenarioState::Completed {
+            manifest: crate::retained_identity("fixture", b"fixture"),
+        };
+        let clean = ControllerSupervision {
+            class: FaultClass::Completed,
+            detail: "completed".into(),
+            exit_code: Some(0),
+            signal: None,
+            timed_out: false,
+            termination_reason: "none".into(),
+            termination_signal: "none".into(),
+            process_group_cleanup: "verified-empty".into(),
+            pipe_cleanup: "complete".into(),
+            descendant_survivors: None,
+            stdout_bytes_seen: 0,
+            stderr_bytes_seen: 0,
+            stdout_log: None,
+            stderr_log: None,
+        };
+        for mutation in 0..5 {
+            let mut row = clean.clone();
+            match mutation {
+                1 => row = ControllerSupervision::not_launched("not launched".into()),
+                2 => row.pipe_cleanup = "unknown".into(),
+                3 => row.process_group_cleanup = "unknown".into(),
+                _ => {}
+            }
+            let rows = vec![if mutation == 0 { None } else { Some(row) }];
+            let receipt = SuiteTeardown::build(&manifest, &rows);
+            crate::ci::evidence::EvidencePublisher::open(&root)
+                .unwrap()
+                .replace(
+                    TEARDOWN_RELATIVE,
+                    &serde_json::to_vec_pretty(&receipt).unwrap(),
+                )
+                .unwrap();
+            let snapshot = crate::ci::evidence::EvidenceSnapshot::open(&root).unwrap();
+            assert_eq!(
+                validate_teardown(&snapshot, &manifest).is_ok(),
+                mutation == 4,
+                "mutation {mutation}"
+            );
+        }
     }
 }

@@ -26,6 +26,28 @@ which releases before 0.22 reject outright while loading, failing the gate befor
 it examines this tree at all. Moving either pin means checking it against the
 other.
 
+Fresh native runs require clean tracked and untracked source admitted by S2.
+Workflow controllers bind the candidate checkout through `UQM_CI_SOURCE_ROOT`,
+the separately admitted exact policy bytes through `UQM_CI_AUTHORITY_PATH`, and
+the requested suite through the trusted event selection. Native compilation uses
+S4's distinct build UID; gameplay and observation retain the controller's Aqua
+session. The containment probe requires protected-file writes and controller
+signaling to be denied before candidate Cargo executes.
+
+`native-suite-validate` and workflow `native validate` apply trusted source,
+policy and shared-build correlation to successful evidence. Local `native
+validate`, report, gallery and retained replay inspect historical inputs without
+requiring the current checkout to be clean. Historical consistency does not
+establish acceptance for the current workflow event.
+
+Suite finalization retains a bounded intent tied to the preceding immutable
+journal event. An interrupted publication recovers into a failed diagnostic
+bundle without starting another child. Success also requires completed, drained,
+verified-empty controller supervision. Plan, gates, autoplay and the required
+aggregate consume the base-owned `workflow_transport.py` implementation for descriptor traversal,
+content-addressed indexes and upload receipts. Bootstrap failure indexes remain
+available before that helper is installed.
+
 Coverage measures the pure profile, which is the configuration the unit suite is
 written for, and must reach 70 percent. The linked profile drives the C game
 through FFI and is covered by the linked provider fixture and native acceptance

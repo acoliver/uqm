@@ -277,7 +277,7 @@ fn run() -> Result<(), String> {
         return ci::run_ci(&root, &extra);
     }
     if command == "native" {
-        run_preflight(&root, preflight_for(&command)?)
+        run_preflight(&root, native_preflight(extra.first().map(String::as_str)))
             .map_err(|error| format!("{command} preflight: {error}"))?;
         return native_cli::run(&root, &extra);
     }
@@ -341,7 +341,24 @@ fn validate_native_suite_bundle(
     let environment = env::var(ci::exec::AUTOPLAY_SCENARIOS_ENV).ok();
     let selected = selected_acceptance_scripts(&authority, requested.or(environment.as_deref()))?;
     let manifest = native_suite::validate_accounting(bundle, &selected)?;
-    if !manifest.passed {
+    if manifest.passed {
+        let policy = ci::authority::load_policy_bytes(root)?;
+        if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
+            let binding = ci::controller::derive_binding(root, &authority, &policy)?;
+            let required = binding.selected(&authority, &binding.source_sha, &policy)?;
+            if selected != required {
+                return Err(
+                    "native validation selection differs from trusted workflow event".into(),
+                );
+            }
+        }
+        let source = match env::var("UQM_CI_EXPECTED_SHA") {
+            Ok(source) => source,
+            Err(env::VarError::NotPresent) => git_text(root, &["rev-parse", "HEAD"], "HEAD")?,
+            Err(error) => return Err(error.to_string()),
+        };
+        native_suite::validate_success(bundle, &selected, &authority, &source, &policy)?;
+    } else {
         native_suite::validate_failure_diagnostics(bundle, &authority)?;
     }
     println!(
@@ -359,6 +376,18 @@ fn usage() -> String {
     "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native|native-test|probe|harness|package|production|prove|verify|capture-dependencies|doctor|matrix|ci>".into()
 }
 
+fn native_preflight(subcommand: Option<&str>) -> Preflight {
+    if subcommand == Some("run") {
+        Preflight::StrictSource
+    } else {
+        Preflight::ContractOnly
+    }
+}
+
+fn native_test_applicable(is_macos: bool) -> bool {
+    is_macos
+}
+
 fn preflight_for(command: &str) -> Result<Preflight, String> {
     match command {
         "production" | "prove" | "package" | "__ci-production" | "__ci-package" => {
@@ -371,13 +400,12 @@ fn preflight_for(command: &str) -> Result<Preflight, String> {
         | "capture-dependencies"
         | "__ci-capture-dependencies"
         | "doctor" => Ok(Preflight::Full),
+        "native-test" | "__ci-native-test" => Ok(Preflight::StrictSource),
         "verify"
         | "test"
         | "native"
-        | "native-test"
         | "__ci-verify"
         | "__ci-test"
-        | "__ci-native-test"
         | "__ci-ownership-production"
         | "__ci-ownership-fixture" => Ok(Preflight::ContractOnly),
         "matrix" => Ok(Preflight::PureInspection),
@@ -437,11 +465,11 @@ fn repository_root() -> Result<PathBuf, String> {
     }
 
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest
+    let fallback = manifest
         .parent()
         .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .ok_or_else(|| "xtask is not inside the repository".into())
+        .ok_or_else(|| "xtask is not inside the repository".to_string())?;
+    ci::controller::runtime_source_root(fallback)
 }
 
 fn build_profile(root: &Path, profile: Profile) -> Result<(), String> {
@@ -686,13 +714,24 @@ fn native_test(root: &Path) -> Result<(), String> {
 }
 
 pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Result<(), String> {
-    if !cfg!(target_os = "macos") {
+    if !native_test_applicable(cfg!(target_os = "macos")) {
         println!("native window acceptance is not required on this platform");
         return Ok(());
+    }
+    run_preflight(root, Preflight::StrictSource)?;
+    if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
+        ci::exec::verify_uid_containment(root)?;
     }
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
     let selected = selected_acceptance_scripts(&authority, request.scenarios.as_deref())?;
+    if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
+        let policy = ci::authority::load_policy_bytes(root)?;
+        let binding = ci::controller::derive_binding(root, &authority, &policy)?;
+        if binding.selected(&authority, &binding.source_sha, &policy)? != selected {
+            return Err("requested native suite differs from trusted workflow selection".into());
+        }
+    }
     let mut accounting =
         native_suite::from_request(request.evidence_root.as_deref(), &selected, &authority)?;
     let mut phase = native_suite::SuitePhase::Preflight;
@@ -722,6 +761,14 @@ pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Resul
     match accounting.as_mut() {
         Some(suite) => native_suite::conclude(suite, result, phase),
         None => result,
+    }
+}
+
+fn require_native_platform(is_macos: bool) -> Result<(), String> {
+    if is_macos {
+        Ok(())
+    } else {
+        Err("native window acceptance requires macOS".into())
     }
 }
 
@@ -3191,6 +3238,50 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    /// The build script must not shell out to `rustfmt`.
+    ///
+    /// The base-owned controller bootstrap installs the pinned toolchain with
+    /// `--profile minimal`, which carries no `rustfmt`. Bindgen's default
+    /// formatter shells out to it, treats the missing binary as non-fatal and
+    /// emits unformatted bindings instead, so a builder that does not choose a
+    /// formatter makes the generated bytes depend on what happens to be
+    /// installed on the machine. Every builder therefore has to select one, and
+    /// the only correct choice for bindings that are compiled out of `OUT_DIR`
+    /// and never read as source is no formatter at all.
+    #[test]
+    fn abi_bindings_are_generated_without_rustfmt() {
+        const BUILD_SCRIPT: &str = include_str!("../../build.rs");
+        let builders = BUILD_SCRIPT.matches("bindgen::Builder::default()").count();
+        assert!(builders > 0, "the build script generates no ABI bindings");
+        assert_eq!(
+            BUILD_SCRIPT
+                .matches(".formatter(ABI_BINDING_FORMATTER)")
+                .count(),
+            builders,
+            "every bindgen builder must select the shared no-rustfmt formatter"
+        );
+        assert!(
+            BUILD_SCRIPT.contains(
+                "const ABI_BINDING_FORMATTER: bindgen::Formatter = bindgen::Formatter::None;"
+            ),
+            "the shared ABI binding formatter must be bindgen::Formatter::None"
+        );
+        // Every other way of asking bindgen for a formatter, so the dependency
+        // cannot come back through a different spelling.
+        for rejected in [
+            "Formatter::Rustfmt",
+            "Formatter::Prettyplease",
+            ".rustfmt_bindings(",
+            ".rustfmt_configuration_file(",
+            "rustfmt_path",
+        ] {
+            assert!(
+                !BUILD_SCRIPT.contains(rejected),
+                "the build script must not depend on {rejected}"
+            );
+        }
+    }
+
     #[test]
     fn verify_requires_prove_stage_not_a_production_build() {
         let error = validate_proof_stage(PRODUCTION_COMMAND, false).unwrap_err();
@@ -3977,5 +4068,75 @@ mod tests {
             enforce_nonzero_test_inventory("required route", &tests).unwrap_err(),
             "required route listed zero executable tests"
         );
+    }
+}
+
+#[cfg(test)]
+mod native_admission_regressions {
+    use super::*;
+
+    #[test]
+    fn only_fresh_native_execution_demands_clean_source() {
+        assert!(matches!(
+            native_preflight(Some("run")),
+            Preflight::StrictSource
+        ));
+        for command in ["validate", "report", "gallery", "replay", "list"] {
+            assert!(matches!(
+                native_preflight(Some(command)),
+                Preflight::ContractOnly
+            ));
+        }
+        assert!(matches!(
+            preflight_for("native-test").unwrap(),
+            Preflight::StrictSource
+        ));
+    }
+
+    #[test]
+    fn explicit_host_rejection_is_separate_from_conditional_test_applicability() {
+        assert!(require_native_platform(true).is_ok());
+        assert!(require_native_platform(false).is_err());
+        assert!(native_test_applicable(true));
+        assert!(!native_test_applicable(false));
+    }
+
+    #[test]
+    fn tracked_and_untracked_edits_cannot_be_admitted_as_head() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.email", "fixture@example.org"],
+            vec!["config", "user.name", "fixture"],
+        ] {
+            assert!(Command::new("git")
+                .current_dir(root)
+                .args(args)
+                .status()
+                .unwrap()
+                .success());
+        }
+        fs::write(root.join("source.rs"), b"original").unwrap();
+        assert!(Command::new("git")
+            .current_dir(root)
+            .args(["add", "."])
+            .status()
+            .unwrap()
+            .success());
+        assert!(Command::new("git")
+            .current_dir(root)
+            .args(["commit", "-qm", "fixture"])
+            .status()
+            .unwrap()
+            .success());
+        reject_dirty_source(root).unwrap();
+        fs::write(root.join("source.rs"), b"changed").unwrap();
+        assert!(reject_dirty_source(root).unwrap_err().contains("source.rs"));
+        fs::write(root.join("source.rs"), b"original").unwrap();
+        fs::write(root.join("untracked.rs"), b"candidate").unwrap();
+        assert!(reject_dirty_source(root)
+            .unwrap_err()
+            .contains("untracked.rs"));
     }
 }

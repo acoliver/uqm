@@ -214,6 +214,22 @@ impl SelectionBinding {
     }
 }
 
+/// Resolve the candidate checkout independently of the controller compilation directory.
+pub fn runtime_source_root(fallback: &Path) -> Result<std::path::PathBuf, String> {
+    let configured = std::env::var_os("UQM_CI_SOURCE_ROOT");
+    if configured.is_none() && std::env::var_os("UQM_CI_EVENT_NAME").is_some() {
+        return Err("UQM_CI_SOURCE_ROOT is required for a workflow controller".into());
+    }
+    let root = configured
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| fallback.to_path_buf());
+    if !root.is_absolute() {
+        return Err("UQM_CI_SOURCE_ROOT must be absolute".into());
+    }
+    super::bounded_io::validate_directory_nofollow(&root)?;
+    Ok(root)
+}
+
 fn revision(value: &str) -> bool {
     value.len() == 40
         && value

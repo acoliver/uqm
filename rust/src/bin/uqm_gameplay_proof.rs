@@ -558,25 +558,31 @@ fn finalize_config_with(
     write: impl FnMut(&Path, &[u8]) -> Result<(), String>,
     remove: impl FnOnce(&Path) -> std::io::Result<()>,
 ) -> Result<(), ConfigFinalizationFailure> {
-    let final_config =
-        retain_final_config(evidence, write).map_err(|detail| ConfigFinalizationFailure {
-            contract: FailedContract::ConfigRetention,
-            detail,
-        })?;
-    evidence.provenance.final_config_tree_sha256 = final_config.tree_sha256;
-    remove(&evidence.config_root).map_err(|error| ConfigFinalizationFailure {
-        contract: FailedContract::ConfigCleanup,
-        detail: format!("remove mutable config root: {error}"),
-    })?;
-    if !config_root_removed(&evidence.config_root).map_err(|detail| ConfigFinalizationFailure {
-        contract: FailedContract::ConfigCleanup,
-        detail,
-    })? {
-        return Err(ConfigFinalizationFailure {
-            contract: FailedContract::ConfigCleanup,
-            detail: "mutable config root remains after cleanup".into(),
+    let retention = retain_final_config(evidence, write);
+    let cleanup = remove(&evidence.config_root)
+        .map_err(|error| format!("remove mutable config root: {error}"))
+        .and_then(|()| {
+            config_root_removed(&evidence.config_root).and_then(|removed| {
+                if removed {
+                    Ok(())
+                } else {
+                    Err("mutable config root remains after cleanup".into())
+                }
+            })
         });
-    }
+    let final_config = match (retention, cleanup) {
+        (Ok(final_config), Ok(())) => final_config,
+        (retention, cleanup) => {
+            let (contract, detail) = match (retention, cleanup) {
+                (Err(retention), Err(cleanup)) => (FailedContract::ConfigRetention, format!("final config retention failed: {retention}; config cleanup also failed: {cleanup}")),
+                (Err(retention), Ok(())) => (FailedContract::ConfigRetention, format!("final config retention failed: {retention}; mutable config was removed")),
+                (Ok(_), Err(cleanup)) => (FailedContract::ConfigCleanup, format!("config cleanup failed: {cleanup}")),
+                (Ok(_), Ok(())) => unreachable!(),
+            };
+            return Err(ConfigFinalizationFailure { contract, detail });
+        }
+    };
+    evidence.provenance.final_config_tree_sha256 = final_config.tree_sha256;
     uqm_rust::automation::artifact::sync_directory(&evidence.output_root).map_err(|error| {
         ConfigFinalizationFailure {
             contract: FailedContract::ConfigCleanup,
@@ -2458,7 +2464,7 @@ mod tests {
         assert!(role_for_path("run/whatever.json").is_err());
     }
 
-    struct Fixture {
+    pub(super) struct Fixture {
         _temp: tempfile::TempDir,
         path: PathBuf,
     }
@@ -2486,7 +2492,7 @@ mod tests {
         }
     }
 
-    fn fixture() -> Fixture {
+    pub(super) fn fixture() -> Fixture {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
         fs::create_dir_all(root.join("run/captures")).unwrap();
@@ -2677,7 +2683,7 @@ mod tests {
         Fixture { _temp: temp, path }
     }
 
-    fn pending_config(fixture: &Fixture) -> RunEvidence {
+    pub(super) fn pending_config(fixture: &Fixture) -> RunEvidence {
         let root = fixture.path.parent().unwrap();
         let manifest: LcarManifest = read_json(&fixture.path).unwrap();
         fs::remove_file(&fixture.path).unwrap();
@@ -2965,7 +2971,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn final_config_source_symlinks_and_read_failures_preserve_runtime_state() {
+    fn final_config_source_symlinks_and_read_failures_remove_owned_runtime_state() {
         use std::os::unix::fs::symlink;
         for boundary in ["file", "directory", "root", "missing", "destination"] {
             let fixture = fixture();
@@ -3006,7 +3012,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(diagnostic["first_failed_contract"], "config_retention");
-            assert_eq!(diagnostic["config_root_removed"], boundary == "missing");
+            assert_eq!(diagnostic["config_root_removed"], true);
             assert_eq!(
                 fs::read(outside.path().join("secret")).unwrap(),
                 b"must not copy"
@@ -3015,7 +3021,7 @@ mod tests {
     }
 
     #[test]
-    fn final_config_source_changes_during_copy_stop_before_cleanup() {
+    fn final_config_source_changes_during_copy_fail_proof_but_still_clean_config() {
         for boundary in ["read", "change", "oversize"] {
             let fixture = fixture();
             let mut evidence = pending_config(&fixture);
@@ -3050,7 +3056,7 @@ mod tests {
             })
             .unwrap_err();
             assert!(error.contains("ConfigRetention"), "{error}");
-            assert!(source.is_dir());
+            assert!(!source.exists());
             assert!(!fixture.path.exists());
             let diagnostic = read_json_value(
                 &evidence
@@ -3059,7 +3065,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(diagnostic["first_failed_contract"], "config_retention");
-            assert_eq!(diagnostic["config_root_removed"], false);
+            assert_eq!(diagnostic["config_root_removed"], true);
         }
     }
 
@@ -3521,5 +3527,42 @@ mod tests {
                 .replacen("\"sequence\":1", "\"sequence\":9", 1);
         fs::write(trace, text).unwrap();
         assert!(validate_manifest(&fixture.path).is_err());
+    }
+}
+
+#[cfg(test)]
+mod config_cleanup_regressions {
+    use super::*;
+
+    #[test]
+    fn retention_failure_still_removes_owned_mutable_config() {
+        let fixture = tests::fixture();
+        let mut evidence = tests::pending_config(&fixture);
+        fs::write(evidence.config_root.join("settings.cfg"), b"retain me").unwrap();
+        let error = finalize_config_with(
+            &mut evidence,
+            |_, _| Err("retention injected".into()),
+            |path| fs::remove_dir_all(path),
+        )
+        .unwrap_err();
+        assert!(!evidence.config_root.exists());
+        assert!(error.detail.contains("retention injected"));
+        assert!(error.detail.contains("mutable config was removed"));
+    }
+
+    #[test]
+    fn retention_and_removal_failures_are_both_reported() {
+        let fixture = tests::fixture();
+        let mut evidence = tests::pending_config(&fixture);
+        fs::write(evidence.config_root.join("settings.cfg"), b"retain me").unwrap();
+        let error = finalize_config_with(
+            &mut evidence,
+            |_, _| Err("retention injected".into()),
+            |_| Err(std::io::Error::other("cleanup injected")),
+        )
+        .unwrap_err();
+        assert!(error.detail.contains("retention injected"));
+        assert!(error.detail.contains("cleanup injected"));
+        assert!(evidence.config_root.exists());
     }
 }

@@ -802,21 +802,26 @@ fn runtime_authority_path(
     }
 }
 
-/// Load the trusted runtime authority and its exact JSON contract.
-pub fn load_authority_contract(root: &Path) -> Result<(Authority, serde_json::Value), String> {
+/// Read the admitted runtime policy without reserializing its identity.
+pub fn load_policy_bytes(root: &Path) -> Result<Vec<u8>, String> {
     let path = runtime_authority_path(
         root,
         std::env::var_os("UQM_CI_SOURCE_ROOT").is_some(),
         std::env::var_os("UQM_CI_AUTHORITY_PATH"),
     )?;
-    let bytes = super::bounded_io::read_regular_nofollow(
+    super::bounded_io::read_regular_nofollow(
         &path,
         super::bounded_io::AUTHORITY_BOOTSTRAP_LIMIT_BYTES,
-    )?;
+    )
+}
+
+/// Load the trusted runtime authority and its exact JSON contract.
+pub fn load_authority_contract(root: &Path) -> Result<(Authority, serde_json::Value), String> {
+    let bytes = load_policy_bytes(root)?;
     let authority = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("invalid authority {}: {error}", path.display()))?;
+        .map_err(|error| format!("invalid admitted authority: {error}"))?;
     let contract = serde_json::from_slice(&bytes)
-        .map_err(|error| format!("invalid authority {}: {error}", path.display()))?;
+        .map_err(|error| format!("invalid admitted authority: {error}"))?;
     Ok((authority, contract))
 }
 

@@ -3182,6 +3182,7 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
         )
     })?;
     use std::os::unix::fs::PermissionsExt as _;
+    verify_control_plane_denials(root, Path::new(&config.home))?;
     let directory = Path::new(&config.home).join("darwin-containment-check");
     if directory.exists() {
         std::fs::remove_dir_all(&directory)
@@ -3263,6 +3264,56 @@ pub fn verify_uid_containment(root: &Path) -> Result<(), String> {
     helper_cleanup?;
     directory_cleanup?;
     Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn verify_control_plane_denials(root: &Path, home: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let controls = home
+        .parent()
+        .ok_or("containment home has no trusted parent")?
+        .join("control-plane-denial-probe");
+    std::fs::create_dir(&controls).map_err(|error| error.to_string())?;
+    let result = (|| {
+        std::fs::set_permissions(&controls, std::fs::Permissions::from_mode(0o750))
+            .map_err(|error| error.to_string())?;
+        let mut arguments = vec!["-c".into(),
+            "pid=$1; shift; for path do if printf forged > \"$path\"; then exit 11; fi; done; if kill -0 \"$pid\"; then exit 12; fi".into(),
+            "control-denial-probe".into(), std::process::id().to_string()];
+        for name in ["authority.json", "controller", "evidence.json"] {
+            let path = controls.join(name);
+            std::fs::write(&path, b"trusted").map_err(|error| error.to_string())?;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o440))
+                .map_err(|error| error.to_string())?;
+            arguments.push(path.to_string_lossy().into_owned());
+        }
+        let captured = run_captured_with_limits(
+            root,
+            "/bin/sh",
+            &arguments,
+            &[],
+            Limits {
+                timeout: Duration::from_secs(10),
+                termination_grace: Duration::from_secs(1),
+                pipe_drain_timeout: Duration::from_secs(2),
+                stdout_bytes: 16384,
+                stderr_bytes: 16384,
+                executable_bytes: 268435456,
+            },
+        );
+        if !captured.succeeded() {
+            return Err(captured.failure_detail("candidate control-plane write/signal denial"));
+        }
+        for name in ["authority.json", "controller", "evidence.json"] {
+            if std::fs::read(controls.join(name)).map_err(|error| error.to_string())? != b"trusted"
+            {
+                return Err(format!("candidate modified protected {name}"));
+            }
+        }
+        Ok(())
+    })();
+    let cleanup = std::fs::remove_dir_all(&controls).map_err(|error| error.to_string());
+    result.and(cleanup)
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]

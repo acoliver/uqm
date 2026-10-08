@@ -48,6 +48,7 @@ const FLAGS: &[&str] = &[
 pub struct Options {
     pub positional: Vec<String>,
     pub scenarios: Vec<String>,
+    scenario_selection_supplied: bool,
     pub all: bool,
     pub seed: Option<u32>,
     pub profile: Option<String>,
@@ -106,6 +107,14 @@ impl Options {
                 }
             }
         }
+        if options.scenario_selection_supplied
+            && !options
+                .scenarios
+                .iter()
+                .any(|scenario| !scenario.trim().is_empty())
+        {
+            return Err("--scenario/--scenarios requires at least one scenario name".into());
+        }
         if options.all && !options.scenarios.is_empty() {
             return Err("--all and --scenario select different suites; pass one".into());
         }
@@ -114,14 +123,20 @@ impl Options {
 
     fn assign(&mut self, flag: &str, value: String) -> Result<(), String> {
         match flag {
-            "--scenario" => self.scenarios.push(value),
-            "--scenarios" => self.scenarios.extend(
-                value
-                    .split([',', '\n', ' '])
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-                    .map(str::to_string),
-            ),
+            "--scenario" => {
+                self.scenario_selection_supplied = true;
+                self.scenarios.push(value);
+            }
+            "--scenarios" => {
+                self.scenario_selection_supplied = true;
+                self.scenarios.extend(
+                    value
+                        .split([',', '\n', ' '])
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty())
+                        .map(str::to_string),
+                );
+            }
             "--seed" => {
                 let seed = value
                     .parse::<u32>()
@@ -341,6 +356,7 @@ fn scenario_stem(path: &str) -> Result<String, String> {
 
 /// Run the native suite through the existing acceptance adapter.
 fn run_suite(root: &Path, options: &Options) -> Result<(), String> {
+    crate::require_native_platform(cfg!(target_os = "macos"))?;
     options.require_only(
         "run",
         &[
@@ -450,7 +466,19 @@ fn validate(root: &Path, options: &Options) -> Result<(), String> {
         "offline validation checks that a retained bundle is internally consistent. It does not \
          start the game and is not a gameplay replay."
     );
-    crate::validate_native_suite_bundle(root, &bundle, options.selection().as_deref())
+    if std::env::var_os("UQM_CI_EVENT_NAME").is_some() {
+        crate::validate_native_suite_bundle(root, &bundle, options.selection().as_deref())
+    } else {
+        let authority = load_authority(root)?;
+        let selected =
+            crate::selected_acceptance_scripts(&authority, options.selection().as_deref())?;
+        let manifest = crate::native_suite::validate_accounting(&bundle, &selected)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?
+        );
+        suite_result(&manifest)
+    }
 }
 
 /// Summarise a retained bundle, including the obligations it did not satisfy.
@@ -720,6 +748,18 @@ mod tests {
     #[test]
     fn no_selection_leaves_the_adapter_on_its_existing_default() {
         assert_eq!(parse("").unwrap().selection(), None);
+    }
+
+    #[test]
+    fn explicitly_empty_scenario_selections_are_rejected_for_every_command() {
+        for arguments in [
+            vec!["--scenarios".into(), "".into()],
+            vec!["--scenarios= ,,, ".into()],
+            vec!["--scenario".into(), "".into()],
+        ] {
+            let error = Options::parse(&arguments).unwrap_err();
+            assert!(error.contains("requires at least one scenario"), "{error}");
+        }
     }
 
     #[test]

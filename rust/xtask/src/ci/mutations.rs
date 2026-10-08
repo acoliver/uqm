@@ -863,8 +863,8 @@ fn workflow_trust_boundary_mutant(
             "${EVIDENCE_DIR}/xtask-build-unretained.result.json",
         ),
         (
-            "uqm-s4-transport-evidence-v1",
-            "uqm-s4-transport-evidence-disabled",
+            "verify_trusted_path \"${RUNNER_TEMP}/s4-workflow-transport.py\" f 0500",
+            "verify_trusted_path \"${RUNNER_TEMP}/s4-workflow-transport.py\" f 0400",
         ),
     ] {
         if !mutant.contains(from) {

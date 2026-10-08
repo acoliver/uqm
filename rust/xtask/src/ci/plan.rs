@@ -112,8 +112,10 @@ impl Plan {
 }
 
 pub fn plan(root: &Path) -> Result<Plan, CiError> {
-    let plan = derive_plan(root)?;
-    write_plan(root, &plan)?;
+    let source_root = super::controller::runtime_source_root(root)
+        .map_err(|error| CiError::new("ci.plan.source", error))?;
+    let plan = derive_plan(&source_root)?;
+    write_plan(&source_root, &plan)?;
     let text = serde_json::to_string_pretty(&plan)
         .map_err(|error| CiError::new("ci.plan.serialize", error.to_string()))?;
     println!("{text}");
@@ -121,11 +123,19 @@ pub fn plan(root: &Path) -> Result<Plan, CiError> {
 }
 
 pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
-    let (authority, authority_contract) =
-        load_authority_contract(root).map_err(|error| CiError::new("ci.plan.authority", error))?;
-    derive_supported_tuples(root, &authority)
+    let source_root = super::controller::runtime_source_root(root)
+        .map_err(|error| CiError::new("ci.plan.source", error))?;
+    if !source_root.is_absolute() {
+        return Err(CiError::new(
+            "ci.plan.source",
+            "UQM_CI_SOURCE_ROOT must be absolute",
+        ));
+    }
+    let (authority, authority_contract) = load_authority_contract(&source_root)
+        .map_err(|error| CiError::new("ci.plan.authority", error))?;
+    derive_supported_tuples(&source_root, &authority)
         .map_err(|error| CiError::new("ci.plan.matrix", error))?;
-    let matrix_path = root.join(&authority.matrix_file);
+    let matrix_path = source_root.join(&authority.matrix_file);
     let bytes = super::bounded_io::read_regular_nofollow(
         &matrix_path,
         authority.actions.evidence_snapshot_member_limit_bytes,
@@ -136,7 +146,7 @@ pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
     let mut plan = build_plan(&matrix, &authority.runner_mapping, AUTHORITY_RELATIVE)
         .map_err(|error| CiError::new("ci.plan.matrix", error))?;
     let policy = super::bounded_io::read_regular_nofollow(
-        &root.join(AUTHORITY_RELATIVE),
+        &source_root.join(AUTHORITY_RELATIVE),
         super::bounded_io::AUTHORITY_BOOTSTRAP_LIMIT_BYTES,
     )
     .map_err(|e| CiError::new("ci.plan.policy", e))?;
@@ -148,7 +158,7 @@ pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
             "source policy differs from admitted controller policy",
         ));
     }
-    let binding = super::controller::derive_binding(root, &authority, &policy)
+    let binding = super::controller::derive_binding(&source_root, &authority, &policy)
         .map_err(|e| CiError::new("ci.plan.selection", e))?;
     plan.authority_contract = Some(authority_contract);
     plan.autoplay = binding.autoplay.clone();
@@ -338,5 +348,123 @@ mod tests {
         matrix.supported[0].architectures.clear();
         assert!(matrix.derive_contract_tuples().is_err());
         assert!(build_plan(&matrix, &fixture_runner_mapping(), "rust/ci/gates.json").is_err());
+    }
+}
+
+#[cfg(test)]
+mod external_controller_regressions {
+    use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn controller_a_plans_candidate_b_and_refuses_missing_bindings_before_candidate_code() {
+        const MARKER: &str = "UQM_PLAN_BINDING_FIXTURE";
+        if let Ok(controller) = std::env::var(MARKER) {
+            let mode = std::env::var("UQM_PLAN_FIXTURE_MODE").unwrap();
+            let result = derive_plan(Path::new(&controller));
+            if mode == "valid" {
+                let plan = result.unwrap();
+                let binding = plan.selection.unwrap();
+                assert_eq!(
+                    binding.source_sha,
+                    std::env::var("UQM_CI_EXPECTED_SHA").unwrap()
+                );
+                assert_ne!(binding.source_sha, binding.controller_sha);
+                assert_eq!(plan.autoplay.scenarios.len(), 32);
+            } else {
+                let error = result.unwrap_err().to_string();
+                assert!(
+                    error.contains(if mode == "missing-source" {
+                        "UQM_CI_SOURCE_ROOT"
+                    } else {
+                        "UQM_CI_AUTHORITY_PATH"
+                    }),
+                    "{error}"
+                );
+            }
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let policy = include_bytes!("../../../ci/gates.json");
+        let mut base: serde_json::Value = serde_json::from_slice(policy).unwrap();
+        base["native_acceptance"]["scenario_scripts"]
+            .as_array_mut()
+            .unwrap()
+            .truncate(1);
+        base["mutation_targets"]
+            .as_array_mut()
+            .unwrap()
+            .retain(|item| item != "autoplay");
+        let controller = temp.path().join("controller-a");
+        let candidate = temp.path().join("candidate-b");
+        let commit = |root: &Path, bytes: &[u8]| {
+            fs::create_dir_all(root.join("rust/ci")).unwrap();
+            fs::create_dir_all(root.join("rust/build")).unwrap();
+            fs::write(root.join("rust/ci/gates.json"), bytes).unwrap();
+            fs::write(
+                root.join("rust/build/supported-matrix.json"),
+                include_bytes!("../../../build/supported-matrix.json"),
+            )
+            .unwrap();
+            fs::write(
+                root.join("build.rs"),
+                b"compile_error!(\"candidate code must not execute during plan\");",
+            )
+            .unwrap();
+            for args in [
+                vec!["init", "-q"],
+                vec!["config", "user.email", "fixture@example.org"],
+                vec!["config", "user.name", "fixture"],
+                vec!["add", "."],
+                vec!["commit", "-qm", "fixture"],
+            ] {
+                assert!(Command::new("git")
+                    .current_dir(root)
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success());
+            }
+            String::from_utf8(
+                Command::new("git")
+                    .current_dir(root)
+                    .args(["rev-parse", "HEAD"])
+                    .output()
+                    .unwrap()
+                    .stdout,
+            )
+            .unwrap()
+            .trim()
+            .to_string()
+        };
+        let a = commit(&controller, &serde_json::to_vec(&base).unwrap());
+        let b = commit(&candidate, policy);
+        let admitted = temp.path().join("admitted.json");
+        super::super::controller::admit_command(
+            &controller.join("rust/ci/gates.json"),
+            &candidate.join("rust/ci/gates.json"),
+            &admitted,
+        )
+        .unwrap();
+        for mode in ["valid", "missing-source", "missing-policy"] {
+            let mut child = Command::new(std::env::current_exe().unwrap());
+            child.args(["--exact", "ci::plan::external_controller_regressions::controller_a_plans_candidate_b_and_refuses_missing_bindings_before_candidate_code", "--nocapture"])
+                .env(MARKER, &controller).env("UQM_PLAN_FIXTURE_MODE", mode)
+                .env("UQM_CI_EVENT_NAME", "push").env("UQM_CI_EXPECTED_SHA", &b).env("UQM_CI_CONTROLLER_SHA", &a)
+                .env_remove("UQM_CI_SOURCE_ROOT").env_remove("UQM_CI_AUTHORITY_PATH");
+            if mode != "missing-source" {
+                child.env("UQM_CI_SOURCE_ROOT", &candidate);
+            }
+            if mode != "missing-policy" {
+                child.env("UQM_CI_AUTHORITY_PATH", &admitted);
+            }
+            let output = child.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{mode}: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
     }
 }

@@ -1946,7 +1946,12 @@ struct FailureManifestContext<'a> {
 /// belonging to this run into the evidence before the manifest is inventoried.
 /// The report is written asynchronously, so wait briefly for it to appear.
 #[cfg(target_os = "macos")]
-fn retain_crash_report(root: &Path, pid: u32) -> Result<(), String> {
+fn retain_crash_report(
+    root: &Path,
+    process: &NativeProcessIdentity,
+    executable: &str,
+) -> Result<(), String> {
+    let pid = process.pid;
     let home = std::env::var_os("HOME").ok_or("crash report lookup has no HOME")?;
     let floor = std::time::SystemTime::now() - std::time::Duration::from_secs(1800);
     let reports = Path::new(&home).join("Library/Logs/DiagnosticReports");
@@ -1970,10 +1975,7 @@ fn retain_crash_report(root: &Path, pid: u32) -> Result<(), String> {
                 let Ok(bytes) = read_regular_file_nofollow_bounded(&path, 1024 * 1024) else {
                     continue;
                 };
-                // The report names the process it belongs to; match this run's.
-                // The field is written with spaces around the colon.
-                let text = String::from_utf8_lossy(&bytes);
-                if !text.contains(&format!("\"pid\" : {pid}")) {
+                if !crash_report_matches(&bytes, process, executable) {
                     continue;
                 }
                 return write_bytes_atomic_noclobber(&root.join("crash-report.ips"), &bytes);
@@ -2009,10 +2011,130 @@ fn retain_crash_report(root: &Path, pid: u32) -> Result<(), String> {
     }
 }
 
+fn crash_report_matches(bytes: &[u8], process: &NativeProcessIdentity, executable: &str) -> bool {
+    if bytes.len() > 1024 * 1024 {
+        return false;
+    }
+    // Apple .ips files contain a metadata object followed by a separate report object.
+    let mut documents =
+        serde_json::Deserializer::from_slice(bytes).into_iter::<serde_json::Value>();
+    let Some(Ok(first)) = documents.next() else {
+        return false;
+    };
+    let report = if first.get("pid").is_some() {
+        first
+    } else {
+        let Some(Ok(report)) = documents.next() else {
+            return false;
+        };
+        report
+    };
+    if documents.next().is_some()
+        || report.get("pid").and_then(serde_json::Value::as_u64) != Some(u64::from(process.pid))
+        || report.get("procPath").and_then(serde_json::Value::as_str) != Some(executable)
+    {
+        return false;
+    }
+    let Some(start) = process.start_time.parse::<u64>().ok() else {
+        return false;
+    };
+    let launch = report
+        .get("procLaunch")
+        .and_then(serde_json::Value::as_str)
+        .and_then(apple_timestamp_micros);
+    let capture = report
+        .get("captureTime")
+        .and_then(serde_json::Value::as_str)
+        .and_then(apple_timestamp_micros);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| u64::try_from(duration.as_micros()).ok());
+    // procLaunch is printed at millisecond precision; process identity retains microseconds.
+    matches!((launch, capture, now), (Some(launch), Some(capture), Some(now))
+        if launch / 1000 == start / 1000 && capture >= start && capture <= now)
+}
+
+fn apple_timestamp_micros(text: &str) -> Option<u64> {
+    let (date, rest) = text.split_once(' ')?;
+    let (clock, zone) = rest.split_once(' ')?;
+    let date = date
+        .split('-')
+        .map(str::parse::<i64>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    let (clock, fraction) = clock.split_once('.')?;
+    let clock = clock
+        .split(':')
+        .map(str::parse::<i64>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    if date.len() != 3
+        || clock.len() != 3
+        || !(1970..=9999).contains(&date[0])
+        || !(1..=12).contains(&date[1])
+        || !(1..=31).contains(&date[2])
+        || !(0..24).contains(&clock[0])
+        || !(0..60).contains(&clock[1])
+        || !(0..60).contains(&clock[2])
+        || fraction.is_empty()
+        || fraction.len() > 6
+        || !fraction.bytes().all(|b| b.is_ascii_digit())
+        || zone.len() != 5
+        || !matches!(zone.as_bytes()[0], b'+' | b'-')
+    {
+        return None;
+    }
+    let leap = date[0] % 4 == 0 && (date[0] % 100 != 0 || date[0] % 400 == 0);
+    let last_day = match date[1] {
+        2 => {
+            if leap {
+                29
+            } else {
+                28
+            }
+        }
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    if date[2] > last_day {
+        return None;
+    }
+    let offset_hours = zone.get(1..3)?.parse::<i64>().ok()?;
+    let offset_minutes = zone.get(3..5)?.parse::<i64>().ok()?;
+    if offset_hours > 23 || offset_minutes > 59 {
+        return None;
+    }
+    let year = date[0] - i64::from(date[1] <= 2);
+    let era = year.div_euclid(400);
+    let yoe = year - era * 400;
+    let month = date[1] + if date[1] > 2 { -3 } else { 9 };
+    let doy = (153 * month + 2) / 5 + date[2] - 1;
+    let days = era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468;
+    let offset =
+        (offset_hours * 60 + offset_minutes) * 60 * if zone.starts_with('-') { -1 } else { 1 };
+    let seconds = days
+        .checked_mul(86400)?
+        .checked_add(clock[0] * 3600 + clock[1] * 60 + clock[2])?
+        .checked_sub(offset)?;
+    let fraction = fraction
+        .parse::<u64>()
+        .ok()?
+        .checked_mul(10u64.pow(6 - fraction.len() as u32))?;
+    u64::try_from(seconds)
+        .ok()?
+        .checked_mul(1_000_000)?
+        .checked_add(fraction)
+}
+
 /// Other platforms retain nothing here; their crash artefacts are configured
 /// outside this harness.
 #[cfg(not(target_os = "macos"))]
-fn retain_crash_report(_root: &Path, _pid: u32) -> Result<(), String> {
+fn retain_crash_report(
+    _root: &Path,
+    _process: &NativeProcessIdentity,
+    _executable: &str,
+) -> Result<(), String> {
     Ok(())
 }
 
@@ -2024,7 +2146,13 @@ fn publish_failure_manifest(
     if context.child.signal.is_some() {
         // Retain before the inventory runs, so the report is indexed with the
         // rest of the evidence rather than appearing as an unexpected file.
-        if let Err(retention) = retain_crash_report(context.root, context.child.process.pid) {
+        let executable = context
+            .command
+            .first()
+            .ok_or("crash diagnostic has no child executable")?;
+        if let Err(retention) =
+            retain_crash_report(context.root, &context.child.process, executable)
+        {
             return publish_failure_without_crash(
                 context,
                 contract,
@@ -5156,5 +5284,82 @@ mod tests {
         fs::write(&target, b"content").unwrap();
         symlink(&target, root.path().join("alias.uqm")).unwrap();
         assert!(find_content_package(root.path()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod crash_identity_regressions {
+    use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_process_identity_is_epoch_microseconds_for_apple_report_correlation() {
+        let start =
+            crate::automation::child_session::process_start_micros(std::process::id()).unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros();
+        assert!(start > 1_000_000_000_000_000 && u128::from(start) <= now);
+    }
+
+    #[test]
+    fn crash_timestamp_rejects_invalid_calendar_and_unbounded_years() {
+        for time in [
+            "2026-02-29 12:00:00.000 +0000",
+            "2026-04-31 12:00:00.000 +0000",
+            "2147483647-01-01 12:00:00.000 +0000",
+            "2026-13-01 12:00:00.000 +0000",
+        ] {
+            assert_eq!(apple_timestamp_micros(time), None, "{time}");
+        }
+        assert!(apple_timestamp_micros("2024-02-29 12:00:00.000 +0000").is_some());
+    }
+
+    #[test]
+    fn apple_two_document_reports_bind_exact_pid_executable_and_launch_time() {
+        let start = apple_timestamp_micros("2026-01-01 12:00:00.123 +0000").unwrap();
+        let process = NativeProcessIdentity {
+            pid: 123,
+            start_time: start.to_string(),
+            nonce: "fixture".into(),
+            executable_sha256: "a".repeat(64),
+        };
+        let report = serde_json::json!({"pid": 123, "procPath": "/exact/uqm", "procLaunch": "2026-01-01 12:00:00.123 +0000", "captureTime": "2026-01-01 12:00:01.000 +0000"});
+        let bytes =
+            |report: &serde_json::Value| format!("{{\"bug_type\":\"309\"}}\n{report}").into_bytes();
+        assert!(crash_report_matches(
+            &bytes(&report),
+            &process,
+            "/exact/uqm"
+        ));
+        for (field, value) in [
+            ("pid", serde_json::json!(1234)),
+            ("procPath", serde_json::json!("/different/uqm")),
+            (
+                "procLaunch",
+                serde_json::json!("2025-12-01 12:00:00.123 +0000"),
+            ),
+            (
+                "captureTime",
+                serde_json::json!("2025-12-31 12:00:01.000 +0000"),
+            ),
+        ] {
+            let mut forged = report.clone();
+            forged[field] = value;
+            assert!(
+                !crash_report_matches(&bytes(&forged), &process, "/exact/uqm"),
+                "{field}"
+            );
+        }
+        assert!(!crash_report_matches(
+            b"unknown Apple report",
+            &process,
+            "/exact/uqm"
+        ));
+        assert_eq!(
+            apple_timestamp_micros("2026-01-01 04:00:00.123 -0800"),
+            Some(start)
+        );
     }
 }
