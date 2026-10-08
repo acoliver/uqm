@@ -3578,6 +3578,34 @@ fn valid_detached_replay(
     })
 }
 
+fn valid_source_selection(
+    root: &Path,
+    index: &EvidenceIndex,
+    authority: &Authority,
+    receipt: &serde_json::Value,
+) -> bool {
+    // Historical generic receipts have no selection; native success independently requires it.
+    let Some(value) = receipt.get("selection") else {
+        return true;
+    };
+    let Ok(binding) = serde_json::from_value::<super::controller::SelectionBinding>(value.clone())
+    else {
+        return false;
+    };
+    let Some(policy) = index
+        .entries
+        .iter()
+        .find(|entry| entry.role == "authority.snapshot")
+        .and_then(|entry| read_bundle_file(root, &entry.path).ok())
+    else {
+        return false;
+    };
+    binding
+        .bind_environment()
+        .and_then(|()| binding.selected(authority, &index.source_sha, &policy))
+        .is_ok()
+}
+
 fn validate_source_receipt(
     root: &Path,
     index: &EvidenceIndex,
@@ -3595,25 +3623,26 @@ fn validate_source_receipt(
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok());
     let valid = receipt.as_ref().is_some_and(|receipt| {
-        let exact_fields = exact_json_fields(
-            receipt,
-            &[
-                "schema",
-                "source_sha",
-                "detached_state",
-                "expected_sha",
-                "base_sha",
-                "tuple",
-                "expected_tuple",
-                "cache_mode",
-                "clean",
-                "canonical_environment",
-                "passed",
-                "first_failed_contract",
-                "detail",
-            ],
-        );
-        let common = exact_fields
+        let mut fields = vec![
+            "schema",
+            "source_sha",
+            "detached_state",
+            "expected_sha",
+            "base_sha",
+            "tuple",
+            "expected_tuple",
+            "cache_mode",
+            "clean",
+            "canonical_environment",
+            "passed",
+            "first_failed_contract",
+            "detail",
+        ];
+        if receipt.get("selection").is_some() {
+            fields.push("selection");
+        }
+        let common = exact_json_fields(receipt, &fields)
+            && valid_source_selection(root, index, authority, receipt)
             && receipt.get("schema").and_then(|value| value.as_str())
                 == Some("uqm-s4-source-preflight-v2")
             && valid_detached_replay(receipt, index, authority)
@@ -17075,6 +17104,64 @@ mod tests {
                 entry.role.as_str(),
                 "gate.result" | "ownership.zero-native-delta"
             )));
+        }
+    }
+
+    #[test]
+    fn emitted_source_selection_is_validated_against_retained_source_and_policy() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        for mutation in 0..6 {
+            let bundle = tempfile::tempdir().unwrap();
+            let mut index = preflight_failure_bundle(bundle.path(), "tools.preflight");
+            let source_entry = index
+                .entries
+                .iter()
+                .find(|entry| entry.role == "preflight.source")
+                .unwrap();
+            let mut receipt: serde_json::Value =
+                serde_json::from_slice(&fs::read(bundle.path().join(&source_entry.path)).unwrap())
+                    .unwrap();
+            receipt["selection"] =
+                serde_json::to_value(super::super::controller::SelectionBinding {
+                    schema: "uqm-s4-selection-v1".into(),
+                    event: super::super::controller::WorkflowEvent::Local,
+                    source_sha: index.source_sha.clone(),
+                    controller_sha: "b".repeat(40),
+                    base_sha: None,
+                    merge_base_sha: None,
+                    changed_paths_z: Vec::new(),
+                    authority_sha256: hex_sha256(include_bytes!("../../../ci/gates.json")),
+                    autoplay: super::super::controller::event_selection(
+                        super::super::controller::WorkflowEvent::Local,
+                        None,
+                    ),
+                })
+                .unwrap();
+            match mutation {
+                1 => receipt["selection"]["source_sha"] = serde_json::json!("c".repeat(40)),
+                2 => receipt["selection"]["authority_sha256"] = serde_json::json!("c".repeat(64)),
+                3 => receipt["selection"]["autoplay"]["scenarios"]
+                    .as_array_mut()
+                    .unwrap()
+                    .truncate(1),
+                4 => receipt["selection"]["controller_sha"] = serde_json::json!("not-a-revision"),
+                5 => receipt["selection"]["unknown"] = serde_json::json!(true),
+                _ => {}
+            }
+            rewrite_bundle_entry(
+                bundle.path(),
+                &mut index.entries,
+                "preflight.source",
+                &serde_json::to_vec(&receipt).unwrap(),
+            );
+            let mut contracts = Vec::new();
+            validate_source_receipt(bundle.path(), &index, &authority, &mut contracts);
+            assert_eq!(
+                contracts.is_empty(),
+                mutation == 0,
+                "mutation {mutation}: {contracts:?}"
+            );
         }
     }
 
