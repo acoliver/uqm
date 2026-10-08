@@ -1464,6 +1464,52 @@ mod tests {
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
+    #[test]
+    fn original_explore_prefix_holds_and_releases_two_distinct_select_taps() {
+        let path = std::path::Path::new("explore-planet-v1.json");
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(
+                include_bytes!("../../scripts/explore-planet-v1.json"),
+                path,
+            )
+            .unwrap(),
+            path,
+        )
+        .unwrap();
+        assert_eq!(script.start_scene(), None);
+        let config = cfg(script.steps());
+        let mut state = SchedulerState::initial();
+        let mut observed = Vec::new();
+        for tick in 1..=44 {
+            let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            if let Some(key) = transition.effects.write_key {
+                observed.push((tick, key.0, key.1));
+            }
+            if let Some(key) = transition.effects.release_key {
+                observed.push((tick, key, 0));
+            }
+            state = transition.new_state;
+        }
+        println!("original explore planned key transitions: {observed:?}");
+        assert_eq!(
+            observed,
+            vec![
+                (11, MenuKey::Down, 1),
+                (12, MenuKey::Down, 1),
+                (13, MenuKey::Down, 1),
+                (14, MenuKey::Down, 0),
+                (18, MenuKey::Select, 1),
+                (19, MenuKey::Select, 1),
+                (20, MenuKey::Select, 1),
+                (21, MenuKey::Select, 0),
+                (32, MenuKey::Select, 1),
+                (33, MenuKey::Select, 1),
+                (34, MenuKey::Select, 1),
+                (35, MenuKey::Select, 0),
+            ]
+        );
+    }
+
     fn cfg(actions: &[Action]) -> SchedulerConfig<'_> {
         SchedulerConfig {
             actions,

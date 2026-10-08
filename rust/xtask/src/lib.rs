@@ -3072,6 +3072,12 @@ fn classify_supervision(
         FaultClass::OutputLimit
     } else if captured.signal.is_some() {
         FaultClass::Signal
+    } else if captured.exit_code == Some(0)
+        && (captured.process_group_cleanup != "verified-empty"
+            || captured.pipe_cleanup != "complete"
+            || captured.termination_signal != "none")
+    {
+        FaultClass::SupervisionFailed
     } else if captured.succeeded() {
         FaultClass::Completed
     } else {
@@ -3814,6 +3820,17 @@ mod tests {
         };
         mutate(&mut captured);
         captured
+    }
+    #[test]
+    fn native_exit_zero_without_verified_cleanup_retains_supervision_failure() {
+        for cleanup in ["not-supported", "unknown"] {
+            let captured = supervised(|captured| captured.process_group_cleanup = cleanup);
+            let receipt = classify_supervision(&captured, "scenario");
+            assert_eq!(receipt.class, native_suite::FaultClass::SupervisionFailed);
+            assert_eq!(receipt.exit_code, Some(0));
+            assert_eq!(receipt.process_group_cleanup, cleanup);
+            assert!(!receipt.process_state_clear());
+        }
     }
 
     /// The class a supervised child should reach, and the fault that puts it
