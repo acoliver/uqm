@@ -1419,10 +1419,8 @@ fn advance_to_next(
 ) -> SchedulerTransition {
     let next_index = state.step_index + 1;
 
-    // Zero-callback chaining: if the next action requires no input callbacks
-    // (wait_input_ticks(0) or AssertActivity), chain through it immediately.
-    // AssertMainMenuTransition is handled by the AdmittedInput match arm
-    // (enters WaitingSemantic on first input callback), NOT chained here.
+    // Only zero-tick waits may chain. Assertions must remain current until
+    // the coordinator verifies runtime state before their input callback.
     if let Some(next_action) = config.actions.get(next_index) {
         match next_action {
             Action::WaitInputTicks(w) if w.count == 0 => {
@@ -1435,16 +1433,6 @@ fn advance_to_next(
                     ..*state
                 };
                 return advance_to_next(&chained_state, config, sv, combined);
-            }
-            Action::AssertActivity(_) => {
-                // AssertActivity is immediate — no callback needed.
-                let chained_state = SchedulerState {
-                    step_index: next_index,
-                    phase: ActionPhase::WaitingForInput,
-                    state_version: sv,
-                    ..*state
-                };
-                return advance_to_next(&chained_state, config, sv, initial_effects);
             }
             _ => {}
         }
@@ -2230,6 +2218,37 @@ mod tests {
     }
 
     // --- assert_activity advances immediately ---
+
+    #[test]
+    fn capture_completion_leaves_activity_assertion_for_runtime_verification() {
+        let actions = [
+            Action::Capture(crate::automation::script::CaptureStep {
+                label: "before-activity".into(),
+                expect_change: false,
+            }),
+            Action::AssertActivity(ActivityAssertion { mask: 1, equals: 0 }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let armed = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        let completed = scheduler_reduce(
+            &armed.new_state,
+            &config,
+            SchedulerEvent::CommittedPresent {
+                generation: armed.new_state.capture_generation,
+            },
+        );
+        assert_eq!(completed.new_state.step_index, 1);
+        assert_eq!(completed.new_state.phase, ActionPhase::WaitingForInput);
+        assert_eq!(
+            completed.effects.complete_capture,
+            Some(CaptureGeneration(1))
+        );
+    }
 
     #[test]
     fn assert_activity_advances() {

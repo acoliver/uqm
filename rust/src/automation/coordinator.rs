@@ -2530,6 +2530,84 @@ mod tests {
     }
 
     #[test]
+    fn native_capture_then_activity_requires_verified_distinct_commit() {
+        const CHILD: &str = "UQM_CAPTURE_ACTIVITY_COMMIT_TEST";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "automation::coordinator::tests::native_capture_then_activity_requires_verified_distinct_commit", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let source = br#"{"version":1,"name":"capture-activity","budgets":{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"capture","label":"before-activity"},{"action":"assert_activity","mask":0,"equals":0},{"action":"capture","label":"after-activity"},{"action":"finish"}]}"#;
+        let script = crate::automation::validate_script(
+            crate::automation::parse_script(source, "test.json").unwrap(),
+            "test.json",
+        )
+        .unwrap();
+        let plan =
+            super::super::native_checkpoint::NativeCheckpointPlan::derive(source, &script).unwrap();
+        Coordinator::init_with_native_checkpoints(script, temp.path().into(), Some(65536));
+        let coord = Coordinator::get().unwrap();
+        let frame = |count, generation| super::super::capture::PresentedFrame {
+            count,
+            generation,
+            width: 1,
+            height: 1,
+            rgba: vec![1, 2, 3, 255],
+        };
+        let records = || {
+            std::fs::read_to_string(temp.path().join("trace.jsonl"))
+                .unwrap()
+                .lines()
+                .map(|line| TraceRecord::from_jsonl(line).unwrap())
+                .collect::<Vec<_>>()
+        };
+        assert!(!coord.process_input_inner());
+        assert!(!Coordinator::process_present(Some(frame(1, 1))));
+        assert_eq!(
+            coord.inner.lock().sched_state.step_index,
+            1,
+            "capture must leave activity awaiting its runtime verification"
+        );
+        assert_eq!(plan.committed(&records()).unwrap().len(), 1);
+        assert!(!coord.process_input_inner());
+        assert_eq!(coord.inner.lock().sched_state.step_index, 2);
+        assert!(!coord.process_input_inner());
+        assert!(coord.inner.lock().armed_capture_label.is_none());
+        assert!(!Coordinator::process_present(Some(frame(2, 1))));
+        assert_eq!(plan.committed(&records()).unwrap().len(), 2);
+        assert!(!coord.process_input_inner());
+        assert!(!Coordinator::process_present(Some(frame(3, 2))));
+        assert_eq!(plan.committed(&records()).unwrap().len(), 3);
+        assert!(coord.process_input_inner());
+        assert_eq!(Coordinator::finalize(0).unwrap(), 0);
+        let trace = records();
+        let counts: Vec<_> = trace
+            .iter()
+            .filter(|record| record.kind == RecordKind::Checkpoint)
+            .map(|record| record.presentation.as_ref().unwrap().count)
+            .collect();
+        assert_eq!(counts, [1, 2, 3]);
+        assert_eq!(
+            trace
+                .iter()
+                .filter(|record| record
+                    .activity
+                    .as_ref()
+                    .is_some_and(|evidence| evidence.passed))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn native_checkpoint_barrier_queues_readiness_until_prior_commit() {
         const CHILD: &str = "UQM_NATIVE_READY_BARRIER_TEST";
         if std::env::var_os(CHILD).is_none() {
