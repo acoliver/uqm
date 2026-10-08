@@ -1,0 +1,9 @@
+# MOD resources decode without scratch files
+
+`ModDecoder::open_from_bytes` parses archive resources directly through `sound::tracker`. Loading a ship ditty must not write host temporary storage. The native game sandbox admits immutable content and runtime output; it deliberately denies unrelated host writes. The former scratch-file adapter failed there, causing initial ship loading to abort before any combat frame.
+
+The parser validates header bounds, order count, pattern bytes, sample references, volume, fine tune, sample bytes and loop bounds before playback. Invalid input returns `DecodeError::InvalidData`. It accepts four-channel 15-sample modules and the existing tagged four-, six-, eight- and twelve-channel layouts. Stereo PCM playback includes sample loops, fine tuning, arpeggio, pitch slides, tone portamento, vibrato, tremolo, panning, sample offset, volume slides, order jumps, pattern breaks, speed/tempo, pattern loops, retrigger, cut, delayed notes and delayed rows. The hardware filter is not emulated. No claim of complete tracker-format compatibility or reference-player audio parity is made.
+
+The audible playback regression runs under a macOS sandbox that denies all file writes. It verifies nonzero PCM and identical PCM after seek-to-zero. Parser, tick-effect and flow tests run without external assets. The shipped-content test requires the pinned external content package and is explicitly invoked with `--include-ignored`; it is not a substitute for live game proof.
+
+Failed-suite galleries keep scenario and checkpoint failures unchanged. When a failed scenario has a retained failure inventory and a matching committed trace checkpoint, the gallery shows the original OS image and separate client crop with their declared sizes and hashes. It labels these as diagnostics. Only image identities matching the retained bytes receive links. Internal renderer readbacks remain separate from OS evidence.

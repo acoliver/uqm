@@ -1,16 +1,16 @@
 //! MOD/tracker music decoder implementation
 //!
-//! Uses the `mod_player` crate for pure Rust MOD file playback.
-//! Supports Amiga ProTracker MOD format files.
+//! Parses and plays Amiga ProTracker MOD data in memory, including archive resources.
+//! Byte-based opening performs no filesystem writes.
 
 use std::path::Path;
 
 use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
 use super::formats::{AudioFormat, DecoderFormats};
 
-/// MOD decoder using mod_player crate
+/// In-memory ProTracker MOD decoder
 pub struct ModDecoder {
-    /// Sample frequency in Hz (always 44100 for mod_player)
+    /// Sample frequency in Hz
     frequency: u32,
     /// Audio format (always Stereo16)
     format: AudioFormat,
@@ -23,9 +23,9 @@ pub struct ModDecoder {
     /// Stored formats for reference
     formats: Option<DecoderFormats>,
     /// The loaded song
-    song: Option<mod_player::Song>,
+    song: Option<super::tracker::Song>,
     /// The player state
-    player_state: Option<mod_player::PlayerState>,
+    player_state: Option<super::tracker::Player>,
     /// Current PCM sample position
     current_pcm: u64,
     /// Total PCM samples (estimated)
@@ -49,69 +49,20 @@ impl ModDecoder {
         }
     }
 
-    /// Load a MOD file from bytes
     fn load_from_bytes(&mut self, data: &[u8]) -> DecodeResult<()> {
-        // mod_player::read_mod expects a file path, but we can use read_mod_from_bytes
-        // Actually, let's check the API...
-        // The mod_player crate has read_mod_file which takes a path
-        // We need to write to a temp file or find another way
-
-        // For now, let's try parsing directly - mod_player has internal parsing
-        // Looking at the mod_player source, it reads the file directly
-        // We'll need to write a temp file approach or fork the crate
-
-        // Actually, let's use a cursor approach - mod_player::Song can be created
-        // by parsing the MOD format ourselves, but that's complex.
-
-        // Simpler approach: write to temp file, load, delete
-        use std::io::Write;
-        let temp_path = std::env::temp_dir().join(format!("uqm_mod_{}.mod", std::process::id()));
-
-        {
-            let mut file = std::fs::File::create(&temp_path)
-                .map_err(|e| DecodeError::IoError(e.to_string()))?;
-            file.write_all(data)
-                .map_err(|e| DecodeError::IoError(e.to_string()))?;
-        }
-
-        let result = self.load_from_path(&temp_path);
-
-        // Clean up temp file
-        let _ = std::fs::remove_file(&temp_path);
-
-        result
+        let song = super::tracker::Song::parse(data)?;
+        let player = super::tracker::Player::new(song.channels, self.frequency);
+        self.length = song.estimated_length();
+        self.total_pcm = (self.length * self.frequency as f32) as u64;
+        self.song = Some(song);
+        self.player_state = Some(player);
+        self.current_pcm = 0;
+        Ok(())
     }
 
-    /// Load a MOD file from a path
     fn load_from_path(&mut self, path: &Path) -> DecodeResult<()> {
-        let path_str = path.to_string_lossy();
-
-        let song = mod_player::read_mod_file(&path_str);
-
-        // Initialize player state
-        let player_state = mod_player::PlayerState::new(song.format.num_channels, self.frequency);
-
-        // Estimate song length based on actual song structure
-        // num_used_patterns = number of positions in the song order table
-        // Each pattern has 64 rows
-        // Default tempo: 125 BPM, 6 ticks per row
-        // Time per row = 60 / BPM * rows_per_beat = 60 / 125 * (1/4) = 0.12 seconds per beat
-        // But actually: at 125 BPM, 6 ticks/row, tick time = 2.5ms / tick_constant
-        // Amiga timing: row_time = (2500 / bpm) * ticks_per_row ms
-        // Default: (2500 / 125) * 6 = 120ms per row = 0.12 seconds
-        let num_positions = song.num_used_patterns as usize;
-        let rows_per_pattern = 64;
-        let total_rows = num_positions * rows_per_pattern;
-        // More accurate: 2500ms per beat at 125 BPM with 6 ticks = 120ms per row
-        let ms_per_row = 120.0; // Default timing, actual varies with tempo changes
-        self.length = (total_rows as f32) * ms_per_row / 1000.0;
-        self.total_pcm = (self.length * self.frequency as f32) as u64;
-
-        self.song = Some(song);
-        self.player_state = Some(player_state);
-        self.current_pcm = 0;
-
-        Ok(())
+        let data = std::fs::read(path).map_err(|error| DecodeError::IoError(error.to_string()))?;
+        self.load_from_bytes(&data)
     }
 }
 
@@ -179,7 +130,7 @@ impl SoundDecoder for ModDecoder {
 
         // Check if song has truly ended (not just looped)
         // song_has_ended means the song order list is exhausted
-        if player_state.song_has_ended {
+        if player_state.ended {
             return Err(DecodeError::EndOfFile);
         }
 
@@ -188,12 +139,12 @@ impl SoundDecoder for ModDecoder {
 
         while bytes_written + bytes_per_sample <= buf.len() {
             // Get next sample (returns f32 left/right)
-            let (left, right) = mod_player::next_sample(song, player_state);
+            let (left, right) = player_state.next_sample(song);
 
             // Check for end AFTER getting sample
             // song_has_ended means the song truly ended (no more patterns)
             // has_looped means it wrapped around - for non-looping playback we treat this as end
-            if player_state.song_has_ended {
+            if player_state.ended {
                 if bytes_written == 0 {
                     return Err(DecodeError::EndOfFile);
                 }
@@ -224,10 +175,8 @@ impl SoundDecoder for ModDecoder {
         // MOD seeking is complex - for now only support seek to 0 (restart)
         if pcm_pos == 0 {
             if let Some(ref song) = self.song {
-                self.player_state = Some(mod_player::PlayerState::new(
-                    song.format.num_channels,
-                    self.frequency,
-                ));
+                self.player_state =
+                    Some(super::tracker::Player::new(song.channels, self.frequency));
                 self.current_pcm = 0;
                 return Ok(0);
             }
@@ -267,6 +216,61 @@ impl SoundDecoder for ModDecoder {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn audible_module() -> Vec<u8> {
+        let mut data = vec![0; 1084 + 1024 + 32];
+        data[42..44].copy_from_slice(&16_u16.to_be_bytes());
+        data[45] = 64;
+        data[48..50].copy_from_slice(&16_u16.to_be_bytes());
+        data[950] = 1;
+        data[1080..1084].copy_from_slice(b"M.K.");
+        data[1084..1088].copy_from_slice(&[0x01, 0xac, 0x10, 0]);
+        for (index, sample) in data[2108..].iter_mut().enumerate() {
+            *sample = if index < 16 { 100 } else { 156 };
+        }
+        data
+    }
+
+    #[test]
+    fn module_bytes_decode_without_filesystem_writes() {
+        #[cfg(target_os = "macos")]
+        if std::env::var_os("UQM_MOD_MEMORY_CHILD").is_none() {
+            let status = std::process::Command::new("/usr/bin/sandbox-exec")
+                .args(["-p", "(version 1)(allow default)(deny file-write*)"])
+                .arg(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "sound::mod_decoder::tests::module_bytes_decode_without_filesystem_writes",
+                    "--nocapture",
+                ])
+                .env("UQM_MOD_MEMORY_CHILD", "1")
+                .status()
+                .unwrap();
+            assert!(status.success());
+            return;
+        }
+        let mut decoder = ModDecoder::new();
+        assert!(decoder.init());
+        decoder
+            .open_from_bytes(&audible_module(), "avatar.mod")
+            .unwrap();
+        let mut pcm = [0; 4096];
+        assert_eq!(decoder.decode(&mut pcm).unwrap(), pcm.len());
+        assert!(pcm.iter().any(|byte| *byte != 0));
+        decoder.seek(0).unwrap();
+        let mut repeated = [0; 4096];
+        decoder.decode(&mut repeated).unwrap();
+        assert_eq!(pcm, repeated);
+    }
+
+    #[test]
+    fn truncated_module_returns_typed_error() {
+        let mut decoder = ModDecoder::new();
+        assert!(matches!(
+            decoder.open_from_bytes(b"short", "short.mod"),
+            Err(DecodeError::InvalidData(_))
+        ));
+    }
 
     #[test]
     fn test_mod_decoder_new() {

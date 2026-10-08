@@ -259,10 +259,13 @@ fn scenario_rows(
         .as_ref()
         .map(|proof| proof.window.screenshots.iter().collect())
         .unwrap_or_default();
-    let checkpoints = match &plan {
+    let mut checkpoints = match &plan {
         Some(plan) => checkpoint_rows(plan, &shots, &row.directory, retained, default_outcome)?,
         None => Vec::new(),
     };
+    if matches!(row.state, ScenarioState::Failed { .. }) && proof.is_none() {
+        bind_failure_diagnostics(snapshot, retained, &row.directory, &mut checkpoints)?;
+    }
     Ok(GalleryScenario {
         index,
         script: row.script.clone(),
@@ -450,6 +453,103 @@ fn image(
         byte_length: declared.byte_length,
         sha256: declared.sha256.clone(),
         retained: present,
+    }
+}
+
+/// Failure images remain diagnostics. Their presence does not satisfy a checkpoint.
+#[derive(Deserialize)]
+struct FailureInventory {
+    schema: String,
+    passed: bool,
+    retained_files: Vec<NativeRetainedInput>,
+}
+
+fn bind_failure_diagnostics(
+    snapshot: &EvidenceSnapshot,
+    retained: &BTreeMap<String, NativeRetainedInput>,
+    directory: &str,
+    checkpoints: &mut [GalleryCheckpoint],
+) -> Result<(), String> {
+    let path = format!("{directory}/native-acceptance-failure.json");
+    let bytes = match snapshot.read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("read {path}: {error}")),
+    };
+    let failure: FailureInventory =
+        serde_json::from_slice(bytes).map_err(|error| format!("parse {path}: {error}"))?;
+    if failure.schema != "uqm-native-window-acceptance-failure-v1" {
+        return Ok(());
+    }
+    if failure.passed {
+        return Err(format!("{path} claims passed failure diagnostics"));
+    }
+    let trace_path = format!("{directory}/automation/trace.jsonl");
+    let trace = match snapshot.read(&trace_path) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format!("read {trace_path}: {error}")),
+    };
+    let records = trace
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| {
+            serde_json::from_slice::<uqm_rust::automation::TraceRecord>(line)
+                .map_err(|error| format!("parse {trace_path}: {error}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for checkpoint in checkpoints {
+        let matches: Vec<_> = records
+            .iter()
+            .filter(|record| {
+                record.kind == uqm_rust::automation::RecordKind::Checkpoint
+                    && record
+                        .checkpoint
+                        .as_ref()
+                        .is_some_and(|binding| binding.id == checkpoint.id)
+                    && record
+                        .presentation
+                        .as_ref()
+                        .is_some_and(|frame| frame.count > 0 && frame.count == record.present_seen)
+            })
+            .collect();
+        if let [record] = matches.as_slice() {
+            bind_failure_images(
+                checkpoint,
+                record.present_seen,
+                &failure.retained_files,
+                directory,
+                retained,
+            );
+        }
+    }
+    Ok(())
+}
+
+fn bind_failure_images(
+    checkpoint: &mut GalleryCheckpoint,
+    presentation: u64,
+    inventory: &[NativeRetainedInput],
+    directory: &str,
+    retained: &BTreeMap<String, NativeRetainedInput>,
+) {
+    let stem = format!("screenshots/checkpoint-{:04}", checkpoint.action_index);
+    let original: Vec<_> = inventory
+        .iter()
+        .filter(|file| file.relative_path == format!("{stem}.os.png"))
+        .collect();
+    let normalized: Vec<_> = inventory
+        .iter()
+        .filter(|file| file.relative_path == format!("{stem}.png"))
+        .collect();
+    if let ([original], [normalized]) = (original.as_slice(), normalized.as_slice()) {
+        checkpoint.committed_presentation = Some(presentation);
+        checkpoint.original_os_capture = Some(image(directory, original, retained));
+        checkpoint.normalized_client_capture = Some(image(directory, normalized, retained));
+        checkpoint.detail = Some(
+            "captured before scenario failure; diagnostic evidence, not successful acceptance"
+                .into(),
+        );
     }
 }
 
@@ -850,6 +950,130 @@ mod tests {
         assert_eq!(gallery.totals.missing, 2);
         assert_eq!(gallery.totals.captured, 0);
         assert_eq!(gallery.scenarios[0].checkpoints.len(), 2);
+    }
+
+    #[test]
+    fn failed_scenario_retains_checkpoint_bound_diagnostic_images() {
+        let fixture = Fixture::new(
+            vec![row(ScenarioState::Failed {
+                detail: "battle frames 0".into(),
+            })],
+            false,
+        );
+        let original = b"original OS evidence";
+        let normalized = b"derived client evidence";
+        let os = crate::retained_identity("screenshots/checkpoint-0000.os.png", original);
+        let crop = crate::retained_identity("screenshots/checkpoint-0000.png", normalized);
+        fixture.write(
+            "scenarios/0000/screenshots/checkpoint-0000.os.png",
+            original,
+        );
+        fixture.write("scenarios/0000/screenshots/checkpoint-0000.png", normalized);
+        fixture.write(
+            "scenarios/0000/native-acceptance-failure.json",
+            &serde_json::to_vec(&serde_json::json!({
+                "schema": "uqm-native-window-acceptance-failure-v1", "passed": false,
+                "retained_files": [os.clone(), crop.clone()],
+            }))
+            .unwrap(),
+        );
+        let document = parse_script(SCRIPT.as_bytes(), Path::new("gallery.json")).unwrap();
+        let script = validate_script(document, Path::new("gallery.json")).unwrap();
+        let plan = NativeCheckpointPlan::derive(SCRIPT.as_bytes(), &script).unwrap();
+        let marker = serde_json::json!({"schema":2,"run":1,"sequence":1,"input_seen":1,"present_seen":11,"elapsed_ms":1,"kind":"checkpoint",
+            "presentation":{"count":11,"generation":3,"width":1280,"height":960},
+            "checkpoint":{"id":plan.checkpoints[0].id}});
+        fixture.write(
+            "scenarios/0000/automation/trace.jsonl",
+            format!("{marker}\n").as_bytes(),
+        );
+        let gallery = build(fixture.root()).unwrap();
+        assert!(!gallery.suite_passed);
+        assert_eq!(gallery.scenarios[0].state, "failed");
+        assert_eq!(gallery.totals.failed, 2);
+        assert_eq!(gallery.totals.captured, 0);
+        let checkpoint = &gallery.scenarios[0].checkpoints[0];
+        assert_eq!(checkpoint.id, plan.checkpoints[0].id);
+        assert_eq!(checkpoint.committed_presentation, Some(11));
+        let image = checkpoint.original_os_capture.as_ref().unwrap();
+        assert_eq!(
+            image.relative_path,
+            format!("scenarios/0000/{}", os.relative_path)
+        );
+        assert_eq!(image.sha256, os.sha256);
+        assert_eq!(image.byte_length, os.byte_length);
+        assert!(image.retained);
+        assert_eq!(
+            checkpoint
+                .normalized_client_capture
+                .as_ref()
+                .unwrap()
+                .sha256,
+            crop.sha256
+        );
+        assert!(
+            checkpoint
+                .normalized_client_capture
+                .as_ref()
+                .unwrap()
+                .retained
+        );
+        assert!(gallery.scenarios[0].checkpoints[1]
+            .original_os_capture
+            .is_none());
+        let html = render_html(&gallery, "../bundle/").unwrap();
+        assert!(html.contains("checkpoint-0000.os.png"));
+        assert!(html.contains("diagnostic"));
+        assert_eq!(gallery.totals.captured, 0);
+        assert_eq!(gallery.scenarios[0].checkpoints.len(), 2);
+
+        for path in [&os.relative_path, &crop.relative_path] {
+            std::fs::write(
+                fixture.root().join(format!("scenarios/0000/{path}")),
+                b"changed",
+            )
+            .unwrap();
+        }
+        let changed = build(fixture.root()).unwrap();
+        let checkpoint = &changed.scenarios[0].checkpoints[0];
+        assert!(!checkpoint.original_os_capture.as_ref().unwrap().retained);
+        assert!(
+            !checkpoint
+                .normalized_client_capture
+                .as_ref()
+                .unwrap()
+                .retained
+        );
+        let html = render_html(&changed, "../bundle/").unwrap();
+        assert!(!html.contains(r#"href="../bundle/scenarios/0000/screenshots/checkpoint-0000"#));
+        assert_eq!(changed.totals.captured, 0);
+
+        let mut wrong = marker.clone();
+        wrong["checkpoint"]["id"] = serde_json::json!("unrelated");
+        std::fs::write(
+            fixture.root().join("scenarios/0000/automation/trace.jsonl"),
+            format!(
+                "{wrong}
+"
+            ),
+        )
+        .unwrap();
+        assert!(build(fixture.root()).unwrap().scenarios[0].checkpoints[0]
+            .original_os_capture
+            .is_none());
+        wrong = marker;
+        wrong["presentation"]["count"] = serde_json::json!(12);
+        std::fs::write(
+            fixture.root().join("scenarios/0000/automation/trace.jsonl"),
+            format!(
+                "{wrong}
+"
+            ),
+        )
+        .unwrap();
+        assert!(build(fixture.root()).unwrap().scenarios[0].checkpoints[0]
+            .original_os_capture
+            .is_none());
     }
 
     #[test]
