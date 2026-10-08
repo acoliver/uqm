@@ -3762,7 +3762,7 @@ fn write_bytes_atomic_noclobber(path: &Path, bytes: &[u8]) -> Result<(), String>
 }
 
 fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> Result<(), String> {
-    let mut bytes = serde_json::to_vec_pretty(value)
+    let mut bytes = serde_json::to_vec(value)
         .map_err(|error| format!("serialize {}: {error}", path.display()))?;
     bytes.push(b'\n');
     write_bytes_atomic_noclobber(path, &bytes)
@@ -3772,6 +3772,43 @@ fn write_json_atomic(path: &Path, value: &impl serde::Serialize) -> Result<(), S
 mod tests {
     use super::*;
     static CWD_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn complete_publication_history_fits_reserved_manifest_without_dropping_records() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let limits = runtime_contract().inventory_limits;
+        let _scope = super::super::native_budget::begin_with_limits(root, limits, limits).unwrap();
+        let publications: Vec<_> = (1..=1500)
+            .map(|count| {
+                serde_json::json!({
+                    "state": {
+                        "schema": "uqm-native-window-state-v1",
+                        "nonce": "a".repeat(64), "pid": 1234, "sdl_window_id": 1,
+                        "committed_presentation": count, "shown": true,
+                        "requested_client_bounds": {"x":80,"y":80,"width":1280,"height":960},
+                        "client_bounds": {"x":80,"y":80,"width":1280,"height":960},
+                        "semantic": {"trace_record_count":count * 2,
+                            "accepted_player_inputs":0,"verified_battle_frames":0}
+                    },
+                    "acknowledgement": {
+                        "schema":"uqm-native-window-ack-v1", "nonce":"a".repeat(64),
+                        "committed_presentation":count
+                    }
+                })
+            })
+            .collect();
+        let value = serde_json::json!({"publications":publications});
+        assert!(serde_json::to_vec_pretty(&value).unwrap().len() > 1024 * 1024);
+        let path = root.join("native-acceptance.json");
+        write_json_atomic(&path, &value).unwrap();
+        let retained = fs::read(path).unwrap();
+        assert!(retained.len() <= 1024 * 1024);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&retained).unwrap(),
+            value
+        );
+    }
 
     #[test]
     fn native_setup_failure_retains_nonempty_config_before_cleanup() {
