@@ -1,0 +1,123 @@
+{
+  "library": "/opt/homebrew/lib/libopenmpt.dylib",
+  "reference": "libopenmpt nearest-neighbor, no ramping, Amiga emulator off, stereo separation 200%, gain default",
+  "cases": [
+    {
+      "name": "low-b",
+      "duration": 0.96,
+      "estimated_duration": 0.96,
+      "total_frames": 42336,
+      "frames": 42336,
+      "peak": 0.390625,
+      "sha256": "0401fcd3a891c6a1be09fe0ecd49e1c727a6d7685a59f36cea69f12829b4e3e2"
+    },
+    {
+      "name": "short-periods",
+      "duration": 0.14,
+      "estimated_duration": 0.14,
+      "total_frames": 6174,
+      "frames": 6174,
+      "peak": 0.390625,
+      "sha256": "8bcd834f657f879770b0ba3b75f41f47849ecc83eb8cb9a4320eac374db497fd"
+    },
+    {
+      "name": "extended-slide",
+      "duration": 0.36,
+      "estimated_duration": 0.36,
+      "total_frames": 15876,
+      "frames": 15876,
+      "peak": 0.390625,
+      "sha256": "2c29346af848b4359994b756840554c7b35000ac97a059fd5f57f3d241a7e710"
+    },
+    {
+      "name": "off-grid",
+      "duration": 0.6,
+      "estimated_duration": 0.6,
+      "total_frames": 26460,
+      "frames": 26460,
+      "peak": 0.390625,
+      "sha256": "57ea1348270712b87000894aad4c5101ccfc0267ee6d76823b073da0ae5819d2"
+    },
+    {
+      "name": "pcm",
+      "duration": 0.84,
+      "estimated_duration": 0.8400000000000001,
+      "total_frames": 37044,
+      "frames": 37044,
+      "peak": 0.390625,
+      "sha256": "a719fafd62ffe785a77dfa481bcda196dc444b4e5f889fb643d8170dd734cc34"
+    },
+    {
+      "name": "delay",
+      "duration": 0.48,
+      "estimated_duration": 0.48,
+      "total_frames": 21168,
+      "frames": 21168,
+      "peak": 0.390625,
+      "sha256": "b8f300e0a8456fab04aef8bb715292c57a7a575129b427cd32568f19c377de3e"
+    },
+    {
+      "name": "loop",
+      "duration": 0.84,
+      "estimated_duration": 0.84,
+      "total_frames": 37044,
+      "frames": 37044,
+      "peak": 0.390625,
+      "sha256": "b0f0e10aaa609b30fe7d3c666646196aee7276e48e6a4687c3c948c98972bb43"
+    },
+    {
+      "name": "jump",
+      "duration": 0.24,
+      "estimated_duration": 0.24,
+      "total_frames": 10584,
+      "frames": 10584,
+      "peak": 0.390625,
+      "sha256": "89f6f43cf89a0564a387789d0f82f03ad179d6cee0579e113b6bccdb473708fe"
+    },
+    {
+      "name": "tempo",
+      "duration": 0.20333333333333334,
+      "estimated_duration": 0.2,
+      "total_frames": 8967,
+      "frames": 8967,
+      "peak": 0.390625,
+      "sha256": "f7ebaf09552303ffcc2c08b0e3ae4d0440d099c46fb2df23eb1ea717ea0a9998"
+    },
+    {
+      "name": "fractional-tempo",
+      "duration": 0.22054421768707483,
+      "estimated_duration": 0.21875,
+      "total_frames": 9726,
+      "frames": 9726,
+      "peak": 0.390625,
+      "sha256": "916085aeb8e9b33b52acb14d9f716bc23c4f6ab95fd124c28fc7c8964b5938b9"
+    },
+    {
+      "name": "mix",
+      "duration": 0.24,
+      "estimated_duration": 0.24,
+      "total_frames": 10584,
+      "frames": 10584,
+      "peak": 0.78125,
+      "sha256": "aec477c38b2414543ad0d80986ca866622d910881e1c720fa4cdc42de9205aca"
+    },
+    {
+      "name": "finite",
+      "duration": 0.24,
+      "estimated_duration": 0.24,
+      "total_frames": 10584,
+      "frames": 4096,
+      "peak": 0.390625,
+      "sha256": "3161b279a1a843f733e9d0bce785824d12bffada6e6eda776ed45753df27dbec"
+    },
+    {
+      "name": "empty-word",
+      "duration": 0.36,
+      "estimated_duration": 0.36,
+      "total_frames": 15876,
+      "frames": 15876,
+      "peak": 0.390625,
+      "sha256": "2dacb419dee7bb87569e46c3a09846782cfa8d2ac9ae1785acf61ef1efc4a4cf"
+    }
+  ]
+}

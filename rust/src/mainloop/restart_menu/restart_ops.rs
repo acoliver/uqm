@@ -134,7 +134,6 @@ pub trait RestartMenuOps {
     fn melee(&self);
     fn setup_menu(&self);
     fn free_game_data(&self);
-    fn introduction(&self);
     fn credits(&self, victory: bool);
     fn victory(&self);
     fn splash_screen(&self);
@@ -534,10 +533,6 @@ impl RestartMenuOps for CffiOps {
     fn free_game_data(&self) {
         // SAFETY: FreeGameData releases game session resources.
         unsafe { c_extern::FreeGameData() }
-    }
-    fn introduction(&self) {
-        // SAFETY: Introduction plays the intro sequence.
-        unsafe { c_extern::Introduction() }
     }
     fn credits(&self, victory: bool) {
         // SAFETY: Credits displays the credits screen.

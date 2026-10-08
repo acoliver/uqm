@@ -18,6 +18,8 @@ This policy is chosen before new native gameplay results. It replaces the earlie
 
 ## Native images and execution
 
+New-game startup hands off from the Rust restart menu directly to game initialization and activity dispatch. The intro presentation is deferred pending its Rust port; the restart adapter does not call the legacy C introduction. The menu's activity word records the selected activity before initialization, so it must not be interpreted as proof that a presentation has entered the navigation loop. Native navigation still uses the real solar-system input and collision path.
+
 The native binary and the external xtask controller call the same Rust `automation::native_runner` implementation. The executable dispatches observer-helper arguments back into that implementation; the observer is the hashed controller executable, not a helper supplied by the game under test.
 
 Each native screenshot retains the original OS PNG as well as the normalized client image. The `uqm-native-window-proof-v3` receipt and `uqm-native-window-acceptance-v3` manifest bind both paths, byte lengths and hashes, together with the selected checkpoint plan. Offline validation decodes within the existing byte and allocation bounds, reapplies the recorded OS/client geometry, and requires the derived PNG to match the retained normalized image. Removing the original, replacing its bytes, or substituting a different valid PNG and updating only its metadata fails validation. Internal automation captures remain supplementary renderer images.

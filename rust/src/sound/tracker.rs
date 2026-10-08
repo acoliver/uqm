@@ -1,6 +1,38 @@
 //! In-memory ProTracker parsing and playback. No decoder scratch files are needed.
 
+use std::collections::HashSet;
+
 use super::decoder::{DecodeError, DecodeResult};
+
+const PERIODS: [u16; 72] = [
+    1712, 1616, 1524, 1440, 1356, 1280, 1208, 1140, 1076, 1016, 960, 907, 856, 808, 762, 720, 678,
+    640, 604, 570, 538, 508, 480, 453, 428, 404, 381, 360, 339, 320, 302, 285, 269, 254, 240, 226,
+    214, 202, 190, 180, 170, 160, 151, 143, 135, 127, 120, 113, 107, 101, 95, 90, 85, 80, 75, 71,
+    67, 63, 60, 56, 53, 50, 47, 45, 42, 40, 37, 35, 33, 31, 30, 28,
+];
+
+fn note_period(period: u16) -> f64 {
+    let closest = PERIODS
+        .iter()
+        .min_by_key(|value| (value.abs_diff(period), **value));
+    f64::from(closest.copied().unwrap_or(period))
+}
+
+fn validate_effect(effect: u8, argument: u8) -> DecodeResult<()> {
+    if effect == 14 {
+        let command = argument >> 4;
+        let value = argument & 15;
+        if (command == 0 && value != 1)
+            || (matches!(command, 3 | 15) && value != 0)
+            || (matches!(command, 4 | 7) && value & 3 == 3)
+        {
+            return Err(DecodeError::UnsupportedFormat(format!(
+                "MOD extended effect E{argument:02X} is not supported"
+            )));
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy, Default)]
 struct Note {
@@ -69,6 +101,7 @@ impl Song {
                         if sample > sample_count {
                             return Err(invalid("MOD note references an absent sample"));
                         }
+                        validate_effect(bytes[2] & 15, bytes[3])?;
                         Ok(Note {
                             sample,
                             period: (u16::from(bytes[0] & 15) << 8) | u16::from(bytes[1]),
@@ -83,7 +116,13 @@ impl Song {
         let mut samples = Vec::with_capacity(sample_count);
         for index in 0..sample_count {
             let header = &data[20 + index * 30..50 + index * 30];
-            let length = words(header, 22);
+            // A one-word sample is the MOD empty-instrument sentinel and has no payload.
+            let declared_length = words(header, 22);
+            let length = if declared_length > 2 {
+                declared_length
+            } else {
+                0
+            };
             let volume = header[25];
             if volume > 64 || header[24] > 15 {
                 return Err(invalid("invalid MOD sample volume or fine tune"));
@@ -118,8 +157,19 @@ impl Song {
         })
     }
 
-    pub(super) fn estimated_length(&self) -> f32 {
-        self.orders.len() as f32 * 64.0 * 0.12
+    pub(super) fn length_frames(&self, frequency: u32) -> u64 {
+        let mut player = Player::new(self.channels, frequency);
+        let mut frames = 0;
+        while !player.ended {
+            player.begin_tick(self);
+            if player.ended {
+                break;
+            }
+            frames += u64::from(player.remaining_samples);
+            player.remaining_samples = 0;
+            player.advance_tick(self);
+        }
+        frames
     }
 }
 
@@ -147,6 +197,8 @@ struct Channel {
     loop_row: usize,
     loop_count: u8,
     delayed_note: Option<Note>,
+    last_voice: (f64, f64),
+    end_tail: (f64, f64),
 }
 
 impl Channel {
@@ -159,9 +211,9 @@ impl Channel {
         }
         if note.period != 0 {
             if portamento {
-                self.target = f64::from(note.period);
+                self.target = note_period(note.period);
             } else {
-                self.period = f64::from(note.period);
+                self.period = note_period(note.period);
                 self.position = 0.0;
                 if self.vibrato_wave < 4 {
                     self.vibrato_phase = 0;
@@ -197,8 +249,8 @@ impl Channel {
             return;
         }
         match self.effect {
-            1 => self.period = (self.period - f64::from(self.argument)).max(113.0),
-            2 => self.period = (self.period + f64::from(self.argument)).min(856.0),
+            1 => self.period = (self.period - f64::from(self.argument)).max(28.0),
+            2 => self.period = (self.period + f64::from(self.argument)).min(3424.0),
             3 => self.tone_portamento(),
             4 => self.vibrato_phase = self.vibrato_phase.wrapping_add(self.vibrato_speed),
             5 => {
@@ -238,7 +290,11 @@ impl Channel {
                 2 => self.argument & 15,
                 _ => 0,
             };
-            period /= 2.0_f64.powf(f64::from(semitones) / 12.0);
+            let index = PERIODS.iter().position(|value| f64::from(*value) <= period);
+            if let Some(index) = index {
+                period =
+                    f64::from(PERIODS[(index + usize::from(semitones)).min(PERIODS.len() - 1)]);
+            }
         }
         if matches!(self.effect, 4 | 6) {
             period += waveform(self.vibrato_phase, self.vibrato_wave)
@@ -249,8 +305,27 @@ impl Channel {
     }
 
     fn mix(&mut self, song: &Song, tick: u8, frequency: u32) -> (f32, f32) {
+        let voice = self.voice_value(song, tick, frequency);
+        if let Some(value) = voice {
+            self.last_voice = (value * (1.0 - self.pan), value * self.pan);
+        } else {
+            self.end_tail.0 += self.last_voice.0;
+            self.end_tail.1 += self.last_voice.1;
+            self.last_voice = (0.0, 0.0);
+        }
+        // Preserve the mixer offset when a non-looping voice ends, then decay
+        // it independently of later notes so sample endings do not click.
+        self.end_tail.0 *= 255.0 / 256.0;
+        self.end_tail.1 *= 255.0 / 256.0;
+        (
+            (self.last_voice.0 + self.end_tail.0) as f32,
+            (self.last_voice.1 + self.end_tail.1) as f32,
+        )
+    }
+
+    fn voice_value(&mut self, song: &Song, tick: u8, frequency: u32) -> Option<f64> {
         if self.sample == 0 || self.period <= 0.0 {
-            return (0.0, 0.0);
+            return None;
         }
         let sample = &song.samples[self.sample - 1];
         let limit = if sample.loop_length > 2 {
@@ -260,7 +335,7 @@ impl Channel {
         };
         if self.position >= limit as f64 {
             if sample.loop_length <= 2 {
-                return (0.0, 0.0);
+                return None;
             }
             self.position = sample.loop_start as f64
                 + (self.position - sample.loop_start as f64) % sample.loop_length as f64;
@@ -274,9 +349,18 @@ impl Channel {
         } else {
             self.volume
         };
-        let value = f64::from(sample.data[self.position as usize]) * volume / (128.0 * 64.0);
-        self.position += 3_579_545.0 / self.rendered_period(tick).max(1.0) / f64::from(frequency);
-        ((value * (1.0 - self.pan)) as f32, (value * self.pan) as f32)
+        // Half gain leaves room for the two full-volume Amiga voices on each side.
+        let mut sample_index = self.position.round() as usize;
+        if sample_index >= limit {
+            sample_index = if sample.loop_length > 2 {
+                sample.loop_start
+            } else {
+                limit - 1
+            };
+        }
+        let value = f64::from(sample.data[sample_index]) * volume / (256.0 * 64.0);
+        self.position += 3_546_895.0 / self.rendered_period(tick).max(1.0) / f64::from(frequency);
+        Some(value)
     }
 }
 
@@ -296,6 +380,15 @@ fn waveform(phase: u8, wave: u8) -> f64 {
     }
 }
 
+#[derive(Hash, PartialEq, Eq)]
+struct RowState {
+    order: usize,
+    row: usize,
+    speed: u8,
+    bpm: u8,
+    loops: Vec<(usize, u8)>,
+}
+
 pub(super) struct Player {
     channels: Vec<Channel>,
     order: usize,
@@ -303,12 +396,14 @@ pub(super) struct Player {
     tick: u8,
     speed: u8,
     bpm: u8,
-    remaining_samples: f64,
+    remaining_samples: u32,
     frequency: u32,
     next_order: Option<usize>,
     next_row: Option<usize>,
     loop_row: Option<usize>,
     delay: u8,
+    new_row: bool,
+    visited: HashSet<RowState>,
     pub(super) ended: bool,
 }
 
@@ -326,12 +421,14 @@ impl Player {
             tick: 0,
             speed: 6,
             bpm: 125,
-            remaining_samples: 0.0,
+            remaining_samples: 0,
             frequency,
             next_order: None,
             next_row: None,
             loop_row: None,
             delay: 0,
+            new_row: true,
+            visited: HashSet::new(),
             ended: false,
         }
     }
@@ -431,6 +528,21 @@ impl Player {
             }
             self.row_effect(index, note);
         }
+        // Pattern loops are finite control states; revisiting an identical state
+        // instead marks the end of a song programmed to jump back indefinitely.
+        let state = RowState {
+            order: self.order,
+            row: self.row,
+            speed: self.speed,
+            bpm: self.bpm,
+            loops: self
+                .channels
+                .iter()
+                .map(|channel| (channel.loop_row, channel.loop_count))
+                .collect(),
+        };
+        self.ended |= !self.visited.insert(state);
+        self.new_row = false;
     }
 
     fn advance_row(&mut self, song: &Song) {
@@ -438,6 +550,7 @@ impl Player {
             self.delay -= 1;
             return;
         }
+        self.new_row = true;
         if let Some(row) = self.loop_row.take() {
             self.row = row;
             return;
@@ -462,21 +575,38 @@ impl Player {
         self.ended = self.order >= song.orders.len();
     }
 
+    fn begin_tick(&mut self, song: &Song) {
+        // MOD tempo changes take effect on the next tick. The mixer truncates
+        // each tick independently rather than carrying fractional frames forward.
+        self.remaining_samples = (u64::from(self.frequency) * 5 / (u64::from(self.bpm) * 2)) as u32;
+        if self.tick == 0 {
+            if self.new_row {
+                self.begin_row(song);
+            }
+        } else {
+            for channel in &mut self.channels {
+                channel.tick(self.tick, song);
+            }
+        }
+    }
+
+    fn advance_tick(&mut self, song: &Song) {
+        self.tick += 1;
+        if self.tick == self.speed {
+            self.tick = 0;
+            self.advance_row(song);
+        }
+    }
+
     pub(super) fn next_sample(&mut self, song: &Song) -> (f32, f32) {
         if self.ended {
             return (0.0, 0.0);
         }
-        if self.remaining_samples <= 0.0 {
-            if self.tick == 0 {
-                if self.delay == 0 {
-                    self.begin_row(song);
-                }
-            } else {
-                for channel in &mut self.channels {
-                    channel.tick(self.tick, song);
-                }
+        if self.remaining_samples == 0 {
+            self.begin_tick(song);
+            if self.ended {
+                return (0.0, 0.0);
             }
-            self.remaining_samples += f64::from(self.frequency) * 2.5 / f64::from(self.bpm);
         }
         let mut output = (0.0, 0.0);
         for channel in &mut self.channels {
@@ -484,13 +614,9 @@ impl Player {
             output.0 += left;
             output.1 += right;
         }
-        self.remaining_samples -= 1.0;
-        if self.remaining_samples <= 0.0 {
-            self.tick += 1;
-            if self.tick == self.speed {
-                self.tick = 0;
-                self.advance_row(song);
-            }
+        self.remaining_samples -= 1;
+        if self.remaining_samples == 0 {
+            self.advance_tick(song);
         }
         output
     }

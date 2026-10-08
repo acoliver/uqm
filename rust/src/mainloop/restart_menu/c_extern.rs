@@ -215,7 +215,6 @@ extern "C" {
     pub fn Melee();
     pub fn SetupMenu();
     pub fn FreeGameData();
-    pub fn Introduction();
     pub fn Credits(victory: c_int);
     pub fn Victory();
     /// `void SplashScreen(void (*DoProcessing)(DWORD TimeOut))` — function pointer.

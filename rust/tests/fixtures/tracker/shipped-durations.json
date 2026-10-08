@@ -1,0 +1,254 @@
+[
+  {
+    "path": "sc2/content/base/battle/battle.mod",
+    "duration": 107.52000000000105
+  },
+  {
+    "path": "sc2/content/base/comm/arilou/arilou.mod",
+    "duration": 171.00000000000344
+  },
+  {
+    "path": "sc2/content/base/comm/chmmr/chmmr.mod",
+    "duration": 122.87999999999809
+  },
+  {
+    "path": "sc2/content/base/comm/commander/commander.mod",
+    "duration": 176.64000000000516
+  },
+  {
+    "path": "sc2/content/base/comm/druuge/druuge.mod",
+    "duration": 81.91999999999896
+  },
+  {
+    "path": "sc2/content/base/comm/ilwrath/ilwrath.mod",
+    "duration": 176.64000000000365
+  },
+  {
+    "path": "sc2/content/base/comm/kohrah/kohrah.mod",
+    "duration": 92.16000000000047
+  },
+  {
+    "path": "sc2/content/base/comm/melnorme/melnorme.mod",
+    "duration": 81.91999999999861
+  },
+  {
+    "path": "sc2/content/base/comm/mycon/mycon.mod",
+    "duration": 199.68000000000453
+  },
+  {
+    "path": "sc2/content/base/comm/orz/orz.mod",
+    "duration": 69.11999999999959
+  },
+  {
+    "path": "sc2/content/base/comm/pkunk/pkunk.mod",
+    "duration": 127.99999999999763
+  },
+  {
+    "path": "sc2/content/base/comm/probe/probe.mod",
+    "duration": 199.68000000000453
+  },
+  {
+    "path": "sc2/content/base/comm/shofixti/shofixti.mod",
+    "duration": 115.20000000000134
+  },
+  {
+    "path": "sc2/content/base/comm/slylandro/slylandro.mod",
+    "duration": 126.24000000000048
+  },
+  {
+    "path": "sc2/content/base/comm/spathi/spathi.mod",
+    "duration": 148.4800000000008
+  },
+  {
+    "path": "sc2/content/base/comm/supox/supox.mod",
+    "duration": 226.56000000000554
+  },
+  {
+    "path": "sc2/content/base/comm/syreen/syreen.mod",
+    "duration": 230.4000000000057
+  },
+  {
+    "path": "sc2/content/base/comm/talkingpet/talkingpet.mod",
+    "duration": 71.67999999999918
+  },
+  {
+    "path": "sc2/content/base/comm/thraddash/thraddash.mod",
+    "duration": 111.3600000000027
+  },
+  {
+    "path": "sc2/content/base/comm/umgah/umgah.mod",
+    "duration": 90.24000000000039
+  },
+  {
+    "path": "sc2/content/base/comm/urquan/urquan.mod",
+    "duration": 33.600000000000094
+  },
+  {
+    "path": "sc2/content/base/comm/utwig/utwig.mod",
+    "duration": 184.32000000000394
+  },
+  {
+    "path": "sc2/content/base/comm/vux/vux.mod",
+    "duration": 199.68000000000453
+  },
+  {
+    "path": "sc2/content/base/comm/yehat/yehat.mod",
+    "duration": 161.28000000000307
+  },
+  {
+    "path": "sc2/content/base/comm/zoqfotpik/zoqfotpik.mod",
+    "duration": 49.07999999999972
+  },
+  {
+    "path": "sc2/content/base/cutscene/ending/victory1.mod",
+    "duration": 15.359999999999959
+  },
+  {
+    "path": "sc2/content/base/cutscene/ending/victory2.mod",
+    "duration": 15.360000000000012
+  },
+  {
+    "path": "sc2/content/base/cutscene/ending/victoryf.mod",
+    "duration": 147.20000000000314
+  },
+  {
+    "path": "sc2/content/base/cutscene/intro/introx.mod",
+    "duration": 138.4399999999994
+  },
+  {
+    "path": "sc2/content/base/nav/hyper.mod",
+    "duration": 184.32000000000545
+  },
+  {
+    "path": "sc2/content/base/nav/orbit.mod",
+    "duration": 96.00000000000061
+  },
+  {
+    "path": "sc2/content/base/nav/quasispace.mod",
+    "duration": 230.4000000000057
+  },
+  {
+    "path": "sc2/content/base/nav/space.mod",
+    "duration": 69.11999999999959
+  },
+  {
+    "path": "sc2/content/base/ships/androsynth/guardian.mod",
+    "duration": 4.240000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/arilou/skiff.mod",
+    "duration": 2.880000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/chenjesu/broodhome.mod",
+    "duration": 1.8800000000000006
+  },
+  {
+    "path": "sc2/content/base/ships/chmmr/avatar.mod",
+    "duration": 4.060000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/druuge/mauler.mod",
+    "duration": 3.480000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/flagship/flagship.mod",
+    "duration": 3.240000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/human/cruiser.mod",
+    "duration": 2.700000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/ilwrath/avenger.mod",
+    "duration": 4.5
+  },
+  {
+    "path": "sc2/content/base/ships/kohrah/marauder.mod",
+    "duration": 5.160000000000004
+  },
+  {
+    "path": "sc2/content/base/ships/melnorme/trader.mod",
+    "duration": 2.9000000000000012
+  },
+  {
+    "path": "sc2/content/base/ships/mmrnmhrm/xform.mod",
+    "duration": 3.3000000000000016
+  },
+  {
+    "path": "sc2/content/base/ships/mycon/podship.mod",
+    "duration": 3.600000000000001
+  },
+  {
+    "path": "sc2/content/base/ships/orz/nemesis.mod",
+    "duration": 3.9600000000000026
+  },
+  {
+    "path": "sc2/content/base/ships/pkunk/fury.mod",
+    "duration": 3.1200000000000006
+  },
+  {
+    "path": "sc2/content/base/ships/shofixti/scout.mod",
+    "duration": 3.6800000000000024
+  },
+  {
+    "path": "sc2/content/base/ships/slylandro/probe.mod",
+    "duration": 3.500000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/spathi/eluder.mod",
+    "duration": 3.040000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/supox/blade.mod",
+    "duration": 2.3800000000000012
+  },
+  {
+    "path": "sc2/content/base/ships/syreen/penetrator.mod",
+    "duration": 3.600000000000002
+  },
+  {
+    "path": "sc2/content/base/ships/thraddash/torch.mod",
+    "duration": 2.0000000000000004
+  },
+  {
+    "path": "sc2/content/base/ships/umgah/drone.mod",
+    "duration": 3.1200000000000014
+  },
+  {
+    "path": "sc2/content/base/ships/urquan/dreadnought.mod",
+    "duration": 4.6400000000000015
+  },
+  {
+    "path": "sc2/content/base/ships/utwig/jugger.mod",
+    "duration": 5.4999999999999964
+  },
+  {
+    "path": "sc2/content/base/ships/vux/intruder.mod",
+    "duration": 3.7200000000000024
+  },
+  {
+    "path": "sc2/content/base/ships/yehat/terminator.mod",
+    "duration": 2.1600000000000015
+  },
+  {
+    "path": "sc2/content/base/ships/zoqfotpik/stinger.mod",
+    "duration": 4.680000000000003
+  },
+  {
+    "path": "sc2/content/base/ui/outfit.mod",
+    "duration": 92.16000000000047
+  },
+  {
+    "path": "sc2/content/base/ui/redalert.mod",
+    "duration": 4.320000000000003
+  },
+  {
+    "path": "sc2/content/base/ui/shipyard.mod",
+    "duration": 155.64000000000286
+  },
+  {
+    "path": "sc2/content/base/ui/starbase.mod",
+    "duration": 61.43999999999946
+  }
+]

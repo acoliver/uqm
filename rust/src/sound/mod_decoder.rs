@@ -8,7 +8,16 @@ use std::path::Path;
 use super::decoder::{DecodeError, DecodeResult, SoundDecoder};
 use super::formats::{AudioFormat, DecoderFormats};
 
-/// In-memory ProTracker MOD decoder
+/// In-memory ProTracker MOD decoder.
+///
+/// Produces 44100-Hz stereo16 PCM with PAL sample timing, nearest-neighbor
+/// resampling and hard Amiga channel panning. Length is the rendered frame count
+/// of one traversal, including finite pattern loops; an identical repeated
+/// sequencer state ends a programmed song loop. Seeking replays from the start
+/// to preserve effect memory and sample phase and clamps requests at EOF.
+///
+/// Hardware filter enable, glissando enable, sample inversion and random
+/// modulation waveforms are rejected at opening rather than ignored.
 pub struct ModDecoder {
     /// Sample frequency in Hz
     frequency: u32,
@@ -28,7 +37,7 @@ pub struct ModDecoder {
     player_state: Option<super::tracker::Player>,
     /// Current PCM sample position
     current_pcm: u64,
-    /// Total PCM samples (estimated)
+    /// Total PCM frames in one traversal, including finite pattern loops.
     total_pcm: u64,
 }
 
@@ -52,8 +61,8 @@ impl ModDecoder {
     fn load_from_bytes(&mut self, data: &[u8]) -> DecodeResult<()> {
         let song = super::tracker::Song::parse(data)?;
         let player = super::tracker::Player::new(song.channels, self.frequency);
-        self.length = song.estimated_length();
-        self.total_pcm = (self.length * self.frequency as f32) as u64;
+        self.total_pcm = song.length_frames(self.frequency);
+        self.length = (self.total_pcm as f64 / f64::from(self.frequency)) as f32;
         self.song = Some(song);
         self.player_state = Some(player);
         self.current_pcm = 0;
@@ -115,6 +124,8 @@ impl SoundDecoder for ModDecoder {
         self.song = None;
         self.player_state = None;
         self.current_pcm = 0;
+        self.total_pcm = 0;
+        self.length = 0.0;
     }
 
     fn decode(&mut self, buf: &mut [u8]) -> DecodeResult<usize> {
@@ -128,28 +139,15 @@ impl SoundDecoder for ModDecoder {
             .as_mut()
             .ok_or(DecodeError::NotInitialized)?;
 
-        // Check if song has truly ended (not just looped)
-        // song_has_ended means the song order list is exhausted
-        if player_state.ended {
+        if self.current_pcm >= self.total_pcm {
             return Err(DecodeError::EndOfFile);
         }
 
         let mut bytes_written = 0;
         let bytes_per_sample = 4; // 2 channels * 2 bytes per sample (16-bit stereo)
 
-        while bytes_written + bytes_per_sample <= buf.len() {
-            // Get next sample (returns f32 left/right)
+        while bytes_written + bytes_per_sample <= buf.len() && self.current_pcm < self.total_pcm {
             let (left, right) = player_state.next_sample(song);
-
-            // Check for end AFTER getting sample
-            // song_has_ended means the song truly ended (no more patterns)
-            // has_looped means it wrapped around - for non-looping playback we treat this as end
-            if player_state.ended {
-                if bytes_written == 0 {
-                    return Err(DecodeError::EndOfFile);
-                }
-                break;
-            }
 
             // Convert f32 [-1.0, 1.0] to i16
             let left_i16 = (left.clamp(-1.0, 1.0) * 32767.0) as i16;
@@ -172,19 +170,16 @@ impl SoundDecoder for ModDecoder {
     }
 
     fn seek(&mut self, pcm_pos: u32) -> DecodeResult<u32> {
-        // MOD seeking is complex - for now only support seek to 0 (restart)
-        if pcm_pos == 0 {
-            if let Some(ref song) = self.song {
-                self.player_state =
-                    Some(super::tracker::Player::new(song.channels, self.frequency));
-                self.current_pcm = 0;
-                return Ok(0);
-            }
+        let song = self.song.as_ref().ok_or(DecodeError::NotInitialized)?;
+        let target = u64::from(pcm_pos).min(self.total_pcm);
+        let mut player = super::tracker::Player::new(song.channels, self.frequency);
+        // Replay preserves sample phase and effect memory, including intra-row seeks.
+        for _ in 0..target {
+            player.next_sample(song);
         }
-
-        Err(DecodeError::SeekFailed(
-            "MOD seeking not fully supported".to_string(),
-        ))
+        self.player_state = Some(player);
+        self.current_pcm = target;
+        Ok(target as u32)
     }
 
     fn get_frame(&self) -> u32 {

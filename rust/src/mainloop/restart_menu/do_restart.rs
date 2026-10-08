@@ -585,7 +585,6 @@ mod tests {
             self.setup_menu_called.set(true);
         }
         fn free_game_data(&self) {}
-        fn introduction(&self) {}
         fn credits(&self, _victory: bool) {}
         fn victory(&self) {}
         fn splash_screen(&self) {}
