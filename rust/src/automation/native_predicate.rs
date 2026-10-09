@@ -1,6 +1,7 @@
 //! Replay the existing semantic trace vocabulary against selected action parameters.
 
 use super::{
+    navigation::HYPERSPACE_REACHED_LABEL,
     script::Action,
     trace::{RecordKind, TraceRecord},
 };
@@ -163,6 +164,7 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
             label == format!("navigation_reached:planet={}", value.planet)
         }
         Action::NavigateToOrbit(value) => label == format!("orbit_reached:planet={}", value.planet),
+        Action::NavigateToHyperspace(_) => label == HYPERSPACE_REACHED_LABEL,
         Action::NavigateToMoon(value) => {
             shape(
                 label,
@@ -376,6 +378,10 @@ mod tests {
             (
                 json!({"action":"navigate_to_orbit","planet":2,"max_ticks":100}),
                 "orbit_reached:planet=2",
+            ),
+            (
+                json!({"action":"navigate_to_hyperspace","max_ticks":100}),
+                "navigation_reached:hyperspace",
             ),
             (
                 json!({"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":100}),

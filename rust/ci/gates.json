@@ -272,8 +272,8 @@
           },
           {
                 "path": "rust/scripts/explore-planet-v1.json",
-                "sha256": "39d47506ee989cf28cdde966c304602432148ce1f4c18331ce2a761b169ae45c",
-                "byte_length": 978
+                "sha256": "a9a1d4ed2d6091a616bb81e31a67a50e2e8fee4eec601335fded87217e3304e8",
+                "byte_length": 983
           },
           {
                 "path": "rust/scripts/hard-hang.json",

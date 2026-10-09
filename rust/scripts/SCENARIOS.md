@@ -76,6 +76,22 @@ input callback. It succeeds only after the real game enters the target planet's
 inner system. `max_ticks` contributes to script budget validation and the
 script's global watchdog remains the terminal safety bound.
 
+`navigate_to_hyperspace` is the departure counterpart:
+
+```json
+{"action": "navigate_to_hyperspace", "max_ticks": 1800}
+```
+
+It leaves any orbit through the menu, then flies player one directly away
+from the centre of the current view with production thrust/left/right
+controls. Leaving the screen at maximum zoom makes the game's own
+`CheckShipLocation` end interplanetary flight. The step succeeds only after it
+has itself sampled live interplanetary flight and then sees the solar system
+torn down and the hyperspace activity dispatched. It never writes activity or
+position. `explore-planet-v1.json` uses it after selecting New Game and
+asserting interplanetary activity, before its hyperspace capture and
+assertion (#213).
+
 ## Deterministic start scenes
 
 Scripts may alternatively declare root-level `start_scene`. A scene is consumed

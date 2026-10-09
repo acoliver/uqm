@@ -70,25 +70,82 @@ pub fn steer_toward_target(observation: NavigationObservation) -> NavigationCont
         return NavigationControl::default();
     }
 
-    let full_circle = std::f64::consts::TAU;
-    let angle = dx.atan2(-dy).rem_euclid(full_circle);
-    let desired = ((angle * 16.0 / full_circle).round() as i32).rem_euclid(16);
-    let current = i32::from(observation.ship_facing & 0x0f);
-    let clockwise = (desired - current).rem_euclid(16);
-    let turn_error = clockwise.min(16 - clockwise);
-
     // Thrust whenever roughly aimed at the target. `navigate_to_planet` ends
     // on a real collision, and the display-space distance covered per frame
     // depends on the zoom radius, which this observation does not carry.
     // Cutting thrust on proximity alone therefore lets the flagship's inertia
     // carry it past an orbiting planet, after which it circles indefinitely
     // without ever intersecting.
+    pursue_heading(dx, dy, observation.ship_facing)
+}
+
+/// Turn toward a display-space direction and thrust once roughly aligned.
+fn pursue_heading(dx: f64, dy: f64, ship_facing: u8) -> NavigationControl {
+    let full_circle = std::f64::consts::TAU;
+    let angle = dx.atan2(-dy).rem_euclid(full_circle);
+    let desired = ((angle * 16.0 / full_circle).round() as i32).rem_euclid(16);
+    let current = i32::from(ship_facing & 0x0f);
+    let clockwise = (desired - current).rem_euclid(16);
+    let turn_error = clockwise.min(16 - clockwise);
+
     NavigationControl {
         thrust: turn_error <= 2,
         left: clockwise > 8,
         right: clockwise != 0 && clockwise <= 8,
         leave_orbit: false,
     }
+}
+
+/// Trace label recorded when `navigate_to_hyperspace` observes the real
+/// transition into hyperspace.
+pub const HYPERSPACE_REACHED_LABEL: &str = "navigation_reached:hyperspace";
+
+/// Low byte of `CurrentActivity` while the hyperspace loop runs
+/// (`IN_HYPERSPACE` in `globdata.h`).
+const IN_HYPERSPACE: u16 = 3;
+
+/// Fly the flagship straight away from the centre of the current view.
+///
+/// Both the outer system (centred on the sun) and an inner system (centred on
+/// its planet) are drawn around the view centre, so flying outward first
+/// leaves any inner system, then crosses each outer zoom level until
+/// production `CheckShipLocation` sees the ship leave the screen at maximum
+/// zoom and ends interplanetary flight. No position or route is encoded.
+#[must_use]
+pub fn steer_out_of_system(observation: NavigationObservation) -> NavigationControl {
+    if !observation.active {
+        return NavigationControl::default();
+    }
+    if observation.in_orbit {
+        return NavigationControl {
+            leave_orbit: true,
+            ..NavigationControl::default()
+        };
+    }
+    let outward_x = observation.ship_x - observation.view_center_x;
+    let outward_y = observation.ship_y - observation.view_center_y;
+    let (dx, dy) = if outward_x == 0 && outward_y == 0 {
+        (0.0, -1.0)
+    } else {
+        (f64::from(outward_x), f64::from(outward_y))
+    };
+    pursue_heading(dx, dy, observation.ship_facing)
+}
+
+/// Whether a `navigate_to_hyperspace` step has seen production enter
+/// hyperspace.
+///
+/// `flight_observed` must record that this step itself sampled live
+/// interplanetary flight. Arrival then requires that the solar-system state
+/// is gone and the main loop dispatched the hyperspace activity, so a step
+/// that starts anywhere other than interplanetary flight can never succeed.
+#[must_use]
+pub const fn hyperspace_reached(
+    flight_observed: bool,
+    solar_system_active: bool,
+    activity_word: u16,
+) -> bool {
+    flight_observed && !solar_system_active && activity_word & 0x00ff == IN_HYPERSPACE
 }
 
 /// Encode the collision guard used by C for a moon in an inner system.
@@ -280,6 +337,133 @@ mod tests {
         assert!(control.thrust);
         assert!(!control.left);
         assert!(!control.right);
+    }
+
+    #[test]
+    fn departure_leaves_orbit_before_flying() {
+        let mut state = observation(100, 100, 0, 0, 0);
+        state.in_orbit = true;
+        assert_eq!(
+            steer_out_of_system(state),
+            NavigationControl {
+                leave_orbit: true,
+                ..NavigationControl::default()
+            }
+        );
+    }
+
+    #[test]
+    fn departure_is_inert_without_a_live_solar_system() {
+        let mut state = observation(10, 10, 0, 0, 0);
+        state.active = false;
+        assert_eq!(steer_out_of_system(state), NavigationControl::default());
+    }
+
+    #[test]
+    fn departure_thrusts_when_already_facing_away_from_the_centre() {
+        // Directly above the centre (121, 113) and facing up (0).
+        assert_eq!(
+            steer_out_of_system(observation(121, 40, 0, 0, 0)),
+            NavigationControl {
+                thrust: true,
+                ..NavigationControl::default()
+            }
+        );
+    }
+
+    #[test]
+    fn departure_turns_away_from_the_centre_before_thrusting() {
+        // Right of the centre but facing left (12): outward is facing 4.
+        let control = steer_out_of_system(observation(200, 113, 12, 0, 0));
+        assert!(!control.thrust);
+        assert!(control.left ^ control.right);
+    }
+
+    #[test]
+    fn departure_picks_a_direction_at_the_exact_centre() {
+        assert!(steer_out_of_system(observation(121, 113, 0, 0, 0)).thrust);
+    }
+
+    #[test]
+    fn hyperspace_requires_observed_flight_then_torn_down_system_and_activity() {
+        // IN_HYPERSPACE low byte with high-byte flags still counts.
+        assert!(hyperspace_reached(true, false, 0x0003));
+        assert!(hyperspace_reached(true, false, 0x0403));
+        // Never flew out during this step.
+        assert!(!hyperspace_reached(false, false, 0x0003));
+        // Solar system still live, or still interplanetary.
+        assert!(!hyperspace_reached(true, true, 0x0003));
+        assert!(!hyperspace_reached(true, false, 0x0004));
+        // Load dialog / encounter words are not hyperspace.
+        assert!(!hyperspace_reached(true, false, 0x1004));
+        assert!(!hyperspace_reached(true, false, 0x0002));
+    }
+
+    /// Closed-loop property: from any start inside the view and any initial
+    /// drift, outward steering leaves the screen rectangle, which is what
+    /// makes production `CheckShipLocation` end interplanetary flight.
+    #[test]
+    fn departure_leaves_the_view_from_any_starting_geometry() {
+        const TURN_WAIT: u32 = 2;
+        const THRUST_INCREMENT: f64 = 6.0;
+        const MAX_SPEED: f64 = 60.0;
+        const WIDTH: f64 = 242.0;
+        const HEIGHT: f64 = 227.0;
+
+        let starts = [
+            (121, 113, 0, 0.0, 0.0),
+            (130, 120, 8, 0.0, 0.0),
+            (30, 30, 4, 20.0, -20.0),
+            (200, 200, 12, -40.0, 0.0),
+            (121, 20, 8, 0.0, 50.0),
+            (5, 113, 4, 60.0, 0.0),
+            (160, 150, 2, -30.0, -30.0),
+        ];
+        for (start_x, start_y, start_facing, start_vx, start_vy) in starts {
+            let mut x = f64::from(start_x);
+            let mut y = f64::from(start_y);
+            let mut velocity_x: f64 = start_vx;
+            let mut velocity_y: f64 = start_vy;
+            let mut facing: i32 = start_facing;
+            let mut turn_counter: u32 = 0;
+            let mut left_view = false;
+            for _ in 0..2000 {
+                if !(0.0..WIDTH).contains(&x) || !(0.0..HEIGHT).contains(&y) {
+                    left_view = true;
+                    break;
+                }
+                let control = steer_out_of_system(NavigationObservation {
+                    ship_x: x.round() as i32,
+                    ship_y: y.round() as i32,
+                    ship_facing: facing as u8,
+                    ..observation(0, 0, 0, 0, 0)
+                });
+                assert!(!control.leave_orbit);
+                if turn_counter > 0 {
+                    turn_counter -= 1;
+                } else if control.left || control.right {
+                    facing = (facing + if control.right { 1 } else { -1 }).rem_euclid(16);
+                    turn_counter = TURN_WAIT;
+                }
+                if control.thrust {
+                    let angle = f64::from(facing) * std::f64::consts::TAU / 16.0
+                        - std::f64::consts::FRAC_PI_2;
+                    velocity_x += angle.cos() * THRUST_INCREMENT;
+                    velocity_y += angle.sin() * THRUST_INCREMENT;
+                    let speed = velocity_x.hypot(velocity_y);
+                    if speed > MAX_SPEED {
+                        velocity_x = velocity_x * MAX_SPEED / speed;
+                        velocity_y = velocity_y * MAX_SPEED / speed;
+                    }
+                }
+                x += velocity_x / 16.0;
+                y += velocity_y / 16.0;
+            }
+            assert!(
+                left_view,
+                "departure failed to leave the view from ({start_x}, {start_y})"
+            );
+        }
     }
 
     #[test]

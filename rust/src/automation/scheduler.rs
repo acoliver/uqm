@@ -296,7 +296,10 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
                 | ActionPhase::TapReleasePending
                 | ActionPhase::TapSettling { .. }
         ),
-        Action::NavigateToPlanet(_) | Action::NavigateToMoon(_) | Action::NavigateToOrbit(_) => {
+        Action::NavigateToPlanet(_)
+        | Action::NavigateToMoon(_)
+        | Action::NavigateToOrbit(_)
+        | Action::NavigateToHyperspace(_) => {
             matches!(
                 phase,
                 ActionPhase::WaitingForInput | ActionPhase::Navigating { .. }
@@ -389,6 +392,7 @@ pub fn scheduler_reduce(
                 Action::NavigateToPlanet(_)
                     | Action::NavigateToMoon(_)
                     | Action::NavigateToOrbit(_)
+                    | Action::NavigateToHyperspace(_)
             ) {
                 match state.phase {
                     ActionPhase::WaitingForInput | ActionPhase::Navigating { remaining: 1.. } => {
@@ -821,7 +825,8 @@ fn reduce_navigation(
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining: 0 })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining: 0 })
-        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 }) => {
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining: 0 })
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining: 0 }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     terminal: Some(TerminalOutcome::SemanticMismatch),
@@ -833,7 +838,8 @@ fn reduce_navigation(
         }
         (Action::NavigateToPlanet(_), ActionPhase::Navigating { remaining })
         | (Action::NavigateToMoon(_), ActionPhase::Navigating { remaining })
-        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining }) => {
+        | (Action::NavigateToOrbit(_), ActionPhase::Navigating { remaining })
+        | (Action::NavigateToHyperspace(_), ActionPhase::Navigating { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
@@ -846,6 +852,18 @@ fn reduce_navigation(
             }
         }
         (Action::NavigateToOrbit(navigation), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::Navigating {
+                        remaining: navigation.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::NavigateToHyperspace(navigation), ActionPhase::WaitingForInput) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::Navigating {
@@ -1457,17 +1475,16 @@ fn advance_to_next(
 mod tests {
     use super::*;
     use crate::automation::script::{
-        ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToMoonStep, SetMenuKeyStep,
-        TapMenuKeyStep, TapPlayerKeyStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForMainMenuReadyStep,
-        WaitInputTicksStep, WaitPresentationsStep,
+        ActivityAssertion, CaptureStep, MainMenuTransitionDto, NavigateToHyperspaceStep,
+        NavigateToMoonStep, SetMenuKeyStep, TapMenuKeyStep, TapPlayerKeyStep,
+        WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
+        WaitForDispatchStep, WaitForMainMenuReadyStep, WaitInputTicksStep, WaitPresentationsStep,
     };
     use crate::mainloop::restart_menu::types::RestartMenuItem;
 
-    #[test]
-    fn original_explore_prefix_holds_and_releases_two_distinct_select_taps() {
+    fn explore_script() -> crate::automation::ValidatedScript {
         let path = std::path::Path::new("explore-planet-v1.json");
-        let script = crate::automation::validate_script(
+        crate::automation::validate_script(
             crate::automation::parse_script(
                 include_bytes!("../../scripts/explore-planet-v1.json"),
                 path,
@@ -1475,12 +1492,20 @@ mod tests {
             .unwrap(),
             path,
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    /// #213: the explore scenario must establish hyperspace through a real new
+    /// game and real flight, never through Down (which focuses Load Game on
+    /// the restart menu) or a start scene.
+    #[test]
+    fn explore_selects_new_game_without_moving_menu_focus() {
+        let script = explore_script();
         assert_eq!(script.start_scene(), None);
         let config = cfg(script.steps());
         let mut state = SchedulerState::initial();
         let mut observed = Vec::new();
-        for tick in 1..=44 {
+        for tick in 1..=60 {
             let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
             if let Some(key) = transition.effects.write_key {
                 observed.push((tick, key.0, key.1));
@@ -1490,23 +1515,99 @@ mod tests {
             }
             state = transition.new_state;
         }
-        println!("original explore planned key transitions: {observed:?}");
         assert_eq!(
             observed,
             vec![
-                (11, MenuKey::Down, 1),
-                (12, MenuKey::Down, 1),
-                (13, MenuKey::Down, 1),
-                (14, MenuKey::Down, 0),
-                (18, MenuKey::Select, 1),
-                (19, MenuKey::Select, 1),
-                (20, MenuKey::Select, 1),
-                (21, MenuKey::Select, 0),
-                (32, MenuKey::Select, 1),
-                (33, MenuKey::Select, 1),
-                (34, MenuKey::Select, 1),
-                (35, MenuKey::Select, 0),
+                (11, MenuKey::Select, 1),
+                (12, MenuKey::Select, 1),
+                (13, MenuKey::Select, 1),
+                (14, MenuKey::Select, 0),
             ]
+        );
+    }
+
+    /// #213: interplanetary flight is asserted, then the flagship flies out
+    /// with production controls, and only then are the unchanged hyperspace
+    /// capture and assertion evaluated.
+    #[test]
+    fn explore_reaches_hyperspace_by_real_flight_before_its_unchanged_assertions() {
+        let script = explore_script();
+        let steps = script.steps();
+        let position = |predicate: &dyn Fn(&Action) -> bool| {
+            steps.iter().position(predicate).expect("step present")
+        };
+        let interplanetary = position(&|step| {
+            matches!(
+                step,
+                Action::AssertActivity(ActivityAssertion {
+                    mask: 255,
+                    equals: 4
+                })
+            )
+        });
+        let departure = position(&|step| matches!(step, Action::NavigateToHyperspace(_)));
+        let first_capture = position(&|step| matches!(step, Action::Capture(_)));
+        let hyperspace = position(&|step| {
+            matches!(
+                step,
+                Action::AssertActivity(ActivityAssertion {
+                    mask: 255,
+                    equals: 3
+                })
+            )
+        });
+        assert!(interplanetary < departure);
+        assert!(departure < first_capture);
+        assert!(first_capture < hyperspace);
+        let captures: Vec<&str> = steps
+            .iter()
+            .filter_map(|step| match step {
+                Action::Capture(capture) => Some(capture.label.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            captures,
+            [
+                "hyperspace-initial",
+                "hyperspace-after-navigation",
+                "hyperspace-final"
+            ]
+        );
+        assert!(!steps.iter().any(|step| matches!(
+            step,
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Down,
+                ..
+            }) | Action::SetMenuKey(SetMenuKeyStep {
+                key: MenuKey::Down,
+                ..
+            })
+        )));
+    }
+
+    #[test]
+    fn hyperspace_departure_counts_down_and_fails_when_exhausted() {
+        let actions = [
+            Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks: 2 }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let started = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        )
+        .new_state;
+        assert_eq!(started.phase, ActionPhase::Navigating { remaining: 1 });
+        let reached = scheduler_reduce(&started, &config, SchedulerEvent::NavigationReached);
+        assert_eq!(reached.new_state.step_index, 1);
+        let last = scheduler_reduce(&started, &config, SchedulerEvent::AdmittedInput).new_state;
+        assert_eq!(last.phase, ActionPhase::Navigating { remaining: 0 });
+        let exhausted = scheduler_reduce(&last, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            exhausted.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
         );
     }
 

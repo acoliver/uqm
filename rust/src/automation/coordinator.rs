@@ -256,6 +256,9 @@ struct CoordInner {
     consumed_planet_menu_generation: u64,
     /// Require one callback after orbit navigation before accepting menu ownership.
     orbit_transition_pending: bool,
+    /// Whether the current `navigate_to_hyperspace` step has sampled live
+    /// interplanetary flight, which arrival requires.
+    hyperspace_flight_observed: bool,
     /// Release a semantically injected Select key on the next callback.
     release_semantic_select: bool,
 }
@@ -390,6 +393,7 @@ impl Coordinator {
                 consumed_planet_menu_generation: 0,
                 release_semantic_select: false,
                 orbit_transition_pending: false,
+                hyperspace_flight_observed: false,
             }),
         };
 
@@ -817,6 +821,69 @@ impl Coordinator {
         scheduler_event
     }
 
+    /// Fly the flagship out of the live solar system with player controls and
+    /// report arrival once production has dispatched hyperspace.
+    fn service_hyperspace_departure(
+        &self,
+        inner: &mut CoordInner,
+        mut scheduler_event: SchedulerEvent,
+    ) -> SchedulerEvent {
+        let snapshot = crate::automation::input_ffi::departure_snapshot();
+        let solar_system_active = snapshot.active != 0;
+        if solar_system_active && snapshot.in_ip_flight != 0 && !inner.hyperspace_flight_observed {
+            inner.hyperspace_flight_observed = true;
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                format!(
+                    "hyperspace_departure_started:ship={},{}:facing={}",
+                    snapshot.ship_x, snapshot.ship_y, snapshot.ship_facing
+                ),
+            );
+        }
+        let activity = crate::mainloop::ffi::get_current_activity().0;
+        if crate::automation::navigation::hyperspace_reached(
+            inner.hyperspace_flight_observed,
+            solar_system_active,
+            activity,
+        ) {
+            if !Self::set_navigation_controls(
+                crate::automation::navigation::NavigationControl::default(),
+            ) {
+                self.reject_input(inner, "navigation", -1, -1);
+                return scheduler_event;
+            }
+            inner.hyperspace_flight_observed = false;
+            scheduler_event = SchedulerEvent::NavigationReached;
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                crate::automation::navigation::HYPERSPACE_REACHED_LABEL.to_string(),
+            );
+            return scheduler_event;
+        }
+        let control = crate::automation::navigation::steer_out_of_system(
+            crate::automation::navigation::NavigationObservation {
+                active: solar_system_active,
+                inner_planet: u8::try_from(snapshot.inner_planet).ok(),
+                in_orbit: snapshot.in_orbit != 0,
+                ship_x: snapshot.ship_x,
+                ship_y: snapshot.ship_y,
+                ship_facing: u8::try_from(snapshot.ship_facing).unwrap_or(0),
+                target_x: snapshot.target_x,
+                target_y: snapshot.target_y,
+                velocity_x: snapshot.velocity_x,
+                velocity_y: snapshot.velocity_y,
+                view_center_x: snapshot.view_center_x,
+                view_center_y: snapshot.view_center_y,
+            },
+        );
+        if !Self::set_navigation_controls(control) {
+            self.reject_input(inner, "navigation", -1, -1);
+        }
+        scheduler_event
+    }
+
     /// Derive real player controls for whichever navigation the current step
     /// is running, and report arrival.
     fn service_navigation(
@@ -911,6 +978,10 @@ impl Coordinator {
                 self.reject_input(inner, "navigation", -1, -1);
                 return scheduler_event;
             }
+        } else if let Some(Action::NavigateToHyperspace(_)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            scheduler_event = self.service_hyperspace_departure(inner, scheduler_event);
         } else if let Some(Action::NavigateToMoon(navigation)) =
             self.actions.get(inner.sched_state.step_index)
         {

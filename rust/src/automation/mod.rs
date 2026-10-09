@@ -124,13 +124,14 @@ pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePl
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
     CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion, MainMenuTransition,
-    MenuKey, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
-    PlanetSideOutcomeName, PlayerKey, RootDocument, SceneAssertion, ScriptStep,
-    SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep, SetPlayerKeyStep,
-    SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep, ValidatedScript,
-    WaitForBattleFramesStep, WaitForCommunicationEndStep, WaitForCommunicationReplayStep,
-    WaitForDispatchStep, WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
-    WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
+    MenuKey, NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep,
+    NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName, PlayerKey, RootDocument,
+    SceneAssertion, ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep,
+    SetMenuKeyStep, SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep,
+    TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+    WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
+    WaitForPlanetSideStartStep, WaitInputTicksStep, WaitPresentationsStep,
+    CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{

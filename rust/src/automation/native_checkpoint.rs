@@ -39,6 +39,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         Action::NavigateToPlanet(_)
         | Action::NavigateToMoon(_)
         | Action::NavigateToOrbit(_)
+        | Action::NavigateToHyperspace(_)
         | Action::SelectPlanetMenu(_)
         | Action::SelectCommunicationResponse(_)
         | Action::SetupPlanetSideCollisionFixture(_) => Some(CheckpointClass::Navigation),

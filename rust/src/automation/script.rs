@@ -464,6 +464,14 @@ pub struct NavigateToOrbitStep {
     pub max_ticks: u64,
 }
 
+/// A `navigate_to_hyperspace` step flies the real flagship out of the current
+/// solar system with player controls until production enters hyperspace.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct NavigateToHyperspaceStep {
+    pub max_ticks: u64,
+}
+
 /// Wait until a Rust PlanetSide session has started.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -687,6 +695,7 @@ pub enum Action {
     NavigateToPlanet(NavigateToPlanetStep),
     NavigateToMoon(NavigateToMoonStep),
     NavigateToOrbit(NavigateToOrbitStep),
+    NavigateToHyperspace(NavigateToHyperspaceStep),
     WaitForPlanetSideStart(WaitForPlanetSideStartStep),
     WaitForPlanetSideEnd(WaitForPlanetSideEndStep),
     SelectPlanetMenu(SelectPlanetMenuStep),
@@ -1715,6 +1724,16 @@ fn validate_navigation_step(
                     path,
                     index,
                     "navigate_to_orbit requires planet 0..=8 and positive max_ticks",
+                )));
+            }
+            navigation.max_ticks
+        }
+        Action::NavigateToHyperspace(navigation) => {
+            if navigation.max_ticks == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "navigate_to_hyperspace max_ticks must be positive",
                 )));
             }
             navigation.max_ticks
