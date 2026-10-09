@@ -2981,6 +2981,44 @@ mod tests {
         }
     }
 
+    /// #213: a fresh profile starts on the main menu with no save, so no
+    /// checked-in script may assert hyperspace without first flying there.
+    #[test]
+    fn every_hyperspace_assertion_follows_a_real_departure() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&scripts).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "json") {
+                continue;
+            }
+            let label = path.to_string_lossy().into_owned();
+            let script = validate_script(
+                parse_script(&std::fs::read(&path).unwrap(), &label).unwrap(),
+                &label,
+            )
+            .unwrap();
+            if script.start_scene().is_some() {
+                continue;
+            }
+            let steps = script.steps();
+            let Some(first_hyperspace) = steps.iter().position(|step| {
+                matches!(step, Action::AssertActivity(ActivityAssertion { mask, equals })
+                    if mask & 0x00ff == 0x00ff && equals & 0x00ff == 3)
+            }) else {
+                continue;
+            };
+            checked += 1;
+            assert!(
+                steps[..first_hyperspace]
+                    .iter()
+                    .any(|step| matches!(step, Action::NavigateToHyperspace(_))),
+                "{label} asserts hyperspace at step {first_hyperspace} without flying there"
+            );
+        }
+        assert_eq!(checked, 10, "hyperspace scenarios checked");
+    }
+
     #[test]
     fn setup_planet_side_collision_fixture_parses_and_validates_explicitly() {
         let txt = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":36000,"max_presentations":36000,"max_wallclock_seconds":900},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;

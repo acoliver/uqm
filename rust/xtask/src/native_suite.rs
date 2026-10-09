@@ -2938,7 +2938,7 @@ mod tests {
                 .iter()
                 .filter(|entry| entry.budgets.max_wallclock_seconds >= 300)
                 .count(),
-            15
+            16
         );
         assert!(admitted
             .iter()

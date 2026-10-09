@@ -88,9 +88,13 @@ controls. Leaving the screen at maximum zoom makes the game's own
 `CheckShipLocation` end interplanetary flight. The step succeeds only after it
 has itself sampled live interplanetary flight and then sees the solar system
 torn down and the hyperspace activity dispatched. It never writes activity or
-position. `explore-planet-v1.json` uses it after selecting New Game and
-asserting interplanetary activity, before its hyperspace capture and
-assertion (#213).
+position. A fresh profile starts on the main menu with no save, so every
+script that asserts hyperspace (`explore-planet-v1`, `probe-encounter-v1` to
+`v7`, `starbase-visit-v1`, `load-save-v1`) first selects New Game, asserts
+interplanetary activity and flies out with it (#213). `load-save-v1` then
+saves twice through the hyperspace Game menu and loads slot 0 back through
+the same menu, because the Quit confirmation loop bypasses the `DoInput`
+automation service.
 
 ## Deterministic start scenes
 

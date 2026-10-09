@@ -292,8 +292,8 @@
           },
           {
                 "path": "rust/scripts/load-save-v1.json",
-                "sha256": "13247f2d835b5635095223b8c5bac71e9b2f12e2d4e097ec57281003a97f77bf",
-                "byte_length": 1869
+                "sha256": "6835f07cd443dc4b09157edb30dff8008440062c50a817ce4c92372b6a7c0da5",
+                "byte_length": 3462
           },
           {
                 "path": "rust/scripts/main-menu-v1.json",
@@ -307,38 +307,38 @@
           },
           {
                 "path": "rust/scripts/probe-encounter-v1.json",
-                "sha256": "f7e116eaecd4a2c3900ebdcb1711b4f36f3b5a5c95fe5912203842415016778c",
-                "byte_length": 2310
+                "sha256": "5ac184e58a1e552b14f0430e85fe191c6231b3c378c2387fe7d0c9b4aef4e998",
+                "byte_length": 2730
           },
           {
                 "path": "rust/scripts/probe-encounter-v2.json",
-                "sha256": "ce81fc42248902631ad17754f819e17d52f3c57de290431fc1aed2efe7e8e91e",
-                "byte_length": 3266
+                "sha256": "04ea06347a795339507901c4c7d57db7c4fdebbad0e61ac63305c6284c0a53e2",
+                "byte_length": 3354
           },
           {
                 "path": "rust/scripts/probe-encounter-v3.json",
-                "sha256": "070d5b4962da931a8059ebd24539652b7212819c4689f36beea529f76c512d09",
-                "byte_length": 1408
+                "sha256": "31cd99e9574e8f666020a50b0b5628a6ff1970f81fe7c15773e69ebd7421c470",
+                "byte_length": 1496
           },
           {
                 "path": "rust/scripts/probe-encounter-v4.json",
-                "sha256": "9ccc0094b8a78ba763cb12db9866191dc9b86636369d7eef4e746649eb9e2365",
-                "byte_length": 1408
+                "sha256": "9bab0edfe7583d986bee94172cbdcc2c4ba42b91a9783364f91a576edb779ca2",
+                "byte_length": 1496
           },
           {
                 "path": "rust/scripts/probe-encounter-v5.json",
-                "sha256": "3ee648cdaf0e1532c5e9a36ea8c121b9a1d16dfbe98e0c8be6e31c43cb1d368a",
-                "byte_length": 3649
+                "sha256": "c319691493ac3db2b117e045fa5d11129dc6bae2abe9ea59b15f580e2fc230c4",
+                "byte_length": 3737
           },
           {
                 "path": "rust/scripts/probe-encounter-v6.json",
-                "sha256": "1e7428c0ff4e9f8ab3f2984d98245395fe5c04e91418394f06f5247cde67d97f",
-                "byte_length": 2509
+                "sha256": "e4f18e4c0d0052b4bad2bf9e3e4542205aeb84be43c899d0b8e38ffe6fc74561",
+                "byte_length": 2597
           },
           {
                 "path": "rust/scripts/probe-encounter-v7.json",
-                "sha256": "255aa6265b821f70b2fd078662e1d973a5120fbe9723d8e1fef9b35e075bfdbf",
-                "byte_length": 2850
+                "sha256": "be8b037a9e2c061c0ef6aa1d3f7138073d345f101ce56a7535bf43dc1d26b497",
+                "byte_length": 2938
           },
           {
                 "path": "rust/scripts/probe-encounter-wait.json",
@@ -427,8 +427,8 @@
           },
           {
                 "path": "rust/scripts/starbase-visit-v1.json",
-                "sha256": "4ee44aebf76368d4ee2b3932cd001f1052edd0780746f5aa59a256f4848de585",
-                "byte_length": 934
+                "sha256": "2f4a63b64d97178acc9ab1a059994d4b61b963bd854a49a23f43f2adad5a754c",
+                "byte_length": 1025
           },
           {
                 "path": "rust/scripts/state-sync-v1.json",
