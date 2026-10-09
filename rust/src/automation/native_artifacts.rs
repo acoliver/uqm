@@ -57,26 +57,6 @@ impl ArtifactBudget {
         self.claim(path, bytes, false)
     }
 
-    /// Enlarge an existing file claim once its bounded size becomes known.
-    ///
-    /// The claim keeps its name and member slot; only the additional bytes are
-    /// charged, against the same per-member and aggregate limits.
-    pub fn grow(&self, path: &str, additional: u64) -> Result<(), String> {
-        let mut state = self.0.lock().map_err(|_| "artifact budget lock poisoned")?;
-        if !state.claims.contains(path) {
-            return Err(format!("artifact was never claimed: {path}"));
-        }
-        let total = state
-            .bytes
-            .checked_add(additional)
-            .ok_or("artifact byte overflow")?;
-        if total > state.limits.aggregate_bytes {
-            return Err(format!("artifact reservation exceeds suite budget: {path}"));
-        }
-        state.bytes = total;
-        Ok(())
-    }
-
     /// Charge directories, including empty ones, before creating them.
     /// Existing directory claims are shared by their contained writers.
     pub fn reserve_directory(&self, path: &str) -> Result<(), String> {

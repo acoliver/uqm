@@ -46,6 +46,8 @@ pub mod native_checkpoint;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_isolation;
 mod native_predicate;
+#[cfg(feature = "debug-process")]
+mod native_publication_history;
 #[cfg(all(unix, feature = "debug-process"))]
 pub mod native_runner;
 mod native_trace;

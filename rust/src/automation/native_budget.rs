@@ -140,37 +140,6 @@ fn claim(path: &Path, bytes: u64, directory: bool) -> Result<(), String> {
     })
 }
 
-/// Raise a reserved diagnostic's bound once the scenario's own limits are
-/// known, charging the extra bytes to the ordinary budget immediately.
-pub(super) fn grow_reserved(path: &Path, bound: u64) -> Result<(), String> {
-    ACTIVE.with(|slot| {
-        let mut active = slot.borrow_mut();
-        let Some(active) = active.as_mut() else {
-            return Ok(());
-        };
-        let absolute = absolute_path(path)?;
-        let relative = absolute
-            .strip_prefix(&active.root)
-            .map_err(|_| "artifact escaped scenario root")?
-            .to_str()
-            .ok_or("non-UTF8 artifact path")?
-            .to_string();
-        let current = *active
-            .reserved
-            .get(&relative)
-            .ok_or("diagnostic is not reserved")?;
-        if bound <= current {
-            return Ok(());
-        }
-        if bound > active.ordinary.remaining()?.member_bytes {
-            return Err("reserved native diagnostic bound exceeds the member limit".into());
-        }
-        active.ordinary.grow(&relative, bound - current)?;
-        active.reserved.insert(relative, bound);
-        Ok(())
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,36 +170,6 @@ mod tests {
         let _fresh = begin_with_limits(root.path(), limits(), limits()).unwrap();
         reserve(&root.path().join("payload"), 7).unwrap();
     }
-    #[test]
-    fn a_grown_reservation_admits_its_new_bound_and_no_more() {
-        let root = tempfile::tempdir().unwrap();
-        let mut wide = limits();
-        wide.aggregate_bytes = 4 * 1024 * 1024;
-        wide.member_bytes = 3 * 1024 * 1024;
-        let _scope = begin_with_limits(root.path(), wide, wide).unwrap();
-        let manifest = root.path().join("native-acceptance.json");
-        grow_reserved(&manifest, 2 * 1024 * 1024).unwrap();
-        // The extra megabyte is charged now, not when the manifest is written.
-        assert!(reserve(&root.path().join("payload"), 1024 * 1024 + 1).is_err());
-        assert!(reserve(&manifest, 2 * 1024 * 1024 + 1).is_err());
-        reserve(&manifest, 2 * 1024 * 1024).unwrap();
-    }
-
-    #[test]
-    fn a_reservation_cannot_grow_past_the_member_limit_or_appear_from_nothing() {
-        let root = tempfile::tempdir().unwrap();
-        let _scope = begin_with_limits(root.path(), limits(), limits()).unwrap();
-        assert!(grow_reserved(
-            &root.path().join("native-acceptance.json"),
-            limits().member_bytes + 1
-        )
-        .is_err());
-        assert!(grow_reserved(&root.path().join("payload"), 10).is_err());
-        // Shrinking is not a thing; the original reservation still holds.
-        grow_reserved(&root.path().join("native-acceptance.json"), 1).unwrap();
-        reserve(&root.path().join("native-acceptance.json"), 1024 * 1024).unwrap();
-    }
-
     #[test]
     fn missing_file_and_symlink_roots_cannot_activate_a_budget() {
         let root = tempfile::tempdir().unwrap();

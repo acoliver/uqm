@@ -657,7 +657,7 @@ pub struct NativeWindowReceipt {
     pub passed: bool,
 }
 
-pub const NATIVE_ACCEPTANCE_SCHEMA: &str = "uqm-native-window-acceptance-v3";
+pub const NATIVE_ACCEPTANCE_SCHEMA: &str = "uqm-native-window-acceptance-v4";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -843,6 +843,7 @@ pub struct NativeAcceptanceManifest {
     pub trace_sha256: String,
     pub child: NativeChildCleanupReceipt,
     pub window: NativeWindowReceipt,
+    #[serde(with = "super::native_publication_history")]
     pub publications: Vec<NativeWindowPublication>,
     pub passed: bool,
 }
@@ -5108,6 +5109,29 @@ mod tests {
             );
             fs::write(path, original).unwrap();
         }
+    }
+
+    /// The success manifest keeps its original 1 MiB reservation. A healthy
+    /// 5073-presentation run once failed it by retaining one verbose record per
+    /// presentation; the history is now stored compactly, without dropping any.
+    #[test]
+    fn a_long_runs_manifest_fits_the_one_mebibyte_reservation_without_losing_publications() {
+        let (_root, _receipt, mut manifest) = playable_acceptance_fixture();
+        let template = manifest.publications[0].clone();
+        manifest.publications = (1..=24_000_u64)
+            .map(|count| {
+                let mut publication = template.clone();
+                publication.state.committed_presentation = count;
+                publication.acknowledgement.committed_presentation = count;
+                publication.state.semantic.trace_record_count = 2 * count + count % 3;
+                publication.state.semantic.accepted_player_inputs = count / 40;
+                publication
+            })
+            .collect();
+        let encoded = serde_json::to_vec(&manifest).unwrap();
+        assert!(encoded.len() <= 1024 * 1024, "{}", encoded.len());
+        let decoded: NativeAcceptanceManifest = serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(decoded, manifest);
     }
 
     #[test]

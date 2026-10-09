@@ -38,23 +38,6 @@ const MAX_CONTENT_ARCHIVE_ENTRIES: usize = 100_000;
 const MAX_CONTENT_ARCHIVE_NAME_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_CONTENT_ARCHIVE_ENTRY_NAME_BYTES: usize = 4096;
 const MAX_NATIVE_MANIFEST_BYTES: u64 = 1024 * 1024;
-/// Fixed part of a success manifest: identities, receipts and retained files.
-const NATIVE_MANIFEST_BASE_BYTES: u64 = 1024 * 1024;
-/// Upper bound on one compact publication record (state and acknowledgement).
-const NATIVE_PUBLICATION_RECORD_BYTES: u64 = 1024;
-
-/// Bound the success manifest by the script's own presentation budget.
-///
-/// The manifest retains one publication per committed presentation, so a
-/// fixed size silently refuses every scenario whose legitimate run outgrows
-/// it, however healthy the run was.
-fn success_manifest_bound(max_presentations: u64) -> Result<u64, String> {
-    max_presentations
-        .checked_add(1)
-        .and_then(|records| records.checked_mul(NATIVE_PUBLICATION_RECORD_BYTES))
-        .and_then(|records| records.checked_add(NATIVE_MANIFEST_BASE_BYTES))
-        .ok_or_else(|| "native success manifest bound overflows".to_string())
-}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -534,21 +517,18 @@ pub fn entry_with_arguments(arguments: &[String]) -> Result<(), String> {
             println!("{}", evidence_root.join("native-acceptance.json").display());
             Ok(())
         }
-        [_, command, manifest, member_limit] if command == "validate-internal-consistency" => {
+        [_, command, manifest] if command == "validate-internal-consistency" => {
             let path = Path::new(manifest);
             let root = path
                 .parent()
                 .ok_or_else(|| "manifest has no parent directory".to_string())?;
-            let member_limit = member_limit
-                .parse::<u64>()
-                .map_err(|error| format!("parse member limit: {error}"))?;
-            let bytes = read_regular_file_nofollow_bounded(path, member_limit)?;
+            let bytes = read_regular_file_nofollow_bounded(path, MAX_NATIVE_MANIFEST_BYTES)?;
             let manifest: NativeAcceptanceManifest = serde_json::from_slice(&bytes)
                 .map_err(|error| format!("parse manifest: {error}"))?;
             validate_native_acceptance_bundle(root, &manifest)
                 .map_err(|error| format!("validate manifest: {error:?}"))
         }
-        _ => Err("usage: uqm-native-acceptance <run EXECUTABLE CONTENT SCRIPT EVIDENCE_ROOT EXECUTABLE_LENGTH EXECUTABLE_SHA256 RUNTIME_CONTRACT ACCEPTANCE_POLICY LINKED_BUILD_PROOF LINKED_BUILD_MEMBER_LIMIT|validate-internal-consistency MANIFEST MEMBER_LIMIT>".to_string()),
+        _ => Err("usage: uqm-native-acceptance <run EXECUTABLE CONTENT SCRIPT EVIDENCE_ROOT EXECUTABLE_LENGTH EXECUTABLE_SHA256 RUNTIME_CONTRACT ACCEPTANCE_POLICY LINKED_BUILD_PROOF LINKED_BUILD_MEMBER_LIMIT|validate-internal-consistency MANIFEST>".to_string()),
     }
 }
 
@@ -1440,10 +1420,6 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         let checkpoint_plan = super::native_checkpoint::NativeCheckpointPlan::derive(
             &script_bytes,
             &validated_script,
-        )?;
-        super::native_budget::grow_reserved(
-            &root.join("native-acceptance.json"),
-            success_manifest_bound(validated_script.budgets().max_presentations)?,
         )?;
 
         validate_expected_executable(
@@ -3831,101 +3807,6 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&retained).unwrap(),
             value
         );
-    }
-
-    #[test]
-    fn a_publication_record_never_exceeds_its_manifest_allowance() {
-        let widest = NativeWindowPublication {
-            state: NativeWindowChildState {
-                schema: "uqm-native-window-state-v1".to_string(),
-                nonce: "f".repeat(64),
-                pid: u32::MAX,
-                sdl_window_id: u32::MAX,
-                committed_presentation: u64::MAX,
-                shown: true,
-                requested_client_bounds: widest_bounds(),
-                client_bounds: widest_bounds(),
-                semantic: super::super::native_window::NativeWindowSemanticSnapshot {
-                    trace_record_count: u64::MAX,
-                    accepted_player_inputs: u64::MAX,
-                    verified_battle_frames: u64::MAX,
-                },
-            },
-            acknowledgement: NativeWindowAck {
-                schema: NATIVE_WINDOW_ACK_SCHEMA.to_string(),
-                nonce: "f".repeat(64),
-                committed_presentation: u64::MAX,
-            },
-        };
-        // One more byte for the separating comma in the publication array.
-        let encoded = serde_json::to_vec(&widest).unwrap().len() as u64 + 1;
-        assert!(encoded <= NATIVE_PUBLICATION_RECORD_BYTES, "{encoded}");
-    }
-
-    /// The real-Sol commander scenario committed 5073 presentations and was
-    /// refused at the end of a successful run because its manifest outgrew a
-    /// fixed 1 MiB reservation.
-    #[test]
-    fn a_long_successful_run_retains_its_whole_publication_history() {
-        let temporary = tempfile::tempdir().unwrap();
-        let root = temporary.path();
-        let limits = runtime_contract().inventory_limits;
-        let _scope = super::super::native_budget::begin_with_limits(root, limits, limits).unwrap();
-        let presentations = 6000_u64;
-        super::super::native_budget::grow_reserved(
-            &root.join("native-acceptance.json"),
-            success_manifest_bound(presentations).unwrap(),
-        )
-        .unwrap();
-        let publications: Vec<_> = (1..=presentations)
-            .map(|count| {
-                serde_json::json!({
-                    "state": {
-                        "schema": "uqm-native-window-state-v1",
-                        "nonce": "a".repeat(64), "pid": 1234, "sdl_window_id": 1,
-                        "committed_presentation": count, "shown": true,
-                        "requested_client_bounds": {"x":80,"y":80,"width":1280,"height":960},
-                        "client_bounds": {"x":80,"y":80,"width":1280,"height":960},
-                        "semantic": {"trace_record_count":count * 2,
-                            "accepted_player_inputs":0,"verified_battle_frames":0}
-                    },
-                    "acknowledgement": {
-                        "schema":"uqm-native-window-ack-v1", "nonce":"a".repeat(64),
-                        "committed_presentation":count
-                    }
-                })
-            })
-            .collect();
-        let value = serde_json::json!({"publications":publications});
-        assert!(serde_json::to_vec(&value).unwrap().len() > 3 * 1024 * 1024);
-        let path = root.join("native-acceptance.json");
-        write_json_atomic(&path, &value).unwrap();
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&fs::read(path).unwrap()).unwrap(),
-            value
-        );
-    }
-
-    #[test]
-    fn the_success_manifest_bound_follows_the_presentation_budget() {
-        assert_eq!(
-            success_manifest_bound(0).unwrap(),
-            NATIVE_MANIFEST_BASE_BYTES + NATIVE_PUBLICATION_RECORD_BYTES
-        );
-        assert_eq!(
-            success_manifest_bound(24_000).unwrap(),
-            NATIVE_MANIFEST_BASE_BYTES + 24_001 * NATIVE_PUBLICATION_RECORD_BYTES
-        );
-        assert!(success_manifest_bound(u64::MAX).is_err());
-    }
-
-    fn widest_bounds() -> NativeWindowBounds {
-        NativeWindowBounds {
-            x: i32::MIN,
-            y: i32::MIN,
-            width: u32::MAX,
-            height: u32::MAX,
-        }
     }
 
     #[test]
