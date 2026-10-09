@@ -24,9 +24,16 @@ impl NativeTraceJournal {
         })
     }
 
+    /// Make every committed record visible to the observer before the
+    /// presentation is acknowledged.
+    ///
+    /// The observer reads the file on the same host, so completed writes are
+    /// already visible to it; a flush to stable storage per presentation only
+    /// protects against power loss and made each frame wait on the disk. The
+    /// controller syncs the finished trace once before it hashes it.
     pub(super) fn publish(&mut self, commit: &OrderedCommit) -> io::Result<()> {
         commit.publish_all(self)?;
-        self.file.sync_all()
+        self.flush()
     }
 }
 

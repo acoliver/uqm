@@ -267,6 +267,14 @@ impl BoundOutputDirectory {
         }
     }
 
+    /// Replace `name` atomically by rename.
+    ///
+    /// These files are the live handshake between the game and its observer
+    /// on one machine, written once per presentation. Rename makes each whole
+    /// document visible to the other process at once; a flush to stable
+    /// storage adds nothing for a reader on the same host and a full sync per
+    /// presentation was a large share of each frame. The controller syncs the
+    /// final state and acknowledgement once before it hashes them.
     #[cfg(unix)]
     fn publish(&self, name: &std::ffi::OsStr, bytes: &[u8], label: &str) -> Result<(), String> {
         use std::ffi::CString;
@@ -293,11 +301,7 @@ impl BoundOutputDirectory {
             ));
         }
         let mut file = unsafe { fs::File::from_raw_fd(descriptor) };
-        if let Err(error) = file
-            .write_all(bytes)
-            .and_then(|()| file.write_all(b"\n"))
-            .and_then(|()| file.sync_all())
-        {
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.write_all(b"\n")) {
             drop(file);
             unsafe {
                 libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0);
@@ -320,12 +324,6 @@ impl BoundOutputDirectory {
             }
             return Err(format!("publish native-window {label}: {error}"));
         }
-        if unsafe { libc::fsync(self.directory.as_raw_fd()) } != 0 {
-            return Err(format!(
-                "sync native-window {label} directory: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
         Ok(())
     }
 
@@ -340,11 +338,7 @@ impl BoundOutputDirectory {
             .write(true)
             .open(&temporary)
             .map_err(|error| format!("create native-window {label} temporary: {error}"))?;
-        if let Err(error) = file
-            .write_all(bytes)
-            .and_then(|()| file.write_all(b"\n"))
-            .and_then(|()| file.sync_all())
-        {
+        if let Err(error) = file.write_all(bytes).and_then(|()| file.write_all(b"\n")) {
             drop(file);
             let _ = fs::remove_file(&temporary);
             return Err(format!("write native-window {label}: {error}"));
@@ -1985,7 +1979,7 @@ fn wait_for_native_window_ack(
                 "native-window state presentation {committed_presentation} was not acknowledged"
             ));
         }
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        std::thread::sleep(std::time::Duration::from_micros(200));
     }
 }
 

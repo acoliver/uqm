@@ -1031,6 +1031,9 @@ mod os {
     const OWNED_PROCESS_RECORD_NAME: &str = ".uqm-run-child.json";
     const RUN_LOCK_GUARD_NAME: &str = ".uqm-run-owner.guard";
     const RUN_LOCK_MAX_BYTES: u64 = 16 * 1024;
+    /// The game blocks on the observer's acknowledgement for every
+    /// presentation, so the gap between observer polls is added to each frame.
+    const OBSERVER_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -2575,7 +2578,7 @@ mod os {
                         return Ok(SupervisorEvent::Deadline)
                     }
                     Ok(false) => thread::sleep(
-                        Duration::from_millis(5)
+                        OBSERVER_POLL_INTERVAL
                             .min(deadline.saturating_duration_since(Instant::now())),
                     ),
                     Err(error) if error.kind() == ErrorKind::Interrupted => {}

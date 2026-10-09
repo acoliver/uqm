@@ -1155,6 +1155,9 @@ fn build_acceptance_manifest(
     inputs: AcceptanceManifestInputs<'_>,
 ) -> Result<NativeAcceptanceManifest, String> {
     let trace_path = automation.join("trace.jsonl");
+    for name in LIVE_PUBLISHED_FILES {
+        sync_regular_file(&automation.join(name))?;
+    }
     let (input_events, battle_frames) = trace_semantics(
         &trace_path,
         inputs.runtime_contract.inventory_limits.member_bytes,
@@ -3558,6 +3561,31 @@ fn fresh_nonce() -> Result<String, String> {
     Ok(random.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
+/// Files the game rewrites for every presentation without syncing them.
+const LIVE_PUBLISHED_FILES: [&str; 3] = [
+    "trace.jsonl",
+    "native-window-state.json",
+    "native-window-ack.json",
+];
+
+/// Flush a finished regular file to stable storage without following links.
+fn sync_regular_file(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|error| format!("open {} for sync: {error}", path.display()))?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| format!("inspect {} for sync: {error}", path.display()))?;
+    if !metadata.is_file() {
+        return Err(format!("{} is not a regular file", path.display()));
+    }
+    file.sync_all()
+        .map_err(|error| format!("sync {}: {error}", path.display()))
+}
+
 fn trace_semantics(path: &Path, limit: u64) -> Result<(u64, u64), String> {
     let bytes = read_regular_file_nofollow_bounded(path, limit)?;
     if bytes.is_empty() || !bytes.ends_with(b"\n") {
@@ -3807,6 +3835,19 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&retained).unwrap(),
             value
         );
+    }
+
+    #[test]
+    fn finished_evidence_is_synced_only_when_it_is_a_regular_file() {
+        let temporary = tempfile::tempdir().unwrap();
+        let regular = temporary.path().join("trace.jsonl");
+        fs::write(&regular, b"{}\n").unwrap();
+        sync_regular_file(&regular).unwrap();
+        assert!(sync_regular_file(&temporary.path().join("missing")).is_err());
+        assert!(sync_regular_file(temporary.path()).is_err());
+        let link = temporary.path().join("link");
+        std::os::unix::fs::symlink(&regular, &link).unwrap();
+        assert!(sync_regular_file(&link).is_err());
     }
 
     #[test]
