@@ -599,11 +599,12 @@ struct NativeObservationSession {
     checkpoint_count: usize,
     trace_limit: u64,
     trace_path: PathBuf,
+    trace_cursor: super::native_trace_cursor::TraceCursor,
     publications: Vec<NativeWindowPublication>,
 }
 
 impl NativeObservationSession {
-    fn pending_checkpoints(&self, state: &NativeWindowChildState) -> io::Result<Vec<usize>> {
+    fn pending_checkpoints(&mut self, state: &NativeWindowChildState) -> io::Result<Vec<usize>> {
         let Some(plan) = self.proof.checkpoint_plan() else {
             return Ok(Vec::new());
         };
@@ -613,12 +614,9 @@ impl NativeObservationSession {
         let bytes = read_regular_file_nofollow_bounded(&self.trace_path, self.trace_limit)
             .map_err(io::Error::other)?;
         let count = usize::try_from(state.semantic.trace_record_count).map_err(io::Error::other)?;
-        let records: Vec<TraceRecord> = bytes
-            .split(|byte| *byte == b'\n')
-            .filter(|line| !line.is_empty())
-            .take(count)
-            .map(serde_json::from_slice)
-            .collect::<Result<_, _>>()
+        let records = self
+            .trace_cursor
+            .records(&bytes, count)
             .map_err(io::Error::other)?;
         if records.len() != count
             || native_window_trace_semantic_snapshot(&records).map_err(io::Error::other)?
@@ -1562,6 +1560,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             checkpoint_count: 0,
             trace_limit: runtime_contract.inventory_limits.member_bytes,
             trace_path: automation.join("trace.jsonl"),
+            trace_cursor: Default::default(),
             publications: Vec::new(),
         };
         let session_result =
@@ -4187,6 +4186,7 @@ mod tests {
             checkpoint_count: 0,
             trace_limit: runtime_contract().inventory_limits.member_bytes,
             trace_path: root.join("automation/trace.jsonl"),
+            trace_cursor: Default::default(),
             publications: vec![NativeWindowPublication {
                 acknowledgement,
                 state: prior_state.clone(),

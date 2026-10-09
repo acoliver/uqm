@@ -49,6 +49,8 @@ mod native_predicate;
 #[cfg(all(unix, feature = "debug-process"))]
 pub mod native_runner;
 mod native_trace;
+#[cfg(all(unix, feature = "debug-process"))]
+mod native_trace_cursor;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
 pub mod navigation;
