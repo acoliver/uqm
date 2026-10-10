@@ -109,7 +109,8 @@ fn base_content_path_store_honours_the_real_c_buffer_bound() {
         "the pinned source the C archive object is built from"
     );
 
-    let c_bound = std::mem::size_of_val(unsafe { &*std::ptr::addr_of!(options_abi::baseContentPath) });
+    let c_bound =
+        std::mem::size_of_val(unsafe { &*std::ptr::addr_of!(options_abi::baseContentPath) });
     assert_eq!(
         PATH_MAX, c_bound,
         "the Rust bound must equal the C array length"
@@ -134,21 +135,27 @@ fn base_content_path_store_honours_the_real_c_buffer_bound() {
 
     for len in [c_bound, c_bound + 1, 4096] {
         let too_long = path_of(len);
-        let refused =
-            store_base_content_path(Path::new(std::ffi::OsStr::from_bytes(&too_long)));
+        let refused = store_base_content_path(Path::new(std::ffi::OsStr::from_bytes(&too_long)));
         assert_eq!(
             refused.map_err(enametoolong),
             Err(Some(libc::ENAMETOOLONG)),
             "length {len}"
         );
-        assert_eq!(real_base_content_path_prefix(c_bound), stored, "length {len}");
+        assert_eq!(
+            real_base_content_path_prefix(c_bound),
+            stored,
+            "length {len}"
+        );
 
         let arg = CString::new(too_long).unwrap();
-        let status = unsafe {
-            rust_prepare_content_dir(arg.as_ptr(), std::ptr::null(), c"uqm".as_ptr())
-        };
+        let status =
+            unsafe { rust_prepare_content_dir(arg.as_ptr(), std::ptr::null(), c"uqm".as_ptr()) };
         assert_eq!(status, -1, "length {len}");
-        assert_eq!(real_base_content_path_prefix(c_bound), stored, "length {len}");
+        assert_eq!(
+            real_base_content_path_prefix(c_bound),
+            stored,
+            "length {len}"
+        );
     }
 
     store_base_content_path(Path::new("")).unwrap();
