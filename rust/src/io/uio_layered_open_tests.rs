@@ -11,14 +11,14 @@ use tempfile::TempDir;
 
 use super::*;
 
-struct Stack {
-    repo: *mut uio_Repository,
-    root: *mut uio_DirHandle,
+pub(super) struct Stack {
+    pub(super) repo: *mut uio_Repository,
+    pub(super) root: *mut uio_DirHandle,
     _dirs: Vec<TempDir>,
 }
 
 impl Stack {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         if let Ok(mut registry) = get_mount_registry().lock() {
             registry.clear();
         }
@@ -37,7 +37,13 @@ impl Stack {
         }
     }
 
-    fn mount(&self, fs_type: c_int, flags: c_int, host: &Path, relative: *mut uio_MountHandle) {
+    pub(super) fn mount(
+        &self,
+        fs_type: c_int,
+        flags: c_int,
+        host: &Path,
+        relative: *mut uio_MountHandle,
+    ) {
         let handle = register_mount(
             self.repo,
             Path::new("/"),
@@ -50,7 +56,7 @@ impl Stack {
         assert!(!handle.is_null(), "mount of {host:?} failed");
     }
 
-    fn mount_dir(&mut self, files: &[(&str, &[u8])], flags: c_int) -> PathBuf {
+    pub(super) fn mount_dir(&mut self, files: &[(&str, &[u8])], flags: c_int) -> PathBuf {
         let dir = TempDir::new().unwrap();
         for (name, data) in files {
             std::fs::write(dir.path().join(name), data).unwrap();
@@ -61,7 +67,7 @@ impl Stack {
         path
     }
 
-    fn mount_zip(&mut self, files: &[(&str, &[u8])], flags: c_int, relative: usize) {
+    pub(super) fn mount_zip(&mut self, files: &[(&str, &[u8])], flags: c_int, relative: usize) {
         let dir = TempDir::new().unwrap();
         let zip_path = dir.path().join("pack.zip");
         let mut zip = zip::ZipWriter::new(std::fs::File::create(&zip_path).unwrap());
@@ -83,11 +89,11 @@ impl Stack {
         self.mount(UIO_FSTYPE_ZIP, flags, &zip_path, relative_handle);
     }
 
-    fn first_mount_id(&self) -> usize {
+    pub(super) fn first_mount_id(&self) -> usize {
         get_mount_registry().lock().unwrap()[0].id
     }
 
-    fn read(&self, name: &str) -> Option<Vec<u8>> {
+    pub(super) fn read(&self, name: &str) -> Option<Vec<u8>> {
         use std::io::Read;
         let name = CString::new(name).unwrap();
         unsafe {
@@ -191,7 +197,7 @@ fn a_file_found_in_no_mount_cannot_be_opened() {
 }
 
 impl Stack {
-    fn mount_dir_above(&mut self, files: &[(&str, &[u8])], relative: usize) {
+    pub(super) fn mount_dir_above(&mut self, files: &[(&str, &[u8])], relative: usize) {
         let dir = TempDir::new().unwrap();
         for (name, data) in files {
             std::fs::write(dir.path().join(name), data).unwrap();

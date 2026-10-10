@@ -20,6 +20,8 @@ pub mod decoder;
 mod decoder_vtable_tests;
 pub mod dukaud;
 pub mod dukaud_ffi;
+#[cfg(test)]
+mod dukaud_vtable_tests;
 pub mod ffi;
 pub mod formats;
 pub mod mixer;

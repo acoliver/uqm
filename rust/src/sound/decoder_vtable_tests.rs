@@ -19,11 +19,11 @@ use crate::io::uio_bridge::{
 const MONO8: u32 = 101;
 const STEREO8: u32 = 102;
 const MONO16: u32 = 103;
-const STEREO16: u32 = 104;
+pub(super) const STEREO16: u32 = 104;
 const UIO_FSTYPE_STDIO: i32 = 1;
 const UIO_MOUNT_TOP: i32 = 1 << 2;
 
-fn formats() -> TFB_DecoderFormats {
+pub(super) fn formats() -> TFB_DecoderFormats {
     TFB_DecoderFormats {
         big_endian: false,
         want_big_endian: false,
@@ -35,14 +35,14 @@ fn formats() -> TFB_DecoderFormats {
 }
 
 /// A uio repository whose root is a temporary directory.
-struct Directory {
+pub(super) struct Directory {
     files: TempDir,
     repository: *mut crate::io::uio_bridge::uio_Repository,
     handle: *mut crate::io::uio_bridge::uio_DirHandle,
 }
 
 impl Directory {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let files = TempDir::new().unwrap();
         unsafe {
             uio_init();
@@ -71,11 +71,11 @@ impl Directory {
         }
     }
 
-    fn write(&self, name: &str, bytes: &[u8]) {
+    pub(super) fn write(&self, name: &str, bytes: &[u8]) {
         std::fs::write(self.files.path().join(name), bytes).unwrap();
     }
 
-    fn handle(&self) -> *mut uio_DirHandle {
+    pub(super) fn handle(&self) -> *mut uio_DirHandle {
         self.handle as *mut uio_DirHandle
     }
 }
@@ -91,19 +91,19 @@ impl Drop for Directory {
 }
 
 /// Zeroed storage big enough for the decoder's wrapper struct.
-struct DecoderStorage {
+pub(super) struct DecoderStorage {
     words: Vec<u64>,
 }
 
 impl DecoderStorage {
-    fn new(funcs: &TFB_SoundDecoderFuncs) -> Self {
+    pub(super) fn new(funcs: &TFB_SoundDecoderFuncs) -> Self {
         let bytes = (funcs.GetStructSize)() as usize;
         Self {
             words: vec![0u64; bytes.div_ceil(8)],
         }
     }
 
-    fn decoder(&mut self) -> *mut TFB_SoundDecoder {
+    pub(super) fn decoder(&mut self) -> *mut TFB_SoundDecoder {
         self.words.as_mut_ptr() as *mut TFB_SoundDecoder
     }
 }
@@ -157,7 +157,7 @@ fn aiff_file(channels: u16, frames: u32, bits: u16, data: &[u8]) -> Vec<u8> {
     file
 }
 
-fn open_file(
+pub(super) fn open_file(
     funcs: &TFB_SoundDecoderFuncs,
     storage: &mut DecoderStorage,
     directory: &Directory,
@@ -167,7 +167,7 @@ fn open_file(
     (funcs.Open)(storage.decoder(), directory.handle(), name.as_ptr())
 }
 
-fn decode_all(funcs: &TFB_SoundDecoderFuncs, storage: &mut DecoderStorage) -> Vec<u8> {
+pub(super) fn decode_all(funcs: &TFB_SoundDecoderFuncs, storage: &mut DecoderStorage) -> Vec<u8> {
     let mut out = Vec::new();
     let mut chunk = [0u8; 64];
     loop {

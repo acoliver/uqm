@@ -7934,3 +7934,11 @@ mod tests {
 #[cfg(test)]
 #[path = "uio_layered_open_tests.rs"]
 mod layered_open_tests;
+
+#[cfg(test)]
+#[path = "uio_stream_tests.rs"]
+mod stream_tests;
+
+#[cfg(test)]
+#[path = "uio_mount_ops_tests.rs"]
+mod mount_ops_tests;

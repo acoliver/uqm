@@ -698,3 +698,7 @@ mod tests {
         assert!(joy.hats[0].up.is_empty());
     }
 }
+
+#[cfg(test)]
+#[path = "joystick_behavior_tests.rs"]
+mod behavior_tests;

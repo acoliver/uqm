@@ -123,47 +123,50 @@ unsafe extern "C" fn rust_free_music(data: *mut c_void) -> c_int {
     1
 }
 
-// Test stubs for UIO functions — these are never actually called in tests
-// because all UIO-calling FFI functions are gated with #[cfg(not(test))]
+// In tests the same entry points run against the Rust UIO implementation
+// that ships in the binary, so file-backed paths see real files.
 #[cfg(test)]
-unsafe fn uio_fopen(_dir: *mut c_void, _path: *const c_char, _mode: *const c_char) -> *mut c_void {
-    ptr::null_mut()
+use crate::io::uio_bridge as real_uio;
+
+#[cfg(test)]
+unsafe fn uio_fopen(dir: *mut c_void, path: *const c_char, mode: *const c_char) -> *mut c_void {
+    real_uio::uio_fopen(dir.cast(), path, mode).cast()
 }
 #[cfg(test)]
-unsafe fn uio_fclose(_fp: *mut c_void) -> c_int {
-    0
+unsafe fn uio_fclose(fp: *mut c_void) -> c_int {
+    real_uio::uio_fclose(fp.cast())
 }
 #[cfg(test)]
-unsafe fn uio_fread(_buf: *mut c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize {
-    0
+unsafe fn uio_fread(buf: *mut c_void, size: usize, count: usize, fp: *mut c_void) -> usize {
+    real_uio::uio_fread(buf, size, count, fp.cast())
 }
 #[cfg(test)]
-unsafe fn uio_fwrite(_buf: *const c_void, _size: usize, _count: usize, _fp: *mut c_void) -> usize {
-    0
+unsafe fn uio_fwrite(buf: *const c_void, size: usize, count: usize, fp: *mut c_void) -> usize {
+    real_uio::uio_fwrite(buf, size, count, fp.cast())
 }
 #[cfg(test)]
-unsafe fn uio_fseek(_fp: *mut c_void, _offset: c_long, _whence: c_int) -> c_int {
-    0
+unsafe fn uio_fseek(fp: *mut c_void, offset: c_long, whence: c_int) -> c_int {
+    real_uio::uio_fseek(fp.cast(), offset, whence)
 }
 #[cfg(test)]
-unsafe fn uio_ftell(_fp: *mut c_void) -> c_long {
-    0
+unsafe fn uio_ftell(fp: *mut c_void) -> c_long {
+    real_uio::uio_ftell(fp.cast())
 }
 #[cfg(test)]
-unsafe fn uio_fgetc(_fp: *mut c_void) -> c_int {
-    -1
+unsafe fn uio_fgetc(fp: *mut c_void) -> c_int {
+    real_uio::uio_fgetc(fp.cast())
 }
 #[cfg(test)]
-unsafe fn uio_fputc(_c: c_int, _fp: *mut c_void) -> c_int {
-    -1
+unsafe fn uio_fputc(c: c_int, fp: *mut c_void) -> c_int {
+    real_uio::uio_fputc(c, fp.cast())
 }
 #[cfg(test)]
-unsafe fn uio_unlink(_dir: *mut c_void, _path: *const c_char) -> c_int {
-    -1
+unsafe fn uio_unlink(dir: *mut c_void, path: *const c_char) -> c_int {
+    real_uio::uio_unlink(dir.cast(), path)
 }
 #[cfg(test)]
-unsafe fn uio_stat(_dir: *mut c_void, _path: *const c_char, _stat_buf: *mut libc::stat) -> c_int {
-    -1
+unsafe fn uio_stat(dir: *mut c_void, path: *const c_char, stat_buf: *mut libc::stat) -> c_int {
+    real_uio::uio_stat(dir.cast(), path, stat_buf)
 }
 
 #[cfg(test)]
@@ -2802,3 +2805,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ffi_bridge_file_tests.rs"]
+mod file_tests;
