@@ -24,7 +24,7 @@ fn offsets(base: *const c_char, start: *const c_char, end: *const c_char) -> (is
 fn take(string: *mut c_char) -> Vec<u8> {
     assert!(!string.is_null());
     let bytes = unsafe { CStr::from_ptr(string) }.to_bytes().to_vec();
-    unsafe { libc::free(string.cast()) };
+    super::lifetime_probe::caller_free(string.cast());
     bytes
 }
 

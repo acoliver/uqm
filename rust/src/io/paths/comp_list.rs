@@ -11,7 +11,7 @@
 //! references and are never followed when deleting. A list built with an
 //! `up` argument (`uio_makePathComps`) therefore does not own that node.
 
-use std::ffi::c_char;
+use std::ffi::{c_char, c_void};
 use std::marker::PhantomData;
 use std::mem::{align_of, offset_of, size_of};
 use std::ptr;
@@ -43,11 +43,33 @@ const _: () = {
     assert!(offset_of!(PathComp, up) == 3 * size_of::<usize>());
 };
 
+/// A new block of `size` bytes; every allocation of this module goes through
+/// here so tests can account for its owners.
+fn alloc_block(size: usize) -> *mut c_void {
+    // SAFETY: aborts on out-of-memory; the block is owned by the caller.
+    let block = unsafe { rust_hmalloc(size) };
+    #[cfg(test)]
+    super::lifetime_probe::allocated(block, size);
+    block
+}
+
+/// Releases a block from [`alloc_block`] (or a `malloc` block that a node
+/// adopted).
+///
+/// # Safety
+/// `block` is a live block that nothing else frees or uses afterwards.
+unsafe fn free_block(block: *mut c_void) {
+    #[cfg(test)]
+    super::lifetime_probe::released(block);
+    // SAFETY: per the contract.
+    unsafe { rust_hfree(block) }
+}
+
 /// A new heap copy of `bytes` with a NUL after it, for a node to own.
 pub fn alloc_name(bytes: &[u8]) -> *mut c_char {
     // SAFETY: the block has room for `bytes` and the NUL; it aborts on OOM.
     unsafe {
-        let name = rust_hmalloc(bytes.len() + 1).cast::<u8>();
+        let name = alloc_block(bytes.len() + 1).cast::<u8>();
         ptr::copy_nonoverlapping(bytes.as_ptr(), name, bytes.len());
         name.add(bytes.len()).write(0);
         name.cast()
@@ -62,7 +84,7 @@ pub fn alloc_name(bytes: &[u8]) -> *mut c_char {
 pub unsafe fn new(name: *mut c_char, name_len: usize, up: *mut PathComp) -> *mut PathComp {
     // SAFETY: the block is large enough for one node; it aborts on OOM.
     unsafe {
-        let node = rust_hmalloc(size_of::<PathComp>()).cast::<PathComp>();
+        let node = alloc_block(size_of::<PathComp>()).cast::<PathComp>();
         node.write(PathComp {
             name,
             name_len,
@@ -84,8 +106,8 @@ pub unsafe fn delete(mut head: *mut PathComp) {
         // SAFETY: a live node per the contract; the next link is read first.
         unsafe {
             let next = (*head).next;
-            rust_hfree((*head).name.cast());
-            rust_hfree(head.cast());
+            free_block((*head).name.cast());
+            free_block(head.cast());
             head = next;
         }
     }
@@ -169,6 +191,11 @@ impl OwnedPathComps {
     /// module that nothing else owns or frees.
     pub unsafe fn from_raw(head: *mut PathComp) -> Self {
         Self { head }
+    }
+
+    /// The first node, still owned by `self`.
+    pub fn as_ptr(&self) -> *const PathComp {
+        self.head
     }
 
     /// Gives the list to the caller, who must [`delete`] it.
