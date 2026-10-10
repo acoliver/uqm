@@ -615,11 +615,11 @@ pub unsafe extern "C" fn rust_mixer_GetFormat() -> c_uint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
+    use crate::sound::test_support::{Probe, ENGINE_TEST_LOCK};
 
     #[test]
-    #[serial]
     fn test_ffi_init_uninit() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
             rust_mixer_Uninit();
             assert_eq!(
@@ -636,8 +636,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_ffi_gen_sources() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
             rust_mixer_Uninit();
             rust_mixer_Init(
@@ -664,8 +664,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_ffi_gen_buffers() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
             rust_mixer_Uninit();
             rust_mixer_Init(
@@ -690,8 +690,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_ffi_source_properties() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
             rust_mixer_Uninit();
             rust_mixer_Init(
@@ -723,8 +723,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_ffi_buffer_data() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         unsafe {
             rust_mixer_Uninit();
             rust_mixer_Init(
@@ -757,8 +757,27 @@ mod tests {
             rust_mixer_Uninit();
         }
     }
+
+    #[test]
+    fn the_ffi_mixer_tests_wait_for_the_lock_of_the_mixer_they_initialise() {
+        let bodies: [fn(); 5] = [
+            test_ffi_init_uninit,
+            test_ffi_gen_sources,
+            test_ffi_gen_buffers,
+            test_ffi_source_properties,
+            test_ffi_buffer_data,
+        ];
+        let engine = ENGINE_TEST_LOCK.lock();
+        let probes = bodies.map(Probe::spawn);
+        let blocked = Probe::all_blocked_for_grace(&probes);
+        drop(engine);
+
+        let finished: Vec<bool> = probes.into_iter().map(|p| p.join().is_ok()).collect();
+        assert!(blocked, "an ffi mixer test ran without the engine lock");
+        assert_eq!(finished, [true; 5]);
+    }
 }
 
 #[cfg(test)]
 #[path = "ffi_playback_tests.rs"]
-mod playback_tests;
+pub(crate) mod playback_tests;

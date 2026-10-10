@@ -46,6 +46,19 @@ impl Probe {
         true
     }
 
+    /// Whether every step is still unfinished once the grace period, shared by
+    /// all of them, has passed.
+    pub(crate) fn all_blocked_for_grace(probes: &[Probe]) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < PROBE_GRACE {
+            if probes.iter().any(|p| p.handle.is_finished()) {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        true
+    }
+
     /// The step's outcome: `Err` carries its panic.
     pub(crate) fn join(self) -> thread::Result<()> {
         self.handle.join()

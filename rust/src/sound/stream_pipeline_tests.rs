@@ -7,8 +7,9 @@
 //! `process_source_stream` directly and observe the result deterministically.
 
 use super::*;
+use crate::sound::mixer::ffi::playback_tests as mixer_playback;
 use crate::sound::mixer::types::BufferState;
-use crate::sound::test_support::{ScriptedDecoder, ENGINE_TEST_LOCK};
+use crate::sound::test_support::{Probe, ScriptedDecoder, ENGINE_TEST_LOCK};
 
 const CHUNK: usize = 400;
 const TEST_SOURCE: usize = LAST_SFX_SOURCE;
@@ -66,13 +67,35 @@ fn chunks(count: usize) -> Vec<Vec<u8>> {
     (0..count).map(|i| pcm(i as u8 + 1)).collect()
 }
 
-fn lock_test() -> parking_lot::MutexGuard<'static, ()> {
+/// `ENGINE_TEST_LOCK` together with the mixer source a test plays on. The
+/// mixer renders every playing source in the process-wide pool, so the source
+/// is deleted before the lock is released and a finished test leaves nothing
+/// in the pool for the mixer tests to hear.
+struct TestSourceLease {
+    handle: usize,
+    _guard: parking_lot::MutexGuard<'static, ()>,
+}
+
+impl Drop for TestSourceLease {
+    fn drop(&mut self) {
+        let deleted = mixer_source::mixer_delete_sources(&[self.handle]);
+        assert!(
+            deleted.is_ok() || std::thread::panicking(),
+            "the test's mixer source was already gone"
+        );
+    }
+}
+
+fn lock_test() -> TestSourceLease {
     let guard = ENGINE_TEST_LOCK.lock();
     let handle = mixer_source::mixer_gen_sources(1).unwrap()[0];
     let mut source = get_source(TEST_SOURCE).unwrap();
     *source = SoundSource::new();
     source.handle = handle;
-    guard
+    TestSourceLease {
+        handle,
+        _guard: guard,
+    }
 }
 
 fn sample_with(
@@ -832,4 +855,40 @@ fn a_stereo_eight_bit_stream_at_a_foreign_rate_is_queued_like_any_other() {
     let buffer = crate::sound::mixer::buffer::mixer_get_buffer(buffer).unwrap();
     assert_eq!(buffer.lock().state, BufferState::Queued as u32);
     assert_eq!(mixer_int(SourceProp::BuffersQueued), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Sharing the mixer's source pool with the mixer tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_finished_stream_test_leaves_nothing_for_the_mixer_tests_to_hear() {
+    starting_a_stream_prefills_one_buffer_per_decoded_chunk_then_plays();
+    mixer_playback::a_queued_source_plays_its_samples_then_stops_with_the_buffer_processed();
+}
+
+#[test]
+fn a_mixer_test_waits_while_a_stream_test_is_playing_on_the_pool() {
+    let lease = lock_test();
+    let sample = sample_with(Some(ScriptedDecoder::new(chunks(2))), 3, None);
+    play_stream(sample, TEST_SOURCE, false, false, true).unwrap();
+    assert_eq!(
+        mixer_int(SourceProp::SourceState),
+        SourceState::Playing as i32
+    );
+
+    let mixer_test = Probe::spawn(
+        mixer_playback::a_queued_source_plays_its_samples_then_stops_with_the_buffer_processed,
+    );
+    let rendered_early = mixer_test.finishes_within_grace();
+    drop(lease);
+
+    assert!(
+        !rendered_early,
+        "the mixer test rendered while a stream test held the pool"
+    );
+    assert!(
+        mixer_test.join().is_ok(),
+        "the mixer test heard a source it did not play"
+    );
 }
