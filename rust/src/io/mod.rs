@@ -8,6 +8,7 @@ pub mod files;
 mod name_filter;
 pub mod paths;
 pub mod uio_bridge;
+pub mod uioutils;
 pub mod zip_reader; // @plan PLAN-20260314-FILE-IO.P09 @requirement REQ-FIO-ARCHIVE-MOUNT
 pub mod zip_stat;
 

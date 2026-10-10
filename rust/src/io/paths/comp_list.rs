@@ -45,7 +45,7 @@ const _: () = {
 
 /// A new block of `size` bytes; every allocation of this module goes through
 /// here so tests can account for its owners.
-fn alloc_block(size: usize) -> *mut c_void {
+pub(crate) fn alloc_block(size: usize) -> *mut c_void {
     // SAFETY: aborts on out-of-memory; the block is owned by the caller.
     let block = unsafe { rust_hmalloc(size) };
     #[cfg(test)]

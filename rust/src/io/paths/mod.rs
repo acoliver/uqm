@@ -49,7 +49,7 @@ mod c_abi_tests;
 #[cfg(test)]
 mod components_tests;
 #[cfg(test)]
-mod lifetime_probe;
+pub(crate) mod lifetime_probe;
 #[cfg(test)]
 mod lifetime_tests;
 #[cfg(test)]

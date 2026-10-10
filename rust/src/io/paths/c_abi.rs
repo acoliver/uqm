@@ -33,7 +33,7 @@ use super::unc;
 use crate::io::dirs::c_abi::{contract_violation, set_errno};
 
 /// A non-null pointer argument.
-fn required<T>(function: &str, argument: &str, value: *const T) {
+pub(crate) fn required<T>(function: &str, argument: &str, value: *const T) {
     if value.is_null() {
         contract_violation(function, &format!("{argument} is null"));
     }
@@ -43,7 +43,7 @@ fn required<T>(function: &str, argument: &str, value: *const T) {
 ///
 /// # Safety
 /// `value` is null or a NUL-terminated string that outlives `'a`.
-unsafe fn string<'a>(function: &str, argument: &str, value: *const c_char) -> &'a [u8] {
+pub(crate) unsafe fn string<'a>(function: &str, argument: &str, value: *const c_char) -> &'a [u8] {
     required(function, argument, value);
     // SAFETY: non-null and NUL-terminated per the contract.
     unsafe { CStr::from_ptr(value) }.to_bytes()

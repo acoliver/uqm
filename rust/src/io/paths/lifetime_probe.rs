@@ -25,7 +25,7 @@ thread_local! {
     static LEDGER: RefCell<Ledger> = RefCell::new(Ledger::default());
 }
 
-pub(super) fn allocated(block: *mut c_void, size: usize) {
+pub(crate) fn allocated(block: *mut c_void, size: usize) {
     LEDGER.with_borrow_mut(|ledger| {
         let address = block as usize;
         let previous = ledger.live.insert(address, size);
@@ -38,7 +38,7 @@ pub(super) fn allocated(block: *mut c_void, size: usize) {
     });
 }
 
-pub(super) fn released(block: *mut c_void) {
+pub(crate) fn released(block: *mut c_void) {
     let address = block as usize;
     let freed = LEDGER.with_borrow_mut(|ledger| {
         ledger.attempted_releases += 1;
@@ -55,52 +55,52 @@ pub(super) fn released(block: *mut c_void) {
 }
 
 /// The C caller's `free` of a block the module returned.
-pub(super) fn caller_free(block: *mut c_void) {
+pub(crate) fn caller_free(block: *mut c_void) {
     released(block);
     // SAFETY: a live block from `rust_hmalloc`, which is libc malloc.
     unsafe { libc::free(block) };
 }
 
 /// A fresh ledger for the calling test thread.
-pub(super) struct Probe;
+pub(crate) struct Probe;
 
 impl Probe {
-    pub(super) fn start() -> Self {
+    pub(crate) fn start() -> Self {
         LEDGER.with_borrow_mut(|ledger| *ledger = Ledger::default());
         Probe
     }
 
-    pub(super) fn live_blocks(&self) -> usize {
+    pub(crate) fn live_blocks(&self) -> usize {
         LEDGER.with_borrow(|ledger| ledger.live.len())
     }
 
-    pub(super) fn live_bytes(&self) -> usize {
+    pub(crate) fn live_bytes(&self) -> usize {
         LEDGER.with_borrow(|ledger| ledger.live.values().sum())
     }
 
-    pub(super) fn is_live<T>(&self, block: *const T) -> bool {
+    pub(crate) fn is_live<T>(&self, block: *const T) -> bool {
         LEDGER.with_borrow(|ledger| ledger.live.contains_key(&(block as usize)))
     }
 
-    pub(super) fn size_of_live<T>(&self, block: *const T) -> Option<usize> {
+    pub(crate) fn size_of_live<T>(&self, block: *const T) -> Option<usize> {
         LEDGER.with_borrow(|ledger| ledger.live.get(&(block as usize)).copied())
     }
 
     /// Releases of `block` since it was allocated.
-    pub(super) fn releases_of<T>(&self, block: *const T) -> u32 {
+    pub(crate) fn releases_of<T>(&self, block: *const T) -> u32 {
         LEDGER.with_borrow(|ledger| ledger.releases.get(&(block as usize)).copied().unwrap_or(0))
     }
 
-    pub(super) fn allocations(&self) -> usize {
+    pub(crate) fn allocations(&self) -> usize {
         LEDGER.with_borrow(|ledger| ledger.allocations)
     }
 
-    pub(super) fn attempted_releases(&self) -> usize {
+    pub(crate) fn attempted_releases(&self) -> usize {
         LEDGER.with_borrow(|ledger| ledger.attempted_releases)
     }
 
     /// Every block ever allocated has been released.
-    pub(super) fn assert_balanced(&self) {
+    pub(crate) fn assert_balanced(&self) {
         let (live, allocations) = LEDGER.with_borrow(|l| (l.live.len(), l.allocations));
         assert_eq!(live, 0, "{live} of {allocations} blocks never released");
     }

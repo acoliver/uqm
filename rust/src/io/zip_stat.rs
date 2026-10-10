@@ -33,6 +33,8 @@ use std::io::{self, Read, Seek, SeekFrom};
 
 use zip::DateTime;
 
+use super::uioutils::dos_time::dos_to_unix_seconds;
+
 const TYPE_MASK: u32 = 0o170000;
 const REGULAR_FILE: u32 = 0o100000;
 const DIRECTORY: u32 = 0o040000;
@@ -230,24 +232,11 @@ fn dos_mode(attributes: u32, directory_name: bool) -> Result<u32, UnsupportedEnt
 }
 
 /// The DOS date and time of an entry as seconds since the epoch, read as UTC
-/// the way the original `dosToUnixTime` does (the format carries no zone).
+/// the way the original `dosToUnixTime` does (the format carries no zone),
+/// decoded by the one decoder `dosToUnixTime` shares. A time that is not a
+/// calendar value is no time.
 fn unix_seconds(time: DateTime) -> i64 {
-    // Days from 1970-01-01 to the civil date (proleptic Gregorian).
-    let (year, month, day) = (
-        i64::from(time.year()),
-        i64::from(time.month()),
-        i64::from(time.day()),
-    );
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    let days = era * 146_097 + day_of_era - 719_468;
-    days * 86_400
-        + i64::from(time.hour()) * 3_600
-        + i64::from(time.minute()) * 60
-        + i64::from(time.second())
+    dos_to_unix_seconds(time.datepart(), time.timepart()).unwrap_or(0)
 }
 
 #[cfg(test)]
