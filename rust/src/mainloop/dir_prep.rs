@@ -214,6 +214,39 @@ unsafe fn mount_stdio_dir(
     )
 }
 
+/// Opens the directory `name` below the config directory, for a directory
+/// the user wants kept at `host`. The original opened `<config>/name` whatever
+/// `host` was and could not follow an override elsewhere (its own TODO). When
+/// `host` is not `<config>/name`, it is mounted at `/name` first, so the
+/// handle reaches the directory that was created.
+unsafe fn open_config_subdir(
+    name: &str,
+    host: &std::path::Path,
+) -> Result<*mut uio_DirHandle, DirPrepError> {
+    let repo = repository as *mut uio_Repository;
+    let config_dir = configDir as *mut uio_DirHandle;
+    let config_host = std::env::var("UQM_CONFIG_DIR")
+        .expect("prepare_config_dir runs before the directories below it");
+    if host != std::path::Path::new(&config_host).join(name) {
+        let mount = mount_stdio_dir(repo, name, &host.to_string_lossy(), UIO_MOUNT_TOP);
+        if mount.is_null() {
+            return Err(DirPrepError::MountFailed(format!(
+                "Could not mount {name} dir: {}",
+                host.display()
+            )));
+        }
+    }
+    let relative = CString::new(name).expect("a fixed directory name holds no NUL");
+    let dir = uio_openDirRelative(config_dir, relative.as_ptr(), 0);
+    if dir.is_null() {
+        return Err(DirPrepError::MountFailed(format!(
+            "Could not open {name} dir: {}",
+            host.display()
+        )));
+    }
+    Ok(dir)
+}
+
 /// Open a directory in the repository and return the handle.
 unsafe fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle {
     let p = CString::new(path).unwrap();
@@ -284,15 +317,7 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
 
     tracing::debug!("Saved games are kept in {}.", path_str);
 
-    let config_dir = unsafe { configDir as *mut uio_DirHandle };
-    let save = CString::new("save").unwrap();
-    let dir = unsafe { uio_openDirRelative(config_dir, save.as_ptr(), 0) };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not open save dir: {path_str}"
-        )));
-    }
-
+    let dir = unsafe { open_config_subdir("save", &path)? };
     unsafe { saveDir = dir as *mut std::ffi::c_void };
     Ok(())
 }
@@ -314,15 +339,7 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
     std::env::set_var("UQM_MELEE_DIR", &path_str);
     std::fs::create_dir_all(&path)?;
 
-    let config_dir = unsafe { configDir as *mut uio_DirHandle };
-    let teams = CString::new("teams").unwrap();
-    let dir = unsafe { uio_openDirRelative(config_dir, teams.as_ptr(), 0) };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not open melee teams dir: {path_str}"
-        )));
-    }
-
+    let dir = unsafe { open_config_subdir("teams", &path)? };
     unsafe { meleeDir = dir as *mut std::ffi::c_void };
     Ok(())
 }

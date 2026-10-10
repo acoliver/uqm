@@ -18,7 +18,16 @@ fn dir_with(files: &[(&str, &[u8])]) -> TempDir {
 fn mount_case_zip(repo: &Repo, entries: Files) -> (TempDir, Dir) {
     let host = TempDir::new().unwrap();
     write_zip(&host.path().join("pack.zip"), entries);
-    let source = repo.open_dir(host.path().to_str().unwrap());
+    // The archive lies in the repository's `packages` directory, where the
+    // game's content tree keeps it, and is mounted from there.
+    let packages = repo.mount_stdio(
+        "/packages",
+        host.path(),
+        MOUNT_TOP | MOUNT_RDONLY,
+        Mount::NONE,
+    );
+    assert!(!packages.is_null());
+    let source = repo.open_dir("/packages");
     let mount = repo.mount_zip(
         "/",
         &source,

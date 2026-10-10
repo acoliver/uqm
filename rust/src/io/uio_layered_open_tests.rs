@@ -24,11 +24,9 @@ impl Stack {
         }
         let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let root = Box::into_raw(Box::new(uio_DirHandle {
-            path: PathBuf::from("/"),
             virtual_path: PathBuf::from("/"),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository: repo,
-            root_end: PathBuf::from("/"),
         }));
         Stack {
             repo,
@@ -128,11 +126,9 @@ pub(super) fn mount_host_root(host: &Path) -> (*mut uio_Repository, *mut uio_Dir
     );
     assert!(!mount.is_null(), "mount of {host:?} failed");
     let root = Box::into_raw(Box::new(uio_DirHandle {
-        path: host.to_path_buf(),
         virtual_path: PathBuf::from("/"),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: repo,
-        root_end: PathBuf::from("/"),
     }));
     (repo, root)
 }

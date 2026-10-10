@@ -65,8 +65,10 @@ impl Game {
             content_mount,
             repo,
         };
-        let packages = game.repo.open_dir("/packages");
-        game.mount_dir_zips(&packages, "/", MOUNT_BELOW, content_mount);
+        // As mountContentDir: a content tree without `packages` has none to mount.
+        if let Some(packages) = game.repo.try_open_dir("/packages") {
+            game.mount_dir_zips(&packages, "/", MOUNT_BELOW, content_mount);
+        }
         game
     }
 

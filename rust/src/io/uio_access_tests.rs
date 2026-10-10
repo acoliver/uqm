@@ -30,7 +30,9 @@ fn stdio_access(
     (handle, if handle.is_null() { errno_value() } else { 0 })
 }
 
-/// A directory handle that stores extracted archive entries.
+/// A directory handle that stores extracted archive entries: a writable host
+/// directory mounted at `/scratch` of the repository, opened the way the
+/// game opens its temporary directory.
 struct TempHandle {
     dir: TempDir,
     handle: *mut uio_DirHandle,
@@ -39,13 +41,18 @@ struct TempHandle {
 impl TempHandle {
     fn new(repo: *mut uio_Repository) -> Self {
         let dir = TempDir::new().unwrap();
-        let handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: dir.path().to_path_buf(),
-            virtual_path: dir.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: dir.path().to_path_buf(),
-        }));
+        let mount = register_mount(
+            repo,
+            Path::new("/scratch"),
+            dir.path().to_path_buf(),
+            UIO_FSTYPE_STDIO,
+            UIO_MOUNT_TOP,
+            ptr::null_mut(),
+            true,
+        );
+        assert!(!mount.is_null());
+        let handle = unsafe { uio_openDir(repo, c"/scratch".as_ptr(), 0) };
+        assert!(!handle.is_null());
         TempHandle { dir, handle }
     }
 }
@@ -235,6 +242,11 @@ fn an_archive_entry_is_copied_to_the_temp_directory_and_removed_on_release() {
         let copy = std::path::PathBuf::from(path);
         uio_releaseStdioAccess(handle);
         assert!(!copy.exists(), "the temporary copy is deleted on release");
+        assert!(
+            !copy.parent().unwrap().exists(),
+            "so is the directory made for it"
+        );
+        assert!(temp.dir.path().exists(), "the temporary directory stays");
     }
 }
 

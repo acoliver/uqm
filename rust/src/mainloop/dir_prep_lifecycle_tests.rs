@@ -256,6 +256,30 @@ fn save_dir_expands_variables_in_an_override() {
         std::env::var("UQM_SAVE_DIR").unwrap(),
         expected.to_str().unwrap()
     );
+    // The handle reaches the override, not a "save" directory that is not there.
+    std::fs::write(expected.join("slot1.sav"), b"saved game").unwrap();
+    assert_eq!(
+        read_through_uio(unsafe { saveDir }, "slot1.sav").as_deref(),
+        Some(&b"saved game"[..])
+    );
+}
+
+#[test]
+#[serial]
+fn melee_dir_override_is_reached_through_the_handle() {
+    let fx = Fixture::new();
+    fx.prepare_config();
+    std::env::set_var("UQM_MELEE_DIR", "${UQM_CONFIG_DIR}/my_teams");
+
+    prepare_melee_dir().unwrap();
+
+    let expected = fx.config_path().join("my_teams");
+    assert!(expected.is_dir());
+    std::fs::write(expected.join("mine.mle"), b"team").unwrap();
+    assert_eq!(
+        read_through_uio(unsafe { meleeDir }, "mine.mle").as_deref(),
+        Some(&b"team"[..])
+    );
 }
 
 #[test]

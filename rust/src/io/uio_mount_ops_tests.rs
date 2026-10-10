@@ -178,13 +178,11 @@ fn unmount_all_clears_only_the_given_repository() {
 #[serial]
 fn transplanting_a_directory_requires_a_read_only_mount() {
     let mut stack = Stack::new();
-    let host = stack.mount_dir(&[("a.txt", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
+    stack.mount_dir(&[("a.txt", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     let source = Box::into_raw(Box::new(uio_DirHandle {
-        path: host.clone(),
         virtual_path: PathBuf::from("/"),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: stack.repo,
-        root_end: host,
     }));
     let point = cstr("/copy");
     unsafe {
@@ -235,16 +233,14 @@ fn transplanting_a_directory_requires_a_read_only_mount() {
 #[serial]
 fn a_transplanted_directory_exposes_its_files_at_the_new_mount_point() {
     let mut stack = Stack::new();
-    let host = stack.mount_dir(
+    stack.mount_dir(
         &[("a.txt", b"transplanted")],
         UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
     );
     let source = Box::into_raw(Box::new(uio_DirHandle {
-        path: host.clone(),
         virtual_path: PathBuf::from("/"),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: stack.repo,
-        root_end: host,
     }));
     let point = cstr("/copy");
     let mounted = unsafe {

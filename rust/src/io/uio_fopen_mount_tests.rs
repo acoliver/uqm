@@ -63,11 +63,9 @@ fn handle_contents(dir: *mut uio_DirHandle, name: &str) -> Result<Vec<u8>, c_int
 
 fn dir_at(stack: &Stack, virtual_path: &str) -> *mut uio_DirHandle {
     Box::into_raw(Box::new(uio_DirHandle {
-        path: PathBuf::from(virtual_path),
         virtual_path: PathBuf::from(virtual_path),
         refcount: std::sync::atomic::AtomicI32::new(1),
         repository: stack.repo,
-        root_end: PathBuf::from("/"),
     }))
 }
 

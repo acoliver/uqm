@@ -6,7 +6,7 @@ use crate::bridge_log::rust_bridge_log_msg;
 use libc::{mode_t, off_t, size_t};
 use std::collections::BTreeSet;
 
-use std::ffi::OsStr;
+use std::ffi::{CStr, CString, OsStr};
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::raw::{c_char, c_int, c_long};
@@ -17,10 +17,15 @@ use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
+#[path = "uio_resolve.rs"]
+mod resolve;
+use resolve::{covering, locate, transplant_source, verify_directory, Kind, Place};
+
 // =============================================================================
 // Mount Point Registry
 const UIO_MOUNT_RDONLY: c_int = 1 << 1;
 const UIO_MOUNT_LOCATION_MASK: c_int = 3 << 2;
+#[cfg(test)]
 const UIO_MOUNT_BOTTOM: c_int = 0 << 2;
 const UIO_MOUNT_TOP: c_int = 1 << 2;
 
@@ -114,8 +119,32 @@ struct MountInfo {
     read_only: bool,
     /// ZIP archive index (only for UIO_FSTYPE_ZIP mounts)
     zip_index: Option<std::sync::Arc<crate::io::zip_reader::ZipIndex>>,
+    /// The directory of the archive this mount shows as its root: empty for
+    /// the whole archive, `"sub"` for a mount of the archive's `sub/`
+    /// directory (what a transplant of such a directory makes).
+    archive_root: String,
     // Note: AutoMount is DEFERRED per P00a Q2 resolution - not needed for engine/runtime paths
     // auto_mount_rules field is NOT implemented
+}
+
+impl MountInfo {
+    /// Archives can only be mounted read-only, so an archive mount is
+    /// read-only whatever flags it was given.
+    fn is_read_only(&self) -> bool {
+        self.read_only || self.fs_type == UIO_FSTYPE_ZIP
+    }
+
+    /// The archive entry name of `suffix`, a path below the mount point.
+    /// `None` when the bytes are not UTF-8: entry names are Unicode, so such
+    /// a path names no entry.
+    fn archive_name(&self, suffix: &Path) -> Option<String> {
+        let suffix = suffix.to_str()?;
+        Some(match (self.archive_root.is_empty(), suffix.is_empty()) {
+            (_, true) => self.archive_root.clone(),
+            (true, false) => suffix.to_owned(),
+            (false, false) => format!("{}/{}", self.archive_root, suffix),
+        })
+    }
 }
 
 /// @plan PLAN-20260314-FILE-IO.P11
@@ -132,15 +161,16 @@ fn get_mount_registry() -> &'static Mutex<Vec<MountInfo>> {
 
 // Types matching C structures from io.h and uiostream.h
 
+/// A place in a repository's virtual tree: an absolute, normalized virtual
+/// path and the repository whose mounts give it meaning. It holds no host
+/// path. Every operation looks the path up in the repository's mount stack as
+/// it is at that moment (see `uio_resolve`), as the original's handle held
+/// only the virtual path.
 #[repr(C)]
 pub struct uio_DirHandle {
-    path: PathBuf,
-    /// The original virtual path (e.g. "/packages") used for mount resolution.
-    /// `path` holds the resolved host path; this holds the pre-resolution virtual path.
     virtual_path: PathBuf,
     refcount: std::sync::atomic::AtomicI32,
     repository: *mut uio_Repository,
-    root_end: PathBuf,
 }
 
 #[repr(C)]
@@ -197,8 +227,16 @@ pub unsafe extern "C" fn uio_rename(
 
         // Resolve both paths through mount registry
         let registry = get_mount_registry().lock().unwrap();
-        let old_resolution = resolve_mount_for_path(&registry, &old_virtual);
-        let new_resolution = resolve_mount_for_path(&registry, &new_virtual);
+        let old_resolution = resolve_mount_for_path(
+            &registry,
+            repository_key((*old_dir).repository),
+            &old_virtual,
+        );
+        let new_resolution = resolve_mount_for_path(
+            &registry,
+            repository_key((*new_dir).repository),
+            &new_virtual,
+        );
 
         let (old_mount_id, old_host_path) = match old_resolution {
             Some(res) => {
@@ -268,49 +306,29 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
         let registry = get_mount_registry().lock().unwrap();
 
         // Resolve to topmost visible object in mount order
-        let visible = registry
-            .iter()
-            .filter(|m| m.active_in_registry)
-            .find_map(|mount| {
-                let mount_path = Path::new(&mount.mount_point);
-                if virtual_path == mount_path || virtual_path.starts_with(mount_path) {
-                    let suffix = virtual_path
-                        .strip_prefix(mount_path)
-                        .unwrap_or_else(|_| Path::new(""));
-
-                    // @plan PLAN-20260314-FILE-IO.P09
-                    // @requirement REQ-FIO-ARCHIVE-MOUNT
-                    // Check ZIP archives
-                    if mount.fs_type == UIO_FSTYPE_ZIP {
-                        // Entry names are Unicode: other bytes name no entry.
-                        if let (Some(zip_index), Some(name)) =
-                            (mount.zip_index.as_ref(), suffix.to_str())
-                        {
-                            if zip_index.contains(name) {
-                                // Use mounted_root as placeholder for ZIP entry
-                                return Some((mount, mount.mounted_root.clone()));
-                            }
-                        }
-                        return None;
-                    }
-
-                    // Check stdio mounts
-                    let host_path = if suffix.as_os_str().is_empty() {
-                        mount.mounted_root.clone()
-                    } else {
-                        map_virtual_to_host_confined(&mount.mounted_root, suffix)
-                    };
-                    if host_path.exists() {
-                        Some((mount, host_path))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
+        let visible = covering(&registry, repository_key((*dir).repository), &virtual_path)
+            .find_map(|covered| {
+                // @plan PLAN-20260314-FILE-IO.P09
+                // @requirement REQ-FIO-ARCHIVE-MOUNT
+                if covered.mount.fs_type == UIO_FSTYPE_ZIP {
+                    let zip_index = covered.mount.zip_index.as_ref()?;
+                    let name = covered.archive_name()?;
+                    // Use mounted_root as placeholder for ZIP entry
+                    return (name.is_empty() || zip_index.contains(&name)).then(|| {
+                        (
+                            covered.mount,
+                            covered.mount.mounted_root.clone(),
+                            Some(name),
+                        )
+                    });
                 }
+                let host_path = covered.host_path();
+                host_path
+                    .exists()
+                    .then_some((covered.mount, host_path, None))
             });
 
-        let (mount, host_path) = match visible {
+        let (mount, host_path, archive_name) = match visible {
             Some(v) => v,
             None => return fail_errno(libc::ENOENT, -1),
         };
@@ -344,15 +362,8 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
         if (mode & X_OK) != 0 {
             // For ZIP mounts, check if it's a directory in the archive
             if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let mount_path = Path::new(&mount.mount_point);
-                    let suffix = virtual_path
-                        .strip_prefix(mount_path)
-                        .unwrap_or_else(|_| Path::new(""));
-                    if suffix
-                        .to_str()
-                        .is_some_and(|name| zip_index.is_directory(name))
-                    {
+                if let (Some(zip_index), Some(name)) = (&mount.zip_index, &archive_name) {
+                    if name.is_empty() || zip_index.is_directory(name) {
                         // Directories are executable (traversable)
                         return 0;
                     }
@@ -423,31 +434,24 @@ pub unsafe extern "C" fn uio_stat(
         let registry = get_mount_registry().lock().unwrap();
 
         // Resolve to topmost visible object in mount order
-        for mount in registry.iter().filter(|m| m.active_in_registry) {
-            let mount_path = Path::new(&mount.mount_point);
-            if virtual_path != mount_path && !virtual_path.starts_with(mount_path) {
-                continue;
-            }
-
-            let suffix = virtual_path
-                .strip_prefix(mount_path)
-                .unwrap_or_else(|_| Path::new(""));
+        for covered in covering(&registry, repository_key((*dir).repository), &virtual_path) {
+            let mount = covered.mount;
 
             // Handle ZIP mounts
             if mount.fs_type == UIO_FSTYPE_ZIP {
                 // Entry names are Unicode: other bytes name no entry.
-                if let (Some(zip_index), Some(suffix_str)) =
-                    (mount.zip_index.as_ref(), suffix.to_str())
+                if let (Some(zip_index), Some(name)) =
+                    (mount.zip_index.as_ref(), covered.archive_name())
                 {
                     // Check if it's a directory
-                    if zip_index.is_directory(suffix_str) {
+                    if name.is_empty() || zip_index.is_directory(&name) {
                         (*stat_buf).st_size = 0;
                         (*stat_buf).st_mode = 0o040555; // Directory, read+exec for all
                         return 0;
                     }
 
                     // Check if it's a file
-                    if let Some(entry) = zip_index.get_entry(suffix_str) {
+                    if let Some(entry) = zip_index.get_entry(&name) {
                         (*stat_buf).st_size = entry.uncompressed_size as i64;
                         (*stat_buf).st_mode = 0o100444; // Regular file, read-only
                         return 0;
@@ -457,11 +461,7 @@ pub unsafe extern "C" fn uio_stat(
             }
 
             // Handle stdio mounts
-            let host_path = if suffix.as_os_str().is_empty() {
-                mount.mounted_root.clone()
-            } else {
-                map_virtual_to_host_confined(&mount.mounted_root, suffix)
-            };
+            let host_path = covered.host_path();
 
             match fs::metadata(&host_path) {
                 Ok(meta) => {
@@ -516,7 +516,11 @@ pub unsafe extern "C" fn uio_mkdir(
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let host_path = match resolve_mount_for_path(&registry, &virtual_path) {
+        let host_path = match resolve_mount_for_path(
+            &registry,
+            repository_key((*dir).repository),
+            &virtual_path,
+        ) {
             Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
             Some(resolution) => resolution.host_path.clone(),
             None => return fail_errno(libc::ENOENT, -1),
@@ -558,7 +562,11 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let host_path = match resolve_mount_for_path(&registry, &virtual_path) {
+        let host_path = match resolve_mount_for_path(
+            &registry,
+            repository_key((*dir).repository),
+            &virtual_path,
+        ) {
             Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
             Some(resolution) => resolution.host_path.clone(),
             None => return fail_errno(libc::ENOENT, -1),
@@ -771,19 +779,48 @@ fn normalize_mount_point(path: &Path) -> PathBuf {
     PathBuf::from(OsStr::from_bytes(&normalized))
 }
 
-fn normalize_virtual_path(path: &Path) -> PathBuf {
-    if path.as_os_str().is_empty() {
-        return PathBuf::from("/");
-    }
-    normalize_mount_point(path)
+/// What a new mount shows: a host directory, or an archive (the whole of it
+/// or one of its directories).
+struct MountBacking {
+    mounted_root: PathBuf,
+    fs_type: c_int,
+    zip_index: Option<Arc<crate::io::zip_reader::ZipIndex>>,
+    archive_root: String,
 }
+
+/// The errno for a location/relative combination `uio_mountDir` and
+/// `uio_transplantDir` refuse: ABOVE and BELOW name a mount to be relative to,
+/// TOP and BOTTOM must not.
+fn check_relative(flags: c_int, relative: *mut uio_MountHandle) -> Result<(), c_int> {
+    let location = flags & UIO_MOUNT_LOCATION_MASK;
+    let relative_required = location == UIO_MOUNT_ABOVE || location == UIO_MOUNT_BELOW;
+    if relative_required == relative.is_null() {
+        Err(libc::EINVAL)
+    } else {
+        Ok(())
+    }
+}
+
+/// Indexes the archive at `path`. A failure of the host (no such file, no
+/// permission) keeps the host's errno; a file that is not a readable archive
+/// is EIO, as in the original.
+fn index_archive(path: &Path) -> Result<Arc<crate::io::zip_reader::ZipIndex>, c_int> {
+    crate::io::zip_reader::ZipIndex::new(path)
+        .map(Arc::new)
+        .map_err(|err| err.raw_os_error().unwrap_or(libc::EIO))
+}
+
 /// @plan PLAN-20260314-FILE-IO.P06
 /// @requirement REQ-FIO-MOUNT-ORDER
 /// @plan PLAN-20260314-FILE-IO.P09
 /// @requirement REQ-FIO-ARCHIVE-MOUNT
-/// Register a mount with explicit ordering semantics.
+/// Register a mount of `mounted_root` (a host directory, or for ZIP mounts
+/// the archive file, which is indexed now) with explicit ordering semantics.
 /// Returns NULL and sets errno on failure.
-/// For ZIP mounts, indexes the archive at mount time.
+///
+/// The game mounts through [`uio_mountDir`], which builds the backing from the
+/// mounts as they are; this is the direct form the tests use to set up a stack.
+#[cfg(test)]
 fn register_mount(
     repository: *mut uio_Repository,
     mount_point: &Path,
@@ -793,41 +830,56 @@ fn register_mount(
     relative: *mut uio_MountHandle,
     active_in_registry: bool,
 ) -> *mut uio_MountHandle {
-    let location = flags & UIO_MOUNT_LOCATION_MASK;
-    let read_only = (flags & UIO_MOUNT_RDONLY) != 0;
-
-    // Validate location/relative combination
-    let relative_required = location == UIO_MOUNT_ABOVE || location == UIO_MOUNT_BELOW;
-    let relative_forbidden = location == UIO_MOUNT_TOP || location == UIO_MOUNT_BOTTOM;
-
-    if relative_required && relative.is_null() {
-        set_errno(libc::EINVAL);
+    if let Err(errno) = check_relative(flags, relative) {
+        set_errno(errno);
         return ptr::null_mut();
     }
-
-    if relative_forbidden && !relative.is_null() {
-        set_errno(libc::EINVAL);
-        return ptr::null_mut();
-    }
-
-    // For ZIP mounts, index the archive at mount time
     let zip_index = if fs_type == UIO_FSTYPE_ZIP {
-        match crate::io::zip_reader::ZipIndex::new(&mounted_root) {
-            Ok(index) => Some(std::sync::Arc::new(index)),
-            Err(_e) => {
-                set_errno(libc::EIO);
+        match index_archive(&mounted_root) {
+            Ok(index) => Some(index),
+            Err(errno) => {
+                set_errno(errno);
                 return ptr::null_mut();
             }
         }
     } else {
         None
     };
+    let backing = MountBacking {
+        mounted_root,
+        fs_type,
+        zip_index,
+        archive_root: String::new(),
+    };
+    insert_mount(
+        repository,
+        mount_point,
+        backing,
+        flags,
+        relative,
+        active_in_registry,
+    )
+    .unwrap_or_else(|errno| fail_errno(errno, ptr::null_mut()))
+}
+
+/// Puts a mount of `backing` into the registry at the position `flags` and
+/// `relative` ask for. EINVAL if `relative` is not a mount of the registry.
+fn insert_mount(
+    repository: *mut uio_Repository,
+    mount_point: &Path,
+    backing: MountBacking,
+    flags: c_int,
+    relative: *mut uio_MountHandle,
+    active_in_registry: bool,
+) -> Result<*mut uio_MountHandle, c_int> {
+    let location = flags & UIO_MOUNT_LOCATION_MASK;
+    let read_only = (flags & UIO_MOUNT_RDONLY) != 0;
 
     let id = NEXT_MOUNT_ID.fetch_add(1, Ordering::SeqCst);
     let handle = Box::new(uio_MountHandle {
         repository,
         id,
-        fs_type,
+        fs_type: backing.fs_type,
     });
     let handle_ptr = Box::into_raw(handle);
 
@@ -856,8 +908,7 @@ fn register_mount(
         drop(registry);
         // SAFETY: handle_ptr came from Box::into_raw above and was never published.
         drop(unsafe { Box::from_raw(handle_ptr) });
-        set_errno(libc::EINVAL);
-        return ptr::null_mut();
+        return Err(libc::EINVAL);
     };
 
     let info = MountInfo {
@@ -865,12 +916,13 @@ fn register_mount(
         repository: repository_key(repository),
         handle_ptr: mount_handle_key(handle_ptr),
         mount_point: normalize_mount_point(mount_point),
-        mounted_root,
-        fs_type,
+        mounted_root: backing.mounted_root,
+        fs_type: backing.fs_type,
         active_in_registry,
         position: 0,
         read_only,
-        zip_index,
+        zip_index: backing.zip_index,
+        archive_root: backing.archive_root,
     };
 
     registry.insert(insert_at, info);
@@ -881,7 +933,7 @@ fn register_mount(
         mount.position = DEFAULT_START_POSITION + rank;
     }
     sort_mount_registry(&mut registry);
-    handle_ptr
+    Ok(handle_ptr)
 }
 
 fn sort_mount_registry(registry: &mut [MountInfo]) {
@@ -914,8 +966,8 @@ struct MountResolution<'a> {
 
 /// @plan PLAN-20260314-FILE-IO.P06a
 /// @requirement REQ-FIO-MUTATION (G14)
-/// Resolve a virtual path to the topmost visible mount that covers it.
-/// Returns None if no mount covers the path.
+/// Resolve a virtual path to the topmost visible mount of `repository` that
+/// covers it. Returns None if no mount covers the path.
 ///
 /// This is used for mutation operations to determine:
 /// - Which mount owns the path
@@ -923,28 +975,14 @@ struct MountResolution<'a> {
 /// - The actual host filesystem path
 fn resolve_mount_for_path<'a>(
     registry: &'a [MountInfo],
+    repository: usize,
     virtual_path: &Path,
 ) -> Option<MountResolution<'a>> {
-    let normalized = normalize_virtual_path(virtual_path);
-
-    registry
-        .iter()
-        .filter(|m| m.active_in_registry)
-        .find_map(|mount| {
-            let mount_path = Path::new(&mount.mount_point);
-            if normalized == mount_path || normalized.starts_with(mount_path) {
-                let suffix = normalized
-                    .strip_prefix(mount_path)
-                    .unwrap_or_else(|_| Path::new(""));
-                let host_path = if suffix.as_os_str().is_empty() {
-                    mount.mounted_root.clone()
-                } else {
-                    map_virtual_to_host_confined(&mount.mounted_root, suffix)
-                };
-                Some(MountResolution { mount, host_path })
-            } else {
-                None
-            }
+    covering(registry, repository, virtual_path)
+        .next()
+        .map(|top| MountResolution {
+            mount: top.mount,
+            host_path: top.host_path(),
         })
 }
 
@@ -991,125 +1029,88 @@ fn duplicate_c_string(path: &Path) -> *mut c_char {
     alloc
 }
 
-fn is_real_filesystem_path(path: &Path) -> bool {
-    if !path.is_absolute() {
-        return false;
-    }
-
-    let Some(component) = path.components().nth(1) else {
-        return false;
-    };
-
-    matches!(
-        component.as_os_str().to_string_lossy().as_ref(),
-        "Users"
-            | "home"
-            | "tmp"
-            | "var"
-            | "opt"
-            | "private"
-            | "System"
-            | "Library"
-            | "Applications"
-    )
-}
-
-fn resolve_virtual_mount_path(registry: &[MountInfo], path: &Path) -> Option<(usize, PathBuf)> {
-    let normalized = normalize_virtual_path(path);
-
-    registry
-        .iter()
-        .filter(|entry| entry.active_in_registry)
-        .find_map(|entry| {
-            let mount_path = Path::new(&entry.mount_point);
-            if normalized == mount_path || normalized.starts_with(mount_path) {
-                let suffix = normalized
-                    .strip_prefix(mount_path)
-                    .unwrap_or_else(|_| Path::new(""));
-                let resolved = if suffix.as_os_str().is_empty() {
-                    entry.mounted_root.clone()
-                } else {
-                    entry.mounted_root.join(suffix)
-                };
-                Some((entry.handle_ptr, resolved))
-            } else {
-                None
-            }
-        })
-}
-
-fn resolve_file_location(
-    dir: *mut uio_DirHandle,
-    in_path: *const c_char,
-) -> Option<(usize, PathBuf)> {
-    if dir.is_null() {
-        return None;
-    }
-
-    let dir_path = unsafe { &(*dir).path };
-    let input = unsafe { cstr_to_pathbuf(in_path) }?;
-    let candidate = resolve_path(dir_path, &input);
-    let registry = get_mount_registry().lock().unwrap();
-
-    if is_real_filesystem_path(&candidate) {
-        return registry
-            .iter()
-            .filter(|entry| entry.active_in_registry)
-            .filter(|entry| {
-                candidate == entry.mounted_root || candidate.starts_with(&entry.mounted_root)
-            })
-            .max_by_key(|entry| entry.mounted_root.components().count())
-            .map(|entry| (entry.handle_ptr, candidate.clone()));
-    }
-
-    resolve_virtual_mount_path(&registry, &candidate)
-}
-
 // =============================================================================
 // uio_get_file_location / uio_unmountDir / uio_unmount_all_dirs /
 // uio_get_mount_file_system_type / uio_transplantDir
 // =============================================================================
+/// Which mount provides the file at `in_path` (relative to `dir`) and where
+/// the file is inside that mount: its host path for a directory mount, the
+/// absolute path inside the archive (`/entry`) for an archive mount, which has
+/// no host path. On failure both outputs are cleared and errno says why:
+/// ENOENT if no mount of the directory's repository has it, EISDIR for a
+/// directory. Only read access is supported; any other `flags` is ENOSYS.
+///
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-ERRNO
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `dir` must be null or a live directory handle, `in_path` a C string, and
+/// each output null or writable.
 pub unsafe fn uio_get_file_location(
     dir: *mut uio_DirHandle,
     in_path: *const c_char,
-    _flags: c_int,
+    flags: c_int,
     mount_handle: *mut *mut uio_MountHandle,
     out_path: *mut *mut c_char,
 ) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_get_file_location called");
 
-        let Some((handle_ptr, resolved_path)) = resolve_file_location(dir, in_path) else {
-            if !mount_handle.is_null() {
-                *mount_handle = ptr::null_mut();
+        let found = file_location(dir, in_path, flags);
+        match found {
+            Ok((mount, location)) => {
+                let duplicated = duplicate_c_string(&location);
+                if duplicated.is_null() {
+                    return fail_errno(libc::ENOMEM, -1);
+                }
+                if !mount_handle.is_null() {
+                    *mount_handle = mount as *mut uio_MountHandle;
+                }
+                if !out_path.is_null() {
+                    *out_path = duplicated;
+                }
+                0
             }
-            if !out_path.is_null() {
-                *out_path = ptr::null_mut();
+            Err(errno) => {
+                if !mount_handle.is_null() {
+                    *mount_handle = ptr::null_mut();
+                }
+                if !out_path.is_null() {
+                    *out_path = ptr::null_mut();
+                }
+                fail_errno(errno, -1)
             }
-            set_errno(libc::ENOENT);
-            return -1;
-        };
-
-        let duplicated = duplicate_c_string(&resolved_path);
-        if duplicated.is_null() {
-            set_errno(libc::ENOMEM);
-            return -1;
         }
-
-        if !mount_handle.is_null() {
-            *mount_handle = handle_ptr as *mut uio_MountHandle;
-        }
-        if !out_path.is_null() {
-            *out_path = duplicated;
-        }
-        0
     })
+}
+
+/// The handle address of the mount holding the file, and its place there.
+///
+/// # Safety
+///
+/// `dir` must be null or a live directory handle and `in_path` a C string.
+unsafe fn file_location(
+    dir: *mut uio_DirHandle,
+    in_path: *const c_char,
+    flags: c_int,
+) -> Result<(usize, PathBuf), c_int> {
+    let dir = dir.as_ref().ok_or(libc::EINVAL)?;
+    let input = cstr_to_pathbuf(in_path).ok_or(libc::EINVAL)?;
+    if flags & O_ACCMODE != O_RDONLY {
+        return Err(libc::ENOSYS);
+    }
+    let virtual_path = normalize_virtual_path_full(&dir.virtual_path, &input);
+    let registry = get_mount_registry().lock().unwrap();
+    let found = locate(&registry, repository_key(dir.repository), &virtual_path)?;
+    if found.kind == Kind::Directory {
+        return Err(libc::EISDIR);
+    }
+    let location = match found.place {
+        Place::Host(path) => path,
+        Place::Archive(name) => Path::new("/").join(name),
+    };
+    Ok((found.mount.handle_ptr, location))
 }
 
 ///
@@ -1159,10 +1160,16 @@ pub unsafe fn uio_get_mount_file_system_type(mount_handle: *mut uio_MountHandle)
     (*mount_handle).fs_type
 }
 
+/// Mounts, at `mount_point`, the physical directory that `source_dir` is
+/// now: the first read-only directory the repository's mounts hold at the
+/// source's virtual path, host directory or archive subtree. Only read-only
+/// transplants exist (ENOSYS otherwise); ENOENT if no read-only directory is
+/// there.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `source_dir` must be null or a live directory handle, `mount_point` a C
+/// string, and `relative` null or a live mount handle.
 #[no_mangle]
 pub unsafe extern "C" fn uio_transplantDir(
     mount_point: *const c_char,
@@ -1170,32 +1177,60 @@ pub unsafe extern "C" fn uio_transplantDir(
     flags: c_int,
     relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
-    log_marker("uio_transplantDir called");
+    ffi_guard!(ptr::null_mut(), {
+        log_marker("uio_transplantDir called");
+        match transplant_dir(mount_point, source_dir, flags, relative) {
+            Ok(handle) => handle,
+            Err(errno) => fail_errno(errno, ptr::null_mut()),
+        }
+    })
+}
 
-    if source_dir.is_null() {
-        return ptr::null_mut();
+/// # Safety
+///
+/// As for [`uio_transplantDir`].
+unsafe fn transplant_dir(
+    mount_point: *const c_char,
+    source_dir: *mut uio_DirHandle,
+    flags: c_int,
+    relative: *mut uio_MountHandle,
+) -> Result<*mut uio_MountHandle, c_int> {
+    let source = source_dir.as_ref().ok_or(libc::EINVAL)?;
+    if flags & UIO_MOUNT_RDONLY != UIO_MOUNT_RDONLY {
+        return Err(libc::ENOSYS);
+    }
+    check_relative(flags, relative)?;
+    let mount_point = cstr_to_pathbuf(mount_point).ok_or(libc::EINVAL)?;
+    if !valid_mount_point(&mount_point) {
+        return Err(libc::EINVAL);
     }
 
-    if (flags & UIO_MOUNT_RDONLY) != UIO_MOUNT_RDONLY {
-        return ptr::null_mut();
-    }
-
-    let mount_point = match cstr_to_pathbuf(mount_point) {
-        Some(path) => path,
-        None => return ptr::null_mut(),
+    let backing = {
+        let registry = get_mount_registry().lock().unwrap();
+        let (mount, place) = transplant_source(
+            &registry,
+            repository_key(source.repository),
+            &source.virtual_path,
+        )?;
+        match place {
+            Place::Host(path) => MountBacking {
+                mounted_root: path,
+                fs_type: UIO_FSTYPE_STDIO,
+                zip_index: None,
+                archive_root: String::new(),
+            },
+            Place::Archive(name) => MountBacking {
+                mounted_root: mount.mounted_root.clone(),
+                fs_type: UIO_FSTYPE_ZIP,
+                zip_index: mount.zip_index.clone(),
+                archive_root: name,
+            },
+        }
     };
-
-    let location = flags & UIO_MOUNT_LOCATION_MASK;
-    let relative_required = location == UIO_MOUNT_ABOVE || location == UIO_MOUNT_BELOW;
-    if relative_required == relative.is_null() {
-        return ptr::null_mut();
-    }
-
-    register_mount(
-        (*source_dir).repository,
+    insert_mount(
+        source.repository,
         &mount_point,
-        (*source_dir).path.clone(),
-        UIO_FSTYPE_STDIO,
+        backing,
         flags,
         relative,
         true,
@@ -1959,15 +1994,58 @@ pub unsafe extern "C" fn uio_walkGPPath(
 /// @plan PLAN-20260314-FILE-IO.P10
 /// @requirement REQ-FIO-STDIO-ACCESS
 /// Internal structure for StdioAccess handles.
-/// Tracks whether the handle provides a direct path to the underlying file
-/// or a temporary copy that must be cleaned up on release.
 struct StdioAccessHandleInner {
-    /// Host filesystem path (direct or temp copy)
-    host_path: PathBuf,
-    /// Whether this is a temp copy that needs cleanup
-    is_temp_copy: bool,
-    /// C-allocated string for host_path (stable across Rust reallocations)
+    /// C-allocated string of the host path (stable across Rust reallocations)
     path_cstr: *mut c_char,
+    /// The copy made for an archive entry; `None` when the file is used where
+    /// it lies.
+    copy: Option<StdioCopy>,
+}
+
+/// An archive entry unpacked into a directory generated under the caller's
+/// temporary directory, as the original did: all of it goes through the mount
+/// stack, and releasing the access removes exactly what was made.
+struct StdioCopy {
+    /// The caller's temporary directory; this handle holds one reference.
+    temp_root: *mut uio_DirHandle,
+    /// The generated directory under `temp_root`, and a handle on it.
+    dir_name: CString,
+    dir: *mut uio_DirHandle,
+    file_name: CString,
+}
+
+impl StdioCopy {
+    /// Removes the copy and its directory, then lets go of the temporary
+    /// directory. Failures cannot be returned from the release call, so they
+    /// are logged: the original reported them the same way.
+    ///
+    /// # Safety
+    ///
+    /// The handles must be the live ones this copy was made with, and not be
+    /// used again.
+    unsafe fn remove(self) {
+        if uio_unlink(self.dir, self.file_name.as_ptr()) == -1 {
+            log_marker(&format!(
+                "uio_releaseStdioAccess: could not remove temporary file: errno {}",
+                last_errno()
+            ));
+        }
+        uio_closeDir(self.dir);
+        if uio_rmdir(self.temp_root, self.dir_name.as_ptr()) == -1 {
+            log_marker(&format!(
+                "uio_releaseStdioAccess: could not remove temporary directory: errno {}",
+                last_errno()
+            ));
+        }
+        uio_closeDir(self.temp_root);
+    }
+}
+
+/// The errno the last failed call set.
+fn last_errno() -> c_int {
+    std::io::Error::last_os_error()
+        .raw_os_error()
+        .unwrap_or(libc::EIO)
 }
 
 #[repr(C)]
@@ -2248,183 +2326,209 @@ pub unsafe extern "C" fn uio_StdioAccessHandle_getPath(
     })
 }
 
-/// @plan PLAN-20260314-FILE-IO.P10
-/// @requirement REQ-FIO-STDIO-ACCESS
-/// Get stdio access to a file, returning a handle with a guaranteed host filesystem path.
-/// If the file is on a stdio mount, returns a direct path.
-/// If the file is on a ZIP mount, extracts it to tempDir and returns a temp path.
-/// The tempDir parameter is required for ZIP-backed files.
+/// What the repository holds at a path that `uio_getStdioAccess` was asked for.
+enum AccessSource {
+    /// A file of a directory mount: usable where it lies.
+    Host(PathBuf),
+    /// An entry of an archive: it has no host path and has to be unpacked.
+    Entry(Arc<crate::io::zip_reader::ZipIndex>, String),
+}
+
+/// The generated directory name the original used: eight hex digits from the
+/// clock, advanced when the name is taken.
+fn temp_dir_name(attempt: u32) -> CString {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as u32);
+    CString::new(format!("{:08x}", seconds.wrapping_add(attempt))).expect("hex digits hold no NUL")
+}
+
+/// Creates a new directory under `temp_dir` through the mount stack.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `temp_dir` must be a live directory handle.
+unsafe fn make_temp_directory(temp_dir: *mut uio_DirHandle) -> Result<CString, c_int> {
+    const ATTEMPTS: u32 = 16;
+    for attempt in 0..ATTEMPTS {
+        let name = temp_dir_name(attempt);
+        if uio_mkdir(temp_dir, name.as_ptr(), 0o700) == 0 {
+            return Ok(name);
+        }
+        match last_errno() {
+            libc::EEXIST => {}
+            errno => return Err(errno),
+        }
+    }
+    Err(libc::ENOSPC)
+}
+
+/// Writes `data` as a new file `name` in `dir`, through the mount stack.
+///
+/// # Safety
+///
+/// `dir` must be a live directory handle.
+unsafe fn write_new_file(dir: *mut uio_DirHandle, name: &CStr, data: &[u8]) -> Result<(), c_int> {
+    let file = uio_open(dir, name.as_ptr(), O_WRONLY | O_CREAT | O_EXCL, 0o600);
+    if file.is_null() {
+        return Err(last_errno());
+    }
+    let written = (*file).lock().unwrap().write_all(data);
+    uio_close(file);
+    written.map_err(|err| err.raw_os_error().unwrap_or(libc::EIO))
+}
+
+/// Unpacks `data` into a fresh directory under `temp_dir`.
+///
+/// # Safety
+///
+/// `temp_dir` must be a live directory handle.
+unsafe fn unpack_into_temp(
+    temp_dir: *mut uio_DirHandle,
+    file_name: CString,
+    data: &[u8],
+) -> Result<StdioCopy, c_int> {
+    let dir_name = make_temp_directory(temp_dir)?;
+    let dir = uio_openDirRelative(temp_dir, dir_name.as_ptr(), 0);
+    if dir.is_null() {
+        let errno = last_errno();
+        uio_rmdir(temp_dir, dir_name.as_ptr());
+        return Err(errno);
+    }
+    (*temp_dir)
+        .refcount
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let copy = StdioCopy {
+        temp_root: temp_dir,
+        dir_name,
+        dir,
+        file_name,
+    };
+    match write_new_file(dir, &copy.file_name, data) {
+        Ok(()) => Ok(copy),
+        Err(errno) => {
+            copy.remove();
+            Err(errno)
+        }
+    }
+}
+
+/// The host path of the unpacked copy. The copy has to be on a directory
+/// mount: an archive under the temporary directory cannot give a host path.
+///
+/// # Safety
+///
+/// `copy.dir` must be a live directory handle.
+unsafe fn copy_host_path(copy: &StdioCopy) -> Result<PathBuf, c_int> {
+    let dir = &*copy.dir;
+    let name = Path::new(OsStr::from_bytes(copy.file_name.to_bytes()));
+    let virtual_path = normalize_virtual_path_full(&dir.virtual_path, name);
+    let registry = get_mount_registry().lock().unwrap();
+    match locate(&registry, repository_key(dir.repository), &virtual_path)?.place {
+        Place::Host(path) => Ok(path),
+        Place::Archive(_) => Err(libc::EINVAL),
+    }
+}
+
+/// The C-visible handle for the path in `path_cstr`, owning `copy` if any.
+fn new_access(path_cstr: *mut c_char, copy: Option<StdioCopy>) -> *mut uio_StdioAccessHandle {
+    Box::into_raw(Box::new(StdioAccessHandleInner { path_cstr, copy })).cast()
+}
+
+/// # Safety
+///
+/// As for [`uio_getStdioAccess`].
+unsafe fn stdio_access(
+    dir: *mut uio_DirHandle,
+    path: *const c_char,
+    flags: c_int,
+    temp_dir: *mut uio_DirHandle,
+) -> Result<*mut uio_StdioAccessHandle, c_int> {
+    let dir = dir.as_ref().ok_or(libc::EINVAL)?;
+    let input = cstr_to_pathbuf(path).ok_or(libc::EINVAL)?;
+    if flags & O_ACCMODE != O_RDONLY {
+        return Err(libc::ENOSYS);
+    }
+    let virtual_path = normalize_virtual_path_full(&dir.virtual_path, &input);
+    let source = {
+        let registry = get_mount_registry().lock().unwrap();
+        let found = locate(&registry, repository_key(dir.repository), &virtual_path)?;
+        match (found.kind, found.place) {
+            (Kind::Directory, _) => return Err(libc::EISDIR),
+            (Kind::File, Place::Host(path)) => AccessSource::Host(path),
+            (Kind::File, Place::Archive(name)) => {
+                let index = found
+                    .mount
+                    .zip_index
+                    .clone()
+                    .expect("an archive mount is registered with its index");
+                AccessSource::Entry(index, name)
+            }
+        }
+    };
+
+    let (index, entry) = match source {
+        AccessSource::Host(path) => {
+            let path_cstr = duplicate_c_string(&path);
+            return if path_cstr.is_null() {
+                Err(libc::ENOMEM)
+            } else {
+                Ok(new_access(path_cstr, None))
+            };
+        }
+        AccessSource::Entry(index, entry) => (index, entry),
+    };
+    if temp_dir.is_null() {
+        return Err(libc::EINVAL);
+    }
+    let data = index
+        .read_entry(&entry)
+        .map_err(|err| err.raw_os_error().unwrap_or(libc::EIO))?;
+    let file_name = Path::new(&entry)
+        .file_name()
+        .and_then(|name| CString::new(name.as_bytes()).ok())
+        .ok_or(libc::EINVAL)?;
+    let copy = unpack_into_temp(temp_dir, file_name, &data)?;
+    let host = match copy_host_path(&copy) {
+        Ok(host) => host,
+        Err(errno) => {
+            copy.remove();
+            return Err(errno);
+        }
+    };
+    let path_cstr = duplicate_c_string(&host);
+    if path_cstr.is_null() {
+        copy.remove();
+        return Err(libc::ENOMEM);
+    }
+    Ok(new_access(path_cstr, Some(copy)))
+}
+
+/// @plan PLAN-20260314-FILE-IO.P10
+/// @requirement REQ-FIO-STDIO-ACCESS
+/// Get stdio access to a file, returning a handle with a guaranteed host
+/// filesystem path. A file of a directory mount is used where it lies. An
+/// entry of an archive is unpacked into a new directory under `temp_dir`
+/// (required then), through the mount stack, so `temp_dir` has to be a
+/// writable directory mount now: EACCES on a read-only one, ENOENT when its
+/// mount is gone. Releasing the handle removes the unpacked file and the
+/// directory made for it, never `temp_dir` itself.
+///
+/// # Safety
+///
+/// `dir` and `temp_dir` must be null or live directory handles and `path` a C
+/// string.
 #[no_mangle]
 pub unsafe extern "C" fn uio_getStdioAccess(
     dir: *mut uio_DirHandle,
     path: *const c_char,
-    _flags: c_int,
+    flags: c_int,
     temp_dir: *mut uio_DirHandle,
 ) -> *mut uio_StdioAccessHandle {
     ffi_guard!(ptr::null_mut(), {
         log_marker("uio_getStdioAccess called");
-
-        if dir.is_null() {
-            set_errno(libc::EINVAL);
-            return ptr::null_mut();
-        }
-
-        let dir_virt_path = &(*dir).virtual_path;
-        let input_path = match cstr_to_pathbuf(path) {
-            Some(p) => p,
-            None => {
-                set_errno(libc::EINVAL);
-                return ptr::null_mut();
-            }
-        };
-
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
-        let registry = get_mount_registry().lock().unwrap();
-
-        // Resolve to topmost visible object
-        for mount in registry.iter().filter(|m| m.active_in_registry) {
-            let mount_path = Path::new(&mount.mount_point);
-            if virtual_path != mount_path && !virtual_path.starts_with(mount_path) {
-                continue;
-            }
-
-            let suffix = virtual_path
-                .strip_prefix(mount_path)
-                .unwrap_or_else(|_| Path::new(""));
-
-            // Handle ZIP mounts - need temp copy
-            if mount.fs_type == UIO_FSTYPE_ZIP {
-                // Entry names are Unicode: other bytes name no entry.
-                if let (Some(zip_index), Some(suffix_str)) =
-                    (mount.zip_index.as_ref(), suffix.to_str())
-                {
-                    // Check if it's a directory
-                    if zip_index.is_directory(suffix_str) {
-                        drop(registry);
-                        set_errno(libc::EISDIR);
-                        return ptr::null_mut();
-                    }
-
-                    // Check if entry exists
-                    if !zip_index.contains(suffix_str) {
-                        drop(registry);
-                        set_errno(libc::ENOENT);
-                        return ptr::null_mut();
-                    }
-
-                    // Need temp directory for extraction
-                    if temp_dir.is_null() {
-                        drop(registry);
-                        set_errno(libc::EINVAL);
-                        return ptr::null_mut();
-                    }
-
-                    let temp_dir_path = &(*temp_dir).path;
-
-                    // Extract entry to temp directory
-                    match zip_index.read_entry(suffix_str) {
-                        Ok(data) => {
-                            // Create temp file path (use entry name as filename)
-                            let filename = Path::new(suffix_str)
-                                .file_name()
-                                .unwrap_or_else(|| std::ffi::OsStr::new("temp"));
-                            let temp_file_path = temp_dir_path.join(filename);
-
-                            // Write data to temp file
-                            if let Err(e) = std::fs::write(&temp_file_path, &data) {
-                                drop(registry);
-                                log_marker(&format!(
-                                    "uio_getStdioAccess: failed to write temp file: {}",
-                                    e
-                                ));
-                                set_errno(libc::EIO);
-                                return ptr::null_mut();
-                            }
-
-                            drop(registry);
-
-                            // Create C string for path
-                            let path_cstr = duplicate_c_string(&temp_file_path);
-                            if path_cstr.is_null() {
-                                let _ = std::fs::remove_file(&temp_file_path);
-                                set_errno(libc::ENOMEM);
-                                return ptr::null_mut();
-                            }
-
-                            // Create handle
-                            let inner = StdioAccessHandleInner {
-                                host_path: temp_file_path,
-                                is_temp_copy: true,
-                                path_cstr,
-                            };
-
-                            let boxed = Box::new(inner);
-                            return Box::into_raw(boxed) as *mut uio_StdioAccessHandle;
-                        }
-                        Err(e) => {
-                            drop(registry);
-                            log_marker(&format!(
-                                "uio_getStdioAccess: failed to read ZIP entry: {}",
-                                e
-                            ));
-                            set_errno(libc::EIO);
-                            return ptr::null_mut();
-                        }
-                    }
-                }
-
-                drop(registry);
-                set_errno(libc::ENOENT);
-                return ptr::null_mut();
-            }
-
-            // Handle stdio mounts - direct path
-            let host_path = if suffix.as_os_str().is_empty() {
-                mount.mounted_root.clone()
-            } else {
-                map_virtual_to_host_confined(&mount.mounted_root, suffix)
-            };
-
-            drop(registry);
-
-            // Check if path exists
-            if !host_path.exists() {
-                set_errno(libc::ENOENT);
-                return ptr::null_mut();
-            }
-
-            // Check if it's a directory
-            if host_path.is_dir() {
-                set_errno(libc::EISDIR);
-                return ptr::null_mut();
-            }
-
-            // Create C string for path
-            let path_cstr = duplicate_c_string(&host_path);
-            if path_cstr.is_null() {
-                set_errno(libc::ENOMEM);
-                return ptr::null_mut();
-            }
-
-            // Create handle for direct path
-            let inner = StdioAccessHandleInner {
-                host_path,
-                is_temp_copy: false,
-                path_cstr,
-            };
-
-            let boxed = Box::new(inner);
-            return Box::into_raw(boxed) as *mut uio_StdioAccessHandle;
-        }
-
-        // No mount found
-        drop(registry);
-        set_errno(libc::ENOENT);
-        ptr::null_mut()
+        stdio_access(dir, path, flags, temp_dir)
+            .unwrap_or_else(|errno| fail_errno(errno, ptr::null_mut()))
     })
 }
 
@@ -2451,24 +2555,9 @@ pub unsafe extern "C" fn uio_releaseStdioAccess(handle: *mut uio_StdioAccessHand
         }
 
         let inner = Box::from_raw(handle as *mut StdioAccessHandleInner);
-
-        // Free the C string
-        if !inner.path_cstr.is_null() {
-            libc::free(inner.path_cstr as *mut libc::c_void);
-        }
-
-        // For temp copies, delete the temp file and parent dir (best-effort)
-        if inner.is_temp_copy {
-            if let Err(e) = std::fs::remove_file(&inner.host_path) {
-                log_marker(&format!(
-                    "uio_releaseStdioAccess: failed to remove temp file {:?}: {} (best-effort)",
-                    inner.host_path, e
-                ));
-            }
-            // Best-effort temp directory removal (succeeds only if empty)
-            if let Some(parent) = std::path::Path::new(&inner.host_path).parent() {
-                let _ = std::fs::remove_dir(parent);
-            }
+        libc::free(inner.path_cstr.cast());
+        if let Some(copy) = inner.copy {
+            copy.remove();
         }
 
         // inner is dropped here, freeing the Box
@@ -2740,11 +2829,6 @@ fn map_virtual_to_host_confined(mount_root: &Path, mount_relative_components: &P
     result
 }
 
-// Helper: Convert path to absolute path if relative, with normalization
-fn resolve_path(base: &Path, path: &Path) -> PathBuf {
-    normalize_virtual_path_full(base, path)
-}
-
 // =============================================================================
 // uio_init / uio_unInit / uio_openRepository / uio_closeRepository
 // =============================================================================
@@ -2860,75 +2944,53 @@ pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
 // uio_openDir / uio_closeDir / uio_mountDir / uio_openDirRelative
 // =============================================================================
 
-fn resolve_mount_path(path: &Path) -> PathBuf {
-    rust_bridge_log_msg(&format!("RUST_UIO: resolve_mount_path input: {:?}", path));
-
-    let registry = get_mount_registry().lock().unwrap();
-    if is_real_filesystem_path(path)
-        || registry
-            .iter()
-            .filter(|entry| entry.active_in_registry)
-            .any(|entry| path == entry.mounted_root || path.starts_with(&entry.mounted_root))
-    {
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: path {:?} already resolved to filesystem path",
-            path
-        ));
-        return path.to_path_buf();
-    }
-
-    if let Some((_handle_ptr, resolved)) = resolve_virtual_mount_path(&registry, path) {
-        rust_bridge_log_msg(&format!("RUST_UIO: resolved {:?} -> {:?}", path, resolved));
-        resolved
-    } else {
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: no mount match for {:?}, returning original",
-            path
-        ));
-        path.to_path_buf()
-    }
-}
-
+/// Opens the directory `path` (relative to `base`) of `repository`'s virtual
+/// tree. The handle keeps only the normalized virtual path; the directory has
+/// to exist in the repository's mounts now (ENOENT if nothing is there,
+/// ENOTDIR if a file is), as in the original `uio_verifyPath`.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `path` must be a C string; `repository` null or a live repository.
+unsafe fn open_directory(
+    repository: *mut uio_Repository,
+    base: &Path,
+    path: *const c_char,
+) -> Result<*mut uio_DirHandle, c_int> {
+    if repository.is_null() {
+        return Err(libc::EINVAL);
+    }
+    let requested = cstr_to_pathbuf(path).ok_or(libc::EINVAL)?;
+    let virtual_path = normalize_virtual_path_full(base, &requested);
+    {
+        let registry = get_mount_registry().lock().unwrap();
+        verify_directory(&registry, repository_key(repository), &virtual_path)?;
+    }
+    Ok(Box::into_raw(Box::new(uio_DirHandle {
+        virtual_path,
+        refcount: std::sync::atomic::AtomicI32::new(1),
+        repository,
+    })))
+}
+
+/// Opens a directory of the repository's virtual tree. `path` is absolute in
+/// that tree (a relative one starts at its root); a host path is not a
+/// virtual path. NULL with errno ENOENT or ENOTDIR if the repository has no
+/// such directory. The `uio_OD_ROOT` flag is not used by any caller.
+///
+/// # Safety
+///
+/// `path` must be a C string; `repository` a live repository.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDir(
-    _repository: *mut uio_Repository,
+    repository: *mut uio_Repository,
     path: *const c_char,
     _flags: c_int,
 ) -> *mut uio_DirHandle {
-    let c_path = match cstr_to_pathbuf(path) {
-        Some(p) => p,
-        None => {
-            rust_bridge_log_msg("RUST_UIO: uio_openDir: null path");
-            return ptr::null_mut();
-        }
-    };
-
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_openDir called with path: {:?}",
-        c_path
-    ));
-
-    // Resolve through mount registry
-    let resolved = resolve_mount_path(&c_path);
-
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_openDir resolved to: {:?}",
-        resolved
-    ));
-
-    // Create directory handle (don't fail if it doesn't exist - may be created later)
-    let handle = Box::new(uio_DirHandle {
-        path: resolved.clone(),
-        virtual_path: c_path.clone(),
-        refcount: std::sync::atomic::AtomicI32::new(1),
-        repository: _repository,
-        root_end: resolved.clone(), // For now, root_end = full path
-    });
-    Box::leak(handle) as *mut uio_DirHandle
+    ffi_guard!(ptr::null_mut(), {
+        open_directory(repository, Path::new("/"), path)
+            .unwrap_or_else(|errno| fail_errno(errno, ptr::null_mut()))
+    })
 }
 
 /// @plan PLAN-20260314-FILE-IO.P11
@@ -2957,177 +3019,226 @@ pub unsafe extern "C" fn uio_closeDir(dir: *mut uio_DirHandle) -> c_int {
     0 // Success
 }
 
+/// The original's `validPathName` for a mount point: after one leading slash,
+/// every component is a real name (not empty, `.` or `..`); one trailing slash
+/// is allowed.
+fn valid_mount_point(mount_point: &Path) -> bool {
+    let bytes = mount_point.as_os_str().as_bytes();
+    let bytes = bytes.strip_prefix(b"/").unwrap_or(bytes);
+    let bytes = match bytes.strip_suffix(b"/") {
+        Some(rest) if !rest.is_empty() => rest,
+        _ => bytes,
+    };
+    bytes.is_empty()
+        || bytes
+            .split(|&b| b == b'/')
+            .all(|name| !name.is_empty() && name != b"." && name != b"..")
+}
+
+/// What `uio_mountDir` was asked, with the C arguments read and checked.
+struct MountRequest<'a> {
+    destination: *mut uio_Repository,
+    mount_point: PathBuf,
+    fs_type: c_int,
+    /// The directory and the path in it of the archive to mount, as the game
+    /// passes them. `None` mounts `in_path` as a host path (the game's way of
+    /// mounting its content and config directories).
+    source: Option<(&'a uio_DirHandle, PathBuf)>,
+    /// With a source: the directory inside the archive to show. Without: the
+    /// host path to mount.
+    in_path: PathBuf,
+    flags: c_int,
+    relative: *mut uio_MountHandle,
+}
+
+/// The directory of `index` that `in_path` names, as an archive name: empty
+/// for the whole archive.
+fn archive_subdirectory(
+    index: &crate::io::zip_reader::ZipIndex,
+    in_path: &Path,
+) -> Result<String, c_int> {
+    let bytes = in_path.as_os_str().as_bytes();
+    let trimmed = bytes.strip_prefix(b"/").unwrap_or(bytes);
+    let trimmed = trimmed.strip_suffix(b"/").unwrap_or(trimmed);
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+    // Entry names are Unicode: other bytes name no directory.
+    let name = std::str::from_utf8(trimmed).map_err(|_| libc::ENOENT)?;
+    if index.is_directory(name) {
+        Ok(name.to_owned())
+    } else if index.get_entry(name).is_some() {
+        Err(libc::ENOTDIR)
+    } else {
+        Err(libc::ENOENT)
+    }
+}
+
+/// The archive file `file` names inside `dir`, found in the repository's
+/// mounts as they are now, indexed and ready to mount.
+fn archive_backing(
+    dir: &uio_DirHandle,
+    file: &Path,
+    in_path: &Path,
+) -> Result<MountBacking, c_int> {
+    let virtual_path = normalize_virtual_path_full(&dir.virtual_path, file);
+    let host_file = {
+        let registry = get_mount_registry().lock().unwrap();
+        let found = locate(&registry, repository_key(dir.repository), &virtual_path)?;
+        match (found.kind, found.place) {
+            (Kind::Directory, _) => return Err(libc::EISDIR),
+            (Kind::File, Place::Host(path)) => path,
+            // The index reads the archive from the host file system.
+            (Kind::File, Place::Archive(_)) => return Err(libc::ENOTSUP),
+        }
+    };
+    let index = index_archive(&host_file)?;
+    let archive_root = archive_subdirectory(&index, in_path)?;
+    Ok(MountBacking {
+        mounted_root: host_file,
+        fs_type: UIO_FSTYPE_ZIP,
+        zip_index: Some(index),
+        archive_root,
+    })
+}
+
+fn mount_backing(request: &MountRequest<'_>) -> Result<MountBacking, c_int> {
+    match &request.source {
+        Some((dir, file)) => archive_backing(dir, file, &request.in_path),
+        None if request.fs_type == UIO_FSTYPE_ZIP => Ok(MountBacking {
+            mounted_root: request.in_path.clone(),
+            fs_type: UIO_FSTYPE_ZIP,
+            zip_index: Some(index_archive(&request.in_path)?),
+            archive_root: String::new(),
+        }),
+        None => Ok(MountBacking {
+            mounted_root: request.in_path.clone(),
+            fs_type: UIO_FSTYPE_STDIO,
+            zip_index: None,
+            archive_root: String::new(),
+        }),
+    }
+}
+
+/// The arguments of `uio_mountDir` as C passed them.
+struct RawMountArgs {
+    destination: *mut uio_Repository,
+    mount_point: *const c_char,
+    fs_type: c_int,
+    source_dir: *mut uio_DirHandle,
+    source_path: *const c_char,
+    in_path: *const c_char,
+    flags: c_int,
+    relative: *mut uio_MountHandle,
+}
+
+/// Reads and checks the arguments of `uio_mountDir` in the original's order.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// The pointers must be null or valid, as for [`uio_mountDir`].
+unsafe fn mount_request<'a>(raw: RawMountArgs) -> Result<MountRequest<'a>, c_int> {
+    check_relative(raw.flags, raw.relative)?;
+    let mount_point = cstr_to_pathbuf(raw.mount_point).ok_or(libc::EINVAL)?;
+    if !valid_mount_point(&mount_point) {
+        return Err(libc::EINVAL);
+    }
+    let source = match (raw.source_dir.as_ref(), cstr_to_pathbuf(raw.source_path)) {
+        (None, None) => None,
+        (Some(dir), Some(file)) => Some((dir, file)),
+        _ => return Err(libc::EINVAL),
+    };
+    match raw.fs_type {
+        UIO_FSTYPE_ZIP => {}
+        // The directory file system is mounted from a host path, never from
+        // a file.
+        UIO_FSTYPE_STDIO if source.is_some() => return Err(libc::EINVAL),
+        UIO_FSTYPE_STDIO => {}
+        _ => return Err(libc::ENODEV),
+    }
+    Ok(MountRequest {
+        destination: raw.destination,
+        mount_point,
+        fs_type: raw.fs_type,
+        source,
+        in_path: cstr_to_pathbuf(raw.in_path).ok_or(libc::EINVAL)?,
+        flags: raw.flags,
+        relative: raw.relative,
+    })
+}
+
+/// Mounts a directory of the host, or an archive, into `dest_rep` at
+/// `mount_point`.
+///
+/// With `source_dir` and `source_path` the archive is the file `source_path`
+/// of the virtual directory `source_dir`, found in the repository's mounts as
+/// they are now, and `in_path` is the directory inside it to show. Without
+/// them `in_path` is a host path, which is how the game mounts its content
+/// and config directories. Failures: EINVAL for malformed arguments, ENODEV
+/// for an unknown file system, ENOENT/ENOTDIR/EISDIR for a source the mounts
+/// do not hold, the host's errno when it refuses to read the source, EIO when
+/// the source is not an archive.
+///
+/// # Safety
+///
+/// Every pointer must be null or valid for its type; strings are C strings.
 #[no_mangle]
 pub unsafe extern "C" fn uio_mountDir(
-    _dest_rep: *mut uio_Repository,
+    dest_rep: *mut uio_Repository,
     mount_point: *const c_char,
-    _fs_type: c_int,
+    fs_type: c_int,
     source_dir: *mut uio_DirHandle,
     source_path: *const c_char,
-
     in_path: *const c_char,
     _auto_mount: *mut *mut (),
     flags: c_int,
     relative: *mut uio_MountHandle,
 ) -> *mut uio_MountHandle {
-    let mount_point = match cstr_to_pathbuf(mount_point) {
-        Some(p) => p,
-        None => {
-            eprintln!("RUST_UIO: uio_mountDir: null mount_point");
-            return ptr::null_mut();
-        }
-    };
-
-    let source_path_str = if source_path.is_null() {
-        "(null)".to_string()
-    } else {
-        std::ffi::CStr::from_ptr(source_path)
-            .to_string_lossy()
-            .into_owned()
-    };
-    let in_path_str = if in_path.is_null() {
-        "(null)".to_string()
-    } else {
-        std::ffi::CStr::from_ptr(in_path)
-            .to_string_lossy()
-            .into_owned()
-    };
-    eprintln!(
-        "RUST_UIO: uio_mountDir: mount_point={:?}, source_path='{}', in_path='{}', source_dir={:?}, flags={}, relative={:?}",
-        mount_point, source_path_str, in_path_str, source_dir, flags, relative
-    );
-
-    if !source_dir.is_null() {
-        let base_path = (*source_dir).path.clone();
-        let rel_path = cstr_to_pathbuf(source_path).unwrap_or_default();
-        let mounted_root = if rel_path.as_os_str().is_empty() || rel_path == Path::new("/") {
-            base_path.clone()
-        } else {
-            resolve_path(&base_path, &rel_path)
-        };
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: uio_mountDir: source_dir set, source_path {:?} -> {:?}",
-            rel_path, mounted_root
-        ));
-
-        // @plan PLAN-20260314-FILE-IO.P09
-        // @requirement REQ-FIO-ARCHIVE-MOUNT
-        // ZIP mounts are now fully active in the registry
-        let active_in_registry = true;
-        return register_mount(
-            _dest_rep,
-            &mount_point,
-            mounted_root,
-            _fs_type,
+    ffi_guard!(ptr::null_mut(), {
+        let mounted = mount_request(RawMountArgs {
+            destination: dest_rep,
+            mount_point,
+            fs_type,
+            source_dir,
+            source_path,
+            in_path,
             flags,
             relative,
-            active_in_registry,
-        );
-    }
-
-    let mounted_root = if !in_path.is_null() {
-        match cstr_to_pathbuf(in_path) {
-            Some(path) => {
-                rust_bridge_log_msg(&format!(
-                    "RUST_UIO: uio_mountDir: using in_path {:?} as source",
-                    path
-                ));
-                path
-            }
-            None => {
-                rust_bridge_log_msg(
-                    "RUST_UIO: uio_mountDir: in_path conversion failed, using empty path",
-                );
-                PathBuf::new()
-            }
-        }
-    } else {
-        rust_bridge_log_msg("RUST_UIO: uio_mountDir: in_path is NULL, using empty path");
-        PathBuf::new()
-    };
-
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_mountDir: mounting root={:?} at {:?}",
-        mounted_root, mount_point
-    ));
-
-    register_mount(
-        _dest_rep,
-        &mount_point,
-        mounted_root,
-        _fs_type,
-        flags,
-        relative,
-        true,
-    )
+        })
+        .and_then(|request| {
+            let backing = mount_backing(&request)?;
+            insert_mount(
+                request.destination,
+                &request.mount_point,
+                backing,
+                request.flags,
+                request.relative,
+                true,
+            )
+        });
+        mounted.unwrap_or_else(|errno| fail_errno(errno, ptr::null_mut()))
+    })
 }
 
+/// Opens `path` relative to `base`; see [`uio_openDir`]. A path starting with
+/// a slash is absolute in the virtual tree.
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `base` must be null or a live directory handle and `path` a C string.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openDirRelative(
     base: *mut uio_DirHandle,
     path: *const c_char,
     _flags: c_int,
 ) -> *mut uio_DirHandle {
-    log_marker("uio_openDirRelative called");
-
-    if base.is_null() {
-        return ptr::null_mut();
-    }
-
-    let base_path = &(*base).path;
-    let rel_path = match cstr_to_pathbuf(path) {
-        Some(p) => p,
-        None => return ptr::null_mut(),
-    };
-
-    // Log before moving rel_path
-    let is_abs = rel_path.is_absolute();
-    rust_bridge_log_msg(&format!(
-        "RUST_UIO: uio_openDirRelative: base={:?} path={:?} (is_absolute={})",
-        base_path, rel_path, is_abs
-    ));
-
-    // If rel_path is already absolute, it's been resolved by caller - skip resolve_mount_path
-    // This prevents double-resolution that causes path duplication
-    let resolved = if is_abs {
-        rust_bridge_log_msg(&format!("RUST_UIO: uio_openDirRelative: path is absolute {:?}, using directly (no mount resolution)", rel_path));
-        rel_path
-    } else {
-        // Only join if rel_path is actually relative
-        let joined = resolve_path(base_path, &rel_path);
-        rust_bridge_log_msg(&format!(
-            "RUST_UIO: uio_openDirRelative: joined {:?} + {:?} = {:?}",
-            base_path, rel_path, joined
-        ));
-        // Then resolve through mount registry
-        resolve_mount_path(&joined)
-    };
-
-    // Compute virtual path from base's virtual path
-    let base_virtual = &(*base).virtual_path;
-    let virtual_resolved = if is_abs {
-        cstr_to_pathbuf(path).unwrap_or_default()
-    } else {
-        let rel = cstr_to_pathbuf(path).unwrap_or_default();
-        normalize_virtual_path_full(base_virtual, &rel)
-    };
-
-    let handle = Box::new(uio_DirHandle {
-        path: resolved.clone(),
-        virtual_path: virtual_resolved,
-        refcount: std::sync::atomic::AtomicI32::new(1),
-        repository: (*base).repository,
-        root_end: (*base).root_end.clone(),
-    });
-    Box::leak(handle) as *mut uio_DirHandle
+    ffi_guard!(ptr::null_mut(), {
+        match base.as_ref() {
+            Some(base) => open_directory(base.repository, &base.virtual_path, path)
+                .unwrap_or_else(|errno| fail_errno(errno, ptr::null_mut())),
+            None => fail_errno(libc::EINVAL, ptr::null_mut()),
+        }
+    })
 }
 
 // =============================================================================
@@ -3193,7 +3304,11 @@ fn open_through_mounts(
     let registry = get_mount_registry().lock().unwrap();
 
     if writes {
-        let host_path = match resolve_mount_for_path(&registry, &virtual_path) {
+        let host_path = match resolve_mount_for_path(
+            &registry,
+            repository_key(dir.repository),
+            &virtual_path,
+        ) {
             Some(resolution) if resolution.mount.read_only => return Err(libc::EACCES),
             Some(resolution) if resolution.mount.fs_type == UIO_FSTYPE_ZIP => {
                 return Err(libc::EACCES)
@@ -3213,32 +3328,19 @@ fn open_through_mounts(
             });
     }
 
-    let normalized = normalize_virtual_path(&virtual_path);
-    for mount in registry.iter().filter(|m| m.active_in_registry) {
-        let mount_path = Path::new(&mount.mount_point);
-        if normalized != mount_path && !normalized.starts_with(mount_path) {
-            continue;
-        }
-        let suffix = normalized
-            .strip_prefix(mount_path)
-            .unwrap_or_else(|_| Path::new(""));
-
+    for covered in covering(&registry, repository_key(dir.repository), &virtual_path) {
+        let mount = covered.mount;
         let opened = if mount.fs_type == UIO_FSTYPE_ZIP {
-            match (mount.zip_index.as_ref(), suffix.to_str()) {
+            match (mount.zip_index.as_ref(), covered.archive_name()) {
                 (Some(zip_index), Some(name)) => {
-                    zip_index.open_entry(name).map(uio_HandleInner::ZipEntry)
+                    zip_index.open_entry(&name).map(uio_HandleInner::ZipEntry)
                 }
                 // Entry names are Unicode: other bytes name no entry.
                 (Some(_), None) => Err(std::io::ErrorKind::NotFound.into()),
                 (None, _) => continue,
             }
         } else {
-            let host_path = if suffix.as_os_str().is_empty() {
-                mount.mounted_root.clone()
-            } else {
-                map_virtual_to_host_confined(&mount.mounted_root, suffix)
-            };
-            open_host_file(&host_path, flags).map(uio_HandleInner::File)
+            open_host_file(&covered.host_path(), flags).map(uio_HandleInner::File)
         };
 
         match opened {
@@ -3398,7 +3500,11 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let file_path = match resolve_mount_for_path(&registry, &virtual_path) {
+        let file_path = match resolve_mount_for_path(
+            &registry,
+            repository_key((*dir).repository),
+            &virtual_path,
+        ) {
             Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
             Some(resolution) => resolution.host_path.clone(),
             None => return fail_errno(libc::ENOENT, -1),
@@ -3663,7 +3769,12 @@ pub unsafe extern "C" fn uio_getDirList(
         // The registry lock gives a consistent view of the mount topology.
         let names = {
             let registry = get_mount_registry().lock().unwrap();
-            collect_dir_names(&registry, &virtual_path, &filter)
+            collect_dir_names(
+                &registry,
+                repository_key((*dir).repository),
+                &virtual_path,
+                &filter,
+            )
         };
         log_marker(&format!(
             "uio_getDirList: {} matches in {:?}",
@@ -3681,19 +3792,16 @@ pub unsafe extern "C" fn uio_getDirList(
 /// mounted in list order, and that order is their priority.
 fn collect_dir_names(
     registry: &[MountInfo],
+    repository: usize,
     virtual_path: &Path,
     filter: &NameFilter,
 ) -> BTreeSet<Vec<u8>> {
     let mut names = BTreeSet::new();
-    for mount in registry.iter().filter(|m| m.active_in_registry) {
-        let mount_path = Path::new(&mount.mount_point);
-        let Ok(suffix) = virtual_path.strip_prefix(mount_path) else {
-            continue;
-        };
-        if mount.fs_type == UIO_FSTYPE_ZIP {
-            add_archive_names(&mut names, mount, suffix, filter);
+    for covered in covering(registry, repository, virtual_path) {
+        if covered.mount.fs_type == UIO_FSTYPE_ZIP {
+            add_archive_names(&mut names, &covered, filter);
         } else {
-            add_host_names(&mut names, mount, suffix, filter);
+            add_host_names(&mut names, &covered, filter);
         }
     }
     names
@@ -3703,19 +3811,19 @@ fn collect_dir_names(
 /// @requirement REQ-FIO-ARCHIVE-MOUNT
 fn add_archive_names(
     names: &mut BTreeSet<Vec<u8>>,
-    mount: &MountInfo,
-    suffix: &Path,
+    covered: &resolve::Covering<'_>,
     filter: &NameFilter,
 ) {
+    let mount = covered.mount;
     let Some(zip_index) = mount.zip_index.as_ref() else {
         return;
     };
     // Archive entry names are Unicode, so a directory named by other bytes is
     // not in the archive.
-    let Some(directory) = suffix.to_str() else {
+    let Some(directory) = covered.archive_name() else {
         return;
     };
-    let entries = zip_index.list_directory(directory);
+    let entries = zip_index.list_directory(&directory);
     log_marker(&format!(
         "uio_getDirList: ZIP mount {:?} returned {} entries for {:?}",
         mount.mount_point,
@@ -3733,15 +3841,11 @@ fn add_archive_names(
 
 fn add_host_names(
     names: &mut BTreeSet<Vec<u8>>,
-    mount: &MountInfo,
-    suffix: &Path,
+    covered: &resolve::Covering<'_>,
     filter: &NameFilter,
 ) {
-    let host_path = if suffix.as_os_str().is_empty() {
-        mount.mounted_root.clone()
-    } else {
-        map_virtual_to_host_confined(&mount.mounted_root, suffix)
-    };
+    let mount = covered.mount;
+    let host_path = covered.host_path();
     log_marker(&format!(
         "uio_getDirList: checking stdio mount {:?} at host_path={:?}",
         mount.mount_point, host_path
@@ -3867,8 +3971,7 @@ mod tests {
     }
 
     // Helper to add a test mount
-    fn add_test_mount(mount_point: &str, mounted_root: &str) {
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+    fn add_test_mount(repository: *mut uio_Repository, mount_point: &str, mounted_root: &str) {
         let id = NEXT_MOUNT_ID.fetch_add(1, Ordering::SeqCst);
         let handle = Box::into_raw(Box::new(uio_MountHandle {
             repository,
@@ -3897,13 +4000,18 @@ mod tests {
             position,
             read_only: false,
             zip_index: None,
+            archive_root: String::new(),
         });
         sort_mount_registry(&mut registry);
     }
 
     // Helper to add a test mount with read_only flag
-    fn add_test_mount_readonly(mount_point: &str, mounted_root: &str, read_only: bool) {
-        let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+    fn add_test_mount_readonly(
+        repository: *mut uio_Repository,
+        mount_point: &str,
+        mounted_root: &str,
+        read_only: bool,
+    ) {
         let id = NEXT_MOUNT_ID.fetch_add(1, Ordering::SeqCst);
         let handle = Box::into_raw(Box::new(uio_MountHandle {
             repository,
@@ -3931,6 +4039,7 @@ mod tests {
             position,
             read_only,
             zip_index: None,
+            archive_root: String::new(),
         });
         sort_mount_registry(&mut registry);
     }
@@ -3941,7 +4050,8 @@ mod tests {
         {
             clear_mount_registry();
 
-            add_test_mount("/content", "/tmp/content");
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount(repo, "/content", "/tmp/content");
 
             {
                 let registry = get_mount_registry().lock().unwrap();
@@ -3954,55 +4064,7 @@ mod tests {
                 assert!(info.active_in_registry);
             }
 
-            clear_mount_registry();
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_resolve_mount_path_with_mount() {
-        {
-            clear_mount_registry();
-
-            add_test_mount("/", "/Users/test/game");
-
-            let path = PathBuf::from("/content/packages");
-            let resolved = resolve_mount_path(&path);
-
-            assert_eq!(resolved, PathBuf::from("/Users/test/game/content/packages"));
-
-            clear_mount_registry();
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_resolve_mount_path_no_mount() {
-        {
-            clear_mount_registry();
-
-            let path = PathBuf::from("/some/random/path");
-            let resolved = resolve_mount_path(&path);
-
-            assert_eq!(resolved, path);
-
-            clear_mount_registry();
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_resolve_mount_path_absolute_fs_path() {
-        {
-            clear_mount_registry();
-
-            add_test_mount("/", "/Users/test/game");
-
-            let path = PathBuf::from("/Users/acoliver/projects/uqm/content");
-            let resolved = resolve_mount_path(&path);
-
-            assert_eq!(resolved, path);
-
+            drop(unsafe { Box::from_raw(repo) });
             clear_mount_registry();
         }
     }
@@ -4025,31 +4087,6 @@ mod tests {
         {
             let result = unsafe { cstr_to_pathbuf(std::ptr::null()) };
             assert!(result.is_none());
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_resolve_path_relative() {
-        {
-            let base = PathBuf::from("/home/user");
-            let rel = PathBuf::from("documents/file.txt");
-
-            let result = resolve_path(&base, &rel);
-            assert_eq!(result, PathBuf::from("/home/user/documents/file.txt"));
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_resolve_path_absolute() {
-        {
-            let base = PathBuf::from("/home/user");
-            let abs = PathBuf::from("/etc/config");
-
-            let result = resolve_path(&base, &abs);
-            // Absolute paths should be returned as-is
-            assert_eq!(result, PathBuf::from("/etc/config"));
         }
     }
 
@@ -4665,11 +4702,9 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
                 virtual_path: temp_dir.path().to_path_buf(),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository,
-                root_end: temp_dir.path().to_path_buf(),
             }));
 
             let path = CString::new("nonexistent.txt").unwrap();
@@ -4725,11 +4760,9 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
                 virtual_path: temp_dir.path().to_path_buf(),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository,
-                root_end: temp_dir.path().to_path_buf(),
             }));
 
             let path = CString::new("test.txt").unwrap();
@@ -4758,11 +4791,9 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
             let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
                 virtual_path: temp_dir.path().to_path_buf(),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository,
-                root_end: temp_dir.path().to_path_buf(),
             }));
 
             let path = CString::new("nonexistent.txt").unwrap();
@@ -5025,11 +5056,9 @@ mod tests {
             assert!(!mount.is_null());
 
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/content"),
                 virtual_path: PathBuf::from("/content"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
-                root_end: PathBuf::from("/content"),
             }));
 
             let path = CString::new("test.txt").unwrap();
@@ -5075,11 +5104,9 @@ mod tests {
             };
 
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/content"),
                 virtual_path: PathBuf::from("/content"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
-                root_end: PathBuf::from("/content"),
             }));
 
             let path = CString::new("test.txt").unwrap();
@@ -5123,11 +5150,9 @@ mod tests {
             };
 
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/content"),
                 virtual_path: PathBuf::from("/content"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
-                root_end: PathBuf::from("/content"),
             }));
 
             let path = CString::new("subdir").unwrap();
@@ -5192,11 +5217,9 @@ mod tests {
             };
 
             let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: PathBuf::from("/content"),
                 virtual_path: PathBuf::from("/content"),
                 refcount: std::sync::atomic::AtomicI32::new(1),
                 repository: repo,
-                root_end: PathBuf::from("/content"),
             }));
 
             unsafe {
@@ -5249,16 +5272,14 @@ mod tests {
             fs::write(&test_file, b"original content").unwrap();
 
             // Mount as read-only
-            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount_readonly(repo, "/data", temp_dir.to_str().unwrap(), true);
 
             unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Try to open for writing - should fail with EACCES
@@ -5311,24 +5332,20 @@ mod tests {
             fs::write(temp_dir1.join("file.txt"), b"test content").unwrap();
 
             // Add two separate mounts
-            add_test_mount_readonly("/mount1", temp_dir1.to_str().unwrap(), false);
-            add_test_mount_readonly("/mount2", temp_dir2.to_str().unwrap(), false);
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount_readonly(repo, "/mount1", temp_dir1.to_str().unwrap(), false);
+            add_test_mount_readonly(repo, "/mount2", temp_dir2.to_str().unwrap(), false);
 
             unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
                 let dir1 = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/mount1"),
                     virtual_path: PathBuf::from("/mount1"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/mount1"),
                 }));
                 let dir2 = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/mount2"),
                     virtual_path: PathBuf::from("/mount2"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/mount2"),
                 }));
 
                 // Try to rename across mounts - should fail with EXDEV
@@ -5371,16 +5388,14 @@ mod tests {
             fs::write(temp_dir.join("file.txt"), b"test content").unwrap();
 
             // Mount as read-only
-            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount_readonly(repo, "/data", temp_dir.to_str().unwrap(), true);
 
             unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Try to unlink - should fail with EACCES
@@ -5416,16 +5431,14 @@ mod tests {
             fs::create_dir_all(&temp_dir).unwrap();
 
             // Mount as read-only
-            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount_readonly(repo, "/data", temp_dir.to_str().unwrap(), true);
 
             unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Try to create directory - should fail with EACCES
@@ -5464,16 +5477,14 @@ mod tests {
             fs::create_dir(temp_dir.join("testdir")).unwrap();
 
             // Mount as read-only
-            add_test_mount_readonly("/data", temp_dir.to_str().unwrap(), true);
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount_readonly(repo, "/data", temp_dir.to_str().unwrap(), true);
 
             unsafe {
-                let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Try to remove directory - should fail with EACCES
@@ -5503,7 +5514,8 @@ mod tests {
             clear_mount_registry();
 
             // Add a mount with TOP - should not underflow
-            add_test_mount("/first", "/tmp/first");
+            let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+            add_test_mount(repo, "/first", "/tmp/first");
 
             {
                 let registry = get_mount_registry().lock().unwrap();
@@ -5516,7 +5528,7 @@ mod tests {
             }
 
             // Add another mount with TOP - should still not underflow
-            add_test_mount("/second", "/tmp/second");
+            add_test_mount(repo, "/second", "/tmp/second");
 
             {
                 let registry = get_mount_registry().lock().unwrap();
@@ -5535,6 +5547,7 @@ mod tests {
                 assert_ne!(mount1.position, mount2.position);
             }
 
+            drop(unsafe { Box::from_raw(repo) });
             clear_mount_registry();
         }
     }
@@ -5564,15 +5577,13 @@ mod tests {
             std::fs::write(dir_path.join("file.zip"), b"test").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", dir_path.to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Test .rmp pattern
@@ -5617,15 +5628,13 @@ mod tests {
             std::fs::write(dir_path.join("readme.txt"), b"test").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", dir_path.to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Test .zip/.uqm pattern
@@ -5662,15 +5671,13 @@ mod tests {
             std::fs::write(dir_path.join("file.txt"), b"test").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", dir_path.to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", dir_path.to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 // Use invalid regex pattern
@@ -5714,16 +5721,14 @@ mod tests {
 
             unsafe {
                 // Add mounts manually with proper precedence
-                add_test_mount_readonly("/content", temp_a.path().to_str().unwrap(), true);
-                add_test_mount_readonly("/content", temp_b.path().to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/content", temp_a.path().to_str().unwrap(), true);
+                add_test_mount_readonly(repo, "/content", temp_b.path().to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/content"),
                     virtual_path: PathBuf::from("/content"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/content"),
                 }));
 
                 // List all files
@@ -5776,16 +5781,14 @@ mod tests {
             std::fs::write(temp_b.path().join("duplicate.txt"), b"version_b").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_a.path().to_str().unwrap(), true);
-                add_test_mount_readonly("/data", temp_b.path().to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_a.path().to_str().unwrap(), true);
+                add_test_mount_readonly(repo, "/data", temp_b.path().to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let list = uio_getDirList(
@@ -5822,15 +5825,13 @@ mod tests {
             // Don't create any files
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let list = uio_getDirList(
@@ -5882,16 +5883,14 @@ mod tests {
             std::fs::write(temp_b.path().join("readme.md"), b"b").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/indices", temp_a.path().to_str().unwrap(), true);
-                add_test_mount_readonly("/indices", temp_b.path().to_str().unwrap(), true);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/indices", temp_a.path().to_str().unwrap(), true);
+                add_test_mount_readonly(repo, "/indices", temp_b.path().to_str().unwrap(), true);
+
                 let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/indices"),
                     virtual_path: PathBuf::from("/indices"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/indices"),
                 }));
 
                 // List only .rmp files
@@ -6343,15 +6342,13 @@ mod tests {
             std::fs::write(&test_file, b"direct path content").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let path = CString::new("test.txt").unwrap();
@@ -6425,19 +6422,27 @@ mod tests {
                 assert!(!mount.is_null());
 
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/archive"),
                     virtual_path: PathBuf::from("/archive"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/archive"),
                 }));
 
+                // The temporary directory is a writable directory of the same
+                // repository, found through the mounts like any other.
+                let scratch_mount = register_mount(
+                    repo,
+                    Path::new("/scratch"),
+                    temp_extract_dir.path().to_path_buf(),
+                    UIO_FSTYPE_STDIO,
+                    UIO_MOUNT_TOP,
+                    ptr::null_mut(),
+                    true,
+                );
+                assert!(!scratch_mount.is_null());
                 let temp_dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                    path: temp_extract_dir.path().to_path_buf(),
-                    virtual_path: temp_extract_dir.path().to_path_buf(),
+                    virtual_path: PathBuf::from("/scratch"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: temp_extract_dir.path().to_path_buf(),
                 }));
 
                 let path = CString::new("data.txt").unwrap();
@@ -6467,8 +6472,14 @@ mod tests {
                 // Temp file should be deleted
                 assert!(!temp_file_path.exists());
 
+                assert!(
+                    temp_extract_dir.path().exists(),
+                    "the temporary directory itself is kept"
+                );
+
                 let _ = Box::from_raw(dir);
                 let _ = Box::from_raw(temp_dir_handle);
+                let _ = Box::from_raw(scratch_mount);
                 let _ = Box::from_raw(mount);
                 let _ = Box::from_raw(repo);
             }
@@ -6491,15 +6502,13 @@ mod tests {
             std::fs::create_dir(&subdir).unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let path = CString::new("subdir").unwrap();
@@ -6529,15 +6538,13 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let path = CString::new("nonexistent.txt").unwrap();
@@ -6593,11 +6600,9 @@ mod tests {
                 assert!(!mount.is_null());
 
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/archive"),
                     virtual_path: PathBuf::from("/archive"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/archive"),
                 }));
 
                 let path = CString::new("data.txt").unwrap();
@@ -6655,15 +6660,13 @@ mod tests {
             std::fs::write(&src_file, b"file content to copy").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let src_path = CString::new("source.txt").unwrap();
@@ -6704,15 +6707,13 @@ mod tests {
             std::fs::write(&dst_file, b"existing").unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let src_path = CString::new("source.txt").unwrap();
@@ -6748,15 +6749,13 @@ mod tests {
             let temp_dir = TempDir::new().unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let src_path = CString::new("nonexistent.txt").unwrap();
@@ -6796,15 +6795,13 @@ mod tests {
             std::fs::write(&src_file, &data).unwrap();
 
             unsafe {
-                add_test_mount_readonly("/data", temp_dir.path().to_str().unwrap(), false);
-
                 let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+                add_test_mount_readonly(repo, "/data", temp_dir.path().to_str().unwrap(), false);
+
                 let dir = Box::into_raw(Box::new(uio_DirHandle {
-                    path: PathBuf::from("/data"),
                     virtual_path: PathBuf::from("/data"),
                     refcount: std::sync::atomic::AtomicI32::new(1),
                     repository: repo,
-                    root_end: PathBuf::from("/data"),
                 }));
 
                 let src_path = CString::new("large.dat").unwrap();
@@ -7325,3 +7322,7 @@ mod fopen_mount_tests;
 #[cfg(test)]
 #[path = "uio_name_bytes_tests.rs"]
 mod name_bytes_tests;
+
+#[cfg(test)]
+#[path = "uio_resolution_tests.rs"]
+mod resolution_tests;

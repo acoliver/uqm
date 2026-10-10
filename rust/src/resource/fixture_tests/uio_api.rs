@@ -134,10 +134,16 @@ impl Repo {
     }
 
     pub(super) fn open_dir(&self, path: &str) -> Dir {
+        self.try_open_dir(path)
+            .unwrap_or_else(|| panic!("uio_openDir returned NULL for {path}"))
+    }
+
+    /// `uio_openDir`, with `None` for the NULL the original returns when the
+    /// repository has no such directory.
+    pub(super) fn try_open_dir(&self, path: &str) -> Option<Dir> {
         let path = cstr(path);
         let raw = unsafe { uio_openDir(self.raw, path.as_ptr(), 0) };
-        assert!(!raw.is_null(), "uio_openDir returned NULL");
-        Dir { raw }
+        (!raw.is_null()).then_some(Dir { raw })
     }
 
     pub(super) fn unmount(&self, mount: Mount) -> c_int {

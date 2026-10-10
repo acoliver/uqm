@@ -125,10 +125,19 @@ impl Fixture {
     }
 
     fn load(&self, path: &str, pattern: &str, match_type: MatchType) -> Option<OwnedStringTable> {
+        self.try_load(path, pattern, match_type).unwrap()
+    }
+
+    fn try_load(
+        &self,
+        path: &str,
+        pattern: &str,
+        match_type: MatchType,
+    ) -> Result<Option<OwnedStringTable>, DirEntryError> {
         let path = cstring(path);
         let pattern = cstring(pattern);
         // SAFETY: `base` is live for the duration of the call.
-        unsafe { load_dir_entry_table(self.base(), &path, &pattern, match_type) }.unwrap()
+        unsafe { load_dir_entry_table(self.base(), &path, &pattern, match_type) }
     }
 }
 
@@ -359,7 +368,12 @@ fn no_matching_entry_means_no_table() {
 
     assert!(fixture.load("", ".mle", MatchType::Suffix).is_none());
     assert!(fixture.load("empty", "", MatchType::Substring).is_none());
-    assert!(fixture.load("missing", ".mle", MatchType::Suffix).is_none());
+    // A directory the repository does not have cannot be opened: that is an
+    // error, not an empty table (the C loader asserts on it).
+    assert!(matches!(
+        fixture.try_load("missing", ".mle", MatchType::Suffix),
+        Err(DirEntryError::OpenDir)
+    ));
 }
 
 #[test]

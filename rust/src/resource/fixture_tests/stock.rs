@@ -13,8 +13,7 @@ use super::game::{write_files, Game};
 use super::res::{self, Rows};
 use super::uio_api::{Dir, Mount, Repo, Session};
 
-/// The checked-in content, with no `..` left in it: UIO tells host paths from
-/// virtual ones by prefix, and an unnormalized mount root would not match its own children.
+/// The checked-in content, with no `..` left in it.
 fn content_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../sc2/content")
@@ -35,7 +34,16 @@ fn host_text(name: &str) -> String {
 
 /// The stock package alone: ZIP at "/" with nothing else mounted.
 fn package_only(repo: &Repo) -> Dir {
-    let packages = repo.open_dir(content_root().join("packages").to_str().unwrap());
+    // The package lies in the content tree's `packages` directory, which the
+    // game mounts and opens as `/packages`.
+    let on_disk = repo.mount_stdio(
+        "/packages",
+        &content_root().join("packages"),
+        MOUNT_TOP | MOUNT_RDONLY,
+        Mount::NONE,
+    );
+    assert!(!on_disk.is_null(), "packages directory did not mount");
+    let packages = repo.open_dir("/packages");
     let name = STOCK_PACKAGE.rsplit('/').next().unwrap();
     let mount = repo.mount_zip(
         "/",
