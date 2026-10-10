@@ -2,6 +2,7 @@
 //! through, the zip reader behind it, and the two `USE_RUST_FILE` helpers
 //! (`fileExists`, `copyFile`) exported from [`ffi`].
 
+pub mod debug;
 pub mod dirs;
 pub mod ffi;
 pub mod files;

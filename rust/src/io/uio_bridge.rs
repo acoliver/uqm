@@ -2201,16 +2201,19 @@ pub struct uio_GPRoot {
     _private: [u8; 0],
 }
 
+/// `uio_DirHandle_print`: writes the handle's place in its repository to
+/// `out_stream` (see [`crate::io::debug::listing::format_dir_handle`]).
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `dir_handle` is a live directory handle and `out_stream` an open `FILE *`;
+/// a null pointer is a caller bug that aborts the process.
 #[no_mangle]
 pub unsafe extern "C" fn uio_DirHandle_print(
-    _dir_handle: *const uio_DirHandle,
-    _out_stream: *mut libc::FILE,
+    dir_handle: *const uio_DirHandle,
+    out_stream: *mut libc::FILE,
 ) {
-    log_marker("uio_DirHandle_print called - stub");
+    crate::io::debug::c_abi::print_dir_handle(dir_handle, out_stream);
 }
 
 ///
@@ -2808,16 +2811,62 @@ pub unsafe fn uio_copy_file(
     })
 }
 
+/// `uio_printMounts`: writes one line per mount of `repository` to
+/// `out_stream`, highest priority first (see
+/// [`crate::io::debug::listing::format_mounts`]).
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// `repository` is a live repository and `out_stream` an open `FILE *`; a
+/// null pointer is a caller bug that aborts the process.
 #[no_mangle]
 pub unsafe extern "C" fn uio_printMounts(
-    _out_stream: *mut libc::FILE,
-    _repository: *const uio_Repository,
+    out_stream: *mut libc::FILE,
+    repository: *const uio_Repository,
 ) {
-    log_marker("uio_printMounts called - stub");
+    crate::io::debug::c_abi::print_mounts(out_stream, repository);
+}
+
+/// One mount of a repository as `uio_printMounts` shows it.
+pub struct MountListing {
+    pub fs_type: c_int,
+    /// The absolute mount point, no trailing slash (`/` for the root).
+    pub mount_point: Vec<u8>,
+    /// What is mounted, as a path inside its file system without a leading
+    /// slash: the host directory of a directory mount, the directory of the
+    /// archive an archive mount shows.
+    pub source_dir: Vec<u8>,
+    pub read_only: bool,
+}
+
+/// The mounts of `repository` in resolution order, highest priority first,
+/// which is the order of the original's `mounts` array.
+pub fn mount_listing(repository: *const uio_Repository) -> Vec<MountListing> {
+    let key = repository_key(repository.cast_mut());
+    let registry = get_mount_registry().lock().unwrap();
+    registry
+        .iter()
+        .filter(|mount| mount.repository == key && mount.active_in_registry)
+        .map(|mount| MountListing {
+            fs_type: mount.fs_type,
+            mount_point: mount.mount_point.as_os_str().as_bytes().to_vec(),
+            source_dir: if mount.fs_type == UIO_FSTYPE_ZIP {
+                mount.archive_root.clone().into_bytes()
+            } else {
+                let host = mount.mounted_root.as_os_str().as_bytes();
+                let start = host.iter().position(|&b| b != b'/').unwrap_or(host.len());
+                host[start..].to_vec()
+            },
+            read_only: mount.is_read_only(),
+        })
+        .collect()
+}
+
+impl uio_DirHandle {
+    /// The absolute normalized virtual path the handle names.
+    pub(crate) fn virtual_path_bytes(&self) -> &[u8] {
+        self.virtual_path.as_os_str().as_bytes()
+    }
 }
 
 ///
