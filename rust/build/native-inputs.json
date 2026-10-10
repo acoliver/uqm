@@ -444,15 +444,6 @@
       "provider": "native_object:native/rust_vcontrol_impl.c.o"
     },
     {
-      "source": "sc2/src/libs/list/list.c",
-      "source_sha256": "281a1be67c840277a419b6f867fefc1797137e89c743f2312f06e9727af62247",
-      "object_output": "list.c.o",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "owner": "COLLECTIONS",
-      "production_profile": "production",
-      "provider": "native_object:native/list.c.o"
-    },
-    {
       "source": "sc2/src/libs/log/msgbox_stub.c",
       "source_sha256": "fe4062bcdb582f4cac459be3d13ebd4a414051634db666e08930adf8bdbc907f",
       "object_output": "msgbox_stub.c.o",
@@ -2209,7 +2200,7 @@
     },
     {
       "source": "sc2/src/uqm/rust_bridge_macros.c",
-      "source_sha256": "757c21c9fd08c7128709e07f73bb6f9f35e2566bfa9b5be1e5247259632830ca",
+      "source_sha256": "9f53a815a728558cda7e03ebfb37ae95f44cf8780859e5d607356ec28bc0346a",
       "object_output": "rust_bridge_macros.c.o",
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "owner": "FINAL",

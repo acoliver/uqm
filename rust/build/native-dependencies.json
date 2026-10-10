@@ -493,16 +493,6 @@
       ]
     },
     {
-      "path": "sc2/src/libs/list/list.h",
-      "sha256": "27987bdc1dacb0cde3800f00c1de07df381f8d4651b9a3bb72ac0c6dc5fe6081",
-      "targets": [
-        "linux-aarch64",
-        "linux-x86_64",
-        "macos-aarch64",
-        "macos-x86_64"
-      ]
-    },
-    {
       "path": "sc2/src/libs/log.h",
       "sha256": "15729093b5331f6055cfb56d59bdd57b06944927db2c14c928e7aaee32fafc55",
       "targets": [

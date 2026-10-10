@@ -2,7 +2,7 @@
   "schema": "uqm-native-input-trend-v1",
   "baseline_assessment_commit": "54e1dba5f56e9f20a3aa773d5f151470a8cf0662",
   "baseline_observed_objects": 339,
-  "current_transitional_inputs": 321,
+  "current_transitional_inputs": 320,
   "maximum_transitional_inputs": 321,
   "tracked_native_file_delta": 0,
   "infrastructure_delta": {
@@ -38,6 +38,14 @@
       "rust_provider": "rust/src/collections/hash_table.rs",
       "canonical_owner": "CORE_NATIVE/#22",
       "retained_source": "sc2/src/libs/strings/stringhashtable.c"
+    }
+  ],
+  "retired_inputs": [
+    {
+      "native_provider": "native/list.c.o",
+      "source": "sc2/src/libs/list/list.c",
+      "canonical_owner": "COLLECTIONS/#37",
+      "reason": "no includer and no symbol consumer; source deleted"
     }
   ]
 }

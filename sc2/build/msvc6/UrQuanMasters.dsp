@@ -542,18 +542,6 @@ SOURCE=..\..\src\libs\graphics\widgets.c
 SOURCE=..\..\src\libs\graphics\widgets.h
 # End Source File
 # End Group
-# Begin Group "heap"
-
-# PROP Default_Filter ""
-# Begin Source File
-
-SOURCE=..\..\src\libs\heap\heap.c
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\src\libs\heap\heap.h
-# End Source File
-# End Group
 # Begin Group "input"
 
 # PROP Default_Filter ""
@@ -600,18 +588,6 @@ SOURCE=..\..\src\libs\input\input_common.c
 # Begin Source File
 
 SOURCE=..\..\src\libs\input\input_common.h
-# End Source File
-# End Group
-# Begin Group "list"
-
-# PROP Default_Filter ""
-# Begin Source File
-
-SOURCE=..\..\src\libs\list\list.c
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\src\libs\list\list.h
 # End Source File
 # End Group
 # Begin Group "log"
@@ -1522,15 +1498,7 @@ SOURCE=..\..\src\libs\gfxlib.h
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\src\libs\heap.h
-# End Source File
-# Begin Source File
-
 SOURCE=..\..\src\libs\inplib.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\src\libs\list.h
 # End Source File
 # Begin Source File
 
@@ -3171,10 +3139,6 @@ SOURCE=..\..\src\uqm\cyborg.c
 # Begin Source File
 
 SOURCE=..\..\src\uqm\demo.h
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\src\uqm\displist.c
 # End Source File
 # Begin Source File
 

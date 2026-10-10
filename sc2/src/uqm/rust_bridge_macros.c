@@ -8,7 +8,6 @@
 #include "races.h"
 #include "element.h"
 #include "collide.h"
-#include "displist.h"
 #include "nameref.h"
 #include "globdata.h"
 #include "units.h"
@@ -21,7 +20,6 @@
 #undef InitIntersectEndPoint
 #undef GetElementStarShip
 #undef SetElementStarShip
-#undef GetLinkSize
 #undef LoadGraphic
 #undef LoadSound
 #undef LoadMusic
@@ -61,28 +59,6 @@ void
 SetElementStarShip (ELEMENT *e, STARSHIP *psd)
 {
 	e->pParent = psd;
-}
-
-// --- displist.h static inlines / macros ---
-
-void *
-rust_bridge_LockLink (const QUEUE *pq, HLINK h)
-{
-	(void)pq;
-	return (void *)h;
-}
-
-void
-rust_bridge_UnlockLink (const QUEUE *pq, HLINK h)
-{
-	(void)pq;
-	(void)h;
-}
-
-COUNT
-rust_bridge_GetLinkSize (const QUEUE *pq)
-{
-	return (COUNT)(pq->object_size);
 }
 
 // --- nameref.h macros (Load* wrappers) ---
