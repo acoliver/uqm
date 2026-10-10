@@ -446,7 +446,7 @@ unsafe fn in_hq_space() -> bool {
 /// C: `GetHeadLink(pq)` — returns the head handle of a queue.
 #[inline]
 unsafe fn get_head_link(pq: *const Queue) -> HLink {
-    (*pq).head
+    (*pq).head()
 }
 
 /// Direct GlobData queue accessors — replace C bridge FFI calls.
@@ -456,7 +456,7 @@ unsafe fn get_head_link(pq: *const Queue) -> HLink {
 fn avail_race_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.avail_race_q) as *mut Queue
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.avail_race_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -465,7 +465,7 @@ fn avail_race_queue() -> *mut Queue {
 fn npc_built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.npc_built_ship_q) as *mut Queue
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.npc_built_ship_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -474,7 +474,7 @@ fn npc_built_ship_queue() -> *mut Queue {
 fn encounter_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.encounter_q) as *mut Queue
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.encounter_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -484,7 +484,7 @@ fn encounter_queue() -> *mut Queue {
 fn built_ship_queue() -> *mut Queue {
     #[cfg(not(test))]
     unsafe {
-        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.built_ship_q) as *mut Queue
+        std::ptr::addr_of_mut!(ffi::GLOB_DATA.game_state.built_ship_q)
     }
     #[cfg(test)]
     std::ptr::null_mut()
@@ -950,7 +950,7 @@ pub unsafe fn prepare_automation_sol_probe_encounter() -> Result<(), &'static st
     if npc_q.is_null() || avail_q.is_null() {
         return Err("ship queue accessor returned null");
     }
-    if (*npc_q).pq_tab.is_null() || (*avail_q).pq_tab.is_null() {
+    if (*npc_q).capacity() == 0 || (*avail_q).capacity() == 0 {
         return Err("ship queues are not initialized");
     }
 

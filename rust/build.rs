@@ -115,6 +115,7 @@ fn run() -> Result<(), String> {
     generate_state_bindings(Path::new("../sc2/src/uqm/globdata.h"));
     println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
+    generate_queue_abi_bindings()?;
     generate_input_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
@@ -686,6 +687,92 @@ fn generate_hash_abi_bindings() -> Result<(), String> {
     fs::write(out_dir.join("hash_table_abi.rs"), generated)
         .map_err(|error| format!("cannot write generated hash-table ABI bindings: {error}"))
 }
+/// Spells the C typedef names of `displist.h` the way this crate does, so the
+/// generated test bindings need no lint suppression.
+#[derive(Debug)]
+struct QueueAbiNames;
+
+impl bindgen::callbacks::ParseCallbacks for QueueAbiNames {
+    fn item_name(&self, original: &str) -> Option<String> {
+        let renamed = match original {
+            "QUEUE" => "Queue",
+            "LINK" => "Link",
+            "HLINK" => "HLink",
+            "OBJ_SIZE" => "ObjSize",
+            "BOOLEAN" => "Boolean",
+            "QUEUE_HANDLE" => "QueueHandle",
+            "BYTE" => "Byte",
+            "UBYTE" => "Ubyte",
+            "COUNT" => "Count",
+            "UWORD" => "Uword",
+            "uint8" => "Uint8",
+            "uint16" => "Uint16",
+            _ => return None,
+        };
+        Some(renamed.to_string())
+    }
+}
+
+/// Bindings for the retained queue header, used only by the queue unit tests.
+///
+/// `displist.h` stays as the C declaration of `rust/src/collections/queue.rs`
+/// until the last C includer is gone. Two files come out of it: the C struct
+/// layout, generated with its own types, and the exported function signatures,
+/// generated against the Rust `Queue`/`Link` so that a differing argument or
+/// return type no longer coerces in the tests.
+fn generate_queue_abi_bindings() -> Result<(), String> {
+    const SIGNATURE_FUNCTIONS: &str = "(Init|Uninit|Reinit)Queue|(Alloc|Free)Link|CountLinks|ForAllLinks|(Put|Insert|Remove)Queue";
+    let out_dir = output_directory()?;
+    let header = "../sc2/src/uqm/displist.h";
+    println!("cargo:rerun-if-changed={header}");
+    let builder = || {
+        bindgen::Builder::default()
+            .header(header)
+            .clang_arg("-I../sc2")
+            .clang_arg("-I../sc2/src")
+            .parse_callbacks(Box::new(QueueAbiNames))
+            .generate_comments(false)
+            .layout_tests(false)
+            .formatter(ABI_BINDING_FORMATTER)
+    };
+    let layout = builder()
+        .allowlist_type("(QUEUE|LINK)")
+        .generate()
+        .map_err(|error| format!("cannot generate queue layout bindings: {error}"))?;
+    fs::write(out_dir.join("queue_abi_layout.rs"), layout.to_string())
+        .map_err(|error| format!("cannot write generated queue layout bindings: {error}"))?;
+    let mut signatures = builder().allowlist_function(SIGNATURE_FUNCTIONS);
+    // Only the types the signatures use are kept; the shared ones come from
+    // the Rust module under test and `COUNT` is the one plain integer typedef.
+    for excluded in [
+        "QUEUE",
+        "LINK",
+        "link",
+        "HLINK",
+        "QUEUE_HANDLE",
+        "OBJ_SIZE",
+        "BOOLEAN",
+        "COUNT",
+        "UWORD",
+        "BYTE",
+        "UBYTE",
+        "uint8",
+        "uint16",
+    ] {
+        signatures = signatures.blocklist_type(excluded);
+    }
+    let signatures = signatures
+        .raw_line("use crate::collections::queue::{Boolean, HLink, Link, ObjSize, Queue};")
+        .raw_line("type Count = u16;")
+        .generate()
+        .map_err(|error| format!("cannot generate queue signature bindings: {error}"))?;
+    fs::write(
+        out_dir.join("queue_abi_signatures.rs"),
+        signatures.to_string(),
+    )
+    .map_err(|error| format!("cannot write generated queue signature bindings: {error}"))
+}
+
 fn generate_input_abi_bindings() -> Result<(), String> {
     let out_dir = output_directory()?;
     let header = "../sc2/src/uqm/controls.h";

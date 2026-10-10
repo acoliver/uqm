@@ -52,8 +52,8 @@ pub type CSize = i16;
 pub type CBoolean = u8;
 
 /// C `HLINK` = `QUEUE_HANDLE` = `void*`.  All queue handles are opaque
-/// pointers at the ABI level.
-pub type HLink = *mut c_void;
+/// pointers at the ABI level; the queue module owns the definition.
+pub use crate::collections::queue::HLink;
 
 /// C `HSTARSHIP` = `HLINK`.
 pub type HStarship = HLink;
@@ -97,13 +97,6 @@ pub type CStatusFlags = u16;
 /// etc.).
 #[repr(C)]
 pub struct CElement {
-    _opaque: [u8; 0],
-}
-
-/// Opaque C `QUEUE` — Rust never inspects queue internals; all access is
-/// through C queue API functions.
-#[repr(C)]
-pub struct CQueue {
     _opaque: [u8; 0],
 }
 
@@ -262,7 +255,7 @@ pub struct CMasterShipInfo {
 // ---------------------------------------------------------------------------
 //
 // C: HSTARSHIP rust_build_ship(QUEUE *queue, SPECIES_ID species);
-// Rust: pub unsafe extern "C" fn rust_build_ship(queue: *mut CQueue,
+// Rust: pub unsafe extern "C" fn rust_build_ship(queue: *mut Queue,
 //                                          species: CSpeciesId) -> HStarship;
 // Ownership: C queue owns storage; Rust inserts into C-owned queue.
 //

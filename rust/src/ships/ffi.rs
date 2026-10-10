@@ -21,6 +21,7 @@ use super::types::{Characteristics, ShipData, ShipInfo};
 use super::types::{RaceDesc, SpeciesId, Starship};
 #[cfg(not(test))]
 use crate::battle::element::{Element, FrameHandle};
+use crate::collections::queue::{AllocLink, PutQueue, Queue};
 #[cfg(not(test))]
 use std::mem::ManuallyDrop;
 use std::os::raw::c_void;
@@ -172,25 +173,6 @@ fn verify_race_desc_layout() {
 }
 
 // ===========================================================================
-// C Function Imports
-// ===========================================================================
-
-#[cfg(not(test))]
-extern "C" {
-    // Queue management functions
-    fn AllocLink(queue: *mut c_void) -> *mut c_void;
-    fn PutQueue(queue: *mut c_void, link: *mut c_void);
-    #[link_name = "rust_bridge_LockLink"]
-    fn LockLink(queue: *mut c_void, link: *mut c_void) -> *mut c_void;
-    #[link_name = "rust_bridge_UnlockLink"]
-    fn UnlockLink(queue: *mut c_void, link: *mut c_void);
-    #[link_name = "rust_bridge_GetLinkSize"]
-    fn GetLinkSize(queue: *mut c_void) -> usize;
-
-    // Activity getter
-}
-
-// ===========================================================================
 // Catalog FFI
 // ===========================================================================
 
@@ -308,58 +290,39 @@ pub unsafe extern "C" fn rust_ships_free(
 /// Builds a new ship in a C-owned queue.
 /// # Safety
 ///
-/// This is an FFI function called from C. The caller must ensure pointers are valid.
+/// This is an FFI function called from C. `queue` must be null or point to a
+/// `QUEUE` set up by `InitQueue` whose slots are at least as large as
+/// `STARSHIP` or `SHIP_FRAGMENT`.
 ///
 /// C: `HSTARSHIP rust_ships_build(QUEUE *queue, SPECIES_ID species);`
 ///
 /// Allocates a new STARSHIP or SHIP_FRAGMENT entry in the C-owned queue,
-/// initializes it with the species ID, and adds it to the queue.
+/// initializes it with the species ID, and adds it to the queue. Returns null
+/// when `queue` is null or its pool is exhausted.
 #[no_mangle]
-pub unsafe extern "C" fn rust_ships_build(
-    queue: *mut std::os::raw::c_void,
-    species: CSpeciesId,
-) -> HStarship {
-    #[cfg(test)]
-    {
-        let _ = (queue, species);
-        ptr::null_mut()
-    }
-
-    #[cfg(not(test))]
+pub unsafe extern "C" fn rust_ships_build(queue: *mut Queue, species: CSpeciesId) -> HStarship {
     catch_unwind(|| {
         if queue.is_null() {
             return ptr::null_mut();
         }
 
-        // Safety: We trust C to pass a valid queue pointer
+        // SAFETY: the caller guarantees `queue` is a set-up QUEUE.
         unsafe {
-            // Allocate a new link in the queue
             let h_new_ship = AllocLink(queue);
             if h_new_ship.is_null() {
                 return ptr::null_mut();
             }
 
-            // Lock the link to access the struct
-            let ship_ptr = LockLink(queue, h_new_ship);
-            if ship_ptr.is_null() {
-                // Allocation failed
-                return ptr::null_mut();
-            }
+            // Zero the whole slot, then set the species. STARSHIP and
+            // SHIP_FRAGMENT both start with SHIP_BASE_COMMON.
+            ptr::write_bytes(
+                h_new_ship.cast::<u8>(),
+                0,
+                usize::from((*queue).link_size()),
+            );
+            (*h_new_ship.cast::<CStarship>()).species_id = species;
 
-            // Zero out the entire struct
-            let link_size = GetLinkSize(queue);
-            ptr::write_bytes(ship_ptr as *mut u8, 0, link_size);
-
-            // Cast to CStarship (STARSHIP and SHIP_FRAGMENT both start with SHIP_BASE_COMMON)
-            let ship_base = ship_ptr as *mut CStarship;
-            (*ship_base).species_id = species;
-
-            // Unlock the link
-            UnlockLink(queue, h_new_ship);
-
-            // Add to the queue
             PutQueue(queue, h_new_ship);
-
             h_new_ship
         }
     })

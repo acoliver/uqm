@@ -5,6 +5,8 @@
 use std::ffi::{c_char, c_void};
 use std::sync::Mutex;
 
+use crate::collections::queue::Queue;
+
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
 
 #[cfg(not(test))]
@@ -79,19 +81,6 @@ pub struct CSisState {
     pub planet_name: [u8; 16],
 }
 
-/// C `QUEUE` struct (displist.h) — repr(C) mirror.
-/// Total size 40 bytes on 64-bit (QUEUE_TABLE variant).
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct CQueue {
-    pub head: *mut c_void,
-    pub tail: *mut c_void,
-    pub pq_tab: *mut u8,
-    pub free_list: *mut c_void,
-    pub object_size: u16,
-    pub num_objects: u8,
-}
-
 /// C `GLOBDATA` struct (globdata.h) — repr(C) mirror with the fields we access.
 /// Layout verified via offsetof: SIS_STATE at 0 (124 bytes), GAME_STATE at 128 (512 bytes).
 /// Total size 640 bytes.
@@ -127,11 +116,11 @@ pub struct CGameState {
     pub _velocity: [u8; 18],         // offset 124, VELOCITY_DESC
     _velocity_pad: [u8; 2],          // align BattleGroupRef to offset 144
     _battle_group_ref: u32,          // offset 144, DWORD
-    pub avail_race_q: CQueue,        // offset 152 (verified)
-    pub npc_built_ship_q: CQueue,    // offset 192 (verified)
-    pub ip_group_q: CQueue,          // offset 232 (verified)
-    pub encounter_q: CQueue,         // offset 272 (verified)
-    pub built_ship_q: CQueue,        // offset 312 (verified)
+    pub avail_race_q: Queue,         // offset 152 (verified)
+    pub npc_built_ship_q: Queue,     // offset 192 (verified)
+    pub ip_group_q: Queue,           // offset 232 (verified)
+    pub encounter_q: Queue,          // offset 272 (verified)
+    pub built_ship_q: Queue,         // offset 312 (verified)
     pub game_state_bytes: [u8; 155], // offset 352, GameState array (155 bytes)
     _final_pad: [u8; 5],             // pad to 512 total
 }

@@ -1,498 +1,517 @@
-// Generic doubly-linked list queue — port of C displist.c
-// Uses #[repr(C)] QUEUE/LINK structs matching the exact C memory layout.
-// QUEUE_TABLE mode: elements are allocated from a preallocated pool.
+//! Pooled doubly linked queue shared with the remaining C callers.
+//!
+//! This is the only implementation of the `QUEUE`/`LINK` API declared in
+//! `sc2/src/uqm/displist.h`. The header stays as the C declaration of this
+//! module until the last C includer is ported (tracked by #158). It declares
+//! the `QUEUE_TABLE` variant: every queue owns a fixed pool of equally sized
+//! slots and the number of slots is a hard limit on the queue length. The
+//! hyperspace encounter limit depends on that.
+//!
+//! Layout: [`Queue`] and [`Link`] are `repr(C)` mirrors of the C structs. The
+//! unit tests compare them with bindings generated from the header at build
+//! time, so a change to either side fails the build of the tests.
+//!
+//! Ownership: a [`Queue`] owns its pool. `init` allocates it and `uninit`
+//! releases it. Slots are handed out as raw handles because C stores the
+//! handles inside its own structs.
 
-use std::os::raw::c_void;
+use std::ffi::{c_uint, c_void};
+use std::mem::size_of;
+use std::ptr;
 
-/// HLINK — opaque handle to a link (actually a raw pointer to the LINK fields)
+use crate::logging::{log_add, LogLevel};
+use crate::memory::{rust_hfree, rust_hmalloc};
+
+#[cfg(test)]
+mod tests;
+
+/// `HLINK`: the address of a slot in a queue pool. Null is the empty handle.
 pub type HLink = *mut c_void;
 
-/// LINK — the first two fields of any queue element
-/// C: `typedef struct link { HLINK pred; HLINK succ; } LINK;`
+/// `OBJ_SIZE`: the byte size of one pool slot.
+pub type ObjSize = u16;
+
+/// `BOOLEAN`: a C enum, so it travels as an `unsigned int`.
+pub type Boolean = c_uint;
+
+/// `FALSE`.
+pub const FALSE: Boolean = 0;
+
+/// `TRUE`.
+pub const TRUE: Boolean = 1;
+
+/// The pool size is stored in a `BYTE`, which caps the queue length.
+pub const MAX_QUEUE_OBJECTS: u16 = u8::MAX as u16;
+
+/// `LINK`: the first two fields of every queue element.
 #[repr(C)]
+#[derive(Debug)]
 pub struct Link {
     pub pred: HLink,
     pub succ: HLink,
 }
 
-/// QUEUE — the queue control structure
-/// C: `typedef struct queue { HLINK head; HLINK tail; BYTE *pq_tab;
-///      HLINK free_list; COUNT object_size; BYTE num_objects; } QUEUE;`
+/// `QUEUE`: queue control block, embedded by value in C structs.
+///
+/// A zeroed `Queue` (what C globals start as) is an uninitialised queue
+/// without a pool. Fields are private so that only this module maintains the
+/// pool invariants: `pq_tab` is null or points at `object_size * num_objects`
+/// bytes from [`rust_hmalloc`], and `head`, `tail` and `free_list` are null or
+/// slots of that pool.
 #[repr(C)]
+#[derive(Debug)]
 pub struct Queue {
-    pub head: HLink,
-    pub tail: HLink,
-    pub pq_tab: *mut u8,
-    pub free_list: HLink,
-    pub object_size: u16,
-    pub num_objects: u8,
+    head: HLink,
+    tail: HLink,
+    pq_tab: *mut u8,
+    free_list: HLink,
+    object_size: u16,
+    num_objects: u8,
 }
 
-/// OBJ_SIZE type alias
-pub type ObjSize = u16;
+/// `void (*)(LINK *, void *)`, the callback type of [`ForAllLinks`].
+pub type LinkCallback = extern "C" fn(*mut Link, *mut c_void);
 
-extern "C" {
-    fn rust_hmalloc(size: usize) -> *mut c_void;
-    fn rust_hfree(ptr: *mut c_void);
+/// Slot counts reported by [`Queue::audit`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QueueAudit {
+    /// Slots in the pool.
+    pub capacity: u8,
+    /// Links reachable from the head.
+    pub queued: u8,
+    /// Links on the free list.
+    pub free: u8,
+    /// Slots that were allocated and are not queued: held by the caller.
+    pub detached: u8,
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers (replacing C macros)
-// ---------------------------------------------------------------------------
-
-#[inline]
-unsafe fn lock_link(_pq: *const Queue, h: HLink) -> *mut Link {
-    // LockLink in QUEUE_TABLE mode just does bounds-check asserts + cast.
-    // We skip the assert for performance (C only asserts in debug).
-    h as *mut Link
+/// A broken queue invariant found by [`Queue::audit`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueueFault {
+    /// A list entry is not a slot of this queue's pool.
+    ForeignLink(usize),
+    /// The same slot is reachable twice in one list.
+    Cycle(usize),
+    /// A queued link's `pred` is not the link before it.
+    BrokenPred(usize),
+    /// `tail` is not the last reachable link, or `head` and `tail` disagree
+    /// about emptiness.
+    BrokenTail,
+    /// A slot is both queued and on the free list.
+    QueuedAndFree(usize),
 }
 
-#[inline]
-unsafe fn get_pred_link(lp: *const Link) -> HLink {
-    (*lp).pred
-}
+impl Queue {
+    /// An uninitialised queue without a pool.
+    pub const fn new() -> Self {
+        Self {
+            head: ptr::null_mut(),
+            tail: ptr::null_mut(),
+            pq_tab: ptr::null_mut(),
+            free_list: ptr::null_mut(),
+            object_size: 0,
+            num_objects: 0,
+        }
+    }
 
-#[inline]
-unsafe fn set_pred_link(lp: *mut Link, h: HLink) {
-    (*lp).pred = h;
-}
+    /// First queued link, or null.
+    pub fn head(&self) -> HLink {
+        self.head
+    }
 
-#[inline]
-unsafe fn get_succ_link(lp: *const Link) -> HLink {
-    (*lp).succ
-}
+    /// Last queued link, or null.
+    pub fn tail(&self) -> HLink {
+        self.tail
+    }
 
-#[inline]
-unsafe fn set_succ_link(lp: *mut Link, h: HLink) {
-    (*lp).succ = h;
-}
+    /// Next link [`alloc_link`](Self::alloc_link) will return, or null.
+    pub fn free_list(&self) -> HLink {
+        self.free_list
+    }
 
-#[inline]
-unsafe fn get_link_addr(pq: *const Queue, i: u16) -> HLink {
-    let base = (*pq).pq_tab;
-    let offset = ((*pq).object_size as usize) * ((i - 1) as usize);
-    base.add(offset) as HLink
-}
+    /// `GetLinkSize`: byte size of one slot.
+    pub fn link_size(&self) -> ObjSize {
+        self.object_size
+    }
 
-// ---------------------------------------------------------------------------
-// Public API — matches C function signatures exactly
-// ---------------------------------------------------------------------------
+    /// Number of slots in the pool.
+    pub fn capacity(&self) -> u8 {
+        self.num_objects
+    }
 
-/// C: `BOOLEAN InitQueue(QUEUE *pq, COUNT num_elements, OBJ_SIZE size)`
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) -> bool {
-    unsafe {
-        (*pq).head = std::ptr::null_mut();
-        (*pq).tail = std::ptr::null_mut();
-        (*pq).object_size = size;
+    /// Whether `h` is the address of a slot of this queue's pool.
+    pub fn owns(&self, h: HLink) -> bool {
+        let size = usize::from(self.object_size);
+        let pool_len = size * usize::from(self.num_objects);
+        let offset = h.addr().wrapping_sub(self.pq_tab.addr());
+        !h.is_null() && !self.pq_tab.is_null() && offset < pool_len && offset.is_multiple_of(size)
+    }
 
-        // AllocQueueTab: pq_tab = HMalloc(object_size * num_objects)
-        (*pq).num_objects = num_elements as u8;
-        let tab_size = (size as usize) * (num_elements as usize);
-        (*pq).pq_tab = rust_hmalloc(tab_size) as *mut u8;
-
-        if (*pq).pq_tab.is_null() {
+    /// `InitQueue`: empty the queue and allocate a pool of `num_elements`
+    /// slots of `size` bytes.
+    ///
+    /// Returns `false`, leaving a queue without a pool, when the geometry is
+    /// invalid: `num_elements` must be 1 to [`MAX_QUEUE_OBJECTS`] and `size`
+    /// must fit a [`Link`]. The pool of an earlier `init` is not released;
+    /// use [`uninit`](Self::uninit) first, as C does.
+    pub fn init(&mut self, num_elements: u16, size: ObjSize) -> bool {
+        *self = Self::new();
+        self.object_size = size;
+        let valid_count = (1..=MAX_QUEUE_OBJECTS).contains(&num_elements);
+        if !valid_count || usize::from(size) < size_of::<Link>() {
+            log(
+                LogLevel::Error,
+                &format!("InitQueue(): invalid pool of {num_elements} elements of {size} bytes"),
+            );
             return false;
         }
 
-        // Build free list: free each slot in reverse order
-        (*pq).free_list = std::ptr::null_mut();
-        let mut n = num_elements;
-        while n > 0 {
-            FreeLink(pq, get_link_addr(pq, n));
-            n -= 1;
-        }
-
+        let pool_len = usize::from(size) * usize::from(num_elements);
+        // SAFETY: `rust_hmalloc` has no preconditions and aborts on failure.
+        self.pq_tab = unsafe { rust_hmalloc(pool_len) }.cast();
+        self.num_objects = num_elements as u8;
+        self.rebuild_free_list();
         true
     }
-}
 
-/// C: `BOOLEAN UninitQueue(QUEUE *pq)`
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn UninitQueue(pq: *mut Queue) -> bool {
-    unsafe {
-        (*pq).head = std::ptr::null_mut();
-        (*pq).tail = std::ptr::null_mut();
-        (*pq).free_list = std::ptr::null_mut();
-
-        if !(*pq).pq_tab.is_null() {
-            rust_hfree((*pq).pq_tab as *mut c_void);
-            (*pq).pq_tab = std::ptr::null_mut();
+    /// `UninitQueue`: empty the queue and release its pool. Queued links and
+    /// handles into the pool are invalid afterwards.
+    pub fn uninit(&mut self) {
+        if !self.pq_tab.is_null() {
+            // SAFETY: `pq_tab` came from `rust_hmalloc` in `init` and is
+            // cleared below, so it is freed once.
+            unsafe { rust_hfree(self.pq_tab.cast()) };
         }
-
-        true
+        *self = Self {
+            object_size: self.object_size,
+            ..Self::new()
+        };
     }
-}
 
-/// C: `void ReinitQueue(QUEUE *pq)` — empty the queue, rebuild free list
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn ReinitQueue(pq: *mut Queue) {
-    unsafe {
-        (*pq).head = std::ptr::null_mut();
-        (*pq).tail = std::ptr::null_mut();
-
-        (*pq).free_list = std::ptr::null_mut();
-        let num_elements = (*pq).num_objects as u16;
-        let mut n = num_elements;
-        while n > 0 {
-            FreeLink(pq, get_link_addr(pq, n));
-            n -= 1;
-        }
+    /// `ReinitQueue`: empty the queue and return every slot to the free list.
+    /// The slot contents are untouched.
+    pub fn reinit(&mut self) {
+        self.head = ptr::null_mut();
+        self.tail = ptr::null_mut();
+        self.rebuild_free_list();
     }
-}
 
-/// C: `HLINK AllocLink(QUEUE *pq)` — allocate from free list
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
-    unsafe {
-        let h = (*pq).free_list;
-        if !h.is_null() {
-            let lp = lock_link(pq, h);
-            (*pq).free_list = get_succ_link(lp);
+    /// `AllocLink`: take a slot off the free list, or null when the pool is
+    /// exhausted. The slot contents are whatever the last user left.
+    pub fn alloc_link(&mut self) -> HLink {
+        let h = self.free_list;
+        if h.is_null() {
+            log(LogLevel::Debug, "AllocLink(): No more elements");
+            return h;
         }
+        // SAFETY: a non-null free list head is a pool slot.
+        self.free_list = unsafe { (*self.link(h)).succ };
         h
     }
-}
 
-/// C: `void FreeLink(QUEUE *pq, HLINK hLink)` — return to free list
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
-    unsafe {
-        let lp = lock_link(pq, h_link);
-        set_succ_link(lp, (*pq).free_list);
-        (*pq).free_list = h_link;
+    /// `FreeLink`: return a slot to the free list.
+    ///
+    /// # Safety
+    ///
+    /// `h` must be a slot of this queue's pool that is not queued and not
+    /// already free.
+    pub unsafe fn free_link(&mut self, h: HLink) {
+        (*self.link(h)).succ = self.free_list;
+        self.free_list = h;
     }
-}
 
-/// C: `void PutQueue(QUEUE *pq, HLINK hLink)` — append to tail
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
-    unsafe {
-        if (*pq).head.is_null() {
-            (*pq).head = h_link;
+    /// `PutQueue`: append `h` at the tail.
+    ///
+    /// # Safety
+    ///
+    /// `h` must be an allocated slot of this queue's pool that is not queued.
+    pub unsafe fn put(&mut self, h: HLink) {
+        if self.head.is_null() {
+            self.head = h;
         } else {
-            let tail = (*pq).tail;
-            let lp_tail = lock_link(pq, tail);
-            set_succ_link(lp_tail, h_link);
+            (*self.link(self.tail)).succ = h;
         }
-
-        let lp = lock_link(pq, h_link);
-        set_pred_link(lp, (*pq).tail);
-        set_succ_link(lp, std::ptr::null_mut());
-
-        (*pq).tail = h_link;
-    }
-}
-
-/// C: `void InsertQueue(QUEUE *pq, HLINK hLink, HLINK hRefLink)` — insert before ref
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) {
-    if h_ref_link.is_null() {
-        PutQueue(pq, h_link);
-        return;
+        let link = self.link(h);
+        (*link).pred = self.tail;
+        (*link).succ = ptr::null_mut();
+        self.tail = h;
     }
 
-    unsafe {
-        let lp = lock_link(pq, h_link);
-        let lp_ref = lock_link(pq, h_ref_link);
-
-        set_pred_link(lp, get_pred_link(lp_ref));
-        set_pred_link(lp_ref, h_link);
-        set_succ_link(lp, h_ref_link);
-
-        if (*pq).head == h_ref_link {
-            (*pq).head = h_link;
-        } else {
-            let h_pred = get_pred_link(lp);
-            let lp_pred = lock_link(pq, h_pred);
-            set_succ_link(lp_pred, h_link);
+    /// `InsertQueue`: insert `h` before `h_ref`, or append when `h_ref` is
+    /// null.
+    ///
+    /// # Safety
+    ///
+    /// `h` must be as for [`put`](Self::put), and `h_ref` must be null or a
+    /// queued slot.
+    pub unsafe fn insert(&mut self, h: HLink, h_ref: HLink) {
+        if h_ref.is_null() {
+            self.put(h);
+            return;
         }
-
-        // UnlockLink is no-op in our mode
-    }
-}
-
-/// C: `void RemoveQueue(QUEUE *pq, HLINK hLink)` — unlink from queue
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
-    unsafe {
-        let lp = lock_link(pq, h_link);
-
-        if (*pq).head == h_link {
-            (*pq).head = get_succ_link(lp);
+        let link = self.link(h);
+        let ref_link = self.link(h_ref);
+        (*link).pred = (*ref_link).pred;
+        (*ref_link).pred = h;
+        (*link).succ = h_ref;
+        if self.head == h_ref {
+            self.head = h;
         } else {
-            let h_pred = get_pred_link(lp);
-            let lp_pred = lock_link(pq, h_pred);
-            set_succ_link(lp_pred, get_succ_link(lp));
-        }
-
-        if (*pq).tail == h_link {
-            (*pq).tail = get_pred_link(lp);
-        } else {
-            let h_succ = get_succ_link(lp);
-            let lp_succ = lock_link(pq, h_succ);
-            set_pred_link(lp_succ, get_pred_link(lp));
+            (*self.link((*link).pred)).succ = h;
         }
     }
-}
 
-/// C: `COUNT CountLinks(QUEUE *pq)` — count elements
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn CountLinks(pq: *const Queue) -> u16 {
-    unsafe {
-        let mut count: u16 = 0;
-        let mut h = (*pq).head;
+    /// `RemoveQueue`: unlink `h`. The slot stays allocated; its own links are
+    /// left as they were.
+    ///
+    /// # Safety
+    ///
+    /// `h` must be a queued slot of this queue.
+    pub unsafe fn remove(&mut self, h: HLink) {
+        let link = self.link(h);
+        if self.head == h {
+            self.head = (*link).succ;
+        } else {
+            (*self.link((*link).pred)).succ = (*link).succ;
+        }
+        if self.tail == h {
+            self.tail = (*link).pred;
+        } else {
+            (*self.link((*link).succ)).pred = (*link).pred;
+        }
+    }
+
+    /// `CountLinks`: number of queued links.
+    pub fn count(&self) -> u16 {
+        let mut count = 0;
+        let mut h = self.head;
         while !h.is_null() {
             count += 1;
-            h = get_succ_link(lock_link(pq, h));
+            // SAFETY: queued handles are pool slots.
+            h = unsafe { (*self.link(h)).succ };
         }
         count
     }
-}
 
-/// C: `void ForAllLinks(QUEUE *pq, void (*callback)(LINK*, void*), void *arg)`
-pub type LinkCallback = extern "C" fn(*mut Link, *mut c_void);
-
-#[no_mangle]
-#[allow(
-    clippy::not_unsafe_ptr_arg_deref,
-    reason = "C ABI compatibility is fixed during the Rust migration; tracked by PLAN-20260723-RUNTIME-AUTOMATION.P00"
-)]
-pub extern "C" fn ForAllLinks(pq: *mut Queue, callback: LinkCallback, arg: *mut c_void) {
-    unsafe {
-        let mut h = (*pq).head;
+    /// Check the pool invariants and report the slot accounting.
+    ///
+    /// Every list entry must be a pool slot and appear once, the `pred`
+    /// chain must mirror the `succ` chain, `tail` must be the last link, and
+    /// no slot may be both queued and free.
+    pub fn audit(&self) -> Result<QueueAudit, QueueFault> {
+        let mut queued_slots = [false; MAX_QUEUE_OBJECTS as usize];
+        let mut queued = 0u8;
+        let mut prev: HLink = ptr::null_mut();
+        let mut h = self.head;
         while !h.is_null() {
-            let lp = lock_link(pq, h);
-            let next = get_succ_link(lp);
-            callback(lp, arg);
-            h = next;
+            let slot = self.slot_index(h)?;
+            if queued_slots[slot] {
+                return Err(QueueFault::Cycle(slot));
+            }
+            queued_slots[slot] = true;
+            queued += 1;
+            // SAFETY: `slot_index` verified that `h` is a pool slot.
+            let link = unsafe { &*self.link(h) };
+            if link.pred != prev {
+                return Err(QueueFault::BrokenPred(slot));
+            }
+            prev = h;
+            h = link.succ;
+        }
+        if prev != self.tail {
+            return Err(QueueFault::BrokenTail);
+        }
+
+        let mut free_slots = [false; MAX_QUEUE_OBJECTS as usize];
+        let mut free = 0u8;
+        let mut h = self.free_list;
+        while !h.is_null() {
+            let slot = self.slot_index(h)?;
+            if queued_slots[slot] {
+                return Err(QueueFault::QueuedAndFree(slot));
+            }
+            if free_slots[slot] {
+                return Err(QueueFault::Cycle(slot));
+            }
+            free_slots[slot] = true;
+            free += 1;
+            // SAFETY: `slot_index` verified that `h` is a pool slot.
+            h = unsafe { (*self.link(h)).succ };
+        }
+        Ok(QueueAudit {
+            capacity: self.num_objects,
+            queued,
+            free,
+            detached: self.num_objects - queued - free,
+        })
+    }
+
+    /// Zero-based slot number of `h`.
+    fn slot_index(&self, h: HLink) -> Result<usize, QueueFault> {
+        if self.owns(h) {
+            Ok(h.addr().wrapping_sub(self.pq_tab.addr()) / usize::from(self.object_size))
+        } else {
+            Err(QueueFault::ForeignLink(h.addr()))
+        }
+    }
+
+    /// `GetLinkAddr`: address of the slot with the one-based number `number`.
+    fn slot_addr(&self, number: u16) -> HLink {
+        let offset = usize::from(self.object_size) * usize::from(number - 1);
+        self.pq_tab.wrapping_add(offset).cast()
+    }
+
+    /// `LockLink`: the link header of slot `h`.
+    ///
+    /// The debug assertion is the pool membership invariant of the C
+    /// `LockLink`, with the slot alignment added.
+    fn link(&self, h: HLink) -> *mut Link {
+        debug_assert!(
+            self.owns(h),
+            "{h:p} is not a slot of the queue pool at {:p}",
+            self.pq_tab
+        );
+        h.cast()
+    }
+
+    /// Chain every slot onto the free list so the lowest slot is allocated
+    /// first.
+    fn rebuild_free_list(&mut self) {
+        self.free_list = ptr::null_mut();
+        for number in (1..=u16::from(self.num_objects)).rev() {
+            let slot = self.slot_addr(number);
+            // SAFETY: `slot` is in the pool and not on the free list yet.
+            unsafe { self.free_link(slot) };
         }
     }
 }
 
+impl Default for Queue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn log(level: LogLevel, message: &str) {
+    // SAFETY: `log_add` only formats the message to the diagnostic stream.
+    unsafe { log_add(level, message) };
+}
+
 // ---------------------------------------------------------------------------
-// Tests
+// C ABI, as declared in displist.h
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// `BOOLEAN InitQueue (QUEUE *pq, COUNT num_elements, OBJ_SIZE size)`.
+///
+/// Returns `FALSE` for a pool of zero or more than 255 elements, or for a
+/// slot size that cannot hold a `LINK`.
+///
+/// # Safety
+///
+/// `pq` must point to a writable `QUEUE`. A pool it already owns is leaked.
+#[no_mangle]
+pub unsafe extern "C" fn InitQueue(pq: *mut Queue, num_elements: u16, size: ObjSize) -> Boolean {
+    Boolean::from((*pq).init(num_elements, size))
+}
 
-    // Test element: LINK fields followed by a payload
-    #[repr(C)]
-    struct TestElement {
-        pred: HLink,
-        succ: HLink,
-        value: i32,
-    }
+/// `BOOLEAN UninitQueue (QUEUE *pq)`.
+///
+/// # Safety
+///
+/// `pq` must point to a `QUEUE` that is zeroed or was set up by [`InitQueue`].
+#[no_mangle]
+pub unsafe extern "C" fn UninitQueue(pq: *mut Queue) -> Boolean {
+    (*pq).uninit();
+    TRUE
+}
 
-    /// Allocate a QUEUE + elements, perform operations, verify behavior
-    fn setup_queue(n: u16) -> (*mut Queue, Vec<*mut TestElement>) {
-        let object_size = std::mem::size_of::<TestElement>() as u16;
+/// `void ReinitQueue (QUEUE *pq)`.
+///
+/// # Safety
+///
+/// `pq` must point to a `QUEUE` that is zeroed or was set up by [`InitQueue`].
+#[no_mangle]
+pub unsafe extern "C" fn ReinitQueue(pq: *mut Queue) {
+    (*pq).reinit();
+}
 
-        // Allocate queue struct
-        let pq = Box::into_raw(Box::new(Queue {
-            head: std::ptr::null_mut(),
-            tail: std::ptr::null_mut(),
-            pq_tab: std::ptr::null_mut(),
-            free_list: std::ptr::null_mut(),
-            object_size,
-            num_objects: 0,
-        }));
+/// `HLINK AllocLink (QUEUE *pq)`.
+///
+/// # Safety
+///
+/// `pq` must point to a `QUEUE` that is zeroed or was set up by [`InitQueue`].
+#[no_mangle]
+pub unsafe extern "C" fn AllocLink(pq: *mut Queue) -> HLink {
+    (*pq).alloc_link()
+}
 
-        // Use InitQueue to allocate the pool
-        InitQueue(pq, n, object_size);
+/// `void FreeLink (QUEUE *pq, HLINK hLink)`.
+///
+/// # Safety
+///
+/// See [`Queue::free_link`]; `pq` must point to a set-up `QUEUE`.
+#[no_mangle]
+pub unsafe extern "C" fn FreeLink(pq: *mut Queue, h_link: HLink) {
+    (*pq).free_link(h_link);
+}
 
-        // Alloc n elements
-        let mut elems = Vec::new();
-        for i in 0..n as i32 {
-            let h = AllocLink(pq);
-            assert!(!h.is_null());
-            unsafe {
-                (*(h as *mut TestElement)).value = i;
-            }
-            elems.push(h as *mut TestElement);
-        }
+/// `void PutQueue (QUEUE *pq, HLINK hLink)`.
+///
+/// # Safety
+///
+/// See [`Queue::put`]; `pq` must point to a set-up `QUEUE`.
+#[no_mangle]
+pub unsafe extern "C" fn PutQueue(pq: *mut Queue, h_link: HLink) {
+    (*pq).put(h_link);
+}
 
-        (pq, elems)
-    }
+/// `void InsertQueue (QUEUE *pq, HLINK hLink, HLINK hRefLink)`.
+///
+/// # Safety
+///
+/// See [`Queue::insert`]; `pq` must point to a set-up `QUEUE`.
+#[no_mangle]
+pub unsafe extern "C" fn InsertQueue(pq: *mut Queue, h_link: HLink, h_ref_link: HLink) {
+    (*pq).insert(h_link, h_ref_link);
+}
 
-    fn teardown_queue(pq: *mut Queue) {
-        unsafe {
-            UninitQueue(pq);
-            drop(Box::from_raw(pq));
-        }
-    }
+/// `void RemoveQueue (QUEUE *pq, HLINK hLink)`.
+///
+/// # Safety
+///
+/// See [`Queue::remove`]; `pq` must point to a set-up `QUEUE`.
+#[no_mangle]
+pub unsafe extern "C" fn RemoveQueue(pq: *mut Queue, h_link: HLink) {
+    (*pq).remove(h_link);
+}
 
-    #[test]
-    fn test_init_uninit() {
-        let (pq, _) = setup_queue(4);
-        teardown_queue(pq);
-    }
+/// `COUNT CountLinks (QUEUE *pq)`.
+///
+/// # Safety
+///
+/// `pq` must point to a `QUEUE` that is zeroed or was set up by [`InitQueue`].
+#[no_mangle]
+pub unsafe extern "C" fn CountLinks(pq: *mut Queue) -> u16 {
+    (*pq).count()
+}
 
-    #[test]
-    fn test_alloc_exhaustion() {
-        let (pq, _) = setup_queue(3);
-        // Pool of 3 exhausted
-        let h = AllocLink(pq);
-        assert!(
-            h.is_null(),
-            "AllocLink should return NULL when pool exhausted"
-        );
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_free_realloc() {
-        let (pq, elems) = setup_queue(2);
-        // Free one, then alloc should succeed again
-        FreeLink(pq, elems[0] as HLink);
-        let h = AllocLink(pq);
-        assert!(!h.is_null(), "AllocLink should succeed after FreeLink");
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_put_count_remove() {
-        let (pq, elems) = setup_queue(3);
-        unsafe {
-            assert_eq!(CountLinks(pq), 0);
-
-            PutQueue(pq, elems[0] as HLink);
-            PutQueue(pq, elems[1] as HLink);
-            PutQueue(pq, elems[2] as HLink);
-            assert_eq!(CountLinks(pq), 3);
-
-            RemoveQueue(pq, elems[1] as HLink);
-            assert_eq!(CountLinks(pq), 2);
-
-            // Head should be elems[0], tail should be elems[2]
-            assert_eq!((*pq).head, elems[0] as HLink);
-            assert_eq!((*pq).tail, elems[2] as HLink);
-        }
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_reinit() {
-        let (pq, elems) = setup_queue(3);
-        PutQueue(pq, elems[0] as HLink);
-        PutQueue(pq, elems[1] as HLink);
-        assert_eq!(CountLinks(pq), 2);
-        ReinitQueue(pq);
-        assert_eq!(CountLinks(pq), 0);
-        // After reinit, pool should be fully available again
-        let h = AllocLink(pq);
-        assert!(!h.is_null());
-        let h2 = AllocLink(pq);
-        assert!(!h2.is_null());
-        let h3 = AllocLink(pq);
-        assert!(!h3.is_null());
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_insert_in_order() {
-        let (pq, elems) = setup_queue(3);
-        unsafe {
-            // Put [0], then [2], then insert [1] before [2]
-            PutQueue(pq, elems[0] as HLink);
-            PutQueue(pq, elems[2] as HLink);
-            InsertQueue(pq, elems[1] as HLink, elems[2] as HLink);
-
-            // Walk the list: should be 0 → 1 → 2
-            let mut h = (*pq).head;
-            let order = [0i32, 1, 2];
-            let mut idx = 0;
-            while !h.is_null() {
-                let val = (*(h as *mut TestElement)).value;
-                assert_eq!(val, order[idx], "element {} in wrong position", idx);
-                h = get_succ_link(lock_link(pq, h));
-                idx += 1;
-            }
-            assert_eq!(idx, 3);
-        }
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_insert_at_head() {
-        let (pq, elems) = setup_queue(3);
-        unsafe {
-            PutQueue(pq, elems[0] as HLink);
-            InsertQueue(pq, elems[1] as HLink, elems[0] as HLink);
-
-            // Head should now be elems[1]
-            assert_eq!((*pq).head, elems[1] as HLink);
-        }
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_insert_null_ref_appends() {
-        let (pq, elems) = setup_queue(3);
-        unsafe {
-            PutQueue(pq, elems[0] as HLink);
-            InsertQueue(pq, elems[1] as HLink, std::ptr::null_mut());
-
-            // Should append → tail is elems[1]
-            assert_eq!((*pq).tail, elems[1] as HLink);
-        }
-        teardown_queue(pq);
-    }
-
-    #[test]
-    fn test_for_all_links() {
-        extern "C" fn count_cb(_lp: *mut Link, arg: *mut c_void) {
-            unsafe {
-                let counter = arg as *mut u16;
-                *counter += 1;
-            }
-        }
-
-        let (pq, elems) = setup_queue(4);
-        PutQueue(pq, elems[0] as HLink);
-        PutQueue(pq, elems[1] as HLink);
-        PutQueue(pq, elems[2] as HLink);
-        let mut counter: u16 = 0;
-        ForAllLinks(pq, count_cb, &mut counter as *mut u16 as *mut c_void);
-        assert_eq!(counter, 3);
-        teardown_queue(pq);
+/// `void ForAllLinks (QUEUE *pq, void (*callback)(LINK *, void *), void *arg)`.
+///
+/// The successor is read before the callback runs, so the callback may remove
+/// or free the link it is given. It may also use `pq`; the queue is not
+/// borrowed while the callback runs.
+///
+/// # Safety
+///
+/// `pq` must point to a set-up `QUEUE`, and `callback` must uphold the
+/// contracts of the queue operations it performs.
+#[no_mangle]
+pub unsafe extern "C" fn ForAllLinks(pq: *mut Queue, callback: LinkCallback, arg: *mut c_void) {
+    let mut h = (*pq).head;
+    while !h.is_null() {
+        let link = (*pq).link(h);
+        let next = (*link).succ;
+        callback(link, arg);
+        h = next;
     }
 }
