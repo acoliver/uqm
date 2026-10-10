@@ -569,7 +569,6 @@ fn audit_reports_queued_links_left_behind_by_a_released_pool() {
     assert_eq!(queue.audit(), Err(QueueFault::BrokenTail));
 }
 
-#[cfg(debug_assertions)]
 #[test]
 #[should_panic(expected = "is not a slot of the queue pool")]
 fn freeing_a_pointer_outside_the_pool_trips_the_membership_assertion() {
@@ -584,13 +583,62 @@ fn freeing_a_pointer_outside_the_pool_trips_the_membership_assertion() {
     unsafe { pool.queue.free_link((&mut stray as *mut Element).cast()) };
 }
 
-#[cfg(debug_assertions)]
 #[test]
 #[should_panic(expected = "is not a slot of the queue pool")]
 fn a_pointer_into_the_middle_of_a_slot_trips_the_membership_assertion() {
     let mut pool = Pool::new(2);
     let h = pool.alloc(1);
     unsafe { pool.queue.put(h.cast::<u8>().wrapping_add(1).cast()) };
+}
+
+#[test]
+#[should_panic(expected = "is already on the free list")]
+fn freeing_a_slot_twice_is_refused() {
+    let mut pool = Pool::new(3);
+    let h = pool.alloc(1);
+    unsafe {
+        pool.queue.free_link(h);
+        pool.queue.free_link(h);
+    }
+}
+
+#[test]
+#[should_panic(expected = "is already on the free list")]
+fn a_handle_held_across_reinit_cannot_be_freed() {
+    let mut pool = Pool::new(3);
+    let held = pool.alloc(1);
+    pool.queue.reinit();
+    unsafe { pool.queue.free_link(held) };
+}
+
+#[test]
+fn reinit_with_a_handle_held_leaves_a_consistent_pool_when_it_is_dropped() {
+    let mut pool = Pool::new(3);
+    let _held = pool.alloc(1);
+    pool.queue.reinit();
+    assert_eq!(
+        pool.queue.audit(),
+        Ok(QueueAudit {
+            capacity: 3,
+            queued: 0,
+            free: 3,
+            detached: 0
+        })
+    );
+}
+
+#[test]
+fn slot_sizes_that_are_not_a_multiple_of_the_link_alignment_are_refused() {
+    let align = align_of::<Link>() as ObjSize;
+    let link_size = size_of::<Link>() as ObjSize;
+    for size in link_size + 1..link_size + align {
+        let mut queue = Queue::new();
+        assert!(!queue.init(4, size), "size {size}");
+        assert!(!queue.has_pool());
+    }
+    let mut queue = Queue::new();
+    assert!(queue.init(4, link_size + align));
+    queue.uninit();
 }
 
 // ---------------------------------------------------------------------------
@@ -669,6 +717,25 @@ fn exports_have_the_signatures_declared_in_displist_h() {
     let _: unsafe extern "C" fn(*mut Queue, HeaderCallback, *mut c_void) = c::ForAllLinks;
     let _: unsafe extern "C" fn(*mut Queue, LinkCallback, *mut c_void) = ForAllLinks;
     assert_eq!(size_of::<LinkCallback>(), size_of::<HeaderCallback>());
+}
+
+/// Compiles only when both type parameters are the same type.
+fn same_type<T>(_: std::marker::PhantomData<T>, _: std::marker::PhantomData<T>) {}
+
+#[test]
+fn the_rust_spellings_of_the_header_types_are_the_types_bindgen_generates() {
+    use header_signatures as c;
+    use std::marker::PhantomData as P;
+
+    // `BOOLEAN` is a C enum (`unsigned int`), `COUNT` is `UWORD`, `OBJ_SIZE`
+    // is `UWORD`, `HLINK` is `void *`. A change of any Rust alias that the
+    // header does not share (say `Boolean` as `u8`) fails to compile here.
+    same_type(P::<c::Boolean>, P::<Boolean>);
+    assert_eq!(c::FALSE, FALSE);
+    assert_eq!(c::TRUE, TRUE);
+    same_type(P::<c::Count>, P::<u16>);
+    same_type(P::<c::ObjSize>, P::<ObjSize>);
+    same_type(P::<c::HLink>, P::<HLink>);
     assert_eq!(size_of::<Boolean>(), size_of::<c_uint>());
 }
 

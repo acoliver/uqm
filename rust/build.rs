@@ -717,9 +717,18 @@ impl bindgen::callbacks::ParseCallbacks for QueueAbiNames {
 ///
 /// `displist.h` stays as the C declaration of `rust/src/collections/queue.rs`
 /// until the last C includer is gone. Two files come out of it: the C struct
-/// layout, generated with its own types, and the exported function signatures,
-/// generated against the Rust `Queue`/`Link` so that a differing argument or
-/// return type no longer coerces in the tests.
+/// layout, and the exported function signatures with the header's own
+/// `BOOLEAN`, `COUNT`, `OBJ_SIZE` and `HLINK`, generated against the Rust
+/// `Queue`/`Link` so that a differing argument or return type no longer
+/// coerces in the tests.
+///
+/// This runs in every build, production included, because a build script
+/// cannot see whether the crate is built for tests, and the crate has no
+/// test-only mode to gate it on; the controller-input and hash-table
+/// generators above and below are in the same position. The header is a
+/// tracked input, so a missing `displist.h` is a real error, not something to
+/// paper over with a copied layout. #158 deletes the header; this generator
+/// and the header comparison tests in `collections/queue/tests.rs` go with it.
 fn generate_queue_abi_bindings() -> Result<(), String> {
     const SIGNATURE_FUNCTIONS: &str = "(Init|Uninit|Reinit)Queue|(Alloc|Free)Link|CountLinks|ForAllLinks|(Put|Insert|Remove)Queue";
     let out_dir = output_directory()?;
@@ -741,29 +750,21 @@ fn generate_queue_abi_bindings() -> Result<(), String> {
         .map_err(|error| format!("cannot generate queue layout bindings: {error}"))?;
     fs::write(out_dir.join("queue_abi_layout.rs"), layout.to_string())
         .map_err(|error| format!("cannot write generated queue layout bindings: {error}"))?;
+    // `QUEUE` and `LINK` are the Rust `Queue` and `Link` here, because their
+    // layout is compared with the layout bindings above. Every other type of
+    // the signatures (`BOOLEAN`, `COUNT`, `OBJ_SIZE`, `HLINK` and what they
+    // are built from) is generated from the header, so the tests compare
+    // those against the Rust spellings instead of assuming them.
     let mut signatures = builder().allowlist_function(SIGNATURE_FUNCTIONS);
-    // Only the types the signatures use are kept; the shared ones come from
-    // the Rust module under test and `COUNT` is the one plain integer typedef.
-    for excluded in [
-        "QUEUE",
-        "LINK",
-        "link",
-        "HLINK",
-        "QUEUE_HANDLE",
-        "OBJ_SIZE",
-        "BOOLEAN",
-        "COUNT",
-        "UWORD",
-        "BYTE",
-        "UBYTE",
-        "uint8",
-        "uint16",
-    ] {
+    for excluded in ["QUEUE", "LINK", "link", "BYTE", "UBYTE", "uint8"] {
         signatures = signatures.blocklist_type(excluded);
     }
+    // The enumerators of `BOOLEAN` keep their C spelling (`FALSE`, `TRUE`)
+    // instead of the enum-prefixed `Boolean_FALSE`, which is not a valid
+    // constant name.
+    signatures = signatures.prepend_enum_name(false);
     let signatures = signatures
-        .raw_line("use crate::collections::queue::{Boolean, HLink, Link, ObjSize, Queue};")
-        .raw_line("type Count = u16;")
+        .raw_line("use crate::collections::queue::{Link, Queue};")
         .generate()
         .map_err(|error| format!("cannot generate queue signature bindings: {error}"))?;
     fs::write(

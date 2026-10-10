@@ -16,7 +16,7 @@
 //! handles inside its own structs.
 
 use std::ffi::{c_uint, c_void};
-use std::mem::size_of;
+use std::mem::{align_of, size_of};
 use std::ptr;
 
 use crate::logging::{log_add, LogLevel};
@@ -160,13 +160,18 @@ impl Queue {
     ///
     /// Returns `false`, leaving a queue without a pool, when the geometry is
     /// invalid: `num_elements` must be 1 to [`MAX_QUEUE_OBJECTS`] and `size`
-    /// must fit a [`Link`]. The pool of an earlier `init` is not released;
-    /// use [`uninit`](Self::uninit) first, as C does.
+    /// must fit a [`Link`] and be a multiple of its alignment. Every C element
+    /// struct starts with a `LINK`, so its `sizeof` already is such a
+    /// multiple; a slot size that is not would leave later slots misaligned
+    /// for the `Link` header access. The pool of an earlier `init` is not
+    /// released; use [`uninit`](Self::uninit) first, as C does.
     pub fn init(&mut self, num_elements: u16, size: ObjSize) -> bool {
         *self = Self::new();
         self.object_size = size;
         let valid_count = (1..=MAX_QUEUE_OBJECTS).contains(&num_elements);
-        if !valid_count || usize::from(size) < size_of::<Link>() {
+        let valid_size =
+            usize::from(size) >= size_of::<Link>() && usize::from(size) % align_of::<Link>() == 0;
+        if !valid_count || !valid_size {
             log(
                 LogLevel::Error,
                 &format!("InitQueue(): invalid pool of {num_elements} elements of {size} bytes"),
@@ -198,6 +203,10 @@ impl Queue {
 
     /// `ReinitQueue`: empty the queue and return every slot to the free list.
     /// The slot contents are untouched.
+    ///
+    /// Every handle of this pool is released with it, queued or held by the
+    /// caller. A held handle must not be used or freed afterwards: it is on
+    /// the free list again, so [`free_link`](Self::free_link) refuses it.
     pub fn reinit(&mut self) {
         self.head = ptr::null_mut();
         self.tail = ptr::null_mut();
@@ -219,12 +228,18 @@ impl Queue {
 
     /// `FreeLink`: return a slot to the free list.
     ///
+    /// Freeing a slot twice, or a slot that [`reinit`](Self::reinit) already
+    /// released, would link the free list into a cycle that hands one slot to
+    /// two owners. That is a bug in the caller, so it panics here, where the
+    /// bug is, instead of corrupting the pool.
+    ///
     /// # Safety
     ///
-    /// `h` must be a slot of this queue's pool that is not queued and not
-    /// already free.
+    /// `h` must be a slot of this queue's pool that is not queued.
     pub unsafe fn free_link(&mut self, h: HLink) {
-        (*self.link(h)).succ = self.free_list;
+        let link = self.link(h);
+        assert!(!self.is_free(h), "{h:p} is already on the free list");
+        (*link).succ = self.free_list;
         self.free_list = h;
     }
 
@@ -361,6 +376,13 @@ impl Queue {
         })
     }
 
+    /// Point the free list at `h` without checking it, to build the corrupt
+    /// pools that invariant tests need.
+    #[cfg(test)]
+    pub(crate) fn set_free_list_unchecked(&mut self, h: HLink) {
+        self.free_list = h;
+    }
+
     /// Zero-based slot number of `h`.
     fn slot_index(&self, h: HLink) -> Result<usize, QueueFault> {
         if self.owns(h) {
@@ -376,12 +398,32 @@ impl Queue {
         self.pq_tab.wrapping_add(offset).cast()
     }
 
+    /// Whether `h` is on the free list. The walk is bounded by the pool size,
+    /// so a corrupted free list ends the walk instead of looping.
+    fn is_free(&self, h: HLink) -> bool {
+        let mut free = self.free_list;
+        for _ in 0..self.num_objects {
+            if free.is_null() {
+                return false;
+            }
+            if free == h {
+                return true;
+            }
+            // SAFETY: free-list entries are pool slots.
+            free = unsafe { (*self.link(free)).succ };
+        }
+        false
+    }
+
     /// `LockLink`: the link header of slot `h`.
     ///
-    /// The debug assertion is the pool membership invariant of the C
-    /// `LockLink`, with the slot alignment added.
+    /// The assertion is the pool membership invariant of the C `LockLink`,
+    /// which was live in production (C is built without `NDEBUG`), with the
+    /// slot alignment added. It is two comparisons, so it stays in release
+    /// builds: a foreign handle would otherwise write through arbitrary
+    /// memory.
     fn link(&self, h: HLink) -> *mut Link {
-        debug_assert!(
+        assert!(
             self.owns(h),
             "{h:p} is not a slot of the queue pool at {:p}",
             self.pq_tab
@@ -396,7 +438,8 @@ impl Queue {
         for number in (1..=u16::from(self.num_objects)).rev() {
             let slot = self.slot_addr(number);
             // SAFETY: `slot` is in the pool and not on the free list yet.
-            unsafe { self.free_link(slot) };
+            unsafe { (*self.link(slot)).succ = self.free_list };
+            self.free_list = slot;
         }
     }
 }

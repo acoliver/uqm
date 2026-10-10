@@ -1,4 +1,5 @@
 use std::ffi::CString;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 /// Log levels matching the C enum
 #[allow(dead_code)]
@@ -44,11 +45,29 @@ impl LogLevel {
     }
 }
 
+/// Most verbose level that is written. Levels above it are dropped, as in the
+/// C logger, so expected conditions logged at `Debug` (a full hyperspace
+/// encounter queue, say) do not reach stderr on every occurrence.
+static MAX_LEVEL: AtomicI32 = AtomicI32::new(LogLevel::Info as i32);
+
+/// Change the most verbose level that [`log_add`] writes.
+pub fn set_max_level(level: LogLevel) {
+    MAX_LEVEL.store(level.as_i32(), Ordering::Relaxed);
+}
+
+/// Whether a message of `level` is written at the current maximum level.
+pub fn is_enabled(level: LogLevel) -> bool {
+    level.as_i32() <= MAX_LEVEL.load(Ordering::Relaxed)
+}
+
 /// Add a log entry by calling the C log_add function via FFI
 ///
 /// # Safety
 /// This function calls into C code via FFI
 pub unsafe fn log_add(level: LogLevel, message: &str) {
+    if !is_enabled(level) {
+        return;
+    }
     // Convert the Rust string to a C string
     let _c_msg = match CString::new(message) {
         Ok(s) => s,
@@ -171,6 +190,16 @@ mod tests {
         // Invalid values should default to Info
         assert_eq!(LogLevel::from_i32(100), LogLevel::Info);
         assert_eq!(LogLevel::from_i32(-1), LogLevel::Info);
+    }
+
+    #[test]
+    fn debug_messages_are_dropped_by_default_and_errors_are_not() {
+        assert!(is_enabled(LogLevel::Fatal));
+        assert!(is_enabled(LogLevel::Error));
+        assert!(is_enabled(LogLevel::Warning));
+        assert!(is_enabled(LogLevel::Info));
+        assert!(!is_enabled(LogLevel::Debug));
+        assert!(!is_enabled(LogLevel::All));
     }
 
     #[test]

@@ -298,35 +298,38 @@ pub unsafe extern "C" fn rust_ships_free(
 ///
 /// Allocates a new STARSHIP or SHIP_FRAGMENT entry in the C-owned queue,
 /// initializes it with the species ID, and adds it to the queue. Returns null
-/// when `queue` is null or its pool is exhausted.
+/// when `queue` is null or its pool is exhausted; both are conditions of the
+/// caller's data, not bugs here.
+///
+/// There is deliberately no `catch_unwind`: the only way this function can
+/// panic is a queue invariant violation (a handle outside the pool), an
+/// internal bug that must not be reported to C as a null "pool exhausted".
+/// A panic in an `extern "C"` function aborts the process.
 #[no_mangle]
 pub unsafe extern "C" fn rust_ships_build(queue: *mut Queue, species: CSpeciesId) -> HStarship {
-    catch_unwind(|| {
-        if queue.is_null() {
+    if queue.is_null() {
+        return ptr::null_mut();
+    }
+
+    // SAFETY: the caller guarantees `queue` is a set-up QUEUE.
+    unsafe {
+        let h_new_ship = AllocLink(queue);
+        if h_new_ship.is_null() {
             return ptr::null_mut();
         }
 
-        // SAFETY: the caller guarantees `queue` is a set-up QUEUE.
-        unsafe {
-            let h_new_ship = AllocLink(queue);
-            if h_new_ship.is_null() {
-                return ptr::null_mut();
-            }
+        // Zero the whole slot, then set the species. STARSHIP and
+        // SHIP_FRAGMENT both start with SHIP_BASE_COMMON.
+        ptr::write_bytes(
+            h_new_ship.cast::<u8>(),
+            0,
+            usize::from((*queue).link_size()),
+        );
+        (*h_new_ship.cast::<CStarship>()).species_id = species;
 
-            // Zero the whole slot, then set the species. STARSHIP and
-            // SHIP_FRAGMENT both start with SHIP_BASE_COMMON.
-            ptr::write_bytes(
-                h_new_ship.cast::<u8>(),
-                0,
-                usize::from((*queue).link_size()),
-            );
-            (*h_new_ship.cast::<CStarship>()).species_id = species;
-
-            PutQueue(queue, h_new_ship);
-            h_new_ship
-        }
-    })
-    .unwrap_or(ptr::null_mut())
+        PutQueue(queue, h_new_ship);
+        h_new_ship
+    }
 }
 
 /// Clones a ship fragment from source to destination.
@@ -1071,7 +1074,74 @@ pub unsafe extern "C" fn rust_ships_death(element: *mut c_void) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::collections::queue::{CountLinks, InitQueue, UninitQueue};
     use serial_test::serial;
+
+    #[test]
+    fn ships_build_appends_zeroed_slots_with_the_species_until_the_pool_is_exhausted() {
+        let slot_size = size_of::<CStarship>() as u16;
+        let mut queue = Queue::new();
+        let pq: *mut Queue = &mut queue;
+        unsafe {
+            assert_eq!(InitQueue(pq, 2, slot_size), 1);
+            assert!(rust_ships_build(ptr::null_mut(), 7).is_null());
+
+            let first = rust_ships_build(pq, 7);
+            let second = rust_ships_build(pq, 9);
+            assert!(!first.is_null() && !second.is_null());
+            assert_eq!((*first.cast::<CStarship>()).species_id, 7);
+            assert_eq!((*second.cast::<CStarship>()).species_id, 9);
+            assert_eq!((*first.cast::<CStarship>()).crew_level, 0);
+            assert_eq!(CountLinks(pq), 2);
+            assert_eq!((*pq).head(), first);
+            assert_eq!((*pq).tail(), second);
+
+            assert!(rust_ships_build(pq, 11).is_null());
+            assert_eq!(CountLinks(pq), 2);
+            UninitQueue(pq);
+        }
+    }
+
+    const CORRUPT_POOL_CHILD: &str = "UQM_SHIPS_BUILD_CORRUPT_POOL_CHILD";
+
+    /// A pool whose free list names an address outside the pool is an
+    /// internal invariant violation. `rust_ships_build` must not turn it into
+    /// the null that means "pool exhausted": the process has to abort. The
+    /// abort needs its own process.
+    #[test]
+    fn ships_build_aborts_on_a_corrupt_pool_instead_of_reporting_exhaustion() {
+        if std::env::var_os(CORRUPT_POOL_CHILD).is_some() {
+            let mut queue = Queue::new();
+            let mut stray = [0u64; 8];
+            unsafe {
+                assert_eq!(InitQueue(&mut queue, 2, size_of::<CStarship>() as u16), 1);
+                queue.set_free_list_unchecked(stray.as_mut_ptr().cast());
+                let built = rust_ships_build(&mut queue, 7);
+                // Reached only when the panic was swallowed.
+                std::process::exit(if built.is_null() { 0 } else { 3 });
+            }
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "ships::ffi::tests::ships_build_aborts_on_a_corrupt_pool_instead_of_reporting_exhaustion",
+                "--nocapture",
+            ])
+            .env(CORRUPT_POOL_CHILD, "1")
+            .output()
+            .expect("spawn child test process");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success() && output.status.code().is_none(),
+            "child must die from the abort signal, got {:?}\n{stderr}",
+            output.status
+        );
+        assert!(
+            stderr.contains("is not a slot of the queue pool"),
+            "{stderr}"
+        );
+    }
 
     #[test]
     #[serial]
