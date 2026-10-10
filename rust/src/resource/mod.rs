@@ -6,6 +6,7 @@ pub mod ffi_bridge;
 pub mod ffi_types;
 pub mod propfile;
 pub mod resource_type;
+pub mod string_bank;
 pub mod type_registry;
 
 pub use propfile::*;
