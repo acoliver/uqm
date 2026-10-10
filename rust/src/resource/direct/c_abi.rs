@@ -10,8 +10,9 @@ use std::ptr::{self, NonNull};
 
 use crate::io::uio_bridge::uio_DirHandle;
 
-use super::{load_dir_entry_table, MatchType};
-use crate::resource::string_table::StringTable;
+use super::{load_dir_entry_table, DirEntryError, MatchType};
+use crate::logging::{log_add, LogLevel};
+use crate::resource::string_table::{OwnedStringTable, StringTable};
 
 /// Reports a violated caller contract the way the C `assert` did, without
 /// unwinding across the C boundary.
@@ -32,6 +33,11 @@ fn contract_violation(what: &str) -> ! {
 ///
 /// A null pointer, an unknown `match_type`, or a directory the UIO cannot
 /// open or list aborts the process, as the `assert`s in `direct.c` did.
+///
+/// A directory with more matching files than a table can address (65535, the
+/// range of C's `COUNT`) is user data, not a caller bug: it is logged and
+/// reported as null, "nothing found", which both callers handle. `direct.c`
+/// wrapped its count silently and overran the table.
 #[allow(
     non_snake_case,
     reason = "the C symbol this function replaces is named LoadDirEntryTable"
@@ -49,14 +55,27 @@ pub unsafe extern "C" fn LoadDirEntryTable(
     }
     let match_type =
         MatchType::from_c(match_type).unwrap_or_else(|| contract_violation("unknown match type"));
-    match load_dir_entry_table(
+    table_or_null(load_dir_entry_table(
         base,
         CStr::from_ptr(path),
         CStr::from_ptr(pattern),
         match_type,
-    ) {
+    ))
+}
+
+/// The C view of a load result: the table, or null for "nothing found" and
+/// for a listing too large to represent. Failing UIO calls abort.
+pub(super) fn table_or_null(
+    result: Result<Option<OwnedStringTable>, DirEntryError>,
+) -> *mut StringTable {
+    match result {
         Ok(Some(table)) => table.into_raw(),
         Ok(None) => ptr::null_mut(),
+        Err(error @ DirEntryError::Table(_)) => {
+            // SAFETY: `log_add` only requires a valid message.
+            unsafe { log_add(LogLevel::Error, &format!("LoadDirEntryTable: {error}")) };
+            ptr::null_mut()
+        }
         Err(error) => contract_violation(&error.to_string()),
     }
 }

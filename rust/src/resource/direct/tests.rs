@@ -12,14 +12,14 @@ use proptest::prelude::*;
 use serial_test::serial;
 use tempfile::TempDir;
 
-use super::c_abi::LoadDirEntryTable;
-use super::{load_dir_entry_table, scan_dir_entries, DirEntryError, MatchType};
+use super::c_abi::{table_or_null, LoadDirEntryTable};
+use super::{load_dir_entry_table, scan_dir_entries, table_from_names, DirEntryError, MatchType};
 use crate::io::uio_bridge::{
     uio_DirHandle, uio_Repository, uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir,
     uio_openRepository,
 };
 use crate::resource::string_table::tests::c_free_string_table;
-use crate::resource::string_table::{OwnedStringTable, StringTable};
+use crate::resource::string_table::{OwnedStringTable, StringTable, StringTableError, MAX_ENTRIES};
 
 // uio_bridge keeps these private; the values are fixed by the UIO API.
 const FSTYPE_STDIO: c_int = 1;
@@ -428,6 +428,104 @@ fn errors_name_the_failing_uio_call() {
         "uio_openDirRelative failed"
     );
     assert_eq!(DirEntryError::ListDir.to_string(), "uio_getDirList failed");
+}
+
+// --- listings beyond what a table can address -------------------------------
+//
+// No directory with 65536 files is created: the selected names are plain
+// owned Rust strings by the time the table is built, so the limit is
+// exercised with that many names directly.
+
+fn many_names(count: usize) -> Vec<CString> {
+    (0..count)
+        .map(|n| CString::new(format!("f{n}.mle")).unwrap())
+        .collect()
+}
+
+#[test]
+fn a_listing_of_the_largest_addressable_size_becomes_a_table() {
+    let table = table_from_names(&many_names(MAX_ENTRIES))
+        .unwrap()
+        .expect("table");
+    assert_eq!(table.len(), MAX_ENTRIES);
+}
+
+#[test]
+fn a_listing_past_the_addressable_size_is_an_error_not_a_wrapped_count() {
+    for count in [MAX_ENTRIES + 1, MAX_ENTRIES + 2] {
+        // C's COUNT would have held 0 and 1 here.
+        assert_eq!(
+            table_from_names(&many_names(count)).err(),
+            Some(DirEntryError::Table(StringTableError::TooManyEntries {
+                count
+            }))
+        );
+    }
+}
+
+#[test]
+fn an_empty_selection_is_still_no_table() {
+    assert!(table_from_names(&[]).unwrap().is_none());
+}
+
+#[test]
+fn the_c_view_of_an_oversized_listing_is_null() {
+    let error = table_from_names(&many_names(MAX_ENTRIES + 1)).err();
+    assert!(table_or_null(Err(error.unwrap())).is_null());
+}
+
+#[test]
+fn the_c_view_of_a_loaded_table_is_a_walkable_table() {
+    let table = table_from_names(&many_names(3)).unwrap();
+    let raw = table_or_null(Ok(table));
+    assert!(!raw.is_null());
+    unsafe {
+        let StringTable { size, strings, .. } = raw.read();
+        assert_eq!(size, 3);
+        assert_eq!(
+            CStr::from_ptr(strings.add(2).read().data).to_bytes(),
+            b"f2.mle"
+        );
+        c_free_string_table(raw);
+    }
+}
+
+#[test]
+fn the_c_view_of_no_match_is_null() {
+    assert!(table_or_null(Ok(None)).is_null());
+}
+
+#[test]
+fn a_failing_open_still_aborts_like_the_c_assert() {
+    crate::resource::abort_child::expect_abort(
+        module_path!(),
+        "a_failing_open_still_aborts_like_the_c_assert",
+        "uio_openDirRelative failed",
+        || {
+            table_or_null(Err(DirEntryError::OpenDir));
+        },
+    );
+}
+
+#[test]
+fn a_failing_list_still_aborts_like_the_c_assert() {
+    crate::resource::abort_child::expect_abort(
+        module_path!(),
+        "a_failing_list_still_aborts_like_the_c_assert",
+        "uio_getDirList failed",
+        || {
+            table_or_null(Err(DirEntryError::ListDir));
+        },
+    );
+}
+
+#[test]
+fn the_oversize_error_reads_like_the_table_error() {
+    let error = DirEntryError::Table(StringTableError::TooManyEntries { count: 65536 });
+    assert_eq!(
+        error.to_string(),
+        "65536 entries exceed the 65535 a string table can address"
+    );
 }
 
 // --- properties -----------------------------------------------------------

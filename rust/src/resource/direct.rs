@@ -25,7 +25,7 @@ use crate::io::uio_bridge::{
     uio_openDirRelative, uio_stat,
 };
 
-use super::string_table::OwnedStringTable;
+use super::string_table::{OwnedStringTable, StringTableError};
 
 pub mod c_abi;
 
@@ -58,13 +58,17 @@ impl MatchType {
     }
 }
 
-/// The two conditions `direct.c` asserts on.
+/// Why a directory table cannot be produced: the two conditions `direct.c`
+/// asserts on, and a listing too large for a C `STRING_TABLE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirEntryError {
     /// `uio_openDirRelative` returned no handle.
     OpenDir,
     /// `uio_getDirList` returned no list.
     ListDir,
+    /// More qualifying files than a table can address. `direct.c` counted
+    /// them in a `COUNT` and wrapped silently; this is reported instead.
+    Table(StringTableError),
 }
 
 impl fmt::Display for DirEntryError {
@@ -72,6 +76,7 @@ impl fmt::Display for DirEntryError {
         match self {
             DirEntryError::OpenDir => f.write_str("uio_openDirRelative failed"),
             DirEntryError::ListDir => f.write_str("uio_getDirList failed"),
+            DirEntryError::Table(error) => fmt::Display::fmt(error, f),
         }
     }
 }
@@ -190,5 +195,11 @@ pub unsafe fn load_dir_entry_table(
     match_type: MatchType,
 ) -> Result<Option<OwnedStringTable>, DirEntryError> {
     let names = scan_dir_entries(base, path, pattern, match_type)?;
-    Ok(OwnedStringTable::from_names(&names))
+    table_from_names(&names)
+}
+
+/// The table for the selected names: `None` for no names, an error for more
+/// than a table can address.
+fn table_from_names(names: &[CString]) -> Result<Option<OwnedStringTable>, DirEntryError> {
+    OwnedStringTable::from_names(names).map_err(DirEntryError::Table)
 }
