@@ -853,61 +853,31 @@ fn register_mount(
 
     let mut registry = get_mount_registry().lock().unwrap();
 
-    // Derive position from TOP/BOTTOM/ABOVE/BELOW semantics
-    // Start positions at 1000 to avoid underflow with TOP insertions
-    const DEFAULT_START_POSITION: usize = 1000;
-
-    let position = match location {
-        UIO_MOUNT_TOP => {
-            // Highest priority - insert before all others
-            registry
-                .iter()
-                .filter(|m| m.active_in_registry)
-                .map(|m| m.position)
-                .min()
-                .unwrap_or(DEFAULT_START_POSITION)
-                .saturating_sub(1)
-        }
-        UIO_MOUNT_BOTTOM => {
-            // Lowest priority - insert after all others
-            registry
-                .iter()
-                .filter(|m| m.active_in_registry)
-                .map(|m| m.position)
-                .max()
-                .unwrap_or(DEFAULT_START_POSITION)
-                .saturating_add(1)
-        }
-        UIO_MOUNT_ABOVE => {
-            // Insert just above the referenced mount
-            let relative_id = unsafe { (*relative).id };
-            let relative_pos = registry
-                .iter()
-                .find(|m| m.id == relative_id)
-                .map(|m| m.position)
-                .unwrap_or(DEFAULT_START_POSITION);
-            relative_pos.saturating_sub(1)
-        }
-        UIO_MOUNT_BELOW => {
-            // Insert just below the referenced mount
-            let relative_id = unsafe { (*relative).id };
-            let relative_pos = registry
-                .iter()
-                .find(|m| m.id == relative_id)
-                .map(|m| m.position)
-                .unwrap_or(DEFAULT_START_POSITION);
-            relative_pos.saturating_add(1)
-        }
-        _ => {
-            // Default to bottom
-            registry
-                .iter()
-                .filter(|m| m.active_in_registry)
-                .map(|m| m.position)
-                .max()
-                .unwrap_or(DEFAULT_START_POSITION)
-                .saturating_add(1)
-        }
+    // The original repository kept one array with the highest priority mount
+    // at index 0: TOP inserts at the front, BOTTOM appends, ABOVE inserts at
+    // the relative mount's index and BELOW right after it. Several mounts made
+    // ABOVE or BELOW the same relative mount therefore stack in the order the C
+    // code produced, which a fixed offset from the relative mount cannot give.
+    let active_count = registry.iter().filter(|m| m.active_in_registry).count();
+    let relative_index = || {
+        let relative_id = unsafe { (*relative).id };
+        registry
+            .iter()
+            .filter(|m| m.active_in_registry)
+            .position(|m| m.id == relative_id)
+    };
+    let insert_at = match location {
+        UIO_MOUNT_TOP => Some(0),
+        UIO_MOUNT_ABOVE => relative_index(),
+        UIO_MOUNT_BELOW => relative_index().map(|index| index + 1),
+        _ => Some(active_count),
+    };
+    let Some(insert_at) = insert_at else {
+        drop(registry);
+        // SAFETY: handle_ptr came from Box::into_raw above and was never published.
+        drop(unsafe { Box::from_raw(handle_ptr) });
+        set_errno(libc::EINVAL);
+        return ptr::null_mut();
     };
 
     let info = MountInfo {
@@ -918,13 +888,18 @@ fn register_mount(
         mounted_root,
         fs_type,
         active_in_registry,
-        position,
+        position: 0,
         read_only,
         zip_index,
     };
 
-    registry.push(info);
-    // Sort by position (lower = higher priority)
+    registry.insert(insert_at, info);
+    // Positions are the rank in the array; start at 1000 so tests and logs
+    // keep seeing the values they always did.
+    const DEFAULT_START_POSITION: usize = 1000;
+    for (rank, mount) in registry.iter_mut().enumerate() {
+        mount.position = DEFAULT_START_POSITION + rank;
+    }
     sort_mount_registry(&mut registry);
     handle_ptr
 }
