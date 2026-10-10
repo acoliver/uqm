@@ -122,8 +122,14 @@ fn expand_dollar_vars(input: &str) -> String {
                 continue;
             }
         }
-        result.push(bytes[i] as char);
-        i += 1;
+        // `i` only ever advances over ASCII delimiters or whole characters,
+        // so it always sits on a char boundary and multi-byte text survives.
+        let ch = input[i..]
+            .chars()
+            .next()
+            .expect("index is inside the input");
+        result.push(ch);
+        i += ch.len_utf8();
     }
 
     result
@@ -760,10 +766,16 @@ pub unsafe extern "C" fn rust_prepare_shadow_addons(addons: *const *const c_char
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[path = "dir_prep_lifecycle_tests.rs"]
+mod lifecycle_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_expand_path_home() {
         std::env::set_var("HOME", "/tmp/testhome");
         let p = expand_path("~/foo").unwrap();
@@ -771,6 +783,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_expand_path_tilde_only() {
         std::env::set_var("HOME", "/tmp/testhome");
         let p = expand_path("~").unwrap();
@@ -784,6 +797,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_expand_env_var_braces() {
         std::env::set_var("MY_TEST_VAR", "/opt/data");
         let p = expand_path("${MY_TEST_VAR}/sub").unwrap();
@@ -791,6 +805,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_expand_env_var_no_braces() {
         std::env::set_var("MY_TEST_VAR2", "/opt/data2");
         let p = expand_path("$MY_TEST_VAR2/sub").unwrap();
@@ -798,6 +813,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_expand_env_var_undefined() {
         // Undefined var → expands to empty string
         std::env::remove_var("UNDEFINED_UQM_VAR");
@@ -813,6 +829,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_expand_dollar_vars_nested() {
         std::env::set_var("UQM_CONFIG_DIR", "/home/user/.uqm");
         let result = expand_dollar_vars("${UQM_CONFIG_DIR}/save");
@@ -820,6 +837,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_expand_dollar_vars_multiple() {
         std::env::set_var("A", "/a");
         std::env::set_var("B", "/b");
@@ -828,6 +846,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_find_content_dir_finds_or_none() {
         // Should either find content or return None — never panic
         let result = find_content_dir().unwrap();

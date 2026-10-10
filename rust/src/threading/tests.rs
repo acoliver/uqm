@@ -36,7 +36,7 @@ use std::time::Duration;
 static THREAD_SYSTEM: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Take the lock, ignoring poisoning from an unrelated failing test.
-fn hold_thread_system() -> std::sync::MutexGuard<'static, ()> {
+pub(super) fn hold_thread_system() -> std::sync::MutexGuard<'static, ()> {
     THREAD_SYSTEM
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())

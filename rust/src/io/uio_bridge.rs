@@ -3404,73 +3404,81 @@ pub unsafe extern "C" fn uio_open(
             return Box::leak(Box::new(Mutex::new(handle))) as *mut uio_Handle;
         }
 
-        // Read-only mode - try mount registry first, fall back to direct path
-        let registry = get_mount_registry().lock().unwrap();
-
+        // Read-only mode: consult every mount that covers the path in
+        // priority order. A mount that lacks the file lets the lookup fall
+        // through to the next one; any other failure is reported as is.
         // @plan PLAN-20260314-FILE-IO.P09
         // @requirement REQ-FIO-ARCHIVE-MOUNT
-        // Check if this is a ZIP entry
+        let registry = get_mount_registry().lock().unwrap();
+        let normalized = normalize_virtual_path(&virtual_path);
+        let mut covered_by_a_mount = false;
         for mount in registry.iter().filter(|m| m.active_in_registry) {
             let mount_path = Path::new(&mount.mount_point);
-            if virtual_path != mount_path && !virtual_path.starts_with(mount_path) {
+            if normalized != mount_path && !normalized.starts_with(mount_path) {
                 continue;
             }
-
-            let suffix = virtual_path
+            covered_by_a_mount = true;
+            let suffix = normalized
                 .strip_prefix(mount_path)
                 .unwrap_or_else(|_| Path::new(""));
 
-            if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let suffix_str = suffix.to_string_lossy();
-                    match zip_index.open_entry(&suffix_str) {
-                        Ok(reader) => {
-                            drop(registry);
-                            let handle = uio_HandleInner::ZipEntry(reader);
-                            return Box::leak(Box::new(Mutex::new(handle))) as *mut uio_Handle;
-                        }
-                        Err(err) => {
-                            drop(registry);
-                            log_marker(&format!(
-                                "uio_open ZIP entry failed: path={:?} err={}",
-                                suffix_str, err
-                            ));
-                            let err_code = err.raw_os_error().unwrap_or(libc::EIO);
-                            set_errno(err_code);
-                            return ptr::null_mut();
-                        }
-                    }
+            let opened = if mount.fs_type == UIO_FSTYPE_ZIP {
+                match mount.zip_index {
+                    Some(ref zip_index) => zip_index
+                        .open_entry(&suffix.to_string_lossy())
+                        .map(uio_HandleInner::ZipEntry),
+                    None => continue,
+                }
+            } else {
+                let host_path = if suffix.as_os_str().is_empty() {
+                    mount.mounted_root.clone()
+                } else {
+                    map_virtual_to_host_confined(&mount.mounted_root, suffix)
+                };
+                OpenOptions::new()
+                    .read(true)
+                    .open(&host_path)
+                    .map(uio_HandleInner::File)
+            };
+
+            match opened {
+                Ok(inner) => {
+                    drop(registry);
+                    return Box::leak(Box::new(Mutex::new(inner))) as *mut uio_Handle;
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(err) => {
+                    drop(registry);
+                    log_marker(&format!(
+                        "uio_open read failed: path={:?} err={}",
+                        virtual_path, err
+                    ));
+                    set_errno(err.raw_os_error().unwrap_or(libc::EIO));
+                    return ptr::null_mut();
                 }
             }
         }
+        drop(registry);
 
-        let file_path = if let Some(resolution) = resolve_mount_for_path(&registry, &virtual_path) {
-            let path = resolution.host_path.clone();
-            drop(registry);
-            path
-        } else {
-            drop(registry);
-            // No mount - fall back to direct path resolution
-            resolve_path(dir_host_path, &input_path)
-        };
+        if covered_by_a_mount {
+            set_errno(libc::ENOENT);
+            return ptr::null_mut();
+        }
 
-        let mut opts = OpenOptions::new();
-        opts.read(true);
-
-        let file = match opts.open(&file_path) {
+        // No mount covers the path - fall back to direct path resolution
+        let file_path = resolve_path(dir_host_path, &input_path);
+        let file = match OpenOptions::new().read(true).open(&file_path) {
             Ok(f) => f,
             Err(err) => {
                 log_marker(&format!(
                     "uio_open read failed: path={:?} err={}",
                     file_path, err
                 ));
-                let err_code = err.raw_os_error().unwrap_or(libc::EIO);
-                set_errno(err_code);
+                set_errno(err.raw_os_error().unwrap_or(libc::EIO));
                 return ptr::null_mut();
             }
         };
 
-        // Return Mutex<HandleInner> as uio_Handle
         let handle = uio_HandleInner::File(file);
         Box::leak(Box::new(Mutex::new(handle))) as *mut uio_Handle
     })
@@ -7922,3 +7930,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "uio_layered_open_tests.rs"]
+mod layered_open_tests;

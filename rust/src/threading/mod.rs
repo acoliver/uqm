@@ -22,6 +22,8 @@
 //! See `sc2/src/libs/threads/` for the original C implementation.
 
 #[cfg(test)]
+mod ffi_tests;
+#[cfg(test)]
 mod tests;
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};

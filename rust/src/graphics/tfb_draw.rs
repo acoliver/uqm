@@ -331,16 +331,14 @@ pub fn convert_canvas_format(
     let src_pixels = canvas.pixels();
     let src_bpp = canvas.format().bytes_per_pixel as usize;
     let dst_bpp = target.bytes_per_pixel as usize;
+    let shared_bytes = dst_bpp.min(src_bpp);
     converted.with_pixels_mut(|dst_pixels| {
         for (idx, chunk) in dst_pixels.chunks_exact_mut(dst_bpp).enumerate() {
             let src_offset = idx * src_bpp;
             if src_offset + src_bpp <= src_pixels.len() {
-                chunk.copy_from_slice(&src_pixels[src_offset..src_offset + dst_bpp.min(src_bpp)]);
-                if dst_bpp > src_bpp {
-                    for extra in &mut chunk[src_bpp..] {
-                        *extra = 255;
-                    }
-                }
+                chunk[..shared_bytes]
+                    .copy_from_slice(&src_pixels[src_offset..src_offset + shared_bytes]);
+                chunk[shared_bytes..].fill(255);
             }
         }
     })?;
@@ -3565,6 +3563,10 @@ fn test_draw_image_partial_clip() {
     let offset = (7 * dst_width + 7) as usize * 4;
     assert_eq!(dst_pixels[offset], 0); // R
 }
+
+#[cfg(test)]
+#[path = "tfb_draw_primitive_tests.rs"]
+mod primitive_tests;
 
 #[cfg(test)]
 mod copy_rect_tests {
