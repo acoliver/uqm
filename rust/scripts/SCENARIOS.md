@@ -96,6 +96,15 @@ saves twice through the hyperspace Game menu and loads slot 0 back through
 the same menu, because the Quit confirmation loop bypasses the `DoInput`
 automation service.
 
+## Restart menu readiness and tap semantics
+
+Every script that begins at the restart menu starts with
+`wait_for_main_menu_ready`. The menu ignores input until its first frame is
+initialized, and a fixed tick count raced that startup (#213). A
+`tap_menu_key` is one press: the updates after its first one only hold the
+key, and the production key-repeat pulse for it is discarded, so a slow host
+cannot turn one tap into several.
+
 ## Deterministic start scenes
 
 Scripts may alternatively declare root-level `start_scene`. A scene is consumed

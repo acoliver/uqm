@@ -7,7 +7,7 @@
     "max_wallclock_seconds": 180
   },
   "steps": [
-    {"action": "wait_input_ticks", "count": 10},
+    {"action": "wait_for_main_menu_ready"},
     {"action": "tap_menu_key", "key": "select", "value": 1, "hold": 3, "settle": 15},
     {"action": "wait_input_ticks", "count": 20},
     {"action": "assert_activity", "mask": 255, "equals": 4},

@@ -3019,6 +3019,47 @@ mod tests {
         assert_eq!(checked, 10, "hyperspace scenarios checked");
     }
 
+    /// #213: the restart menu only reads input after its first frame is
+    /// initialized. A fixed tick count races that startup, and a Select sent
+    /// too early was only ever rescued by the production key-repeat clock.
+    /// Every script that starts at the restart menu must wait for readiness
+    /// before its first key.
+    #[test]
+    fn every_restart_menu_script_waits_for_readiness_before_its_first_key() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&scripts).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "json") {
+                continue;
+            }
+            let label = path.to_string_lossy().into_owned();
+            let script = validate_script(
+                parse_script(&std::fs::read(&path).unwrap(), &label).unwrap(),
+                &label,
+            )
+            .unwrap();
+            if script.start_scene().is_some() {
+                continue;
+            }
+            let steps = script.steps();
+            let Some(first_key) = steps
+                .iter()
+                .position(|step| matches!(step, Action::TapMenuKey(_) | Action::SetMenuKey(_)))
+            else {
+                continue;
+            };
+            checked += 1;
+            assert!(
+                steps[..first_key]
+                    .iter()
+                    .any(|step| matches!(step, Action::WaitForMainMenuReady(_))),
+                "{label} presses a menu key at step {first_key} before the restart menu is ready"
+            );
+        }
+        assert_eq!(checked, 30, "restart menu scripts checked");
+    }
+
     /// #213 amendment 5: Rust-owned `main` presents twice per input callback
     /// (once when the frame wakes, once after the callback), measured at 2.00
     /// across the native suite. A scenario whose scripted waits and holds alone

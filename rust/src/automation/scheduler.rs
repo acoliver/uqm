@@ -1514,6 +1514,9 @@ mod tests {
         let mut state = SchedulerState::initial();
         let mut observed = Vec::new();
         for tick in 1..=60 {
+            if tick == 31 {
+                state = scheduler_reduce(&state, &config, SchedulerEvent::MainMenuReady).new_state;
+            }
             let transition = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
             if let Some(key) = transition.effects.write_key {
                 observed.push((tick, key.0, key.1));
@@ -1526,11 +1529,12 @@ mod tests {
         assert_eq!(
             observed,
             vec![
-                (11, MenuKey::Select, 1),
-                (12, MenuKey::Select, 1),
-                (13, MenuKey::Select, 1),
-                (14, MenuKey::Select, 0),
-            ]
+                (31, MenuKey::Select, 1),
+                (32, MenuKey::Select, 1),
+                (33, MenuKey::Select, 1),
+                (34, MenuKey::Select, 0),
+            ],
+            "no key may be written before the restart menu reports ready"
         );
     }
 

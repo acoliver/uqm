@@ -14618,7 +14618,7 @@ mod tests {
             match mutation {
                 "steps" => {
                     let mut value = serde_json::to_value(&receipt.scenario).unwrap();
-                    value["steps"][0]["count"] = serde_json::json!(11);
+                    value["steps"][1]["settle"] = serde_json::json!(11);
                     receipt.scenario = serde_json::from_value(value).unwrap();
                     receipt.replay_identity = receipt.scenario.replay_identity().unwrap();
                     receipt.validate().unwrap();
@@ -15049,7 +15049,7 @@ mod tests {
         let mut doc: serde_json::Value =
             serde_json::from_slice(&read_lcar_artifact(root, "snapshots/script.json").unwrap())
                 .unwrap();
-        doc["steps"][0]["count"] = serde_json::json!(11);
+        doc["steps"][1]["settle"] = serde_json::json!(11);
         let bytes = serde_json::to_vec(&doc).unwrap();
         let script = uqm_rust::automation::script::validate_script(
             uqm_rust::automation::script::parse_script(&bytes, "script.json").unwrap(),
