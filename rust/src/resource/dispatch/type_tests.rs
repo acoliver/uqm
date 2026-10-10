@@ -158,21 +158,90 @@ fn type_keys_are_found_without_being_entries() {
 }
 
 #[test]
-fn a_sys_key_cannot_become_an_entry_and_the_type_it_names_survives() {
+fn the_key_of_a_registered_type_cannot_become_an_entry_and_the_type_survives() {
     let mut dispatch = dispatch_with_builtin_numbers();
-    for key in ["sys.INT32", "sys.UNKNOWNRES", "sys.NEW", "sys."] {
+    for key in ["sys.INT32", "sys.UNKNOWNRES", "sys.STRING"] {
         assert_eq!(
             dispatch.process_resource_desc(key, "STRING:x"),
-            Err(DescriptorError::TypeNamespaceKey),
+            Err(DescriptorError::RegisteredTypeKey),
             "{key}"
         );
     }
-    assert!(dispatch.entries.is_empty());
+    assert!(dispatch.entries.is_empty(), "no shadow entry for a type");
+    assert_eq!(dispatch.type_registry.count(), 3);
     assert!(dispatch.has_key("sys.INT32"));
     dispatch.process_resource_desc("n", "INT32:5").unwrap();
     assert_eq!(dispatch.get_int_resource("n"), Some(5));
     assert!(!dispatch.remove_resource("sys.INT32"));
     assert!(dispatch.has_key("sys.INT32"));
+}
+
+#[test]
+fn an_unregistered_sys_key_is_an_ordinary_resource_through_its_whole_life() {
+    let mut dispatch = dispatch_with_builtin_numbers();
+    for key in ["sys.FOO", "sys.", "sys.int32", "sys.INT32x"] {
+        assert!(!dispatch.has_key(key), "{key} before");
+        dispatch.process_resource_desc(key, "INT32:7").unwrap();
+        assert!(dispatch.has_key(key), "{key} stored");
+        assert!(!dispatch.is_type_key(key), "{key} is no type");
+        assert_eq!(dispatch.get_int_resource(key), Some(7), "{key}");
+        assert_eq!(dispatch.get_resource_type(key).unwrap(), "INT32", "{key}");
+    }
+    assert_eq!(
+        dispatch.entries.len(),
+        4,
+        "one ordinary store, one entry per key"
+    );
+    assert_eq!(dispatch.type_registry.count(), 3, "no type was added");
+
+    dispatch
+        .process_resource_desc("sys.FOO", "STRING:again")
+        .unwrap();
+    assert_eq!(dispatch.get_string_resource("sys.FOO"), Some(&b"again"[..]));
+
+    assert!(dispatch.remove_resource("sys.FOO"));
+    assert!(!dispatch.has_key("sys.FOO"));
+    assert!(
+        dispatch.has_key("sys.INT32"),
+        "the registered type is untouched"
+    );
+    assert!(!dispatch.remove_resource("sys.FOO"));
+}
+
+#[test]
+fn a_type_whose_key_an_entry_already_holds_is_refused_and_the_entry_stays() {
+    let mut dispatch = dispatch_with_builtin_numbers();
+    dispatch
+        .process_resource_desc("sys.NEWTYPE", "INT32:9")
+        .unwrap();
+    let before = dispatch.type_registry.count();
+
+    let refused = dispatch.install_type("NEWTYPE", Some(use_descriptor_as_res), None, None);
+    assert_eq!(refused, Err(InstallError::KeyHeldByEntry));
+    assert_eq!(dispatch.type_registry.count(), before);
+    assert!(dispatch.type_registry.lookup("NEWTYPE").is_none());
+    assert_eq!(dispatch.get_int_resource("sys.NEWTYPE"), Some(9));
+
+    // Only the first 27 bytes are the key: a longer identifier collides too.
+    let long = format!("{}tail", "N".repeat(27));
+    dispatch
+        .process_resource_desc(format!("sys.{}", "N".repeat(27)), "INT32:1")
+        .unwrap();
+    assert_eq!(
+        dispatch.install_type(&long, Some(use_descriptor_as_res), None, None),
+        Err(InstallError::KeyHeldByEntry)
+    );
+
+    // Once the entry is gone the key is free for the type, which then owns it.
+    assert!(dispatch.remove_resource("sys.NEWTYPE"));
+    dispatch
+        .install_type("NEWTYPE", Some(use_descriptor_as_res), None, None)
+        .unwrap();
+    assert!(dispatch.is_type_key("sys.NEWTYPE"));
+    assert_eq!(
+        dispatch.process_resource_desc("sys.NEWTYPE", "INT32:2"),
+        Err(DescriptorError::RegisteredTypeKey)
+    );
 }
 
 #[test]

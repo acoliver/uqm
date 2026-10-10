@@ -16,9 +16,11 @@ use std::ffi::{c_void, CString};
 use std::fmt;
 use std::ptr;
 
-use super::ffi_types::{ResourceData, ResourceHandlers};
+use super::ffi_types::{
+    ResourceData, ResourceFreeFun, ResourceHandlers, ResourceLoadFun, ResourceStringFun,
+};
 use super::raw_resource_type::RawResourceType;
-use super::type_registry::{use_descriptor_as_res, TypeRegistry, TYPE_KEY_PREFIX};
+use super::type_registry::{use_descriptor_as_res, InstallError, TypeRegistry};
 
 /// The type of every entry whose descriptor names no registered type. It is
 /// registered by [`ResourceDispatch::new`], as `InitResourceSystem` does in C.
@@ -68,11 +70,11 @@ pub enum DescriptorError {
     /// The type is registered without a load function. C refuses to create
     /// the entry and leaves any earlier entry for the key alone.
     NoLoadFunction { type_name: RawResourceType },
-    /// The key starts with `sys.`, the part of the resource map that holds the
-    /// registered types. C lets such a key replace a type with an ordinary
-    /// entry and then reads that entry as a type; the key is refused instead,
-    /// and no ordinary resource has a `sys.` name.
-    TypeNamespaceKey,
+    /// The key is the key of a registered type (`sys.` and its identifier).
+    /// C lets such a key replace the type with an ordinary entry and then
+    /// reads that entry as a type; the key is refused instead and the type
+    /// stays. Any other `sys.` key is an ordinary resource name.
+    RegisteredTypeKey,
 }
 
 impl fmt::Display for DescriptorError {
@@ -84,8 +86,8 @@ impl fmt::Display for DescriptorError {
             DescriptorError::NoLoadFunction { type_name } => {
                 write!(f, "type {type_name} has no load function")
             }
-            DescriptorError::TypeNamespaceKey => {
-                write!(f, "key is in the sys. namespace of the registered types")
+            DescriptorError::RegisteredTypeKey => {
+                write!(f, "key is the key of a registered resource type")
             }
         }
     }
@@ -122,6 +124,32 @@ impl ResourceDispatch {
         }
     }
 
+    /// Register a type on behalf of a caller that can also store ordinary
+    /// entries. C keeps types and entries in one map, so a type whose key
+    /// (`sys.` and the cut identifier) already names an entry is refused and
+    /// the entry stays, as `CharHashTable_add` refuses a taken key.
+    ///
+    /// # Errors
+    ///
+    /// [`InstallError`]; nothing was registered.
+    pub fn install_type(
+        &mut self,
+        identifier: impl AsRef<[u8]>,
+        load: Option<ResourceLoadFun>,
+        free: Option<ResourceFreeFun>,
+        to_string: Option<ResourceStringFun>,
+    ) -> Result<(), InstallError> {
+        let identifier = identifier.as_ref();
+        if self
+            .entries
+            .contains_key(&TypeRegistry::map_key(identifier)[..])
+        {
+            return Err(InstallError::KeyHeldByEntry);
+        }
+        self.type_registry
+            .install(identifier, load, free, to_string)
+    }
+
     /// The entry stored under `key`.
     pub fn entry(&self, key: impl AsRef<[u8]>) -> Option<&FullResourceDesc> {
         self.entries.get(key.as_ref())
@@ -153,8 +181,8 @@ impl ResourceDispatch {
         if key.contains(&0) {
             return Err(DescriptorError::InteriorNul);
         }
-        if key.starts_with(TYPE_KEY_PREFIX) {
-            return Err(DescriptorError::TypeNamespaceKey);
+        if self.type_registry.holds_key(key) {
+            return Err(DescriptorError::RegisteredTypeKey);
         }
         let (handlers, descriptor) = self.resolve_type(key, value);
         let (res_type, load_fun, is_value_type) = (

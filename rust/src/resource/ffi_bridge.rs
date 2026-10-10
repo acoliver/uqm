@@ -545,8 +545,8 @@ pub unsafe extern "C" fn SaveResourceIndex(
 
 /// Install resource type vectors (load/free/toString) for a named type.
 /// The name is a C string of any bytes. Returns 1 on success, 0 when the name
-/// is NULL or its first 27 bytes are already registered; as in C, the first
-/// registration stays.
+/// is NULL, its first 27 bytes are already registered (the first registration
+/// stays, as in C), or an ordinary resource already has the type's `sys.` key.
 ///
 /// # Safety
 ///
@@ -571,8 +571,7 @@ pub unsafe extern "C" fn InstallResTypeVectors(
     let state = guard.as_mut().unwrap();
     match state
         .dispatch
-        .type_registry
-        .install(identifier, load_fun, free_fun, string_fun)
+        .install_type(identifier, load_fun, free_fun, string_fun)
     {
         Ok(()) => 1,
         Err(err) => {

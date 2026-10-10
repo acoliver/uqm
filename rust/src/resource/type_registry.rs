@@ -45,6 +45,9 @@ pub enum InstallError {
     /// [`TYPE_KEY_MAX`] bytes. C keeps the first one and reports failure
     /// (`CharHashTable_add` refuses a key it has), and so does this.
     AlreadyInstalled { installed: RawResourceType },
+    /// An ordinary resource entry already has the type's key (`sys.` and the
+    /// first [`TYPE_KEY_MAX`] bytes). C keeps the entry and refuses the type.
+    KeyHeldByEntry,
 }
 
 impl fmt::Display for InstallError {
@@ -53,6 +56,9 @@ impl fmt::Display for InstallError {
             InstallError::InteriorNul => write!(f, "type identifier contains a NUL byte"),
             InstallError::AlreadyInstalled { installed } => {
                 write!(f, "type key is already held by {installed}")
+            }
+            InstallError::KeyHeldByEntry => {
+                write!(f, "type key is already held by an ordinary resource")
             }
         }
     }
@@ -109,6 +115,12 @@ impl TypeRegistry {
     /// to [`TYPE_KEY_MAX`] bytes as C does.
     pub fn lookup(&self, type_text: impl AsRef<[u8]>) -> Option<&ResourceHandlers> {
         self.handlers.get(key_of(type_text.as_ref()))
+    }
+
+    /// The key C's resource map would hold a type under: `"sys."` and the
+    /// identifier cut to [`TYPE_KEY_MAX`] bytes.
+    pub fn map_key(identifier: &[u8]) -> Vec<u8> {
+        [TYPE_KEY_PREFIX, key_of(identifier)].concat()
     }
 
     /// Whether `key` is the resource-map key of a registered type: `"sys."`

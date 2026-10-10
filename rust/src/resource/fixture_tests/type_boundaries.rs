@@ -23,7 +23,7 @@ use crate::resource::type_registry::{
     descriptor_to_int, int_to_string, raw_descriptor, use_descriptor_as_res,
 };
 
-use super::descriptors::{has, integer, key, loaded, saved, type_of};
+use super::descriptors::{has, integer, key, loaded, saved, string, type_of};
 use super::res::Rows;
 use super::uio_api::Session;
 
@@ -226,18 +226,77 @@ fn t10_sys_keys_are_keys_but_not_resources() {
 
 #[test]
 #[serial]
-fn t10_an_index_line_cannot_replace_a_type_through_its_sys_key() {
+fn t10_an_index_line_cannot_replace_a_registered_type_through_its_key() {
     let _session = Session::begin();
     let cfg = loaded(
-        b"sys.INT32 = STRING:x\nsys.NEW = INT32:1\nn = INT32:5\n",
+        b"sys.INT32 = STRING:x\nsys.STRING = INT32:1\nn = INT32:5\n",
         None,
     );
+    let types = type_count();
     let mut rows = Rows::default();
     rows.check("HasKey sys.INT32", has(b"sys.INT32"), true);
+    rows.check("HasKey sys.STRING", has(b"sys.STRING"), true);
     rows.check("type of n", type_of(b"n"), Some(b"INT32".to_vec()));
     rows.check("value of n", integer(b"n"), 5);
-    rows.check("sys.NEW", has(b"sys.NEW"), false);
+    rows.check("type count", type_count(), types);
     rows.check("saved", saved(&cfg, None, false), b"n = INT32:5\n".to_vec());
+    // The type still loads the next INT32 line, so it was not replaced.
+    let _more = loaded(b"m = INT32:6\n", None);
+    rows.check("value of m", integer(b"m"), 6);
+    rows.finish();
+}
+
+#[test]
+#[serial]
+fn t10_an_unregistered_sys_key_is_an_ordinary_entry_that_loads_gets_saves_and_goes() {
+    let _session = Session::begin();
+    let cfg = loaded(
+        b"sys.FOO = INT32:7\nsys.bar = STRING:text\nn = INT32:5\n",
+        None,
+    );
+    let types = type_count();
+    let mut rows = Rows::default();
+    rows.check("HasKey sys.FOO", has(b"sys.FOO"), true);
+    rows.check("type", type_of(b"sys.FOO"), Some(b"INT32".to_vec()));
+    rows.check("value", integer(b"sys.FOO"), 7);
+    rows.check("sys.bar", string(b"sys.bar"), b"text".to_vec());
+    rows.check("type count", type_count(), types);
+    rows.check(
+        "saved",
+        saved(&cfg, None, false),
+        b"n = INT32:5\nsys.FOO = INT32:7\nsys.bar = STRING:text\n".to_vec(),
+    );
+    rows.check(
+        "saved under the sys. root",
+        saved(&cfg, Some(b"sys."), true),
+        b"FOO = INT32:7\nbar = STRING:text\n".to_vec(),
+    );
+    let name = key(b"sys.FOO");
+    rows.check("Remove", unsafe { res_Remove(name.as_ptr()) }, 1);
+    rows.check("HasKey after Remove", has(b"sys.FOO"), false);
+    rows.check("Remove again", unsafe { res_Remove(name.as_ptr()) }, 0);
+    rows.check("sys.bar kept", has(b"sys.bar"), true);
+    rows.check("registered sys.INT32 kept", has(b"sys.INT32"), true);
+    rows.finish();
+}
+
+#[test]
+#[serial]
+fn t10_a_type_cannot_take_the_key_of_an_entry_and_can_after_the_entry_is_removed() {
+    let _session = Session::begin();
+    let _cfg = loaded(b"sys.LATE = INT32:3\n", None);
+    let mut rows = Rows::default();
+    let types = type_count();
+    rows.check("install over entry", install_number_type(b"LATE"), 0);
+    rows.check("type count", type_count(), types);
+    rows.check("entry value", integer(b"sys.LATE"), 3);
+    let name = key(b"sys.LATE");
+    rows.check("Remove", unsafe { res_Remove(name.as_ptr()) }, 1);
+    rows.check("install after Remove", install_number_type(b"LATE"), 1);
+    rows.check("type count after", type_count(), types + 1);
+    rows.check("HasKey as a type", has(b"sys.LATE"), true);
+    rows.check("Remove a type", unsafe { res_Remove(name.as_ptr()) }, 0);
+    rows.check("still a type", has(b"sys.LATE"), true);
     rows.finish();
 }
 
