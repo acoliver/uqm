@@ -79,7 +79,8 @@ impl PoolNode {
 // ---------------------------------------------------------------------------
 
 /// A pool-based doubly-linked list allocator for Elements.
-/// Uses a flat array with embedded prev/next links, matching C's displist.c
+/// Uses a flat array with embedded prev/next links, modelled on the pooled
+/// queue in `collections::queue`.
 pub struct DisplayList {
     /// Fixed-size pool of nodes
     pool: Vec<PoolNode>,
