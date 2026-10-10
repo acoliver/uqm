@@ -500,3 +500,15 @@ expand_row!(
         );
     }
 );
+
+/// The C object declares `char baseContentPath[PATH_MAX]` with the platform
+/// `<limits.h>` value (1024 on macOS), so a larger constant would let the copy
+/// overrun the buffer.
+#[test]
+fn u21_the_buffer_bound_is_the_platform_path_max() {
+    assert_eq!(PATH_MAX, libc::PATH_MAX as usize);
+    assert_eq!(
+        std::mem::size_of_val(unsafe { &*ptr::addr_of!(baseContentPath) }),
+        PATH_MAX
+    );
+}

@@ -110,11 +110,12 @@ extern "C" {
     pub static mut contentMountHandle: *mut std::ffi::c_void;
     #[link_name = "baseContentPath"]
     #[allow(non_upper_case_globals)]
-    pub static mut baseContentPath: [std::ffi::c_char; 4096];
+    pub static mut baseContentPath: [std::ffi::c_char; PATH_MAX];
 }
 
-/// Maximum path length, matching C's PATH_MAX on macOS.
-const PATH_MAX: usize = 4096;
+/// Size of the C `baseContentPath[PATH_MAX]` buffer: the platform `<limits.h>`
+/// value the C object is compiled with (1024 on macOS, 4096 on Linux).
+const PATH_MAX: usize = libc::PATH_MAX as usize;
 
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
@@ -125,7 +126,7 @@ mod c_dir_globals {
     pub static mut saveDir: *mut std::ffi::c_void = std::ptr::null_mut();
     pub static mut meleeDir: *mut std::ffi::c_void = std::ptr::null_mut();
     pub static mut contentMountHandle: *mut std::ffi::c_void = std::ptr::null_mut();
-    pub static mut baseContentPath: [std::ffi::c_char; 4096] = [0; 4096];
+    pub static mut baseContentPath: [std::ffi::c_char; super::PATH_MAX] = [0; super::PATH_MAX];
 }
 
 #[cfg(test)]
@@ -731,6 +732,10 @@ mod lifecycle_tests;
 #[cfg(test)]
 #[path = "dir_prep_startup_tests.rs"]
 mod startup_tests;
+
+#[cfg(test)]
+#[path = "dir_prep_joint_tests.rs"]
+mod joint_tests;
 
 #[cfg(test)]
 mod tests {

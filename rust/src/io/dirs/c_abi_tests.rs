@@ -115,8 +115,9 @@ fn options_c_directory_preparation_sequence() {
             assert_eq!(unsafe { mkdirhier(save_dir.as_ptr()) }, 0);
             assert!(Path::new(std::ffi::OsStr::from_bytes(save_dir.to_bytes())).is_dir());
 
-            // prepareContentDir: relative content path into baseContentPath[4096].
-            let (status, _, buf) = call_expand(b"../content", 4096, EP_ALL_SYSTEM);
+            // prepareContentDir: relative content path into baseContentPath[PATH_MAX].
+            let (status, _, buf) =
+                call_expand(b"../content", libc::PATH_MAX as usize, EP_ALL_SYSTEM);
             assert_eq!(status, 0);
             let parent = std::env::current_dir()
                 .unwrap()

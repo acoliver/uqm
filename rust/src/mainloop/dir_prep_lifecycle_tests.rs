@@ -73,7 +73,7 @@ impl Drop for Fixture {
             saveDir = ptr::null_mut();
             meleeDir = ptr::null_mut();
             contentMountHandle = ptr::null_mut();
-            baseContentPath = [0; 4096];
+            baseContentPath = [0; PATH_MAX];
             uio_unInit();
         }
         for (key, value) in &self.saved_env {
