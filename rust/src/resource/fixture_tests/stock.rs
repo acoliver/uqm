@@ -13,8 +13,13 @@ use super::game::{write_files, Game};
 use super::res::{self, Rows};
 use super::uio_api::{Dir, Mount, Repo, Session};
 
+/// The checked-in content, with no `..` left in it: UIO tells host paths from
+/// virtual ones by prefix, and an unnormalized mount root would not match its own children.
 fn content_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/content")
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../sc2/content")
+        .canonicalize()
+        .expect("sc2/content is checked in")
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -43,15 +48,17 @@ fn package_only(repo: &Repo) -> Dir {
     repo.open_dir("/")
 }
 
-/// Loose tree on TOP of the real stock package, as `mountContentDir` stacks them.
-fn loose_over_package(repo: &Repo, loose: &Path) -> Dir {
-    let top = repo.mount_stdio("/", loose, MOUNT_TOP | MOUNT_RDONLY, Mount::NONE);
-    assert!(!top.is_null());
-    let packages = repo.open_dir(content_root().join("packages").to_str().unwrap());
-    let name = STOCK_PACKAGE.rsplit('/').next().unwrap();
-    let below = repo.mount_zip("/", &packages, name, MOUNT_BELOW | MOUNT_RDONLY, top);
-    assert!(!below.is_null());
-    repo.open_dir("/")
+/// A loose tree on TOP of the real stock package, laid out as the game finds
+/// it: the package sits in `packages/` of the content directory and is mounted
+/// BELOW the content mount by `mountContentDir`.
+fn loose_over_package(loose: &Path) -> Game {
+    std::fs::create_dir_all(loose.join("packages")).unwrap();
+    std::fs::copy(
+        content_root().join(STOCK_PACKAGE),
+        loose.join(STOCK_PACKAGE),
+    )
+    .unwrap();
+    Game::start(loose)
 }
 
 fn assert_stock_index_loaded() {
@@ -161,14 +168,14 @@ fn st4_key_maps_load_with_their_game_prefixes() {
 #[serial]
 fn st5_package_supplies_files_the_loose_tree_lacks() {
     let _session = Session::begin();
-    let repo = Repo::open();
     let loose = TempDir::new().unwrap();
     write_files(loose.path(), &[("readme.txt", b"loose only")]);
-    let root = loose_over_package(&repo, loose.path());
+    let game = loose_over_package(loose.path());
+    let root = &game.content;
     let bytes = root.read("uqm.rmp").unwrap();
     assert_eq!(sha256_hex(&bytes), STOCK_FILES[0].2);
     assert_eq!(root.read("readme.txt").unwrap(), b"loose only");
-    res::load(&root, "uqm.rmp", None);
+    res::load(root, "uqm.rmp", None);
     assert_stock_index_loaded();
 }
 
@@ -176,7 +183,6 @@ fn st5_package_supplies_files_the_loose_tree_lacks() {
 #[serial]
 fn st6_loose_files_override_the_package_and_merge_with_it() {
     let _session = Session::begin();
-    let repo = Repo::open();
     let loose = TempDir::new().unwrap();
     write_files(
         loose.path(),
@@ -185,10 +191,11 @@ fn st6_loose_files_override_the_package_and_merge_with_it() {
             ("base/lander/lander.ani", LOOSE_ANI),
         ],
     );
-    let root = loose_over_package(&repo, loose.path());
+    let game = loose_over_package(loose.path());
+    let root = &game.content;
 
     assert_eq!(root.read("uqm.rmp").unwrap(), LOOSE_RMP);
-    res::load(&root, "uqm.rmp", None);
+    res::load(root, "uqm.rmp", None);
     assert_eq!(res::text("marker.override"), "loose");
     for (key, _) in res::oracle_entries(&host_text("uqm.rmp")) {
         assert!(

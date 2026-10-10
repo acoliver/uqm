@@ -99,22 +99,58 @@ fn en4_prefixed_keys_are_capped_at_254_bytes() {
 
 #[test]
 fn en4_a_cut_inside_a_character_does_not_panic() {
-    // "config." is 7 bytes, 246 'k' make 253, so byte 254 is the first half of "é".
-    let key = format!("{}é", "k".repeat(246));
-    let text = format!("{key} = STRING:v\n");
-    let mut keys = Vec::new();
-    crate::resource::propfile::parse_propfile(
-        &text,
-        &mut |k, _| keys.push(k.to_string()),
-        Some("config."),
+    // "config." is 7 bytes; with 244..=250 'k' the two bytes of "é" start at
+    // byte 252..=258, so the 254-byte cut meets every alignment around it.
+    for ks in 244..=250 {
+        let key = format!("{}é", "k".repeat(ks));
+        let text = format!("{key} = STRING:v\n");
+        let mut keys = Vec::new();
+        crate::resource::propfile::parse_propfile(
+            &text,
+            &mut |k, _| keys.push(k.to_string()),
+            Some("config."),
+        );
+        assert_eq!(keys.len(), 1, "{ks} k");
+        assert!(
+            keys[0].len() <= PREFIX_KEY_CAP,
+            "{ks} k: key is {} bytes",
+            keys[0].len()
+        );
+        assert!(keys[0].starts_with("config.kkk"), "{ks} k");
+    }
+}
+
+#[test]
+#[serial]
+fn en6_saved_latin1_value_is_written_back_byte_for_byte() {
+    let _session = Session::begin();
+    let mut file = b"latin = STRING:".to_vec();
+    file.extend_from_slice(LATIN1_VALUE);
+    file.push(b'\n');
+    let cfg = config_dir(&[("in.cfg", &file)]);
+    res::load(&cfg.root, "in.cfg", None);
+    res::save(&cfg.root, "out.cfg", None);
+    assert_eq!(std::fs::read(cfg.dir.path().join("out.cfg")).unwrap(), file);
+}
+
+#[test]
+fn en7_byte_parser_follows_the_c_scanner_on_nul_and_vertical_tab() {
+    let mut seen: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    // C works on strlen: nothing after the first NUL is read. isspace also
+    // counts \v, which Rust's is_ascii_whitespace does not.
+    let data = b"a\x0b=\x0bINT32:1\x0b\nlatin = STRING:\xE7\n\0skipped = INT32:2\n";
+    crate::resource::propfile::parse_propfile_bytes(
+        data,
+        &mut |k, v| seen.push((k.to_vec(), v.to_vec())),
+        None,
     );
-    assert_eq!(keys.len(), 1);
-    assert!(
-        keys[0].len() <= PREFIX_KEY_CAP,
-        "key is {} bytes",
-        keys[0].len()
+    assert_eq!(
+        seen,
+        [
+            (b"a".to_vec(), b"INT32:1".to_vec()),
+            (b"latin".to_vec(), b"STRING:\xE7".to_vec()),
+        ]
     );
-    assert!(keys[0].starts_with("config.kkk"));
 }
 
 #[test]
