@@ -22,7 +22,9 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use zip::{DateTime, ZipArchive};
+use zip::ZipArchive;
+
+use super::zip_stat::{CentralRecord, UnsupportedEntry, ZipEntryStat, ZipObject};
 
 /// Metadata for a single entry in a ZIP archive
 #[derive(Debug, Clone)]
@@ -43,6 +45,9 @@ pub struct ZipEntry {
     pub is_directory: bool,
     /// Index in the ZIP archive
     pub index: usize,
+    /// What `stat` reports for the entry, from its central-directory record;
+    /// the reason when the record describes nothing a file system can show.
+    pub stat: Result<ZipEntryStat, UnsupportedEntry>,
 }
 
 /// Index of a ZIP archive, built at mount time
@@ -73,6 +78,10 @@ impl ZipIndex {
             )
         })?;
 
+        // The `zip` crate does not expose the host that made an entry or its
+        // raw attributes, so the central headers are read from the file the
+        // archive reads, through a handle of their own.
+        let mut central = File::open(archive_path)?;
         let mut entries = HashMap::new();
         let mut directories = HashSet::new();
 
@@ -102,6 +111,9 @@ impl ZipIndex {
                 _ => 99, // Unknown/unsupported methods
             };
 
+            let record = CentralRecord::read(&mut central, entry.central_header_start())?;
+            let stat = record.stat(is_dir, entry.size(), entry.last_modified());
+
             let zip_entry = ZipEntry {
                 path: normalized.clone(),
                 compressed_size: entry.compressed_size(),
@@ -111,6 +123,7 @@ impl ZipIndex {
                 local_header_offset: entry.data_start(),
                 is_directory: is_dir,
                 index: i,
+                stat,
             };
 
             // Last entry wins for duplicates
@@ -150,6 +163,24 @@ impl ZipIndex {
     pub fn is_directory(&self, path: &str) -> bool {
         let normalized = normalize_zip_path(path);
         self.directories.contains(&normalized)
+    }
+
+    /// What `stat` reports for the object at `path`; `None` when the archive
+    /// holds nothing there. A directory wins over a file of the same name, as
+    /// it does for every lookup of the archive.
+    pub fn stat(&self, path: &str) -> Option<Result<ZipObject, UnsupportedEntry>> {
+        let normalized = normalize_zip_path(path);
+        if normalized.is_empty() {
+            return Some(Ok(ZipObject::ImpliedDirectory));
+        }
+        let entry = self.entries.get(&normalized);
+        if self.directories.contains(&normalized) {
+            return Some(match entry {
+                Some(entry) if entry.is_directory => entry.stat.map(ZipObject::Recorded),
+                _ => Ok(ZipObject::ImpliedDirectory),
+            });
+        }
+        entry.map(|entry| entry.stat.map(ZipObject::Recorded))
     }
 
     /// List all entries in a directory (non-recursive)
@@ -244,7 +275,7 @@ impl ZipIndex {
             ));
         }
 
-        ZipEntryReader::new(&self.archive_path, entry.index, entry.uncompressed_size)
+        ZipEntryReader::new(&self.archive_path, entry.index, entry.stat)
     }
 }
 
@@ -255,28 +286,18 @@ impl ZipIndex {
 pub struct ZipEntryReader {
     data: Vec<u8>,
     position: u64,
-    /// What the central directory recorded for the entry, kept so that
-    /// `fstat` answers from the handle and never from the archive path,
-    /// which may have left the mount stack or the host by then.
-    unix_mode: Option<u32>,
-    modified: Option<DateTime>,
-}
-
-/// What `fstat` reports for an open archive entry, as the original
-/// `zip_fillStat` does: the length of the entry, its mode and its
-/// modification time in seconds since the epoch. The archive holds no access
-/// or change time and no owner, so the caller reports those as 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ZipEntryStat {
-    pub size: u64,
-    /// File type and permission bits, at most 16 bits wide.
-    pub mode: u32,
-    /// 0 when the entry carries no valid modification time.
-    pub mtime: i64,
+    /// The entry's central-directory `stat`, captured when the handle was
+    /// opened so that `fstat` answers from the handle and never from the
+    /// archive path, which may have left the mount stack or the host by then.
+    stat: Result<ZipEntryStat, UnsupportedEntry>,
 }
 
 impl ZipEntryReader {
-    fn new(archive_path: &Path, index: usize, _size: u64) -> Result<Self, std::io::Error> {
+    fn new(
+        archive_path: &Path,
+        index: usize,
+        stat: Result<ZipEntryStat, UnsupportedEntry>,
+    ) -> Result<Self, std::io::Error> {
         let file = File::open(archive_path)?;
         let mut archive = ZipArchive::new(file).map_err(|e| {
             std::io::Error::new(
@@ -285,15 +306,15 @@ impl ZipEntryReader {
             )
         })?;
 
-        let (expected_crc, unix_mode, modified) = {
-            let entry = archive.by_index_raw(index).map_err(|e| {
+        let expected_crc = archive
+            .by_index_raw(index)
+            .map_err(|e| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to read ZIP entry metadata: {}", e),
                 )
-            })?;
-            (entry.crc32(), entry.unix_mode(), entry.last_modified())
-        };
+            })?
+            .crc32();
 
         let mut zip_file = archive.by_index(index).map_err(|e| {
             std::io::Error::new(
@@ -319,8 +340,7 @@ impl ZipEntryReader {
         Ok(ZipEntryReader {
             data,
             position: 0,
-            unix_mode,
-            modified,
+            stat,
         })
     }
 
@@ -328,53 +348,22 @@ impl ZipEntryReader {
         self.data.len() as u64
     }
 
-    /// The length, mode and time `fstat` reports. The length is that of the
-    /// decoded bytes the handle serves, so it agrees with every read and with
-    /// a file block over the handle. An entry that records no mode, or is not
-    /// a regular file (a symbolic link), has no mode to report and is refused
-    /// as unsupported rather than given an invented one.
+    /// The length, mode and time `fstat` reports: the entry's record, with
+    /// the length of the decoded bytes the handle serves, so it agrees with
+    /// every read and with a file block over the handle. An entry whose
+    /// record describes no regular file has no `stat` and is refused as
+    /// unsupported.
     pub fn stat(&self) -> Result<ZipEntryStat, std::io::Error> {
-        const TYPE_MASK: u32 = 0o170000;
-        const REGULAR_FILE: u32 = 0o100000;
-        let unsupported =
-            |what: &str| std::io::Error::new(std::io::ErrorKind::Unsupported, what.to_owned());
-        let mode = self
-            .unix_mode
-            .ok_or_else(|| unsupported("ZIP entry records no file mode"))?;
-        if mode & TYPE_MASK != REGULAR_FILE || mode > 0xFFFF {
-            return Err(unsupported("ZIP entry is not a regular file"));
-        }
+        let recorded = self.stat?;
         Ok(ZipEntryStat {
             size: self.size(),
-            mode,
-            mtime: self.modified.map_or(0, unix_seconds),
+            ..recorded
         })
     }
 
     pub fn position(&self) -> u64 {
         self.position
     }
-}
-
-/// The DOS date and time of an entry as seconds since the epoch, read as UTC
-/// the way the original `dosToUnixTime` does (the format carries no zone).
-fn unix_seconds(time: DateTime) -> i64 {
-    // Days from 1970-01-01 to the civil date (proleptic Gregorian).
-    let (year, month, day) = (
-        i64::from(time.year()),
-        i64::from(time.month()),
-        i64::from(time.day()),
-    );
-    let year = if month <= 2 { year - 1 } else { year };
-    let era = year.div_euclid(400);
-    let year_of_era = year - era * 400;
-    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
-    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
-    let days = era * 146_097 + day_of_era - 719_468;
-    days * 86_400
-        + i64::from(time.hour()) * 3_600
-        + i64::from(time.minute()) * 60
-        + i64::from(time.second())
 }
 
 impl Read for ZipEntryReader {

@@ -9,7 +9,7 @@
 //! call is the exported C ABI function.
 
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
 use serial_test::serial;
 use zip::write::SimpleFileOptions;
@@ -22,19 +22,19 @@ use super::*;
 
 /// One archive entry as written: its bytes, how they are stored, the unix
 /// permission bits and the DOS time, with the unix seconds that time is.
-struct Entry {
-    name: &'static str,
-    data: Vec<u8>,
-    method: CompressionMethod,
-    mode: u32,
-    time: (u16, u8, u8, u8, u8, u8),
-    mtime: i64,
+pub(super) struct Entry {
+    pub(super) name: &'static str,
+    pub(super) data: Vec<u8>,
+    pub(super) method: CompressionMethod,
+    pub(super) mode: u32,
+    pub(super) time: (u16, u8, u8, u8, u8, u8),
+    pub(super) mtime: i64,
 }
 
-const MAY_2020: (u16, u8, u8, u8, u8, u8) = (2020, 5, 17, 13, 45, 30);
-const MAY_2020_UNIX: i64 = 1_589_723_130;
+pub(super) const MAY_2020: (u16, u8, u8, u8, u8, u8) = (2020, 5, 17, 13, 45, 30);
+pub(super) const MAY_2020_UNIX: i64 = 1_589_723_130;
 
-fn entries() -> Vec<Entry> {
+pub(super) fn entries() -> Vec<Entry> {
     vec![
         Entry {
             name: "empty.bin",
@@ -84,27 +84,31 @@ fn entries() -> Vec<Entry> {
     ]
 }
 
+pub(super) fn add_entry(zip: &mut zip::ZipWriter<std::fs::File>, entry: &Entry) {
+    let (year, month, day, hour, minute, second) = entry.time;
+    let options = SimpleFileOptions::default()
+        .compression_method(entry.method)
+        .unix_permissions(entry.mode)
+        .last_modified_time(
+            DateTime::from_date_and_time(year, month, day, hour, minute, second).unwrap(),
+        );
+    zip.start_file(entry.name, options).unwrap();
+    zip.write_all(&entry.data).unwrap();
+}
+
 fn write_archive(path: &Path, entries: &[Entry]) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
     for entry in entries {
-        let (year, month, day, hour, minute, second) = entry.time;
-        let options = SimpleFileOptions::default()
-            .compression_method(entry.method)
-            .unix_permissions(entry.mode)
-            .last_modified_time(
-                DateTime::from_date_and_time(year, month, day, hour, minute, second).unwrap(),
-            );
-        zip.start_file(entry.name, options).unwrap();
-        zip.write_all(&entry.data).unwrap();
+        add_entry(&mut zip, entry);
     }
     zip.finish().unwrap();
 }
 
-/// An archive no mode can be read from: one entry whose central directory
-/// records no attributes (what a foreign archiver writes for data from a
-/// pipe), and a symbolic link entry.
-fn write_unsupported_archive(path: &Path) {
+/// An archive with an entry whose central directory records no attributes at
+/// all (what a foreign archiver writes for data from a pipe), and a symbolic
+/// link entry.
+fn write_unrecorded_archive(path: &Path) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
@@ -112,46 +116,21 @@ fn write_unsupported_archive(path: &Path) {
     zip.write_all(b"no mode recorded").unwrap();
     zip.add_symlink("link", "noattrs.bin", options).unwrap();
     zip.finish().unwrap();
-    drop_attributes_of(path, "noattrs.bin");
-}
-
-/// Zeroes the external attributes in the central directory header of `name`.
-fn drop_attributes_of(path: &Path, name: &str) {
-    const CENTRAL_SIGNATURE: [u8; 4] = [0x50, 0x4b, 0x01, 0x02];
-    const NAME_LENGTH_AT: usize = 28;
-    const ATTRIBUTES_AT: usize = 38;
-    const NAME_AT: usize = 46;
-    let mut bytes = std::fs::read(path).unwrap();
-    let mut patched = 0;
-    for at in 0..bytes.len().saturating_sub(NAME_AT) {
-        if bytes[at..at + 4] != CENTRAL_SIGNATURE {
-            continue;
-        }
-        let length = usize::from(u16::from_le_bytes([
-            bytes[at + NAME_LENGTH_AT],
-            bytes[at + NAME_LENGTH_AT + 1],
-        ]));
-        if &bytes[at + NAME_AT..at + NAME_AT + length] == name.as_bytes() {
-            bytes[at + ATTRIBUTES_AT..at + ATTRIBUTES_AT + 4].fill(0);
-            patched += 1;
-        }
-    }
-    assert_eq!(patched, 1, "exactly one central header names {name}");
-    std::fs::write(path, bytes).unwrap();
+    super::archive_path_tests::patch_central(path, "noattrs.bin", None, Some(0));
 }
 
 /// A repository holding the archive at "/z" (read-only, as every real caller
 /// mounts one) and a read-write host directory at "/out".
-struct Archive {
+pub(super) struct Archive {
     _fx: Fx,
-    repo: *mut uio_Repository,
-    zip_path: PathBuf,
-    zip_mount: *mut uio_MountHandle,
-    out: PathBuf,
+    pub(super) repo: *mut uio_Repository,
+    pub(super) zip_path: PathBuf,
+    pub(super) zip_mount: *mut uio_MountHandle,
+    pub(super) out: PathBuf,
 }
 
 impl Archive {
-    fn new(write: impl FnOnce(&Path)) -> Self {
+    pub(super) fn new(write: impl FnOnce(&Path)) -> Self {
         Self::with_out_flags(write, UIO_MOUNT_TOP)
     }
 
@@ -176,7 +155,7 @@ impl Archive {
         }
     }
 
-    fn open(&self, name: &str) -> *mut uio_Handle {
+    pub(super) fn open(&self, name: &str) -> *mut uio_Handle {
         let dir = open_dir(self.repo, "/z");
         let name = cstr(name);
         let handle = unsafe { uio_open(dir, name.as_ptr(), O_RDONLY, 0) };
@@ -188,24 +167,24 @@ impl Archive {
 const FILLER: u8 = 0xAB;
 
 /// A `stat` every byte of which the caller has set to a recognisable value.
-fn filled_stat() -> stat {
+pub(super) fn filled_stat() -> stat {
     let mut info: stat = unsafe { std::mem::zeroed() };
     unsafe { ptr::write_bytes(&mut info as *mut stat as *mut u8, FILLER, size_of::<stat>()) };
     info
 }
 
-fn stat_bytes(info: &stat) -> Vec<u8> {
+pub(super) fn stat_bytes(info: &stat) -> Vec<u8> {
     unsafe { slice::from_raw_parts(info as *const stat as *const u8, size_of::<stat>()) }.to_vec()
 }
 
-fn fstat_of(handle: *mut uio_Handle) -> stat {
+pub(super) fn fstat_of(handle: *mut uio_Handle) -> stat {
     let mut info = filled_stat();
     let rc = unsafe { uio_fstat(handle, &mut info) };
     assert_eq!(rc, 0, "errno {}", errno_value());
     info
 }
 
-fn read_all(handle: *mut uio_Handle) -> Vec<u8> {
+pub(super) fn read_all(handle: *mut uio_Handle) -> Vec<u8> {
     let mut bytes = Vec::new();
     unsafe { (*handle).lock().unwrap().read_to_end(&mut bytes).unwrap() };
     bytes
@@ -340,22 +319,29 @@ fn file_block_length_agrees_with_fstat() {
 
 #[test]
 #[serial]
-fn unsupported_archive_metadata_is_an_explicit_error() {
-    let archive = Archive::new(write_unsupported_archive);
-    for (name, content) in [
-        ("noattrs.bin", &b"no mode recorded"[..]),
-        ("link", &b"noattrs.bin"[..]),
-    ] {
-        let handle = archive.open(name);
-        let mut info = filled_stat();
-        let before = stat_bytes(&info);
-        super::set_errno(0);
-        assert_eq!(unsafe { uio_fstat(handle, &mut info) }, -1, "{name}");
-        assert_eq!(errno_value(), libc::ENOTSUP, "{name}");
-        assert_eq!(stat_bytes(&info), before, "{name}: the caller's struct");
-        assert_eq!(read_all(handle), content, "{name}: still readable");
-        unsafe { uio_close(handle) };
-    }
+fn an_entry_that_records_no_attributes_is_an_ordinary_writable_file() {
+    let archive = Archive::new(write_unrecorded_archive);
+    let handle = archive.open("noattrs.bin");
+    let info = fstat_of(handle);
+    assert_eq!(u32::from(info.st_mode), 0o100666);
+    assert_eq!(info.st_size, 16);
+    assert_eq!(read_all(handle), b"no mode recorded");
+    unsafe { uio_close(handle) };
+}
+
+#[test]
+#[serial]
+fn a_symbolic_link_entry_has_no_stat_and_is_not_followed() {
+    let archive = Archive::new(write_unrecorded_archive);
+    let handle = archive.open("link");
+    let mut info = filled_stat();
+    let before = stat_bytes(&info);
+    super::set_errno(0);
+    assert_eq!(unsafe { uio_fstat(handle, &mut info) }, -1);
+    assert_eq!(errno_value(), libc::ENOTSUP);
+    assert_eq!(stat_bytes(&info), before, "the caller's struct");
+    assert_eq!(read_all(handle), b"noattrs.bin", "the link's own bytes");
+    unsafe { uio_close(handle) };
 }
 
 #[test]
@@ -387,23 +373,18 @@ fn fstat_arguments_and_host_files_keep_their_contract() {
         let real = std::fs::metadata(host.join("host.bin")).unwrap();
         assert_eq!(info.st_size as u64, real.len());
         assert_eq!(u32::from(info.st_mode), real.permissions().mode());
-        let mut template = filled_stat();
-        template.st_size = info.st_size;
-        template.st_mode = info.st_mode;
-        let expected = stat_bytes(&template);
-        assert_eq!(
-            stat_bytes(&info),
-            expected,
-            "a host file's fstat sets the size and the mode and nothing else"
-        );
+        assert_eq!(info.st_ino, real.ino());
+        assert_eq!(info.st_mtime, real.mtime());
+        assert_eq!(info.st_uid, real.uid());
+        assert_eq!(info.st_nlink as u64, real.nlink());
     }
 }
 
-fn bits(path: &Path) -> u32 {
+pub(super) fn bits(path: &Path) -> u32 {
     std::fs::metadata(path).unwrap().permissions().mode() & 0o7777
 }
 
-fn copy(archive: &Archive, from: &str, to: &str) -> c_int {
+pub(super) fn copy(archive: &Archive, from: &str, to: &str) -> c_int {
     use crate::io::ffi::{copyFile, uio_DirHandle as FfiDir};
     let source = open_dir(archive.repo, "/z") as *mut FfiDir;
     let target = open_dir(archive.repo, "/out") as *mut FfiDir;
@@ -475,12 +456,17 @@ fn copy_file_to_a_read_only_destination_is_refused() {
 
 #[test]
 #[serial]
-fn copy_file_of_an_entry_without_mode_creates_nothing() {
-    let archive = Archive::new(write_unsupported_archive);
-    assert_eq!(copy(&archive, "noattrs.bin", "copy.bin"), -1);
-    assert_eq!(copy(&archive, "link", "link-copy"), -1);
-    assert!(
-        std::fs::read_dir(&archive.out).unwrap().next().is_none(),
-        "no mode-0 or partial file is left behind"
+fn copy_file_of_an_entry_without_attributes_gets_the_defined_mode_and_a_link_creates_nothing() {
+    let archive = Archive::new(write_unrecorded_archive);
+    assert_eq!(copy(&archive, "noattrs.bin", "copy.bin"), 0);
+    let copied = archive.out.join("copy.bin");
+    assert_eq!(std::fs::read(&copied).unwrap(), b"no mode recorded");
+    let mode = bits(&copied);
+    assert_eq!(
+        mode & 0o600,
+        0o600,
+        "0666 under the umask keeps the owner's bits: {mode:o}"
     );
+    assert_eq!(copy(&archive, "link", "link-copy"), -1);
+    assert!(!archive.out.join("link-copy").exists());
 }

@@ -88,6 +88,11 @@ impl Fixture {
     /// Mounts a zip holding `files` (empty content) and directory entries
     /// `dirs` above everything mounted so far.
     fn mount_zip(&mut self, files: &[&str], dirs: &[&str]) {
+        self.mount_zip_with_links(files, dirs, &[]);
+    }
+
+    /// Like [`Fixture::mount_zip`], with symbolic-link entries `links` too.
+    fn mount_zip_with_links(&mut self, files: &[&str], dirs: &[&str], links: &[&str]) {
         let host = TempDir::new().unwrap();
         let archive = host.path().join("pack.zip");
         let mut zip = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
@@ -99,6 +104,9 @@ impl Fixture {
         for name in files {
             zip.start_file(*name, options).unwrap();
             zip.write_all(b"data").unwrap();
+        }
+        for name in links {
+            zip.add_symlink(*name, "a.mle", options).unwrap();
         }
         zip.finish().unwrap();
         self.hosts.push(host);
@@ -173,6 +181,29 @@ fn only_visible_regular_files_are_listed() {
         fixture.scan("", ".mle", MatchType::Suffix),
         strs(&["link.mle", "real.mle"])
     );
+}
+
+#[test]
+#[serial]
+fn only_regular_archive_entries_are_listed_because_uio_stat_says_so() {
+    let mut fixture = Fixture::new();
+    fixture.mount_zip_with_links(
+        &["b.mle", "a.mle", "imp.mle/inner.txt"],
+        &["dir.mle/"],
+        &["link.mle"],
+    );
+
+    // The explicit directory, the one the archive only implies and the
+    // symbolic link (which has no stat) are not regular files; the listing
+    // asks the real `uio_stat` and nothing else.
+    assert_eq!(
+        fixture.scan("", ".mle", MatchType::Suffix),
+        strs(&["a.mle", "b.mle"])
+    );
+    let table = fixture
+        .load("", ".mle", MatchType::Suffix)
+        .expect("two regular files");
+    assert_eq!(table.len(), 2);
 }
 
 #[test]

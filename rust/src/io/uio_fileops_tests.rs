@@ -78,7 +78,8 @@ fn stat_describes_archive_files_and_directories() {
     );
     let file = stat_of(&stack, "data/blob.bin").expect("entry");
     assert_eq!(file.st_size, 10);
-    assert_eq!(file.st_mode as u32, 0o100444);
+    // The mode the archive writer recorded for the entry, not a constant.
+    assert_eq!(file.st_mode as u32, 0o100644);
     let dir = stat_of(&stack, "data").expect("directory");
     assert_eq!(dir.st_size, 0);
     assert_eq!(dir.st_mode as u32, 0o040555);

@@ -2,6 +2,7 @@
 // Reference: sc2/src/libs/uio/io.h, uiostream.h
 
 use super::name_filter::NameFilter;
+use super::zip_stat::{ZipEntryStat, ZipObject, IMPLIED_DIRECTORY_MODE};
 use crate::bridge_log::rust_bridge_log_msg;
 use libc::{mode_t, off_t, size_t};
 use std::collections::BTreeSet;
@@ -357,6 +358,18 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
             None => return fail_errno(libc::ENOENT, -1),
         };
 
+        // What `uio_stat` and `uio_fstat` report for an archive entry is also
+        // what decides here. An entry whose record describes nothing a file
+        // system can show answers every mode alike.
+        let archive_object = match (&mount.zip_index, &archive_name) {
+            (Some(zip_index), Some(name)) => match zip_index.stat(name) {
+                Some(Ok(object)) => Some(object),
+                Some(Err(_)) => return fail_errno(libc::ENOTSUP, -1),
+                None => None,
+            },
+            _ => None,
+        };
+
         // F_OK: existence only
         if mode == F_OK {
             return 0;
@@ -377,16 +390,15 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
 
         // Check X_OK
         if (mode & X_OK) != 0 {
-            // For ZIP mounts, check if it's a directory in the archive
+            // An archive directory is always searchable; a file is
+            // executable when its record says so.
             if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let (Some(zip_index), Some(name)) = (&mount.zip_index, &archive_name) {
-                    if name.is_empty() || zip_index.is_directory(name) {
-                        // Directories are executable (traversable)
-                        return 0;
-                    }
-                }
-                // ZIP files are not executable
-                return fail_errno(libc::EACCES, -1);
+                let executable = archive_object.is_some_and(|object| object.is_executable());
+                return if executable {
+                    0
+                } else {
+                    fail_errno(libc::EACCES, -1)
+                };
             }
 
             // For STDIO mounts, check host filesystem
@@ -460,17 +472,13 @@ pub unsafe extern "C" fn uio_stat(
                 if let (Some(zip_index), Some(name)) =
                     (mount.zip_index.as_ref(), covered.archive_name())
                 {
-                    // Check if it's a directory
-                    if name.is_empty() || zip_index.is_directory(&name) {
-                        fill_directory_stat(stat_buf);
-                        return 0;
-                    }
-
-                    // Check if it's a file
-                    if let Some(entry) = zip_index.get_entry(&name) {
-                        (*stat_buf).st_size = entry.uncompressed_size as i64;
-                        (*stat_buf).st_mode = 0o100444; // Regular file, read-only
-                        return 0;
+                    match zip_index.stat(&name) {
+                        Some(Ok(object)) => {
+                            fill_zip_stat(object, &mut *stat_buf);
+                            return 0;
+                        }
+                        Some(Err(_)) => return fail_errno(libc::ENOTSUP, -1),
+                        None => {}
                     }
                 }
                 continue;
@@ -481,13 +489,7 @@ pub unsafe extern "C" fn uio_stat(
 
             match fs::metadata(&host_path) {
                 Ok(meta) => {
-                    (*stat_buf).st_size = meta.len() as i64;
-                    (*stat_buf).st_mode = if meta.is_file() { 0o100000 } else { 0o040000 };
-                    (*stat_buf).st_mode |= if meta.permissions().readonly() {
-                        0o444
-                    } else {
-                        0o666
-                    };
+                    fill_host_stat(&meta, &mut *stat_buf);
                     return 0;
                 }
                 // Only a mount that lacks the object lets the lookup go on to
@@ -500,22 +502,61 @@ pub unsafe extern "C" fn uio_stat(
 
         // No mount holds it; the mount tree may still know it as a directory.
         if is_virtual_directory(&registry, repository_key((*dir).repository), &virtual_path) {
-            fill_directory_stat(stat_buf);
+            fill_zip_stat(ZipObject::ImpliedDirectory, &mut *stat_buf);
             return 0;
         }
         fail_errno(libc::ENOENT, -1)
     })
 }
 
-/// The `stat` of a directory that no host holds (an archive directory or one
-/// of the mount tree): read and search for everyone, no size.
-///
-/// # Safety
-///
-/// `stat_buf` must be writable.
-unsafe fn fill_directory_stat(stat_buf: *mut stat) {
-    (*stat_buf).st_size = 0;
-    (*stat_buf).st_mode = 0o040555;
+/// A zeroed `stat`: all-zero is the documented "nothing known" value of every
+/// field that is not filled, so none is left uninitialised for the C caller.
+fn zeroed_stat() -> stat {
+    // SAFETY: `stat` is plain old data and all-zero is a valid value.
+    unsafe { std::mem::zeroed() }
+}
+
+/// The `stat` of a host file or directory: everything `std` reports, which
+/// is the whole of the file's metadata; the fields it does not report read 0.
+/// `uio_stat` and `uio_fstat` both fill a host object through here.
+fn fill_host_stat(meta: &fs::Metadata, out: &mut stat) {
+    *out = zeroed_stat();
+    out.st_dev = meta.dev() as _;
+    out.st_ino = meta.ino() as _;
+    out.st_mode = meta.mode() as _;
+    out.st_nlink = meta.nlink() as _;
+    out.st_uid = meta.uid() as _;
+    out.st_gid = meta.gid() as _;
+    out.st_rdev = meta.rdev() as _;
+    out.st_size = meta.size() as _;
+    out.st_atime = meta.atime() as _;
+    out.st_atime_nsec = meta.atime_nsec() as _;
+    out.st_mtime = meta.mtime() as _;
+    out.st_mtime_nsec = meta.mtime_nsec() as _;
+    out.st_ctime = meta.ctime() as _;
+    out.st_ctime_nsec = meta.ctime_nsec() as _;
+    out.st_blksize = meta.blksize() as _;
+    out.st_blocks = meta.blocks() as _;
+}
+
+/// The `stat` of an archive object, as the original `zip_fillStat` gives it:
+/// size, mode and modification time, with the owner and the access and change
+/// times 0 because the archive holds none. A directory that only the mount
+/// tree or an archive path implies has a mode and nothing else. Path and
+/// handle lookups of an archive entry both fill it through here.
+fn fill_zip_stat(object: ZipObject, out: &mut stat) {
+    let entry = match object {
+        ZipObject::Recorded(entry) => entry,
+        ZipObject::ImpliedDirectory => ZipEntryStat {
+            size: 0,
+            mode: IMPLIED_DIRECTORY_MODE,
+            mtime: 0,
+        },
+    };
+    *out = zeroed_stat();
+    out.st_size = entry.size as off_t;
+    out.st_mode = entry.mode as mode_t;
+    out.st_mtime = entry.mtime as libc::time_t;
 }
 
 /// @plan PLAN-20260314-FILE-IO.P06a
@@ -729,31 +770,14 @@ impl uio_HandleInner {
         self.len().map(|len| len == 0)
     }
 
-    /// Fills the `fstat` fields of an open handle from the handle itself.
-    ///
-    /// A host file reports its size and its type and permission bits; the
-    /// rest of the caller's struct is left alone. An archive entry fills the
-    /// whole struct the way the original `zip_fillStat` does (zeroed, then
-    /// size, mode and modification time), so the fields the archive does not
-    /// hold read as 0. A failure leaves the struct untouched.
+    /// Fills the `fstat` struct of an open handle from the handle itself: a
+    /// host file by its own metadata, an archive entry by the record it copied
+    /// when it was opened. Either way every field not known reads 0, and a
+    /// failure leaves the struct untouched.
     fn fstat_into(&self, out: &mut stat) -> std::io::Result<()> {
         match self {
-            uio_HandleInner::File(f) => {
-                let meta = f.metadata()?;
-                out.st_size = meta.len() as off_t;
-                // The host's own type and permission bits: `copyFile`
-                // creates its copy with them.
-                out.st_mode = meta.mode() as mode_t;
-            }
-            uio_HandleInner::ZipEntry(z) => {
-                let entry = z.stat()?;
-                // SAFETY: `stat` is plain old data and all-zero is its
-                // documented "nothing known" value.
-                *out = unsafe { std::mem::zeroed() };
-                out.st_size = entry.size as off_t;
-                out.st_mode = entry.mode as mode_t;
-                out.st_mtime = entry.mtime as libc::time_t;
-            }
+            uio_HandleInner::File(f) => fill_host_stat(&f.metadata()?, out),
+            uio_HandleInner::ZipEntry(z) => fill_zip_stat(ZipObject::Recorded(z.stat()?), out),
         }
         Ok(())
     }
@@ -7432,3 +7456,7 @@ mod stdio_write_tests;
 #[cfg(test)]
 #[path = "uio_archive_stat_tests.rs"]
 mod archive_stat_tests;
+
+#[cfg(test)]
+#[path = "uio_archive_path_tests.rs"]
+mod archive_path_tests;
