@@ -28,13 +28,10 @@
 extern "C" {
 #endif
 
-// Note that we MUST use the QUEUE_TABLE variant at this time, because
-// certain gameplay elements depend on it. Namely, the maximum number
-// of HyperSpace encounter globes chasing the player is defined by the
-// allocated size of the encounter_q. If switched to non-table variant,
-// the max number of encounters will be virtually unlimited the way the
-// code works now.
-#define QUEUE_TABLE
+// The queue is a fixed pool of equally sized slots (pq_tab), allocated up
+// front by InitQueue. Certain gameplay elements depend on that: the maximum
+// number of HyperSpace encounter globes chasing the player is defined by the
+// allocated size of the encounter_q.
 
 typedef void* QUEUE_HANDLE;
 
@@ -53,17 +50,11 @@ typedef struct /* queue */
 {
 	HLINK head;
 	HLINK tail;
-#ifdef QUEUE_TABLE
 	BYTE  *pq_tab;
 	HLINK free_list;
-#endif
 	COUNT object_size;
-#ifdef QUEUE_TABLE
 	BYTE num_objects;
-#endif /* QUEUE_TABLE */
 } QUEUE;
-
-#ifdef QUEUE_TABLE
 
 extern HLINK AllocLink (QUEUE *pq);
 extern void FreeLink (QUEUE *pq, HLINK hLink);
@@ -89,31 +80,11 @@ UnlockLink (const QUEUE *pq, HLINK h)
 	}
 }
 
-#define GetFreeList(pq) (pq)->free_list
-#define SetFreeList(pq, h) (pq)->free_list = (h)
-#define AllocQueueTab(pq,n) \
-		((pq)->pq_tab = HMalloc (((COUNT)(pq)->object_size * \
-		(COUNT)((pq)->num_objects = (BYTE)(n)))))
-#define FreeQueueTab(pq) HFree ((pq)->pq_tab); (pq)->pq_tab = NULL
-#define SizeQueueTab(pq) (COUNT)((pq)->num_objects)
-#define GetLinkAddr(pq,i) (HLINK)((pq)->pq_tab + ((pq)->object_size * ((i) - 1)))
-#else /* !QUEUE_TABLE */
-#define AllocLink(pq)     (HLINK)HMalloc ((pq)->object_size)
-#define LockLink(pq, h)   ((LINK*)(h))
-#define UnlockLink(pq, h) ((void)(h))
-#define FreeLink(pq,h)    HFree (h)
-#endif /* QUEUE_TABLE */
-
-#define SetLinkSize(pq,s) ((pq)->object_size = (COUNT)(s))
 #define GetLinkSize(pq) (COUNT)((pq)->object_size)
 #define GetHeadLink(pq) ((pq)->head)
-#define SetHeadLink(pq,h) ((pq)->head = (h))
 #define GetTailLink(pq) ((pq)->tail)
-#define SetTailLink(pq,h) ((pq)->tail = (h))
 #define _GetPredLink(lpE) ((lpE)->pred)
-#define _SetPredLink(lpE,h) ((lpE)->pred = (h))
 #define _GetSuccLink(lpE) ((lpE)->succ)
-#define _SetSuccLink(lpE,h) ((lpE)->succ = (h))
 
 extern BOOLEAN InitQueue (QUEUE *pq, COUNT num_elements, OBJ_SIZE size);
 extern BOOLEAN UninitQueue (QUEUE *pq);

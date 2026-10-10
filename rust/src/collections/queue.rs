@@ -2,9 +2,9 @@
 //!
 //! This is the only implementation of the `QUEUE`/`LINK` API declared in
 //! `sc2/src/uqm/displist.h`. The header stays as the C declaration of this
-//! module until the last C includer is ported (tracked by #158). It declares
-//! the `QUEUE_TABLE` variant: every queue owns a fixed pool of equally sized
-//! slots and the number of slots is a hard limit on the queue length. The
+//! module until the last C includer is ported (tracked by #158). Every queue
+//! owns a fixed pool of equally sized slots and the number of slots is a hard
+//! limit on the queue length. The
 //! hyperspace encounter limit depends on that.
 //!
 //! Layout: [`Queue`] and [`Link`] are `repr(C)` mirrors of the C structs. The
@@ -392,7 +392,7 @@ impl Queue {
         }
     }
 
-    /// `GetLinkAddr`: address of the slot with the one-based number `number`.
+    /// Address of the slot with the one-based number `number`.
     fn slot_addr(&self, number: u16) -> HLink {
         let offset = usize::from(self.object_size) * usize::from(number - 1);
         self.pq_tab.wrapping_add(offset).cast()
