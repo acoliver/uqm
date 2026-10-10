@@ -200,6 +200,12 @@ impl ProviderReport {
             .filter(|o| o.archive_decision == ArchiveDecision::ExcludeReplaced)
             .count();
 
+        let retired = manifest
+            .objects
+            .iter()
+            .filter(|o| o.archive_decision == ArchiveDecision::ExcludeRetired)
+            .count();
+
         let total_violations = diagnostics.len();
         let passed = diagnostics.is_empty();
 
@@ -221,7 +227,7 @@ impl ProviderReport {
             summary: ReportSummary {
                 total_objects: manifest.objects.len(),
                 included,
-                excluded: duplicate + recompiled + replaced,
+                excluded: duplicate + recompiled + replaced + retired,
                 duplicate_providers_excluded: duplicate,
                 recompiled,
                 replaced,

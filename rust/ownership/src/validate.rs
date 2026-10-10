@@ -383,6 +383,21 @@ impl Validator {
                 continue;
             };
             let path = options.repo_root.join(source);
+            if self
+                .manifest
+                .retired_sources
+                .iter()
+                .any(|retired| retired == source)
+            {
+                if path.symlink_metadata().is_ok() {
+                    diagnostics.push(diagnostic(
+                        DiagnosticCode::StaleObject,
+                        Some(source),
+                        "retired canonical source is still present",
+                    ));
+                }
+                continue;
+            }
             if !path.is_file() {
                 diagnostics.push(diagnostic(
                     DiagnosticCode::MissingFromDisk,

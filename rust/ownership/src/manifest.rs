@@ -24,6 +24,11 @@ pub struct Manifest {
     #[serde(default)]
     pub external_imports: Vec<ExternalImport>,
     pub no_tracked_native_change: NoTrackedNativeChange,
+    /// Canonical sources deleted from the tree whose ledger object stays in
+    /// the object list so the ledger identity projection is unchanged. Each
+    /// must be absent from disk and from the native inputs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub retired_sources: Vec<String>,
     pub objects: Vec<ManifestObject>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -60,6 +65,7 @@ pub enum ArchiveDecision {
     ExcludeRecompiled,
     ExcludeReplaced,
     ExcludeDuplicateProvider,
+    ExcludeRetired,
 }
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -68,6 +74,7 @@ pub enum ProviderKind {
     RecompiledNative,
     RustSource,
     ExternalImport,
+    Retired,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(try_from = "String", into = "String")]
@@ -94,6 +101,7 @@ impl TryFrom<String> for ObjectProvider {
             "recompiled_native" => ProviderKind::RecompiledNative,
             "rust_source" => ProviderKind::RustSource,
             "external_import" => ProviderKind::ExternalImport,
+            "retired" => ProviderKind::Retired,
             _ => return Err(format!("unknown provider kind '{kind}'")),
         };
         if path.is_empty() {
@@ -109,6 +117,7 @@ impl From<ObjectProvider> for String {
             ProviderKind::RecompiledNative => "recompiled_native",
             ProviderKind::RustSource => "rust_source",
             ProviderKind::ExternalImport => "external_import",
+            ProviderKind::Retired => "retired",
         };
         format!("{kind}:{}", provider.path)
     }
@@ -164,6 +173,7 @@ impl Manifest {
         self.validate_recompiled(&mut diagnostics);
         self.validate_symbols(&mut diagnostics);
         self.validate_native_change(&mut diagnostics);
+        self.validate_retired_sources(&mut diagnostics);
         diagnostics.sort_by(|a, b| {
             a.path
                 .cmp(&b.path)
@@ -358,6 +368,10 @@ impl Manifest {
             }
             ArchiveDecision::ExcludeReplaced | ArchiveDecision::ExcludeDuplicateProvider => {
                 object.provider.kind == ProviderKind::RustSource
+            }
+            ArchiveDecision::ExcludeRetired => {
+                object.provider.kind == ProviderKind::Retired
+                    && object.canonical_source.as_deref() == Some(object.provider.path.as_str())
             }
         };
         if !valid {
@@ -567,6 +581,51 @@ impl Manifest {
                 Some(crate::DISPLIST_OBJECT),
                 "displist must be excluded with the Rust queue as sole active provider",
             ));
+        }
+    }
+    fn validate_retired_sources(&self, diagnostics: &mut Vec<Diagnostic>) {
+        if self.retired_sources != crate::RETIRED_NATIVE_SOURCES {
+            diagnostics.push(diag(
+                DiagnosticCode::ManifestDrift,
+                Some("retired_sources"),
+                "retired source list differs from the authorized COLLECTIONS/#37 retirements",
+            ));
+        }
+        for source in &self.retired_sources {
+            check_path(source, diagnostics);
+            let objects: Vec<_> = self
+                .objects
+                .iter()
+                .filter(|object| object.canonical_source.as_deref() == Some(source.as_str()))
+                .collect();
+            let anchored = matches!(
+                objects.as_slice(),
+                [object] if matches!(
+                    object.archive_decision,
+                    ArchiveDecision::ExcludeRetired | ArchiveDecision::ExcludeDuplicateProvider
+                )
+            );
+            if !anchored {
+                diagnostics.push(diag(
+                    DiagnosticCode::UnassignedObject,
+                    Some(source),
+                    "retired source must be the canonical source of exactly one excluded ledger object",
+                ));
+            }
+        }
+        for object in &self.objects {
+            let retired = object.archive_decision == ArchiveDecision::ExcludeRetired;
+            let listed = object
+                .canonical_source
+                .as_ref()
+                .is_some_and(|source| self.retired_sources.contains(source));
+            if retired && !listed {
+                diagnostics.push(diag(
+                    DiagnosticCode::UnassignedObject,
+                    Some(&object.path),
+                    "retired object must name a retired source",
+                ));
+            }
         }
     }
     pub fn sorted_paths(&self) -> Vec<&str> {

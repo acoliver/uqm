@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "107169fb8c7f63899c8a13f99d9fdba02c69bb08761d0d1207d24b5bb2c3b37c",
+    "projection_sha256": "c5aec333e91bf06af1ab650f3b38a858022de99f5a56ef2cf89eb9a3044226f2",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -57,6 +57,10 @@
       "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
       "production_profile": "production"
     }
+  ],
+  "retired_sources": [
+    "sc2/src/libs/list/list.c",
+    "sc2/src/uqm/displist.c"
   ],
   "objects": [
     {
@@ -686,11 +690,10 @@
       "canonical_source": "sc2/src/libs/list/list.c",
       "scan_root": "native",
       "sha256": "281a1be67c840277a419b6f867fefc1797137e89c743f2312f06e9727af62247",
-      "archive_decision": "include",
-      "provider": "native_object:native/list.c.o",
-      "reason": "Transitional C ambient archive member",
-      "producing_command": "cc <structured-pkg-config-includes> <validated-production-defines> -std=gnu99 -O2 -fPIC -MMD -c <canonical-source> -o <OUT_DIR/native/object>",
-      "production_profile": "production"
+      "archive_decision": "exclude_retired",
+      "provider": "retired:sc2/src/libs/list/list.c",
+      "reason": "Retired by COLLECTIONS/#37: no includer and no symbol consumer; source deleted",
+      "producing_command": "rust/build/native-inputs.json (input removed; source deleted by COLLECTIONS/#37)"
     },
     {
       "path": "native/msgbox_stub.c.o",
@@ -3158,7 +3161,7 @@
       "issue": "FINAL",
       "canonical_source": "sc2/src/uqm/rust_bridge_macros.c",
       "scan_root": "native",
-      "sha256": "757c21c9fd08c7128709e07f73bb6f9f35e2566bfa9b5be1e5247259632830ca",
+      "sha256": "9f53a815a728558cda7e03ebfb37ae95f44cf8780859e5d607356ec28bc0346a",
       "archive_decision": "include",
       "provider": "native_object:native/rust_bridge_macros.c.o",
       "reason": "Transitional C ambient archive member",
@@ -4582,6 +4585,7 @@
     "declared": true,
     "tracked_native_file_delta": 0,
     "removed_production_providers": [
+      "native/list.c.o",
       "native/displist.c.o",
       "native/heap.c.o",
       "native/charhashtable.c.o",
@@ -4591,9 +4595,7 @@
       "-undefined,dynamic_lookup"
     ],
     "retained_canonical_sources": [
-      "sc2/src/uqm/displist.c",
       "sc2/src/uqm/displist.h",
-      "sc2/src/libs/heap/heap.h",
       "sc2/src/libs/uio/charhashtable.c",
       "sc2/src/libs/uio/charhashtable.h",
       "sc2/src/libs/strings/stringhashtable.c",

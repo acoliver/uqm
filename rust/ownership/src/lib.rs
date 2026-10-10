@@ -78,10 +78,13 @@ pub const EXPECTED_LEDGER_GIST_REVISION: &str = "5aece912bec7e8a2a646bd1bfc95d18
 pub const EXPECTED_LEDGER_SHA256: &str =
     "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789";
 pub const EXPECTED_LEDGER_PROJECTION_SHA256: &str =
-    "107169fb8c7f63899c8a13f99d9fdba02c69bb08761d0d1207d24b5bb2c3b37c";
+    "c5aec333e91bf06af1ab650f3b38a858022de99f5a56ef2cf89eb9a3044226f2";
 pub const EXPECTED_SCAN_ROOT: &str = "native";
 pub const EXPECTED_OBJECT_COUNT: usize = 338;
 pub const DISPLIST_OBJECT: &str = "native/displist.c.o";
+pub const LIST_OBJECT: &str = "native/list.c.o";
+pub const LIST_SOURCE: &str = "sc2/src/libs/list/list.c";
+pub const DISPLIST_SOURCE: &str = "sc2/src/uqm/displist.c";
 pub const REMOVED_HEAP_OBJECT: &str = "native/heap.c.o";
 pub const QUEUE_RUST_PROVIDER: &str = "rust/src/collections/queue.rs";
 pub const HASH_TABLE_RUST_PROVIDER: &str = "rust/src/collections/hash_table.rs";
@@ -93,16 +96,18 @@ pub const STRING_HASH_TABLE_SOURCE: &str = "sc2/src/libs/strings/stringhashtable
 pub const STRING_HASH_TABLE_HEADER: &str = "sc2/src/libs/strings/stringhashtable.h";
 pub const CHAR_HASH_TABLE_OWNER: &str = "RESOURCE/#22";
 pub const STRING_HASH_TABLE_OWNER: &str = "CORE_NATIVE/#22";
-pub const REMOVED_PRODUCTION_PROVIDERS: [&str; 4] = [
+pub const REMOVED_PRODUCTION_PROVIDERS: [&str; 5] = [
+    LIST_OBJECT,
     DISPLIST_OBJECT,
     REMOVED_HEAP_OBJECT,
     CHAR_HASH_TABLE_OBJECT,
     STRING_HASH_TABLE_OBJECT,
 ];
-pub const RETAINED_CANONICAL_SOURCES: [&str; 7] = [
-    "sc2/src/uqm/displist.c",
+/// Tracked sources COLLECTIONS/#37 deleted. Their ledger objects stay in the
+/// manifest so the ledger identity projection is unchanged.
+pub const RETIRED_NATIVE_SOURCES: [&str; 2] = [LIST_SOURCE, DISPLIST_SOURCE];
+pub const RETAINED_CANONICAL_SOURCES: [&str; 5] = [
     "sc2/src/uqm/displist.h",
-    "sc2/src/libs/heap/heap.h",
     CHAR_HASH_TABLE_SOURCE,
     CHAR_HASH_TABLE_HEADER,
     STRING_HASH_TABLE_SOURCE,
