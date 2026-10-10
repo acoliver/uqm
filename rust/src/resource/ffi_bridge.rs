@@ -10,7 +10,7 @@
 //! @plan PLAN-20260224-RES-SWAP.P20
 //! @requirement REQ-RES-002-003, REQ-RES-088, REQ-RES-075-079, REQ-RES-R001-R004
 
-use std::ffi::{c_char, c_int, c_long, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_long, c_void, CStr};
 use std::ptr;
 use std::sync::Mutex;
 
@@ -182,12 +182,9 @@ static mut contentDir: *mut c_void = ptr::null_mut();
 // Global state
 // =============================================================================
 
-/// Holds the ResourceDispatch and any CStrings that must outlive their pointers.
+/// Holds the ResourceDispatch; the type identifiers handed to C live in its registry.
 struct ResourceState {
     dispatch: ResourceDispatch,
-    /// Type names handed to C by res_GetResourceType, by type — kept alive
-    /// for pointer stability
-    type_cache: std::collections::HashMap<String, CString>,
     /// Whether C subsystem type registration has been performed
     c_types_registered: bool,
 }
@@ -212,35 +209,38 @@ const STREAM_SENTINEL: *mut c_void = !0usize as *mut c_void;
 fn create_initial_state() -> ResourceState {
     let mut dispatch = ResourceDispatch::new();
 
-    // Register the 5 built-in value types matching C resinit.c
-    dispatch.type_registry.install(
-        "STRING",
-        Some(type_registry::use_descriptor_as_res as ResourceLoadFun),
-        None,
-        Some(type_registry::raw_descriptor as ResourceStringFun),
-    );
-    dispatch.type_registry.install(
-        "INT32",
-        Some(type_registry::descriptor_to_int as ResourceLoadFun),
-        None,
-        Some(type_registry::int_to_string as ResourceStringFun),
-    );
-    dispatch.type_registry.install(
-        "BOOLEAN",
-        Some(type_registry::descriptor_to_boolean as ResourceLoadFun),
-        None,
-        Some(type_registry::boolean_to_string as ResourceStringFun),
-    );
-    dispatch.type_registry.install(
-        "COLOR",
-        Some(type_registry::descriptor_to_color as ResourceLoadFun),
-        None,
-        Some(type_registry::color_to_string as ResourceStringFun),
-    );
+    // Register the 4 built-in value types matching C resinit.c
+    let builtins: [(&str, ResourceLoadFun, ResourceStringFun); 4] = [
+        (
+            "STRING",
+            type_registry::use_descriptor_as_res,
+            type_registry::raw_descriptor,
+        ),
+        (
+            "INT32",
+            type_registry::descriptor_to_int,
+            type_registry::int_to_string,
+        ),
+        (
+            "BOOLEAN",
+            type_registry::descriptor_to_boolean,
+            type_registry::boolean_to_string,
+        ),
+        (
+            "COLOR",
+            type_registry::descriptor_to_color,
+            type_registry::color_to_string,
+        ),
+    ];
+    for (name, load, to_string) in builtins {
+        dispatch
+            .type_registry
+            .install(name, Some(load), None, Some(to_string))
+            .expect("the built-in types are installed once into an empty registry");
+    }
 
     ResourceState {
         dispatch,
-        type_cache: std::collections::HashMap::new(),
         c_types_registered: false,
     }
 }
@@ -268,14 +268,6 @@ fn put_descriptor(state: &mut ResourceState, key: &[u8], descriptor: &[u8]) {
             err
         );
     }
-}
-
-/// Helper: safely convert a *const c_char to &str, returning None on null/invalid UTF-8.
-unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
-    if ptr.is_null() {
-        return None;
-    }
-    CStr::from_ptr(ptr).to_str().ok()
 }
 
 /// The numeric payload of `key` when it is stored as `type_name`; `None` for
@@ -552,7 +544,9 @@ pub unsafe extern "C" fn SaveResourceIndex(
 // =============================================================================
 
 /// Install resource type vectors (load/free/toString) for a named type.
-/// Returns 1 on success, 0 on failure.
+/// The name is a C string of any bytes. Returns 1 on success, 0 when the name
+/// is NULL or its first 27 bytes are already registered; as in C, the first
+/// registration stays.
 ///
 /// # Safety
 ///
@@ -564,9 +558,8 @@ pub unsafe extern "C" fn InstallResTypeVectors(
     free_fun: Option<ResourceFreeFun>,
     string_fun: Option<ResourceStringFun>,
 ) -> c_int {
-    let type_name = match cstr_to_str(res_type) {
-        Some(s) => s,
-        None => return 0,
+    let Some(identifier) = cstr_bytes(res_type) else {
+        return 0;
     };
 
     let mut guard = match RESOURCE_STATE.lock() {
@@ -576,14 +569,20 @@ pub unsafe extern "C" fn InstallResTypeVectors(
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    if state
+    match state
         .dispatch
         .type_registry
-        .install(type_name, load_fun, free_fun, string_fun)
+        .install(identifier, load_fun, free_fun, string_fun)
     {
-        1
-    } else {
-        0
+        Ok(()) => 1,
+        Err(err) => {
+            log::warn!(
+                "Type '{}' not installed: {}",
+                identifier.escape_ascii(),
+                err
+            );
+            0
+        }
     }
 }
 
@@ -679,6 +678,12 @@ pub unsafe extern "C" fn res_Remove(key: *const c_char) -> c_int {
     if state.dispatch.remove_resource(key_str) {
         1
     } else {
+        if state.dispatch.is_type_key(key_str) {
+            log::warn!(
+                "Not removing '{}': a registered type lasts until UninitResourceSystem",
+                key_str.escape_ascii()
+            );
+        }
         0
     }
 }
@@ -758,19 +763,23 @@ pub unsafe extern "C" fn res_GetResourceType(key: *const c_char) -> *const c_cha
     };
     ensure_init(&mut guard);
 
-    let ResourceState {
-        dispatch,
-        type_cache,
-        ..
-    } = guard.as_mut().unwrap();
-    let Some(type_name) = dispatch.get_resource_type(key_str) else {
-        return ptr::null();
-    };
-
-    type_cache
-        .entry(type_name.to_string())
-        .or_insert_with(|| CString::new(type_name).unwrap_or_default())
-        .as_ptr()
+    let state = guard.as_ref().unwrap();
+    match state.dispatch.get_resource_type(key_str) {
+        // The pointer is into the registry's own copy of the identifier, which
+        // lives, unmoved, until UninitResourceSystem drops the registry.
+        Some(type_name) => type_name.as_c_str().as_ptr(),
+        None => {
+            if state.dispatch.is_type_key(key_str) {
+                // C reads `desc->vtable->resType` here and faults: a type's
+                // key has no vtable.
+                log::warn!(
+                    "Trying to get the type of '{}', which names a registered type",
+                    key_str.escape_ascii()
+                );
+            }
+            ptr::null()
+        }
+    }
 }
 
 /// Count the number of registered resource types.
@@ -815,11 +824,7 @@ pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state.dispatch.entry(key_str).is_some() {
-        1
-    } else {
-        0
-    }
+    c_int::from(state.dispatch.has_key(key_str))
 }
 
 /// Check if a key is a STRING type.
@@ -841,10 +846,12 @@ pub unsafe extern "C" fn res_IsString(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("STRING") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "STRING"),
+    )
 }
 
 /// Check if a key is an INT32 type.
@@ -866,10 +873,12 @@ pub unsafe extern "C" fn res_IsInteger(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("INT32") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "INT32"),
+    )
 }
 
 /// Check if a key is a BOOLEAN type.
@@ -891,10 +900,12 @@ pub unsafe extern "C" fn res_IsBoolean(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("BOOLEAN") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "BOOLEAN"),
+    )
 }
 
 /// Check if a key is a COLOR type.
@@ -916,10 +927,12 @@ pub unsafe extern "C" fn res_IsColor(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("COLOR") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "COLOR"),
+    )
 }
 
 /// Get a string value. Returns pointer that lives as long as the state entry.
@@ -1500,12 +1513,11 @@ mod tests {
     }
 
     fn install_mock_gfxres(state: &mut ResourceState) {
-        state.dispatch.type_registry.install(
-            "GFXRES",
-            Some(mock_heap_load),
-            Some(mock_heap_free),
-            None,
-        );
+        state
+            .dispatch
+            .type_registry
+            .install("GFXRES", Some(mock_heap_load), Some(mock_heap_free), None)
+            .unwrap();
     }
 
     // =========================================================================
@@ -2593,12 +2605,16 @@ mod tests {
             {
                 let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
                 let state = guard.as_mut().unwrap();
-                state.dispatch.type_registry.install(
-                    "HEAPTYPE",
-                    Some(dummy_heap_load),
-                    Some(dummy_heap_free),
-                    None, // No toString
-                );
+                state
+                    .dispatch
+                    .type_registry
+                    .install(
+                        "HEAPTYPE",
+                        Some(dummy_heap_load),
+                        Some(dummy_heap_free),
+                        None, // No toString
+                    )
+                    .unwrap();
 
                 // Add a heap entry
                 state
@@ -2775,12 +2791,16 @@ mod tests {
             {
                 let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
                 let state = guard.as_mut().unwrap();
-                state.dispatch.type_registry.install(
-                    "HEAPTYPE",
-                    Some(dummy_heap_load),
-                    Some(dummy_heap_free),
-                    None,
-                );
+                state
+                    .dispatch
+                    .type_registry
+                    .install(
+                        "HEAPTYPE",
+                        Some(dummy_heap_load),
+                        Some(dummy_heap_free),
+                        None,
+                    )
+                    .unwrap();
 
                 // Add heap entry with "config." prefix
                 state

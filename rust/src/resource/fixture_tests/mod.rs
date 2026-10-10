@@ -12,4 +12,5 @@ mod lifecycle;
 mod paths;
 mod res;
 mod stock;
+mod type_boundaries;
 mod uio_api;

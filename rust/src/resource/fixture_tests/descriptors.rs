@@ -24,16 +24,16 @@ use super::config::{config_dir, Config};
 use super::res::{self, Rows};
 use super::uio_api::{cstr, Session};
 
-fn key(bytes: &[u8]) -> CString {
+pub(super) fn key(bytes: &[u8]) -> CString {
     CString::new(bytes).expect("fixture bytes have no NUL")
 }
 
-fn has(name: &[u8]) -> bool {
+pub(super) fn has(name: &[u8]) -> bool {
     let name = key(name);
     unsafe { res_HasKey(name.as_ptr()) != 0 }
 }
 
-fn type_of(name: &[u8]) -> Option<Vec<u8>> {
+pub(super) fn type_of(name: &[u8]) -> Option<Vec<u8>> {
     let name = key(name);
     unsafe {
         let ty: *const c_char = res_GetResourceType(name.as_ptr());
@@ -41,12 +41,12 @@ fn type_of(name: &[u8]) -> Option<Vec<u8>> {
     }
 }
 
-fn integer(name: &[u8]) -> i32 {
+pub(super) fn integer(name: &[u8]) -> i32 {
     let name = key(name);
     unsafe { res_GetInteger(name.as_ptr()) }
 }
 
-fn string(name: &[u8]) -> Vec<u8> {
+pub(super) fn string(name: &[u8]) -> Vec<u8> {
     let name = key(name);
     unsafe {
         CStr::from_ptr(res_GetString(name.as_ptr()))
@@ -71,7 +71,7 @@ fn kinds(name: &[u8]) -> [bool; 4] {
 /// The C string `res_GetResource` hands back for a string-valued entry
 /// (STRING or UNKNOWNRES), and the pointer itself. For INT32, BOOLEAN and
 /// COLOR it returns the number in the pointer, which is not read as a string.
-fn resource_text(name: &[u8]) -> Option<(Vec<u8>, *const c_void)> {
+pub(super) fn resource_text(name: &[u8]) -> Option<(Vec<u8>, *const c_void)> {
     let holds_string = matches!(type_of(name).as_deref(), Some(b"STRING" | b"UNKNOWNRES"));
     if !holds_string {
         return None;
@@ -99,7 +99,7 @@ fn put_string(name: &[u8], value: &[u8]) {
 }
 
 /// `SaveResourceIndex (dir, "out.cfg", root, strip_root)`; returns the file.
-fn saved(cfg: &Config, root: Option<&[u8]>, strip_root: bool) -> Vec<u8> {
+pub(super) fn saved(cfg: &Config, root: Option<&[u8]>, strip_root: bool) -> Vec<u8> {
     let root = root.map(key);
     let file = cstr("out.cfg");
     unsafe {
@@ -120,7 +120,7 @@ fn sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
-fn loaded(file: &[u8], prefix: Option<&str>) -> Config {
+pub(super) fn loaded(file: &[u8], prefix: Option<&str>) -> Config {
     let cfg = config_dir(&[("t.rmp", file)]);
     res::load(&cfg.root, "t.rmp", prefix);
     cfg

@@ -8,6 +8,8 @@
 
 use std::ffi::{c_char, c_int, c_uint, c_void};
 
+use super::raw_resource_type::RawResourceType;
+
 /// FFI-compatible resource data union matching the C `RESOURCE_DATA` type.
 ///
 /// ```c
@@ -62,15 +64,14 @@ pub type ResourceStringFun = unsafe extern "C" fn(*mut ResourceData, *mut c_char
 /// ```
 pub type ResourceLoadFileFun = unsafe extern "C" fn(*mut c_void, u32) -> *mut c_void;
 
-/// FFI-compatible resource handler registration record.
+/// A registered resource type: its identifier and the functions that load,
+/// free and serialize its resources. A `None` function is the C `NULL`.
 ///
-/// Stores the type name and associated function pointers for a registered
-/// resource type. Uses `Option<fn>` for nullable function pointers per
-/// REQ-RES-R008.
-#[repr(C)]
+/// This is the Rust side of C's `ResourceHandlers`; C never sees it, so it has
+/// no C layout. The identifier is kept whole and as bytes (see
+/// [`RawResourceType`]).
 pub struct ResourceHandlers {
-    /// Type name, null-terminated, fixed-size buffer
-    pub res_type: [u8; 32],
+    res_type: RawResourceType,
     /// Load function — called to deserialize a resource from its descriptor
     pub load_fun: Option<ResourceLoadFun>,
     /// Free function — called to release a heap-allocated resource (None for value types)
@@ -80,21 +81,12 @@ pub struct ResourceHandlers {
 }
 
 impl ResourceHandlers {
-    /// Create a new `ResourceHandlers` with the given type name and function pointers.
-    ///
-    /// The type name is truncated to 31 bytes (plus null terminator) if too long.
     pub fn new(
-        type_name: &str,
+        res_type: RawResourceType,
         load_fun: Option<ResourceLoadFun>,
         free_fun: Option<ResourceFreeFun>,
         to_string: Option<ResourceStringFun>,
     ) -> Self {
-        let mut res_type = [0u8; 32];
-        let bytes = type_name.as_bytes();
-        let copy_len = bytes.len().min(31);
-        res_type[..copy_len].copy_from_slice(&bytes[..copy_len]);
-        // Already zero-terminated since array is initialized to 0
-
         ResourceHandlers {
             res_type,
             load_fun,
@@ -103,10 +95,9 @@ impl ResourceHandlers {
         }
     }
 
-    /// Get the type name as a string slice.
-    pub fn type_name(&self) -> &str {
-        let len = self.res_type.iter().position(|&b| b == 0).unwrap_or(32);
-        std::str::from_utf8(&self.res_type[..len]).unwrap_or("")
+    /// The identifier the type was registered under, whole.
+    pub fn res_type(&self) -> &RawResourceType {
+        &self.res_type
     }
 }
 
@@ -144,17 +135,26 @@ mod tests {
 
     #[test]
     fn test_resource_handlers_new() {
-        let handlers = ResourceHandlers::new("TESTTYPE", None, None, None);
-        assert_eq!(handlers.type_name(), "TESTTYPE");
+        let name = RawResourceType::new("TESTTYPE").unwrap();
+        let handlers = ResourceHandlers::new(name, None, None, None);
+        assert_eq!(handlers.res_type(), "TESTTYPE");
         assert!(handlers.load_fun.is_none());
         assert!(handlers.free_fun.is_none());
         assert!(handlers.to_string.is_none());
     }
 
     #[test]
-    fn test_resource_handlers_type_name_truncation() {
+    fn test_resource_handlers_keep_a_long_identifier_whole() {
         let long_name = "A".repeat(64);
-        let handlers = ResourceHandlers::new(&long_name, None, None, None);
-        assert_eq!(handlers.type_name().len(), 31);
+        let handlers =
+            ResourceHandlers::new(RawResourceType::new(&long_name).unwrap(), None, None, None);
+        assert_eq!(handlers.res_type().as_bytes(), long_name.as_bytes());
+    }
+
+    #[test]
+    fn test_resource_handlers_keep_an_identifier_that_is_not_utf8() {
+        let handlers =
+            ResourceHandlers::new(RawResourceType::new(b"G\xE9").unwrap(), None, None, None);
+        assert_eq!(handlers.res_type().as_bytes(), b"G\xE9");
     }
 }

@@ -10,6 +10,7 @@ pub mod ffi_types;
 #[cfg(test)]
 mod fixture_tests;
 pub mod propfile;
+pub mod raw_resource_type;
 pub mod resource_type;
 pub mod string_bank;
 pub mod string_table;

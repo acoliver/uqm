@@ -14,10 +14,12 @@ fn dispatch_with_value_types() -> ResourceDispatch {
     let mut dispatch = ResourceDispatch::new();
     dispatch
         .type_registry
-        .install("STRING", Some(use_descriptor_as_res), None, None);
+        .install("STRING", Some(use_descriptor_as_res), None, None)
+        .unwrap();
     dispatch
         .type_registry
-        .install("INT32", Some(descriptor_to_int), None, None);
+        .install("INT32", Some(descriptor_to_int), None, None)
+        .unwrap();
     dispatch
 }
 
@@ -59,9 +61,21 @@ fn a_registered_type_keeps_its_type_and_the_text_after_the_first_colon() {
     let mut dispatch = dispatch_with_value_types();
     dispatch.process_resource_desc("n", "INT32:7").unwrap();
     dispatch.process_resource_desc("s", "STRING:a:b").unwrap();
-    assert_eq!(dispatch.get_resource_type("n"), Some("INT32"));
+    assert_eq!(
+        dispatch
+            .get_resource_type("n")
+            .map(|name| name.to_string())
+            .as_deref(),
+        Some("INT32")
+    );
     assert_eq!(dispatch.get_int_resource("n"), Some(7));
-    assert_eq!(dispatch.get_resource_type("s"), Some("STRING"));
+    assert_eq!(
+        dispatch
+            .get_resource_type("s")
+            .map(|name| name.to_string())
+            .as_deref(),
+        Some("STRING")
+    );
     assert_eq!(dispatch.get_string_resource("s"), Some(b"a:b".as_slice()));
 }
 
@@ -75,12 +89,24 @@ fn a_type_that_is_not_utf8_or_is_very_long_is_unknown_and_does_not_panic() {
     dispatch
         .process_resource_desc("long", format!("{long_type}:foo"))
         .unwrap();
-    assert_eq!(dispatch.get_resource_type("latin"), Some("UNKNOWNRES"));
+    assert_eq!(
+        dispatch
+            .get_resource_type("latin")
+            .map(|name| name.to_string())
+            .as_deref(),
+        Some("UNKNOWNRES")
+    );
     assert_eq!(
         dispatch.entry("latin").unwrap().descriptor_bytes(),
         b"\xE9T:foo"
     );
-    assert_eq!(dispatch.get_resource_type("long"), Some("UNKNOWNRES"));
+    assert_eq!(
+        dispatch
+            .get_resource_type("long")
+            .map(|name| name.to_string())
+            .as_deref(),
+        Some("UNKNOWNRES")
+    );
     assert_eq!(
         dispatch.entry("long").unwrap().descriptor_bytes(),
         format!("{long_type}:foo").as_bytes()
@@ -132,12 +158,15 @@ fn a_nul_in_the_key_or_the_value_is_refused_and_nothing_is_stored() {
 #[test]
 fn a_type_without_a_load_function_creates_no_entry_and_keeps_the_old_one() {
     let mut dispatch = dispatch_with_value_types();
-    dispatch.type_registry.install("NOLOAD", None, None, None);
+    dispatch
+        .type_registry
+        .install("NOLOAD", None, None, None)
+        .unwrap();
     dispatch.process_resource_desc("k", "INT32:5").unwrap();
     assert_eq!(
         dispatch.process_resource_desc("k", "NOLOAD:x"),
         Err(DescriptorError::NoLoadFunction {
-            type_name: "NOLOAD".to_string()
+            type_name: RawResourceType::new("NOLOAD").unwrap()
         })
     );
     assert_eq!(dispatch.get_int_resource("k"), Some(5));
@@ -172,7 +201,7 @@ proptest! {
         dispatch.process_resource_desc("k", &value).unwrap();
         let entry = dispatch.entry("k").unwrap();
         let (res_type, descriptor) = c_rule(&value);
-        prop_assert_eq!(entry.res_type.as_str(), res_type);
+        prop_assert_eq!(entry.res_type.as_bytes(), res_type.as_bytes());
         prop_assert_eq!(entry.descriptor_bytes(), descriptor);
     }
 }

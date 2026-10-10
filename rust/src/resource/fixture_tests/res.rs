@@ -1,7 +1,7 @@
 //! The resource API as the C game calls it: index loading and the typed
 //! getters, by key.
 
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::ptr;
 
 use crate::resource::ffi_bridge::{
@@ -37,6 +37,13 @@ unsafe extern "C" fn free_nothing(_data: *mut c_void) -> c_int {
 
 fn register_subsystem_types() {
     for name in SUBSYSTEM_TYPES {
+        // A second load in the same session finds the types registered, and
+        // registering a key twice is refused.
+        let key = [b"sys.".as_slice(), name.to_bytes()].concat();
+        let key = CString::new(key).expect("type names have no NUL");
+        if unsafe { res_HasKey(key.as_ptr()) } != 0 {
+            continue;
+        }
         let installed = unsafe {
             InstallResTypeVectors(name.as_ptr(), Some(load_nothing), Some(free_nothing), None)
         };

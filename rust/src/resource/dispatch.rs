@@ -16,8 +16,9 @@ use std::ffi::{c_void, CString};
 use std::fmt;
 use std::ptr;
 
-use super::ffi_types::ResourceData;
-use super::type_registry::{use_descriptor_as_res, TypeRegistry};
+use super::ffi_types::{ResourceData, ResourceHandlers};
+use super::raw_resource_type::RawResourceType;
+use super::type_registry::{use_descriptor_as_res, TypeRegistry, TYPE_KEY_PREFIX};
 
 /// The type of every entry whose descriptor names no registered type. It is
 /// registered by [`ResourceDispatch::new`], as `InitResourceSystem` does in C.
@@ -28,10 +29,12 @@ const UNKNOWN_TYPE: &str = "UNKNOWNRES";
 /// Merges the descriptor string with `ResourceData` (the loaded data union)
 /// and refcount tracking for the dispatch lifecycle.
 pub struct FullResourceDesc {
-    /// Name of the type handler that owns this entry: "STRING", "INT32",
-    /// "BOOLEAN", "COLOR", "GFXRES", ... or `UNKNOWNRES` when the descriptor
-    /// had no registered type. This is what C reports as the entry's type.
-    pub res_type: String,
+    /// Identifier of the type handler that owns this entry: "STRING",
+    /// "INT32", "BOOLEAN", "COLOR", "GFXRES", ... or `UNKNOWNRES` when the
+    /// descriptor had no registered type. This is what C reports as the
+    /// entry's type: the whole identifier the type was registered under, which
+    /// may be longer than the descriptor's type text and need not be UTF-8.
+    pub res_type: RawResourceType,
     /// FFI-compatible data union (num/ptr/str_ptr)
     pub data: ResourceData,
     /// Reference count for loaded heap resources
@@ -49,6 +52,11 @@ impl FullResourceDesc {
     pub fn descriptor_bytes(&self) -> &[u8] {
         self.descriptor.to_bytes()
     }
+
+    #[cfg(test)]
+    fn data_is_unloaded(&self) -> bool {
+        unsafe { self.data.ptr.is_null() }
+    }
 }
 
 /// Why a descriptor did not become an entry.
@@ -59,7 +67,12 @@ pub enum DescriptorError {
     InteriorNul,
     /// The type is registered without a load function. C refuses to create
     /// the entry and leaves any earlier entry for the key alone.
-    NoLoadFunction { type_name: String },
+    NoLoadFunction { type_name: RawResourceType },
+    /// The key starts with `sys.`, the part of the resource map that holds the
+    /// registered types. C lets such a key replace a type with an ordinary
+    /// entry and then reads that entry as a type; the key is refused instead,
+    /// and no ordinary resource has a `sys.` name.
+    TypeNamespaceKey,
 }
 
 impl fmt::Display for DescriptorError {
@@ -70,6 +83,9 @@ impl fmt::Display for DescriptorError {
             }
             DescriptorError::NoLoadFunction { type_name } => {
                 write!(f, "type {type_name} has no load function")
+            }
+            DescriptorError::TypeNamespaceKey => {
+                write!(f, "key is in the sys. namespace of the registered types")
             }
         }
     }
@@ -96,7 +112,9 @@ impl ResourceDispatch {
     /// registered; it is a value type whose value is its descriptor.
     pub fn new() -> Self {
         let mut type_registry = TypeRegistry::new();
-        type_registry.install(UNKNOWN_TYPE, Some(use_descriptor_as_res), None, None);
+        type_registry
+            .install(UNKNOWN_TYPE, Some(use_descriptor_as_res), None, None)
+            .unwrap();
         ResourceDispatch {
             entries: HashMap::new(),
             type_registry,
@@ -135,13 +153,17 @@ impl ResourceDispatch {
         if key.contains(&0) {
             return Err(DescriptorError::InteriorNul);
         }
-        let (res_type, descriptor) = self.split_descriptor(key, value);
+        if key.starts_with(TYPE_KEY_PREFIX) {
+            return Err(DescriptorError::TypeNamespaceKey);
+        }
+        let (handlers, descriptor) = self.resolve_type(key, value);
+        let (res_type, load_fun, is_value_type) = (
+            handlers.res_type().clone(),
+            handlers.load_fun,
+            handlers.free_fun.is_none(),
+        );
         let descriptor = CString::new(descriptor).map_err(|_| DescriptorError::InteriorNul)?;
 
-        let (load_fun, is_value_type) = match self.type_registry.lookup(&res_type) {
-            Some(handlers) => (handlers.load_fun, handlers.free_fun.is_none()),
-            None => (None, false),
-        };
         let Some(load_fun) = load_fun else {
             log::warn!(
                 "Unable to load '{}'; no handler for type {} defined",
@@ -176,29 +198,34 @@ impl ResourceDispatch {
         Ok(())
     }
 
-    /// The handler type and the descriptor for `value`: the registered type
+    /// The handlers and the descriptor for `value`: the registered type
     /// named before the first colon with the text after it, or `UNKNOWNRES`
-    /// with all of `value`.
+    /// with all of `value`. The type text is looked up as C does, cut to the
+    /// registry's key length.
     ///
     /// @requirement REQ-RES-UNK-001
-    fn split_descriptor<'v>(&self, key: &[u8], value: &'v [u8]) -> (String, &'v [u8]) {
+    fn resolve_type<'s, 'v>(
+        &'s self,
+        key: &[u8],
+        value: &'v [u8],
+    ) -> (&'s ResourceHandlers, &'v [u8]) {
         let registered = value.iter().position(|&b| b == b':').and_then(|colon| {
-            let type_name = std::str::from_utf8(&value[..colon]).ok()?;
-            self.type_registry.lookup(type_name)?;
-            Some((type_name, &value[colon + 1..]))
+            let handlers = self.type_registry.lookup(&value[..colon])?;
+            Some((handlers, &value[colon + 1..]))
         });
-        match registered {
-            Some((type_name, descriptor)) => (type_name.to_owned(), descriptor),
-            None => {
-                log::warn!(
-                    "No registered type in descriptor '{}' for resource '{}'; treating as {}",
-                    String::from_utf8_lossy(value),
-                    String::from_utf8_lossy(key),
-                    UNKNOWN_TYPE
-                );
-                (UNKNOWN_TYPE.to_owned(), value)
-            }
-        }
+        registered.unwrap_or_else(|| {
+            log::warn!(
+                "No registered type in descriptor '{}' for resource '{}'; treating as {}",
+                String::from_utf8_lossy(value),
+                String::from_utf8_lossy(key),
+                UNKNOWN_TYPE
+            );
+            let unknown = self
+                .type_registry
+                .lookup(UNKNOWN_TYPE)
+                .expect("ResourceDispatch::new registers UNKNOWNRES and nothing removes a type");
+            (unknown, value)
+        })
     }
 
     /// Lazy-load and return a resource pointer, incrementing its refcount.
@@ -447,10 +474,25 @@ impl ResourceDispatch {
             .map(FullResourceDesc::descriptor_bytes)
     }
 
-    /// Get the type name for a resource entry.
-    pub fn get_resource_type(&self, key: impl AsRef<[u8]>) -> Option<&str> {
+    /// Get the type identifier of a resource entry.
+    pub fn get_resource_type(&self, key: impl AsRef<[u8]>) -> Option<&RawResourceType> {
         let desc = self.entries.get(key.as_ref())?;
         Some(&desc.res_type)
+    }
+
+    /// Whether `key` names an entry or a registered type, as `res_HasKey` asks
+    /// of C's one map. Types are answered from the registry; they are not
+    /// among [`Self::entries`].
+    pub fn has_key(&self, key: impl AsRef<[u8]>) -> bool {
+        let key = key.as_ref();
+        self.entries.contains_key(key) || self.type_registry.holds_key(key)
+    }
+
+    /// Whether `key` names a registered type (`sys.` and a stored identifier).
+    /// Such a key has no entry, so no resource getter has anything to say
+    /// about it.
+    pub fn is_type_key(&self, key: impl AsRef<[u8]>) -> bool {
+        self.type_registry.holds_key(key.as_ref())
     }
 
     /// Clean up all loaded heap resources during shutdown.
@@ -513,16 +555,20 @@ mod tests {
     fn register_builtin_value_types(dispatch: &mut ResourceDispatch) {
         dispatch
             .type_registry
-            .install("STRING", Some(string_load_wrapper), None, None);
+            .install("STRING", Some(string_load_wrapper), None, None)
+            .unwrap();
         dispatch
             .type_registry
-            .install("INT32", Some(int_load_wrapper), None, None);
+            .install("INT32", Some(int_load_wrapper), None, None)
+            .unwrap();
         dispatch
             .type_registry
-            .install("BOOLEAN", Some(bool_load_wrapper), None, None);
+            .install("BOOLEAN", Some(bool_load_wrapper), None, None)
+            .unwrap();
         dispatch
             .type_registry
-            .install("COLOR", Some(color_load_wrapper), None, None);
+            .install("COLOR", Some(color_load_wrapper), None, None)
+            .unwrap();
     }
 
     // Dummy heap-type free function for tests
@@ -670,11 +716,23 @@ mod tests {
         dispatch
             .process_resource_desc("test.num", "INT32:42")
             .unwrap();
-        assert_eq!(dispatch.get_resource_type("test.num"), Some("INT32"));
+        assert_eq!(
+            dispatch
+                .get_resource_type("test.num")
+                .map(|name| name.to_string())
+                .as_deref(),
+            Some("INT32")
+        );
         dispatch
             .process_resource_desc("test.flag", "BOOLEAN:true")
             .unwrap();
-        assert_eq!(dispatch.get_resource_type("test.flag"), Some("BOOLEAN"));
+        assert_eq!(
+            dispatch
+                .get_resource_type("test.flag")
+                .map(|name| name.to_string())
+                .as_deref(),
+            Some("BOOLEAN")
+        );
         assert_eq!(dispatch.get_resource_type("no.such.key"), None);
     }
 
@@ -697,15 +755,18 @@ mod tests {
         unsafe {
             let mut dispatch = ResourceDispatch::new();
             // Register a heap type
-            dispatch.type_registry.install(
-                "MOCKHEAP",
-                Some(dummy_load_noop as ResourceLoadFun),
-                Some(dummy_free as ResourceFreeFun),
-                Some(dummy_tostring as ResourceStringFun),
-            );
+            dispatch
+                .type_registry
+                .install(
+                    "MOCKHEAP",
+                    Some(dummy_load_noop as ResourceLoadFun),
+                    Some(dummy_free as ResourceFreeFun),
+                    Some(dummy_tostring as ResourceStringFun),
+                )
+                .unwrap();
             // Manually insert an entry with null ptr (not loaded)
             let desc = FullResourceDesc {
-                res_type: "MOCKHEAP".to_string(),
+                res_type: RawResourceType::new("MOCKHEAP").unwrap(),
                 data: ResourceData {
                     ptr: ptr::null_mut(),
                 },
@@ -725,16 +786,19 @@ mod tests {
     #[test]
     fn test_detach_resource_refcount_too_high() {
         let mut dispatch = ResourceDispatch::new();
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(dummy_load_noop as ResourceLoadFun),
-            Some(dummy_free as ResourceFreeFun),
-            Some(dummy_tostring as ResourceStringFun),
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(dummy_load_noop as ResourceLoadFun),
+                Some(dummy_free as ResourceFreeFun),
+                Some(dummy_tostring as ResourceStringFun),
+            )
+            .unwrap();
         // Manually insert a loaded entry with refcount > 1
         let mut value: u32 = 0xDEAD;
         let desc = FullResourceDesc {
-            res_type: "MOCKHEAP".to_string(),
+            res_type: RawResourceType::new("MOCKHEAP").unwrap(),
             data: ResourceData {
                 ptr: &mut value as *mut u32 as *mut c_void,
             },
@@ -890,15 +954,18 @@ mod tests {
             // Simulate loading by setting ptr to a non-null value
             (*data).ptr = 0xDEADBEEF as *mut c_void;
         }
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(mock_heap_load as ResourceLoadFun),
-            Some(dummy_free as ResourceFreeFun),
-            None,
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(mock_heap_load as ResourceLoadFun),
+                Some(dummy_free as ResourceFreeFun),
+                None,
+            )
+            .unwrap();
         // Manually insert unloaded heap entry
         let desc = FullResourceDesc {
-            res_type: "MOCKHEAP".to_string(),
+            res_type: RawResourceType::new("MOCKHEAP").unwrap(),
             data: ResourceData {
                 ptr: ptr::null_mut(),
             },
@@ -940,12 +1007,15 @@ mod tests {
             (*data).ptr = 0xDEADBEEF as *mut c_void;
         }
         let mut dispatch = ResourceDispatch::new();
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(mock_load as ResourceLoadFun),
-            Some(mock_free_tracking as ResourceFreeFun),
-            None,
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(mock_load as ResourceLoadFun),
+                Some(mock_free_tracking as ResourceFreeFun),
+                None,
+            )
+            .unwrap();
         // Insert initial entry and simulate it being loaded
         dispatch
             .process_resource_desc("test.key", "MOCKHEAP:file1.dat")
@@ -977,12 +1047,15 @@ mod tests {
             (*data).ptr = 0xDEADBEEF as *mut c_void;
         }
         let mut dispatch = ResourceDispatch::new();
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(mock_load as ResourceLoadFun),
-            Some(mock_free_tracking as ResourceFreeFun),
-            None,
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(mock_load as ResourceLoadFun),
+                Some(mock_free_tracking as ResourceFreeFun),
+                None,
+            )
+            .unwrap();
         // Insert initial entry and simulate it being loaded with refcount > 0
         dispatch
             .process_resource_desc("test.key", "MOCKHEAP:file1.dat")
@@ -1034,12 +1107,15 @@ mod tests {
             (*data).ptr = 0xDEADBEEF as *mut c_void;
         }
         let mut dispatch = ResourceDispatch::new();
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(mock_load as ResourceLoadFun),
-            Some(mock_free_tracking as ResourceFreeFun),
-            None,
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(mock_load as ResourceLoadFun),
+                Some(mock_free_tracking as ResourceFreeFun),
+                None,
+            )
+            .unwrap();
         // Insert and simulate loaded entry
         dispatch
             .process_resource_desc("test.key", "MOCKHEAP:file.dat")
@@ -1085,12 +1161,15 @@ mod tests {
             // Don't set ptr - leave it null
         }
         let mut dispatch = ResourceDispatch::new();
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(mock_load as ResourceLoadFun),
-            Some(mock_free_tracking as ResourceFreeFun),
-            None,
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(mock_load as ResourceLoadFun),
+                Some(mock_free_tracking as ResourceFreeFun),
+                None,
+            )
+            .unwrap();
         // Insert entry but don't load it (ptr remains null)
         dispatch
             .process_resource_desc("test.key", "MOCKHEAP:file.dat")
@@ -1157,12 +1236,15 @@ mod tests {
             (*data).ptr = 0xDEADBEEF as *mut c_void;
         }
         let mut dispatch = ResourceDispatch::new();
-        dispatch.type_registry.install(
-            "MOCKHEAP",
-            Some(mock_load as ResourceLoadFun),
-            Some(mock_free_tracking as ResourceFreeFun),
-            None,
-        );
+        dispatch
+            .type_registry
+            .install(
+                "MOCKHEAP",
+                Some(mock_load as ResourceLoadFun),
+                Some(mock_free_tracking as ResourceFreeFun),
+                None,
+            )
+            .unwrap();
         // Insert and simulate loaded entry
         dispatch
             .process_resource_desc("test.key", "MOCKHEAP:file.dat")
@@ -1207,3 +1289,5 @@ mod tests {
 
 #[cfg(test)]
 mod descriptor_tests;
+#[cfg(test)]
+mod type_tests;
