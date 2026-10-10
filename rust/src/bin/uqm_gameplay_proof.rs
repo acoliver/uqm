@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
+use uqm_rust::automation::content_view::{self, ContentEntry, ContentView};
 use uqm_rust::automation::interrupt;
 use uqm_rust::automation::{
     verified_command_digest, ChildSession, ChildSessionConfig, ChildSessionError,
@@ -294,6 +295,7 @@ fn execute_prepared(repo_root: &Path, evidence: &mut RunEvidence) -> Result<(), 
         &evidence.provenance.executable_sha256,
     )
     .map_err(|error| error.to_string())?;
+    let mut view = expand_content_view(repo_root, evidence)?;
     let receipt = supervise_child(
         repo_root,
         &evidence.output_root.join("snapshots/uqm"),
@@ -301,7 +303,72 @@ fn execute_prepared(repo_root: &Path, evidence: &mut RunEvidence) -> Result<(), 
         &evidence.output_root.join("snapshots/script.json"),
         evidence,
     );
+    remove_content_view(&mut view, evidence)?;
     complete_run(evidence, receipt)
+}
+
+/// Derive the decoded content the game reads from the retained package, if any.
+///
+/// The retained tree is what the identity snapshot names; the view exists only
+/// while the child runs, and its own identity is printed so the run record
+/// says exactly what the game could read.
+fn expand_content_view(repo_root: &Path, evidence: &RunEvidence) -> Result<ContentView, String> {
+    let snapshots = evidence.output_root.join("snapshots");
+    let identity: TreeSnapshot = read_json(&snapshots.join("content-identity.json"))?;
+    let retained = content_entries(&identity.entries);
+    if !content_view::needs_expansion(&retained) {
+        return Ok(ContentView::default());
+    }
+    let budget = content_expansion_budget(repo_root)?;
+    let content = snapshots.join("sc2/content");
+    let view = ContentView::expand(&content, &retained, budget)?;
+    let expanded = snapshot_tree(&content, "content")?;
+    println!(
+        "content_view	files={}	bytes={}	tree_sha256={}",
+        expanded.entries.len(),
+        expanded
+            .entries
+            .iter()
+            .map(|entry| entry.bytes)
+            .sum::<u64>(),
+        expanded.tree_sha256
+    );
+    Ok(view)
+}
+
+/// Remove the decoded view and prove only the retained tree is left behind.
+fn remove_content_view(view: &mut ContentView, evidence: &RunEvidence) -> Result<(), String> {
+    if !view.is_expanded() {
+        return Ok(());
+    }
+    view.remove()?;
+    let left = snapshot_tree(
+        &evidence.output_root.join("snapshots/sc2/content"),
+        "content",
+    )?;
+    if left.tree_sha256 != evidence.provenance.content_tree_sha256 {
+        return Err("content left after the run differs from the retained content".into());
+    }
+    Ok(())
+}
+
+/// The scratch budget the native acceptance route already uses for expanded content.
+fn content_expansion_budget(repo_root: &Path) -> Result<u64, String> {
+    let authority: serde_json::Value = read_json(&repo_root.join("rust/ci/gates.json"))?;
+    authority["native_acceptance"]["runtime_contract"]["content_expansion_budget_bytes"]
+        .as_u64()
+        .ok_or_else(|| "authority has no content expansion budget".to_string())
+}
+
+fn content_entries(entries: &[TreeEntry]) -> Vec<ContentEntry> {
+    entries
+        .iter()
+        .map(|entry| ContentEntry {
+            path: entry.path.clone(),
+            sha256: entry.sha256.clone(),
+            bytes: entry.bytes,
+        })
+        .collect()
 }
 
 fn prepare_evidence(
@@ -840,10 +907,15 @@ fn validate_scenario_binding(root: &Path, manifest: &LcarManifest) -> Result<(),
     Ok(())
 }
 
+/// Retain the content a replay needs: packages, the version marker and loose
+/// files the packages do not provide. Loose copies of package members are not
+/// retained because the package carries them, and the run derives them again.
 fn retain_content(source: &Path, destination: &Path) -> Result<TreeSnapshot, String> {
-    let expected = snapshot_tree(source, "content")?;
+    let whole = snapshot_tree(source, "content")?;
+    let selection = content_view::select_from_tree(source, &content_entries(&whole.entries))?;
+    let retained = tree_entries(&selection.retained);
     fs::create_dir_all(destination).map_err(|error| format!("create retained content: {error}"))?;
-    for entry in &expected.entries {
+    for entry in &retained {
         let target = destination.join(&entry.path);
         let parent = target
             .parent()
@@ -852,10 +924,43 @@ fn retain_content(source: &Path, destination: &Path) -> Result<TreeSnapshot, Str
         copy_new(&source.join(&entry.path), &target)?;
     }
     let copied = snapshot_tree(destination, "content")?;
-    if copied.tree_sha256 != expected.tree_sha256 {
+    if copied.tree_sha256 != tree_digest(&retained) {
         return Err("content changed while retaining replay inputs".into());
     }
+    report_content_selection(&whole, &selection, &copied);
     Ok(copied)
+}
+
+fn tree_entries(entries: &[ContentEntry]) -> Vec<TreeEntry> {
+    entries
+        .iter()
+        .map(|entry| TreeEntry {
+            path: entry.path.clone(),
+            sha256: entry.sha256.clone(),
+            bytes: entry.bytes,
+        })
+        .collect()
+}
+
+/// Say what was retained, what the retained package makes redundant and what
+/// the invocation never selects, with a digest of each set.
+fn report_content_selection(
+    whole: &TreeSnapshot,
+    selection: &content_view::Selection,
+    retained: &TreeSnapshot,
+) {
+    let line = |label: &str, entries: &[ContentEntry]| {
+        println!(
+            "content_selection	{label}	files={}	bytes={}	tree_sha256={}",
+            entries.len(),
+            entries.iter().map(|entry| entry.bytes).sum::<u64>(),
+            tree_digest(&tree_entries(entries))
+        );
+    };
+    line("source", &content_entries(&whole.entries));
+    line("retained", &content_entries(&retained.entries));
+    line("duplicated_by_package", &selection.duplicated_by_package);
+    line("unselected", &selection.unselected);
 }
 
 /// Print the published matrix, optionally for one domain.
@@ -3564,5 +3669,95 @@ mod config_cleanup_regressions {
         assert!(error.detail.contains("retention injected"));
         assert!(error.detail.contains("cleanup injected"));
         assert!(evidence.config_root.exists());
+    }
+}
+
+#[cfg(test)]
+mod content_selection_tests {
+    use super::*;
+    use zip::write::SimpleFileOptions;
+
+    /// A source tree shaped like the repository's: a package, loose copies of
+    /// every package member, one loose file that overrides a member, and a pack
+    /// the invocation never selects.
+    fn source_tree(root: &Path, decoded_files: usize) {
+        fs::create_dir_all(root.join("packages")).unwrap();
+        fs::create_dir_all(root.join("base")).unwrap();
+        fs::create_dir_all(root.join("addons/pack")).unwrap();
+        let mut archive =
+            zip::ZipWriter::new(fs::File::create(root.join("packages/p.uqm")).unwrap());
+        for index in 0..decoded_files {
+            let name = format!("base/f{index}.txt");
+            let bytes = format!("member {index}");
+            archive
+                .start_file(name.clone(), SimpleFileOptions::default())
+                .unwrap();
+            archive.write_all(bytes.as_bytes()).unwrap();
+            fs::write(root.join(&name), bytes).unwrap();
+        }
+        archive.finish().unwrap();
+        fs::write(root.join("base/f7.txt"), b"loose override").unwrap();
+        fs::write(root.join("version"), b"0.8.0\n").unwrap();
+        fs::write(root.join("addons/pack/music.bin"), b"unselected").unwrap();
+    }
+
+    fn evidence_member_limit() -> usize {
+        let authority: serde_json::Value =
+            read_json(&Path::new(env!("CARGO_MANIFEST_DIR")).join("ci/gates.json")).unwrap();
+        authority["actions"]["evidence_snapshot_member_count_limit"]
+            .as_u64()
+            .unwrap() as usize
+    }
+
+    #[test]
+    fn retained_content_fits_the_member_limit_that_the_decoded_tree_exceeds() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let limit = evidence_member_limit();
+        source_tree(&source, limit + 1);
+        assert!(snapshot_tree(&source, "content").unwrap().entries.len() > limit);
+
+        let retained = retain_content(&source, &temp.path().join("retained")).unwrap();
+
+        let paths: Vec<_> = retained
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect();
+        assert_eq!(paths, ["base/f7.txt", "packages/p.uqm", "version"]);
+        assert!(retained.entries.len() < limit);
+    }
+
+    #[test]
+    fn the_game_view_is_the_source_tree_without_unselected_packs_and_leaves_no_residue() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        source_tree(&source, 50);
+        let whole = snapshot_tree(&source, "content").unwrap();
+        let selected: Vec<TreeEntry> = whole
+            .entries
+            .iter()
+            .filter(|entry| !entry.path.starts_with("addons/"))
+            .cloned()
+            .collect();
+        let retained_root = temp.path().join("retained");
+        let retained = retain_content(&source, &retained_root).unwrap();
+
+        let mut view = ContentView::expand(
+            &retained_root,
+            &content_entries(&retained.entries),
+            1024 * 1024,
+        )
+        .unwrap();
+
+        let expanded = snapshot_tree(&retained_root, "content").unwrap();
+        assert_eq!(expanded.tree_sha256, tree_digest(&selected));
+        view.remove().unwrap();
+        assert_eq!(
+            snapshot_tree(&retained_root, "content")
+                .unwrap()
+                .tree_sha256,
+            retained.tree_sha256
+        );
     }
 }

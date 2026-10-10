@@ -25,6 +25,10 @@ pub mod battle_observer;
 pub mod capture;
 pub mod child_session;
 pub mod collection_invariants;
+#[cfg(unix)]
+pub mod content_materialize;
+#[cfg(unix)]
+pub mod content_view;
 pub mod coordinator;
 pub mod error;
 pub mod identity;
