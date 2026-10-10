@@ -11,6 +11,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::raw::{c_char, c_int, c_long};
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
@@ -19,12 +20,16 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 #[path = "uio_resolve.rs"]
 mod resolve;
-use resolve::{covering, locate, transplant_source, verify_directory, Kind, Place};
+use resolve::{
+    covering, is_virtual_directory, locate, probe, transplant_source, verify_directory,
+    virtual_children, Kind, Place,
+};
 
 #[path = "uio_write_access.rs"]
 mod write_access;
 use write_access::{
-    names_an_entry, plan_removal, plan_write, prepare_write, remove_entries, Parents, WriteIntent,
+    names_an_entry, plan_removal, plan_write, prepare_write, remove_entries, write_permission,
+    Parents, WriteIntent,
 };
 
 // =============================================================================
@@ -134,10 +139,10 @@ struct MountInfo {
 }
 
 impl MountInfo {
-    /// Archives can only be mounted read-only, so an archive mount is
-    /// read-only whatever flags it was given.
+    /// Archives can only be mounted read-only (see
+    /// [`index_archive_for_mount`]), so an archive mount always has the flag.
     fn is_read_only(&self) -> bool {
-        self.read_only || self.fs_type == UIO_FSTYPE_ZIP
+        self.read_only
     }
 
     /// The archive entry name of `suffix`, a path below the mount point.
@@ -314,32 +319,41 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
 
         let virtual_path = normalize_virtual_path_full(dir_virt_path, &input);
         let registry = get_mount_registry().lock().unwrap();
+        let repository = repository_key((*dir).repository);
 
         // Resolve to topmost visible object in mount order
-        let visible = covering(&registry, repository_key((*dir).repository), &virtual_path)
-            .find_map(|covered| {
-                // @plan PLAN-20260314-FILE-IO.P09
-                // @requirement REQ-FIO-ARCHIVE-MOUNT
-                if covered.mount.fs_type == UIO_FSTYPE_ZIP {
-                    let zip_index = covered.mount.zip_index.as_ref()?;
-                    let name = covered.archive_name()?;
-                    // Use mounted_root as placeholder for ZIP entry
-                    return (name.is_empty() || zip_index.contains(&name)).then(|| {
-                        (
-                            covered.mount,
-                            covered.mount.mounted_root.clone(),
-                            Some(name),
-                        )
-                    });
-                }
-                let host_path = covered.host_path();
-                host_path
-                    .exists()
-                    .then_some((covered.mount, host_path, None))
-            });
+        let visible = covering(&registry, repository, &virtual_path).find_map(|covered| {
+            // @plan PLAN-20260314-FILE-IO.P09
+            // @requirement REQ-FIO-ARCHIVE-MOUNT
+            if covered.mount.fs_type == UIO_FSTYPE_ZIP {
+                let zip_index = covered.mount.zip_index.as_ref()?;
+                let name = covered.archive_name()?;
+                // Use mounted_root as placeholder for ZIP entry
+                return (name.is_empty() || zip_index.contains(&name)).then(|| {
+                    (
+                        covered.mount,
+                        covered.mount.mounted_root.clone(),
+                        Some(name),
+                    )
+                });
+            }
+            let host_path = covered.host_path();
+            host_path
+                .exists()
+                .then_some((covered.mount, host_path, None))
+        });
 
         let (mount, host_path, archive_name) = match visible {
             Some(v) => v,
+            // A directory of the mount tree: it can be looked at and entered,
+            // and no mount can write in it.
+            None if is_virtual_directory(&registry, repository, &virtual_path) => {
+                return if mode & W_OK != 0 {
+                    fail_errno(libc::EACCES, -1)
+                } else {
+                    0
+                };
+            }
             None => return fail_errno(libc::ENOENT, -1),
         };
 
@@ -353,18 +367,11 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
             // All mounts are readable
         }
 
-        // Check W_OK
+        // W_OK: would a write to the path succeed, where `uio_open` and
+        // `uio_mkdir` would put it. Nothing is created or copied to find out.
         if (mode & W_OK) != 0 {
-            if mount.read_only {
-                return fail_errno(libc::EACCES, -1);
-            }
-            // For stdio-backed files, check host filesystem permissions
-            if mount.fs_type == UIO_FSTYPE_STDIO {
-                if let Ok(metadata) = fs::metadata(&host_path) {
-                    if metadata.permissions().readonly() {
-                        return fail_errno(libc::EACCES, -1);
-                    }
-                }
+            if let Err(errno) = write_permission(&registry, repository, &virtual_path) {
+                return fail_errno(errno, -1);
             }
         }
 
@@ -455,8 +462,7 @@ pub unsafe extern "C" fn uio_stat(
                 {
                     // Check if it's a directory
                     if name.is_empty() || zip_index.is_directory(&name) {
-                        (*stat_buf).st_size = 0;
-                        (*stat_buf).st_mode = 0o040555; // Directory, read+exec for all
+                        fill_directory_stat(stat_buf);
                         return 0;
                     }
 
@@ -492,9 +498,24 @@ pub unsafe extern "C" fn uio_stat(
             }
         }
 
-        // Not found in any mount
+        // No mount holds it; the mount tree may still know it as a directory.
+        if is_virtual_directory(&registry, repository_key((*dir).repository), &virtual_path) {
+            fill_directory_stat(stat_buf);
+            return 0;
+        }
         fail_errno(libc::ENOENT, -1)
     })
+}
+
+/// The `stat` of a directory that no host holds (an archive directory or one
+/// of the mount tree): read and search for everyone, no size.
+///
+/// # Safety
+///
+/// `stat_buf` must be writable.
+unsafe fn fill_directory_stat(stat_buf: *mut stat) {
+    (*stat_buf).st_size = 0;
+    (*stat_buf).st_mode = 0o040555;
 }
 
 /// @plan PLAN-20260314-FILE-IO.P06a
@@ -507,7 +528,7 @@ pub unsafe extern "C" fn uio_stat(
 pub unsafe extern "C" fn uio_mkdir(
     dir: *mut uio_DirHandle,
     path: *const c_char,
-    _mode: mode_t,
+    mode: mode_t,
 ) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_mkdir called");
@@ -546,7 +567,10 @@ pub unsafe extern "C" fn uio_mkdir(
             return fail_errno(errno, -1);
         }
 
-        match fs::create_dir(&plan.target) {
+        match fs::DirBuilder::new()
+            .mode(u32::from(mode))
+            .create(&plan.target)
+        {
             Ok(_) => 0,
             Err(e) => {
                 let err_code = e.raw_os_error().unwrap_or(libc::EIO);
@@ -818,6 +842,19 @@ fn check_relative(flags: c_int, relative: *mut uio_MountHandle) -> Result<(), c_
     }
 }
 
+/// `zip_mount` of the original: an archive can only be mounted read-only, so
+/// a mount without `uio_MOUNT_RDONLY` is EACCES rather than a writable
+/// archive. The archive file was found before this, and is read after it.
+fn index_archive_for_mount(
+    path: &Path,
+    flags: c_int,
+) -> Result<Arc<crate::io::zip_reader::ZipIndex>, c_int> {
+    if flags & UIO_MOUNT_RDONLY != UIO_MOUNT_RDONLY {
+        return Err(libc::EACCES);
+    }
+    index_archive(path)
+}
+
 /// Indexes the archive at `path`. A failure of the host (no such file, no
 /// permission) keeps the host's errno; a file that is not a readable archive
 /// is EIO, as in the original.
@@ -852,7 +889,7 @@ fn register_mount(
         return ptr::null_mut();
     }
     let zip_index = if fs_type == UIO_FSTYPE_ZIP {
-        match index_archive(&mounted_root) {
+        match index_archive_for_mount(&mounted_root, flags) {
             Ok(index) => Some(index),
             Err(errno) => {
                 set_errno(errno);
@@ -2438,6 +2475,29 @@ fn new_access(path_cstr: *mut c_char, copy: Option<StdioCopy>) -> *mut uio_Stdio
     Box::into_raw(Box::new(StdioAccessHandleInner { path_cstr, copy })).cast()
 }
 
+/// Access for writing: the write location `uio_getFileLocation` names for
+/// `flags`, after the same preparation (parents made, an entry of another
+/// mount copied up unless the flags truncate it). A write location is never
+/// an archive, so as in the original nothing is unpacked and no temporary
+/// directory is involved.
+///
+/// # Safety
+///
+/// As for [`uio_getStdioAccess`].
+unsafe fn write_access(
+    dir: *mut uio_DirHandle,
+    path: *const c_char,
+    flags: c_int,
+) -> Result<*mut uio_StdioAccessHandle, c_int> {
+    let (_, location) = file_location(dir, path, flags)?;
+    let path_cstr = duplicate_c_string(&location);
+    if path_cstr.is_null() {
+        Err(libc::ENOMEM)
+    } else {
+        Ok(new_access(path_cstr, None))
+    }
+}
+
 /// # Safety
 ///
 /// As for [`uio_getStdioAccess`].
@@ -2447,11 +2507,11 @@ unsafe fn stdio_access(
     flags: c_int,
     temp_dir: *mut uio_DirHandle,
 ) -> Result<*mut uio_StdioAccessHandle, c_int> {
+    if flags & O_ACCMODE != O_RDONLY {
+        return write_access(dir, path, flags);
+    }
     let dir = dir.as_ref().ok_or(libc::EINVAL)?;
     let input = cstr_to_pathbuf(path).ok_or(libc::EINVAL)?;
-    if flags & O_ACCMODE != O_RDONLY {
-        return Err(libc::ENOSYS);
-    }
     let virtual_path = normalize_virtual_path_full(&dir.virtual_path, &input);
     let source = {
         let registry = get_mount_registry().lock().unwrap();
@@ -2516,6 +2576,11 @@ unsafe fn stdio_access(
 /// writable directory mount now: EPERM on a read-only one, ENOENT when its
 /// mount is gone. Releasing the handle removes the unpacked file and the
 /// directory made for it, never `temp_dir` itself.
+///
+/// With write flags (anything but `O_RDONLY`) the path is the write location
+/// of `uio_open` for those flags, prepared the same way, with the errnos of
+/// `uio_getFileLocation` (EPERM when no writable mount can take it). The file
+/// stays on release, `temp_dir` is not used, and may be NULL.
 ///
 /// # Safety
 ///
@@ -3083,6 +3148,7 @@ fn archive_backing(
     dir: &uio_DirHandle,
     file: &Path,
     in_path: &Path,
+    flags: c_int,
 ) -> Result<MountBacking, c_int> {
     let virtual_path = normalize_virtual_path_full(&dir.virtual_path, file);
     let host_file = {
@@ -3095,7 +3161,7 @@ fn archive_backing(
             (Kind::File, Place::Archive(_)) => return Err(libc::ENOTSUP),
         }
     };
-    let index = index_archive(&host_file)?;
+    let index = index_archive_for_mount(&host_file, flags)?;
     let archive_root = archive_subdirectory(&index, in_path)?;
     Ok(MountBacking {
         mounted_root: host_file,
@@ -3107,11 +3173,11 @@ fn archive_backing(
 
 fn mount_backing(request: &MountRequest<'_>) -> Result<MountBacking, c_int> {
     match &request.source {
-        Some((dir, file)) => archive_backing(dir, file, &request.in_path),
+        Some((dir, file)) => archive_backing(dir, file, &request.in_path, request.flags),
         None if request.fs_type == UIO_FSTYPE_ZIP => Ok(MountBacking {
             mounted_root: request.in_path.clone(),
             fs_type: UIO_FSTYPE_ZIP,
-            zip_index: Some(index_archive(&request.in_path)?),
+            zip_index: Some(index_archive_for_mount(&request.in_path, request.flags)?),
             archive_root: String::new(),
         }),
         None => Ok(MountBacking {
@@ -3259,7 +3325,7 @@ pub unsafe extern "C" fn uio_open(
     dir: *mut uio_DirHandle,
     path: *const c_char,
     flags: c_int,
-    _mode: c_int,
+    mode: c_int,
 ) -> *mut uio_Handle {
     ffi_guard!(ptr::null_mut(), {
         rust_bridge_log_msg(&format!("RUST_UIO: uio_open called with flags {}", flags));
@@ -3273,7 +3339,7 @@ pub unsafe extern "C" fn uio_open(
             return ptr::null_mut();
         };
 
-        match open_through_mounts(dir, &input_path, flags) {
+        match open_through_mounts(dir, &input_path, flags, mode) {
             Ok(inner) => handle_into_raw(inner),
             Err(errno) => {
                 set_errno(errno);
@@ -3304,6 +3370,7 @@ fn open_through_mounts(
     dir: &uio_DirHandle,
     input_path: &Path,
     flags: c_int,
+    mode: c_int,
 ) -> Result<uio_HandleInner, c_int> {
     let virtual_path = normalize_virtual_path_full(&dir.virtual_path, input_path);
     let registry = get_mount_registry().lock().unwrap();
@@ -3321,7 +3388,7 @@ fn open_through_mounts(
         )?;
         drop(registry);
         let flags = prepare_write(&plan, flags)?;
-        return open_host_file(&plan.target, flags)
+        return open_host_file(&plan.target, flags, mode)
             .map(uio_HandleInner::File)
             .map_err(|err| {
                 log_marker(&format!(
@@ -3344,7 +3411,7 @@ fn open_through_mounts(
                 (None, _) => continue,
             }
         } else {
-            open_host_file(&covered.host_path(), flags).map(uio_HandleInner::File)
+            open_host_file(&covered.host_path(), flags, mode).map(uio_HandleInner::File)
         };
 
         match opened {
@@ -3362,10 +3429,16 @@ fn open_through_mounts(
     Err(libc::ENOENT)
 }
 
+/// The mode `uio_fopen` creates files with: read and write for everyone, as
+/// the original's `S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH`.
+const FOPEN_MODE: c_int = 0o666;
+
 /// Opens a host file with the access, creation, truncation and append
-/// behaviour that the `O_*` flags ask for.
-fn open_host_file(host_path: &Path, flags: c_int) -> std::io::Result<std::fs::File> {
+/// behaviour that the `O_*` flags ask for. A file the open creates gets
+/// `mode` less the process umask; an existing file keeps its mode.
+fn open_host_file(host_path: &Path, flags: c_int, mode: c_int) -> std::io::Result<std::fs::File> {
     let mut opts = OpenOptions::new();
+    opts.mode(mode as u32);
     match flags & O_ACCMODE {
         O_WRONLY => opts.write(true),
         O_RDWR => opts.read(true).write(true),
@@ -3472,7 +3545,9 @@ pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat)
     match guard.metadata() {
         Ok(meta) => {
             (*stat_buf).st_size = meta.len() as i64;
-            (*stat_buf).st_mode = if meta.is_file() { 0o100000 } else { 0o040000 };
+            // The host's own type and permission bits: `copyFile` creates its
+            // copy with them.
+            (*stat_buf).st_mode = meta.mode() as mode_t;
             0 // Success
         }
         Err(_) => -1,
@@ -3542,7 +3617,7 @@ pub unsafe extern "C" fn uio_fopen(
             return ptr::null_mut();
         };
 
-        let inner = match open_through_mounts(dir, &input, flags) {
+        let inner = match open_through_mounts(dir, &input, flags, FOPEN_MODE) {
             Ok(inner) => inner,
             Err(errno) => {
                 set_errno(errno);
@@ -3761,54 +3836,75 @@ pub unsafe extern "C" fn uio_getDirList(
                 &filter,
             )
         };
-        log_marker(&format!(
-            "uio_getDirList: {} matches in {:?}",
-            names.len(),
-            virtual_path
-        ));
-        dir_list_from_names(&names)
+        match names {
+            Ok(names) => {
+                log_marker(&format!(
+                    "uio_getDirList: {} matches in {:?}",
+                    names.len(),
+                    virtual_path
+                ));
+                dir_list_from_names(&names)
+            }
+            Err(errno) => fail_errno(errno, ptr::null_mut()),
+        }
     })
 }
 
-/// The names every active mount covering `virtual_path` contributes that the
-/// filter selects. A name several mounts provide is listed once, and the
-/// set's order is byte order, which is what the C implementation's `strcmp`
-/// sort produced. Callers rely on it: the addon packs and archives are
-/// mounted in list order, and that order is their priority.
+/// The names `virtual_path` has in the repository that the filter selects:
+/// what the covering mounts hold there, and the mount-tree directories below
+/// it. A name several of them provide is listed once, and the set's order is
+/// byte order, which is what the C implementation's `strcmp` sort produced.
+/// Callers rely on it: the addon packs and archives are mounted in list
+/// order, and that order is their priority.
+///
+/// The walk is `uio_getPathPhysicalDirs`: a mount that lacks the directory is
+/// passed over, and a file where the directory should be ends the walk with
+/// what was found so far. A mount that holds the directory but cannot be read
+/// fails the listing with the host's errno; the original left such a layer
+/// out and said so only in debug builds, which would present a partial
+/// listing as the whole.
 fn collect_dir_names(
     registry: &[MountInfo],
     repository: usize,
     virtual_path: &Path,
     filter: &NameFilter,
-) -> BTreeSet<Vec<u8>> {
+) -> Result<BTreeSet<Vec<u8>>, c_int> {
     let mut names = BTreeSet::new();
     for covered in covering(registry, repository, virtual_path) {
-        if covered.mount.fs_type == UIO_FSTYPE_ZIP {
-            add_archive_names(&mut names, &covered, filter);
-        } else {
-            add_host_names(&mut names, &covered, filter);
+        match probe(&covered) {
+            Ok(None) => {}
+            Ok(Some((_, Kind::File))) | Err(libc::ENOTDIR) => break,
+            Err(errno) => return Err(errno),
+            Ok(Some((Place::Host(directory), Kind::Directory))) => {
+                add_host_names(&mut names, &directory, filter)?;
+            }
+            Ok(Some((Place::Archive(directory), Kind::Directory))) => {
+                add_archive_names(&mut names, covered.mount, &directory, filter);
+            }
         }
     }
-    names
+    names.extend(
+        virtual_children(registry, repository, virtual_path)
+            .map(OsStrExt::as_bytes)
+            .filter(|name| filter.matches(name))
+            .map(<[u8]>::to_vec),
+    );
+    Ok(names)
 }
 
 /// @plan PLAN-20260314-FILE-IO.P09
 /// @requirement REQ-FIO-ARCHIVE-MOUNT
 fn add_archive_names(
     names: &mut BTreeSet<Vec<u8>>,
-    covered: &resolve::Covering<'_>,
+    mount: &MountInfo,
+    directory: &str,
     filter: &NameFilter,
 ) {
-    let mount = covered.mount;
-    let Some(zip_index) = mount.zip_index.as_ref() else {
-        return;
-    };
-    // Archive entry names are Unicode, so a directory named by other bytes is
-    // not in the archive.
-    let Some(directory) = covered.archive_name() else {
-        return;
-    };
-    let entries = zip_index.list_directory(&directory);
+    let zip_index = mount
+        .zip_index
+        .as_ref()
+        .expect("an archive mount is registered with its index");
+    let entries = zip_index.list_directory(directory);
     log_marker(&format!(
         "uio_getDirList: ZIP mount {:?} returned {} entries for {:?}",
         mount.mount_point,
@@ -3826,35 +3922,18 @@ fn add_archive_names(
 
 fn add_host_names(
     names: &mut BTreeSet<Vec<u8>>,
-    covered: &resolve::Covering<'_>,
+    directory: &Path,
     filter: &NameFilter,
-) {
-    let mount = covered.mount;
-    let host_path = covered.host_path();
-    log_marker(&format!(
-        "uio_getDirList: checking stdio mount {:?} at host_path={:?}",
-        mount.mount_point, host_path
-    ));
-    if !host_path.is_dir() {
-        return;
-    }
-    let entries = match fs::read_dir(&host_path) {
-        Ok(entries) => entries,
-        Err(err) => {
-            log_marker(&format!(
-                "uio_getDirList: read_dir failed for {:?}: {}, skipping mount",
-                host_path, err
-            ));
-            return;
-        }
-    };
-    for entry in entries.flatten() {
+) -> Result<(), c_int> {
+    let host_error = |err: std::io::Error| err.raw_os_error().unwrap_or(libc::EIO);
+    for entry in fs::read_dir(directory).map_err(host_error)? {
         // The bytes the host holds, valid UTF-8 or not.
-        let name = entry.file_name();
+        let name = entry.map_err(host_error)?.file_name();
         if filter.matches(name.as_bytes()) {
             names.insert(name.as_bytes().to_vec());
         }
     }
+    Ok(())
 }
 
 /// Lays the names out the way C reads a `uio_DirList`: one buffer of
@@ -7315,3 +7394,15 @@ mod resolution_tests;
 #[cfg(test)]
 #[path = "uio_write_location_tests.rs"]
 mod write_location_tests;
+
+#[cfg(test)]
+#[path = "uio_virtual_dir_tests.rs"]
+mod virtual_dir_tests;
+
+#[cfg(test)]
+#[path = "uio_mode_tests.rs"]
+mod mode_tests;
+
+#[cfg(test)]
+#[path = "uio_stdio_write_tests.rs"]
+mod stdio_write_tests;

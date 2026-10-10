@@ -162,7 +162,8 @@ fn cs1_archive_names_that_differ_only_in_case_are_distinct_files() {
     ] {
         assert!(root.read(path).is_err(), "{path} matched across case");
     }
-    assert_eq!(root.list_all(), ["CASE", "Case", "case"]);
+    // `packages` is the mount point of the directory the archive lies in.
+    assert_eq!(root.list_all(), ["CASE", "Case", "case", "packages"]);
 }
 
 #[test]
@@ -180,7 +181,8 @@ fn cs2_listing_patterns_are_case_sensitive_unless_the_pattern_says_otherwise() {
             "addons",
             "c.Rmp",
             "d.rmpx",
-            "e.rmp.bak"
+            "e.rmp.bak",
+            "packages"
         ]
     );
     assert_eq!(root.list(".rmp", MATCH_SUFFIX), ["a.rmp"]);

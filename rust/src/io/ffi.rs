@@ -1,6 +1,7 @@
 // FFI bindings for I/O module
 // Provides C-compatible interface for file and directory operations
 
+use libc::stat;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
@@ -43,24 +44,6 @@ pub struct uio_Stream {
 #[repr(C)]
 pub struct uio_Handle {
     _private: [u8; 0],
-}
-
-// stat struct for uio_fstat
-#[repr(C)]
-pub struct stat {
-    pub st_dev: u64,
-    pub st_mode: u32,
-    pub st_nlink: u32,
-    pub st_ino: u64,
-    pub st_uid: u32,
-    pub st_gid: u32,
-    pub st_rdev: u64,
-    pub st_size: i64,
-    pub st_atime: i64,
-    pub st_mtime: i64,
-    pub st_ctime: i64,
-    pub st_blksize: i64,
-    pub st_blocks: i64,
 }
 
 // FFI bindings to C uio_* functions

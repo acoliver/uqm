@@ -179,7 +179,7 @@ fn a_byte_path_is_never_read_as_the_replacement_character_file() {
 fn an_archive_entry_is_not_found_by_bytes_that_only_look_like_its_name() {
     let mut stack = Stack::new();
     let name = format!("{REPLACEMENT_CHARACTER}.dat");
-    stack.mount_zip(&[(&name, b"archived")], UIO_MOUNT_TOP, 0);
+    stack.mount_zip(&[(&name, b"archived")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY, 0);
     assert_eq!(stat_size(&stack, name.as_bytes()), Ok(8));
     assert_eq!(
         read_file(&stack, name.as_bytes()).as_deref(),
@@ -222,7 +222,7 @@ fn archive_and_directory_names_merge_into_one_sorted_unique_list() {
             ("pack.txt", b"zip"),
             ("zeta.txt", b"zip"),
         ],
-        UIO_MOUNT_TOP,
+        UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
         0,
     );
     stack.mount_dir(
@@ -248,7 +248,7 @@ fn host_files_named_by_bytes_are_listed_statted_and_read_beside_an_archive() {
     let mut stack = Stack::new();
     stack.mount_zip(
         &[("caf\u{e9}.txt", b"unicode name in the archive")],
-        UIO_MOUNT_BOTTOM,
+        UIO_MOUNT_BOTTOM | UIO_MOUNT_RDONLY,
         0,
     );
     let host = stack.mount_dir(&[], UIO_MOUNT_TOP);
@@ -295,7 +295,7 @@ fn host_files_named_by_bytes_are_listed_statted_and_read_beside_an_archive() {
 fn a_directory_named_by_other_bytes_is_not_the_archive_directory_it_resembles() {
     let mut stack = Stack::new();
     let inner = format!("{REPLACEMENT_CHARACTER}/inner.txt");
-    stack.mount_zip(&[(&inner, b"x")], UIO_MOUNT_TOP, 0);
+    stack.mount_zip(&[(&inner, b"x")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY, 0);
     assert_eq!(
         list_in(&stack, REPLACEMENT_CHARACTER.as_bytes(), b"", MATCH_PREFIX),
         vec![b"inner.txt".to_vec()]

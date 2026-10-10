@@ -997,6 +997,116 @@ fn mount_dir_refuses_inconsistent_sources_types_and_mount_points() {
 }
 
 // ---------------------------------------------------------------------------
+// F12: an archive can only be mounted read-only (zip_mount)
+// ---------------------------------------------------------------------------
+
+fn mount_count() -> usize {
+    get_mount_registry().lock().unwrap().len()
+}
+
+#[test]
+#[serial]
+fn a_zip_mount_without_the_read_only_bit_is_refused_with_eacces() {
+    let mut fx = Fx::new();
+    let repo = fx.repo();
+    let host = fx.host(&[]);
+    write_zip(&host.join("p.zip"), &[("f.txt", b"f")]);
+    assert!(!mount_stdio(repo, "/", &host, RDONLY_TOP).is_null());
+    let root = open_dir(repo, "/");
+    let mounts = mount_count();
+    for flags in [UIO_MOUNT_TOP, UIO_MOUNT_BOTTOM] {
+        assert!(
+            mount_zip(repo, "/z", root, "p.zip", flags).is_null(),
+            "{flags}"
+        );
+        assert_eq!(errno_value(), libc::EACCES, "{flags}");
+        assert_eq!(
+            mount_count(),
+            mounts,
+            "a refused mount registers nothing: {flags}"
+        );
+    }
+    // The same call with the bit mounts, and its content reads.
+    assert!(!mount_zip(repo, "/z", root, "p.zip", UIO_MOUNT_TOP | UIO_MOUNT_RDONLY).is_null());
+    assert_eq!(read(root, "z/f.txt"), Ok(b"f".to_vec()));
+    assert_eq!(mount_count(), mounts + 1);
+}
+
+#[test]
+#[serial]
+fn a_zip_mount_from_a_host_path_needs_the_read_only_bit_too() {
+    let mut fx = Fx::new();
+    let repo = fx.repo();
+    let host = fx.host(&[]);
+    write_zip(&host.join("p.zip"), &[("f.txt", b"f")]);
+    let (point, archive, slash) = (
+        cstr("/z"),
+        CString::new(host.join("p.zip").as_os_str().as_bytes()).unwrap(),
+        cstr("/"),
+    );
+    let mount = |flags: c_int| unsafe {
+        uio_mountDir(
+            repo,
+            point.as_ptr(),
+            UIO_FSTYPE_ZIP,
+            ptr::null_mut(),
+            ptr::null(),
+            archive.as_ptr(),
+            ptr::null_mut(),
+            flags,
+            ptr::null_mut(),
+        )
+    };
+    let _ = slash;
+    assert!(mount(UIO_MOUNT_TOP).is_null());
+    assert_eq!(errno_value(), libc::EACCES);
+    assert!(!mount(UIO_MOUNT_TOP | UIO_MOUNT_RDONLY).is_null());
+}
+
+#[test]
+#[serial]
+fn the_read_only_check_comes_after_finding_the_source_and_before_reading_it() {
+    let mut fx = Fx::new();
+    let repo = fx.repo();
+    let host = fx.host(&[("bogus.zip", b"this is not a zip archive")]);
+    assert!(!mount_stdio(repo, "/", &host, RDONLY_TOP).is_null());
+    let root = open_dir(repo, "/");
+    // As in the original: the source file is opened first (ENOENT), then
+    // zip_mount refuses a writable flag (EACCES) before it reads the archive.
+    assert!(mount_zip(repo, "/z", root, "missing.zip", UIO_MOUNT_TOP).is_null());
+    assert_eq!(errno_value(), libc::ENOENT);
+    assert!(mount_zip(repo, "/z", root, "bogus.zip", UIO_MOUNT_TOP).is_null());
+    assert_eq!(errno_value(), libc::EACCES);
+    assert!(mount_zip(repo, "/z", root, "bogus.zip", RDONLY_TOP).is_null());
+    assert_eq!(errno_value(), libc::EIO);
+}
+
+#[test]
+#[serial]
+fn the_test_registration_helper_enforces_the_same_rule() {
+    let mut fx = Fx::new();
+    let host = fx.host(&[]);
+    write_zip(&host.join("p.zip"), &[("f.txt", b"f")]);
+    let repo = fx.repo();
+    let mounts = mount_count();
+    let register = |flags: c_int| {
+        register_mount(
+            repo,
+            Path::new("/z"),
+            host.join("p.zip"),
+            UIO_FSTYPE_ZIP,
+            flags,
+            ptr::null_mut(),
+            true,
+        )
+    };
+    assert!(register(UIO_MOUNT_TOP).is_null());
+    assert_eq!(errno_value(), libc::EACCES);
+    assert_eq!(mount_count(), mounts);
+    assert!(!register(UIO_MOUNT_TOP | UIO_MOUNT_RDONLY).is_null());
+}
+
+// ---------------------------------------------------------------------------
 // Properties: archive layouts and byte names against small models
 // ---------------------------------------------------------------------------
 

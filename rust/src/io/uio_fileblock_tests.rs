@@ -444,7 +444,11 @@ fn a_block_over_a_stream_handle_outlives_the_stream() {
 #[serial]
 fn a_block_over_an_archive_entry_outlives_the_handle() {
     let mut stack = Stack::new();
-    stack.mount_zip(&[("digits.txt", DIGITS)], UIO_MOUNT_TOP, 0);
+    stack.mount_zip(
+        &[("digits.txt", DIGITS)],
+        UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+        0,
+    );
     let file = handle(&stack, "digits.txt");
     unsafe {
         let owners = watch(file);

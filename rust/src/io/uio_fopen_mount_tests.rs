@@ -276,7 +276,11 @@ fn fopen_for_writing_refuses_a_read_only_mount_and_an_archive() {
     );
 
     let mut stack = Stack::new();
-    stack.mount_zip(&[("packed.txt", b"zip")], UIO_MOUNT_TOP, 0);
+    stack.mount_zip(
+        &[("packed.txt", b"zip")],
+        UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+        0,
+    );
     assert!(fopen(stack.root, "packed.txt", "w").is_null());
     assert_eq!(errno_value(), libc::EPERM, "an archive is never writable");
     assert_eq!(

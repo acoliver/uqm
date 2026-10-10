@@ -12,11 +12,12 @@
 //! that holds it above every writable one means EPERM, and an entry in a
 //! mount below the write location is copied up first.
 
-use std::ffi::OsStr;
-use std::fs::{self, File, OpenOptions};
+use std::ffi::{CString, OsStr};
+use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io;
 use std::os::raw::c_int;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -26,6 +27,10 @@ use crate::io::zip_reader::ZipIndex;
 
 /// Permission bits of a copy of an archive entry; archives carry none.
 const ARCHIVE_COPY_MODE: u32 = 0o644;
+
+/// The mode `uio_makePath` gives the directories a copy-up makes; the umask
+/// takes its share.
+const PARENT_DIRECTORY_MODE: u32 = 0o777;
 
 /// What the caller wants to do with the path.
 #[derive(Clone, Copy)]
@@ -140,6 +145,71 @@ pub(super) fn plan_write(
     })
 }
 
+impl WritePlan {
+    /// Whether the host lets this process write at the target: the entry
+    /// itself if the write location holds it, otherwise the nearest directory
+    /// that exists, where the parents and the copy would be made.
+    fn host_allows_write(&self) -> Result<(), c_int> {
+        let nearest = self
+            .target
+            .ancestors()
+            .find(|path| path.exists())
+            .ok_or(libc::ENOENT)?;
+        host_access_write(nearest)
+    }
+}
+
+/// `access(path, W_OK)` as the host answers it for this process: the owner,
+/// group and other classes, read-only file systems and all.
+fn host_access_write(path: &Path) -> Result<(), c_int> {
+    let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| libc::EINVAL)?;
+    // SAFETY: `path` is a valid NUL-terminated string for the whole call.
+    if unsafe { libc::access(path.as_ptr(), libc::W_OK) } == 0 {
+        Ok(())
+    } else {
+        Err(errno_of(&io::Error::last_os_error()))
+    }
+}
+
+/// Whether a write to `virtual_path`, which exists, would succeed: the answer
+/// of `uio_access(W_OK)`, which asks the planner `uio_open` asks and does
+/// nothing. EACCES when the walk reaches no writable mount (the planner's
+/// EPERM), or the host's errno for the write location. A directory is
+/// writable when the first writable mount that holds it allows it.
+pub(super) fn write_permission(
+    registry: &[MountInfo],
+    repository: usize,
+    virtual_path: &Path,
+) -> Result<(), c_int> {
+    let intent = WriteIntent {
+        create: false,
+        exclusive: false,
+        parents: Parents::Make,
+    };
+    match plan_write(registry, repository, virtual_path, intent) {
+        Ok(plan) => plan.host_allows_write(),
+        Err(libc::EPERM) => Err(libc::EACCES),
+        Err(libc::EISDIR) => directory_write_permission(registry, repository, virtual_path),
+        Err(errno) => Err(errno),
+    }
+}
+
+fn directory_write_permission(
+    registry: &[MountInfo],
+    repository: usize,
+    virtual_path: &Path,
+) -> Result<(), c_int> {
+    for item in covering(registry, repository, virtual_path) {
+        match probe(&item)? {
+            Some((Place::Host(path), Kind::Directory)) if !item.mount.is_read_only() => {
+                return host_access_write(&path);
+            }
+            _ => {}
+        }
+    }
+    Err(libc::EACCES)
+}
+
 fn copy_source(item: &Covering<'_>, place: Place) -> CopySource {
     match place {
         Place::Host(path) => CopySource::Host(path),
@@ -176,7 +246,11 @@ fn missing_parent(writable: &Covering<'_>, parents: Parents) -> Result<Option<Pa
 /// truncating open copies nothing and drops `O_TRUNC`, as the original does.
 pub(super) fn prepare_write(plan: &WritePlan, flags: c_int) -> Result<c_int, c_int> {
     if let Some(parent) = &plan.missing_parent {
-        fs::create_dir_all(parent).map_err(|err| errno_of(&err))?;
+        DirBuilder::new()
+            .recursive(true)
+            .mode(PARENT_DIRECTORY_MODE)
+            .create(parent)
+            .map_err(|err| errno_of(&err))?;
     }
     let Some(source) = &plan.copy_from else {
         return Ok(flags);

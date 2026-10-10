@@ -13,6 +13,7 @@
 //! wrong kind or a failure of the host ends it. Failures of the host or of an
 //! archive are returned as the errno the host gave, never as "not found".
 
+use std::ffi::OsStr;
 use std::fs;
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
@@ -38,18 +39,15 @@ where
     'r: 'p,
 {
     debug_assert!(virtual_path.is_absolute(), "{virtual_path:?}");
-    registry
-        .iter()
-        .filter(move |mount| mount.active_in_registry && mount.repository == repository)
-        .filter_map(move |mount| {
-            virtual_path
-                .strip_prefix(&mount.mount_point)
-                .ok()
-                .map(|suffix| Covering {
-                    mount,
-                    suffix: suffix.to_path_buf(),
-                })
-        })
+    active_mounts(registry, repository).filter_map(move |mount| {
+        virtual_path
+            .strip_prefix(&mount.mount_point)
+            .ok()
+            .map(|suffix| Covering {
+                mount,
+                suffix: suffix.to_path_buf(),
+            })
+    })
 }
 
 impl<'a> Covering<'a> {
@@ -198,7 +196,7 @@ pub(super) fn verify_directory(
     repository: usize,
     virtual_path: &Path,
 ) -> Result<(), c_int> {
-    if is_mount_tree_directory(registry, repository, virtual_path) {
+    if is_virtual_directory(registry, repository, virtual_path) {
         return Ok(());
     }
     match locate(registry, repository, virtual_path)?.kind {
@@ -208,13 +206,42 @@ pub(super) fn verify_directory(
 }
 
 /// The root and every directory that is a mount point or lies on the way to
-/// one exist whether or not a mount holds anything there.
-fn is_mount_tree_directory(registry: &[MountInfo], repository: usize, virtual_path: &Path) -> bool {
+/// one exist whether or not a mount holds anything there: the mount tree of
+/// the original. This is the one place that says so; `uio_openDir` (through
+/// [`verify_directory`]), `uio_stat`, `uio_access` and `uio_getDirList` all
+/// ask it, for the repository they were called on. Components are compared
+/// whole (`/de` is not above `/deep/er`).
+///
+/// A mount holding an entry of the same name has the last word about what
+/// that entry is: callers look at the mounts first and come here only for a
+/// path no mount holds.
+pub(super) fn is_virtual_directory(
+    registry: &[MountInfo],
+    repository: usize,
+    virtual_path: &Path,
+) -> bool {
     virtual_path == Path::new("/")
-        || registry
-            .iter()
-            .filter(|mount| mount.active_in_registry && mount.repository == repository)
+        || active_mounts(registry, repository)
             .any(|mount| mount.mount_point.starts_with(virtual_path))
+}
+
+/// The names of the mount-tree directories directly below `directory`: the
+/// next component of every mount point that lies below it.
+pub(super) fn virtual_children<'r>(
+    registry: &'r [MountInfo],
+    repository: usize,
+    directory: &'r Path,
+) -> impl Iterator<Item = &'r OsStr> + 'r {
+    active_mounts(registry, repository).filter_map(move |mount| {
+        let below = mount.mount_point.strip_prefix(directory).ok()?;
+        below.components().next().map(|name| name.as_os_str())
+    })
+}
+
+fn active_mounts(registry: &[MountInfo], repository: usize) -> impl Iterator<Item = &MountInfo> {
+    registry
+        .iter()
+        .filter(move |mount| mount.active_in_registry && mount.repository == repository)
 }
 
 /// The physical directory `uio_transplantDir` copies: the first read-only
