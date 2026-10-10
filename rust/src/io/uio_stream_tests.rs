@@ -187,6 +187,59 @@ fn ungetc_steps_back_so_the_byte_is_read_again() {
 
 #[test]
 #[serial]
+fn ungetc_of_a_byte_that_was_not_read_is_refused_and_keeps_the_position() {
+    let dir = Dir::new(&[("t.txt", b"QRS")]);
+    let stream = dir.must_open("t.txt", "r");
+    unsafe {
+        assert_eq!(uio_fgetc(stream), b'Q' as c_int);
+        assert_eq!(
+            uio_ungetc(b'Z' as c_int, stream),
+            -1,
+            "the stream cannot hand back a byte it never held"
+        );
+        assert_eq!(uio_ftell(stream), 1, "a refused pushback moves nothing");
+        assert_eq!(uio_fgetc(stream), b'R' as c_int);
+        uio_fclose(stream);
+    }
+}
+
+#[test]
+#[serial]
+fn ungetc_of_end_of_file_is_refused() {
+    let dir = Dir::new(&[("t.txt", b"QRS")]);
+    let stream = dir.must_open("t.txt", "r");
+    unsafe {
+        assert_eq!(uio_fgetc(stream), b'Q' as c_int);
+        assert_eq!(uio_ungetc(-1, stream), -1);
+        assert_eq!(uio_ftell(stream), 1);
+        uio_fclose(stream);
+    }
+}
+
+#[test]
+#[serial]
+fn a_successful_ungetc_clears_the_end_of_file_flag() {
+    let dir = Dir::new(&[("t.txt", b"Q")]);
+    let stream = dir.must_open("t.txt", "r");
+    unsafe {
+        assert_eq!(uio_fgetc(stream), b'Q' as c_int);
+        assert_eq!(uio_fgetc(stream), -1);
+        assert_ne!(uio_feof(stream), 0);
+
+        assert_eq!(uio_ungetc(b'Q' as c_int, stream), b'Q' as c_int);
+
+        assert_eq!(
+            uio_feof(stream),
+            0,
+            "a pushed-back byte means not at the end"
+        );
+        assert_eq!(uio_fgetc(stream), b'Q' as c_int);
+        uio_fclose(stream);
+    }
+}
+
+#[test]
+#[serial]
 fn ungetc_at_the_start_of_the_file_fails() {
     let dir = Dir::new(&[("t.txt", b"QRS")]);
     let stream = dir.must_open("t.txt", "r");

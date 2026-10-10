@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use rodio::buffer::SamplesBuffer;
-use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{OutputStream, Sink, Source};
 
 use crate::bridge_log::rust_bridge_log_msg;
 
@@ -325,7 +325,10 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
             rust_bridge_log_msg("RODIO_BACKEND: channel closed");
             break;
         };
-        if handle_audio_cmd(&mut state, &stream_handle, cmd) == AudioLoop::Stop {
+        let play = |state: &mut AudioThreadState, id: AudioObject| {
+            play_source(&mut state.sources, &state.buffers, &stream_handle, id);
+        };
+        if handle_audio_cmd(&mut state, cmd, play) == AudioLoop::Stop {
             break;
         }
     }
@@ -334,10 +337,13 @@ fn audio_thread_main(rx: Receiver<AudioCmd>) {
 }
 
 /// Serve one command, reporting whether the thread should keep running.
+///
+/// Starting playback needs the output device, so the caller supplies how a
+/// source is played.
 fn handle_audio_cmd(
     state: &mut AudioThreadState,
-    stream_handle: &OutputStreamHandle,
     cmd: AudioCmd,
+    play: impl FnOnce(&mut AudioThreadState, AudioObject),
 ) -> AudioLoop {
     match cmd {
         AudioCmd::GenSources(n, response) => {
@@ -353,9 +359,7 @@ fn handle_audio_cmd(
         AudioCmd::SourceGetInt(id, prop, response) => {
             let _ = response.send(source_int_value(&mut state.sources, id, prop));
         }
-        AudioCmd::SourcePlay(id) => {
-            play_source(&mut state.sources, &state.buffers, stream_handle, id);
-        }
+        AudioCmd::SourcePlay(id) => play(state, id),
         AudioCmd::SourcePause(id) => source_pause(&mut state.sources, id),
         AudioCmd::SourceStop(id) => source_stop(&mut state.sources, id),
         AudioCmd::SourceRewind(id) => source_rewind(&mut state.sources, id),
@@ -1122,5 +1126,913 @@ mod audio_command_tests {
         assert_eq!(taken.len(), 2, "only processed buffers come back");
         assert!(sources[&id].processed_buffers.is_empty());
         assert!(source_unqueue_buffers(&mut sources, 999, 1).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod source_state_tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    fn buffer(channels: u16, frames: usize, frequency: u32) -> BufferData {
+        BufferData {
+            format: if channels == 2 {
+                AUDIO_FORMAT_STEREO16
+            } else {
+                AUDIO_FORMAT_MONO16
+            },
+            frequency,
+            samples: vec![0; frames * channels as usize],
+            channels,
+            size: (frames * channels as usize * 2) as u32,
+        }
+    }
+
+    fn queued(id: AudioObject, samples: usize) -> QueuedBuffer {
+        QueuedBuffer { id, samples }
+    }
+
+    fn one_source(state: SourceState) -> (HashMap<AudioObject, SourceState>, AudioObject) {
+        let mut sources = HashMap::new();
+        sources.insert(77, state);
+        (sources, 77)
+    }
+
+    #[test]
+    fn a_new_source_is_initial_with_unity_gain_and_nothing_queued() {
+        let src = SourceState::new();
+
+        assert_eq!(src.state, AUDIO_INITIAL);
+        assert_eq!(src.gain, 1.0);
+        assert!(!src.looping);
+        assert!(src.sink.is_none());
+        assert!(src.queued_buffers.is_empty());
+        assert!(src.processed_buffers.is_empty());
+        assert_eq!(src.samples_played(), 0);
+    }
+
+    #[test]
+    fn samples_played_without_a_sample_rate_is_only_the_banked_count() {
+        let mut src = SourceState::new();
+        src.samples_played_before_pause = 7;
+        src.play_start_time = Some(Instant::now() - Duration::from_secs(5));
+
+        assert_eq!(src.samples_played(), 7);
+    }
+
+    #[test]
+    fn samples_played_adds_the_running_clock_to_the_banked_count() {
+        let mut src = SourceState::new();
+        src.sample_rate = 1000;
+        src.samples_played_before_pause = 500;
+        src.play_start_time = Some(Instant::now() - Duration::from_secs(2));
+
+        assert!(src.samples_played() >= 2500);
+    }
+
+    #[test]
+    fn samples_played_ignores_the_clock_while_not_running() {
+        let mut src = SourceState::new();
+        src.sample_rate = 1000;
+        src.samples_played_before_pause = 321;
+
+        assert_eq!(src.samples_played(), 321);
+    }
+
+    #[test]
+    fn only_fully_played_buffers_move_to_processed() {
+        let mut src = SourceState::new();
+        src.sample_rate = 1000;
+        src.queued_buffers = vec![queued(1, 100), queued(2, 100), queued(3, 100)];
+        src.total_samples_queued = 300;
+        src.samples_played_before_pause = 250;
+
+        src.update_processed_buffers();
+
+        assert_eq!(src.processed_buffers, [1, 2]);
+        let remaining: Vec<AudioObject> = src.queued_buffers.iter().map(|b| b.id).collect();
+        assert_eq!(remaining, [3]);
+        assert_eq!(src.samples_consumed, 200);
+        assert_eq!(src.total_samples_queued, 100);
+
+        // A second look at the same clock must not move anything again.
+        src.update_processed_buffers();
+        assert_eq!(src.processed_buffers, [1, 2]);
+        assert_eq!(src.samples_consumed, 200);
+    }
+
+    #[test]
+    fn nothing_moves_before_playback_has_covered_the_first_buffer() {
+        let mut src = SourceState::new();
+        src.sample_rate = 1000;
+        src.queued_buffers = vec![queued(1, 100)];
+        src.total_samples_queued = 100;
+        src.samples_played_before_pause = 99;
+
+        src.update_processed_buffers();
+
+        assert!(src.processed_buffers.is_empty());
+        assert_eq!(src.queued_buffers.len(), 1);
+        assert_eq!(src.samples_consumed, 0);
+        assert_eq!(src.total_samples_queued, 100);
+    }
+
+    #[test]
+    fn an_unknown_source_reads_as_zero_for_every_property() {
+        let mut sources = HashMap::new();
+
+        for prop in [
+            AUDIO_SOURCE_STATE,
+            AUDIO_BUFFERS_QUEUED,
+            AUDIO_BUFFERS_PROCESSED,
+        ] {
+            assert_eq!(source_int_value(&mut sources, 5, prop), 0);
+        }
+    }
+
+    #[test]
+    fn a_sinkless_source_reports_its_stored_state_and_queue() {
+        let mut src = SourceState::new();
+        src.queued_buffers = vec![queued(1, 10), queued(2, 10)];
+        src.looping = true;
+        let (mut sources, id) = one_source(src);
+
+        assert_eq!(
+            source_int_value(&mut sources, id, AUDIO_SOURCE_STATE),
+            AUDIO_INITIAL as AudioIntVal
+        );
+        assert_eq!(source_int_value(&mut sources, id, AUDIO_BUFFERS_QUEUED), 2);
+        assert_eq!(source_int_value(&mut sources, id, AUDIO_LOOPING), 1);
+        assert_eq!(source_int_value(&mut sources, id, AUDIO_GAIN), 0);
+    }
+
+    #[test]
+    fn a_source_that_is_not_looping_reads_zero_for_looping() {
+        let (mut sources, id) = one_source(SourceState::new());
+
+        assert_eq!(source_int_value(&mut sources, id, AUDIO_LOOPING), 0);
+    }
+
+    #[test]
+    fn a_drained_sink_turns_the_source_stopped() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.state = AUDIO_PLAYING;
+        src.play_start_time = Some(Instant::now());
+        src.sink = Some(sink);
+        let (mut sources, id) = one_source(src);
+
+        let state = source_int_value(&mut sources, id, AUDIO_SOURCE_STATE);
+
+        assert_eq!(state, AUDIO_STOPPED as AudioIntVal);
+        assert_eq!(sources[&id].state, AUDIO_STOPPED);
+        assert!(sources[&id].play_start_time.is_none());
+    }
+
+    #[test]
+    fn a_sink_holding_audio_reports_playing_then_paused() {
+        let (sink, _output) = Sink::new_idle();
+        sink.append(rodio::buffer::SamplesBuffer::new(1, 8000, vec![0i16; 16]));
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        let (mut sources, id) = one_source(src);
+
+        assert_eq!(
+            source_int_value(&mut sources, id, AUDIO_SOURCE_STATE),
+            AUDIO_PLAYING as AudioIntVal
+        );
+
+        sources[&id].sink.as_ref().unwrap().pause();
+        assert_eq!(
+            source_int_value(&mut sources, id, AUDIO_SOURCE_STATE),
+            AUDIO_PAUSED as AudioIntVal
+        );
+    }
+
+    #[test]
+    fn a_drained_sink_retires_every_queued_buffer() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        src.queued_buffers = vec![queued(1, 10), queued(2, 10), queued(3, 10)];
+        src.total_samples_queued = 30;
+        src.samples_consumed = 4;
+        let (mut sources, id) = one_source(src);
+
+        let processed = source_int_value(&mut sources, id, AUDIO_BUFFERS_PROCESSED);
+
+        assert_eq!(processed, 3);
+        let src = &sources[&id];
+        assert!(src.queued_buffers.is_empty());
+        assert_eq!(src.processed_buffers, [3, 2, 1], "retired from the back");
+        assert_eq!(src.total_samples_queued, 0);
+        assert_eq!(src.samples_consumed, 0);
+    }
+
+    #[test]
+    fn a_live_sink_retires_buffers_by_the_playback_estimate() {
+        let (sink, _output) = Sink::new_idle();
+        sink.append(rodio::buffer::SamplesBuffer::new(1, 10, vec![0i16; 100]));
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        src.sample_rate = 10;
+        src.samples_played_before_pause = 15;
+        src.queued_buffers = vec![queued(1, 10), queued(2, 10)];
+        src.total_samples_queued = 20;
+        let (mut sources, id) = one_source(src);
+
+        let processed = source_int_value(&mut sources, id, AUDIO_BUFFERS_PROCESSED);
+
+        assert_eq!(processed, 1);
+        assert_eq!(sources[&id].processed_buffers, [1]);
+        assert_eq!(sources[&id].queued_buffers.len(), 1);
+    }
+
+    #[test]
+    fn a_sinkless_source_retires_buffers_by_the_playback_estimate_too() {
+        let mut src = SourceState::new();
+        src.sample_rate = 10;
+        src.samples_played_before_pause = 25;
+        src.queued_buffers = vec![queued(1, 10), queued(2, 10), queued(3, 10)];
+        src.total_samples_queued = 30;
+        let (mut sources, id) = one_source(src);
+
+        assert_eq!(
+            source_int_value(&mut sources, id, AUDIO_BUFFERS_PROCESSED),
+            2
+        );
+    }
+
+    #[test]
+    fn setting_a_buffer_replaces_the_queue_with_exactly_that_buffer() {
+        let mut buffers = HashMap::new();
+        buffers.insert(9, buffer(2, 50, 22050));
+        let mut src = SourceState::new();
+        src.queued_buffers = vec![queued(1, 10), queued(2, 10)];
+        src.processed_buffers = vec![4];
+        src.total_samples_queued = 20;
+        src.samples_consumed = 6;
+        let (mut sources, id) = one_source(src);
+
+        source_set_int(&mut sources, &buffers, id, AUDIO_BUFFER, 9);
+
+        let src = &sources[&id];
+        let ids: Vec<AudioObject> = src.queued_buffers.iter().map(|b| b.id).collect();
+        assert_eq!(ids, [9]);
+        assert_eq!(
+            src.queued_buffers[0].samples, 50,
+            "frames, not interleaved samples"
+        );
+        assert!(src.processed_buffers.is_empty());
+        assert_eq!(src.total_samples_queued, 50);
+        assert_eq!(src.samples_consumed, 0);
+        assert_eq!(src.sample_rate, 22050);
+    }
+
+    #[test]
+    fn setting_buffer_zero_detaches_everything() {
+        let mut src = SourceState::new();
+        src.queued_buffers = vec![queued(1, 10)];
+        src.processed_buffers = vec![2];
+        src.total_samples_queued = 10;
+        let (mut sources, id) = one_source(src);
+
+        source_set_int(&mut sources, &HashMap::new(), id, AUDIO_BUFFER, 0);
+
+        let src = &sources[&id];
+        assert!(src.queued_buffers.is_empty());
+        assert!(src.processed_buffers.is_empty());
+        assert_eq!(src.total_samples_queued, 0);
+    }
+
+    #[test]
+    fn setting_an_unknown_buffer_queues_a_silent_placeholder() {
+        let (mut sources, id) = one_source(SourceState::new());
+
+        source_set_int(&mut sources, &HashMap::new(), id, AUDIO_BUFFER, 404);
+
+        let src = &sources[&id];
+        assert_eq!(src.queued_buffers.len(), 1);
+        assert_eq!(src.queued_buffers[0].id, 404);
+        assert_eq!(src.queued_buffers[0].samples, 0);
+        assert_eq!(src.sample_rate, 0, "an unknown buffer has no rate to adopt");
+    }
+
+    #[test]
+    fn looping_follows_the_integer_value_and_other_properties_are_ignored() {
+        let (mut sources, id) = one_source(SourceState::new());
+
+        source_set_int(&mut sources, &HashMap::new(), id, AUDIO_LOOPING, 1);
+        assert!(sources[&id].looping);
+        source_set_int(&mut sources, &HashMap::new(), id, AUDIO_GAIN, 5);
+        assert!(sources[&id].looping, "gain is not an integer property");
+        source_set_int(&mut sources, &HashMap::new(), id, AUDIO_LOOPING, 0);
+        assert!(!sources[&id].looping);
+
+        // Unknown sources are skipped without being invented.
+        source_set_int(&mut sources, &HashMap::new(), 1234, AUDIO_LOOPING, 1);
+        assert!(!sources.contains_key(&1234));
+    }
+
+    #[test]
+    fn gain_is_stored_and_pushed_to_a_live_sink() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        let (mut sources, id) = one_source(src);
+
+        source_set_float(&mut sources, id, AUDIO_GAIN, 0.25);
+        assert_eq!(sources[&id].gain, 0.25);
+        assert_eq!(sources[&id].sink.as_ref().unwrap().volume(), 0.25);
+
+        source_set_float(&mut sources, id, AUDIO_POSITION, 0.9);
+        assert_eq!(sources[&id].gain, 0.25, "only gain is a float property");
+
+        source_set_float(&mut sources, 1234, AUDIO_GAIN, 0.5);
+        assert!(!sources.contains_key(&1234));
+    }
+
+    #[test]
+    fn pausing_banks_the_samples_played_and_stops_the_clock() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        src.sample_rate = 1000;
+        src.state = AUDIO_PLAYING;
+        src.play_start_time = Some(Instant::now() - Duration::from_secs(1));
+        let (mut sources, id) = one_source(src);
+
+        source_pause(&mut sources, id);
+
+        let src = &sources[&id];
+        assert_eq!(src.state, AUDIO_PAUSED);
+        assert!(src.sink.as_ref().unwrap().is_paused());
+        assert!(src.play_start_time.is_none());
+        assert!(src.samples_played_before_pause >= 1000);
+    }
+
+    #[test]
+    fn pausing_a_source_that_never_started_keeps_its_banked_count() {
+        let mut src = SourceState::new();
+        src.samples_played_before_pause = 42;
+        let (mut sources, id) = one_source(src);
+
+        source_pause(&mut sources, id);
+
+        assert_eq!(sources[&id].state, AUDIO_PAUSED);
+        assert_eq!(sources[&id].samples_played_before_pause, 42);
+
+        source_pause(&mut sources, 1234);
+        assert!(!sources.contains_key(&1234));
+    }
+
+    #[test]
+    fn stopping_retires_the_queue_and_resets_the_counters() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        src.state = AUDIO_PLAYING;
+        src.play_start_time = Some(Instant::now());
+        src.samples_played_before_pause = 9;
+        src.total_samples_queued = 20;
+        src.samples_consumed = 5;
+        src.queued_buffers = vec![queued(1, 10), queued(2, 10)];
+        let (mut sources, id) = one_source(src);
+
+        source_stop(&mut sources, id);
+
+        let src = &sources[&id];
+        assert!(src.sink.is_none());
+        assert_eq!(src.state, AUDIO_STOPPED);
+        assert!(src.queued_buffers.is_empty());
+        assert_eq!(src.processed_buffers, [2, 1]);
+        assert!(src.play_start_time.is_none());
+        assert_eq!(src.samples_played_before_pause, 0);
+        assert_eq!(src.total_samples_queued, 0);
+        assert_eq!(src.samples_consumed, 0);
+
+        source_stop(&mut sources, 1234);
+        assert!(!sources.contains_key(&1234));
+    }
+
+    #[test]
+    fn rewinding_drops_the_sink_but_keeps_the_queue() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        src.state = AUDIO_PLAYING;
+        src.queued_buffers = vec![queued(1, 10)];
+        let (mut sources, id) = one_source(src);
+
+        source_rewind(&mut sources, id);
+
+        let src = &sources[&id];
+        assert!(src.sink.is_none());
+        assert_eq!(src.state, AUDIO_INITIAL);
+        assert_eq!(src.queued_buffers.len(), 1);
+
+        source_rewind(&mut sources, 1234);
+        assert!(!sources.contains_key(&1234));
+    }
+
+    #[test]
+    fn deleting_sources_forgets_them_and_ignores_strangers() {
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        let (mut sources, id) = one_source(src);
+        sources.insert(78, SourceState::new());
+
+        delete_sources(&mut sources, vec![id, 4040]);
+
+        assert!(!sources.contains_key(&id));
+        assert!(sources.contains_key(&78), "other sources survive");
+    }
+
+    #[test]
+    fn queued_buffers_accumulate_frames_and_adopt_the_first_rate() {
+        let mut buffers = HashMap::new();
+        buffers.insert(1, buffer(1, 40, 11025));
+        buffers.insert(2, buffer(2, 30, 44100));
+        let (mut sources, id) = one_source(SourceState::new());
+
+        source_queue_buffers(&mut sources, &buffers, id, vec![1, 2, 3]);
+
+        let src = &sources[&id];
+        let queue: Vec<(AudioObject, usize)> = src
+            .queued_buffers
+            .iter()
+            .map(|b| (b.id, b.samples))
+            .collect();
+        assert_eq!(queue, [(1, 40), (2, 30), (3, 0)]);
+        assert_eq!(src.total_samples_queued, 70);
+        assert_eq!(src.sample_rate, 11025, "the first buffer sets the rate");
+        assert!(
+            src.sink.is_none(),
+            "a source that is not playing has no sink"
+        );
+
+        source_queue_buffers(&mut sources, &buffers, 1234, vec![1]);
+        assert!(!sources.contains_key(&1234));
+    }
+
+    #[test]
+    fn buffers_queued_on_a_playing_source_are_fed_to_its_sink() {
+        let mut buffers = HashMap::new();
+        buffers.insert(1, buffer(1, 40, 11025));
+        let (sink, _output) = Sink::new_idle();
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        src.state = AUDIO_PLAYING;
+        let (mut sources, id) = one_source(src);
+
+        source_queue_buffers(&mut sources, &buffers, id, vec![1, 1]);
+
+        assert_eq!(sources[&id].sink.as_ref().unwrap().len(), 2);
+
+        sources.get_mut(&id).unwrap().state = AUDIO_PAUSED;
+        source_queue_buffers(&mut sources, &buffers, id, vec![1]);
+        assert_eq!(
+            sources[&id].sink.as_ref().unwrap().len(),
+            2,
+            "a paused source only records the queue"
+        );
+        assert_eq!(sources[&id].queued_buffers.len(), 3);
+    }
+
+    #[test]
+    fn unqueue_hands_back_the_most_recently_processed_first() {
+        let mut src = SourceState::new();
+        src.processed_buffers = vec![1, 2, 3];
+        let (mut sources, id) = one_source(src);
+
+        assert_eq!(source_unqueue_buffers(&mut sources, id, 2), [3, 2]);
+        assert_eq!(sources[&id].processed_buffers, [1]);
+    }
+
+    #[test]
+    fn new_buffers_start_empty_mono_and_unknown_properties_read_zero() {
+        let mut buffers = HashMap::new();
+
+        let ids = gen_buffers(&mut buffers, 2);
+
+        for id in ids {
+            assert_eq!(buffer_int_value(&buffers, id, AUDIO_CHANNELS), 1);
+            assert_eq!(buffer_int_value(&buffers, id, AUDIO_SIZE), 0);
+            assert_eq!(buffer_int_value(&buffers, id, AUDIO_FREQUENCY), 0);
+            assert_eq!(buffer_int_value(&buffers, id, AUDIO_GAIN), 0);
+        }
+    }
+
+    #[test]
+    fn an_unrecognised_format_is_treated_as_mono_sixteen_bit() {
+        let mut buffers = HashMap::new();
+        let ids = gen_buffers(&mut buffers, 1);
+
+        fill_buffer(&mut buffers, ids[0], 9999, &[2, 0, 0, 1, 9], 8000);
+
+        let buf = &buffers[&ids[0]];
+        assert_eq!(buf.channels, 1);
+        assert_eq!(buf.samples, [2, 256], "a trailing odd byte is dropped");
+        assert_eq!(buf.size, 5, "the size is the original byte count");
+    }
+
+    #[test]
+    fn handle_audio_cmd_answers_requests_through_their_reply_channels() {
+        let mut state = AudioThreadState {
+            sources: HashMap::new(),
+            buffers: HashMap::new(),
+        };
+        let no_play = |_: &mut AudioThreadState, _: AudioObject| panic!("no play requested");
+
+        let (tx, rx) = mpsc::channel();
+        assert_eq!(
+            handle_audio_cmd(&mut state, AudioCmd::GenSources(2, tx), no_play),
+            AudioLoop::Continue
+        );
+        let sources = rx.recv().unwrap();
+        assert_eq!(sources.len(), 2);
+
+        let (tx, rx) = mpsc::channel();
+        handle_audio_cmd(&mut state, AudioCmd::GenBuffers(1, tx), no_play);
+        let buffers = rx.recv().unwrap();
+
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::BufferData(buffers[0], AUDIO_FORMAT_STEREO16, vec![0; 8], 4000),
+            no_play,
+        );
+        let (tx, rx) = mpsc::channel();
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::BufferGetInt(buffers[0], AUDIO_SIZE, tx),
+            no_play,
+        );
+        assert_eq!(rx.recv().unwrap(), 8);
+
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::SourceSetInt(sources[0], AUDIO_BUFFER, buffers[0] as AudioIntVal),
+            no_play,
+        );
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::SourceQueueBuffers(sources[1], vec![buffers[0]]),
+            no_play,
+        );
+        for source in &sources {
+            let (tx, rx) = mpsc::channel();
+            handle_audio_cmd(
+                &mut state,
+                AudioCmd::SourceGetInt(*source, AUDIO_BUFFERS_QUEUED, tx),
+                no_play,
+            );
+            assert_eq!(rx.recv().unwrap(), 1);
+        }
+
+        handle_audio_cmd(&mut state, AudioCmd::SourceStop(sources[0]), no_play);
+        let (tx, rx) = mpsc::channel();
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::SourceUnqueueBuffers(sources[0], 4, tx),
+            no_play,
+        );
+        assert_eq!(rx.recv().unwrap(), [buffers[0]]);
+
+        handle_audio_cmd(&mut state, AudioCmd::SourcePause(sources[1]), no_play);
+        assert_eq!(state.sources[&sources[1]].state, AUDIO_PAUSED);
+        handle_audio_cmd(&mut state, AudioCmd::SourceRewind(sources[1]), no_play);
+        assert_eq!(state.sources[&sources[1]].state, AUDIO_INITIAL);
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::SourceSetFloat(sources[1], AUDIO_GAIN, 0.5),
+            no_play,
+        );
+        assert_eq!(state.sources[&sources[1]].gain, 0.5);
+
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::DeleteSources(sources.clone()),
+            no_play,
+        );
+        assert!(state.sources.is_empty());
+        handle_audio_cmd(
+            &mut state,
+            AudioCmd::DeleteBuffers(buffers.clone()),
+            no_play,
+        );
+        assert!(state.buffers.is_empty());
+    }
+
+    #[test]
+    fn handle_audio_cmd_hands_play_requests_to_the_player_exactly_once() {
+        let mut state = AudioThreadState {
+            sources: HashMap::new(),
+            buffers: HashMap::new(),
+        };
+        let mut played = Vec::new();
+
+        let verdict = handle_audio_cmd(&mut state, AudioCmd::SourcePlay(31), |_, id| {
+            played.push(id)
+        });
+
+        assert_eq!(verdict, AudioLoop::Continue);
+        assert_eq!(played, [31]);
+    }
+
+    #[test]
+    fn shutdown_stops_the_loop_and_silences_every_sink() {
+        let (sink, _output) = Sink::new_idle();
+        sink.append(rodio::buffer::SamplesBuffer::new(1, 8000, vec![0i16; 8]));
+        let mut src = SourceState::new();
+        src.sink = Some(sink);
+        let mut state = AudioThreadState {
+            sources: HashMap::new(),
+            buffers: HashMap::new(),
+        };
+        state.sources.insert(1, src);
+
+        let verdict = handle_audio_cmd(&mut state, AudioCmd::Shutdown, |_, _| {});
+
+        assert_eq!(verdict, AudioLoop::Stop);
+        assert!(state.sources.is_empty(), "every source is drained");
+    }
+}
+
+/// The C-facing exports talk to the audio thread through one process-wide
+/// channel, so these tests share a fake thread that serves the real command
+/// handler and run one at a time.
+#[cfg(test)]
+mod ffi_export_tests {
+    use super::*;
+    use std::sync::{Arc, MutexGuard};
+
+    static BACKEND_LOCK: Mutex<()> = Mutex::new(());
+
+    struct FakeBackend {
+        played: Arc<Mutex<Vec<AudioObject>>>,
+        _exclusive: MutexGuard<'static, ()>,
+    }
+
+    impl FakeBackend {
+        fn start() -> Self {
+            let exclusive = BACKEND_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            assert!(
+                AUDIO_SENDER.lock().unwrap().is_none(),
+                "no other test may leave a backend running"
+            );
+            let (tx, rx) = mpsc::channel();
+            *AUDIO_SENDER.lock().unwrap() = Some(tx);
+            let played = Arc::new(Mutex::new(Vec::new()));
+            let recorder = Arc::clone(&played);
+            let thread = thread::spawn(move || {
+                let mut state = AudioThreadState {
+                    sources: HashMap::new(),
+                    buffers: HashMap::new(),
+                };
+                while let Ok(cmd) = rx.recv() {
+                    let record = |_: &mut AudioThreadState, id: AudioObject| {
+                        recorder.lock().unwrap().push(id)
+                    };
+                    if handle_audio_cmd(&mut state, cmd, record) == AudioLoop::Stop {
+                        break;
+                    }
+                }
+            });
+            *AUDIO_THREAD.lock().unwrap() = Some(thread);
+            Self {
+                played,
+                _exclusive: exclusive,
+            }
+        }
+    }
+
+    impl Drop for FakeBackend {
+        fn drop(&mut self) {
+            unsafe { rust_audio_backend_uninit() };
+        }
+    }
+
+    fn query_source(src: AudioObject, prop: i32) -> AudioIntVal {
+        let mut out: AudioIntVal = -1;
+        unsafe { rust_audio_get_source_i(src, prop, &mut out) };
+        out
+    }
+
+    fn query_buffer(buf: AudioObject, prop: i32) -> AudioIntVal {
+        let mut out: AudioIntVal = -1;
+        unsafe { rust_audio_get_buffer_i(buf, prop, &mut out) };
+        out
+    }
+
+    fn new_source() -> AudioObject {
+        let mut id: AudioObject = 0;
+        unsafe { rust_audio_gen_sources(1, &mut id) };
+        id
+    }
+
+    fn new_buffer(bytes: &[u8], format: u32, freq: u32) -> AudioObject {
+        let mut id: AudioObject = 0;
+        unsafe {
+            rust_audio_gen_buffers(1, &mut id);
+            rust_audio_buffer_data(id, format, bytes.as_ptr(), bytes.len() as u32, freq);
+        }
+        id
+    }
+
+    #[test]
+    fn exports_return_inert_answers_when_no_backend_is_running() {
+        let _exclusive = BACKEND_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(AUDIO_SENDER.lock().unwrap().is_none());
+
+        let mut id: AudioObject = 55;
+        unsafe { rust_audio_gen_sources(1, &mut id) };
+        assert_eq!(id, 55, "no ids are invented without a backend");
+
+        let mut value: AudioIntVal = 99;
+        unsafe { rust_audio_get_source_i(1, AUDIO_SOURCE_STATE, &mut value) };
+        assert_eq!(value, 0, "a source query that times out reads zero");
+
+        let mut value: AudioIntVal = 99;
+        unsafe { rust_audio_get_buffer_i(1, AUDIO_SIZE, &mut value) };
+        assert_eq!(value, 99, "a buffer query is left alone without a backend");
+
+        assert!(!send_cmd(AudioCmd::Shutdown));
+        assert!(send_cmd_wait::<Vec<AudioObject>>(|tx| AudioCmd::GenBuffers(1, tx)).is_none());
+    }
+
+    #[test]
+    fn null_pointers_are_refused_without_reaching_the_backend() {
+        let _backend = FakeBackend::start();
+
+        unsafe {
+            rust_audio_gen_sources(1, std::ptr::null_mut());
+            rust_audio_gen_buffers(1, std::ptr::null_mut());
+            rust_audio_delete_sources(1, std::ptr::null());
+            rust_audio_delete_buffers(1, std::ptr::null());
+            rust_audio_source_queue_buffers(1, 1, std::ptr::null());
+            rust_audio_source_unqueue_buffers(1, 1, std::ptr::null_mut());
+            rust_audio_buffer_data(1, AUDIO_FORMAT_MONO16, std::ptr::null(), 4, 8000);
+            rust_audio_get_source_i(1, AUDIO_SOURCE_STATE, std::ptr::null_mut());
+            rust_audio_get_buffer_i(1, AUDIO_SIZE, std::ptr::null_mut());
+            rust_audio_get_source_f(1, AUDIO_GAIN, std::ptr::null_mut());
+        }
+
+        // The backend is still healthy afterwards.
+        let src = new_source();
+        assert_ne!(src, 0);
+    }
+
+    #[test]
+    fn a_buffer_round_trips_its_format_through_the_backend() {
+        let _backend = FakeBackend::start();
+
+        let buf = new_buffer(&[0, 0, 1, 0, 2, 0, 3, 0], AUDIO_FORMAT_STEREO16, 22050);
+
+        assert_eq!(query_buffer(buf, AUDIO_FREQUENCY), 22050);
+        assert_eq!(query_buffer(buf, AUDIO_CHANNELS), 2);
+        assert_eq!(query_buffer(buf, AUDIO_BITS), 16);
+        assert_eq!(query_buffer(buf, AUDIO_SIZE), 8);
+    }
+
+    #[test]
+    fn an_empty_buffer_upload_leaves_the_buffer_untouched() {
+        let _backend = FakeBackend::start();
+        let buf = new_buffer(&[1, 0], AUDIO_FORMAT_MONO16, 8000);
+        let bytes = [9u8; 4];
+
+        unsafe { rust_audio_buffer_data(buf, AUDIO_FORMAT_STEREO8, bytes.as_ptr(), 0, 44100) };
+
+        assert_eq!(query_buffer(buf, AUDIO_FREQUENCY), 8000);
+        assert_eq!(query_buffer(buf, AUDIO_SIZE), 2);
+    }
+
+    #[test]
+    fn a_source_walks_through_queue_stop_and_unqueue() {
+        let _backend = FakeBackend::start();
+        let src = new_source();
+        let first = new_buffer(&[0; 8], AUDIO_FORMAT_MONO16, 8000);
+        let second = new_buffer(&[0; 8], AUDIO_FORMAT_MONO16, 8000);
+
+        let queue = [first, second];
+        unsafe { rust_audio_source_queue_buffers(src, 2, queue.as_ptr()) };
+        assert_eq!(query_source(src, AUDIO_BUFFERS_QUEUED), 2);
+        assert_eq!(
+            query_source(src, AUDIO_SOURCE_STATE),
+            AUDIO_INITIAL as AudioIntVal
+        );
+
+        unsafe { rust_audio_source_stop(src) };
+        assert_eq!(
+            query_source(src, AUDIO_SOURCE_STATE),
+            AUDIO_STOPPED as AudioIntVal
+        );
+        assert_eq!(query_source(src, AUDIO_BUFFERS_QUEUED), 0);
+        assert_eq!(query_source(src, AUDIO_BUFFERS_PROCESSED), 2);
+
+        let mut taken = [0 as AudioObject; 2];
+        unsafe { rust_audio_source_unqueue_buffers(src, 2, taken.as_mut_ptr()) };
+        assert_eq!(
+            taken,
+            [first, second],
+            "the oldest retired buffer comes back first"
+        );
+        assert_eq!(query_source(src, AUDIO_BUFFERS_PROCESSED), 0);
+    }
+
+    #[test]
+    fn single_buffer_looping_gain_pause_and_rewind_reach_the_source() {
+        let _backend = FakeBackend::start();
+        let src = new_source();
+        let buf = new_buffer(&[0; 16], AUDIO_FORMAT_MONO16, 8000);
+
+        unsafe {
+            rust_audio_source_i(src, AUDIO_BUFFER, buf as AudioIntVal);
+            rust_audio_source_i(src, AUDIO_LOOPING, 1);
+            rust_audio_source_f(src, AUDIO_GAIN, 0.5);
+            rust_audio_source_fv(src, AUDIO_POSITION, [0.0f32; 3].as_ptr());
+        }
+        assert_eq!(query_source(src, AUDIO_BUFFERS_QUEUED), 1);
+        assert_eq!(query_source(src, AUDIO_LOOPING), 1);
+
+        unsafe { rust_audio_source_pause(src) };
+        assert_eq!(
+            query_source(src, AUDIO_SOURCE_STATE),
+            AUDIO_PAUSED as AudioIntVal
+        );
+
+        unsafe { rust_audio_source_rewind(src) };
+        assert_eq!(
+            query_source(src, AUDIO_SOURCE_STATE),
+            AUDIO_INITIAL as AudioIntVal
+        );
+        assert_eq!(
+            query_source(src, AUDIO_BUFFERS_QUEUED),
+            1,
+            "rewind keeps the queue"
+        );
+    }
+
+    #[test]
+    fn deleted_sources_and_buffers_read_as_gone() {
+        let _backend = FakeBackend::start();
+        let src = new_source();
+        let buf = new_buffer(&[0; 4], AUDIO_FORMAT_MONO16, 8000);
+        unsafe { rust_audio_source_i(src, AUDIO_BUFFER, buf as AudioIntVal) };
+        assert_eq!(query_source(src, AUDIO_BUFFERS_QUEUED), 1);
+
+        unsafe {
+            rust_audio_delete_sources(1, &src);
+            rust_audio_delete_buffers(1, &buf);
+        }
+
+        assert_eq!(query_source(src, AUDIO_BUFFERS_QUEUED), 0);
+        assert_eq!(query_buffer(buf, AUDIO_SIZE), 0);
+    }
+
+    #[test]
+    fn play_requests_reach_the_backends_player() {
+        let backend = FakeBackend::start();
+        let src = new_source();
+
+        unsafe { rust_audio_source_play(src) };
+        // A reply makes sure the play command has been served.
+        query_source(src, AUDIO_SOURCE_STATE);
+
+        assert_eq!(*backend.played.lock().unwrap(), [src]);
+    }
+
+    #[test]
+    fn init_reports_success_without_a_second_thread_when_already_running() {
+        let _backend = FakeBackend::start();
+
+        assert_eq!(unsafe { rust_audio_backend_init(0) }, 1);
+
+        // The fake thread is still the one serving requests.
+        assert_ne!(new_source(), 0);
+    }
+
+    #[test]
+    fn uninit_stops_the_thread_and_clears_the_channel() {
+        let backend = FakeBackend::start();
+        assert_ne!(new_source(), 0);
+
+        unsafe { rust_audio_backend_uninit() };
+
+        assert!(AUDIO_SENDER.lock().unwrap().is_none());
+        assert!(AUDIO_THREAD.lock().unwrap().is_none());
+        assert!(!send_cmd(AudioCmd::Shutdown));
+        drop(backend);
+    }
+
+    #[test]
+    fn fixed_answers_for_object_queries_and_errors() {
+        assert_eq!(unsafe { rust_audio_is_source(123) }, 1);
+        assert_eq!(unsafe { rust_audio_is_buffer(123) }, 1);
+        assert_eq!(unsafe { rust_audio_get_error() }, 0);
+
+        let mut gain = 0.0f32;
+        unsafe { rust_audio_get_source_f(1, AUDIO_GAIN, &mut gain) };
+        assert_eq!(gain, 1.0);
     }
 }

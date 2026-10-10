@@ -1370,10 +1370,26 @@ pub unsafe extern "C" fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int 
         Ok(g) => g,
         Err(_) => return -1,
     };
+    // The stream has no pushback buffer, so only the byte just read can be
+    // handed back; pretending to push back any other byte would make the next
+    // read return different data than the caller was promised.
+    if c == -1 {
+        return -1;
+    }
+    let wanted = c as u8;
     if guard.seek(SeekFrom::Current(-1)).is_err() {
         return -1;
     }
-    c
+    let mut previous = [0u8; 1];
+    if !matches!(guard.read(&mut previous), Ok(1)) || previous[0] != wanted {
+        return -1;
+    }
+    if guard.seek(SeekFrom::Current(-1)).is_err() {
+        return -1;
+    }
+    drop(guard);
+    set_stream_status(stream, UIO_STREAM_STATUS_OK);
+    wanted as c_int
 }
 
 // libc vasprintf(3): formats a va_list into a malloc'd, NUL-terminated buffer

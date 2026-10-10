@@ -665,4 +665,278 @@ mod tests {
         assert_eq!(v.get_volume(SoundCategory::Sfx), 1.0);
         assert_eq!(v.get_volume(SoundCategory::Speech), 1.0);
     }
+
+    #[test]
+    fn category_volume_scales_with_the_master_volume() {
+        let mut v = VolumeState::new();
+        v.master = 0.5;
+        v.music = 0.8;
+        v.sfx = 0.25;
+        v.speech = 0.0;
+
+        assert!((v.get_volume(SoundCategory::Music) - 0.4).abs() < 1e-6);
+        assert!((v.get_volume(SoundCategory::Sfx) - 0.125).abs() < 1e-6);
+        assert_eq!(v.get_volume(SoundCategory::Speech), 0.0);
+    }
+}
+
+/// The exports talk to the audio thread over one process-wide channel. These
+/// tests stand in a thread that records every command it receives and answers
+/// the requests that expect a reply, and run one at a time.
+#[cfg(test)]
+mod command_export_tests {
+    use super::*;
+    use std::sync::{Arc, MutexGuard};
+
+    static EXPORT_LOCK: Mutex<()> = Mutex::new(());
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum Seen {
+        Wav(Vec<u8>, SoundCategory, bool),
+        Ogg(Vec<u8>, SoundCategory, bool),
+        Raw(Vec<u8>, u32, u16, u16, SoundCategory, bool),
+        Stop(u32),
+        Pause(u32),
+        Resume(u32),
+        SetVolume(u32, f32),
+        IsPlaying(u32),
+        StopAll,
+        Master(f32),
+        Music(f32),
+        Sfx(f32),
+        Speech(f32),
+        Cleanup,
+        Shutdown,
+    }
+
+    const PLAY_HANDLE: u32 = 4242;
+
+    struct Recorder {
+        seen: Arc<Mutex<Vec<Seen>>>,
+        _exclusive: MutexGuard<'static, ()>,
+    }
+
+    impl Recorder {
+        fn start(is_playing: bool) -> Self {
+            let exclusive = EXPORT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            assert!(
+                AUDIO_SENDER.lock().unwrap().is_none(),
+                "no other test may leave an audio thread running"
+            );
+            let (tx, rx) = mpsc::channel();
+            *AUDIO_SENDER.lock().unwrap() = Some(tx);
+            let seen = Arc::new(Mutex::new(Vec::new()));
+            let log = Arc::clone(&seen);
+            let thread = thread::spawn(move || {
+                while let Ok(cmd) = rx.recv() {
+                    let entry = match cmd {
+                        AudioCommand::PlayWav(data, cat, looping, reply) => {
+                            let _ = reply.send(PLAY_HANDLE);
+                            Seen::Wav(data, cat, looping)
+                        }
+                        AudioCommand::PlayOgg(data, cat, looping, reply) => {
+                            let _ = reply.send(PLAY_HANDLE + 1);
+                            Seen::Ogg(data, cat, looping)
+                        }
+                        AudioCommand::PlayRaw(data, rate, channels, bits, cat, looping, reply) => {
+                            let _ = reply.send(PLAY_HANDLE + 2);
+                            Seen::Raw(data, rate, channels, bits, cat, looping)
+                        }
+                        AudioCommand::Stop(h) => Seen::Stop(h),
+                        AudioCommand::Pause(h) => Seen::Pause(h),
+                        AudioCommand::Resume(h) => Seen::Resume(h),
+                        AudioCommand::SetVolume(h, v) => Seen::SetVolume(h, v),
+                        AudioCommand::IsPlaying(h, reply) => {
+                            let _ = reply.send(is_playing);
+                            Seen::IsPlaying(h)
+                        }
+                        AudioCommand::StopAll => Seen::StopAll,
+                        AudioCommand::SetMasterVolume(v) => Seen::Master(v),
+                        AudioCommand::SetMusicVolume(v) => Seen::Music(v),
+                        AudioCommand::SetSfxVolume(v) => Seen::Sfx(v),
+                        AudioCommand::SetSpeechVolume(v) => Seen::Speech(v),
+                        AudioCommand::Cleanup => Seen::Cleanup,
+                        AudioCommand::Shutdown => {
+                            log.lock().unwrap().push(Seen::Shutdown);
+                            break;
+                        }
+                    };
+                    log.lock().unwrap().push(entry);
+                }
+            });
+            *AUDIO_THREAD.lock().unwrap() = Some(thread);
+            Self {
+                seen,
+                _exclusive: exclusive,
+            }
+        }
+
+        /// Everything recorded so far; waits for in-flight commands by round
+        /// tripping a reply-bearing request first.
+        fn seen(&self) -> Vec<Seen> {
+            let _ = unsafe { rust_audio_is_playing(0) };
+            self.seen.lock().unwrap().clone()
+        }
+    }
+
+    impl Drop for Recorder {
+        fn drop(&mut self) {
+            unsafe { rust_audio_uninit() };
+        }
+    }
+
+    #[test]
+    fn plays_report_no_handle_when_the_audio_thread_is_not_running() {
+        let _exclusive = EXPORT_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(AUDIO_SENDER.lock().unwrap().is_none());
+        let bytes = [1u8, 2, 3];
+
+        assert_eq!(unsafe { rust_audio_play_wav(bytes.as_ptr(), 3, 0, 0) }, 0);
+        assert_eq!(unsafe { rust_audio_play_ogg(bytes.as_ptr(), 3, 0, 0) }, 0);
+        assert_eq!(
+            unsafe { rust_audio_play_raw(bytes.as_ptr(), 3, 8000, 1, 8, 0, 0) },
+            0
+        );
+        assert_eq!(
+            play_raw_pcm(vec![1, 2], 8000, 1, 16, SoundCategory::Sfx, false),
+            0
+        );
+        assert_eq!(unsafe { rust_audio_is_playing(5) }, 0);
+        assert!(!send_command(AudioCommand::StopAll));
+    }
+
+    #[test]
+    fn empty_or_missing_sound_data_is_refused_before_it_is_sent() {
+        let recorder = Recorder::start(false);
+        let bytes = [1u8];
+
+        assert_eq!(unsafe { rust_audio_play_wav(std::ptr::null(), 4, 0, 0) }, 0);
+        assert_eq!(unsafe { rust_audio_play_wav(bytes.as_ptr(), 0, 0, 0) }, 0);
+        assert_eq!(unsafe { rust_audio_play_ogg(std::ptr::null(), 4, 0, 0) }, 0);
+        assert_eq!(unsafe { rust_audio_play_ogg(bytes.as_ptr(), 0, 0, 0) }, 0);
+        assert_eq!(
+            unsafe { rust_audio_play_raw(std::ptr::null(), 4, 8000, 1, 8, 0, 0) },
+            0
+        );
+        assert_eq!(
+            unsafe { rust_audio_play_raw(bytes.as_ptr(), 0, 8000, 1, 8, 0, 0) },
+            0
+        );
+
+        assert_eq!(recorder.seen(), [Seen::IsPlaying(0)]);
+    }
+
+    #[test]
+    fn wav_and_ogg_plays_carry_their_bytes_category_and_loop_flag() {
+        let recorder = Recorder::start(false);
+        let wav = [10u8, 11, 12];
+        let ogg = [20u8, 21];
+
+        let wav_handle = unsafe { rust_audio_play_wav(wav.as_ptr(), 3, 0, 1) };
+        let ogg_handle = unsafe { rust_audio_play_ogg(ogg.as_ptr(), 2, 1, 0) };
+        let speech_handle = unsafe { rust_audio_play_wav(wav.as_ptr(), 3, 7, 5) };
+
+        assert_eq!(wav_handle, PLAY_HANDLE);
+        assert_eq!(ogg_handle, PLAY_HANDLE + 1);
+        assert_eq!(speech_handle, PLAY_HANDLE);
+        assert_eq!(
+            recorder.seen(),
+            [
+                Seen::Wav(vec![10, 11, 12], SoundCategory::Music, true),
+                Seen::Ogg(vec![20, 21], SoundCategory::Sfx, false),
+                Seen::Wav(vec![10, 11, 12], SoundCategory::Speech, true),
+                Seen::IsPlaying(0),
+            ],
+            "unknown categories are treated as speech and any non-zero loop flag loops"
+        );
+    }
+
+    #[test]
+    fn raw_plays_carry_the_pcm_format_through_both_entry_points() {
+        let recorder = Recorder::start(false);
+        let pcm = [0u8, 1, 2, 3];
+
+        let from_c = unsafe { rust_audio_play_raw(pcm.as_ptr(), 4, 22050, 2, 16, 2, 0) };
+        let from_rust = play_raw_pcm(vec![9, 8], 11025, 1, 8, SoundCategory::Music, true);
+
+        assert_eq!(from_c, PLAY_HANDLE + 2);
+        assert_eq!(from_rust, PLAY_HANDLE + 2);
+        assert_eq!(
+            recorder.seen(),
+            [
+                Seen::Raw(vec![0, 1, 2, 3], 22050, 2, 16, SoundCategory::Speech, false),
+                Seen::Raw(vec![9, 8], 11025, 1, 8, SoundCategory::Music, true),
+                Seen::IsPlaying(0),
+            ]
+        );
+    }
+
+    #[test]
+    fn transport_and_volume_controls_arrive_in_order() {
+        let recorder = Recorder::start(false);
+
+        unsafe {
+            rust_audio_pause(3);
+            rust_audio_resume(3);
+            rust_audio_set_volume(3, 0.5);
+            rust_audio_set_master_volume(0.9);
+            rust_audio_set_music_volume(0.8);
+            rust_audio_set_sfx_volume(0.7);
+            rust_audio_set_speech_volume(0.6);
+            rust_audio_cleanup();
+            rust_audio_stop(3);
+            stop_sound(4);
+            rust_audio_stop_all();
+        }
+
+        assert_eq!(
+            recorder.seen(),
+            [
+                Seen::Pause(3),
+                Seen::Resume(3),
+                Seen::SetVolume(3, 0.5),
+                Seen::Master(0.9),
+                Seen::Music(0.8),
+                Seen::Sfx(0.7),
+                Seen::Speech(0.6),
+                Seen::Cleanup,
+                Seen::Stop(3),
+                Seen::Stop(4),
+                Seen::StopAll,
+                Seen::IsPlaying(0),
+            ]
+        );
+    }
+
+    #[test]
+    fn is_playing_reports_what_the_audio_thread_answers() {
+        let playing = Recorder::start(true);
+        assert_eq!(unsafe { rust_audio_is_playing(9) }, 1);
+        drop(playing);
+
+        let idle = Recorder::start(false);
+        assert_eq!(unsafe { rust_audio_is_playing(9) }, 0);
+        drop(idle);
+    }
+
+    #[test]
+    fn init_keeps_a_running_audio_thread_and_uninit_shuts_it_down() {
+        let recorder = Recorder::start(false);
+
+        assert_eq!(unsafe { rust_audio_init() }, 1, "already initialised");
+        assert_eq!(
+            unsafe { rust_audio_is_playing(1) },
+            0,
+            "same thread answers"
+        );
+
+        unsafe { rust_audio_uninit() };
+
+        assert_eq!(
+            *recorder.seen.lock().unwrap(),
+            [Seen::IsPlaying(1), Seen::Shutdown]
+        );
+        assert!(AUDIO_SENDER.lock().unwrap().is_none());
+        assert!(AUDIO_THREAD.lock().unwrap().is_none());
+    }
 }
