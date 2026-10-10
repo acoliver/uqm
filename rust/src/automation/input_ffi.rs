@@ -17,6 +17,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
+use crate::automation::collection_invariants::CollectionSnapshot;
+#[cfg(feature = "linked_c_archive")]
+use crate::automation::collection_invariants::SelectedQueue;
 use crate::automation::coordinator::Coordinator;
 use crate::automation::runtime::RuntimeModel;
 #[cfg(feature = "linked_c_archive")]
@@ -145,6 +148,38 @@ impl ViewGeometry {
         };
         Self::from_screen(width, height)
     }
+}
+
+/// Audit the game queues held by the C `GlobData` global.
+///
+/// `GlobData` is owned by C but its queues are `Queue` values whose only
+/// implementation is Rust, so this reads them in place with no C hook. The
+/// shared references live only for the audit.
+///
+/// Must run on the game thread. Under `RUST_OWNS_MAIN`, which automation
+/// requires, that is the only thread that mutates these queues, and the
+/// automation hooks run between C operations, so no queue is mid-update.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn sample_game_collections() -> CollectionSnapshot {
+    // SAFETY: the game thread is the sole writer of `GlobData` and is the
+    // caller, so nothing mutates the queues while the references exist.
+    unsafe {
+        let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
+        CollectionSnapshot::observe(|queue| match queue {
+            SelectedQueue::AvailRace => &*std::ptr::addr_of!((*game_state).avail_race_q),
+            SelectedQueue::NpcBuiltShip => &*std::ptr::addr_of!((*game_state).npc_built_ship_q),
+            SelectedQueue::IpGroup => &*std::ptr::addr_of!((*game_state).ip_group_q),
+            SelectedQueue::Encounter => &*std::ptr::addr_of!((*game_state).encounter_q),
+            SelectedQueue::BuiltShip => &*std::ptr::addr_of!((*game_state).built_ship_q),
+        })
+    }
+}
+
+/// Without the linked C archive there is no `GlobData`, so no queue exists.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn sample_game_collections() -> CollectionSnapshot {
+    let absent = crate::collections::queue::Queue::new();
+    CollectionSnapshot::observe(|_| &absent)
 }
 
 /// The game's baseline screen size, used only when the C globals are absent.

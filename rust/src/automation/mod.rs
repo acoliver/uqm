@@ -24,6 +24,7 @@ pub mod artifact;
 pub mod battle_observer;
 pub mod capture;
 pub mod child_session;
+pub mod collection_invariants;
 pub mod coordinator;
 pub mod error;
 pub mod identity;

@@ -15,6 +15,7 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::automation::collection_invariants::CollectionSnapshot;
 use crate::automation::input_ffi;
 use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::{FinalizationResult, RuntimeModel};
@@ -284,6 +285,9 @@ pub struct Coordinator {
     actions: Vec<Action>,
     native_checkpoint_identity: Option<String>,
     native_trace: Option<Mutex<super::native_trace::NativeTraceJournal>>,
+    /// Audits the production game queues. Injected so tests can supply
+    /// queues without the linked C archive.
+    sample_collections: fn() -> CollectionSnapshot,
     /// The typed main-menu transition assertions from the script.
     transitions: Vec<crate::automation::script::MainMenuTransition>,
     /// Watchdog limits from the script budgets.
@@ -316,6 +320,20 @@ impl Coordinator {
         script: ValidatedScript,
         output_root: PathBuf,
         native_limit: Option<u64>,
+    ) {
+        Self::init_with_collection_source(
+            script,
+            output_root,
+            native_limit,
+            input_ffi::sample_game_collections,
+        );
+    }
+
+    fn init_with_collection_source(
+        script: ValidatedScript,
+        output_root: PathBuf,
+        native_limit: Option<u64>,
+        sample_collections: fn() -> CollectionSnapshot,
     ) {
         let native_trace = native_limit
             .map(|limit| {
@@ -374,6 +392,7 @@ impl Coordinator {
             actions,
             native_checkpoint_identity,
             native_trace: native_trace.ok().flatten(),
+            sample_collections,
             transitions,
             watchdog_limits,
             started_at: now,
@@ -1173,6 +1192,10 @@ impl Coordinator {
         // Admitted: this callback is progress for the idle watchdog.
         inner.last_progress = now;
 
+        if self.audit_collections(&mut inner, false) {
+            return true;
+        }
+
         // Keep the next action behind the committed-presentation barrier.
         if self.native_checkpoint_pending(&inner) {
             return false;
@@ -1535,6 +1558,28 @@ impl Coordinator {
                 .any(|action| super::native_checkpoint::checkpoint_class(action).is_some())
     }
 
+    /// Audit the production queues on the game thread.
+    ///
+    /// A checkpoint records the result so retained evidence shows what the
+    /// queues held. Every audit records a broken invariant and ends the run:
+    /// a corrupt pool cannot be repaired here. Returns true when the run must
+    /// stop.
+    fn audit_collections(&self, inner: &mut CoordInner, record_intact: bool) -> bool {
+        let snapshot = (self.sample_collections)();
+        let broken = snapshot.first_fault().is_some();
+        if broken || record_intact {
+            let label = snapshot.label();
+            if broken {
+                eprintln!("[automation] {label}");
+            }
+            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+        }
+        if broken {
+            self.set_terminal(inner, TerminalClass::SemanticMismatch);
+        }
+        broken
+    }
+
     fn commit_native_checkpoints(
         &self,
         inner: &mut CoordInner,
@@ -1546,6 +1591,9 @@ impl Coordinator {
         for index in inner.checkpoint_step..inner.sched_state.step_index {
             if super::native_checkpoint::checkpoint_class(&self.actions[index]).is_none() {
                 continue;
+            }
+            if self.audit_collections(inner, true) {
+                return true;
             }
             let id = super::native_checkpoint::checkpoint_id(identity, index);
             let reservation = self.runtime.commit.reserve();
@@ -3257,3 +3305,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod collection_tests;

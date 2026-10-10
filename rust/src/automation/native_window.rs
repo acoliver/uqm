@@ -2880,6 +2880,12 @@ pub fn native_window_trace_semantic_snapshot(
             }
             verified_battle_frames = verified_battle_frames.max(parsed);
         }
+        if crate::automation::collection_invariants::is_collection_label(label)
+            && (record.kind != crate::automation::trace::RecordKind::SemanticAssertion
+                || crate::automation::collection_invariants::validate_label(label).is_err())
+        {
+            return Err(NativeWindowProofError::Receipt);
+        }
         index += 1;
     }
     Ok(NativeWindowSemanticSnapshot {
@@ -5845,6 +5851,38 @@ mod tests {
             native_window_trace_semantic_snapshot(&wrong_kind),
             Err(NativeWindowProofError::Receipt)
         );
+    }
+
+    #[test]
+    fn collection_labels_are_checked_by_the_semantic_snapshot() {
+        use crate::automation::trace::RecordKind;
+        let intact = "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=intact/4/1/3/0:encounter_q=absent:built_ship_q=absent";
+        let broken = "collection_invariant_failed:queue=ip_group_q:fault=cycle:slot=0";
+        for label in [intact, broken] {
+            let records = [trace_record(0, RecordKind::SemanticAssertion, Some(label))];
+            assert_eq!(
+                native_window_trace_semantic_snapshot(&records)
+                    .unwrap()
+                    .trace_record_count,
+                1,
+                "{label}"
+            );
+        }
+        for (kind, label) in [
+            (RecordKind::Presentation, intact),
+            (
+                RecordKind::SemanticAssertion,
+                "collection_invariants:avail_race_q=intact/4/1/1/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            ),
+            (RecordKind::SemanticAssertion, "collection_invariant_failed:queue=ip_group_q"),
+        ] {
+            let records = [trace_record(0, kind, Some(label))];
+            assert_eq!(
+                native_window_trace_semantic_snapshot(&records),
+                Err(NativeWindowProofError::Receipt),
+                "{label}"
+            );
+        }
     }
 
     #[test]

@@ -505,6 +505,70 @@ fn audit_reports_a_cycle_and_a_broken_pred_and_tail() {
     assert!(pool.queue.audit().is_ok());
 }
 
+const NO_SLOTS: QueueAudit = QueueAudit {
+    capacity: 0,
+    queued: 0,
+    free: 0,
+    detached: 0,
+};
+
+#[test]
+fn audit_treats_a_queue_without_a_pool_as_absent_not_broken() {
+    let mut queue = Queue::new();
+    assert!(!queue.has_pool());
+    assert_eq!(queue.audit(), Ok(NO_SLOTS));
+
+    assert!(
+        !queue.init(0, ELEMENT_SIZE),
+        "invalid geometry keeps no pool"
+    );
+    assert!(!queue.has_pool());
+    assert_eq!(queue.audit(), Ok(NO_SLOTS));
+
+    assert!(queue.init(3, ELEMENT_SIZE));
+    assert!(queue.has_pool());
+    queue.uninit();
+    assert!(!queue.has_pool());
+    assert_eq!(queue.audit(), Ok(NO_SLOTS));
+}
+
+#[test]
+fn audit_reports_a_pool_geometry_that_contradicts_itself() {
+    let mut pool = Pool::new(3);
+    let real_pool = pool.queue.pq_tab;
+
+    pool.queue.pq_tab = std::ptr::null_mut();
+    assert_eq!(pool.queue.audit(), Err(QueueFault::BrokenPool));
+    pool.queue.pq_tab = real_pool;
+
+    pool.queue.num_objects = 0;
+    assert_eq!(pool.queue.audit(), Err(QueueFault::BrokenPool));
+    pool.queue.num_objects = 3;
+
+    pool.queue.object_size = (size_of::<Link>() - 1) as ObjSize;
+    assert_eq!(pool.queue.audit(), Err(QueueFault::BrokenPool));
+    pool.queue.object_size = ELEMENT_SIZE;
+
+    assert!(pool.queue.audit().is_ok());
+}
+
+#[test]
+fn audit_reports_queued_links_left_behind_by_a_released_pool() {
+    let mut queue = Queue::new();
+    let mut stray = Element {
+        link: Link {
+            pred: std::ptr::null_mut(),
+            succ: std::ptr::null_mut(),
+        },
+        value: 0,
+    };
+    queue.head = (&mut stray as *mut Element).cast();
+    assert!(matches!(queue.audit(), Err(QueueFault::ForeignLink(_))));
+    queue.head = std::ptr::null_mut();
+    queue.tail = (&mut stray as *mut Element).cast();
+    assert_eq!(queue.audit(), Err(QueueFault::BrokenTail));
+}
+
 #[cfg(debug_assertions)]
 #[test]
 #[should_panic(expected = "is not a slot of the queue pool")]

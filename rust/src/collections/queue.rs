@@ -99,6 +99,9 @@ pub enum QueueFault {
     BrokenTail,
     /// A slot is both queued and on the free list.
     QueuedAndFree(usize),
+    /// The pool geometry contradicts itself: a slot count without a pool, a
+    /// pool without slots, or slots too small to hold a [`Link`].
+    BrokenPool,
 }
 
 impl Queue {
@@ -137,6 +140,11 @@ impl Queue {
     /// Number of slots in the pool.
     pub fn capacity(&self) -> u8 {
         self.num_objects
+    }
+
+    /// Whether `init` has allocated a pool that `uninit` has not released.
+    pub fn has_pool(&self) -> bool {
+        !self.pq_tab.is_null()
     }
 
     /// Whether `h` is the address of a slot of this queue's pool.
@@ -295,10 +303,17 @@ impl Queue {
 
     /// Check the pool invariants and report the slot accounting.
     ///
-    /// Every list entry must be a pool slot and appear once, the `pred`
-    /// chain must mirror the `succ` chain, `tail` must be the last link, and
-    /// no slot may be both queued and free.
+    /// The pool geometry must be consistent. Every list entry must be a pool
+    /// slot and appear once, the `pred` chain must mirror the `succ` chain,
+    /// `tail` must be the last link, and no slot may be both queued and free.
+    ///
+    /// A queue without a pool (zeroed by C, or released by `uninit`) is not
+    /// broken: it reports a capacity of zero.
     pub fn audit(&self) -> Result<QueueAudit, QueueFault> {
+        let slots_fit_a_link = usize::from(self.object_size) >= size_of::<Link>();
+        if self.has_pool() != (self.num_objects != 0) || (self.has_pool() && !slots_fit_a_link) {
+            return Err(QueueFault::BrokenPool);
+        }
         let mut queued_slots = [false; MAX_QUEUE_OBJECTS as usize];
         let mut queued = 0u8;
         let mut prev: HLink = ptr::null_mut();
