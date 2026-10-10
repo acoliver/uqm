@@ -69,3 +69,88 @@ fn a_second_new_game_starts_from_zero_state() {
         );
     }
 }
+
+/// The C declaration of `baseContentPath` generated from `options.h`.
+#[allow(non_upper_case_globals, non_camel_case_types, dead_code)]
+mod options_abi {
+    include!(concat!(env!("OUT_DIR"), "/options_abi.rs"));
+}
+
+fn real_base_content_path_prefix(len: usize) -> Vec<u8> {
+    let buffer = std::ptr::addr_of!(options_abi::baseContentPath).cast::<u8>();
+    (0..len).map(|i| unsafe { *buffer.add(i) }).collect()
+}
+
+/// The real `baseContentPath` in the linked C archive bounds what the Rust
+/// startup path may store, independent of the bound the crate assumes.
+///
+/// The C bound is the array length `options.h` declares for the object that
+/// `options.c` (whose bytes are pinned here) defines. It is compared with the
+/// Rust bound before anything is written, so a wrong Rust bound fails this test
+/// instead of overrunning the C global.
+#[test]
+fn base_content_path_store_honours_the_real_c_buffer_bound() {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::Path;
+
+    use sha2::{Digest, Sha256};
+    use uqm_rust::mainloop::dir_prep::{
+        rust_prepare_content_dir, store_base_content_path, DirPrepError, PATH_MAX,
+    };
+
+    const OPTIONS_C_SHA256: &str =
+        "488444d1871e1f4cae041ad3bbc31d83ded7bba54fd18b75bdf38b243d1f4b39";
+    let options_c = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sc2/src/options.c");
+    let digest = Sha256::digest(std::fs::read(&options_c).unwrap());
+    assert_eq!(
+        format!("{digest:x}"),
+        OPTIONS_C_SHA256,
+        "the pinned source the C archive object is built from"
+    );
+
+    let c_bound = std::mem::size_of_val(unsafe { &*std::ptr::addr_of!(options_abi::baseContentPath) });
+    assert_eq!(
+        PATH_MAX, c_bound,
+        "the Rust bound must equal the C array length"
+    );
+    assert_eq!(real_base_content_path_prefix(1), [0], "nothing stored yet");
+
+    let enametoolong = |error: DirPrepError| match error {
+        DirPrepError::InvalidPath { source, .. } => source.raw_os_error(),
+        other => panic!("expected InvalidPath, got {other:?}"),
+    };
+    let path_of = |len: usize| {
+        let mut bytes = vec![b'a'; len];
+        bytes[0] = b'/';
+        bytes
+    };
+
+    let fits = path_of(c_bound - 1);
+    store_base_content_path(Path::new(std::ffi::OsStr::from_bytes(&fits))).unwrap();
+    let stored = real_base_content_path_prefix(c_bound);
+    assert_eq!(&stored[..c_bound - 1], &fits[..]);
+    assert_eq!(stored[c_bound - 1], 0, "the NUL lands on the last byte");
+
+    for len in [c_bound, c_bound + 1, 4096] {
+        let too_long = path_of(len);
+        let refused =
+            store_base_content_path(Path::new(std::ffi::OsStr::from_bytes(&too_long)));
+        assert_eq!(
+            refused.map_err(enametoolong),
+            Err(Some(libc::ENAMETOOLONG)),
+            "length {len}"
+        );
+        assert_eq!(real_base_content_path_prefix(c_bound), stored, "length {len}");
+
+        let arg = CString::new(too_long).unwrap();
+        let status = unsafe {
+            rust_prepare_content_dir(arg.as_ptr(), std::ptr::null(), c"uqm".as_ptr())
+        };
+        assert_eq!(status, -1, "length {len}");
+        assert_eq!(real_base_content_path_prefix(c_bound), stored, "length {len}");
+    }
+
+    store_base_content_path(Path::new("")).unwrap();
+    assert_eq!(real_base_content_path_prefix(1), [0]);
+}

@@ -115,7 +115,7 @@ extern "C" {
 
 /// Size of the C `baseContentPath[PATH_MAX]` buffer: the platform `<limits.h>`
 /// value the C object is compiled with (1024 on macOS, 4096 on Linux).
-const PATH_MAX: usize = libc::PATH_MAX as usize;
+pub const PATH_MAX: usize = libc::PATH_MAX as usize;
 
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
@@ -209,7 +209,7 @@ fn create_hierarchy(path: &Path) -> Result<(), DirPrepError> {
 /// Records the content path in the C `baseContentPath[PATH_MAX]` buffer, the
 /// one consumer with a fixed size. A path that does not fit with its NUL is
 /// refused rather than truncated or written past the buffer.
-fn store_base_content_path(path: &Path) -> Result<(), DirPrepError> {
+pub fn store_base_content_path(path: &Path) -> Result<(), DirPrepError> {
     let bytes = path.as_os_str().as_bytes();
     if bytes.len() >= PATH_MAX {
         return Err(DirPrepError::InvalidPath {
