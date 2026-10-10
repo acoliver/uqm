@@ -19,6 +19,7 @@
 //! because the offline trace validators accept `SemanticAssertion` records
 //! with free-form labels and reject payload shapes they do not know.
 
+use crate::automation::trace::{RecordKind, TraceRecord};
 use crate::collections::queue::{Queue, QueueAudit, QueueFault};
 
 /// Label prefix of a record whose queues all passed their audit.
@@ -274,6 +275,87 @@ pub fn validate_label(label: &str) -> Result<LabelVerdict, String> {
         _ => return Err("not a collection label".into()),
     };
     Ok(verdict)
+}
+
+/// The label of `record` when it is a collection audit.
+fn collection_label(record: &TraceRecord) -> Option<&str> {
+    record
+        .label
+        .as_deref()
+        .filter(|label| record.kind == RecordKind::SemanticAssertion && is_collection_label(label))
+}
+
+/// Check that the collection records of a trace prefix are bound to the
+/// checkpoints they were taken for.
+///
+/// A checkpoint audit carries the identity and committed frame of its
+/// checkpoint in the existing `checkpoint` and `presentation` fields. Once a
+/// trace holds any collection record, every `Checkpoint` record must directly
+/// follow an intact audit with the same identity and frame. An intact audit is
+/// only taken at a checkpoint, so it is always bound. A broken audit bound to a
+/// checkpoint refuses it, so no `Checkpoint` record may carry that identity. A
+/// broken audit of an input tick is bound to nothing.
+/// The trace may end between an audit and its checkpoint, so the check holds
+/// for every prefix.
+///
+/// # Errors
+///
+/// Returns a description of the first record that is not bound as the
+/// producer binds it.
+pub fn validate_bindings(records: &[TraceRecord]) -> Result<(), String> {
+    let audited = records
+        .iter()
+        .any(|record| collection_label(record).is_some());
+    for (position, record) in records.iter().enumerate() {
+        if let Some(label) = collection_label(record) {
+            let verdict = validate_label(label)?;
+            let at_checkpoint = match (&record.checkpoint, &record.presentation) {
+                (Some(checkpoint), Some(frame)) => Some((&checkpoint.id, frame)),
+                (None, None) => None,
+                _ => return Err("collection record is half bound".into()),
+            };
+            match (verdict, at_checkpoint) {
+                (LabelVerdict::Intact, None) => {
+                    return Err("intact collection record is bound to no checkpoint".into());
+                }
+                (LabelVerdict::Intact, Some((id, frame))) => {
+                    let committed = records.get(position + 1);
+                    if committed.is_some_and(|next| {
+                        next.kind != RecordKind::Checkpoint
+                            || next.checkpoint.as_ref().map(|c| &c.id) != Some(id)
+                            || next.presentation.as_ref() != Some(frame)
+                    }) {
+                        return Err(
+                            "intact collection record is not followed by its checkpoint".into()
+                        );
+                    }
+                }
+                (LabelVerdict::Broken, Some((id, _))) => {
+                    if records.iter().any(|other| {
+                        other.kind == RecordKind::Checkpoint
+                            && other.checkpoint.as_ref().map(|c| &c.id) == Some(id)
+                    }) {
+                        return Err("a broken audit's checkpoint was committed".into());
+                    }
+                }
+                (LabelVerdict::Broken, None) => {}
+            }
+        } else if audited && record.kind == RecordKind::Checkpoint {
+            let bound = position
+                .checked_sub(1)
+                .and_then(|previous| records.get(previous))
+                .filter(|audit| {
+                    collection_label(audit).and_then(|label| validate_label(label).ok())
+                        == Some(LabelVerdict::Intact)
+                        && audit.checkpoint == record.checkpoint
+                        && audit.presentation == record.presentation
+                });
+            if bound.is_none() {
+                return Err("checkpoint has no collection audit bound to it".into());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parse_intact_field(expected: SelectedQueue, field: &str) -> Result<QueueObservation, String> {

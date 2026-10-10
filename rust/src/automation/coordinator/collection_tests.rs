@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::automation::collection_invariants::{
-    validate_label, LabelVerdict, SelectedQueue, QUEUE_COUNT,
+    validate_bindings, validate_label, LabelVerdict, SelectedQueue, QUEUE_COUNT,
 };
 use crate::collections::queue::{Link, Queue};
 
@@ -94,7 +94,7 @@ fn start(
 fn frame(count: u64) -> crate::automation::capture::PresentedFrame {
     crate::automation::capture::PresentedFrame {
         count,
-        generation: 0,
+        generation: 40 + count,
         width: 1,
         height: 1,
         rgba: vec![1, 2, 3, 255],
@@ -151,19 +151,41 @@ fn each_checkpoint_records_the_queue_audit_taken_at_that_checkpoint() {
             "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=intact/3/2/1/0:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
         ]
     );
-    for (position, record) in records
+    let committed = plan.committed(&records).unwrap();
+    assert_eq!(committed.len(), 2);
+    let checkpoints: Vec<_> = records
         .iter()
         .enumerate()
         .filter(|(_, record)| record.kind == RecordKind::Checkpoint)
-    {
+        .collect();
+    assert_eq!(checkpoints.len(), 2);
+    for (index, (position, checkpoint)) in checkpoints.into_iter().enumerate() {
         let audit = &records[position - 1];
         assert_eq!(audit.kind, RecordKind::SemanticAssertion);
         assert_eq!(
             validate_label(audit.label.as_deref().unwrap()),
             Ok(LabelVerdict::Intact)
         );
-        assert!(record.presentation.is_some());
+        // The audit names the obligation it was taken for and the exact frame
+        // that obligation commits, not merely the record before it.
+        let expected_frame = frame(index as u64 + 1).presentation_evidence();
+        assert_eq!(
+            audit.checkpoint.as_ref().map(|c| c.id.as_str()),
+            Some(committed[index].id.as_str())
+        );
+        assert_eq!(audit.presentation.as_ref(), Some(&expected_frame));
+        assert_eq!(checkpoint.checkpoint, audit.checkpoint);
+        assert_eq!(checkpoint.presentation, audit.presentation);
+        assert_eq!(audit.run, checkpoint.run);
+        assert_eq!(audit.present_seen, checkpoint.present_seen);
+        assert_eq!(audit.input_seen, checkpoint.input_seen);
+        assert!(audit.sequence < checkpoint.sequence);
+        assert!(audit.elapsed_ms <= checkpoint.elapsed_ms);
     }
+    assert!(records.windows(2).all(
+        |pair| pair[0].sequence < pair[1].sequence && pair[0].elapsed_ms <= pair[1].elapsed_ms
+    ));
+    assert_eq!(validate_bindings(&records), Ok(()));
     assert_eq!(plan.committed(&records).unwrap().len(), 2);
 }
 
@@ -203,6 +225,26 @@ fn a_broken_queue_at_a_checkpoint_fails_the_run_before_the_checkpoint_commits() 
         .iter()
         .all(|record| record.kind != RecordKind::Checkpoint));
     assert_eq!(plan.committed(&records).unwrap().len(), 0);
+
+    // The fault names the checkpoint it refused and the frame it was found at.
+    let fault = records
+        .iter()
+        .find(|record| {
+            record
+                .label
+                .as_deref()
+                .is_some_and(|l| l.starts_with("collection_invariant"))
+        })
+        .unwrap();
+    assert_eq!(
+        fault.checkpoint.as_ref().map(|c| c.id.as_str()),
+        Some(plan.checkpoints[0].id.as_str())
+    );
+    assert_eq!(
+        fault.presentation.as_ref(),
+        Some(&frame(1).presentation_evidence())
+    );
+    assert_eq!(validate_bindings(&records), Ok(()));
 }
 
 #[test]
@@ -237,6 +279,23 @@ fn an_input_tick_stops_on_a_broken_queue_and_stays_silent_while_intact() {
         collection_labels(&records),
         ["collection_invariant_failed:queue=built_ship_q:fault=broken_pred:slot=0"]
     );
+    // An input tick has no checkpoint or frame to bind to; the tick counters
+    // of the record say when the fault was found.
+    let fault = records
+        .iter()
+        .find(|record| {
+            record
+                .label
+                .as_deref()
+                .is_some_and(|l| l.starts_with("collection_invariant"))
+        })
+        .unwrap();
+    assert_eq!(
+        (fault.checkpoint.as_ref(), fault.presentation.as_ref()),
+        (None, None)
+    );
+    assert_eq!(fault.input_seen, 3);
+    assert_eq!(validate_bindings(&records), Ok(()));
 }
 
 /// Corrupt `which` after it holds one link and check that the next input tick
@@ -303,7 +362,13 @@ fn an_audit_off_the_game_thread_never_reads_the_queues_and_ends_the_run() {
     let (_, coord) = start(&temp);
     SAMPLED.store(false, Ordering::SeqCst);
     std::thread::scope(|scope| {
-        scope.spawn(|| assert!(coord.audit_collections(&mut coord.inner.lock(), true)));
+        scope.spawn(|| {
+            let at = CheckpointBinding {
+                id: "native:test:0".into(),
+                frame: frame(1).presentation_evidence(),
+            };
+            assert!(coord.audit_collections(&mut coord.inner.lock(), Some(&at)));
+        });
     });
     assert!(
         !SAMPLED.load(Ordering::SeqCst),

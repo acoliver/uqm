@@ -281,6 +281,14 @@ struct CoordInner {
 /// treat as a failing assertion.
 const OFF_THREAD_LABEL: &str = "collection_audit_failed:off_game_thread";
 
+/// The checkpoint an audit is taken for: its identity and the committed frame
+/// it is taken at. The audit record carries both, so retained evidence ties
+/// the audit to that checkpoint by identity and frame, not by position.
+struct CheckpointBinding {
+    id: String,
+    frame: super::trace::PresentationEvidence,
+}
+
 /// The queue sampler together with the one thread allowed to run it.
 struct CollectionSource {
     /// # Safety
@@ -1226,7 +1234,7 @@ impl Coordinator {
         // Admitted: this callback is progress for the idle watchdog.
         inner.last_progress = now;
 
-        if self.audit_collections(&mut inner, false) {
+        if self.audit_collections(&mut inner, None) {
             return true;
         }
 
@@ -1594,11 +1602,12 @@ impl Coordinator {
 
     /// Audit the production queues on the game thread.
     ///
-    /// A checkpoint records the result so retained evidence shows what the
-    /// queues held. Every audit records a broken invariant and ends the run:
-    /// a corrupt pool cannot be repaired here. Returns true when the run must
-    /// stop.
-    fn audit_collections(&self, inner: &mut CoordInner, record_intact: bool) -> bool {
+    /// A checkpoint audit (`at` is `Some`) records its result bound to that
+    /// checkpoint so retained evidence shows what the queues held there; an
+    /// input tick audit records only a broken invariant. A broken invariant
+    /// ends the run before the checkpoint it was taken for commits: a corrupt
+    /// pool cannot be repaired here. Returns true when the run must stop.
+    fn audit_collections(&self, inner: &mut CoordInner, at: Option<&CheckpointBinding>) -> bool {
         let Some(collections) = &self.collections else {
             return false;
         };
@@ -1606,21 +1615,22 @@ impl Coordinator {
             // The queues have no lock, so a read from another thread would
             // race with C. Say so in the trace and stop; never read them.
             eprintln!("[automation] {OFF_THREAD_LABEL}");
-            self.write_trace_labeled(
+            self.write_trace_labeled_at(
                 inner,
                 RecordKind::SemanticAssertion,
                 OFF_THREAD_LABEL.into(),
+                at,
             );
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
             return true;
         };
         let broken = snapshot.first_fault().is_some();
-        if broken || record_intact {
+        if broken || at.is_some() {
             let label = snapshot.label();
             if broken {
                 eprintln!("[automation] {label}");
             }
-            self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
+            self.write_trace_labeled_at(inner, RecordKind::SemanticAssertion, label, at);
         }
         if broken {
             self.set_terminal(inner, TerminalClass::SemanticMismatch);
@@ -1640,10 +1650,14 @@ impl Coordinator {
             if super::native_checkpoint::checkpoint_class(&self.actions[index]).is_none() {
                 continue;
             }
-            if self.audit_collections(inner, true) {
+            let id = super::native_checkpoint::checkpoint_id(identity, index);
+            let binding = CheckpointBinding {
+                id: id.clone(),
+                frame: frame.presentation_evidence(),
+            };
+            if self.audit_collections(inner, Some(&binding)) {
                 return true;
             }
-            let id = super::native_checkpoint::checkpoint_id(identity, index);
             let reservation = self.runtime.commit.reserve();
             let mut record = super::capture::capture_trace_record(
                 reservation.sequence(),
@@ -2288,6 +2302,18 @@ impl Coordinator {
 
     /// Write a trace record with a semantic/evidence label.
     fn write_trace_labeled(&self, inner: &mut CoordInner, kind: RecordKind, label: String) {
+        self.write_trace_labeled_at(inner, kind, label, None);
+    }
+
+    /// Write a labeled record, optionally bound to the checkpoint it belongs
+    /// to: the checkpoint identity and the committed frame it is taken at.
+    fn write_trace_labeled_at(
+        &self,
+        inner: &mut CoordInner,
+        kind: RecordKind,
+        label: String,
+        at: Option<&CheckpointBinding>,
+    ) {
         let reservation = self.runtime.commit.reserve();
         let seq = reservation.sequence();
 
@@ -2304,11 +2330,11 @@ impl Coordinator {
             to: None,
             terminal_reason: None,
             seed_application: None,
-            presentation: None,
+            presentation: at.map(|at| at.frame.clone()),
             activity: None,
             readiness: None,
             command_acknowledgement: None,
-            checkpoint: None,
+            checkpoint: at.map(|at| super::trace::CheckpointEvidence { id: at.id.clone() }),
             failure: None,
         };
 

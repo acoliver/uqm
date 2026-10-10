@@ -2888,6 +2888,8 @@ pub fn native_window_trace_semantic_snapshot(
         }
         index += 1;
     }
+    crate::automation::collection_invariants::validate_bindings(records)
+        .map_err(|_| NativeWindowProofError::Receipt)?;
     Ok(NativeWindowSemanticSnapshot {
         trace_record_count: records
             .len()
@@ -5855,19 +5857,48 @@ mod tests {
 
     #[test]
     fn collection_labels_are_checked_by_the_semantic_snapshot() {
-        use crate::automation::trace::RecordKind;
+        use crate::automation::trace::{CheckpointEvidence, PresentationEvidence, RecordKind};
         let intact = "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=intact/4/1/3/0:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent";
         let broken = "collection_invariant_failed:queue=ip_group_q:fault=cycle:slot=0";
-        for label in [intact, broken] {
-            let records = [trace_record(0, RecordKind::SemanticAssertion, Some(label))];
+        let frame = PresentationEvidence {
+            count: 1,
+            generation: 2,
+            width: 320,
+            height: 240,
+        };
+        let bind = |mut record: crate::automation::trace::TraceRecord| {
+            record.checkpoint = Some(CheckpointEvidence {
+                id: "native:x:0".into(),
+            });
+            record.presentation = Some(frame.clone());
+            record
+        };
+        // An intact audit at its checkpoint, a fault found on an input tick and
+        // a fault that refused a checkpoint are all well formed.
+        let at_checkpoint = [
+            bind(trace_record(0, RecordKind::SemanticAssertion, Some(intact))),
+            bind(trace_record(1, RecordKind::Checkpoint, None)),
+        ];
+        let on_tick = [trace_record(0, RecordKind::SemanticAssertion, Some(broken))];
+        let refused = [bind(trace_record(
+            0,
+            RecordKind::SemanticAssertion,
+            Some(broken),
+        ))];
+        for records in [&at_checkpoint[..], &on_tick[..], &refused[..]] {
             assert_eq!(
-                native_window_trace_semantic_snapshot(&records)
+                native_window_trace_semantic_snapshot(records)
                     .unwrap()
                     .trace_record_count,
-                1,
-                "{label}"
+                records.len() as u64,
             );
         }
+        let unbound_intact = [trace_record(0, RecordKind::SemanticAssertion, Some(intact))];
+        assert_eq!(
+            native_window_trace_semantic_snapshot(&unbound_intact),
+            Err(NativeWindowProofError::Receipt),
+            "an intact audit bound to no checkpoint"
+        );
         for (kind, label) in [
             (RecordKind::Presentation, intact),
             (

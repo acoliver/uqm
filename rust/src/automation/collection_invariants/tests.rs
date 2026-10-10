@@ -419,3 +419,151 @@ fn only_collection_labels_are_claimed_by_the_vocabulary() {
     assert!(!is_collection_label("battle_frames_verified:count=1"));
     assert!(validate_label("battle_frames_verified:count=1").is_err());
 }
+
+const BOUND_INTACT: &str = SOURCE_LABEL;
+const BOUND_BROKEN: &str = "collection_invariant_failed:queue=ip_group_q:fault=cycle:slot=0";
+
+fn frame_evidence(count: u64) -> crate::automation::trace::PresentationEvidence {
+    crate::automation::trace::PresentationEvidence {
+        count,
+        generation: 40 + count,
+        width: 320,
+        height: 240,
+    }
+}
+
+fn trace_record(sequence: u64, kind: RecordKind, label: Option<&str>) -> TraceRecord {
+    TraceRecord {
+        schema: TraceRecord::SCHEMA,
+        run: 1,
+        sequence,
+        input_seen: sequence,
+        present_seen: sequence,
+        elapsed_ms: sequence,
+        kind,
+        label: label.map(str::to_string),
+        from: None,
+        to: None,
+        terminal_reason: None,
+        seed_application: None,
+        presentation: None,
+        activity: None,
+        readiness: None,
+        command_acknowledgement: None,
+        checkpoint: None,
+        failure: None,
+    }
+}
+
+/// An audit taken for checkpoint `id` at frame `count`.
+fn audit(sequence: u64, label: &str, id: &str, count: u64) -> TraceRecord {
+    let mut record = trace_record(sequence, RecordKind::SemanticAssertion, Some(label));
+    record.checkpoint = Some(crate::automation::trace::CheckpointEvidence { id: id.into() });
+    record.presentation = Some(frame_evidence(count));
+    record
+}
+
+fn checkpoint(sequence: u64, id: &str, count: u64) -> TraceRecord {
+    let mut record = trace_record(sequence, RecordKind::Checkpoint, None);
+    record.checkpoint = Some(crate::automation::trace::CheckpointEvidence { id: id.into() });
+    record.presentation = Some(frame_evidence(count));
+    record
+}
+
+#[test]
+fn bindings_accept_the_audit_and_checkpoint_pairs_the_producer_writes() {
+    let pairs = [
+        audit(0, BOUND_INTACT, "native:a:0", 1),
+        checkpoint(1, "native:a:0", 1),
+        audit(2, BOUND_INTACT, "native:a:1", 2),
+        checkpoint(3, "native:a:1", 2),
+    ];
+    assert_eq!(validate_bindings(&pairs), Ok(()));
+    // The trace may be cut between an audit and its checkpoint.
+    assert_eq!(validate_bindings(&pairs[..3]), Ok(()));
+    // A trace without any collection record is not subject to the rule.
+    assert_eq!(validate_bindings(&[checkpoint(0, "native:a:0", 1)]), Ok(()));
+}
+
+#[test]
+fn bindings_reject_an_audit_for_another_checkpoint_or_frame() {
+    for (why, records) in [
+        (
+            "other checkpoint",
+            vec![
+                audit(0, BOUND_INTACT, "native:a:0", 1),
+                checkpoint(1, "native:a:1", 1),
+            ],
+        ),
+        (
+            "other frame",
+            vec![
+                audit(0, BOUND_INTACT, "native:a:0", 1),
+                checkpoint(1, "native:a:0", 2),
+            ],
+        ),
+        (
+            "not directly before",
+            vec![
+                audit(0, BOUND_INTACT, "native:a:0", 1),
+                trace_record(1, RecordKind::Presentation, None),
+                checkpoint(2, "native:a:0", 1),
+            ],
+        ),
+        (
+            "checkpoint without audit",
+            vec![
+                audit(0, BOUND_INTACT, "native:a:0", 1),
+                checkpoint(1, "native:a:0", 1),
+                checkpoint(2, "native:a:1", 2),
+            ],
+        ),
+        (
+            "unbound intact",
+            vec![trace_record(
+                0,
+                RecordKind::SemanticAssertion,
+                Some(BOUND_INTACT),
+            )],
+        ),
+    ] {
+        assert!(validate_bindings(&records).is_err(), "{why}");
+    }
+    let mut half = audit(0, BOUND_INTACT, "native:a:0", 1);
+    half.presentation = None;
+    assert!(
+        validate_bindings(&[half]).is_err(),
+        "checkpoint without frame"
+    );
+    let mut half = audit(0, BOUND_BROKEN, "native:a:0", 1);
+    half.checkpoint = None;
+    assert!(
+        validate_bindings(&[half]).is_err(),
+        "frame without checkpoint"
+    );
+}
+
+#[test]
+fn bindings_let_a_fault_refuse_its_checkpoint_but_never_commit_it() {
+    let refused = [audit(0, BOUND_BROKEN, "native:a:0", 1)];
+    assert_eq!(validate_bindings(&refused), Ok(()));
+    let committed = [
+        audit(0, BOUND_BROKEN, "native:a:0", 1),
+        checkpoint(1, "native:a:0", 1),
+    ];
+    assert!(validate_bindings(&committed).is_err());
+    // A fault found on an input tick belongs to no checkpoint.
+    let tick = [trace_record(
+        0,
+        RecordKind::SemanticAssertion,
+        Some(BOUND_BROKEN),
+    )];
+    assert_eq!(validate_bindings(&tick), Ok(()));
+}
+
+#[test]
+fn bindings_check_the_collection_label_itself() {
+    let mut bad = audit(0, BOUND_INTACT, "native:a:0", 1);
+    bad.label = Some("collection_invariant_failed:queue=ip_group_q".into());
+    assert!(validate_bindings(&[bad]).is_err());
+}
