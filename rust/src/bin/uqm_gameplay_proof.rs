@@ -413,6 +413,7 @@ fn prepare_evidence(
         "--windowed".into(),
         "--scroll=pc".into(),
     ];
+    declare_no_addons(&command)?;
     let environment = BTreeMap::from([
         ("SDL_AUDIODRIVER".into(), "dummy".into()),
         ("SDL_VIDEODRIVER".into(), "dummy".into()),
@@ -940,6 +941,22 @@ fn tree_entries(entries: &[ContentEntry]) -> Vec<TreeEntry> {
             bytes: entry.bytes,
         })
         .collect()
+}
+
+/// Declare before the child starts that the run selects no addon. The retained
+/// content holds no addon pack, so a command that selected one would run on
+/// content the evidence does not hold.
+fn declare_no_addons(command: &[String]) -> Result<(), String> {
+    if let Some(argument) = command
+        .iter()
+        .find(|argument| argument.starts_with("--addon"))
+    {
+        return Err(format!(
+            "{argument} selects addon content the proof does not retain"
+        ));
+    }
+    println!("content_selection\taddons_selected\tnone");
+    Ok(())
 }
 
 /// Say what was retained, what the retained package makes redundant and what
@@ -3726,6 +3743,16 @@ mod content_selection_tests {
             .collect();
         assert_eq!(paths, ["base/f7.txt", "packages/p.uqm", "version"]);
         assert!(retained.entries.len() < limit);
+    }
+
+    #[test]
+    fn a_command_that_selects_an_addon_is_refused_because_no_addon_is_retained() {
+        let plain = ["uqm".to_string(), "--contentdir=c".to_string()];
+        assert_eq!(declare_no_addons(&plain), Ok(()));
+        for argument in ["--addon=remix", "--addondir=/tmp/a"] {
+            let selecting = ["uqm".to_string(), argument.to_string()];
+            assert!(declare_no_addons(&selecting).is_err(), "{argument}");
+        }
     }
 
     #[test]
