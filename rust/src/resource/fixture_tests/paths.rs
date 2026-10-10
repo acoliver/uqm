@@ -114,12 +114,10 @@ fn pt4_missing_files_report_enoent() {
 }
 
 /// With no mount at "/", an absolute host path is not part of the virtual
-/// tree. The Rust port opens an uncovered path relative to the handle's host
-/// directory instead (documented, and relied on by many UIO unit tests); the
-/// game always mounts content at "/", so the gap is not reachable in play.
+/// tree: C answers ENOENT for any path no mount covers, so the file must not
+/// be served from the host.
 #[test]
 #[serial]
-#[ignore = "known divergence: uncovered paths fall back to the handle's host directory (UIO owner's call)"]
 fn pt5_a_path_no_mount_covers_is_not_served_from_the_host() {
     let _session = Session::begin();
     let repo = Repo::open();

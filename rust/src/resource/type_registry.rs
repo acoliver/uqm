@@ -110,14 +110,23 @@ pub unsafe extern "C" fn descriptor_to_int(descriptor: *const c_char, resdata: *
     if descriptor.is_null() || resdata.is_null() {
         return;
     }
-    let value = c_atoi(CStr::from_ptr(descriptor).to_bytes());
-    (*resdata).num = value as u32;
+    let bytes = CStr::from_ptr(descriptor).to_bytes();
+    let wide = c_strtol(bytes);
+    // C leaves the result of atoi() undefined when the number does not fit;
+    // the platform libc truncates the long, and so does this.
+    if i32::try_from(wide).is_err() {
+        log::warn!(
+            "INT32 descriptor {:?} does not fit in 32 bits; keeping the low 32 bits",
+            String::from_utf8_lossy(bytes)
+        );
+    }
+    (*resdata).num = wide as i32 as u32;
 }
 
-/// C `atoi`: skip leading white space, take an optional sign and the leading
-/// decimal digits, ignore the rest, and give 0 when there are no digits.
-/// Out-of-range values wrap the way `(int) strtol (...)` does.
-fn c_atoi(bytes: &[u8]) -> i32 {
+/// C `strtol (s, NULL, 10)`: skip leading white space, take an optional sign
+/// and the leading decimal digits, ignore the rest, give 0 when there are no
+/// digits, and saturate at the 64-bit range.
+fn c_strtol(bytes: &[u8]) -> i64 {
     let mut rest = bytes;
     while let [first, tail @ ..] = rest {
         if !matches!(first, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r') {
@@ -143,8 +152,11 @@ fn c_atoi(bytes: &[u8]) -> i32 {
             acc.saturating_mul(10)
                 .saturating_add(i64::from(digit - b'0'))
         });
-    let value = if negative { -magnitude } else { magnitude };
-    value as i32
+    if negative {
+        -magnitude
+    } else {
+        magnitude
+    }
 }
 
 /// Built-in BOOLEAN loader: case-insensitive "true" → 1, everything else → 0.

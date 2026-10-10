@@ -38,13 +38,11 @@ fn lf1_open_stream_survives_the_unmount_of_its_mount() {
     assert_eq!(repo.unmount(lower_mount), 0);
 }
 
-/// C answers ENOENT once the last mount is gone. The Rust port opens a path
-/// no mount covers relative to the handle's host directory (a deliberate,
-/// documented fallback that many UIO unit tests depend on), so a handle opened
-/// while a mount was on top keeps reading that mount's host files.
+/// C answers ENOENT once the last mount is gone, even for a handle that was
+/// opened while that mount was on top: the handle names a repository path, not
+/// the mount's host directory.
 #[test]
 #[serial]
-#[ignore = "known divergence: uncovered paths fall back to the handle's host directory (UIO owner's call)"]
 fn lf1b_nothing_is_served_after_the_last_mount_is_gone() {
     let _session = Session::begin();
     let repo = Repo::open();

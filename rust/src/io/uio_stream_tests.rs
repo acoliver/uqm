@@ -25,14 +25,7 @@ impl Dir {
         for (name, data) in files {
             std::fs::write(temp.path().join(name), data).unwrap();
         }
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp.path().to_path_buf(),
-            virtual_path: temp.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: temp.path().to_path_buf(),
-        }));
+        let (repo, handle) = super::layered_open_tests::mount_host_root(temp.path());
         Dir { temp, repo, handle }
     }
 
@@ -55,10 +48,7 @@ impl Dir {
 
 impl Drop for Dir {
     fn drop(&mut self) {
-        unsafe {
-            let _ = Box::from_raw(self.handle);
-            let _ = Box::from_raw(self.repo);
-        }
+        unsafe { super::layered_open_tests::release_host_root(self.repo, self.handle) };
     }
 }
 

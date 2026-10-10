@@ -179,8 +179,8 @@ pub unsafe extern "C" fn uio_rename(
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let old_dir_path = &(*old_dir).path;
-        let new_dir_path = &(*new_dir).path;
+        let old_dir_path = &(*old_dir).virtual_path;
+        let new_dir_path = &(*new_dir).virtual_path;
 
         let old_input = match cstr_to_pathbuf(old_path) {
             Some(p) => p,
@@ -506,7 +506,6 @@ pub unsafe extern "C" fn uio_mkdir(
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_host_path = &(*dir).path;
         let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
@@ -517,21 +516,12 @@ pub unsafe extern "C" fn uio_mkdir(
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let host_path = if let Some(resolution) = resolve_mount_for_path(&registry, &virtual_path) {
-            // Path is in a mount - extract data before dropping registry
-            let is_readonly = resolution.mount.read_only;
-            let path = resolution.host_path.clone();
-            drop(registry);
-
-            if is_readonly {
-                return fail_errno(libc::EACCES, -1);
-            }
-            path
-        } else {
-            drop(registry);
-            // No mount - fall back to direct path resolution
-            resolve_path(dir_host_path, &input_path)
+        let host_path = match resolve_mount_for_path(&registry, &virtual_path) {
+            Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
+            Some(resolution) => resolution.host_path.clone(),
+            None => return fail_errno(libc::ENOENT, -1),
         };
+        drop(registry);
 
         match fs::create_dir(&host_path) {
             Ok(_) => 0,
@@ -558,7 +548,6 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_host_path = &(*dir).path;
         let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
@@ -569,21 +558,12 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let host_path = if let Some(resolution) = resolve_mount_for_path(&registry, &virtual_path) {
-            // Path is in a mount - extract data before dropping registry
-            let is_readonly = resolution.mount.read_only;
-            let path = resolution.host_path.clone();
-            drop(registry);
-
-            if is_readonly {
-                return fail_errno(libc::EACCES, -1);
-            }
-            path
-        } else {
-            drop(registry);
-            // No mount - fall back to direct path resolution
-            resolve_path(dir_host_path, &input_path)
+        let host_path = match resolve_mount_for_path(&registry, &virtual_path) {
+            Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
+            Some(resolution) => resolution.host_path.clone(),
+            None => return fail_errno(libc::ENOENT, -1),
         };
+        drop(registry);
 
         match fs::remove_dir(&host_path) {
             Ok(_) => 0,
@@ -3196,8 +3176,8 @@ pub unsafe extern "C" fn uio_open(
 /// Writes (and creations) go to the topmost mount covering the path and fail
 /// with EACCES when that mount is read-only or an archive. Reads try every
 /// covering mount in priority order: a mount lacking the file lets the lookup
-/// fall through to the next one, any other failure is final. Only a path no
-/// mount covers is opened relative to the directory handle's host path.
+/// fall through to the next one, any other failure is final. A path no mount
+/// covers does not exist: the answer is ENOENT, as in the original repository.
 ///
 /// Returns the errno on failure.
 ///
@@ -3219,7 +3199,7 @@ fn open_through_mounts(
                 return Err(libc::EACCES)
             }
             Some(resolution) => resolution.host_path,
-            None => resolve_path(&dir.path, input_path),
+            None => return Err(libc::ENOENT),
         };
         drop(registry);
         return open_host_file(&host_path, flags)
@@ -3234,13 +3214,11 @@ fn open_through_mounts(
     }
 
     let normalized = normalize_virtual_path(&virtual_path);
-    let mut covered_by_a_mount = false;
     for mount in registry.iter().filter(|m| m.active_in_registry) {
         let mount_path = Path::new(&mount.mount_point);
         if normalized != mount_path && !normalized.starts_with(mount_path) {
             continue;
         }
-        covered_by_a_mount = true;
         let suffix = normalized
             .strip_prefix(mount_path)
             .unwrap_or_else(|_| Path::new(""));
@@ -3275,22 +3253,7 @@ fn open_through_mounts(
             }
         }
     }
-    drop(registry);
-
-    if covered_by_a_mount {
-        return Err(libc::ENOENT);
-    }
-
-    let host_path = resolve_path(&dir.path, input_path);
-    open_host_file(&host_path, flags)
-        .map(uio_HandleInner::File)
-        .map_err(|err| {
-            log_marker(&format!(
-                "uio_open read failed: path={:?} err={}",
-                host_path, err
-            ));
-            err.raw_os_error().unwrap_or(libc::EIO)
-        })
+    Err(libc::ENOENT)
 }
 
 /// Opens a host file with the access, creation, truncation and append
@@ -3425,7 +3388,6 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_host_path = &(*dir).path;
         let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
@@ -3436,21 +3398,12 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
 
         // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let file_path = if let Some(resolution) = resolve_mount_for_path(&registry, &virtual_path) {
-            // Path is in a mount - extract data before dropping registry
-            let is_readonly = resolution.mount.read_only;
-            let path = resolution.host_path.clone();
-            drop(registry);
-
-            if is_readonly {
-                return fail_errno(libc::EACCES, -1);
-            }
-            path
-        } else {
-            drop(registry);
-            // No mount - fall back to direct path resolution
-            resolve_path(dir_host_path, &input_path)
+        let file_path = match resolve_mount_for_path(&registry, &virtual_path) {
+            Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
+            Some(resolution) => resolution.host_path.clone(),
+            None => return fail_errno(libc::ENOENT, -1),
         };
+        drop(registry);
 
         match fs::remove_file(&file_path) {
             Ok(_) => 0,
@@ -4377,14 +4330,7 @@ mod tests {
             let test_file = temp_dir.path().join("test.txt");
             fs::write(&test_file, b"test content").unwrap();
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("test.txt").unwrap();
             let mode = CString::new("r").unwrap();
@@ -4395,8 +4341,7 @@ mod tests {
             unsafe {
                 assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
                 uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
@@ -4412,14 +4357,7 @@ mod tests {
             let test_file = temp_dir.path().join("test.txt");
             fs::write(&test_file, b"A").unwrap(); // Single byte file
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("test.txt").unwrap();
             let mode = CString::new("r").unwrap();
@@ -4444,8 +4382,7 @@ mod tests {
                 assert_eq!(uio_ferror(stream), 0);
 
                 uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
@@ -4461,14 +4398,7 @@ mod tests {
             let test_file = temp_dir.path().join("test.txt");
             fs::write(&test_file, b"").unwrap(); // Empty file
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("test.txt").unwrap();
             let mode = CString::new("r").unwrap();
@@ -4489,8 +4419,7 @@ mod tests {
                 assert_eq!(uio_ferror(stream), 0);
 
                 uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
@@ -4506,14 +4435,7 @@ mod tests {
             let test_file = temp_dir.path().join("test.txt");
             fs::write(&test_file, b"ABCD").unwrap();
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("test.txt").unwrap();
             let mode = CString::new("r").unwrap();
@@ -4540,8 +4462,7 @@ mod tests {
                 assert_eq!(uio_feof(stream), 0);
 
                 uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
@@ -4557,14 +4478,7 @@ mod tests {
             let test_file = temp_dir.path().join("test.txt");
             fs::write(&test_file, b"").unwrap();
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("test.txt").unwrap();
             let mode = CString::new("w").unwrap();
@@ -4581,8 +4495,7 @@ mod tests {
                 assert_eq!((*stream).status, UIO_STREAM_STATUS_OK);
 
                 uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
@@ -4598,14 +4511,7 @@ mod tests {
             let test_file = temp_dir.path().join("test.txt");
             fs::write(&test_file, b"X").unwrap();
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("test.txt").unwrap();
             let mode = CString::new("r").unwrap();
@@ -4626,8 +4532,7 @@ mod tests {
                 assert_eq!(uio_feof(stream), 1);
 
                 uio_fclose(stream);
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
@@ -4793,14 +4698,7 @@ mod tests {
             let existing_dir = temp_dir.path().join("existing");
             fs::create_dir(&existing_dir).unwrap();
 
-            let repository = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-            let dir_handle = Box::into_raw(Box::new(uio_DirHandle {
-                path: temp_dir.path().to_path_buf(),
-                virtual_path: temp_dir.path().to_path_buf(),
-                refcount: std::sync::atomic::AtomicI32::new(1),
-                repository,
-                root_end: temp_dir.path().to_path_buf(),
-            }));
+            let (repository, dir_handle) = layered_open_tests::mount_host_root(temp_dir.path());
 
             let path = CString::new("existing").unwrap();
 
@@ -4813,8 +4711,7 @@ mod tests {
                 // errno should be EEXIST (directory already exists)
                 assert_eq!(current_errno(), libc::EEXIST);
 
-                let _ = Box::from_raw(dir_handle);
-                let _ = Box::from_raw(repository);
+                layered_open_tests::release_host_root(repository, dir_handle);
             }
         }
     }
