@@ -194,7 +194,7 @@ fn locate(dir: *mut uio_DirHandle, name: &str) -> Result<(*mut uio_MountHandle, 
     Ok((mount, path))
 }
 
-fn stdio_access(
+pub(super) fn stdio_access(
     dir: *mut uio_DirHandle,
     name: &str,
     temp: *mut uio_DirHandle,
@@ -219,7 +219,7 @@ fn same_file(a: &Path, b: &Path) -> bool {
     }
 }
 
-fn list_names(dir: *mut uio_DirHandle, path: &str) -> Vec<String> {
+pub(super) fn list_names(dir: *mut uio_DirHandle, path: &str) -> Vec<String> {
     let (path, pattern) = (cstr(path), cstr(""));
     unsafe {
         let list = uio_getDirList(dir, path.as_ptr(), pattern.as_ptr(), MATCH_SUBSTRING);
@@ -1000,7 +1000,7 @@ fn mount_dir_refuses_inconsistent_sources_types_and_mount_points() {
 // F12: an archive can only be mounted read-only (zip_mount)
 // ---------------------------------------------------------------------------
 
-fn mount_count() -> usize {
+pub(super) fn mount_count() -> usize {
     get_mount_registry().lock().unwrap().len()
 }
 

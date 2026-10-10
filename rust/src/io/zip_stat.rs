@@ -29,7 +29,6 @@
 //! nothing: they are read-only and searchable, with no time.
 
 use std::fmt;
-use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 
 use zip::DateTime;
@@ -155,7 +154,7 @@ impl CentralRecord {
 
     /// Reads the header at `offset` of `archive`. The `zip` crate has parsed
     /// the same header, so anything else there is a damaged archive.
-    pub fn read(archive: &mut File, offset: u64) -> io::Result<Self> {
+    pub fn read(archive: &mut (impl Read + Seek), offset: u64) -> io::Result<Self> {
         let mut header = [0u8; CENTRAL_PREFIX_LEN];
         archive.seek(SeekFrom::Start(offset))?;
         archive.read_exact(&mut header)?;

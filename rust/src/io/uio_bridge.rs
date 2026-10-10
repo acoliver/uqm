@@ -887,14 +887,26 @@ fn check_relative(flags: c_int, relative: *mut uio_MountHandle) -> Result<(), c_
 /// `zip_mount` of the original: an archive can only be mounted read-only, so
 /// a mount without `uio_MOUNT_RDONLY` is EACCES rather than a writable
 /// archive. The archive file was found before this, and is read after it.
+fn require_read_only_archive(flags: c_int) -> Result<(), c_int> {
+    if flags & UIO_MOUNT_RDONLY == UIO_MOUNT_RDONLY {
+        Ok(())
+    } else {
+        Err(libc::EACCES)
+    }
+}
+
 fn index_archive_for_mount(
     path: &Path,
     flags: c_int,
 ) -> Result<Arc<crate::io::zip_reader::ZipIndex>, c_int> {
-    if flags & UIO_MOUNT_RDONLY != UIO_MOUNT_RDONLY {
-        return Err(libc::EACCES);
-    }
+    require_read_only_archive(flags)?;
     index_archive(path)
+}
+
+/// The errno of a failure to read an archive: the host's own, EIO for a
+/// source that is not a readable archive, as in the original.
+fn archive_errno(err: std::io::Error) -> c_int {
+    err.raw_os_error().unwrap_or(libc::EIO)
 }
 
 /// Indexes the archive at `path`. A failure of the host (no such file, no
@@ -903,7 +915,27 @@ fn index_archive_for_mount(
 fn index_archive(path: &Path) -> Result<Arc<crate::io::zip_reader::ZipIndex>, c_int> {
     crate::io::zip_reader::ZipIndex::new(path)
         .map(Arc::new)
-        .map_err(|err| err.raw_os_error().unwrap_or(libc::EIO))
+        .map_err(archive_errno)
+}
+
+/// Indexes the archive that the entry `name` of `parent` holds. The mount
+/// keeps the entry's decoded bytes, so it no longer depends on `parent` or on
+/// the mount and host file `parent` came from. An entry that has no `stat`
+/// (a link, a device) is ENOTSUP, as `zip_mount`'s `uio_fstat` of the source
+/// gave; one that fails its checksum or is not an archive is EIO.
+fn index_nested_archive(
+    parent: &crate::io::zip_reader::ZipIndex,
+    name: &str,
+    flags: c_int,
+) -> Result<Arc<crate::io::zip_reader::ZipIndex>, c_int> {
+    require_read_only_archive(flags)?;
+    if let Some(Err(_)) = parent.stat(name) {
+        return Err(libc::ENOTSUP);
+    }
+    let bytes = parent.read_entry(name).map_err(archive_errno)?;
+    crate::io::zip_reader::ZipIndex::from_entry_bytes(Arc::from(bytes))
+        .map(Arc::new)
+        .map_err(archive_errno)
 }
 
 /// @plan PLAN-20260314-FILE-IO.P06
@@ -3176,6 +3208,20 @@ fn archive_subdirectory(
     }
 }
 
+/// The archive file a mount names, as the repository's mounts hold it now.
+enum ArchiveFile {
+    /// A file of a directory mount.
+    Host(PathBuf),
+    /// An entry of an archive mount. `parent` is the index that mount holds;
+    /// `path` names the entry for the new mount's `mounted_root`, which is a
+    /// label only: nothing looks it up on the host.
+    Entry {
+        parent: Arc<crate::io::zip_reader::ZipIndex>,
+        name: String,
+        path: PathBuf,
+    },
+}
+
 /// The archive file `file` names inside `dir`, found in the repository's
 /// mounts as they are now, indexed and ready to mount.
 fn archive_backing(
@@ -3185,20 +3231,36 @@ fn archive_backing(
     flags: c_int,
 ) -> Result<MountBacking, c_int> {
     let virtual_path = normalize_virtual_path_full(&dir.virtual_path, file);
-    let host_file = {
+    let found = {
         let registry = get_mount_registry().lock().unwrap();
         let found = locate(&registry, repository_key(dir.repository), &virtual_path)?;
         match (found.kind, found.place) {
             (Kind::Directory, _) => return Err(libc::EISDIR),
-            (Kind::File, Place::Host(path)) => path,
-            // The index reads the archive from the host file system.
-            (Kind::File, Place::Archive(_)) => return Err(libc::ENOTSUP),
+            (Kind::File, Place::Host(path)) => ArchiveFile::Host(path),
+            (Kind::File, Place::Archive(name)) => ArchiveFile::Entry {
+                parent: found
+                    .mount
+                    .zip_index
+                    .clone()
+                    .expect("an archive mount is registered with its index"),
+                path: found.mount.mounted_root.join(&name),
+                name,
+            },
         }
     };
-    let index = index_archive_for_mount(&host_file, flags)?;
+    // The registry is no longer locked: decoding an entry can take a while.
+    let (mounted_root, index) = match found {
+        ArchiveFile::Host(path) => {
+            let index = index_archive_for_mount(&path, flags)?;
+            (path, index)
+        }
+        ArchiveFile::Entry { parent, name, path } => {
+            (path, index_nested_archive(&parent, &name, flags)?)
+        }
+    };
     let archive_root = archive_subdirectory(&index, in_path)?;
     Ok(MountBacking {
-        mounted_root: host_file,
+        mounted_root,
         fs_type: UIO_FSTYPE_ZIP,
         zip_index: Some(index),
         archive_root,
@@ -7452,3 +7514,7 @@ mod archive_stat_tests;
 #[cfg(test)]
 #[path = "uio_archive_path_tests.rs"]
 mod archive_path_tests;
+
+#[cfg(test)]
+#[path = "uio_nested_archive_tests.rs"]
+mod nested_archive_tests;
