@@ -35,14 +35,14 @@ pub(super) fn formats() -> TFB_DecoderFormats {
 }
 
 /// A uio repository whose root is a temporary directory.
-pub(super) struct Directory {
+pub(crate) struct Directory {
     files: TempDir,
     repository: *mut crate::io::uio_bridge::uio_Repository,
     handle: *mut crate::io::uio_bridge::uio_DirHandle,
 }
 
 impl Directory {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let files = TempDir::new().unwrap();
         unsafe {
             uio_init();
@@ -71,11 +71,15 @@ impl Directory {
         }
     }
 
-    pub(super) fn write(&self, name: &str, bytes: &[u8]) {
+    pub(crate) fn write(&self, name: &str, bytes: &[u8]) {
         std::fs::write(self.files.path().join(name), bytes).unwrap();
     }
 
-    pub(super) fn handle(&self) -> *mut uio_DirHandle {
+    pub(crate) fn path_of(&self, name: &str) -> std::path::PathBuf {
+        self.files.path().join(name)
+    }
+
+    pub(crate) fn handle(&self) -> *mut uio_DirHandle {
         self.handle as *mut uio_DirHandle
     }
 }

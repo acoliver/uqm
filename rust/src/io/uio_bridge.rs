@@ -7940,5 +7940,17 @@ mod layered_open_tests;
 mod stream_tests;
 
 #[cfg(test)]
+#[path = "uio_access_tests.rs"]
+mod access_tests;
+
+#[cfg(test)]
+#[path = "uio_fileops_tests.rs"]
+mod fileops_tests;
+
+#[cfg(test)]
+#[path = "uio_fileblock_tests.rs"]
+mod fileblock_tests;
+
+#[cfg(test)]
 #[path = "uio_mount_ops_tests.rs"]
 mod mount_ops_tests;

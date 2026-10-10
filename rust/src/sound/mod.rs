@@ -17,13 +17,15 @@ pub mod aiff;
 pub mod aiff_ffi;
 pub mod decoder;
 #[cfg(test)]
-mod decoder_vtable_tests;
+pub(crate) mod decoder_vtable_tests;
 pub mod dukaud;
 pub mod dukaud_ffi;
 #[cfg(test)]
 mod dukaud_vtable_tests;
 pub mod ffi;
 pub mod formats;
+#[cfg(test)]
+mod heart_ffi_tests;
 pub mod mixer;
 pub mod mod_decoder;
 pub mod mod_ffi;
