@@ -7,6 +7,8 @@ pub mod direct;
 pub mod dispatch;
 pub mod ffi_bridge;
 pub mod ffi_types;
+#[cfg(test)]
+mod fixture_tests;
 pub mod propfile;
 pub mod resource_type;
 pub mod string_bank;
