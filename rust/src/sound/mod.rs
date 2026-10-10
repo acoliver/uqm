@@ -36,6 +36,8 @@ pub mod heart_ffi;
 pub mod music;
 pub mod sfx;
 pub mod stream;
+#[cfg(test)]
+mod test_support;
 pub mod trackplayer;
 // @plan PLAN-20260225-AUDIO-HEART.P03
 // @requirement REQ-CROSS-GENERAL-07

@@ -245,11 +245,10 @@ pub unsafe extern "C" fn rust_dcq_push_drawrect(
 
 /// Push a FilledRect command onto the DCQ.
 ///
-/// The DCQ `Rect` variant is used for both outline and fill; the
-/// `handle_command` dispatch in `dcqueue.rs` currently draws outlines.
-/// For filled rectangles we push a `Rect` with `DrawMode::Blended` to
-/// distinguish it from outline draws. In the future, a dedicated
-/// `FilledRect` variant may be added.
+/// The DCQ `Rect` variant is used for both outline and fill. Filled
+/// rectangles are pushed with `DrawMode::Blended`, which `handle_command`
+/// in `dcqueue.rs` draws as a fill; any other mode is an outline. In the
+/// future, a dedicated `FilledRect` variant may be added.
 ///
 /// Returns 0 on success, -1 on error.
 ///

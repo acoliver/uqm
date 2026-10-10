@@ -1393,8 +1393,13 @@ fn compute_fade_volume(fade: &FadeState, now: u32) -> i32 {
 // =============================================================================
 
 #[cfg(test)]
+#[path = "stream_pipeline_tests.rs"]
+mod pipeline_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sound::test_support::ENGINE_TEST_LOCK;
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
@@ -1718,6 +1723,7 @@ mod tests {
 
     #[test]
     fn test_init_decoder_spawns_thread() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         init_stream_decoder().unwrap();
         let guard = ENGINE.decoder_thread.lock();
         assert!(guard.is_some());
@@ -1727,6 +1733,7 @@ mod tests {
 
     #[test]
     fn test_uninit_decoder_joins_thread() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         init_stream_decoder().unwrap();
         uninit_stream_decoder().unwrap();
         let guard = ENGINE.decoder_thread.lock();
@@ -1735,6 +1742,7 @@ mod tests {
 
     #[test]
     fn test_uninit_no_thread_ok() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         // Should not error when no thread is running
         let result = uninit_stream_decoder();
         assert!(result.is_ok());
