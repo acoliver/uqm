@@ -541,4 +541,262 @@ mod tests {
         buf2.locked = true;
         assert_eq!(buf2.check_state(), Err(MixerError::InvalidOperation));
     }
+
+    // The format word is MIX_FORMAT_MAKE: DUMMYID | bytes-per-channel | channels << 8.
+    const MONO8: u32 = 0x0017_0101;
+    const MONO16: u32 = 0x0017_0102;
+    const STEREO8: u32 = 0x0017_0201;
+    const STEREO16: u32 = 0x0017_0202;
+
+    fn le16(samples: &[i16]) -> Vec<u8> {
+        samples
+            .iter()
+            .flat_map(|sample| sample.to_le_bytes())
+            .collect()
+    }
+
+    /// What the mixer will play from a loaded buffer.
+    struct Loaded {
+        data: Option<Vec<u8>>,
+        size: u32,
+        sampsize: u32,
+        high: u32,
+        low: u32,
+        org_channels: u32,
+        org_chansize: u32,
+        state: u32,
+    }
+
+    /// Loads `data` into a fresh buffer and reports what it holds afterwards.
+    fn load(
+        format: u32,
+        data: &[u8],
+        freq: u32,
+        mixer_freq: u32,
+        mixer_format: MixerFormat,
+    ) -> Result<Loaded, MixerError> {
+        let handle = mixer_gen_buffers(1).unwrap()[0];
+        let loaded = mixer_buffer_data(handle, format, data, freq, mixer_freq, mixer_format);
+        let buffer = mixer_get_buffer(handle).unwrap();
+        let snapshot = {
+            let guard = buffer.lock();
+            Loaded {
+                data: guard.data.clone(),
+                size: guard.size,
+                sampsize: guard.sampsize,
+                high: guard.high,
+                low: guard.low,
+                org_channels: guard.org_channels,
+                org_chansize: guard.org_chansize,
+                state: guard.state,
+            }
+        };
+        mixer_delete_buffers(&[handle]).unwrap();
+        loaded.map(|()| snapshot)
+    }
+
+    #[test]
+    fn eight_bit_mono_is_widened_to_signed_sixteen_bit() {
+        // 8-bit PCM is unsigned with 128 as silence; the mixer plays signed 16-bit.
+        let buffer = load(MONO8, &[128, 255, 0], 44100, 44100, MixerFormat::Stereo16).unwrap();
+        assert_eq!(
+            buffer.data.as_deref(),
+            Some(&le16(&[0, 127 << 8, -128 << 8])[..])
+        );
+        assert_eq!(buffer.size, 6);
+        // Mono sources stay mono even when the mixer output is stereo.
+        assert_eq!(buffer.sampsize, 2);
+        assert_eq!(buffer.org_channels, 1);
+        assert_eq!(buffer.org_chansize, 1);
+        assert_eq!(buffer.state, BufferState::Filled as u32);
+    }
+
+    #[test]
+    fn stereo_sixteen_bit_is_averaged_when_the_mixer_is_mono() {
+        let source = le16(&[1000, 3000, -1000, -3001, i16::MAX, i16::MAX]);
+        let buffer = load(STEREO16, &source, 44100, 44100, MixerFormat::Mono16).unwrap();
+        // Averages use integer division, so -4001 / 2 truncates toward zero.
+        assert_eq!(
+            buffer.data.as_deref(),
+            Some(&le16(&[2000, -2000, i16::MAX])[..])
+        );
+        assert_eq!(buffer.sampsize, 2);
+        assert_eq!(buffer.size, 6);
+        assert_eq!(buffer.org_channels, 2);
+    }
+
+    #[test]
+    fn sixteen_bit_sources_are_narrowed_for_an_eight_bit_mixer() {
+        let buffer = load(
+            MONO16,
+            &le16(&[0x1234, -0x1234, 0x7fff]),
+            44100,
+            44100,
+            MixerFormat::Mono8,
+        )
+        .unwrap();
+        // The arithmetic shift keeps the sign: -0x1234 >> 8 is -19.
+        assert_eq!(
+            buffer.data.as_deref(),
+            Some(&[0x12_u8, (-19_i8) as u8, 0x7f][..])
+        );
+        assert_eq!(buffer.sampsize, 1);
+    }
+
+    #[test]
+    fn stereo_eight_bit_is_downmixed_and_widened_in_one_pass() {
+        // Unsigned 8-bit pairs (130,134) and (100,100) become signed (2,6) and (-28,-28).
+        let buffer = load(
+            STEREO8,
+            &[130, 134, 100, 100],
+            44100,
+            44100,
+            MixerFormat::Mono16,
+        )
+        .unwrap();
+        assert_eq!(buffer.data.as_deref(), Some(&le16(&[4 << 8, -28 << 8])[..]));
+    }
+
+    #[test]
+    fn matching_sixteen_bit_formats_are_copied_unchanged() {
+        let samples = le16(&[1, -2, 300, -400]);
+        for (format, mixer_format) in [
+            (MONO16, MixerFormat::Mono16),
+            (MONO16, MixerFormat::Stereo16),
+            (STEREO16, MixerFormat::Stereo16),
+        ] {
+            let buffer = load(format, &samples, 44100, 44100, mixer_format).unwrap();
+            assert_eq!(buffer.data.as_deref(), Some(&samples[..]), "{format:#x}");
+            assert_eq!(buffer.size as usize, samples.len());
+        }
+    }
+
+    #[test]
+    fn matching_eight_bit_formats_only_flip_the_sign_bit() {
+        let buffer = load(
+            STEREO8,
+            &[0, 128, 255, 127],
+            44100,
+            44100,
+            MixerFormat::Stereo8,
+        )
+        .unwrap();
+        assert_eq!(
+            buffer.data.as_deref(),
+            Some(&[0x80_u8, 0x00, 0x7f, 0xff][..])
+        );
+    }
+
+    #[test]
+    fn a_trailing_partial_sample_is_dropped_by_conversion() {
+        // Six bytes hold one and a half 16-bit stereo frames.
+        let buffer = load(
+            STEREO16,
+            &[1, 0, 3, 0, 9, 9],
+            44100,
+            44100,
+            MixerFormat::Mono16,
+        )
+        .unwrap();
+        assert_eq!(buffer.size, 2);
+        assert_eq!(buffer.data.as_deref(), Some(&le16(&[2])[..]));
+    }
+
+    #[test]
+    fn the_original_buffer_description_is_kept_for_property_queries() {
+        let source = le16(&[5, 6, 7, 8]);
+        let handle = mixer_gen_buffers(1).unwrap()[0];
+        mixer_buffer_data(
+            handle,
+            STEREO16,
+            &source,
+            22050,
+            44100,
+            MixerFormat::Stereo16,
+        )
+        .unwrap();
+        assert_eq!(mixer_get_buffer_i(handle, BufferProp::Frequency), Ok(22050));
+        assert_eq!(mixer_get_buffer_i(handle, BufferProp::Bits), Ok(16));
+        assert_eq!(mixer_get_buffer_i(handle, BufferProp::Channels), Ok(2));
+        assert_eq!(mixer_get_buffer_i(handle, BufferProp::Size), Ok(8));
+        assert_eq!(mixer_get_buffer_i(handle, BufferProp::Data), Ok(0));
+        let buffer = mixer_get_buffer(handle).unwrap();
+        assert_eq!(buffer.lock().org_data.as_deref(), Some(&source[..]));
+
+        buffer.lock().locked = true;
+        assert_eq!(
+            mixer_get_buffer_i(handle, BufferProp::Size),
+            Err(MixerError::InvalidOperation)
+        );
+        buffer.lock().locked = false;
+        buffer.lock().magic = 0;
+        assert_eq!(
+            mixer_get_buffer_i(handle, BufferProp::Size),
+            Err(MixerError::InvalidName)
+        );
+        assert_eq!(
+            mixer_get_buffer_i(usize::MAX, BufferProp::Size),
+            Err(MixerError::InvalidName)
+        );
+        buffer.lock().magic = MIXER_BUF_MAGIC;
+        mixer_delete_buffers(&[handle]).unwrap();
+    }
+
+    #[test]
+    fn resampling_step_follows_the_ratio_of_source_to_mixer_frequency() {
+        let data = le16(&[1, 2, 3, 4]);
+        for (freq, mixer_freq, high, low) in [
+            // Same rate: advance exactly one frame, no fraction.
+            (44100, 44100, 2, 0),
+            // Half rate: no whole frame per output sample, half a frame as a 16.16 fraction.
+            (22050, 44100, 0, 32768),
+            // 48 kHz into 44.1 kHz: one whole frame plus 3900/44100 of another.
+            (48000, 44100, 2, ((48000 % 44100) << 16) / 44100),
+            // Double rate: two whole frames, no fraction.
+            (88200, 44100, 4, 0),
+        ] {
+            let buffer = load(MONO16, &data, freq, mixer_freq, MixerFormat::Mono16).unwrap();
+            assert_eq!(
+                (buffer.high, buffer.low),
+                (high, low),
+                "{freq} -> {mixer_freq}"
+            );
+        }
+    }
+
+    #[test]
+    fn unusable_format_words_and_buffer_states_are_refused() {
+        let handle = mixer_gen_buffers(1).unwrap()[0];
+        let data = le16(&[1, 2]);
+        // Either field of the format word being zero leaves no sample size to decode.
+        for format in [0, 0x0017_0100, 0x0017_0002, 0x0017_0000] {
+            assert_eq!(
+                mixer_buffer_data(handle, format, &data, 44100, 44100, MixerFormat::Mono16),
+                Err(MixerError::InvalidValue),
+                "{format:#x}"
+            );
+        }
+        assert_eq!(
+            mixer_buffer_data(usize::MAX, MONO16, &data, 44100, 44100, MixerFormat::Mono16),
+            Err(MixerError::InvalidName)
+        );
+
+        let buffer = mixer_get_buffer(handle).unwrap();
+        buffer.lock().state = BufferState::Queued as u32;
+        assert_eq!(
+            mixer_buffer_data(handle, MONO16, &data, 44100, 44100, MixerFormat::Mono16),
+            Err(MixerError::InvalidOperation),
+            "a buffer a source is playing from cannot be refilled"
+        );
+        buffer.lock().state = BufferState::Filled as u32;
+        buffer.lock().locked = true;
+        assert_eq!(
+            mixer_buffer_data(handle, MONO16, &data, 44100, 44100, MixerFormat::Mono16),
+            Err(MixerError::InvalidOperation)
+        );
+        buffer.lock().locked = false;
+        // A filled buffer that is not yet queued may be refilled.
+        mixer_buffer_data(handle, MONO16, &data, 44100, 44100, MixerFormat::Mono16).unwrap();
+        mixer_delete_buffers(&[handle]).unwrap();
+    }
 }

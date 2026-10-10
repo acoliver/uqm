@@ -2894,7 +2894,7 @@ fn artifact_digests(artifacts: &[Artifact]) -> Vec<ArtifactDigest> {
 }
 
 fn describe_artifact_difference(first: &[Artifact], second: &[Artifact]) -> String {
-    let changed: Vec<_> = first
+    let mut changed: Vec<_> = first
         .iter()
         .zip(second)
         .filter(|(left, right)| left != right)
@@ -2905,6 +2905,15 @@ fn describe_artifact_difference(first: &[Artifact], second: &[Artifact]) -> Stri
             )
         })
         .collect();
+    if first.len() != second.len() {
+        // zip stops at the shorter build, so a missing artifact would
+        // otherwise be reported as an empty difference.
+        changed.push(format!(
+            "artifact count first={} second={}",
+            first.len(),
+            second.len()
+        ));
+    }
     format!(
         "production artifacts differ across two clean builds: {}",
         changed.join("; ")
@@ -4155,5 +4164,214 @@ mod native_admission_regressions {
         assert!(reject_dirty_source(root)
             .unwrap_err()
             .contains("untracked.rs"));
+    }
+
+    fn tool_identity(executable: &str, version: &str) -> uqm_ownership::ToolIdentity {
+        uqm_ownership::ToolIdentity {
+            executable: executable.into(),
+            version: version.into(),
+            sha256: "0".repeat(64),
+            effective_args: Vec::new(),
+        }
+    }
+
+    fn sample_toolchain() -> ToolchainIdentity {
+        ToolchainIdentity {
+            target: "aarch64-apple-darwin".into(),
+            rustc: tool_identity("/tools/rustc", "rustc 1"),
+            cargo: tool_identity("/tools/cargo", "cargo 1"),
+            cc: tool_identity("/tools/cc", "cc 1"),
+            ar: tool_identity("/tools/ar", "ar 1"),
+            nm: tool_identity("/tools/nm", "nm 1"),
+            pkg_config: tool_identity("/tools/pkg-config", "pkg-config 1"),
+            linker: tool_identity("/tools/linker", "linker 1"),
+        }
+    }
+
+    fn sample_artifact(role: &str, sha256: &str, byte_length: u64) -> Artifact {
+        Artifact {
+            role: role.into(),
+            path: format!("rust/target/release/{role}"),
+            media_type: "application/octet-stream".into(),
+            producing_command: CARGO_BUILD_COMMAND.into(),
+            byte_length,
+            sha256: sha256.into(),
+        }
+    }
+
+    #[test]
+    fn toolchain_difference_names_the_target_before_any_tool() {
+        let recorded = sample_toolchain();
+        let mut live = sample_toolchain();
+        live.target = "x86_64-apple-darwin".into();
+        live.cc = tool_identity("/other/cc", "cc 2");
+        assert_eq!(
+            describe_toolchain_difference(&recorded, &live),
+            "target recorded aarch64-apple-darwin but resolved x86_64-apple-darwin"
+        );
+    }
+
+    #[test]
+    fn toolchain_difference_names_the_first_tool_whose_path_moved() {
+        let recorded = sample_toolchain();
+        let mut live = sample_toolchain();
+        live.ar = tool_identity("/elsewhere/ar", "ar 1");
+        live.linker = tool_identity("/elsewhere/linker", "linker 1");
+        assert_eq!(
+            describe_toolchain_difference(&recorded, &live),
+            "ar recorded /tools/ar but resolved /elsewhere/ar"
+        );
+    }
+
+    #[test]
+    fn toolchain_difference_reports_a_version_change_at_an_unchanged_path() {
+        let recorded = sample_toolchain();
+        let mut live = sample_toolchain();
+        live.pkg_config.version = "pkg-config 2".into();
+        assert_eq!(
+            describe_toolchain_difference(&recorded, &live),
+            "pkg_config at /tools/pkg-config recorded a different version than it now reports"
+        );
+    }
+
+    #[test]
+    fn toolchain_difference_admits_when_nothing_differs() {
+        let recorded = sample_toolchain();
+        let message = describe_toolchain_difference(&recorded, &recorded.clone());
+        assert!(message.contains("contradicts the comparison"), "{message}");
+    }
+
+    #[test]
+    fn resolution_inputs_name_every_variable_that_selects_the_linker_and_compiler() {
+        let report = describe_resolution_inputs("aarch64-apple-darwin");
+        for name in [
+            "CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER",
+            "RUSTC_LINKER",
+            "CC",
+            "CC_aarch64-apple-darwin",
+            "CC_aarch64_apple_darwin",
+        ] {
+            assert!(
+                report.contains(&format!("{name}=")) || report.contains(&format!("{name} unset")),
+                "{name} missing from {report}"
+            );
+        }
+    }
+
+    #[test]
+    fn cargo_arguments_gain_a_target_directory_only_when_one_is_requested() {
+        let plain = cargo_args_with_target(["test", "--locked"], None);
+        assert_eq!(plain, [OsString::from("test"), OsString::from("--locked")]);
+
+        let target = Path::new("/ci/target");
+        let redirected = cargo_args_with_target(["test", "--locked"], Some(target));
+        assert_eq!(
+            redirected,
+            [
+                OsString::from("test"),
+                OsString::from("--locked"),
+                OsString::from("--target-dir"),
+                OsString::from("/ci/target"),
+            ]
+        );
+    }
+
+    #[test]
+    fn exactly_one_accepts_a_single_candidate_and_rejects_zero_or_many() {
+        let one: BTreeSet<_> = ["rust/target/release/uqm".to_string()].into();
+        assert_eq!(
+            exactly_one(one, "executable").unwrap(),
+            "rust/target/release/uqm"
+        );
+
+        let none: BTreeSet<String> = BTreeSet::new();
+        let error = exactly_one(none, "executable").unwrap_err();
+        assert!(error.contains("0 candidates for executable"), "{error}");
+
+        let many: BTreeSet<_> = ["a".to_string(), "b".to_string()].into();
+        let error = exactly_one(many, "executable").unwrap_err();
+        assert!(error.contains("2 candidates for executable"), "{error}");
+        assert!(
+            error.contains("\"a\"") && error.contains("\"b\""),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn artifact_digests_keep_order_and_drop_everything_but_the_identity() {
+        let artifacts = [
+            sample_artifact("executable", &"a".repeat(64), 10),
+            sample_artifact("rust_static_archive", &"b".repeat(64), 20),
+        ];
+        let digests = artifact_digests(&artifacts);
+        assert_eq!(digests.len(), 2);
+        assert_eq!(digests[0].role, "executable");
+        assert_eq!(digests[0].byte_length, 10);
+        assert_eq!(digests[0].sha256, "a".repeat(64));
+        assert_eq!(digests[1].role, "rust_static_archive");
+        assert_eq!(digests[1].byte_length, 20);
+        assert_eq!(digests[1].sha256, "b".repeat(64));
+    }
+
+    #[test]
+    fn artifact_difference_lists_only_the_artifacts_that_changed() {
+        let first = [
+            sample_artifact("executable", &"a".repeat(64), 10),
+            sample_artifact("rust_static_archive", &"b".repeat(64), 20),
+        ];
+        let second = [
+            sample_artifact("executable", &"a".repeat(64), 10),
+            sample_artifact("rust_static_archive", &"c".repeat(64), 21),
+        ];
+        let message = describe_artifact_difference(&first, &second);
+        assert!(message.starts_with("production artifacts differ across two clean builds: "));
+        assert!(message.contains(&format!(
+            "rust_static_archive: first=20 bytes {}, second=21 bytes {}",
+            "b".repeat(64),
+            "c".repeat(64)
+        )));
+        assert!(!message.contains("executable:"), "{message}");
+    }
+
+    #[test]
+    fn artifact_difference_reports_a_build_that_produced_a_different_number_of_artifacts() {
+        let first = [
+            sample_artifact("executable", &"a".repeat(64), 10),
+            sample_artifact("rust_static_archive", &"b".repeat(64), 20),
+        ];
+        let second = [sample_artifact("executable", &"a".repeat(64), 10)];
+        let message = describe_artifact_difference(&first, &second);
+        assert!(
+            message.contains("first=2") && message.contains("second=1"),
+            "a missing artifact must be named in the failure, got: {message}"
+        );
+    }
+
+    #[test]
+    fn the_checked_in_native_input_authority_is_internally_consistent() {
+        let root = repository_root().unwrap();
+        validate_native_inputs(&root).unwrap();
+    }
+
+    #[test]
+    fn the_contract_selects_a_supported_target_for_this_host() {
+        let root = repository_root().unwrap();
+        let target = validate_contract(&root, false).unwrap();
+        assert_eq!(target.os, env::consts::OS);
+        assert!(target
+            .architectures
+            .iter()
+            .any(|architecture| architecture == env::consts::ARCH));
+        assert_eq!(target.renderer, "sdl2-software");
+        assert_eq!(target.package, "directory-manifest");
+    }
+
+    #[test]
+    fn a_host_outside_the_matrix_is_named_in_the_refusal() {
+        let root = repository_root().unwrap();
+        let matrix: Matrix = read_json(&root.join(MATRIX), 1 << 20).unwrap();
+        let error = select_target(matrix, "plan9", "mips").unwrap_err();
+        assert!(error.contains("os=plan9"), "{error}");
+        assert!(error.contains("architecture=mips"), "{error}");
     }
 }

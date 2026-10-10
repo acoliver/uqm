@@ -2943,6 +2943,287 @@ mod tests {
     }
 }
 
+/// Every action that spends a bounded callback budget waiting for the real game
+/// to reach a state shares one contract: the budget counts down one admitted
+/// input at a time, the matching "reached" event advances the script, and an
+/// exhausted budget fails the proof instead of waiting forever.
+#[cfg(test)]
+mod budgeted_wait_tests {
+    use super::*;
+    use crate::automation::script::{
+        NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep,
+        PlanetMenuPhaseName, PlanetSideOutcomeName, SelectCommunicationResponseStep,
+        SelectPlanetMenuStep, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+        WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
+        WaitForPlanetSideStartStep,
+    };
+
+    fn navigation_actions(max_ticks: u64) -> Vec<Action> {
+        vec![
+            Action::NavigateToPlanet(NavigateToPlanetStep {
+                planet: 1,
+                max_ticks,
+            }),
+            Action::NavigateToMoon(NavigateToMoonStep {
+                planet: 1,
+                moon: 0,
+                max_ticks,
+            }),
+            Action::NavigateToOrbit(NavigateToOrbitStep {
+                planet: 1,
+                max_ticks,
+            }),
+            Action::NavigateToHyperspace(NavigateToHyperspaceStep { max_ticks }),
+        ]
+    }
+
+    fn condition_actions(max_ticks: u64) -> Vec<Action> {
+        vec![
+            Action::WaitForPlanetSideStart(WaitForPlanetSideStartStep { max_ticks }),
+            Action::WaitForPlanetSideEnd(WaitForPlanetSideEndStep {
+                outcome: PlanetSideOutcomeName::Returned,
+                max_ticks,
+            }),
+            Action::SelectPlanetMenu(SelectPlanetMenuStep {
+                phase: PlanetMenuPhaseName::Orbit,
+                max_ticks,
+            }),
+            Action::WaitForBattleFrames(WaitForBattleFramesStep {
+                minimum: 1,
+                max_ticks,
+            }),
+            Action::WaitForDispatch(WaitForDispatchStep {
+                encounter: 2,
+                dialogue: 2,
+                max_ticks,
+            }),
+            Action::SelectCommunicationResponse(SelectCommunicationResponseStep {
+                index: 0,
+                max_ticks,
+            }),
+            Action::WaitForCommunicationEnd(WaitForCommunicationEndStep {
+                minimum_completions: 1,
+                max_ticks,
+            }),
+            Action::WaitForCommunicationReplay(WaitForCommunicationReplayStep { max_ticks }),
+        ]
+    }
+
+    fn running_phase(action: &Action, remaining: u64) -> ActionPhase {
+        if matches!(
+            action,
+            Action::NavigateToPlanet(_)
+                | Action::NavigateToMoon(_)
+                | Action::NavigateToOrbit(_)
+                | Action::NavigateToHyperspace(_)
+        ) {
+            ActionPhase::Navigating { remaining }
+        } else {
+            ActionPhase::WaitingCondition { remaining }
+        }
+    }
+
+    fn reached_event(action: &Action) -> SchedulerEvent {
+        if matches!(running_phase(action, 0), ActionPhase::Navigating { .. }) {
+            SchedulerEvent::NavigationReached
+        } else {
+            SchedulerEvent::ConditionReached
+        }
+    }
+
+    fn other_family_event(action: &Action) -> SchedulerEvent {
+        if matches!(running_phase(action, 0), ActionPhase::Navigating { .. }) {
+            SchedulerEvent::ConditionReached
+        } else {
+            SchedulerEvent::NavigationReached
+        }
+    }
+
+    fn all_budgeted_actions(max_ticks: u64) -> Vec<Action> {
+        let mut actions = navigation_actions(max_ticks);
+        actions.extend(condition_actions(max_ticks));
+        actions
+    }
+
+    fn step(
+        state: &SchedulerState,
+        actions: &[Action],
+        event: SchedulerEvent,
+    ) -> SchedulerTransition {
+        let config = SchedulerConfig {
+            actions,
+            transitions: &[],
+        };
+        scheduler_reduce(state, &config, event)
+    }
+
+    #[test]
+    fn budget_counts_down_one_admitted_input_at_a_time_then_fails_the_proof() {
+        for action in all_budgeted_actions(3) {
+            let script = [action, Action::Finish];
+            let mut state = SchedulerState::initial();
+            for (tick, remaining) in [(1_u64, 2_u64), (2, 1), (3, 0)] {
+                let transition = step(&state, &script, SchedulerEvent::AdmittedInput);
+                assert_eq!(
+                    transition.new_state.phase,
+                    running_phase(&script[0], remaining),
+                    "{:?} after input {tick}",
+                    script[0]
+                );
+                assert_eq!(transition.new_state.state_version, tick, "{:?}", script[0]);
+                assert_eq!(transition.new_state.step_index, 0, "{:?}", script[0]);
+                assert_eq!(transition.new_state.terminal, None, "{:?}", script[0]);
+                assert!(transition.effects.is_empty(), "{:?}", script[0]);
+                state = transition.new_state;
+            }
+            let expired = step(&state, &script, SchedulerEvent::AdmittedInput);
+            assert_eq!(
+                expired.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch),
+                "{:?} must fail once its budget is spent",
+                script[0]
+            );
+            assert_eq!(expired.new_state.step_index, 0, "{:?}", script[0]);
+            assert_eq!(expired.new_state.state_version, 4, "{:?}", script[0]);
+            assert!(expired.effects.is_empty(), "{:?}", script[0]);
+        }
+    }
+
+    #[test]
+    fn a_zero_budget_admits_one_input_and_then_fails() {
+        for action in all_budgeted_actions(0) {
+            let script = [action, Action::Finish];
+            let started = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            assert_eq!(
+                started.new_state.phase,
+                running_phase(&script[0], 0),
+                "{:?}",
+                script[0]
+            );
+            let expired = step(&started.new_state, &script, SchedulerEvent::AdmittedInput);
+            assert_eq!(
+                expired.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch),
+                "{:?}",
+                script[0]
+            );
+        }
+    }
+
+    #[test]
+    fn the_matching_reached_event_advances_before_and_during_the_budget() {
+        for action in all_budgeted_actions(4) {
+            let script = [action, Action::Finish];
+            let event = reached_event(&script[0]);
+
+            let immediately = step(&SchedulerState::initial(), &script, event);
+            assert_eq!(immediately.new_state.step_index, 1, "{:?}", script[0]);
+            assert_eq!(
+                immediately.new_state.phase,
+                ActionPhase::WaitingForInput,
+                "{:?}",
+                script[0]
+            );
+            assert_eq!(immediately.new_state.terminal, None, "{:?}", script[0]);
+            assert_eq!(immediately.new_state.state_version, 1, "{:?}", script[0]);
+
+            let counting = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            let during = step(&counting.new_state, &script, event);
+            assert_eq!(during.new_state.step_index, 1, "{:?}", script[0]);
+            assert_eq!(
+                during.new_state.phase,
+                ActionPhase::WaitingForInput,
+                "{:?}",
+                script[0]
+            );
+            assert_eq!(during.new_state.state_version, 2, "{:?}", script[0]);
+            assert!(during.effects.is_empty(), "{:?}", script[0]);
+        }
+    }
+
+    #[test]
+    fn a_reached_event_after_the_budget_is_spent_is_a_mismatch_not_a_pass() {
+        for action in all_budgeted_actions(1) {
+            let script = [action, Action::Finish];
+            let spent = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            assert_eq!(
+                spent.new_state.phase,
+                running_phase(&script[0], 0),
+                "{:?}",
+                script[0]
+            );
+            let late = step(&spent.new_state, &script, reached_event(&script[0]));
+            assert_eq!(
+                late.new_state.terminal,
+                Some(TerminalOutcome::SemanticMismatch),
+                "{:?}",
+                script[0]
+            );
+            assert_eq!(late.new_state.step_index, 0, "{:?}", script[0]);
+        }
+    }
+
+    #[test]
+    fn a_reached_event_from_the_other_family_changes_nothing() {
+        for action in all_budgeted_actions(4) {
+            let script = [action, Action::Finish];
+            let counting = step(
+                &SchedulerState::initial(),
+                &script,
+                SchedulerEvent::AdmittedInput,
+            );
+            for event in [
+                other_family_event(&script[0]),
+                SchedulerEvent::MainMenuReady,
+            ] {
+                let ignored = step(&counting.new_state, &script, event);
+                assert_eq!(
+                    ignored.new_state, counting.new_state,
+                    "{:?} must ignore {event:?}",
+                    script[0]
+                );
+                assert!(ignored.effects.is_empty(), "{:?}", script[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn a_budget_phase_that_belongs_to_the_other_family_is_an_invalid_state() {
+        for action in all_budgeted_actions(4) {
+            let wrong = match running_phase(&action, 2) {
+                ActionPhase::Navigating { remaining } => {
+                    ActionPhase::WaitingCondition { remaining }
+                }
+                _ => ActionPhase::Navigating { remaining: 2 },
+            };
+            let script = [action, Action::Finish];
+            let state = SchedulerState {
+                phase: wrong,
+                ..SchedulerState::initial()
+            };
+            let transition = step(&state, &script, SchedulerEvent::AdmittedInput);
+            assert_eq!(
+                transition.new_state.terminal,
+                Some(TerminalOutcome::InvalidState),
+                "{:?} cannot run in {wrong:?}",
+                script[0]
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod property_tests {
     use super::*;
