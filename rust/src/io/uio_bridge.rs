@@ -729,15 +729,33 @@ impl uio_HandleInner {
         self.len().map(|len| len == 0)
     }
 
-    /// Get metadata (only works for File handles)
-    pub fn metadata(&self) -> std::io::Result<std::fs::Metadata> {
+    /// Fills the `fstat` fields of an open handle from the handle itself.
+    ///
+    /// A host file reports its size and its type and permission bits; the
+    /// rest of the caller's struct is left alone. An archive entry fills the
+    /// whole struct the way the original `zip_fillStat` does (zeroed, then
+    /// size, mode and modification time), so the fields the archive does not
+    /// hold read as 0. A failure leaves the struct untouched.
+    fn fstat_into(&self, out: &mut stat) -> std::io::Result<()> {
         match self {
-            uio_HandleInner::File(f) => f.metadata(),
-            uio_HandleInner::ZipEntry(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::Unsupported,
-                "metadata not supported for ZIP entries",
-            )),
+            uio_HandleInner::File(f) => {
+                let meta = f.metadata()?;
+                out.st_size = meta.len() as off_t;
+                // The host's own type and permission bits: `copyFile`
+                // creates its copy with them.
+                out.st_mode = meta.mode() as mode_t;
+            }
+            uio_HandleInner::ZipEntry(z) => {
+                let entry = z.stat()?;
+                // SAFETY: `stat` is plain old data and all-zero is its
+                // documented "nothing known" value.
+                *out = unsafe { std::mem::zeroed() };
+                out.st_size = entry.size as off_t;
+                out.st_mode = entry.mode as mode_t;
+                out.st_mtime = entry.mtime as libc::time_t;
+            }
         }
+        Ok(())
     }
 }
 
@@ -3542,15 +3560,19 @@ pub unsafe extern "C" fn uio_fstat(handle: *mut uio_Handle, stat_buf: *mut stat)
         Err(_) => return -1,
     };
 
-    match guard.metadata() {
-        Ok(meta) => {
-            (*stat_buf).st_size = meta.len() as i64;
-            // The host's own type and permission bits: `copyFile` creates its
-            // copy with them.
-            (*stat_buf).st_mode = meta.mode() as mode_t;
-            0 // Success
-        }
-        Err(_) => -1,
+    match guard.fstat_into(&mut *stat_buf) {
+        Ok(()) => 0,
+        Err(err) => fail_errno(handle_error_errno(&err), -1),
+    }
+}
+
+/// The errno of a handle operation's failure: the host's own, ENOTSUP when
+/// the archive entry holds data this layer cannot report, EIO otherwise.
+fn handle_error_errno(err: &std::io::Error) -> c_int {
+    match err.raw_os_error() {
+        Some(errno) => errno,
+        None if err.kind() == std::io::ErrorKind::Unsupported => libc::ENOTSUP,
+        None => libc::EIO,
     }
 }
 
@@ -7406,3 +7428,7 @@ mod mode_tests;
 #[cfg(test)]
 #[path = "uio_stdio_write_tests.rs"]
 mod stdio_write_tests;
+
+#[cfg(test)]
+#[path = "uio_archive_stat_tests.rs"]
+mod archive_stat_tests;
