@@ -110,11 +110,41 @@ pub unsafe extern "C" fn descriptor_to_int(descriptor: *const c_char, resdata: *
     if descriptor.is_null() || resdata.is_null() {
         return;
     }
-    let c_str = CStr::from_ptr(descriptor);
-    let s = c_str.to_str().unwrap_or("");
-    // atoi semantics: parse leading integer, 0 on failure
-    let value: i32 = s.trim().parse().unwrap_or(0);
+    let value = c_atoi(CStr::from_ptr(descriptor).to_bytes());
     (*resdata).num = value as u32;
+}
+
+/// C `atoi`: skip leading white space, take an optional sign and the leading
+/// decimal digits, ignore the rest, and give 0 when there are no digits.
+/// Out-of-range values wrap the way `(int) strtol (...)` does.
+fn c_atoi(bytes: &[u8]) -> i32 {
+    let mut rest = bytes;
+    while let [first, tail @ ..] = rest {
+        if !matches!(first, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r') {
+            break;
+        }
+        rest = tail;
+    }
+    let negative = match rest {
+        [b'-', tail @ ..] => {
+            rest = tail;
+            true
+        }
+        [b'+', tail @ ..] => {
+            rest = tail;
+            false
+        }
+        _ => false,
+    };
+    let magnitude = rest
+        .iter()
+        .take_while(|b| b.is_ascii_digit())
+        .fold(0i64, |acc, digit| {
+            acc.saturating_mul(10)
+                .saturating_add(i64::from(digit - b'0'))
+        });
+    let value = if negative { -magnitude } else { magnitude };
+    value as i32
 }
 
 /// Built-in BOOLEAN loader: case-insensitive "true" → 1, everything else → 0.
@@ -132,14 +162,11 @@ pub unsafe extern "C" fn descriptor_to_boolean(
     if descriptor.is_null() || resdata.is_null() {
         return;
     }
-    let c_str = CStr::from_ptr(descriptor);
-    let s = c_str.to_str().unwrap_or("");
-    let value = if s.trim().eq_ignore_ascii_case("true") {
-        1u32
-    } else {
-        0u32
-    };
-    (*resdata).num = value;
+    // strcasecmp (descriptor, "true"): nothing is trimmed.
+    let is_true = CStr::from_ptr(descriptor)
+        .to_bytes()
+        .eq_ignore_ascii_case(b"true");
+    (*resdata).num = u32::from(is_true);
 }
 
 /// Built-in COLOR loader: parses `rgb()`/`rgba()`/`rgb15()` descriptor into packed RGBA.

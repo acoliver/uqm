@@ -18,7 +18,9 @@ use super::dispatch::ResourceDispatch;
 use super::ffi_types::{
     ResourceData, ResourceFreeFun, ResourceLoadFileFun, ResourceLoadFun, ResourceStringFun,
 };
+#[cfg(test)]
 use super::propfile::parse_propfile;
+use super::propfile::parse_propfile_bytes;
 use super::type_registry;
 #[cfg(not(test))]
 use crate::io::ffi::{uio_DirHandle, uio_Stream};
@@ -275,6 +277,20 @@ unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
     CStr::from_ptr(ptr).to_str().ok()
 }
 
+/// The numeric payload of `key` when it is stored as `type_name`; `None` for
+/// a missing key or any other type, as the C typed getters answer.
+///
+/// `ResourceData` is a union: reading `num` from a STRING entry would hand
+/// back part of a pointer.
+fn typed_number(state: &ResourceState, key: &str, type_name: &str) -> Option<u32> {
+    let entry = state.dispatch.entries.get(key)?;
+    if entry.res_type != type_name {
+        return None;
+    }
+    // SAFETY: value types store their parsed number in `num` when loaded.
+    Some(unsafe { entry.data.num })
+}
+
 // =============================================================================
 // Lifecycle
 // =============================================================================
@@ -423,27 +439,17 @@ pub unsafe extern "C" fn LoadResourceIndex(
     // Truncate to actual bytes read
     buf.truncate(bytes_read);
 
-    let content = match std::str::from_utf8(&buf) {
-        Ok(s) => s,
-        Err(_) => {
-            log::warn!("LoadResourceIndex: file contains invalid UTF-8");
-            return;
-        }
-    };
-
-    let prefix_str = if prefix.is_null() {
-        None
-    } else {
-        cstr_to_str(prefix)
-    };
+    // The index is bytes, not text: a Latin-1 value on one line must not cost
+    // the rest of the file.
+    let prefix_bytes = (!prefix.is_null()).then(|| CStr::from_ptr(prefix).to_bytes());
 
     let state = guard.as_mut().unwrap();
-    parse_propfile(
-        content,
+    parse_propfile_bytes(
+        &buf,
         &mut |key, value| {
-            state.dispatch.process_resource_desc(key, value);
+            state.dispatch.process_resource_desc_bytes(key, value);
         },
-        prefix_str,
+        prefix_bytes,
     );
 }
 
@@ -478,7 +484,7 @@ pub unsafe extern "C" fn SaveResourceIndex(
     };
 
     // Collect entries matching root prefix and serialize
-    let mut lines: Vec<String> = Vec::new();
+    let mut lines: Vec<Vec<u8>> = Vec::new();
     let mut keys: Vec<&String> = state.dispatch.entries.keys().collect();
     keys.sort();
 
@@ -505,10 +511,12 @@ pub unsafe extern "C" fn SaveResourceIndex(
         };
 
         // Serialize the entry using toString.
-        // STRING types: use the Rust fname directly — avoids unsafe str_ptr
-        // which can hold a dangling/invalid pointer after type changes.
-        let serialized = if desc.res_type == "STRING" {
-            format!("{}:{}", desc.res_type, desc.fname)
+        // STRING types: write the owned descriptor bytes exactly as loaded —
+        // avoids unsafe str_ptr which can hold a dangling/invalid pointer
+        // after type changes, and keeps non-UTF-8 bytes intact.
+        let mut serialized = format!("{}:", desc.res_type).into_bytes();
+        if desc.res_type == "STRING" {
+            serialized.extend_from_slice(desc.descriptor_bytes());
         } else {
             let mut buf = [0u8; 256];
             let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
@@ -516,9 +524,8 @@ pub unsafe extern "C" fn SaveResourceIndex(
                 to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
             }
             let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
-            let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
-            format!("{}:{}", desc.res_type, value_str)
-        };
+            serialized.extend_from_slice(&buf[..len]);
+        }
 
         let output_key = if strip_root != 0 {
             if let Some(prefix) = root_str {
@@ -530,7 +537,10 @@ pub unsafe extern "C" fn SaveResourceIndex(
             key.as_str()
         };
 
-        lines.push(format!("{} = {}\n", output_key, serialized));
+        let mut line = format!("{} = ", output_key).into_bytes();
+        line.extend_from_slice(&serialized);
+        line.push(b'\n');
+        lines.push(line);
     }
 
     // Open output file
@@ -542,8 +552,7 @@ pub unsafe extern "C" fn SaveResourceIndex(
     }
 
     for line in &lines {
-        let bytes = line.as_bytes();
-        uio_fwrite(bytes.as_ptr() as *const c_void, 1, bytes.len(), fp);
+        uio_fwrite(line.as_ptr() as *const c_void, 1, line.len(), fp);
     }
 
     uio_fclose(fp);
@@ -996,11 +1005,7 @@ pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    state
-        .dispatch
-        .get_int_resource(key_str)
-        .map(|v| v as c_int)
-        .unwrap_or(0)
+    typed_number(state, key_str, "INT32").map_or(0, |v| v as c_int)
 }
 
 /// Get a boolean config value.
@@ -1022,15 +1027,7 @@ pub unsafe extern "C" fn res_GetBoolean(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state
-        .dispatch
-        .get_boolean_resource(key_str)
-        .unwrap_or(false)
-    {
-        1
-    } else {
-        0
-    }
+    c_int::from(typed_number(state, key_str, "BOOLEAN").is_some_and(|v| v != 0))
 }
 
 /// Get a color config value as packed (r<<24)|(g<<16)|(b<<8)|a.
@@ -1052,7 +1049,7 @@ pub unsafe extern "C" fn res_GetColor(key: *const c_char) -> u32 {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    state.dispatch.get_int_resource(key_str).unwrap_or(0)
+    typed_number(state, key_str, "COLOR").unwrap_or(0)
 }
 
 // =============================================================================

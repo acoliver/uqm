@@ -33,6 +33,17 @@ pub struct FullResourceDesc {
     fname_cstring: Option<CString>,
 }
 
+impl FullResourceDesc {
+    /// The descriptor bytes exactly as the index file had them after the
+    /// `TYPE:`; `fname` holds a lossy copy when they are not UTF-8.
+    pub fn descriptor_bytes(&self) -> &[u8] {
+        match &self.fname_cstring {
+            Some(text) => text.to_bytes(),
+            None => self.fname.as_bytes(),
+        }
+    }
+}
+
 /// Resource dispatch system combining entries and type registry.
 ///
 /// This is the main dispatch layer that implements lazy loading, refcounting,
@@ -66,13 +77,31 @@ impl ResourceDispatch {
     /// If the type is not found in the registry, the entry is stored as
     /// `UNKNOWNRES` with a warning.
     pub fn process_resource_desc(&mut self, key: &str, value: &str) {
-        let (type_name, path) = match value.split_once(':') {
-            Some((t, p)) => (t, p),
+        self.process_resource_desc_bytes(key.as_bytes(), value.as_bytes());
+    }
+
+    /// [`process_resource_desc`](Self::process_resource_desc) for the raw
+    /// bytes of an index line. The descriptor after the `:` is kept as the
+    /// exact bytes of the file, whatever their encoding; the key and the type
+    /// name are identifiers and must be UTF-8.
+    pub fn process_resource_desc_bytes(&mut self, key: &[u8], value: &[u8]) {
+        let Ok(key) = std::str::from_utf8(key) else {
+            log::warn!("Skipping resource whose key is not UTF-8: {:?}", key);
+            return;
+        };
+        let (type_bytes, path) = match value.iter().position(|&b| b == b':') {
+            Some(colon) => (&value[..colon], &value[colon + 1..]),
             None => {
-                log::warn!("Invalid resource descriptor '{}' for key '{}'", value, key);
+                log::warn!(
+                    "Invalid resource descriptor '{}' for key '{}'",
+                    String::from_utf8_lossy(value),
+                    key
+                );
                 return;
             }
         };
+        let type_name = String::from_utf8_lossy(type_bytes);
+        let type_name = type_name.as_ref();
 
         let handlers = self.type_registry.lookup(type_name);
 
@@ -91,6 +120,7 @@ impl ResourceDispatch {
         };
 
         let fname_cstring = CString::new(path).ok();
+        let fname = String::from_utf8_lossy(path).into_owned();
         let mut data = ResourceData::default();
 
         // For value types, call loadFun immediately
@@ -131,7 +161,7 @@ impl ResourceDispatch {
         }
 
         let desc = FullResourceDesc {
-            fname: path.to_string(),
+            fname,
             res_type: type_name.to_string(),
             data,
             refcount: 0,

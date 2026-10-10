@@ -119,7 +119,7 @@ fn parse_c_int(s: &str) -> Result<i32, String> {
     let (negative, s) = if let Some(rest) = s.strip_prefix('-') {
         (true, rest.trim())
     } else {
-        (false, s)
+        (false, s.strip_prefix('+').unwrap_or(s))
     };
 
     let value = if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
@@ -175,14 +175,18 @@ pub fn parse_c_color(descriptor: &str) -> Result<(u8, u8, u8, u8), String> {
     let s = descriptor.trim();
 
     // Determine format and extract the content inside parentheses
-    let (mode, inner) = if let Some(rest) = s.strip_prefix("rgba(") {
-        ("rgba", rest)
-    } else if let Some(rest) = s.strip_prefix("rgb15(") {
-        ("rgb15", rest)
-    } else if let Some(rest) = s.strip_prefix("rgb(") {
-        ("rgb", rest)
-    } else {
-        return Err(format!("unrecognized color format: {}", s));
+    // The C scanner format is "rgb ( %i , ..." so whitespace may sit between
+    // the name and the parenthesis.
+    let name_end = s
+        .find(|c: char| !c.is_ascii_alphanumeric())
+        .unwrap_or(s.len());
+    let (name, after_name) = s.split_at(name_end);
+    let rest = after_name.trim_start().strip_prefix('(');
+    let (mode, inner) = match (name, rest) {
+        ("rgba", Some(rest)) => ("rgba", rest),
+        ("rgb15", Some(rest)) => ("rgb15", rest),
+        ("rgb", Some(rest)) => ("rgb", rest),
+        _ => return Err(format!("unrecognized color format: {}", s)),
     };
 
     let inner = inner
