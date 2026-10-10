@@ -3,11 +3,13 @@
 //! so it re-runs itself in a child process.
 
 use super::*;
-use crate::automation::collection_invariants::{validate_label, LabelVerdict, SelectedQueue};
+use crate::automation::collection_invariants::{
+    validate_label, LabelVerdict, SelectedQueue, QUEUE_COUNT,
+};
 use crate::collections::queue::{Link, Queue};
 
-/// The five `GAME_STATE` queues the injected sampler reads.
-struct GameQueues([Box<Queue>; 5]);
+/// The audited queues the injected sampler reads.
+struct GameQueues([Box<Queue>; QUEUE_COUNT]);
 
 // SAFETY: the queues are only reached through `GAME_QUEUES`, whose mutex
 // serialises every access.
@@ -35,6 +37,7 @@ fn put_link(which: SelectedQueue) -> *mut Link {
 }
 
 fn sample_game_queues() -> CollectionSnapshot {
+    SAMPLED.store(true, Ordering::SeqCst);
     let guard = GAME_QUEUES.lock();
     let queues = &guard.as_ref().unwrap().0;
     CollectionSnapshot::observe(|which| &queues[index(which)])
@@ -83,7 +86,7 @@ fn start(
         script,
         temp.path().into(),
         Some(65536),
-        sample_game_queues,
+        Some(CollectionSource::on_current_thread(sample_game_queues)),
     );
     (plan, Coordinator::get().unwrap())
 }
@@ -144,8 +147,8 @@ fn each_checkpoint_records_the_queue_audit_taken_at_that_checkpoint() {
     assert_eq!(
         collection_labels(&records),
         [
-            "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
-            "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=intact/3/2/1/0:built_ship_q=absent",
+            "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
+            "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=intact/3/2/1/0:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
         ]
     );
     for (position, record) in records
@@ -234,4 +237,110 @@ fn an_input_tick_stops_on_a_broken_queue_and_stays_silent_while_intact() {
         collection_labels(&records),
         ["collection_invariant_failed:queue=built_ship_q:fault=broken_pred:slot=0"]
     );
+}
+
+/// Corrupt `which` after it holds one link and check that the next input tick
+/// ends the run with a record naming that queue.
+fn broken_queue_ends_the_run(which: SelectedQueue, corrupt: impl FnOnce(*mut Link), label: &str) {
+    let temp = tempfile::tempdir().unwrap();
+    let (_, coord) = start(&temp);
+    with_queue(which, |queue| {
+        assert!(queue.init(3, 24));
+    });
+    let link = put_link(which);
+    assert!(!coord.process_input_inner());
+    corrupt(link);
+    assert!(coord.process_input_inner());
+    assert_eq!(
+        coord.inner.lock().terminal_class,
+        Some(TerminalClass::SemanticMismatch)
+    );
+    let _ = Coordinator::finalize(0);
+    assert_eq!(collection_labels(&read_trace(&temp)), [label]);
+}
+
+#[test]
+fn a_broken_display_list_ends_the_run() {
+    if run_in_child(
+        "a_broken_display_list_ends_the_run",
+        "UQM_COLLECTION_DISP_Q_CHILD",
+    ) {
+        return;
+    }
+    // SAFETY: the link is a slot of the pool; this models C corrupting `pred`.
+    broken_queue_ends_the_run(
+        SelectedQueue::DisplayList,
+        |link| unsafe { (*link).pred = link.cast() },
+        "collection_invariant_failed:queue=disp_q:fault=broken_pred:slot=0",
+    );
+}
+
+#[test]
+fn a_broken_battle_race_queue_ends_the_run() {
+    if run_in_child(
+        "a_broken_battle_race_queue_ends_the_run",
+        "UQM_COLLECTION_RACE_Q_CHILD",
+    ) {
+        return;
+    }
+    // SAFETY: the link is a slot of the pool; this models C corrupting `succ`.
+    broken_queue_ends_the_run(
+        SelectedQueue::BattleRace0,
+        |link| unsafe { (*link).succ = link.cast() },
+        "collection_invariant_failed:queue=race_q[0]:fault=cycle:slot=0",
+    );
+}
+
+#[test]
+fn an_audit_off_the_game_thread_never_reads_the_queues_and_ends_the_run() {
+    if run_in_child(
+        "an_audit_off_the_game_thread_never_reads_the_queues_and_ends_the_run",
+        "UQM_COLLECTION_OFF_THREAD_CHILD",
+    ) {
+        return;
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let (_, coord) = start(&temp);
+    SAMPLED.store(false, Ordering::SeqCst);
+    std::thread::scope(|scope| {
+        scope.spawn(|| assert!(coord.audit_collections(&mut coord.inner.lock(), true)));
+    });
+    assert!(
+        !SAMPLED.load(Ordering::SeqCst),
+        "queues read off the thread"
+    );
+    assert_eq!(
+        coord.inner.lock().terminal_class,
+        Some(TerminalClass::SemanticMismatch)
+    );
+    let _ = Coordinator::finalize(0);
+    let records = read_trace(&temp);
+    assert!(records
+        .iter()
+        .any(|r| r.label.as_deref() == Some("collection_audit_failed:off_game_thread")));
+}
+
+static SAMPLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[test]
+fn a_record_that_cannot_be_serialized_fails_the_run_instead_of_vanishing() {
+    if run_in_child(
+        "a_record_that_cannot_be_serialized_fails_the_run_instead_of_vanishing",
+        "UQM_COLLECTION_SERIALIZE_CHILD",
+    ) {
+        return;
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let (_, coord) = start(&temp);
+    let reservation = coord.runtime.commit.reserve();
+    let error = crate::automation::error::AutomationError::InvalidJson {
+        path: "<trace>".into(),
+        reason: "injected".into(),
+    };
+    coord.commit_serialized(&mut coord.inner.lock(), reservation, Err(error));
+    assert_eq!(
+        coord.inner.lock().terminal_class,
+        Some(TerminalClass::TraceFailure)
+    );
+    let _ = Coordinator::finalize(0);
 }

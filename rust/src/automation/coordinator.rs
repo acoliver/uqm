@@ -276,6 +276,38 @@ struct CoordInner {
     release_semantic_select: bool,
 }
 
+/// The label of the record that ends a run whose queue audit was requested
+/// off the game thread. It contains `failed`, which the proof validators
+/// treat as a failing assertion.
+const OFF_THREAD_LABEL: &str = "collection_audit_failed:off_game_thread";
+
+/// The queue sampler together with the one thread allowed to run it.
+struct CollectionSource {
+    /// # Safety
+    ///
+    /// Only sound on `game_thread`; [`CollectionSource::sample`] guarantees it.
+    sample: unsafe fn() -> CollectionSnapshot,
+    game_thread: std::thread::ThreadId,
+}
+
+impl CollectionSource {
+    /// The sampler of the thread that initialises the coordinator, which is
+    /// the thread that runs the game loop.
+    #[cfg(any(test, feature = "linked_c_archive"))]
+    fn on_current_thread(sample: unsafe fn() -> CollectionSnapshot) -> Self {
+        Self {
+            sample,
+            game_thread: std::thread::current().id(),
+        }
+    }
+
+    /// Audit the queues, or `None` when called off the game thread.
+    fn sample(&self) -> Option<CollectionSnapshot> {
+        // SAFETY: the thread was checked against the game thread just above.
+        (std::thread::current().id() == self.game_thread).then(|| unsafe { (self.sample)() })
+    }
+}
+
 /// The automation coordinator, holding all live state needed to drive
 /// the scheduler/watchdog during the game loop.
 pub struct Coordinator {
@@ -285,9 +317,10 @@ pub struct Coordinator {
     actions: Vec<Action>,
     native_checkpoint_identity: Option<String>,
     native_trace: Option<Mutex<super::native_trace::NativeTraceJournal>>,
-    /// Audits the production game queues. Injected so tests can supply
-    /// queues without the linked C archive.
-    sample_collections: fn() -> CollectionSnapshot,
+    /// Audits the production game queues; `None` when there is no game
+    /// storage to audit. Injected so tests can supply queues without the
+    /// linked C archive.
+    collections: Option<CollectionSource>,
     /// The typed main-menu transition assertions from the script.
     transitions: Vec<crate::automation::script::MainMenuTransition>,
     /// Watchdog limits from the script budgets.
@@ -321,19 +354,20 @@ impl Coordinator {
         output_root: PathBuf,
         native_limit: Option<u64>,
     ) {
-        Self::init_with_collection_source(
-            script,
-            output_root,
-            native_limit,
+        #[cfg(feature = "linked_c_archive")]
+        let collections = Some(CollectionSource::on_current_thread(
             input_ffi::sample_game_collections,
-        );
+        ));
+        #[cfg(not(feature = "linked_c_archive"))]
+        let collections = None;
+        Self::init_with_collection_source(script, output_root, native_limit, collections);
     }
 
     fn init_with_collection_source(
         script: ValidatedScript,
         output_root: PathBuf,
         native_limit: Option<u64>,
-        sample_collections: fn() -> CollectionSnapshot,
+        collections: Option<CollectionSource>,
     ) {
         let native_trace = native_limit
             .map(|limit| {
@@ -392,7 +426,7 @@ impl Coordinator {
             actions,
             native_checkpoint_identity,
             native_trace: native_trace.ok().flatten(),
-            sample_collections,
+            collections,
             transitions,
             watchdog_limits,
             started_at: now,
@@ -1565,7 +1599,21 @@ impl Coordinator {
     /// a corrupt pool cannot be repaired here. Returns true when the run must
     /// stop.
     fn audit_collections(&self, inner: &mut CoordInner, record_intact: bool) -> bool {
-        let snapshot = (self.sample_collections)();
+        let Some(collections) = &self.collections else {
+            return false;
+        };
+        let Some(snapshot) = collections.sample() else {
+            // The queues have no lock, so a read from another thread would
+            // race with C. Say so in the trace and stop; never read them.
+            eprintln!("[automation] {OFF_THREAD_LABEL}");
+            self.write_trace_labeled(
+                inner,
+                RecordKind::SemanticAssertion,
+                OFF_THREAD_LABEL.into(),
+            );
+            self.set_terminal(inner, TerminalClass::SemanticMismatch);
+            return true;
+        };
         let broken = snapshot.first_fault().is_some();
         if broken || record_intact {
             let label = snapshot.label();
@@ -2205,9 +2253,7 @@ impl Coordinator {
             failure: None,
         };
 
-        if let Ok(jsonl) = record.to_jsonl() {
-            reservation.commit_record(jsonl);
-        }
+        self.commit_serialized(inner, reservation, record.to_jsonl());
     }
 
     fn write_terminal_trace(&self, inner: &mut CoordInner) {
@@ -2237,9 +2283,7 @@ impl Coordinator {
             checkpoint: None,
             failure: None,
         };
-        if let Ok(jsonl) = record.to_jsonl() {
-            reservation.commit_record(jsonl);
-        }
+        self.commit_serialized(inner, reservation, record.to_jsonl());
     }
 
     /// Write a trace record with a semantic/evidence label.
@@ -2268,9 +2312,7 @@ impl Coordinator {
             failure: None,
         };
 
-        if let Ok(jsonl) = record.to_jsonl() {
-            reservation.commit_record(jsonl);
-        }
+        self.commit_serialized(inner, reservation, record.to_jsonl());
     }
 
     /// Write a readiness trace record carrying what became ready and the
@@ -2303,9 +2345,7 @@ impl Coordinator {
             failure: None,
         };
 
-        if let Ok(jsonl) = record.to_jsonl() {
-            reservation.commit_record(jsonl);
-        }
+        self.commit_serialized(inner, reservation, record.to_jsonl());
     }
 
     fn write_presentation_trace(
@@ -2388,6 +2428,26 @@ impl Coordinator {
                     inner,
                     format!("cannot serialize capture trace record: {error}"),
                 );
+            }
+        }
+    }
+
+    /// Commit a serialized trace record, or fail the run.
+    ///
+    /// A record that cannot be serialized is evidence that is missing from
+    /// the trace, so it ends the run as a trace failure with a diagnostic
+    /// instead of being skipped.
+    fn commit_serialized(
+        &self,
+        inner: &mut CoordInner,
+        reservation: crate::automation::trace::Reservation,
+        serialized: Result<String, crate::automation::error::AutomationError>,
+    ) {
+        match serialized {
+            Ok(jsonl) => reservation.commit_record(jsonl),
+            Err(error) => {
+                reservation.cancel();
+                self.capture_failure(inner, error);
             }
         }
     }

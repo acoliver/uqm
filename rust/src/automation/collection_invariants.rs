@@ -1,7 +1,9 @@
 //! Collection invariants of the production game queues, as trace evidence.
 //!
-//! The game keeps five pooled queues in `GAME_STATE` (`globdata.h`). Their
-//! only implementation is [`crate::collections::queue::Queue`], so the
+//! The game keeps its pooled queues in `GAME_STATE` (`globdata.h`) and in
+//! four C globals: the battle display list `disp_q`, the per-side battle ship
+//! queues `race_q[2]` and the master ship list `master_q`. Their only
+//! implementation is [`crate::collections::queue::Queue`], so the
 //! observer is `Queue::audit`: it checks the pool geometry, that every chain
 //! entry is a slot of the pool, that the `pred` chain mirrors the `succ`
 //! chain, and that no slot is both queued and free. This module turns those
@@ -26,8 +28,12 @@ pub const INTACT_LABEL: &str = "collection_invariants";
 /// `failed`, which the proof validators already treat as a failing assertion.
 pub const BROKEN_LABEL: &str = "collection_invariant_failed";
 
-/// The `QUEUE` fields of `GAME_STATE` that the trace audits, named exactly as
-/// `globdata.h` declares them.
+/// The production queues the trace audits, named as C declares them.
+///
+/// The first five and `EventQueue` are `QUEUE` fields of `GAME_STATE`
+/// (`GameClock.event_q` for the clock events). `DisplayList`, `BattleRace0`,
+/// `BattleRace1` and `MasterShips` are the C globals `disp_q`, `race_q[0]`,
+/// `race_q[1]` and `master_q`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelectedQueue {
     AvailRace,
@@ -35,16 +41,29 @@ pub enum SelectedQueue {
     IpGroup,
     Encounter,
     BuiltShip,
+    EventQueue,
+    DisplayList,
+    BattleRace0,
+    BattleRace1,
+    MasterShips,
 }
+
+/// Number of audited queues.
+pub const QUEUE_COUNT: usize = 10;
 
 impl SelectedQueue {
     /// Every audited queue, in the order labels list them.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; QUEUE_COUNT] = [
         Self::AvailRace,
         Self::NpcBuiltShip,
         Self::IpGroup,
         Self::Encounter,
         Self::BuiltShip,
+        Self::EventQueue,
+        Self::DisplayList,
+        Self::BattleRace0,
+        Self::BattleRace1,
+        Self::MasterShips,
     ];
 
     /// The C field name.
@@ -56,6 +75,11 @@ impl SelectedQueue {
             Self::IpGroup => "ip_group_q",
             Self::Encounter => "encounter_q",
             Self::BuiltShip => "built_ship_q",
+            Self::EventQueue => "event_q",
+            Self::DisplayList => "disp_q",
+            Self::BattleRace0 => "race_q[0]",
+            Self::BattleRace1 => "race_q[1]",
+            Self::MasterShips => "master_q",
         }
     }
 
@@ -90,7 +114,7 @@ impl QueueObservation {
 /// One audit of every selected queue, taken at a single game-thread boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CollectionSnapshot {
-    observations: [(SelectedQueue, QueueObservation); 5],
+    observations: [(SelectedQueue, QueueObservation); QUEUE_COUNT],
 }
 
 impl CollectionSnapshot {

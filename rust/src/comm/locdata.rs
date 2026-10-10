@@ -92,6 +92,17 @@ pub struct CGlobData {
 }
 
 /// C `GAME_STATE` struct (globdata.h) — partial repr(C) mirror.
+/// C `CLOCK_STATE` (clock.h), the `GameClock` field of `GAME_STATE`.
+#[repr(C)]
+pub struct CClockState {
+    pub day_index: u8,     // offset 0
+    pub month_index: u8,   // offset 1
+    pub year_index: u16,   // offset 2, COUNT
+    pub tick_count: i16,   // offset 4, SIZE
+    pub day_in_ticks: i16, // offset 6, SIZE
+    pub event_q: Queue,    // offset 8, queue element is EVENT
+}
+
 /// Only the fields accessed from Rust are named; padding matches C layout.
 /// Layout verified via C offsetof. Total size 512 bytes.
 #[repr(C)]
@@ -105,7 +116,7 @@ pub struct CGameState {
     _display_array: *mut c_void,    // offset 32, PRIMITIVE*
     pub current_activity: u16,      // offset 40 (verified)
     _current_activity_pad: [u8; 6], // align CLOCK_STATE to offset 48
-    _clock_state: [u8; 48],         // offset 48, CLOCK_STATE
+    pub game_clock: CClockState,    // offset 48, CLOCK_STATE
     _autopilot: [u8; 4],            // offset 96, POINT
     _ip_location: [u8; 4],          // offset 100, POINT
     pub ship_stamp: CStamp,         // offset 104, STAMP
@@ -407,7 +418,16 @@ mod tests {
         assert_eq!(std::mem::size_of::<CGameState>(), 512);
         assert_eq!(std::mem::offset_of!(CGameState, current_activity), 40);
         assert_eq!(std::mem::offset_of!(CGameState, ship_stamp), 104);
+        assert_eq!(std::mem::size_of::<CClockState>(), 48);
+        assert_eq!(std::mem::offset_of!(CClockState, event_q), 8);
+        assert_eq!(std::mem::offset_of!(CGameState, game_clock), 48);
+        // Every queue the automation audit reads in place is pinned to its
+        // C offset, not placed by being a 40-byte neighbour of another.
         assert_eq!(std::mem::offset_of!(CGameState, avail_race_q), 152);
+        assert_eq!(std::mem::offset_of!(CGameState, npc_built_ship_q), 192);
+        assert_eq!(std::mem::offset_of!(CGameState, ip_group_q), 232);
+        assert_eq!(std::mem::offset_of!(CGameState, encounter_q), 272);
+        assert_eq!(std::mem::offset_of!(CGameState, built_ship_q), 312);
         assert_eq!(std::mem::offset_of!(CGameState, game_state_bytes), 352);
     }
 

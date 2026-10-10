@@ -5856,7 +5856,7 @@ mod tests {
     #[test]
     fn collection_labels_are_checked_by_the_semantic_snapshot() {
         use crate::automation::trace::RecordKind;
-        let intact = "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=intact/4/1/3/0:encounter_q=absent:built_ship_q=absent";
+        let intact = "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=intact/4/1/3/0:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent";
         let broken = "collection_invariant_failed:queue=ip_group_q:fault=cycle:slot=0";
         for label in [intact, broken] {
             let records = [trace_record(0, RecordKind::SemanticAssertion, Some(label))];
@@ -5872,7 +5872,7 @@ mod tests {
             (RecordKind::Presentation, intact),
             (
                 RecordKind::SemanticAssertion,
-                "collection_invariants:avail_race_q=intact/4/1/1/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+                "collection_invariants:avail_race_q=intact/4/1/1/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             ),
             (RecordKind::SemanticAssertion, "collection_invariant_failed:queue=ip_group_q"),
         ] {

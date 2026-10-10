@@ -5,10 +5,9 @@ use std::mem::size_of;
 
 const SLOT_SIZE: u16 = (size_of::<Link>() + 8) as u16;
 
-/// The five game queues as `GAME_STATE` holds them: zeroed until C
-/// initialises them.
+/// The audited game queues: zeroed until C initialises them.
 struct GameQueues {
-    queues: [Box<Queue>; 5],
+    queues: [Box<Queue>; QUEUE_COUNT],
 }
 
 impl GameQueues {
@@ -68,16 +67,22 @@ fn observation(snapshot: &CollectionSnapshot, which: SelectedQueue) -> QueueObse
         .1
 }
 
-const SOURCE_LABEL: &str = "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent";
+const SOURCE_LABEL: &str = "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent";
 
 #[test]
-fn queue_names_are_the_fields_declared_by_the_c_game_state() {
-    let header = include_str!("../../../../sc2/src/uqm/globdata.h");
-    let declared: Vec<&str> = header
-        .lines()
-        .filter_map(|line| line.trim().strip_prefix("QUEUE "))
-        .filter_map(|rest| rest.strip_suffix(';'))
-        .collect();
+fn queue_names_are_the_declarations_in_the_c_sources() {
+    let declarations = |source: &str| -> Vec<String> {
+        source
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("QUEUE "))
+            .filter_map(|rest| rest.strip_suffix(';'))
+            .map(|name| name.split('[').next().unwrap().to_string())
+            .collect()
+    };
+    let game_state = declarations(include_str!("../../../../sc2/src/uqm/globdata.h"));
+    let clock = declarations(include_str!("../../../../sc2/src/uqm/clock.h"));
+    let setup = declarations(include_str!("../../../../sc2/src/uqm/setup.c"));
+    let master = declarations(include_str!("../../../../sc2/src/uqm/master.c"));
     let selected: Vec<&str> = SelectedQueue::ALL.iter().map(|q| q.name()).collect();
     assert_eq!(
         selected,
@@ -86,15 +91,68 @@ fn queue_names_are_the_fields_declared_by_the_c_game_state() {
             "npc_built_ship_q",
             "ip_group_q",
             "encounter_q",
-            "built_ship_q"
+            "built_ship_q",
+            "event_q",
+            "disp_q",
+            "race_q[0]",
+            "race_q[1]",
+            "master_q",
         ]
     );
-    for name in &selected {
+    for (name, declared_in) in [
+        ("avail_race_q", &game_state),
+        ("npc_built_ship_q", &game_state),
+        ("ip_group_q", &game_state),
+        ("encounter_q", &game_state),
+        ("built_ship_q", &game_state),
+        ("event_q", &clock),
+        ("disp_q", &setup),
+        ("race_q", &setup),
+        ("master_q", &master),
+    ] {
         assert!(
-            declared.contains(name),
-            "{name} is not a QUEUE field of GAME_STATE"
+            declared_in.iter().any(|declared| declared == name),
+            "{name} is not declared as a QUEUE in the C sources"
         );
     }
+}
+
+#[test]
+fn the_battle_and_entity_queues_are_audited_and_named_when_broken() {
+    let mut game = GameQueues::new();
+    for which in [
+        SelectedQueue::DisplayList,
+        SelectedQueue::BattleRace0,
+        SelectedQueue::EventQueue,
+        SelectedQueue::MasterShips,
+    ] {
+        game.init(which, 4);
+    }
+    let first = game.put(SelectedQueue::DisplayList);
+    let healthy = game.snapshot().label();
+    assert!(healthy.contains(":disp_q=intact/4/1/3/0:"), "{healthy}");
+    assert!(healthy.contains(":race_q[1]=absent:"), "{healthy}");
+    assert_eq!(validate_label(&healthy), Ok(LabelVerdict::Intact));
+
+    // SAFETY: `first` is a slot of the pool; this models C corrupting `pred`.
+    unsafe { (*first.cast::<Link>()).pred = first };
+    let label = game.snapshot().label();
+    assert_eq!(
+        label,
+        "collection_invariant_failed:queue=disp_q:fault=broken_pred:slot=0"
+    );
+    assert_eq!(validate_label(&label), Ok(LabelVerdict::Broken));
+    unsafe { (*first.cast::<Link>()).pred = std::ptr::null_mut() };
+
+    let race = game.put(SelectedQueue::BattleRace0);
+    // SAFETY: as above, for `race_q[0]`.
+    unsafe { (*race.cast::<Link>()).succ = race };
+    let label = game.snapshot().label();
+    assert_eq!(
+        label,
+        "collection_invariant_failed:queue=race_q[0]:fault=cycle:slot=0"
+    );
+    assert_eq!(validate_label(&label), Ok(LabelVerdict::Broken));
 }
 
 #[test]
@@ -303,7 +361,7 @@ fn healthy_labels_round_trip_through_the_validator() {
     let label = game.snapshot().label();
     assert_eq!(
         label,
-        "collection_invariants:avail_race_q=intact/16/1/15/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=intact/3/0/2/1:built_ship_q=absent"
+        "collection_invariants:avail_race_q=intact/16/1/15/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=intact/3/0/2/1:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent"
     );
     assert_eq!(validate_label(&label), Ok(LabelVerdict::Intact));
     assert!(is_collection_label(&label));
@@ -311,39 +369,39 @@ fn healthy_labels_round_trip_through_the_validator() {
 
 #[test]
 fn the_validator_rejects_labels_the_producer_cannot_write() {
-    let healthy = "collection_invariants:avail_race_q=intact/4/1/3/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent";
+    let healthy = "collection_invariants:avail_race_q=intact/4/1/3/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent";
     assert_eq!(validate_label(healthy), Ok(LabelVerdict::Intact));
     for (bad, why) in [
         ("collection_invariants", "no queues"),
         (
-            "collection_invariants:npc_built_ship_q=absent:avail_race_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            "collection_invariants:npc_built_ship_q=absent:avail_race_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             "order",
         ),
         (
-            "collection_invariants:avail_race_q=intact/4/1/2/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            "collection_invariants:avail_race_q=intact/4/1/2/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             "slots do not add up",
         ),
         (
-            "collection_invariants:avail_race_q=intact/0/0/0/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            "collection_invariants:avail_race_q=intact/0/0/0/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             "zero capacity is absent",
         ),
         (
-            "collection_invariants:avail_race_q=intact/04/1/3/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            "collection_invariants:avail_race_q=intact/04/1/3/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             "leading zero",
         ),
         (
-            "collection_invariants:avail_race_q=intact/256/1/3/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            "collection_invariants:avail_race_q=intact/256/1/3/0:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             "count above a byte",
         ),
         (
-            "collection_invariants:avail_race_q=broken:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent",
+            "collection_invariants:avail_race_q=broken:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent",
             "broken state inside a healthy label",
         ),
         (
-            "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:extra=1",
+            "collection_invariants:avail_race_q=absent:npc_built_ship_q=absent:ip_group_q=absent:encounter_q=absent:built_ship_q=absent:event_q=absent:disp_q=absent:race_q[0]=absent:race_q[1]=absent:master_q=absent:extra=1",
             "trailing field",
         ),
-        ("collection_invariant_failed:queue=disp_q:fault=cycle:slot=0", "unknown queue"),
+        ("collection_invariant_failed:queue=display_q:fault=cycle:slot=0", "unknown queue"),
         ("collection_invariant_failed:queue=ip_group_q:fault=cycle", "cycle without slot"),
         ("collection_invariant_failed:queue=ip_group_q:fault=broken_tail:slot=1", "slot on slotless fault"),
         ("collection_invariant_failed:queue=ip_group_q:fault=cycle:slot=007", "leading zero slot"),

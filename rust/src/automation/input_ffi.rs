@@ -17,9 +17,8 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P06
 //! @requirement REQ-INJECT-001..007, REQ-FFI-001
 
-use crate::automation::collection_invariants::CollectionSnapshot;
 #[cfg(feature = "linked_c_archive")]
-use crate::automation::collection_invariants::SelectedQueue;
+use crate::automation::collection_invariants::{CollectionSnapshot, SelectedQueue};
 use crate::automation::coordinator::Coordinator;
 use crate::automation::runtime::RuntimeModel;
 #[cfg(feature = "linked_c_archive")]
@@ -88,6 +87,15 @@ extern "C" {
     static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemState;
     #[link_name = "GlobData"]
     static mut GLOB_DATA: crate::comm::locdata::CGlobData;
+    /// Battle and entity display list (`setup.c`).
+    #[link_name = "disp_q"]
+    static mut DISP_Q: crate::collections::queue::Queue;
+    /// Per-side battle ship queues (`setup.c`, `NUM_PLAYERS` entries).
+    #[link_name = "race_q"]
+    static mut RACE_Q: [crate::collections::queue::Queue; 2];
+    /// Master ship list (`master.c`).
+    #[link_name = "master_q"]
+    static mut MASTER_Q: crate::collections::queue::Queue;
     #[allow(non_snake_case)]
     fn GetFrameIndex(frame: *mut std::ffi::c_void) -> u16;
     /// Live orbit predicate: `playerInSolarSystem() && pSolarSysState->InOrbit`.
@@ -150,36 +158,38 @@ impl ViewGeometry {
     }
 }
 
-/// Audit the game queues held by the C `GlobData` global.
+/// Audit the production game queues in place.
 ///
-/// `GlobData` is owned by C but its queues are `Queue` values whose only
-/// implementation is Rust, so this reads them in place with no C hook. The
-/// shared references live only for the audit.
+/// The queues live in C storage: the five `GAME_STATE` queues and the clock
+/// event queue inside `GlobData`, and the C globals `disp_q`, `race_q` and
+/// `master_q`. Their only implementation is Rust, so they are read as
+/// [`Queue`](crate::collections::queue::Queue) values with no C hook. The
+/// shared references live only for the audit. A queue that C has not set up
+/// yet, or has torn down, is observed as absent.
 ///
-/// Must run on the game thread. Under `RUST_OWNS_MAIN`, which automation
-/// requires, that is the only thread that mutates these queues, and the
-/// automation hooks run between C operations, so no queue is mid-update.
+/// # Safety
+///
+/// Must run on the game thread, between C operations. C keeps no lock on
+/// these queues: the game thread is the only thread that calls the queue
+/// operations on them (`GameClockTick`, the battle frame, the encounter and
+/// ship code all run there under `RUST_OWNS_MAIN`), so reading them from any
+/// other thread, or from inside a queue operation, would race with C.
+/// [`Coordinator`] enforces the thread before it calls this.
 #[cfg(feature = "linked_c_archive")]
-pub(crate) fn sample_game_collections() -> CollectionSnapshot {
-    // SAFETY: the game thread is the sole writer of `GlobData` and is the
-    // caller, so nothing mutates the queues while the references exist.
-    unsafe {
-        let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
-        CollectionSnapshot::observe(|queue| match queue {
-            SelectedQueue::AvailRace => &*std::ptr::addr_of!((*game_state).avail_race_q),
-            SelectedQueue::NpcBuiltShip => &*std::ptr::addr_of!((*game_state).npc_built_ship_q),
-            SelectedQueue::IpGroup => &*std::ptr::addr_of!((*game_state).ip_group_q),
-            SelectedQueue::Encounter => &*std::ptr::addr_of!((*game_state).encounter_q),
-            SelectedQueue::BuiltShip => &*std::ptr::addr_of!((*game_state).built_ship_q),
-        })
-    }
-}
-
-/// Without the linked C archive there is no `GlobData`, so no queue exists.
-#[cfg(not(feature = "linked_c_archive"))]
-pub(crate) fn sample_game_collections() -> CollectionSnapshot {
-    let absent = crate::collections::queue::Queue::new();
-    CollectionSnapshot::observe(|_| &absent)
+pub(crate) unsafe fn sample_game_collections() -> CollectionSnapshot {
+    let game_state = std::ptr::addr_of!(GLOB_DATA.game_state);
+    CollectionSnapshot::observe(|queue| match queue {
+        SelectedQueue::AvailRace => &*std::ptr::addr_of!((*game_state).avail_race_q),
+        SelectedQueue::NpcBuiltShip => &*std::ptr::addr_of!((*game_state).npc_built_ship_q),
+        SelectedQueue::IpGroup => &*std::ptr::addr_of!((*game_state).ip_group_q),
+        SelectedQueue::Encounter => &*std::ptr::addr_of!((*game_state).encounter_q),
+        SelectedQueue::BuiltShip => &*std::ptr::addr_of!((*game_state).built_ship_q),
+        SelectedQueue::EventQueue => &*std::ptr::addr_of!((*game_state).game_clock.event_q),
+        SelectedQueue::DisplayList => &*std::ptr::addr_of!(DISP_Q),
+        SelectedQueue::BattleRace0 => &*std::ptr::addr_of!(RACE_Q[0]),
+        SelectedQueue::BattleRace1 => &*std::ptr::addr_of!(RACE_Q[1]),
+        SelectedQueue::MasterShips => &*std::ptr::addr_of!(MASTER_Q),
+    })
 }
 
 /// The game's baseline screen size, used only when the C globals are absent.
