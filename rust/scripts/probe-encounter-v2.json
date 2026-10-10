@@ -3,7 +3,7 @@
   "name": "probe-encounter-v2",
   "budgets": {
     "max_input_ticks": 6814,
-    "max_presentations": 8628,
+    "max_presentations": 13628,
     "max_wallclock_seconds": 420
   },
   "steps": [

@@ -3019,6 +3019,45 @@ mod tests {
         assert_eq!(checked, 10, "hyperspace scenarios checked");
     }
 
+    /// #213 amendment 5: Rust-owned `main` presents twice per input callback
+    /// (once when the frame wakes, once after the callback), measured at 2.00
+    /// across the native suite. A scenario whose scripted waits and holds alone
+    /// need more presentations than its cap would end in `presentation_timeout`
+    /// before finishing.
+    #[test]
+    fn required_scenarios_budget_two_presentations_per_scripted_tick() {
+        let scripts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts");
+        let required = crate::automation::suite::required_suite();
+        assert_eq!(required.len(), 32, "required scenarios");
+        for name in required {
+            let label = scripts
+                .join(format!("{name}.json"))
+                .to_string_lossy()
+                .into_owned();
+            let script = validate_script(
+                parse_script(&std::fs::read(&label).unwrap(), &label).unwrap(),
+                &label,
+            )
+            .unwrap();
+            let scripted_ticks: u64 = script
+                .steps()
+                .iter()
+                .map(|step| match step {
+                    Action::WaitInputTicks(wait) => wait.count,
+                    Action::TapMenuKey(tap) => tap.hold + tap.settle,
+                    Action::TapPlayerKey(tap) => tap.hold + tap.settle,
+                    _ => 0,
+                })
+                .sum();
+            assert!(
+                script.budgets().max_presentations >= 2 * scripted_ticks,
+                "{name} caps presentations at {} but its scripted ticks ({scripted_ticks}) present about {}",
+                script.budgets().max_presentations,
+                2 * scripted_ticks
+            );
+        }
+    }
+
     #[test]
     fn setup_planet_side_collision_fixture_parses_and_validates_explicitly() {
         let txt = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":36000,"max_presentations":36000,"max_wallclock_seconds":900},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
