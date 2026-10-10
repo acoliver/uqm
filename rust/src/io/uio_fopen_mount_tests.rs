@@ -264,10 +264,10 @@ fn fopen_for_writing_refuses_a_read_only_mount_and_an_archive() {
 
     for mode in ["w", "a", "r+", "w+"] {
         assert!(fopen(stack.root, "fixed.txt", mode).is_null(), "{mode}");
-        assert_eq!(errno_value(), libc::EACCES, "{mode}");
+        assert_eq!(errno_value(), libc::EPERM, "{mode}");
     }
     assert!(fopen(stack.root, "fresh.txt", "w").is_null());
-    assert_eq!(errno_value(), libc::EACCES);
+    assert_eq!(errno_value(), libc::EPERM);
     assert!(!locked.join("fresh.txt").exists());
     assert_eq!(std::fs::read(locked.join("fixed.txt")).unwrap(), b"keep");
     assert_eq!(
@@ -278,7 +278,7 @@ fn fopen_for_writing_refuses_a_read_only_mount_and_an_archive() {
     let mut stack = Stack::new();
     stack.mount_zip(&[("packed.txt", b"zip")], UIO_MOUNT_TOP, 0);
     assert!(fopen(stack.root, "packed.txt", "w").is_null());
-    assert_eq!(errno_value(), libc::EACCES, "an archive is never writable");
+    assert_eq!(errno_value(), libc::EPERM, "an archive is never writable");
     assert_eq!(
         stream_contents(stack.root, "packed.txt").as_deref(),
         Ok(&b"zip"[..])

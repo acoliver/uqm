@@ -350,7 +350,7 @@ fn unlink_refuses_read_only_missing_and_malformed_requests() {
     let missing = cstr("missing.txt");
     unsafe {
         assert_eq!(uio_unlink(stack.root, locked.as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EROFS);
         assert!(host.join("locked.txt").exists());
         assert_eq!(uio_unlink(stack.root, missing.as_ptr()), -1);
         assert_eq!(uio_unlink(ptr::null_mut(), locked.as_ptr()), -1);

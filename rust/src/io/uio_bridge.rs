@@ -21,6 +21,12 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod resolve;
 use resolve::{covering, locate, transplant_source, verify_directory, Kind, Place};
 
+#[path = "uio_write_access.rs"]
+mod write_access;
+use write_access::{
+    names_an_entry, plan_removal, plan_write, prepare_write, remove_entries, Parents, WriteIntent,
+};
+
 // =============================================================================
 // Mount Point Registry
 const UIO_MOUNT_RDONLY: c_int = 1 << 1;
@@ -225,44 +231,15 @@ pub unsafe extern "C" fn uio_rename(
         let old_virtual = normalize_virtual_path_full(old_dir_path, &old_input);
         let new_virtual = normalize_virtual_path_full(new_dir_path, &new_input);
 
-        // Resolve both paths through mount registry
         let registry = get_mount_registry().lock().unwrap();
-        let old_resolution = resolve_mount_for_path(
+        let (old_host_path, new_host_path) = match rename_places(
             &registry,
-            repository_key((*old_dir).repository),
-            &old_virtual,
-        );
-        let new_resolution = resolve_mount_for_path(
-            &registry,
-            repository_key((*new_dir).repository),
-            &new_virtual,
-        );
-
-        let (old_mount_id, old_host_path) = match old_resolution {
-            Some(res) => {
-                if res.mount.read_only {
-                    return fail_errno(libc::EACCES, -1);
-                }
-                (res.mount.id, res.host_path)
-            }
-            None => return fail_errno(libc::ENOENT, -1),
+            (repository_key((*old_dir).repository), &old_virtual),
+            (repository_key((*new_dir).repository), &new_virtual),
+        ) {
+            Ok(places) => places,
+            Err(errno) => return fail_errno(errno, -1),
         };
-
-        let (new_mount_id, new_host_path) = match new_resolution {
-            Some(res) => {
-                if res.mount.read_only {
-                    return fail_errno(libc::EACCES, -1);
-                }
-                (res.mount.id, res.host_path)
-            }
-            None => return fail_errno(libc::ENOENT, -1),
-        };
-
-        // Check if paths are on different mounts
-        if old_mount_id != new_mount_id {
-            return fail_errno(libc::EXDEV, -1);
-        }
-
         drop(registry);
 
         match fs::rename(&old_host_path, &new_host_path) {
@@ -273,6 +250,39 @@ pub unsafe extern "C" fn uio_rename(
             }
         }
     })
+}
+
+/// The host paths a rename moves between. Like `uio_rename` in the original:
+/// the old path is read from the first mount that holds it (a directory is
+/// EISDIR), the new path must be free and get a write location without
+/// making directories, and both have to be the same mount (EXDEV).
+fn rename_places(
+    registry: &[MountInfo],
+    (old_repository, old_virtual): (usize, &Path),
+    (new_repository, new_virtual): (usize, &Path),
+) -> Result<(PathBuf, PathBuf), c_int> {
+    let old = locate(registry, old_repository, old_virtual)?;
+    if old.kind == Kind::Directory {
+        return Err(libc::EISDIR);
+    }
+    let new = plan_write(
+        registry,
+        new_repository,
+        new_virtual,
+        WriteIntent {
+            create: true,
+            exclusive: true,
+            parents: Parents::MustExist,
+        },
+    )?;
+    let Place::Host(old_host_path) = old.place else {
+        // An archive entry has no host path to move.
+        return Err(libc::EXDEV);
+    };
+    if old.mount.id != new.mount_id {
+        return Err(libc::EXDEV);
+    }
+    Ok((old_host_path, new.target))
 }
 
 /// @plan PLAN-20260314-FILE-IO.P06
@@ -514,20 +524,29 @@ pub unsafe extern "C" fn uio_mkdir(
 
         let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
 
-        // Try to resolve through mount registry first
         let registry = get_mount_registry().lock().unwrap();
-        let host_path = match resolve_mount_for_path(
+        let planned = plan_write(
             &registry,
             repository_key((*dir).repository),
             &virtual_path,
-        ) {
-            Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
-            Some(resolution) => resolution.host_path.clone(),
-            None => return fail_errno(libc::ENOENT, -1),
-        };
+            WriteIntent {
+                create: true,
+                exclusive: true,
+                parents: Parents::Make,
+            },
+        );
         drop(registry);
+        let plan = match planned {
+            Ok(plan) => plan,
+            // A directory already there is an existing name for mkdir.
+            Err(libc::EISDIR) => return fail_errno(libc::EEXIST, -1),
+            Err(errno) => return fail_errno(errno, -1),
+        };
+        if let Err(errno) = prepare_write(&plan, 0) {
+            return fail_errno(errno, -1);
+        }
 
-        match fs::create_dir(&host_path) {
+        match fs::create_dir(&plan.target) {
             Ok(_) => 0,
             Err(e) => {
                 let err_code = e.raw_os_error().unwrap_or(libc::EIO);
@@ -552,35 +571,33 @@ pub unsafe extern "C" fn uio_rmdir(dir: *mut uio_DirHandle, path: *const c_char)
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
-
-        // Try to resolve through mount registry first
-        let registry = get_mount_registry().lock().unwrap();
-        let host_path = match resolve_mount_for_path(
-            &registry,
-            repository_key((*dir).repository),
-            &virtual_path,
-        ) {
-            Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
-            Some(resolution) => resolution.host_path.clone(),
-            None => return fail_errno(libc::ENOENT, -1),
-        };
-        drop(registry);
-
-        match fs::remove_dir(&host_path) {
-            Ok(_) => 0,
-            Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
-                fail_errno(err_code, -1)
-            }
+        match remove_at(dir, &input_path, Kind::Directory) {
+            Ok(()) => 0,
+            Err(errno) => fail_errno(errno, -1),
         }
     })
+}
+
+/// `uio_unlink` and `uio_rmdir`: removes the `wanted` kind of entry named by
+/// `input_path` from every mount of the directory's repository that holds it.
+///
+/// # Safety
+///
+/// `dir` must be a live directory handle.
+unsafe fn remove_at(dir: *mut uio_DirHandle, input_path: &Path, wanted: Kind) -> Result<(), c_int> {
+    if !names_an_entry(input_path.as_os_str()) {
+        return Err(libc::ENOENT);
+    }
+    let virtual_path = normalize_virtual_path_full(&(*dir).virtual_path, input_path);
+    let registry = get_mount_registry().lock().unwrap();
+    let removals = plan_removal(&registry, repository_key((*dir).repository), &virtual_path);
+    drop(registry);
+    remove_entries(removals?, wanted)
 }
 
 ///
@@ -956,36 +973,6 @@ fn sort_mount_registry(registry: &mut [MountInfo]) {
     });
 }
 
-/// @plan PLAN-20260314-FILE-IO.P06a
-/// @requirement REQ-FIO-MUTATION (G14)
-/// Result of resolving a path through the mount overlay
-struct MountResolution<'a> {
-    mount: &'a MountInfo,
-    host_path: PathBuf,
-}
-
-/// @plan PLAN-20260314-FILE-IO.P06a
-/// @requirement REQ-FIO-MUTATION (G14)
-/// Resolve a virtual path to the topmost visible mount of `repository` that
-/// covers it. Returns None if no mount covers the path.
-///
-/// This is used for mutation operations to determine:
-/// - Which mount owns the path
-/// - Whether the mount is read-only
-/// - The actual host filesystem path
-fn resolve_mount_for_path<'a>(
-    registry: &'a [MountInfo],
-    repository: usize,
-    virtual_path: &Path,
-) -> Option<MountResolution<'a>> {
-    covering(registry, repository, virtual_path)
-        .next()
-        .map(|top| MountResolution {
-            mount: top.mount,
-            host_path: top.host_path(),
-        })
-}
-
 fn remove_mount_entry(handle: *mut uio_MountHandle) -> Option<MountInfo> {
     if handle.is_null() {
         return None;
@@ -1038,7 +1025,11 @@ fn duplicate_c_string(path: &Path) -> *mut c_char {
 /// absolute path inside the archive (`/entry`) for an archive mount, which has
 /// no host path. On failure both outputs are cleared and errno says why:
 /// ENOENT if no mount of the directory's repository has it, EISDIR for a
-/// directory. Only read access is supported; any other `flags` is ENOSYS.
+/// directory. For write access (`flags` other than `O_RDONLY`) it is the write
+/// location `uio_open` would use, after the same preparation: the missing
+/// parent directories are made and an existing entry is copied up unless
+/// `O_TRUNC` is set; the entry itself is not created. EPERM when no writable
+/// mount can take it.
 ///
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-ERRNO
@@ -1097,11 +1088,23 @@ unsafe fn file_location(
 ) -> Result<(usize, PathBuf), c_int> {
     let dir = dir.as_ref().ok_or(libc::EINVAL)?;
     let input = cstr_to_pathbuf(in_path).ok_or(libc::EINVAL)?;
-    if flags & O_ACCMODE != O_RDONLY {
-        return Err(libc::ENOSYS);
-    }
     let virtual_path = normalize_virtual_path_full(&dir.virtual_path, &input);
     let registry = get_mount_registry().lock().unwrap();
+    if flags & O_ACCMODE != O_RDONLY {
+        let plan = plan_write(
+            &registry,
+            repository_key(dir.repository),
+            &virtual_path,
+            WriteIntent {
+                create: flags & O_CREAT != 0,
+                exclusive: flags & O_CREAT != 0 && flags & O_EXCL != 0,
+                parents: Parents::Make,
+            },
+        )?;
+        drop(registry);
+        prepare_write(&plan, flags)?;
+        return Ok((plan.mount_handle, plan.target));
+    }
     let found = locate(&registry, repository_key(dir.repository), &virtual_path)?;
     if found.kind == Kind::Directory {
         return Err(libc::EISDIR);
@@ -2510,7 +2513,7 @@ unsafe fn stdio_access(
 /// filesystem path. A file of a directory mount is used where it lies. An
 /// entry of an archive is unpacked into a new directory under `temp_dir`
 /// (required then), through the mount stack, so `temp_dir` has to be a
-/// writable directory mount now: EACCES on a read-only one, ENOENT when its
+/// writable directory mount now: EPERM on a read-only one, ENOENT when its
 /// mount is gone. Releasing the handle removes the unpacked file and the
 /// directory made for it, never `temp_dir` itself.
 ///
@@ -3284,11 +3287,14 @@ pub unsafe extern "C" fn uio_open(
 /// the way the original UIO mount stack does, for both `uio_open` and
 /// `uio_fopen`.
 ///
-/// Writes (and creations) go to the topmost mount covering the path and fail
-/// with EACCES when that mount is read-only or an archive. Reads try every
-/// covering mount in priority order: a mount lacking the file lets the lookup
-/// fall through to the next one, any other failure is final. A path no mount
-/// covers does not exist: the answer is ENOENT, as in the original repository.
+/// Any access but `O_RDONLY` goes to the write location the original picks:
+/// the first writable mount the walk of the covering mounts reaches, with the
+/// entry copied up from a mount below it and the missing parent directories
+/// made there. That is EPERM when only read-only mounts were reached. Reads try
+/// every covering mount in priority order: a mount lacking the file lets the
+/// lookup fall through to the next one, any other failure is final. A path no
+/// mount covers does not exist: the answer is ENOENT, as in the original
+/// repository.
 ///
 /// Returns the errno on failure.
 ///
@@ -3300,29 +3306,27 @@ fn open_through_mounts(
     flags: c_int,
 ) -> Result<uio_HandleInner, c_int> {
     let virtual_path = normalize_virtual_path_full(&dir.virtual_path, input_path);
-    let writes = flags & O_ACCMODE != O_RDONLY || flags & O_CREAT != 0;
     let registry = get_mount_registry().lock().unwrap();
 
-    if writes {
-        let host_path = match resolve_mount_for_path(
+    if flags & O_ACCMODE != O_RDONLY {
+        let plan = plan_write(
             &registry,
             repository_key(dir.repository),
             &virtual_path,
-        ) {
-            Some(resolution) if resolution.mount.read_only => return Err(libc::EACCES),
-            Some(resolution) if resolution.mount.fs_type == UIO_FSTYPE_ZIP => {
-                return Err(libc::EACCES)
-            }
-            Some(resolution) => resolution.host_path,
-            None => return Err(libc::ENOENT),
-        };
+            WriteIntent {
+                create: flags & O_CREAT != 0,
+                exclusive: flags & O_CREAT != 0 && flags & O_EXCL != 0,
+                parents: Parents::Make,
+            },
+        )?;
         drop(registry);
-        return open_host_file(&host_path, flags)
+        let flags = prepare_write(&plan, flags)?;
+        return open_host_file(&plan.target, flags)
             .map(uio_HandleInner::File)
             .map_err(|err| {
                 log_marker(&format!(
                     "uio_open write failed: path={:?} err={}",
-                    host_path, err
+                    plan.target, err
                 ));
                 err.raw_os_error().unwrap_or(libc::EIO)
             });
@@ -3490,33 +3494,14 @@ pub unsafe extern "C" fn uio_unlink(dir: *mut uio_DirHandle, path: *const c_char
             return fail_errno(libc::EINVAL, -1);
         }
 
-        let dir_virt_path = &(*dir).virtual_path;
         let input_path = match cstr_to_pathbuf(path) {
             Some(p) => p,
             None => return fail_errno(libc::EINVAL, -1),
         };
 
-        let virtual_path = normalize_virtual_path_full(dir_virt_path, &input_path);
-
-        // Try to resolve through mount registry first
-        let registry = get_mount_registry().lock().unwrap();
-        let file_path = match resolve_mount_for_path(
-            &registry,
-            repository_key((*dir).repository),
-            &virtual_path,
-        ) {
-            Some(resolution) if resolution.mount.read_only => return fail_errno(libc::EACCES, -1),
-            Some(resolution) => resolution.host_path.clone(),
-            None => return fail_errno(libc::ENOENT, -1),
-        };
-        drop(registry);
-
-        match fs::remove_file(&file_path) {
-            Ok(_) => 0,
-            Err(e) => {
-                let err_code = e.raw_os_error().unwrap_or(libc::EIO);
-                fail_errno(err_code, -1)
-            }
+        match remove_at(dir, &input_path, Kind::File) {
+            Ok(()) => 0,
+            Err(errno) => fail_errno(errno, -1),
         }
     })
 }
@@ -5282,13 +5267,13 @@ mod tests {
                     repository: repo,
                 }));
 
-                // Try to open for writing - should fail with EACCES
+                // Try to open for writing - should fail with EPERM: no writable mount was reached
                 let path = CString::new("test.txt").unwrap();
                 set_errno(0);
                 let handle = uio_open(dir_handle, path.as_ptr(), O_WRONLY, 0o644);
 
                 assert!(handle.is_null());
-                assert_eq!(current_errno(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EPERM);
 
                 // Try to open with O_CREAT - should also fail
                 let new_file = CString::new("newfile.txt").unwrap();
@@ -5296,7 +5281,7 @@ mod tests {
                 let handle2 = uio_open(dir_handle, new_file.as_ptr(), O_WRONLY | O_CREAT, 0o644);
 
                 assert!(handle2.is_null());
-                assert_eq!(current_errno(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EPERM);
 
                 // Reading should still work
                 let handle3 = uio_open(dir_handle, path.as_ptr(), O_RDONLY, 0);
@@ -5398,13 +5383,13 @@ mod tests {
                     repository: repo,
                 }));
 
-                // Try to unlink - should fail with EACCES
+                // Try to unlink - should fail with EROFS: the only mount holding the file is read-only
                 let path = CString::new("file.txt").unwrap();
                 set_errno(0);
                 let result = uio_unlink(dir, path.as_ptr());
 
                 assert_eq!(result, -1);
-                assert_eq!(current_errno(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EROFS);
 
                 // File should still exist
                 assert!(temp_dir.join("file.txt").exists());
@@ -5441,13 +5426,13 @@ mod tests {
                     repository: repo,
                 }));
 
-                // Try to create directory - should fail with EACCES
+                // Try to create directory - should fail with EPERM: no writable mount was reached
                 let path = CString::new("newdir").unwrap();
                 set_errno(0);
                 let result = uio_mkdir(dir, path.as_ptr(), 0o755);
 
                 assert_eq!(result, -1);
-                assert_eq!(current_errno(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EPERM);
 
                 // Directory should not exist
                 assert!(!temp_dir.join("newdir").exists());
@@ -5487,13 +5472,13 @@ mod tests {
                     repository: repo,
                 }));
 
-                // Try to remove directory - should fail with EACCES
+                // Try to remove directory - should fail with EROFS: the only mount holding the directory is read-only
                 let path = CString::new("testdir").unwrap();
                 set_errno(0);
                 let result = uio_rmdir(dir, path.as_ptr());
 
                 assert_eq!(result, -1);
-                assert_eq!(current_errno(), libc::EACCES);
+                assert_eq!(current_errno(), libc::EROFS);
 
                 // Directory should still exist
                 assert!(temp_dir.join("testdir").exists());
@@ -7326,3 +7311,7 @@ mod name_bytes_tests;
 #[cfg(test)]
 #[path = "uio_resolution_tests.rs"]
 mod resolution_tests;
+
+#[cfg(test)]
+#[path = "uio_write_location_tests.rs"]
+mod write_location_tests;

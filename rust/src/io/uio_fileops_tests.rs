@@ -137,10 +137,12 @@ fn a_read_only_mount_refuses_directory_changes() {
     let root = stack.mount_dir(&[], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     std::fs::create_dir(root.join("fixed")).unwrap();
     unsafe {
+        // The original finds no writable mount for the new name (EPERM) and
+        // meets a read-only mount holding the old one (EROFS).
         assert_eq!(uio_mkdir(stack.root, c("new").as_ptr(), 0o755), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EPERM);
         assert_eq!(uio_rmdir(stack.root, c("fixed").as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EROFS);
     }
     assert!(root.join("fixed").is_dir());
     assert!(!root.join("new").exists());
@@ -260,7 +262,7 @@ fn unlinking_removes_a_writable_file_and_spares_a_read_only_mount() {
     let root = stack.mount_dir(&[("keep.txt", b"x")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     unsafe {
         assert_eq!(uio_unlink(stack.root, c("keep.txt").as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EROFS);
     }
     assert!(root.join("keep.txt").exists());
 }

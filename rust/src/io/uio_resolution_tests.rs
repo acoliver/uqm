@@ -19,25 +19,25 @@ use tempfile::TempDir;
 use super::*;
 use crate::io::name_filter::MATCH_SUBSTRING;
 
-const RDONLY_TOP: c_int = UIO_MOUNT_RDONLY | UIO_MOUNT_TOP;
+pub(super) const RDONLY_TOP: c_int = UIO_MOUNT_RDONLY | UIO_MOUNT_TOP;
 
-fn cstr(text: &str) -> CString {
+pub(super) fn cstr(text: &str) -> CString {
     CString::new(text).unwrap()
 }
 
-fn errno_value() -> c_int {
+pub(super) fn errno_value() -> c_int {
     std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
 /// Owns the temporary hosts and repositories of one test and resets the
 /// process-wide mount registry before and after it.
-struct Fx {
+pub(super) struct Fx {
     hosts: Vec<TempDir>,
     repos: Vec<*mut uio_Repository>,
 }
 
 impl Fx {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         clear_registry();
         Fx {
             hosts: Vec::new(),
@@ -45,14 +45,14 @@ impl Fx {
         }
     }
 
-    fn repo(&mut self) -> *mut uio_Repository {
+    pub(super) fn repo(&mut self) -> *mut uio_Repository {
         let repo = unsafe { uio_openRepository(0) };
         self.repos.push(repo);
         repo
     }
 
     /// A host directory holding `files`; names may contain `/`.
-    fn host(&mut self, files: &[(&str, &[u8])]) -> PathBuf {
+    pub(super) fn host(&mut self, files: &[(&str, &[u8])]) -> PathBuf {
         let dir = TempDir::new().unwrap();
         for (name, data) in files {
             let path = dir.path().join(name);
@@ -80,7 +80,7 @@ fn clear_registry() {
     }
 }
 
-fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
+pub(super) fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let mut zip = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
     let options =
@@ -92,7 +92,7 @@ fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
     zip.finish().unwrap();
 }
 
-fn mount_stdio(
+pub(super) fn mount_stdio(
     repo: *mut uio_Repository,
     point: &str,
     host: &Path,
@@ -117,7 +117,7 @@ fn mount_stdio(
     }
 }
 
-fn mount_zip(
+pub(super) fn mount_zip(
     repo: *mut uio_Repository,
     point: &str,
     source: *mut uio_DirHandle,
@@ -140,7 +140,7 @@ fn mount_zip(
     }
 }
 
-fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle {
+pub(super) fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle {
     let path = cstr(path);
     unsafe { uio_openDir(repo, path.as_ptr(), 0) }
 }
@@ -159,7 +159,7 @@ fn dir_or_errno(handle: *mut uio_DirHandle) -> Result<*mut uio_DirHandle, c_int>
     }
 }
 
-fn read(dir: *mut uio_DirHandle, name: &str) -> Result<Vec<u8>, c_int> {
+pub(super) fn read(dir: *mut uio_DirHandle, name: &str) -> Result<Vec<u8>, c_int> {
     let name = cstr(name);
     unsafe {
         let handle = uio_open(dir, name.as_ptr(), 0, 0);
@@ -560,7 +560,7 @@ fn stdio_access_refuses_a_temp_dir_on_a_read_only_mount() {
     assert!(!temp_dir.is_null());
     assert_eq!(
         stdio_access(root, "f.bin", temp_dir).map(|_| ()),
-        Err(libc::EACCES)
+        Err(libc::EPERM)
     );
     assert_eq!(std::fs::read_dir(&temp).unwrap().count(), 0);
 }

@@ -21,6 +21,7 @@ use super::{map_virtual_to_host_confined, MountInfo, UIO_FSTYPE_ZIP};
 
 /// A mount of the repository that covers a virtual path, with the part of the
 /// path below its mount point.
+#[derive(Clone)]
 pub(super) struct Covering<'a> {
     pub(super) mount: &'a MountInfo,
     suffix: PathBuf,
@@ -51,7 +52,29 @@ where
         })
 }
 
-impl Covering<'_> {
+impl<'a> Covering<'a> {
+    /// The same mount at the parent of this path; `None` for the mount's own
+    /// root.
+    pub(super) fn parent(&self) -> Option<Covering<'a>> {
+        Some(Covering {
+            mount: self.mount,
+            suffix: self.suffix.parent()?.to_path_buf(),
+        })
+    }
+
+    /// The same mount at the entry `name` of this directory.
+    pub(super) fn child(&self, name: &std::ffi::OsStr) -> Covering<'a> {
+        Covering {
+            mount: self.mount,
+            suffix: self.suffix.join(name),
+        }
+    }
+
+    /// How many components the path has below the mount point.
+    pub(super) fn depth(&self) -> usize {
+        self.suffix.components().count()
+    }
+
     /// The path below the mount's directory on the host. For an archive mount
     /// this is only the lexical join; use [`Covering::place`] to look at what
     /// the mount holds.
@@ -107,7 +130,7 @@ pub(super) struct Located<'a> {
 /// What this one mount holds at the covered path. `Ok(None)` means nothing:
 /// the lookup may go on to the next mount. `Err` is a failure of the host or
 /// a path through something that is not a directory, and ends the lookup.
-fn probe(covering: &Covering<'_>) -> Result<Option<(Place, Kind)>, c_int> {
+pub(super) fn probe(covering: &Covering<'_>) -> Result<Option<(Place, Kind)>, c_int> {
     let Some(place) = covering.place() else {
         return Ok(None);
     };
