@@ -7,13 +7,11 @@ pub mod battle_controls;
 pub mod battle_types;
 pub mod c_bridge;
 pub mod collision;
-pub mod display_list;
 pub mod element;
 pub mod ffi;
 pub mod gendef;
 pub mod gravity;
 pub mod integration;
-mod integration_tests_p14;
 pub mod lifecycle;
 pub mod netplay;
 pub mod process_loop;
@@ -25,7 +23,6 @@ pub mod weapon;
 pub use ai::*;
 pub use battle_types::*;
 pub use collision::*;
-pub use display_list::*;
 pub use element::*;
 pub use integration::*;
 pub use lifecycle::*;
@@ -228,45 +225,6 @@ mod integration_tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test 5: Display List Stress Test
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_display_list_stress() {
-        let capacity = 10;
-        let mut list = DisplayList::new(capacity);
-        // Allocate to capacity and add to active list
-        let mut handles = Vec::new();
-        for i in 0..capacity {
-            let handle = list.alloc().expect("Should allocate successfully");
-            if let Some(elem) = list.get_mut(handle) {
-                elem.mass_points = i as u8;
-            }
-            // Add to active list
-            list.push_back(handle);
-            handles.push(handle);
-        }
-        assert_eq!(list.count(), capacity, "Should be at capacity");
-        // Verify we can't allocate more
-        assert!(
-            list.alloc().is_none(),
-            "Should fail to allocate beyond capacity"
-        );
-        // Free all
-        for handle in handles.iter() {
-            list.free(*handle);
-        }
-        assert_eq!(list.count(), 0, "All elements should be freed");
-        // Reallocate and verify old handles are invalid
-        let new_handle = list.alloc().expect("Should allocate after freeing");
-        assert!(
-            list.get(handles[0]).is_none(),
-            "Old handle should be invalidated by generation counter"
-        );
-        assert!(list.get(new_handle).is_some(), "New handle should be valid");
-    }
-
-    // -----------------------------------------------------------------------
     // Test 6: Type Relocation Verification
     // -----------------------------------------------------------------------
 
@@ -299,8 +257,6 @@ mod integration_tests {
         let _elem = Element::new();
         // VelocityDesc
         let _vel = VelocityDesc::new();
-        // DisplayList
-        let _list = DisplayList::new(10);
         // CrcState
         let _crc = CrcState::new();
         // LaserBlock
