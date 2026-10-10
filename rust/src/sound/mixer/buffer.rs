@@ -214,11 +214,6 @@ pub fn mixer_buffer_data(
         return Err(MixerError::InvalidOperation);
     }
 
-    // Store original buffer values for OpenAL compatibility
-    buf.org_data = Some(data.to_vec());
-    buf.org_freq = freq;
-    buf.org_size = data.len() as u32;
-
     // The format coming from C is MIX_FORMAT_MAKE encoded:
     // MIX_FORMAT_DUMMYID (0x00170000) | bytes_per_channel | (channels << 8)
     // For MIX_FORMAT_MONO16: 0x170102 = bpc=2, chans=1
@@ -236,6 +231,11 @@ pub fn mixer_buffer_data(
         return Err(MixerError::InvalidValue);
     }
 
+    // Store original buffer values for OpenAL compatibility, once the
+    // upload is known to be acceptable.
+    buf.org_data = Some(data.to_vec());
+    buf.org_freq = freq;
+    buf.org_size = data.len() as u32;
     buf.org_channels = src_chans;
     buf.org_chansize = src_bpc;
 

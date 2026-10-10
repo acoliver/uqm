@@ -27,6 +27,8 @@ pub mod formats;
 pub mod mixer;
 pub mod mod_decoder;
 pub mod mod_ffi;
+#[cfg(test)]
+mod mod_vtable_tests;
 pub mod null;
 pub mod ogg;
 pub mod rodio_audio;

@@ -758,3 +758,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ffi_playback_tests.rs"]
+mod playback_tests;
