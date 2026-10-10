@@ -629,11 +629,11 @@ pub fn mixer_mix_fake(stream: &mut [u8]) -> Result<(), MixerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
+    use crate::sound::test_support::{Probe, ENGINE_TEST_LOCK};
 
     #[test]
-    #[serial]
     fn test_mixer_init() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -647,8 +647,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_init_uninit() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         assert!(!mixer_is_initialized());
         mixer_init(
@@ -667,8 +667,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_reinit() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -690,8 +690,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_get_params() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             22050,
@@ -711,8 +711,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_error() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -730,8 +730,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_channels_empty() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -751,8 +751,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_fake() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -771,8 +771,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_channels_mono16() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -792,8 +792,8 @@ mod tests {
     }
 
     #[test]
-    #[serial]
     fn test_mixer_mix_channels_stereo16() {
+        let _lease = ENGINE_TEST_LOCK.lock();
         let _ = mixer_uninit();
         mixer_init(
             44100,
@@ -810,6 +810,29 @@ mod tests {
             assert_eq!(sample, 0);
         }
         mixer_uninit().unwrap();
+    }
+
+    #[test]
+    fn the_mixer_state_tests_wait_for_the_lock_of_the_pool_they_render() {
+        let bodies: [fn(); 9] = [
+            test_mixer_init,
+            test_mixer_init_uninit,
+            test_mixer_reinit,
+            test_mixer_get_params,
+            test_mixer_error,
+            test_mixer_mix_channels_empty,
+            test_mixer_mix_fake,
+            test_mixer_mix_channels_mono16,
+            test_mixer_mix_channels_stereo16,
+        ];
+        let engine = ENGINE_TEST_LOCK.lock();
+        let probes = bodies.map(Probe::spawn);
+        let blocked = Probe::all_blocked_for_grace(&probes);
+        drop(engine);
+
+        let finished: Vec<bool> = probes.into_iter().map(|p| p.join().is_ok()).collect();
+        assert!(blocked, "a mixer state test ran without the engine lock");
+        assert_eq!(finished, [true; 9]);
     }
 }
 

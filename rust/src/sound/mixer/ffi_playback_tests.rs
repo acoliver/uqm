@@ -3,7 +3,7 @@
 //! the mixer renders into the output stream.
 
 use super::*;
-use serial_test::serial;
+use crate::sound::test_support::ENGINE_TEST_LOCK;
 use std::ptr;
 
 /// MIX_FORMAT_MAKE(bytes per channel, channels) as the C headers encode it.
@@ -23,16 +23,26 @@ thread_local! {
 }
 
 /// The mixer pools outlive a mixer instance, so each test removes the
-/// objects it created before the next one starts.
-struct Mixer;
+/// objects it created before the next one starts. The mixer renders every
+/// playing source in the process-wide pool, so the test holds
+/// `ENGINE_TEST_LOCK`, the lock of everything else that plays on that pool,
+/// from `start` until its objects are gone.
+struct Mixer {
+    _lease: parking_lot::MutexGuard<'static, ()>,
+}
 
 impl Mixer {
     fn start() -> Self {
+        Self::start_with_flags(0)
+    }
+
+    fn start_with_flags(flags: c_uint) -> Self {
+        let lease = ENGINE_TEST_LOCK.lock();
         unsafe {
             rust_mixer_Uninit();
-            assert_eq!(rust_mixer_Init(RATE, C_STEREO16, 1, 0), 1);
+            assert_eq!(rust_mixer_Init(RATE, C_STEREO16, 1, flags), 1);
         }
-        Mixer
+        Mixer { _lease: lease }
     }
 }
 
@@ -103,7 +113,6 @@ const STATE_PLAYING: MixerIntVal = SourceState::Playing as MixerIntVal;
 const STATE_PAUSED: MixerIntVal = SourceState::Paused as MixerIntVal;
 
 #[test]
-#[serial]
 fn c_formats_decode_to_the_matching_mixer_format() {
     assert_eq!(decode_c_format(0x0017_0101), MixerFormat::Mono8);
     assert_eq!(decode_c_format(0x0017_0201), MixerFormat::Stereo8);
@@ -112,7 +121,6 @@ fn c_formats_decode_to_the_matching_mixer_format() {
 }
 
 #[test]
-#[serial]
 fn init_reports_the_negotiated_frequency_and_format() {
     let _mixer = Mixer::start();
     unsafe {
@@ -123,7 +131,6 @@ fn init_reports_the_negotiated_frequency_and_format() {
 }
 
 #[test]
-#[serial]
 fn buffer_data_is_recorded_with_its_original_properties() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_STEREO16, &[1, -1, 2, -2, 3, -3]);
@@ -141,8 +148,7 @@ fn buffer_data_is_recorded_with_its_original_properties() {
 }
 
 #[test]
-#[serial]
-fn a_queued_source_plays_its_samples_then_stops_with_the_buffer_processed() {
+pub(crate) fn a_queued_source_plays_its_samples_then_stops_with_the_buffer_processed() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_STEREO16, &[400, -400, 800, -800, 1200, -1200]);
     let source = source();
@@ -170,7 +176,6 @@ fn a_queued_source_plays_its_samples_then_stops_with_the_buffer_processed() {
 }
 
 #[test]
-#[serial]
 fn gain_scales_what_reaches_the_stream() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_STEREO16, &[1000, -1000, 2000, -2000]);
@@ -188,7 +193,6 @@ fn gain_scales_what_reaches_the_stream() {
 }
 
 #[test]
-#[serial]
 fn the_looping_flag_is_kept_on_the_source_and_stopping_clears_the_queue() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_STEREO16, &[40, 80, 120, 160]);
@@ -208,7 +212,6 @@ fn the_looping_flag_is_kept_on_the_source_and_stopping_clears_the_queue() {
 }
 
 #[test]
-#[serial]
 fn pausing_silences_the_source_and_resuming_continues_where_it_left_off() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_STEREO16, &[40, 80, 120, 160, 200, 240, 280, 320]);
@@ -226,7 +229,6 @@ fn pausing_silences_the_source_and_resuming_continues_where_it_left_off() {
 }
 
 #[test]
-#[serial]
 fn rewinding_restarts_the_queue_from_the_first_sample() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_STEREO16, &[44, 48, 52, 56]);
@@ -243,7 +245,6 @@ fn rewinding_restarts_the_queue_from_the_first_sample() {
 }
 
 #[test]
-#[serial]
 fn two_sources_are_summed_into_the_stream() {
     let _mixer = Mixer::start();
     let first = source();
@@ -258,7 +259,6 @@ fn two_sources_are_summed_into_the_stream() {
 }
 
 #[test]
-#[serial]
 fn queued_buffers_play_back_to_back() {
     let _mixer = Mixer::start();
     let source = source();
@@ -274,7 +274,6 @@ fn queued_buffers_play_back_to_back() {
 }
 
 #[test]
-#[serial]
 fn deleting_objects_invalidates_their_handles_and_zeroes_the_caller_array() {
     let _mixer = Mixer::start();
     let mut sources = [source(), source()];
@@ -290,7 +289,6 @@ fn deleting_objects_invalidates_their_handles_and_zeroes_the_caller_array() {
 }
 
 #[test]
-#[serial]
 fn unknown_properties_and_empty_requests_are_ignored() {
     let _mixer = Mixer::start();
     let source = source();
@@ -328,7 +326,6 @@ fn unknown_properties_and_empty_requests_are_ignored() {
 }
 
 #[test]
-#[serial]
 fn a_zero_sized_or_malformed_buffer_upload_is_refused() {
     let _mixer = Mixer::start();
     let mut handle = [0 as MixerObject; 1];
@@ -344,7 +341,6 @@ fn a_zero_sized_or_malformed_buffer_upload_is_refused() {
 }
 
 #[test]
-#[serial]
 fn mono_buffers_are_accepted_by_a_stereo_mixer() {
     let _mixer = Mixer::start();
     let buffer = buffer_with(C_MONO16, &[5, 6, 7, 8]);
@@ -356,15 +352,40 @@ fn mono_buffers_are_accepted_by_a_stereo_mixer() {
 }
 
 #[test]
-#[serial]
 fn fake_mode_renders_without_real_buffers() {
-    unsafe {
-        rust_mixer_Uninit();
-        assert_eq!(rust_mixer_Init(RATE, C_STEREO16, 1, 1), 1);
-    }
+    let _mixer = Mixer::start_with_flags(1);
     let source = source();
     unsafe { rust_mixer_SourcePlay(source) };
     let mut stream = [0u8; 16];
     unsafe { rust_mixer_MixFake(ptr::null_mut(), stream.as_mut_ptr(), 16) };
-    unsafe { rust_mixer_Uninit() };
+}
+
+#[test]
+fn every_test_that_drives_the_mixer_waits_for_the_engine_lock() {
+    use crate::sound::test_support::Probe;
+
+    let bodies: [fn(); 14] = [
+        init_reports_the_negotiated_frequency_and_format,
+        buffer_data_is_recorded_with_its_original_properties,
+        a_queued_source_plays_its_samples_then_stops_with_the_buffer_processed,
+        gain_scales_what_reaches_the_stream,
+        the_looping_flag_is_kept_on_the_source_and_stopping_clears_the_queue,
+        pausing_silences_the_source_and_resuming_continues_where_it_left_off,
+        rewinding_restarts_the_queue_from_the_first_sample,
+        two_sources_are_summed_into_the_stream,
+        queued_buffers_play_back_to_back,
+        deleting_objects_invalidates_their_handles_and_zeroes_the_caller_array,
+        unknown_properties_and_empty_requests_are_ignored,
+        a_zero_sized_or_malformed_buffer_upload_is_refused,
+        mono_buffers_are_accepted_by_a_stereo_mixer,
+        fake_mode_renders_without_real_buffers,
+    ];
+    let engine = ENGINE_TEST_LOCK.lock();
+    let probes = bodies.map(Probe::spawn);
+    let blocked = Probe::all_blocked_for_grace(&probes);
+    drop(engine);
+
+    let finished: Vec<bool> = probes.into_iter().map(|p| p.join().is_ok()).collect();
+    assert!(blocked, "a mixer test ran without the engine lock");
+    assert_eq!(finished, [true; 14]);
 }
