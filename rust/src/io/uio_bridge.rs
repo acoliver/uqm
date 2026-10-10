@@ -1,18 +1,21 @@
 // Minimal stdio-backed UIO implementation
 // Reference: sc2/src/libs/uio/io.h, uiostream.h
 
+use super::name_filter::NameFilter;
 use crate::bridge_log::rust_bridge_log_msg;
 use libc::{mode_t, off_t, size_t};
-use std::collections::HashMap;
+use std::collections::BTreeSet;
 
+use std::ffi::OsStr;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::raw::{c_char, c_int, c_long};
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 // =============================================================================
 // Mount Point Registry
@@ -101,7 +104,7 @@ struct MountInfo {
     id: usize,
     repository: usize,
     handle_ptr: usize,
-    mount_point: String,
+    mount_point: PathBuf,
     mounted_root: PathBuf,
     fs_type: c_int,
     active_in_registry: bool,
@@ -279,9 +282,11 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
                     // @requirement REQ-FIO-ARCHIVE-MOUNT
                     // Check ZIP archives
                     if mount.fs_type == UIO_FSTYPE_ZIP {
-                        if let Some(ref zip_index) = mount.zip_index {
-                            let suffix_str = suffix.to_string_lossy();
-                            if zip_index.contains(&suffix_str) {
+                        // Entry names are Unicode: other bytes name no entry.
+                        if let (Some(zip_index), Some(name)) =
+                            (mount.zip_index.as_ref(), suffix.to_str())
+                        {
+                            if zip_index.contains(name) {
                                 // Use mounted_root as placeholder for ZIP entry
                                 return Some((mount, mount.mounted_root.clone()));
                             }
@@ -344,8 +349,10 @@ pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_i
                     let suffix = virtual_path
                         .strip_prefix(mount_path)
                         .unwrap_or_else(|_| Path::new(""));
-                    let suffix_str = suffix.to_string_lossy();
-                    if zip_index.is_directory(&suffix_str) {
+                    if suffix
+                        .to_str()
+                        .is_some_and(|name| zip_index.is_directory(name))
+                    {
                         // Directories are executable (traversable)
                         return 0;
                     }
@@ -428,18 +435,19 @@ pub unsafe extern "C" fn uio_stat(
 
             // Handle ZIP mounts
             if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let suffix_str = suffix.to_string_lossy();
-
+                // Entry names are Unicode: other bytes name no entry.
+                if let (Some(zip_index), Some(suffix_str)) =
+                    (mount.zip_index.as_ref(), suffix.to_str())
+                {
                     // Check if it's a directory
-                    if zip_index.is_directory(&suffix_str) {
+                    if zip_index.is_directory(suffix_str) {
                         (*stat_buf).st_size = 0;
                         (*stat_buf).st_mode = 0o040555; // Directory, read+exec for all
                         return 0;
                     }
 
                     // Check if it's a file
-                    if let Some(entry) = zip_index.get_entry(&suffix_str) {
+                    if let Some(entry) = zip_index.get_entry(suffix_str) {
                         (*stat_buf).st_size = entry.uncompressed_size as i64;
                         (*stat_buf).st_mode = 0o100444; // Regular file, read-only
                         return 0;
@@ -710,6 +718,39 @@ impl uio_HandleInner {
 )]
 pub type uio_Handle = Mutex<uio_HandleInner>;
 
+// A `*mut uio_Handle` handed to C is the pointer `Arc::into_raw` returns for
+// an `Arc<uio_Handle>`, so one allocation is shared by the C caller, every
+// stream and every file block over it. C only ever treats the pointer as
+// opaque; it never sees or depends on the allocation's layout. Each owner
+// holds one strong count and the file closes when the last one is released.
+
+/// Hands a freshly opened handle to C, which owns the first strong count.
+fn handle_into_raw(inner: uio_HandleInner) -> *mut uio_Handle {
+    Arc::into_raw(Arc::new(Mutex::new(inner))).cast_mut()
+}
+
+/// Takes one more strong count on a live handle for a new owner.
+///
+/// # Safety
+///
+/// `handle` must come from [`handle_into_raw`] and still hold at least one
+/// strong count owned by the caller or by a structure the caller is borrowing.
+unsafe fn handle_share(handle: *mut uio_Handle) -> Arc<uio_Handle> {
+    Arc::increment_strong_count(handle.cast_const());
+    Arc::from_raw(handle.cast_const())
+}
+
+/// Gives up the strong count C held on `handle`, closing the file when it
+/// was the last one.
+///
+/// # Safety
+///
+/// `handle` must come from [`handle_into_raw`], and the count being released
+/// must not have been released already.
+unsafe fn handle_release(handle: *mut uio_Handle) {
+    drop(Arc::from_raw(handle.cast_const()));
+}
+
 #[repr(C)]
 pub struct uio_Handle_Opaque {
     _private: [u8; 0],
@@ -717,10 +758,6 @@ pub struct uio_Handle_Opaque {
 
 #[repr(C)]
 pub struct uio_Stream {
-    buf: *mut c_char,
-    data_start: *mut c_char,
-    data_end: *mut c_char,
-    buf_end: *mut c_char,
     handle: *mut uio_Handle,
     status: c_int,
     operation: c_int,
@@ -739,31 +776,26 @@ fn mount_handle_key(handle: *mut uio_MountHandle) -> usize {
     handle as usize
 }
 
-fn normalize_mount_point(path: &Path) -> String {
-    let raw = path.to_string_lossy();
-    if raw.is_empty() || raw == "/" {
-        return "/".to_string();
-    }
-
-    let trimmed = raw.trim_matches('/');
-    if trimmed.is_empty() {
-        "/".to_string()
-    } else {
-        format!("/{}", trimmed)
-    }
+/// The absolute form of a mount point or virtual path: one leading slash and
+/// none trailing. It works on the bytes, so a name that is not UTF-8 survives.
+fn normalize_mount_point(path: &Path) -> PathBuf {
+    let bytes = path.as_os_str().as_bytes();
+    let start = bytes.iter().position(|&b| b != b'/').unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .rposition(|&b| b != b'/')
+        .map_or(start, |i| i + 1);
+    let mut normalized = Vec::with_capacity(end - start + 1);
+    normalized.push(b'/');
+    normalized.extend_from_slice(&bytes[start..end]);
+    PathBuf::from(OsStr::from_bytes(&normalized))
 }
 
 fn normalize_virtual_path(path: &Path) -> PathBuf {
     if path.as_os_str().is_empty() {
         return PathBuf::from("/");
     }
-
-    if path.is_absolute() {
-        let mount = normalize_mount_point(path);
-        return PathBuf::from(mount);
-    }
-
-    PathBuf::from(format!("/{}", path.to_string_lossy().trim_matches('/')))
+    normalize_mount_point(path)
 }
 /// @plan PLAN-20260314-FILE-IO.P06
 /// @requirement REQ-FIO-MOUNT-ORDER
@@ -906,7 +938,12 @@ fn sort_mount_registry(registry: &mut [MountInfo]) {
             // Then by position (ascending)
             .then_with(|| a.position.cmp(&b.position))
             // Then by mount point length (descending for specificity)
-            .then_with(|| b.mount_point.len().cmp(&a.mount_point.len()))
+            .then_with(|| {
+                b.mount_point
+                    .as_os_str()
+                    .len()
+                    .cmp(&a.mount_point.as_os_str().len())
+            })
             // Finally by ID for determinism
             .then_with(|| a.id.cmp(&b.id))
     });
@@ -985,8 +1022,7 @@ fn remove_repository_mounts(repository: *mut uio_Repository) -> Vec<usize> {
 }
 
 fn duplicate_c_string(path: &Path) -> *mut c_char {
-    let lossy = path.to_string_lossy();
-    let bytes = lossy.as_bytes();
+    let bytes = path.as_os_str().as_bytes();
     let alloc = unsafe { libc::malloc(bytes.len() + 1) } as *mut c_char;
     if alloc.is_null() {
         return ptr::null_mut();
@@ -1530,8 +1566,9 @@ pub unsafe extern "C" fn uio_clearerr(stream: *mut uio_Stream) {
 /// @requirement REQ-FIO-FILEBLOCK
 /// Internal structure representing a file block with caching
 struct FileBlockInner {
-    /// Borrowed handle to underlying file (NOT owned - do not close)
-    handle: *mut uio_Handle,
+    /// Shares the handle with the C caller, so the block keeps reading after
+    /// the caller closes its own reference. The last owner closes the file.
+    handle: Arc<uio_Handle>,
     /// Base offset in file where this block starts
     base_offset: off_t,
     /// Size of this block (0 means whole file)
@@ -1556,7 +1593,9 @@ pub struct uio_FileBlock {
 ///
 /// # Safety
 ///
-/// Caller must ensure pointer arguments are valid and properly aligned.
+/// `handle` must be NULL or a live handle returned by `uio_open` or
+/// `uio_fopen`'s stream. The block shares it, so it stays readable after the
+/// caller's `uio_close`.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_FileBlock {
     ffi_guard!(ptr::null_mut(), {
@@ -1572,8 +1611,8 @@ pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_
             Err(_) => return fail_errno(libc::EIO, ptr::null_mut()),
         };
 
-        let size = match file_guard.metadata() {
-            Ok(meta) => meta.len() as off_t,
+        let size = match file_guard.len() {
+            Ok(len) => len as off_t,
             Err(e) => {
                 let err_code = e.raw_os_error().unwrap_or(libc::EIO);
                 return fail_errno(err_code, ptr::null_mut());
@@ -1583,7 +1622,7 @@ pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_
         drop(file_guard);
 
         let inner = FileBlockInner {
-            handle,
+            handle: handle_share(handle),
             base_offset: 0,
             size,
             cache: Vec::new(),
@@ -1601,7 +1640,8 @@ pub unsafe extern "C" fn uio_openFileBlock(handle: *mut uio_Handle) -> *mut uio_
 ///
 /// # Safety
 ///
-/// No safety requirements; marked unsafe for C ABI compatibility.
+/// Same as `uio_openFileBlock`: `handle` must be NULL or live, and the block
+/// shares it.
 #[no_mangle]
 pub unsafe extern "C" fn uio_openFileBlock2(
     handle: *mut uio_Handle,
@@ -1631,8 +1671,8 @@ pub unsafe extern "C" fn uio_openFileBlock2(
             Err(_) => return fail_errno(libc::EIO, ptr::null_mut()),
         };
 
-        let file_size = match file_guard.metadata() {
-            Ok(meta) => meta.len(),
+        let file_size = match file_guard.len() {
+            Ok(len) => len,
             Err(e) => {
                 let err_code = e.raw_os_error().unwrap_or(libc::EIO);
                 return fail_errno(err_code, ptr::null_mut());
@@ -1646,7 +1686,7 @@ pub unsafe extern "C" fn uio_openFileBlock2(
         }
 
         let inner = FileBlockInner {
-            handle,
+            handle: handle_share(handle),
             base_offset: offset,
             size: size as off_t,
             cache: Vec::new(),
@@ -1685,18 +1725,19 @@ pub unsafe extern "C" fn uio_accessFileBlock(
 
         let inner = &mut *(block as *mut FileBlockInner);
 
-        // Calculate absolute file offset
-        let file_offset = inner.base_offset + offset;
+        let Some(file_offset) = inner.base_offset.checked_add(offset) else {
+            return fail_errno(libc::EINVAL, -1) as isize;
+        };
 
         // Calculate how many bytes are available in this block
         let available_in_block = if inner.size == 0 {
             // Whole file - need to check actual file size
-            let file_guard = match (*inner.handle).lock() {
+            let file_guard = match inner.handle.lock() {
                 Ok(g) => g,
                 Err(_) => return fail_errno(libc::EIO, -1) as isize,
             };
-            let file_size = match file_guard.metadata() {
-                Ok(meta) => meta.len() as off_t,
+            let file_size = match file_guard.len() {
+                Ok(len) => len as off_t,
                 Err(e) => {
                     let err_code = e.raw_os_error().unwrap_or(libc::EIO);
                     return fail_errno(err_code, -1) as isize;
@@ -1721,7 +1762,7 @@ pub unsafe extern "C" fn uio_accessFileBlock(
         inner.cache.resize(bytes_to_read, 0);
         inner.cache_offset = file_offset;
 
-        let mut file_guard = match (*inner.handle).lock() {
+        let mut file_guard = match inner.handle.lock() {
             Ok(g) => g,
             Err(_) => return fail_errno(libc::EIO, -1) as isize,
         };
@@ -1784,18 +1825,19 @@ pub unsafe extern "C" fn uio_copyFileBlock(
 
         let inner = &mut *(block as *mut FileBlockInner);
 
-        // Calculate absolute file offset
-        let file_offset = inner.base_offset + offset;
+        let Some(file_offset) = inner.base_offset.checked_add(offset) else {
+            return fail_errno(libc::EINVAL, -1);
+        };
 
         // Calculate how many bytes are available in this block
         let available_in_block = if inner.size == 0 {
             // Whole file - need to check actual file size
-            let file_guard = match (*inner.handle).lock() {
+            let file_guard = match inner.handle.lock() {
                 Ok(g) => g,
                 Err(_) => return fail_errno(libc::EIO, -1),
             };
-            let file_size = match file_guard.metadata() {
-                Ok(meta) => meta.len() as off_t,
+            let file_size = match file_guard.len() {
+                Ok(len) => len as off_t,
                 Err(e) => {
                     let err_code = e.raw_os_error().unwrap_or(libc::EIO);
                     return fail_errno(err_code, -1);
@@ -1814,7 +1856,7 @@ pub unsafe extern "C" fn uio_copyFileBlock(
 
         let bytes_to_read = std::cmp::min(length as off_t, available_in_block) as usize;
 
-        let mut file_guard = match (*inner.handle).lock() {
+        let mut file_guard = match inner.handle.lock() {
             Ok(g) => g,
             Err(_) => return fail_errno(libc::EIO, -1),
         };
@@ -1870,7 +1912,8 @@ pub unsafe fn uio_clear_file_block_buffers(block: *mut uio_FileBlock) {
 
 /// @plan PLAN-20260314-FILE-IO.P08
 /// @requirement REQ-FIO-FILEBLOCK
-/// Close file block and free resources (does NOT close underlying handle)
+/// Close file block and release its share of the underlying handle. The
+/// handle's file closes once the caller and every block have let go of it.
 ///
 /// # Safety
 ///
@@ -2300,18 +2343,19 @@ pub unsafe extern "C" fn uio_getStdioAccess(
 
             // Handle ZIP mounts - need temp copy
             if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let suffix_str = suffix.to_string_lossy();
-
+                // Entry names are Unicode: other bytes name no entry.
+                if let (Some(zip_index), Some(suffix_str)) =
+                    (mount.zip_index.as_ref(), suffix.to_str())
+                {
                     // Check if it's a directory
-                    if zip_index.is_directory(&suffix_str) {
+                    if zip_index.is_directory(suffix_str) {
                         drop(registry);
                         set_errno(libc::EISDIR);
                         return ptr::null_mut();
                     }
 
                     // Check if entry exists
-                    if !zip_index.contains(&suffix_str) {
+                    if !zip_index.contains(suffix_str) {
                         drop(registry);
                         set_errno(libc::ENOENT);
                         return ptr::null_mut();
@@ -2327,10 +2371,10 @@ pub unsafe extern "C" fn uio_getStdioAccess(
                     let temp_dir_path = &(*temp_dir).path;
 
                     // Extract entry to temp directory
-                    match zip_index.read_entry(&suffix_str) {
+                    match zip_index.read_entry(suffix_str) {
                         Ok(data) => {
                             // Create temp file path (use entry name as filename)
-                            let filename = Path::new(&*suffix_str)
+                            let filename = Path::new(suffix_str)
                                 .file_name()
                                 .unwrap_or_else(|| std::ffi::OsStr::new("temp"));
                             let temp_file_path = temp_dir_path.join(filename);
@@ -2640,7 +2684,7 @@ unsafe fn cstr_to_pathbuf(cstr: *const c_char) -> Option<PathBuf> {
         return None;
     }
     let c_str = std::ffi::CStr::from_ptr(cstr);
-    Some(PathBuf::from(c_str.to_string_lossy().as_ref()))
+    Some(PathBuf::from(OsStr::from_bytes(c_str.to_bytes())))
 }
 
 /// @plan PLAN-20260314-FILE-IO.P05
@@ -2746,53 +2790,6 @@ fn resolve_path(base: &Path, path: &Path) -> PathBuf {
     normalize_virtual_path_full(base, path)
 }
 
-const MATCH_LITERAL: c_int = 0;
-const MATCH_PREFIX: c_int = 1;
-const MATCH_SUFFIX: c_int = 2;
-const MATCH_SUBSTRING: c_int = 3;
-const MATCH_REGEX: c_int = 4;
-const MATCH_REGEX_ALT: c_int = 5;
-
-/// @plan PLAN-20260314-FILE-IO.P07
-/// @requirement REQ-FIO-DIRLIST-REGEX
-/// Match a name against a pattern based on match type.
-/// For MATCH_REGEX, uses the regex crate to support POSIX ERE-compatible patterns.
-/// Invalid regex patterns return false (no match) instead of crashing.
-fn matches_pattern(name: &str, pattern: &str, match_type: c_int) -> bool {
-    if pattern.is_empty() {
-        return true;
-    }
-
-    match match_type {
-        MATCH_LITERAL => name == pattern,
-        MATCH_PREFIX => name.starts_with(pattern),
-        MATCH_SUFFIX => name.ends_with(pattern),
-        MATCH_SUBSTRING => name.contains(pattern),
-        MATCH_REGEX | MATCH_REGEX_ALT => {
-            // Use regex crate for proper POSIX ERE-compatible matching
-            // Invalid regex returns false (no match) instead of crashing
-            match regex::Regex::new(pattern) {
-                Ok(re) => re.is_match(name),
-                Err(_) => {
-                    // Invalid regex - log and return false
-                    log_marker(&format!(
-                        "matches_pattern: invalid regex pattern '{}', treating as no match",
-                        pattern
-                    ));
-                    false
-                }
-            }
-        }
-        _ => {
-            // Unknown match type - treat as regex for backward compatibility
-            match regex::Regex::new(pattern) {
-                Ok(re) => re.is_match(name),
-                Err(_) => false,
-            }
-        }
-    }
-}
-
 // =============================================================================
 // uio_init / uio_unInit / uio_openRepository / uio_closeRepository
 // =============================================================================
@@ -2827,11 +2824,6 @@ pub unsafe extern "C" fn uio_init() {
         let mut registry = get_mount_registry().lock().unwrap();
         registry.clear();
         drop(registry);
-
-        // Clear buffer size registry
-        let mut buffer_registry = get_buffer_size_registry().lock().unwrap();
-        buffer_registry.clear();
-        drop(buffer_registry);
 
         log_marker("uio_init: subsystem initialized");
     })
@@ -3167,7 +3159,7 @@ pub unsafe extern "C" fn uio_openDirRelative(
     // Compute virtual path from base's virtual path
     let base_virtual = &(*base).virtual_path;
     let virtual_resolved = if is_abs {
-        PathBuf::from(std::ffi::CStr::from_ptr(path).to_string_lossy().as_ref())
+        cstr_to_pathbuf(path).unwrap_or_default()
     } else {
         let rel = cstr_to_pathbuf(path).unwrap_or_default();
         normalize_virtual_path_full(base_virtual, &rel)
@@ -3213,7 +3205,7 @@ pub unsafe extern "C" fn uio_open(
         };
 
         match open_through_mounts(dir, &input_path, flags) {
-            Ok(inner) => Box::leak(Box::new(Mutex::new(inner))) as *mut uio_Handle,
+            Ok(inner) => handle_into_raw(inner),
             Err(errno) => {
                 set_errno(errno);
                 ptr::null_mut()
@@ -3279,11 +3271,13 @@ fn open_through_mounts(
             .unwrap_or_else(|_| Path::new(""));
 
         let opened = if mount.fs_type == UIO_FSTYPE_ZIP {
-            match mount.zip_index {
-                Some(ref zip_index) => zip_index
-                    .open_entry(&suffix.to_string_lossy())
-                    .map(uio_HandleInner::ZipEntry),
-                None => continue,
+            match (mount.zip_index.as_ref(), suffix.to_str()) {
+                (Some(zip_index), Some(name)) => {
+                    zip_index.open_entry(name).map(uio_HandleInner::ZipEntry)
+                }
+                // Entry names are Unicode: other bytes name no entry.
+                (Some(_), None) => Err(std::io::ErrorKind::NotFound.into()),
+                (None, _) => continue,
             }
         } else {
             let host_path = if suffix.as_os_str().is_empty() {
@@ -3351,7 +3345,8 @@ fn open_host_file(host_path: &Path, flags: c_int) -> std::io::Result<std::fs::Fi
 
 /// @plan PLAN-20260314-FILE-IO.P11
 /// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
-/// Close a file handle and free its resources.
+/// Close a file handle: releases the count the caller owned. The file itself
+/// stays open until the last file block sharing the handle is closed too.
 /// Safe to call even if the mount this handle came from was unmounted.
 /// The handle owns its resources independently of mount state.
 ///
@@ -3362,7 +3357,7 @@ fn open_host_file(host_path: &Path, flags: c_int) -> std::io::Result<std::fs::Fi
 pub unsafe extern "C" fn uio_close(handle: *mut uio_Handle) -> c_int {
     log_marker("uio_close called");
     if !handle.is_null() {
-        let _ = Box::from_raw(handle);
+        handle_release(handle);
     }
     0 // Success
 }
@@ -3537,11 +3532,7 @@ pub unsafe extern "C" fn uio_fopen(
         };
 
         Box::leak(Box::new(uio_Stream {
-            buf: ptr::null_mut(),
-            data_start: ptr::null_mut(),
-            data_end: ptr::null_mut(),
-            buf_end: ptr::null_mut(),
-            handle: Box::leak(Box::new(Mutex::new(inner))) as *mut uio_Handle,
+            handle: handle_into_raw(inner),
             status: UIO_STREAM_STATUS_OK,
             operation: UIO_STREAM_OPERATION_NONE,
             open_flags: flags,
@@ -3576,7 +3567,7 @@ fn open_flags_for_mode(mode: &[u8]) -> Option<c_int> {
 /// @plan PLAN-20260314-FILE-IO.P11
 /// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
 /// @requirement REQ-FIO-RESOURCE-MGMT
-/// Close a stream and free its resources (buffer and underlying handle).
+/// Close a stream and release its share of the underlying handle.
 /// Safe to call even if the mount this stream came from was unmounted.
 /// The stream owns its resources independently of mount state.
 ///
@@ -3588,19 +3579,8 @@ pub unsafe extern "C" fn uio_fclose(stream: *mut uio_Stream) -> c_int {
     log_marker("uio_fclose called");
     if !stream.is_null() {
         let s = &*stream;
-        // Free buffer if allocated
-        if !s.buf.is_null() {
-            if let Some(size) = get_buffer_size(s.buf) {
-                let buffer_layout = std::alloc::Layout::from_size_align(size, 1).unwrap();
-                std::alloc::dealloc(s.buf.cast::<u8>(), buffer_layout);
-                remove_buffer_size(s.buf);
-            }
-            // If size not found in registry, buffer was likely not allocated by us
-            // (or was never registered), so we don't deallocate it to avoid double-free
-        }
         if !s.handle.is_null() {
-            // Reconstruct Box<uio_Handle> from raw pointer
-            let _ = Box::from_raw(s.handle);
+            handle_release(s.handle);
         }
         let _ = Box::from_raw(stream);
     }
@@ -3739,309 +3719,194 @@ pub unsafe extern "C" fn uio_getDirList(
         // Use the virtual path for mount resolution
         let virtual_path = normalize_virtual_path_full(dir_virtual_path, &rel_path);
 
-        let pattern_str = if _pattern.is_null() {
-            ""
+        let pattern = if _pattern.is_null() {
+            &[][..]
         } else {
-            std::ffi::CStr::from_ptr(_pattern)
-                .to_str()
-                .unwrap_or_default()
+            std::ffi::CStr::from_ptr(_pattern).to_bytes()
+        };
+        let filter = NameFilter::new(pattern, _match_type);
+        log_marker(&format!(
+            "uio_getDirList: virtual_path={:?} pattern={:?} matchType={}",
+            virtual_path,
+            String::from_utf8_lossy(pattern),
+            _match_type
+        ));
+
+        // The registry lock gives a consistent view of the mount topology.
+        let names = {
+            let registry = get_mount_registry().lock().unwrap();
+            collect_dir_names(&registry, &virtual_path, &filter)
         };
         log_marker(&format!(
-            "uio_getDirList: virtual_path={:?} pattern='{}' matchType={}",
-            virtual_path, pattern_str, _match_type
-        ));
-
-        // Acquire mount registry lock for consistent topology view
-        let registry = get_mount_registry().lock().unwrap();
-
-        // Collect entries from all mounts covering the virtual path
-        // Use indexmap to preserve insertion order (first-seen = highest precedence)
-        use std::collections::BTreeSet;
-        let mut seen_names = BTreeSet::new();
-        let mut name_strings: Vec<String> = Vec::new();
-
-        // Iterate mounts in precedence order (registry is already sorted)
-        for mount in registry.iter().filter(|m| m.active_in_registry) {
-            let mount_path = Path::new(&mount.mount_point);
-
-            // Check if this mount covers the virtual path
-            let is_covered = virtual_path == mount_path || virtual_path.starts_with(mount_path);
-            if !is_covered {
-                continue;
-            }
-
-            // Map virtual path to relative path within mount
-            let suffix = virtual_path
-                .strip_prefix(mount_path)
-                .unwrap_or_else(|_| Path::new(""));
-
-            // @plan PLAN-20260314-FILE-IO.P09
-            // @requirement REQ-FIO-ARCHIVE-MOUNT
-            // Handle ZIP mounts differently than stdio mounts
-            if mount.fs_type == UIO_FSTYPE_ZIP {
-                if let Some(ref zip_index) = mount.zip_index {
-                    let suffix_str = suffix.to_string_lossy();
-                    let archive_entries = zip_index.list_directory(&suffix_str);
-
-                    log_marker(&format!(
-                        "uio_getDirList: ZIP mount '{}' returned {} entries for {:?}",
-                        mount.mount_point,
-                        archive_entries.len(),
-                        suffix_str
-                    ));
-
-                    for name in archive_entries {
-                        // Deduplicate: first-seen wins (higher precedence)
-                        if seen_names.contains(&name) {
-                            continue;
-                        }
-
-                        // Apply pattern matching
-                        if matches_pattern(&name, pattern_str, _match_type) {
-                            seen_names.insert(name.clone());
-                            name_strings.push(name);
-                        }
-                    }
-                }
-                continue;
-            }
-
-            // Stdio mount handling
-            let host_path = if suffix.as_os_str().is_empty() {
-                mount.mounted_root.clone()
-            } else {
-                map_virtual_to_host_confined(&mount.mounted_root, suffix)
-            };
-
-            log_marker(&format!(
-                "uio_getDirList: checking stdio mount '{}' at host_path={:?}",
-                mount.mount_point, host_path
-            ));
-
-            // Read directory if it exists
-            if !host_path.is_dir() {
-                continue;
-            }
-
-            let entries = match fs::read_dir(&host_path) {
-                Ok(entries) => entries,
-                Err(err) => {
-                    log_marker(&format!(
-                        "uio_getDirList: read_dir failed for {:?}: {}, skipping mount",
-                        host_path, err
-                    ));
-                    continue;
-                }
-            };
-
-            // Collect matching entries from this mount
-            for entry in entries.flatten() {
-                if let Some(name_osstr) = entry.file_name().to_str() {
-                    // Deduplicate: first-seen wins (higher precedence)
-                    if seen_names.contains(name_osstr) {
-                        continue;
-                    }
-
-                    // Apply pattern matching
-                    if matches_pattern(name_osstr, pattern_str, _match_type) {
-                        seen_names.insert(name_osstr.to_string());
-                        name_strings.push(name_osstr.to_string());
-                    }
-                }
-            }
-        }
-
-        // Release registry lock before allocation
-        drop(registry);
-
-        // The C implementation returned the names ordered by strcmp, which
-        // is byte order. Callers rely on it: the addon packs and archives
-        // are mounted in list order, and that order is their priority.
-        name_strings.sort_unstable();
-
-        // Always return non-null uio_DirList, even for empty results
-        if name_strings.is_empty() {
-            log_marker(&format!(
-                "uio_getDirList: no matches for pattern '{}' in {:?}",
-                pattern_str, virtual_path
-            ));
-            let dirlist = Box::new(uio_DirList {
-                names: ptr::null_mut(),
-                numNames: 0,
-                buffer: ptr::null_mut(),
-            });
-            return Box::leak(dirlist) as *mut uio_DirList;
-        }
-
-        log_marker(&format!(
-            "uio_getDirList: {} matches for pattern '{}' in {:?}",
-            name_strings.len(),
-            pattern_str,
+            "uio_getDirList: {} matches in {:?}",
+            names.len(),
             virtual_path
         ));
-
-        // Allocate a single contiguous buffer for all strings
-        let total_size: usize = name_strings.iter().map(|s| s.len() + 1).sum();
-        let buffer_layout = std::alloc::Layout::from_size_align(total_size, 1).unwrap();
-        let buffer_ptr = std::alloc::alloc(buffer_layout) as *mut c_char;
-        if buffer_ptr.is_null() {
-            set_errno(libc::ENOMEM);
-            return ptr::null_mut();
-        }
-
-        // Register the buffer size for later deallocation
-        register_buffer_size(buffer_ptr, total_size);
-
-        // Allocate array of pointers using Vec for capacity tracking
-        let num_names = name_strings.len();
-        let mut names_vec: Vec<*mut c_char> = Vec::with_capacity(num_names);
-
-        // Copy strings into buffer and collect pointers
-        let mut offset = 0;
-        for name in name_strings.iter() {
-            let name_bytes = name.as_bytes();
-            let dst = buffer_ptr.add(offset);
-
-            // Copy string bytes including null terminator
-            std::ptr::copy_nonoverlapping(
-                name_bytes.as_ptr() as *const c_char,
-                dst,
-                name_bytes.len(),
-            );
-            std::ptr::write(dst.add(name_bytes.len()), 0); // Null terminate
-
-            // Store pointer in names array
-            names_vec.push(dst);
-
-            offset += name_bytes.len() + 1;
-        }
-
-        // Convert Vec to boxed slice, then leak to get stable pointer
-        let names_ptr = names_vec.into_boxed_slice();
-        let names_ptr_leaked = Box::leak(names_ptr) as *mut [*mut c_char] as *mut *mut c_char;
-
-        let dirlist = Box::new(uio_DirList {
-            names: names_ptr_leaked,
-            numNames: num_names as c_int,
-            buffer: buffer_ptr,
-        });
-        Box::leak(dirlist) as *mut uio_DirList
+        dir_list_from_names(&names)
     })
+}
+
+/// The names every active mount covering `virtual_path` contributes that the
+/// filter selects. A name several mounts provide is listed once, and the
+/// set's order is byte order, which is what the C implementation's `strcmp`
+/// sort produced. Callers rely on it: the addon packs and archives are
+/// mounted in list order, and that order is their priority.
+fn collect_dir_names(
+    registry: &[MountInfo],
+    virtual_path: &Path,
+    filter: &NameFilter,
+) -> BTreeSet<Vec<u8>> {
+    let mut names = BTreeSet::new();
+    for mount in registry.iter().filter(|m| m.active_in_registry) {
+        let mount_path = Path::new(&mount.mount_point);
+        let Ok(suffix) = virtual_path.strip_prefix(mount_path) else {
+            continue;
+        };
+        if mount.fs_type == UIO_FSTYPE_ZIP {
+            add_archive_names(&mut names, mount, suffix, filter);
+        } else {
+            add_host_names(&mut names, mount, suffix, filter);
+        }
+    }
+    names
+}
+
+/// @plan PLAN-20260314-FILE-IO.P09
+/// @requirement REQ-FIO-ARCHIVE-MOUNT
+fn add_archive_names(
+    names: &mut BTreeSet<Vec<u8>>,
+    mount: &MountInfo,
+    suffix: &Path,
+    filter: &NameFilter,
+) {
+    let Some(zip_index) = mount.zip_index.as_ref() else {
+        return;
+    };
+    // Archive entry names are Unicode, so a directory named by other bytes is
+    // not in the archive.
+    let Some(directory) = suffix.to_str() else {
+        return;
+    };
+    let entries = zip_index.list_directory(directory);
+    log_marker(&format!(
+        "uio_getDirList: ZIP mount {:?} returned {} entries for {:?}",
+        mount.mount_point,
+        entries.len(),
+        directory
+    ));
+    for name in entries {
+        // A name with a NUL cannot be a C string, and an archive is
+        // untrusted input.
+        if !name.as_bytes().contains(&0) && filter.matches(name.as_bytes()) {
+            names.insert(name.into_bytes());
+        }
+    }
+}
+
+fn add_host_names(
+    names: &mut BTreeSet<Vec<u8>>,
+    mount: &MountInfo,
+    suffix: &Path,
+    filter: &NameFilter,
+) {
+    let host_path = if suffix.as_os_str().is_empty() {
+        mount.mounted_root.clone()
+    } else {
+        map_virtual_to_host_confined(&mount.mounted_root, suffix)
+    };
+    log_marker(&format!(
+        "uio_getDirList: checking stdio mount {:?} at host_path={:?}",
+        mount.mount_point, host_path
+    ));
+    if !host_path.is_dir() {
+        return;
+    }
+    let entries = match fs::read_dir(&host_path) {
+        Ok(entries) => entries,
+        Err(err) => {
+            log_marker(&format!(
+                "uio_getDirList: read_dir failed for {:?}: {}, skipping mount",
+                host_path, err
+            ));
+            return;
+        }
+    };
+    for entry in entries.flatten() {
+        // The bytes the host holds, valid UTF-8 or not.
+        let name = entry.file_name();
+        if filter.matches(name.as_bytes()) {
+            names.insert(name.as_bytes().to_vec());
+        }
+    }
+}
+
+/// Lays the names out the way C reads a `uio_DirList`: one buffer of
+/// NUL-terminated names in order, and an array of pointers into it. Both are
+/// exact-size boxed slices, so [`uio_DirList_free`] can rebuild them from the
+/// pointers alone. An empty selection is a list of zero names, not NULL.
+fn dir_list_from_names(names: &BTreeSet<Vec<u8>>) -> *mut uio_DirList {
+    if names.is_empty() {
+        return Box::into_raw(Box::new(uio_DirList {
+            names: ptr::null_mut(),
+            numNames: 0,
+            buffer: ptr::null_mut(),
+        }));
+    }
+    let mut text: Vec<u8> = Vec::with_capacity(names.iter().map(|name| name.len() + 1).sum());
+    let mut starts = Vec::with_capacity(names.len());
+    for name in names {
+        starts.push(text.len());
+        text.extend_from_slice(name);
+        text.push(0);
+    }
+    let buffer = Box::into_raw(text.into_boxed_slice()).cast::<c_char>();
+    // SAFETY: every start is an offset inside the buffer just allocated.
+    let pointers: Box<[*mut c_char]> = starts
+        .iter()
+        .map(|&start| unsafe { buffer.add(start) })
+        .collect();
+    Box::into_raw(Box::new(uio_DirList {
+        names: Box::into_raw(pointers).cast::<*mut c_char>(),
+        numNames: c_int::try_from(names.len()).expect("name count fits a C int"),
+        buffer,
+    }))
 }
 
 /// @plan PLAN-20260314-FILE-IO.P11
 /// @requirement REQ-FIO-RESOURCE-MGMT
 /// @requirement REQ-FIO-POST-UNMOUNT-CLEANUP
 /// Free a directory list and all its resources.
-/// Uses a side-channel buffer size registry to properly deallocate the buffer.
 /// Safe to call with NULL pointer (no-op).
 /// Safe to call on empty lists.
 /// Safe to call even if the mount this list came from was unmounted.
 ///
 /// # Safety
 ///
-/// Caller must ensure pointer arguments are valid and properly aligned.
+/// `dirlist` must be NULL or a list [`uio_getDirList`] returned that has not
+/// been freed. Its names are laid out in order in one buffer, so the buffer
+/// ends at the last name's terminator.
 #[no_mangle]
 pub unsafe extern "C" fn uio_DirList_free(dirlist: *mut uio_DirList) {
     log_marker("uio_DirList_free called");
-    if !dirlist.is_null() {
-        let list = &*dirlist;
-
-        // IMPORTANT: The C uio_DirList struct doesn't store capacity information,
-        // so we need to reconstruct it from what we know about our allocation strategy.
-        //
-        // Our allocation strategy in uio_getDirList:
-        // 1. buffer: allocated with Layout::from_size_align(total_size, 1)
-        // 2. names: allocated via Vec::with_capacity() then converted to boxed slice
-        //
-        // To safely free:
-        // 1. Free the buffer first (names pointers point into it)
-        // 2. Reconstruct the names slice from the raw pointer
-        // 3. Free the names allocation
-
-        // Step 1: Free the buffer
-        if !list.buffer.is_null() {
-            // We need to know the buffer size. Since we don't store it in the C struct,
-            // we have a problem. However, looking at the C code, it also doesn't store
-            // the buffer size - it just calls uio_free() which knows the size.
-            //
-            // For Rust, we need the size. Let's work around this by:
-            // 1. NOT using the standard allocator directly
-            // 2. Instead, use Box<[u8]> which can be reconstructed from raw ptr + size
-            //
-            // But we don't have the size! The C struct doesn't preserve it.
-            //
-            // SOLUTION: Store metadata in a side-channel global registry.
-            // Or: Use a known sentinel/size encoding.
-            //
-            // ACTUAL SOLUTION: Since buffer_size is not in the C struct, and we can't
-            // modify the C struct definition (it must match C exactly), we need to
-            // track the buffer size elsewhere. We'll use a global HashMap keyed by
-            // the buffer pointer address.
-
-            // For now, use a workaround: try to find buffer size in our registry
-            let buffer_size = get_buffer_size(list.buffer);
-            if let Some(size) = buffer_size {
-                let buffer_layout = std::alloc::Layout::from_size_align(size, 1).unwrap();
-                std::alloc::dealloc(list.buffer.cast::<u8>(), buffer_layout);
-                remove_buffer_size(list.buffer);
-            }
-            // If size not found in registry, we have a leak - but better than double-free!
-        }
-
-        // Step 2: Free the names array
-        // We need to reconstruct the Box<[T]> from the raw pointer.
-        // Since we used Vec::into_boxed_slice(), we need to use from_raw_parts.
-        if !list.names.is_null() && list.numNames > 0 {
-            // Reconstruct Box<[T]> using from_raw_parts
-            // The data pointer is list.names, and the length is list.numNames
-            let names_slice = std::slice::from_raw_parts_mut(list.names, list.numNames as usize);
-            let names_box: Box<[*mut c_char]> = names_slice.into();
-            drop(names_box);
-        }
-
-        // Step 3: Free the DirList struct itself
-        let _ = Box::from_raw(dirlist);
-    }
-}
-
-// =============================================================================
-// Buffer Size Registry for uio_DirList deallocation
-// =============================================================================
-
-struct BufferSizeEntry {
-    size: usize,
-    // We could also track allocation ID for safety
-}
-
-static BUFFER_SIZE_REGISTRY: OnceLock<Mutex<HashMap<usize, BufferSizeEntry>>> = OnceLock::new();
-
-fn get_buffer_size_registry() -> &'static Mutex<HashMap<usize, BufferSizeEntry>> {
-    BUFFER_SIZE_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
-}
-
-fn register_buffer_size(ptr: *mut c_char, size: usize) {
-    let addr = ptr as usize;
-    let mut registry = get_buffer_size_registry().lock().unwrap();
-    registry.insert(addr, BufferSizeEntry { size });
-}
-
-fn get_buffer_size(ptr: *mut c_char) -> Option<usize> {
-    if ptr.is_null() {
-        return None;
-    }
-    let addr = ptr as usize;
-    let registry = get_buffer_size_registry().lock().unwrap();
-    registry.get(&addr).map(|entry| entry.size)
-}
-
-fn remove_buffer_size(ptr: *mut c_char) {
-    if ptr.is_null() {
+    if dirlist.is_null() {
         return;
     }
-    let addr = ptr as usize;
-    let mut registry = get_buffer_size_registry().lock().unwrap();
-    registry.remove(&addr);
+    let list = Box::from_raw(dirlist);
+    let count = usize::try_from(list.numNames).expect("name count is not negative");
+    if count == 0 {
+        return;
+    }
+    let last = *list.names.add(count - 1);
+    let buffer_len = usize::try_from(last.offset_from(list.buffer))
+        .expect("names follow the buffer start")
+        + std::ffi::CStr::from_ptr(last).to_bytes_with_nul().len();
+    drop(Box::from_raw(ptr::slice_from_raw_parts_mut(
+        list.buffer.cast::<u8>(),
+        buffer_len,
+    )));
+    drop(Box::from_raw(ptr::slice_from_raw_parts_mut(
+        list.names, count,
+    )));
 }
 
 // =============================================================================
@@ -4057,6 +3922,14 @@ mod tests {
     use std::ffi::CString;
 
     use std::path::PathBuf;
+
+    use crate::io::name_filter::{
+        MATCH_LITERAL, MATCH_PREFIX, MATCH_REGEX, MATCH_SUBSTRING, MATCH_SUFFIX,
+    };
+
+    fn matches_pattern(name: &str, pattern: &str, match_type: c_int) -> bool {
+        NameFilter::new(pattern.as_bytes(), match_type).matches(name.as_bytes())
+    }
 
     // Helper to clear mount registry after tests
     fn clear_mount_registry() {
@@ -4146,7 +4019,7 @@ mod tests {
                 let registry = get_mount_registry().lock().unwrap();
                 let info = registry
                     .iter()
-                    .find(|entry| entry.mount_point == "/content")
+                    .find(|entry| entry.mount_point == Path::new("/content"))
                     .unwrap();
                 assert_eq!(info.mounted_root, PathBuf::from("/tmp/content"));
                 assert_eq!(info.fs_type, UIO_FSTYPE_STDIO);
@@ -4344,37 +4217,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_buffer_size_registry() {
-        {
-            let test_ptr = 0x12345678 as *mut c_char;
-
-            // Register a size
-            register_buffer_size(test_ptr, 1024);
-
-            // Verify we can retrieve it
-            let size = get_buffer_size(test_ptr);
-            assert_eq!(size, Some(1024));
-
-            // Remove it
-            remove_buffer_size(test_ptr);
-
-            // Verify it's gone
-            let size = get_buffer_size(test_ptr);
-            assert_eq!(size, None);
-        }
-    }
-
-    #[test]
-    #[serial]
-    fn test_buffer_size_registry_null() {
-        {
-            let result = get_buffer_size(std::ptr::null_mut());
-            assert_eq!(result, None);
-        }
-    }
-
-    #[test]
-    #[serial]
     fn test_seek_constants() {
         {
             // Verify our seek constants match expected values
@@ -4417,10 +4259,6 @@ mod tests {
     fn test_uio_feof_returns_zero_when_not_eof() {
         {
             let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
                 handle: ptr::null_mut(),
                 status: UIO_STREAM_STATUS_OK,
                 operation: UIO_STREAM_OPERATION_NONE,
@@ -4438,10 +4276,6 @@ mod tests {
     fn test_uio_feof_returns_nonzero_when_eof() {
         {
             let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
                 handle: ptr::null_mut(),
                 status: UIO_STREAM_STATUS_EOF,
                 operation: UIO_STREAM_OPERATION_NONE,
@@ -4468,10 +4302,6 @@ mod tests {
     fn test_uio_ferror_returns_zero_when_no_error() {
         {
             let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
                 handle: ptr::null_mut(),
                 status: UIO_STREAM_STATUS_OK,
                 operation: UIO_STREAM_OPERATION_NONE,
@@ -4489,10 +4319,6 @@ mod tests {
     fn test_uio_ferror_returns_nonzero_when_error() {
         {
             let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
                 handle: ptr::null_mut(),
                 status: UIO_STREAM_STATUS_ERROR,
                 operation: UIO_STREAM_OPERATION_NONE,
@@ -4519,10 +4345,6 @@ mod tests {
     fn test_uio_clearerr_clears_eof() {
         {
             let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
                 handle: ptr::null_mut(),
                 status: UIO_STREAM_STATUS_EOF,
                 operation: UIO_STREAM_OPERATION_NONE,
@@ -4543,10 +4365,6 @@ mod tests {
     fn test_uio_clearerr_clears_error() {
         {
             let mut stream = uio_Stream {
-                buf: ptr::null_mut(),
-                data_start: ptr::null_mut(),
-                data_end: ptr::null_mut(),
-                buf_end: ptr::null_mut(),
                 handle: ptr::null_mut(),
                 status: UIO_STREAM_STATUS_ERROR,
                 operation: UIO_STREAM_OPERATION_NONE,
@@ -5817,7 +5635,10 @@ mod tests {
 
             {
                 let registry = get_mount_registry().lock().unwrap();
-                let mount = registry.iter().find(|m| m.mount_point == "/first").unwrap();
+                let mount = registry
+                    .iter()
+                    .find(|m| m.mount_point == Path::new("/first"))
+                    .unwrap();
                 // Position should be reasonable (starting at 1000 or near it)
                 assert!(mount.position < 10000);
             }
@@ -5827,10 +5648,13 @@ mod tests {
 
             {
                 let registry = get_mount_registry().lock().unwrap();
-                let mount1 = registry.iter().find(|m| m.mount_point == "/first").unwrap();
+                let mount1 = registry
+                    .iter()
+                    .find(|m| m.mount_point == Path::new("/first"))
+                    .unwrap();
                 let mount2 = registry
                     .iter()
-                    .find(|m| m.mount_point == "/second")
+                    .find(|m| m.mount_point == Path::new("/second"))
                     .unwrap();
 
                 // Both positions should be valid and different
@@ -6249,7 +6073,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6259,7 +6083,7 @@ mod tests {
                 assert_eq!(inner.size, 13);
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6278,7 +6102,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 // Create block covering bytes 5-10 (5 bytes)
                 let block = uio_openFileBlock2(handle, 5, 5);
@@ -6289,7 +6113,7 @@ mod tests {
                 assert_eq!(inner.size, 5);
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6308,14 +6132,14 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 // Try to create block beyond file size
                 let block = uio_openFileBlock2(handle, 0, 100);
                 assert!(block.is_null());
                 assert_eq!(current_errno(), libc::EINVAL);
 
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6334,7 +6158,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6349,7 +6173,7 @@ mod tests {
                 assert_eq!(data, b"Hello");
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6368,7 +6192,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6383,7 +6207,7 @@ mod tests {
                 assert_eq!(data, b"World");
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6402,7 +6226,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6419,7 +6243,7 @@ mod tests {
                 assert_eq!(data, b"lo");
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6438,7 +6262,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6451,7 +6275,7 @@ mod tests {
                 assert!(buffer.is_null());
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6470,7 +6294,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 // Block covering bytes 5-10 (6 bytes: "56789A")
                 let block = uio_openFileBlock2(handle, 5, 6);
@@ -6487,7 +6311,7 @@ mod tests {
                 assert_eq!(data, b"789");
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6506,7 +6330,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6518,7 +6342,7 @@ mod tests {
                 assert_eq!(&buffer[..5], b"World");
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6537,7 +6361,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6562,7 +6386,7 @@ mod tests {
                 assert!(!buffer.is_null());
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -6581,7 +6405,7 @@ mod tests {
 
             unsafe {
                 let file = std::fs::File::open(temp.path()).unwrap();
-                let handle = Box::into_raw(Box::new(Mutex::new(uio_HandleInner::File(file))));
+                let handle = handle_into_raw(uio_HandleInner::File(file));
 
                 let block = uio_openFileBlock(handle);
                 assert!(!block.is_null());
@@ -6603,7 +6427,7 @@ mod tests {
                 assert_eq!(data2, b"World");
 
                 uio_closeFileBlock(block);
-                let _ = Box::from_raw(handle);
+                uio_close(handle);
             }
         }
     }
@@ -7625,3 +7449,7 @@ mod mount_ops_tests;
 #[cfg(test)]
 #[path = "uio_fopen_mount_tests.rs"]
 mod fopen_mount_tests;
+
+#[cfg(test)]
+#[path = "uio_name_bytes_tests.rs"]
+mod name_bytes_tests;

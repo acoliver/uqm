@@ -6,7 +6,7 @@
 //! pure Rust; uio mounting calls into `crate::io::uio_bridge` (already
 //! Rust-implemented), and C-side globals are set via bridge accessors.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::path::PathBuf;
 use std::ptr;
 
@@ -457,7 +457,7 @@ unsafe fn mount_packages_zips(repo: *mut uio_Repository, _content_dir: *mut uio_
     if pkg_dir.is_null() {
         return;
     }
-    mount_dir_zips(pkg_dir, "/", UIO_MOUNT_BELOW);
+    mount_dir_zips(pkg_dir, c"/", UIO_MOUNT_BELOW);
     uio_closeDir(pkg_dir);
 }
 
@@ -486,7 +486,7 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
     }
 
     // Mount zips directly in addons/
-    mount_dir_zips(addons_dir, "addons", UIO_MOUNT_BELOW);
+    mount_dir_zips(addons_dir, c"addons", UIO_MOUNT_BELOW);
 
     // List and log addon subdirectories
     let empty = CString::new("").unwrap();
@@ -502,21 +502,23 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
                 if name_ptr.is_null() {
                     continue;
                 }
+                // The name's own bytes open the directory; only the log is lossy.
                 let name = std::ffi::CStr::from_ptr(*name_ptr);
-                let name_str = name.to_string_lossy();
 
-                if name_str.starts_with('.') {
+                if name.to_bytes().starts_with(b".") {
                     continue;
                 }
 
                 count += 1;
-                tracing::info!("    {}. {}", count, name_str);
+                tracing::info!("    {}. {}", count, name.to_string_lossy());
 
                 // Mount zips inside each addon subdir
-                let addon_c = CString::new(name_str.to_string()).unwrap();
-                let addon_dir_handle = uio_openDirRelative(addons_dir, addon_c.as_ptr(), 0);
+                let addon_dir_handle = uio_openDirRelative(addons_dir, name.as_ptr(), 0);
                 if !addon_dir_handle.is_null() {
-                    let mountname = format!("addons/{name_str}");
+                    let mut mountname = b"addons/".to_vec();
+                    mountname.extend_from_slice(name.to_bytes());
+                    let mountname =
+                        CString::new(mountname).expect("a C string name has no interior NUL");
                     mount_dir_zips(addon_dir_handle, &mountname, UIO_MOUNT_BELOW);
                     uio_closeDir(addon_dir_handle);
                 }
@@ -542,7 +544,11 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
 }
 
 /// Mount all `.zip` / `.uqm` files found in `dir_handle` at `mount_point`.
-unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, relative_flags: c_int) {
+unsafe fn mount_dir_zips(
+    dir_handle: *mut uio_DirHandle,
+    mount_point: &CStr,
+    relative_flags: c_int,
+) {
     let empty = CString::new("").unwrap();
     let pattern = CString::new("\\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
     let content_mount = unsafe { contentMountHandle as *mut uio_MountHandle };
@@ -565,10 +571,9 @@ unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, rela
         }
         let name = std::ffi::CStr::from_ptr(*name_ptr);
 
-        let mp = CString::new(mount_point).unwrap();
         let result = uio_mountDir(
             unsafe { repository as *mut uio_Repository },
-            mp.as_ptr(),
+            mount_point.as_ptr(),
             UIO_FSTYPE_ZIP,
             dir_handle,
             *name_ptr,
@@ -626,7 +631,7 @@ pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
 
             unsafe {
                 // Mount shadow zips
-                mount_dir_zips(shadow_dir, "/", UIO_MOUNT_ABOVE);
+                mount_dir_zips(shadow_dir, c"/", UIO_MOUNT_ABOVE);
 
                 // Mount non-zipped shadow content
                 let slash = CString::new("/").unwrap();

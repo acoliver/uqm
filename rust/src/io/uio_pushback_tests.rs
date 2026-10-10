@@ -482,9 +482,13 @@ fn run(content: &[u8], ops: &[Op]) {
                     let got = uio_fgets(buf.as_mut_ptr(), *size as c_int, stream);
                     match expected {
                         Some(line) => {
-                            assert!(!got.is_null(), "{step:?}");
-                            let text = CStr::from_ptr(got).to_bytes();
-                            assert_eq!(text, line.as_slice(), "{step:?}");
+                            assert_eq!(got, buf.as_mut_ptr(), "{step:?}");
+                            // Compared by length: a NUL in the file is data,
+                            // and a C string read would stop at it.
+                            let written: Vec<u8> =
+                                buf[..line.len()].iter().map(|&b| b as u8).collect();
+                            assert_eq!(written, line, "{step:?}");
+                            assert_eq!(buf[line.len()], 0, "terminator after {step:?}");
                         }
                         None => assert!(got.is_null(), "{step:?}"),
                     }

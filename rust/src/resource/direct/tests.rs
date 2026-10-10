@@ -265,6 +265,29 @@ fn the_game_call_sites_find_their_files() {
     );
 }
 
+#[test]
+#[serial]
+fn a_file_named_by_bytes_that_are_not_utf8_keeps_those_bytes() {
+    let mut fixture = Fixture::new();
+    let host = fixture.mount_dir(&["plain.mle"]);
+    let name: &[u8] = b"caf\xe9.mle";
+    match std::fs::write(host.join(std::ffi::OsStr::from_bytes(name)), b"data") {
+        Ok(()) => assert_eq!(
+            fixture.scan_bytes("", "", MatchType::Substring),
+            vec![name.to_vec(), b"plain.mle".to_vec()],
+            "byte order, the name unchanged"
+        ),
+        Err(error) => {
+            // Apple file systems cannot hold such a name; the byte path is
+            // covered by the UIO name tests there.
+            assert_eq!(error.raw_os_error(), Some(libc::EILSEQ), "{error}");
+            if cfg!(not(target_vendor = "apple")) {
+                panic!("only Apple file systems refuse byte names");
+            }
+        }
+    }
+}
+
 // --- mounts ---------------------------------------------------------------
 
 #[test]

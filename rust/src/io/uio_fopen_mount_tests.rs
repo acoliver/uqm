@@ -11,6 +11,7 @@ use serial_test::serial;
 
 use super::layered_open_tests::Stack;
 use super::*;
+use crate::io::name_filter::{MATCH_PREFIX, MATCH_REGEX, MATCH_SUBSTRING, MATCH_SUFFIX};
 
 fn cstr(text: &str) -> CString {
     CString::new(text).unwrap()
