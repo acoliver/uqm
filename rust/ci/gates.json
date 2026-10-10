@@ -417,13 +417,13 @@
           },
           {
                 "path": "rust/scripts/repro-sol-probe-comm-ui.json",
-                "sha256": "c11dc9d16df3fa37ec8fba73980e165e99e10bb79aa740c843990c5325dd5a85",
-                "byte_length": 1081
+                "sha256": "6e7f9d05391e4f68971d795012674d30a6cac37cf7732b8340ead92f8ebd293d",
+                "byte_length": 1216
           },
           {
                 "path": "rust/scripts/sol-probe-scene-v1.json",
-                "sha256": "cd0d5aae781b93b050bf06144d57960abc0000234615cf60fa9f73eb2ccc6c4d",
-                "byte_length": 597
+                "sha256": "345f6b115ac62898737d22434c489e7060f3d1bb24889f5c0531aba3af4fe2eb",
+                "byte_length": 732
           },
           {
                 "path": "rust/scripts/starbase-visit-v1.json",

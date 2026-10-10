@@ -38,6 +38,10 @@ pub enum SceneActivationBoundary {
     GameInitialized,
 }
 
+/// Where Sol sits in the universe map (`SOL_X`, `SOL_Y` in `hyper.h`), which is
+/// where a new game starts.
+pub const SOL_UNIVERSE_LOCATION: (i16, i16) = (1752, 1450);
+
 /// Pure setup plan for a deterministic scene.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScenePlan {
@@ -46,6 +50,12 @@ pub struct ScenePlan {
     pub expected_encounter_conversation: u32,
     pub expected_dialogue_conversation: u32,
     pub current_activity: u16,
+    /// Star the flagship is in when the scene starts. The encounter screen
+    /// names this star, so a scene entered before the first solar-system visit
+    /// must establish it as the real game does.
+    pub star_location: (i16, i16),
+    /// Named game-state values the scene's circumstances require.
+    pub game_state: &'static [(&'static str, u32)],
 }
 
 /// Scene activation or verification failure.
@@ -122,6 +132,8 @@ pub fn scene_plan(
             expected_dialogue_conversation: crate::comm::dispatch::conv::URQUAN,
             current_activity: crate::comm::dispatch::IN_ENCOUNTER
                 | crate::comm::dispatch::START_ENCOUNTER,
+            star_location: SOL_UNIVERSE_LOCATION,
+            game_state: &[("PROBE_MESSAGE_DELIVERED", 0)],
         }),
         AutomationScene::StarbaseCommander => Ok(ScenePlan {
             scene,
@@ -130,6 +142,16 @@ pub fn scene_plan(
             expected_dialogue_conversation: crate::comm::dispatch::conv::COMMANDER,
             current_activity: crate::comm::dispatch::IN_INTERPLANETARY
                 | crate::comm::dispatch::START_ENCOUNTER,
+            star_location: SOL_UNIVERSE_LOCATION,
+            game_state: &[
+                ("GLOBAL_FLAGS_AND_DATA", 0xFF),
+                ("STARBASE_AVAILABLE", 1),
+                ("PROBE_ILWRATH_ENCOUNTER", 0),
+                // The visit goes straight into the Commander conversation only
+                // when the moon base is on the ship (or Chmmr installed the
+                // bomb); otherwise it falls through to the starbase menu.
+                ("MOONBASE_ON_SHIP", 1),
+            ],
         }),
     }
 }
@@ -268,22 +290,18 @@ pub fn activate(
 
     #[cfg(feature = "linked_c_archive")]
     unsafe {
-        match scene {
-            AutomationScene::SolProbeEncounter => {
-                if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter()
-                {
-                    *observation().lock() = SceneObservation::default();
-                    return Err(SceneError::SetupFailed(reason));
-                }
-                crate::state::game_state_keys::set_game_state("BATTLE_SEGUE", 0);
-                crate::state::game_state_keys::set_game_state("PROBE_MESSAGE_DELIVERED", 0);
+        if scene == AutomationScene::SolProbeEncounter {
+            if let Err(reason) = crate::comm::dispatch::prepare_automation_sol_probe_encounter() {
+                *observation().lock() = SceneObservation::default();
+                return Err(SceneError::SetupFailed(reason));
             }
-            AutomationScene::StarbaseCommander => {
-                crate::state::game_state_keys::set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
-                crate::state::game_state_keys::set_game_state("STARBASE_AVAILABLE", 1);
-                crate::state::game_state_keys::set_game_state("PROBE_ILWRATH_ENCOUNTER", 0);
-                crate::state::game_state_keys::set_game_state("MOONBASE_ON_SHIP", 0);
-            }
+        }
+        if let Err(reason) = crate::comm::dispatch::place_flagship_at_star(plan.star_location) {
+            *observation().lock() = SceneObservation::default();
+            return Err(SceneError::SetupFailed(reason));
+        }
+        for (name, value) in plan.game_state {
+            crate::state::game_state_keys::set_game_state(name, *value);
         }
         crate::mainloop::ffi::set_last_activity(crate::mainloop::types::ActivityValue(
             crate::comm::dispatch::IN_ENCOUNTER,
@@ -388,6 +406,50 @@ mod tests {
         assert_eq!(plan.expected_encounter_conversation, 24);
         assert_eq!(plan.expected_dialogue_conversation, 18);
         assert_eq!(plan.current_activity, 0x0402);
+    }
+
+    #[test]
+    fn scenes_start_in_sol_where_a_new_game_begins() {
+        for scene in [
+            AutomationScene::SolProbeEncounter,
+            AutomationScene::StarbaseCommander,
+        ] {
+            let plan = scene_plan(scene, SceneActivationBoundary::GameInitialized).unwrap();
+            assert_eq!(plan.star_location, (1752, 1450), "{}", scene.name());
+        }
+    }
+
+    #[test]
+    fn the_starbase_scene_reaches_the_commander_without_the_starbase_menu() {
+        let plan = scene_plan(
+            AutomationScene::StarbaseCommander,
+            SceneActivationBoundary::GameInitialized,
+        )
+        .unwrap();
+        let state = |name: &str| {
+            plan.game_state
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| *value)
+        };
+        assert_eq!(state("STARBASE_AVAILABLE"), Some(1));
+        assert_eq!(state("MOONBASE_ON_SHIP"), Some(1));
+        assert_eq!(state("PROBE_ILWRATH_ENCOUNTER"), Some(0));
+    }
+
+    #[test]
+    fn the_probe_scene_does_not_claim_to_choose_the_segue() {
+        // Ur-Quan initialization sets a hostile segue, so the player always
+        // answers the encounter screen; the scene must not pretend otherwise.
+        let plan = scene_plan(
+            AutomationScene::SolProbeEncounter,
+            SceneActivationBoundary::GameInitialized,
+        )
+        .unwrap();
+        assert!(plan
+            .game_state
+            .iter()
+            .all(|(key, _)| *key != "BATTLE_SEGUE"));
     }
 
     #[test]

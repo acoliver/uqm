@@ -263,9 +263,10 @@ extern "C" {
     /// @plan PLAN-20260707-MAINLOOP.P06
     pub fn AddInitialGameEvents();
 
-    /// `void SetStatusMessageMode(int mode)` — pass `SMM_DEFAULT` (1).
+    /// `StatMsgMode SetStatusMessageMode(StatMsgMode mode)` — pass `SMM_DEFAULT`
+    /// (1). Returns the mode that was in effect.
     /// @plan PLAN-20260707-MAINLOOP.P06
-    pub fn SetStatusMessageMode(mode: c_int);
+    pub fn SetStatusMessageMode(mode: c_int) -> c_int;
 
     /// `void DrawAutoPilotMessage(BOOLEAN tf)`.
     /// @plan PLAN-20260707-MAINLOOP.P06
