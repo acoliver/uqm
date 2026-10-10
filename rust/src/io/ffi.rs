@@ -104,10 +104,10 @@ fn current_errno() -> c_int {
 }
 
 // Constants for uio_open flags
-const O_RDONLY: c_int = 0;
-const O_WRONLY: c_int = 1;
-const O_CREAT: c_int = 0o100;
-const O_EXCL: c_int = 0o200;
+const O_RDONLY: c_int = libc::O_RDONLY;
+const O_WRONLY: c_int = libc::O_WRONLY;
+const O_CREAT: c_int = libc::O_CREAT;
+const O_EXCL: c_int = libc::O_EXCL;
 const O_BINARY: c_int = 0;
 
 // Constants for file permissions (mode)

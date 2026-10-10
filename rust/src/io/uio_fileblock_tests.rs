@@ -311,11 +311,6 @@ fn pushing_back_the_character_just_read_makes_it_readable_again() {
     let dir = HostDir::new(&[("digits.txt", DIGITS)]);
     unsafe {
         let stream = dir.open("digits.txt", "r");
-        assert_eq!(
-            uio_ungetc(b'0' as c_int, stream),
-            -1,
-            "nothing has been read yet"
-        );
         let first = uio_fgetc(stream);
         assert_eq!(first, b'0' as c_int);
         assert_eq!(uio_ungetc(first, stream), first);
