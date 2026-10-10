@@ -1,18 +1,51 @@
 //! The resource API as the C game calls it: index loading and the typed
 //! getters, by key.
 
-use std::ffi::{c_char, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::ptr;
 
 use crate::resource::ffi_bridge::{
     res_GetBoolean, res_GetColor, res_GetInteger, res_GetResourceType, res_GetString, res_HasKey,
-    res_IsBoolean, res_IsColor, res_IsInteger, res_IsString, LoadResourceIndex, SaveResourceIndex,
-    UninitResourceSystem,
+    res_IsBoolean, res_IsColor, res_IsInteger, res_IsString, InstallResTypeVectors,
+    LoadResourceIndex, SaveResourceIndex, UninitResourceSystem,
 };
+use crate::resource::ffi_types::ResourceData;
 
 use super::uio_api::{cstr, Dir};
 
+/// The heap types the C subsystems register when the game starts
+/// (`sresins.c`, `resgfx.c`, `resinst.c`, `vresins.c`, `dummy.c`). The index
+/// loader keeps a type only if it is registered, so a row that expects
+/// `GFXRES` to stay `GFXRES` needs them. Nothing is ever loaded from them.
+const SUBSYSTEM_TYPES: [&CStr; 9] = [
+    c"3DOVID",
+    c"STRTAB",
+    c"BINTAB",
+    c"CONVERSATION",
+    c"GFXRES",
+    c"FONTRES",
+    c"SNDRES",
+    c"MUSICRES",
+    c"SHIP",
+];
+
+unsafe extern "C" fn load_nothing(_descriptor: *const c_char, _data: *mut ResourceData) {}
+
+unsafe extern "C" fn free_nothing(_data: *mut c_void) -> c_int {
+    1
+}
+
+fn register_subsystem_types() {
+    for name in SUBSYSTEM_TYPES {
+        let installed = unsafe {
+            InstallResTypeVectors(name.as_ptr(), Some(load_nothing), Some(free_nothing), None)
+        };
+        assert_eq!(installed, 1, "{name:?} is registered");
+    }
+}
+
 pub(super) fn load(dir: &Dir, file: &str, prefix: Option<&str>) {
+    register_subsystem_types();
     let file = cstr(file);
     let prefix = prefix.map(cstr);
     unsafe {

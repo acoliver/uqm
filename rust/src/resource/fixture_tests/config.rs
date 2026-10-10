@@ -10,13 +10,13 @@ use super::res::{self, Rows};
 use super::uio_api::{Dir, Mount, Repo, Session};
 
 /// A temp directory mounted writable at "/" with `root` open on it.
-struct Config {
-    root: Dir,
+pub(super) struct Config {
+    pub(super) root: Dir,
     _repo: Repo,
-    dir: TempDir,
+    pub(super) dir: TempDir,
 }
 
-fn config_dir(files: &[(&str, &[u8])]) -> Config {
+pub(super) fn config_dir(files: &[(&str, &[u8])]) -> Config {
     let dir = TempDir::new().unwrap();
     for (name, bytes) in files {
         std::fs::write(dir.path().join(name), bytes).unwrap();

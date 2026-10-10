@@ -6,6 +6,7 @@
 mod addon;
 mod config;
 mod declared;
+mod descriptors;
 mod game;
 mod lifecycle;
 mod paths;
