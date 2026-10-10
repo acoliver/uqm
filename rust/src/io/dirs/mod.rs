@@ -16,9 +16,11 @@
 //! `createDirectory`) in the same change that removes `dirs.c` from the
 //! build (`sc2/src/libs/file/Makeinfo`, the `native-inputs.json` and
 //! provider-manifest entries for `dirs.c.o`, and the ownership-ledger rows).
-//! `dir_prep::expand_path` is a separate String-based approximation of
-//! `expandPath` used by the Rust-owned startup; it does not follow this
-//! contract (it accepts a bare `~`, has no length limit and keeps `..`).
+//! The Rust-owned startup (`mainloop::dir_prep`) calls [`expand::expand_path`]
+//! with [`process_env::ProcessEnvironment`] and [`mkdirhier::mkdirhier`]
+//! directly, so these two have a selected caller today; `getHomeDir` is used
+//! through that environment, and `createDirectory` by `mkdirhier`. The extern
+//! "C" wrappers in [`c_abi`] stay unexported until `dirs.c.o` is retired.
 //!
 //! # Allocation
 //!
@@ -42,4 +44,4 @@ mod expand_tests;
 #[cfg(test)]
 mod mkdirhier_tests;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;

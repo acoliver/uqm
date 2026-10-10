@@ -63,7 +63,7 @@ pub(super) fn bytes_or_errno<T>(result: io::Result<T>) -> Result<T, c_int> {
 
 /// A temporary directory addressed by its resolved path, so that expectations
 /// built from it match what `getcwd` reports on macOS (`/var` -> `/private/var`).
-pub(super) fn resolved_tempdir() -> (tempfile::TempDir, PathBuf) {
+pub(crate) fn resolved_tempdir() -> (tempfile::TempDir, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().canonicalize().unwrap();
     (dir, path)
@@ -94,7 +94,7 @@ const CHILD_MARKER: &str = "UQM_DIRS_TEST_CHILD";
 /// single test ran and passed. Call it from a `#[test]`; it returns `true` in
 /// the parent after the child passed and `false` in the child after `body`,
 /// so checks that belong to the parent can be guarded by the result.
-pub(super) fn in_child(
+pub(crate) fn in_child(
     module: &str,
     test_name: &str,
     env: &[(&str, &[u8])],
