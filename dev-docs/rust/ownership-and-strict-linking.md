@@ -43,11 +43,18 @@ mode.
 
 ## Queue ownership boundary
 
-COLLECTIONS/#37 retains `sc2/src/uqm/displist.c`,
-`sc2/src/uqm/displist.h`, `rust/src/collections/queue.rs`, queue behavior, and
-future tracked-source deletion. S1 deletes no tracked native source. It excludes
-and rejects only `sc2/obj/release/src/uqm/displist.c.o` from production archive
-membership and assigns all ten queue exports solely to the Rust queue.
+COLLECTIONS/#37 owns `rust/src/collections/queue.rs` and queue behavior. S1
+deleted no tracked native source. It excluded and rejected only
+`sc2/obj/release/src/uqm/displist.c.o` from production archive membership and
+assigned all ten queue exports solely to the Rust queue.
+
+COLLECTIONS/#37 has since deleted `sc2/src/uqm/displist.c`,
+`sc2/src/libs/list/`, `sc2/src/libs/list.h`, `sc2/src/libs/heap/` and
+`sc2/src/libs/heap.h`. The manifest keeps the `list.c.o` and `displist.c.o`
+ledger objects and lists their sources under `retired_sources`; the validator
+requires those sources to be absent from disk. `sc2/src/uqm/displist.h` stays
+as the C declaration of the Rust queue until its last C includer is ported, and
+#158 owns its deletion.
 
 Ledger v7 additionally authorizes S2 to provide the 24 `CharHashTable_*` and
 `StringHashTable_*` ABI symbols solely from `rust/src/collections/hash_table.rs`.
@@ -58,10 +65,11 @@ ownership: RESOURCE/#22 retains `sc2/src/libs/uio/charhashtable.c` and its heade
 and CORE_NATIVE/#22 retains `sc2/src/libs/strings/stringhashtable.c` and its
 header, including eventual tracked-source deletion.
 
-The machine declaration records tracked native file delta 0, the four removed
-production providers (`displist.c.o`, source-less `heap.c.o`, and both hash-table
-objects), permissive production-link mode delta -1, and retained source ownership
-under COLLECTIONS/#37, RESOURCE/#22, and CORE_NATIVE/#22.
+The machine declaration records the S1/S2 tracked native file delta 0, the five
+removed production providers (`list.c.o`, `displist.c.o`, source-less `heap.c.o`,
+and both hash-table objects), permissive production-link mode delta -1, and
+retained source ownership under COLLECTIONS/#37, RESOURCE/#22, and
+CORE_NATIVE/#22. The COLLECTIONS retirements are recorded by `retired_sources`.
 
 ## Replay
 

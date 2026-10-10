@@ -323,4 +323,4 @@ The provider manifest validates the Cargo feature pair and the corresponding
 
 ## S1 Native Provider Manifest
 
-The production-inverted Rust binary derives archive membership only from `rust/ownership/native-provider-manifest.json`. `rust/build.rs` validates the complete exact-path object inventory and hashes before archive creation. `sc2/obj/release/src/uqm/displist.c.o` is rejected while `rust/src/collections/queue.rs` is the sole queue provider. Permissive unresolved internal-symbol linking is not a supported configuration. See `ownership-and-strict-linking.md`.
+The production-inverted Rust binary derives archive membership only from `rust/ownership/native-provider-manifest.json`. `rust/build.rs` validates the complete exact-path object inventory and hashes before archive creation. `sc2/obj/release/src/uqm/displist.c.o` (its source is deleted) is rejected while `rust/src/collections/queue.rs` is the sole queue provider. Permissive unresolved internal-symbol linking is not a supported configuration. See `ownership-and-strict-linking.md`.
