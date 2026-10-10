@@ -1396,10 +1396,22 @@ fn compute_fade_volume(fade: &FadeState, now: u32) -> i32 {
 #[path = "stream_pipeline_tests.rs"]
 mod pipeline_tests;
 
+/// Interval of the scheduled music fade; 0 when none is running.
+#[cfg(test)]
+pub(crate) fn music_fade_interval() -> u32 {
+    ENGINE.fade.lock().interval
+}
+
+/// Retires any scheduled music fade, for tests that shut the engine down.
+#[cfg(test)]
+pub(crate) fn clear_music_fade() {
+    *ENGINE.fade.lock() = FadeState::new();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sound::test_support::ENGINE_TEST_LOCK;
+    use crate::sound::test_support::{Probe, ENGINE_TEST_LOCK};
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     #[test]
@@ -1447,8 +1459,29 @@ mod tests {
 
     #[test]
     fn test_fade_state_initial() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let fade = ENGINE.fade.lock();
         assert_eq!(fade.interval, 0);
+    }
+
+    /// Tests that schedule a fade hold the engine lock while it is pending, so
+    /// the test reading the idle fade state has to wait for that lock too.
+    #[test]
+    fn the_idle_fade_test_waits_for_the_lock_of_the_fade_it_reads() {
+        let serial = ENGINE_TEST_LOCK.lock();
+        ENGINE.fade.lock().interval = 100;
+        let idle_fade_test = Probe::spawn(test_fade_state_initial);
+
+        let ran_without_the_lock = idle_fade_test.finishes_within_grace();
+        ENGINE.fade.lock().interval = 0;
+        drop(serial);
+        let outcome = idle_fade_test.join();
+
+        assert!(
+            !ran_without_the_lock,
+            "it read a fade owned by the lock holder"
+        );
+        assert!(outcome.is_ok());
     }
 
     // --- Sample Management (REQ-STREAM-SAMPLE-*) ---
