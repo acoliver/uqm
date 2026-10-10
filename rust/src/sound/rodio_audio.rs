@@ -686,6 +686,7 @@ mod tests {
 #[cfg(test)]
 mod command_export_tests {
     use super::*;
+    use crate::sound::test_support::Probe;
     use std::sync::{Arc, MutexGuard};
 
     static EXPORT_LOCK: Mutex<()> = Mutex::new(());
@@ -728,40 +729,42 @@ mod command_export_tests {
             let seen = Arc::new(Mutex::new(Vec::new()));
             let log = Arc::clone(&seen);
             let thread = thread::spawn(move || {
+                // A reply releases the caller to read the log, so the command
+                // is logged before it is answered.
+                let record = |entry: Seen| log.lock().unwrap().push(entry);
                 while let Ok(cmd) = rx.recv() {
-                    let entry = match cmd {
+                    match cmd {
                         AudioCommand::PlayWav(data, cat, looping, reply) => {
+                            record(Seen::Wav(data, cat, looping));
                             let _ = reply.send(PLAY_HANDLE);
-                            Seen::Wav(data, cat, looping)
                         }
                         AudioCommand::PlayOgg(data, cat, looping, reply) => {
+                            record(Seen::Ogg(data, cat, looping));
                             let _ = reply.send(PLAY_HANDLE + 1);
-                            Seen::Ogg(data, cat, looping)
                         }
                         AudioCommand::PlayRaw(data, rate, channels, bits, cat, looping, reply) => {
+                            record(Seen::Raw(data, rate, channels, bits, cat, looping));
                             let _ = reply.send(PLAY_HANDLE + 2);
-                            Seen::Raw(data, rate, channels, bits, cat, looping)
                         }
-                        AudioCommand::Stop(h) => Seen::Stop(h),
-                        AudioCommand::Pause(h) => Seen::Pause(h),
-                        AudioCommand::Resume(h) => Seen::Resume(h),
-                        AudioCommand::SetVolume(h, v) => Seen::SetVolume(h, v),
+                        AudioCommand::Stop(h) => record(Seen::Stop(h)),
+                        AudioCommand::Pause(h) => record(Seen::Pause(h)),
+                        AudioCommand::Resume(h) => record(Seen::Resume(h)),
+                        AudioCommand::SetVolume(h, v) => record(Seen::SetVolume(h, v)),
                         AudioCommand::IsPlaying(h, reply) => {
+                            record(Seen::IsPlaying(h));
                             let _ = reply.send(is_playing);
-                            Seen::IsPlaying(h)
                         }
-                        AudioCommand::StopAll => Seen::StopAll,
-                        AudioCommand::SetMasterVolume(v) => Seen::Master(v),
-                        AudioCommand::SetMusicVolume(v) => Seen::Music(v),
-                        AudioCommand::SetSfxVolume(v) => Seen::Sfx(v),
-                        AudioCommand::SetSpeechVolume(v) => Seen::Speech(v),
-                        AudioCommand::Cleanup => Seen::Cleanup,
+                        AudioCommand::StopAll => record(Seen::StopAll),
+                        AudioCommand::SetMasterVolume(v) => record(Seen::Master(v)),
+                        AudioCommand::SetMusicVolume(v) => record(Seen::Music(v)),
+                        AudioCommand::SetSfxVolume(v) => record(Seen::Sfx(v)),
+                        AudioCommand::SetSpeechVolume(v) => record(Seen::Speech(v)),
+                        AudioCommand::Cleanup => record(Seen::Cleanup),
                         AudioCommand::Shutdown => {
-                            log.lock().unwrap().push(Seen::Shutdown);
+                            record(Seen::Shutdown);
                             break;
                         }
-                    };
-                    log.lock().unwrap().push(entry);
+                    }
                 }
             });
             *AUDIO_THREAD.lock().unwrap() = Some(thread);
@@ -783,6 +786,28 @@ mod command_export_tests {
         fn drop(&mut self) {
             unsafe { rust_audio_uninit() };
         }
+    }
+
+    /// `seen()` trusts that a command answered through a reply has already
+    /// been logged; holding the log shows whether the reply waits for it.
+    #[test]
+    fn a_reply_is_sent_only_after_the_recorder_has_logged_the_command() {
+        let recorder = Recorder::start(false);
+        let held_log = recorder.seen.lock().unwrap();
+        let asking = Probe::spawn(|| {
+            let _ = unsafe { rust_audio_is_playing(0) };
+        });
+
+        let answered_before_logging = asking.finishes_within_grace();
+        drop(held_log);
+        let outcome = asking.join();
+
+        assert!(
+            !answered_before_logging,
+            "the reply was sent while the command was not yet in the log"
+        );
+        assert!(outcome.is_ok());
+        assert_eq!(*recorder.seen.lock().unwrap(), [Seen::IsPlaying(0)]);
     }
 
     #[test]

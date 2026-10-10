@@ -8,10 +8,49 @@ use super::formats::{AudioFormat, DecoderFormats};
 use parking_lot::Mutex;
 use std::path::Path;
 use std::sync::Arc;
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 /// Serializes tests that touch the process-wide sources, mixer pool, track
 /// player or the decoder thread.
 pub(crate) static ENGINE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// How long a [`Probe`] is given to prove it is not waiting on a lock.
+const PROBE_GRACE: Duration = Duration::from_millis(150);
+
+/// A test body or fixture step running on its own thread, so a regression test
+/// can hold a lock and observe whether the step respects it. A step that takes
+/// the lock stays blocked until the holder lets go; one that skips it finishes
+/// within the grace period.
+pub(crate) struct Probe {
+    handle: JoinHandle<()>,
+}
+
+impl Probe {
+    pub(crate) fn spawn(step: impl FnOnce() + Send + 'static) -> Self {
+        Probe {
+            handle: thread::spawn(step),
+        }
+    }
+
+    /// Whether the step finished, by returning or panicking, within the grace
+    /// period.
+    pub(crate) fn finishes_within_grace(&self) -> bool {
+        let start = Instant::now();
+        while !self.handle.is_finished() {
+            if start.elapsed() >= PROBE_GRACE {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        true
+    }
+
+    /// The step's outcome: `Err` carries its panic.
+    pub(crate) fn join(self) -> thread::Result<()> {
+        self.handle.join()
+    }
+}
 
 /// A decoder that hands out a fixed list of PCM chunks, then reports EOF.
 pub(crate) struct ScriptedDecoder {

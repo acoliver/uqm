@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::decoder::SoundDecoder;
 use super::heart_ffi::*;
+use super::stream;
 use super::test_support::{ScriptedDecoder, ENGINE_TEST_LOCK};
 use super::types::{SoundPosition, MUSIC_SOURCE};
 
@@ -31,14 +32,21 @@ impl Engine {
         }
         Engine { _guard: guard }
     }
-}
 
-impl Drop for Engine {
-    fn drop(&mut self) {
+    /// Stops the engine and retires any fade a test left pending, which nothing
+    /// else would ever complete once the decoder thread is gone.
+    fn shut_down(&self) {
         unsafe {
             StopStream(SOURCE);
             UninitStreamDecoder();
         }
+        stream::clear_music_fade();
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        self.shut_down();
     }
 }
 
@@ -316,6 +324,23 @@ fn music_fades_are_scheduled_only_when_they_take_time() {
             "a negative length counts as zero"
         );
     }
+}
+
+#[test]
+fn shutting_the_engine_down_retires_the_fade_a_test_scheduled() {
+    let engine = Engine::start();
+    unsafe {
+        assert!(SetMusicStreamFade(100, 10));
+    }
+    assert_eq!(stream::music_fade_interval(), 100);
+
+    engine.shut_down();
+
+    assert_eq!(
+        stream::music_fade_interval(),
+        0,
+        "a pending fade would be read by the next test as the engine's idle state"
+    );
 }
 
 #[test]

@@ -1236,7 +1236,7 @@ mod flow_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sound::test_support::ENGINE_TEST_LOCK;
+    use crate::sound::test_support::{Probe, ENGINE_TEST_LOCK};
 
     #[test]
     fn test_sound_chunk_creation() {
@@ -1449,6 +1449,7 @@ mod tests {
     // REQ-TRACK-ASSEMBLE-15..17: Multi-track
     #[test]
     fn test_splice_multi_track_precondition() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = splice_multi_track(&[Some("t1"), Some("t2")], &[None, None], None);
         // Should not panic
         assert!(result.is_ok() || result.is_err());
@@ -1456,6 +1457,7 @@ mod tests {
 
     #[test]
     fn test_splice_multi_track_appends() {
+        let _serial = ENGINE_TEST_LOCK.lock();
         let result = splice_multi_track(&[Some("t1")], &[Some("text")], None);
         assert!(result.is_ok() || result.is_err());
     }
@@ -1559,5 +1561,48 @@ mod tests {
     fn test_find_prev_page_defaults_to_head() {
         let head: Option<Box<SoundChunk>> = None;
         assert!(find_prev_page_inner(&head, None).is_none());
+    }
+
+    fn chunks_in_track() -> usize {
+        let state = TRACK_STATE.lock();
+        let mut count = 0;
+        let mut cur = state.chunks_head.as_deref();
+        while let Some(chunk) = cur {
+            count += 1;
+            cur = chunk.next.as_deref();
+        }
+        count
+    }
+
+    /// `splice_multi_track` appends to whatever track list exists, so the two
+    /// tests that call it must wait for the engine lock instead of running
+    /// while a locked test is in the middle of walking its own list.
+    #[test]
+    fn multi_track_tests_wait_for_the_lock_of_the_track_list_they_would_extend() {
+        let serial = ENGINE_TEST_LOCK.lock();
+        splice_track(
+            Some("conversation"),
+            Some("First line\r\nSecond line"),
+            None,
+            None,
+            Vec::new(),
+        )
+        .unwrap();
+        let before = chunks_in_track();
+        let probes = [
+            Probe::spawn(test_splice_multi_track_precondition),
+            Probe::spawn(test_splice_multi_track_appends),
+        ];
+
+        let ran_without_the_lock: Vec<bool> =
+            probes.iter().map(Probe::finishes_within_grace).collect();
+        let after = chunks_in_track();
+        stop_track().unwrap();
+        drop(serial);
+        let outcomes: Vec<_> = probes.into_iter().map(Probe::join).collect();
+
+        assert_eq!(ran_without_the_lock, [false, false]);
+        assert_eq!(after, before, "the held track list gained a chunk");
+        assert!(outcomes.iter().all(Result::is_ok));
     }
 }
