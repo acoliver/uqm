@@ -223,7 +223,7 @@ fn block_calls_refuse_missing_arguments_and_negative_offsets() {
             -1
         );
         assert_eq!(errno_value(), libc::EINVAL);
-        uio_clearFileBlockBuffers(ptr::null_mut());
+        uio_clear_file_block_buffers(ptr::null_mut());
         uio_setFileBlockUsageHint(block, 0, 0);
         assert_eq!(uio_closeFileBlock(ptr::null_mut()), 0);
         uio_closeFileBlock(block);
@@ -239,7 +239,7 @@ fn clearing_block_buffers_does_not_change_what_a_later_access_returns() {
     unsafe {
         let block = uio_openFileBlock(file);
         assert_eq!(access(block, 1, 3), (3, b"123".to_vec()));
-        uio_clearFileBlockBuffers(block);
+        uio_clear_file_block_buffers(block);
         assert_eq!(access(block, 1, 3), (3, b"123".to_vec()));
         uio_closeFileBlock(block);
         uio_close(file);

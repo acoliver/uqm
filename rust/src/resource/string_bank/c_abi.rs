@@ -262,4 +262,145 @@ mod tests {
         let (delimiter, _) = split_arguments(0xC3u8 as c_char, 2).unwrap();
         assert_eq!(delimiter.get(), 0xC3);
     }
+
+    // Caller bugs the C code left undefined abort the process (never unwind
+    // into C). Each runs in its own child process.
+    macro_rules! aborts {
+        ($name:ident, $stderr:expr, $violation:expr) => {
+            #[test]
+            fn $name() {
+                crate::resource::abort_child::expect_abort(
+                    module_path!(),
+                    stringify!($name),
+                    $stderr,
+                    || {
+                        #[allow(unused_unsafe, reason = "shared by safe and unsafe violations")]
+                        let _ = unsafe { $violation };
+                    },
+                );
+            }
+        };
+    }
+
+    aborts!(
+        add_string_aborts_on_a_null_bank,
+        "StringBank_AddString() FATAL: bank is null.",
+        string_bank_add_string(ptr::null_mut(), c"x".as_ptr())
+    );
+    aborts!(
+        add_string_aborts_on_a_null_string,
+        "StringBank_AddString() FATAL: string is null.",
+        string_bank_add_string(string_bank_create(), ptr::null())
+    );
+    aborts!(
+        add_substring_aborts_on_a_null_bank,
+        "StringBank_AddSubstring() FATAL: bank is null.",
+        string_bank_add_substring(ptr::null_mut(), c"x".as_ptr(), 1)
+    );
+    aborts!(
+        add_substring_aborts_on_a_null_string,
+        "StringBank_AddSubstring() FATAL: string is null.",
+        string_bank_add_substring(string_bank_create(), ptr::null(), 1)
+    );
+    aborts!(
+        add_or_find_string_aborts_on_a_null_bank,
+        "StringBank_AddOrFindString() FATAL: bank is null.",
+        string_bank_add_or_find_string(ptr::null_mut(), c"x".as_ptr())
+    );
+    aborts!(
+        add_or_find_string_aborts_on_a_null_string,
+        "StringBank_AddOrFindString() FATAL: string is null.",
+        string_bank_add_or_find_string(string_bank_create(), ptr::null())
+    );
+    aborts!(
+        add_or_find_substring_aborts_on_a_null_bank,
+        "StringBank_AddOrFindSubstring() FATAL: bank is null.",
+        string_bank_add_or_find_substring(ptr::null_mut(), c"x".as_ptr(), 1)
+    );
+    aborts!(
+        add_or_find_substring_aborts_on_a_null_string,
+        "StringBank_AddOrFindSubstring() FATAL: string is null.",
+        string_bank_add_or_find_substring(string_bank_create(), ptr::null(), 1)
+    );
+    aborts!(
+        split_string_aborts_on_a_null_bank,
+        "SplitString() FATAL: bank is null.",
+        {
+            let mut slots = [ptr::null::<c_char>(); 2];
+            split_string(
+                c"a\nb".as_ptr(),
+                b'\n' as c_char,
+                2,
+                slots.as_mut_ptr(),
+                ptr::null_mut(),
+            )
+        }
+    );
+    aborts!(
+        split_string_aborts_on_a_null_string,
+        "SplitString() FATAL: string is null.",
+        {
+            let mut slots = [ptr::null::<c_char>(); 2];
+            split_string(
+                ptr::null(),
+                b'\n' as c_char,
+                2,
+                slots.as_mut_ptr(),
+                string_bank_create(),
+            )
+        }
+    );
+    aborts!(
+        split_string_aborts_on_a_null_result_array,
+        "SplitString() FATAL: result array is null.",
+        split_string(
+            c"a\nb".as_ptr(),
+            b'\n' as c_char,
+            2,
+            ptr::null_mut(),
+            string_bank_create()
+        )
+    );
+    aborts!(
+        split_string_aborts_on_a_nul_split_character,
+        "SplitString() FATAL: split character is NUL.",
+        {
+            let mut slots = [ptr::null::<c_char>(); 2];
+            split_string(
+                c"a\nb".as_ptr(),
+                0,
+                2,
+                slots.as_mut_ptr(),
+                string_bank_create(),
+            )
+        }
+    );
+    aborts!(
+        split_string_aborts_on_a_zero_capacity,
+        "SplitString() FATAL: result capacity is below one.",
+        {
+            let mut slots = [ptr::null::<c_char>(); 2];
+            split_string(
+                c"a\nb".as_ptr(),
+                b'\n' as c_char,
+                0,
+                slots.as_mut_ptr(),
+                string_bank_create(),
+            )
+        }
+    );
+    aborts!(
+        split_string_aborts_on_a_negative_capacity,
+        "SplitString() FATAL: result capacity is below one.",
+        {
+            let mut slots = [ptr::null::<c_char>(); 2];
+            split_string(
+                c"a\nb".as_ptr(),
+                b'\n' as c_char,
+                -1,
+                slots.as_mut_ptr(),
+                string_bank_create(),
+            )
+        }
+    );
 }

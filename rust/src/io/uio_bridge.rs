@@ -240,12 +240,7 @@ pub unsafe extern "C" fn uio_rename(
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_access(
-    dir: *mut uio_DirHandle,
-    path: *const c_char,
-    mode: c_int,
-) -> c_int {
+pub unsafe fn uio_access(dir: *mut uio_DirHandle, path: *const c_char, mode: c_int) -> c_int {
     ffi_guard!(-1, {
         log_marker("uio_access called");
 
@@ -1088,8 +1083,8 @@ fn set_stream_operation(stream: *mut uio_Stream, operation: c_int) {
 }
 
 // =============================================================================
-// uio_getFileLocation / uio_unmountDir / uio_unmountAllDirs /
-// uio_getMountFileSystemType / uio_transplantDir
+// uio_get_file_location / uio_unmountDir / uio_unmount_all_dirs /
+// uio_get_mount_file_system_type / uio_transplantDir
 // =============================================================================
 /// @plan PLAN-20260314-FILE-IO.P05
 /// @requirement REQ-FIO-ERRNO
@@ -1097,8 +1092,7 @@ fn set_stream_operation(stream: *mut uio_Stream, operation: c_int) {
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_getFileLocation(
+pub unsafe fn uio_get_file_location(
     dir: *mut uio_DirHandle,
     in_path: *const c_char,
     _flags: c_int,
@@ -1106,7 +1100,7 @@ pub unsafe extern "C" fn uio_getFileLocation(
     out_path: *mut *mut c_char,
 ) -> c_int {
     ffi_guard!(-1, {
-        log_marker("uio_getFileLocation called");
+        log_marker("uio_get_file_location called");
 
         let Some((handle_ptr, resolved_path)) = resolve_file_location(dir, in_path) else {
             if !mount_handle.is_null() {
@@ -1159,9 +1153,8 @@ pub unsafe extern "C" fn uio_unmountDir(mount_handle: *mut uio_MountHandle) -> c
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_unmountAllDirs(repository: *mut uio_Repository) -> c_int {
-    log_marker("uio_unmountAllDirs called");
+pub unsafe fn uio_unmount_all_dirs(repository: *mut uio_Repository) -> c_int {
+    log_marker("uio_unmount_all_dirs called");
 
     for handle_ptr in remove_repository_mounts(repository) {
         let _ = Box::from_raw(handle_ptr as *mut uio_MountHandle);
@@ -1174,9 +1167,8 @@ pub unsafe extern "C" fn uio_unmountAllDirs(repository: *mut uio_Repository) -> 
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_getMountFileSystemType(mount_handle: *mut uio_MountHandle) -> c_int {
-    log_marker("uio_getMountFileSystemType called");
+pub unsafe fn uio_get_mount_file_system_type(mount_handle: *mut uio_MountHandle) -> c_int {
+    log_marker("uio_get_mount_file_system_type called");
     if mount_handle.is_null() {
         return 0;
     }
@@ -1356,8 +1348,7 @@ pub unsafe extern "C" fn uio_fgetc(stream: *mut uio_Stream) -> c_int {
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int {
     rust_bridge_log_msg("RUST_UIO: uio_ungetc entry");
     if stream.is_null() {
         return -1;
@@ -1390,64 +1381,6 @@ pub unsafe extern "C" fn uio_ungetc(c: c_int, stream: *mut uio_Stream) -> c_int 
     drop(guard);
     set_stream_status(stream, UIO_STREAM_STATUS_OK);
     wanted as c_int
-}
-
-// libc vasprintf(3): formats a va_list into a malloc'd, NUL-terminated buffer
-// in a single call (internal-only, not an exported uio_* symbol).
-extern "C" {
-    fn vasprintf(strp: *mut *mut c_char, fmt: *const c_char, ap: *mut libc::c_void) -> c_int;
-}
-
-/// @plan PLAN-20260314-FILE-IO.P04
-/// @requirement REQ-FIO-STREAM-WRITE
-///
-/// # Safety
-///
-/// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_vfprintf(
-    stream: *mut uio_Stream,
-    format: *const c_char,
-    args: *mut libc::c_void,
-) -> c_int {
-    log_marker("uio_vfprintf called");
-
-    if stream.is_null() || format.is_null() {
-        set_errno(libc::EINVAL);
-        return -1;
-    }
-
-    // Format the va_list into a malloc'd buffer; vasprintf performs the
-    // sizing and the allocation in one call, so no retry loop is needed.
-    let mut formatted_buf: *mut c_char = ptr::null_mut();
-    // SAFETY: `format` is a valid NUL-terminated string and `args` a valid
-    // va_list (both validated by the C caller); `strp` points to our local
-    // out-parameter. On success vasprintf stores a malloc'd, NUL-terminated
-    // buffer and returns its length; on failure it returns -1 and the
-    // pointer is left null with nothing to free.
-    let format_result = unsafe { vasprintf(&mut formatted_buf, format, args) };
-    if format_result < 0 || formatted_buf.is_null() {
-        set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-        return -1;
-    }
-
-    // Get the length of the formatted string
-    let c_str = std::ffi::CStr::from_ptr(formatted_buf);
-    let bytes = c_str.to_bytes();
-    let len = bytes.len();
-
-    // Write the formatted string to the stream using uio_fwrite
-    let written = uio_fwrite(formatted_buf as *const libc::c_void, 1, len, stream);
-
-    // Free the formatted buffer
-    libc::free(formatted_buf as *mut libc::c_void);
-
-    if written != len {
-        set_stream_status(stream, UIO_STREAM_STATUS_ERROR);
-        return -1;
-    }
-
-    len as c_int
 }
 
 ///
@@ -1511,8 +1444,7 @@ pub unsafe extern "C" fn uio_fputs(s: *const c_char, stream: *mut uio_Stream) ->
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_fflush(stream: *mut uio_Stream) -> c_int {
+pub unsafe fn uio_fflush(stream: *mut uio_Stream) -> c_int {
     if stream.is_null() {
         return 0; // Flushing NULL stream is a no-op success
     }
@@ -1636,7 +1568,7 @@ pub unsafe extern "C" fn uio_clearerr(stream: *mut uio_Stream) {
 // =============================================================================
 // uio_openFileBlock / uio_closeFileBlock / uio_accessFileBlock /
 // uio_copyFileBlock / uio_setFileBlockUsageHint / uio_openFileBlock2
-// uio_clearFileBlockBuffers
+// uio_clear_file_block_buffers
 // =============================================================================
 
 /// @plan PLAN-20260314-FILE-IO.P08
@@ -1967,10 +1899,9 @@ pub unsafe extern "C" fn uio_copyFileBlock(
 /// # Safety
 ///
 /// Caller must ensure pointer arguments are valid and properly aligned.
-#[no_mangle]
-pub unsafe extern "C" fn uio_clearFileBlockBuffers(block: *mut uio_FileBlock) {
+pub unsafe fn uio_clear_file_block_buffers(block: *mut uio_FileBlock) {
     ffi_guard!((), {
-        log_marker("uio_clearFileBlockBuffers called");
+        log_marker("uio_clear_file_block_buffers called");
 
         if block.is_null() {
             return;
@@ -2599,15 +2530,14 @@ pub unsafe extern "C" fn uio_releaseStdioAccess(handle: *mut uio_StdioAccessHand
 /// # Safety
 ///
 /// No safety requirements; marked unsafe for C ABI compatibility.
-#[no_mangle]
-pub unsafe extern "C" fn uio_copyFile(
+pub unsafe fn uio_copy_file(
     src_dir: *mut uio_DirHandle,
     src_path: *const c_char,
     dst_dir: *mut uio_DirHandle,
     dst_path: *const c_char,
 ) -> c_int {
     ffi_guard!(-1, {
-        log_marker("uio_copyFile called");
+        log_marker("uio_copy_file called");
 
         if src_dir.is_null() || dst_dir.is_null() {
             set_errno(libc::EINVAL);
@@ -2654,7 +2584,7 @@ pub unsafe extern "C" fn uio_copyFile(
         loop {
             let bytes_read = uio_read(src_handle, buffer.as_mut_ptr(), CHUNK_SIZE);
             if bytes_read < 0 {
-                log_marker("uio_copyFile: read error");
+                log_marker("uio_copy_file: read error");
                 had_error = true;
                 break;
             }
@@ -2668,7 +2598,7 @@ pub unsafe extern "C" fn uio_copyFile(
             let bytes_written = uio_write(dst_handle, buffer.as_ptr(), bytes_to_write);
 
             if bytes_written < 0 || bytes_written as usize != bytes_to_write {
-                log_marker("uio_copyFile: write error");
+                log_marker("uio_copy_file: write error");
                 had_error = true;
                 break;
             }
@@ -2682,13 +2612,13 @@ pub unsafe extern "C" fn uio_copyFile(
 
         // On error, remove partial destination
         if had_error {
-            log_marker("uio_copyFile: cleaning up partial destination");
+            log_marker("uio_copy_file: cleaning up partial destination");
             uio_unlink(dst_dir, dst_path);
             set_errno(libc::EIO);
             return -1;
         }
 
-        log_marker(&format!("uio_copyFile: copied {} bytes", total_copied));
+        log_marker(&format!("uio_copy_file: copied {} bytes", total_copied));
         0
     })
 }
@@ -2735,30 +2665,6 @@ const O_TRUNC: c_int = 0o1000;
 const SEEK_SET: c_int = 0;
 const SEEK_CUR: c_int = 1;
 const SEEK_END: c_int = 2;
-
-/// Log a message to the Rust bridge log file (C-ABI function for use by C).
-///
-/// # Safety
-/// The message pointer must be a valid null-terminated C string.
-///
-/// Returns 0 on success, -1 on failure.
-#[no_mangle]
-pub unsafe extern "C" fn rust_bridge_log_msg_c(message: *const c_char) -> c_int {
-    use crate::bridge_log::rust_bridge_log_msg;
-
-    if message.is_null() {
-        return -1;
-    }
-
-    let c_str = std::ffi::CStr::from_ptr(message);
-    let message_str = match c_str.to_str() {
-        Ok(s) => s,
-        Err(_) => return -1,
-    };
-
-    rust_bridge_log_msg(message_str);
-    0
-}
 
 // Logging helper using rust-bridge.log
 fn log_marker(msg: &str) {
@@ -3038,7 +2944,7 @@ pub unsafe extern "C" fn uio_openRepository(flags: c_int) -> *mut uio_Repository
 pub unsafe extern "C" fn uio_closeRepository(repository: *mut uio_Repository) {
     log_marker("uio_closeRepository called");
     if !repository.is_null() {
-        uio_unmountAllDirs(repository);
+        uio_unmount_all_dirs(repository);
         let _ = Box::from_raw(repository);
     }
 }
@@ -6900,7 +6806,7 @@ mod tests {
                 assert!(!inner.cache.is_empty());
 
                 // Clear buffers
-                uio_clearFileBlockBuffers(block);
+                uio_clear_file_block_buffers(block);
 
                 let inner = &*(block as *const FileBlockInner);
                 assert!(inner.cache.is_empty());
@@ -7322,7 +7228,7 @@ mod tests {
                 let src_path = CString::new("source.txt").unwrap();
                 let dst_path = CString::new("dest.txt").unwrap();
 
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, 0);
 
                 // Verify destination exists
@@ -7372,7 +7278,7 @@ mod tests {
                 let dst_path = CString::new("dest.txt").unwrap();
 
                 set_errno(0);
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, -1);
                 // Should fail with EEXIST (O_EXCL semantics)
                 assert_eq!(current_errno(), libc::EEXIST);
@@ -7416,7 +7322,7 @@ mod tests {
                 let dst_path = CString::new("dest.txt").unwrap();
 
                 set_errno(0);
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, -1);
                 assert_eq!(current_errno(), libc::ENOENT);
 
@@ -7463,7 +7369,7 @@ mod tests {
                 let src_path = CString::new("large.dat").unwrap();
                 let dst_path = CString::new("large_copy.dat").unwrap();
 
-                let result = uio_copyFile(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
+                let result = uio_copy_file(dir, src_path.as_ptr(), dir, dst_path.as_ptr());
                 assert_eq!(result, 0);
 
                 // Verify destination exists and has same size

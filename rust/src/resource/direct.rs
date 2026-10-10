@@ -2,7 +2,7 @@
 //!
 //! Port of `sc2/src/libs/resource/direct.c`. The table lists the regular
 //! files of a UIO directory that match a pattern, as a C `STRING_TABLE`
-//! (see [`string_table`]).
+//! (see [`super::string_table`]).
 //!
 //! Listing, stat and directory handles come from the in-crate Rust UIO
 //! (`crate::io::uio_bridge`), so mounts, zip archives, mount precedence and
@@ -25,10 +25,9 @@ use crate::io::uio_bridge::{
     uio_openDirRelative, uio_stat,
 };
 
-use self::string_table::DirEntryTable;
+use super::string_table::OwnedStringTable;
 
 pub mod c_abi;
-pub mod string_table;
 
 #[cfg(test)]
 mod tests;
@@ -189,7 +188,7 @@ pub unsafe fn load_dir_entry_table(
     path: &CStr,
     pattern: &CStr,
     match_type: MatchType,
-) -> Result<Option<DirEntryTable>, DirEntryError> {
+) -> Result<Option<OwnedStringTable>, DirEntryError> {
     let names = scan_dir_entries(base, path, pattern, match_type)?;
-    Ok(DirEntryTable::from_names(&names))
+    Ok(OwnedStringTable::from_names(&names))
 }

@@ -2,7 +2,7 @@
 //! directories and zip archives, mount precedence, and the table the C
 //! consumers (`gfxload.c`, `loadmele.c`) receive.
 
-use std::ffi::{c_int, c_void, CStr, CString};
+use std::ffi::{c_int, CStr, CString};
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -13,13 +13,13 @@ use serial_test::serial;
 use tempfile::TempDir;
 
 use super::c_abi::LoadDirEntryTable;
-use super::string_table::{DirEntryTable, StringTable, StringTableEntry};
 use super::{load_dir_entry_table, scan_dir_entries, DirEntryError, MatchType};
 use crate::io::uio_bridge::{
     uio_DirHandle, uio_Repository, uio_closeDir, uio_closeRepository, uio_mountDir, uio_openDir,
     uio_openRepository,
 };
-use crate::memory::rust_hfree;
+use crate::resource::string_table::tests::c_free_string_table;
+use crate::resource::string_table::{OwnedStringTable, StringTable};
 
 // uio_bridge keeps these private; the values are fixed by the UIO API.
 const FSTYPE_STDIO: c_int = 1;
@@ -124,7 +124,7 @@ impl Fixture {
             .collect()
     }
 
-    fn load(&self, path: &str, pattern: &str, match_type: MatchType) -> Option<DirEntryTable> {
+    fn load(&self, path: &str, pattern: &str, match_type: MatchType) -> Option<OwnedStringTable> {
         let path = cstring(path);
         let pattern = cstring(pattern);
         // SAFETY: `base` is live for the duration of the call.
@@ -339,111 +339,6 @@ fn no_matching_entry_means_no_table() {
     assert!(fixture.load("missing", ".mle", MatchType::Suffix).is_none());
 }
 
-/// Reads a value at a byte offset: the C layout of `strintrn.h` on an LP64
-/// target, written out independently of the `repr(C)` structs.
-unsafe fn read_at<T: Copy>(base: *const u8, offset: usize) -> T {
-    base.add(offset).cast::<T>().read_unaligned()
-}
-
-/// `FreeStringTable` from `strings.c`, transcribed.
-unsafe fn c_free_string_table(table: *mut StringTable) {
-    const HAS_SOUND_CLIPS: u16 = 1 << 0;
-    const HAS_TIMESTAMP: u16 = 1 << 1;
-    let base = table.cast::<u8>();
-    let flags: u16 = read_at(base, 0);
-    let size: c_int = read_at(base, 4);
-    let strings: *mut u8 = read_at(base, 8);
-    let mut multiplier = 1;
-    if flags & HAS_SOUND_CLIPS != 0 {
-        multiplier += 1;
-    }
-    if flags & HAS_TIMESTAMP != 0 {
-        multiplier += 1;
-    }
-    for slot in 0..(size * multiplier) as usize {
-        let data: *mut c_void = read_at(strings, slot * 24);
-        if !data.is_null() {
-            rust_hfree(data);
-        }
-    }
-    rust_hfree(strings.cast());
-    rust_hfree(table.cast());
-}
-
-#[cfg(target_pointer_width = "64")]
-#[test]
-#[serial]
-fn the_table_has_the_layout_the_c_string_functions_read() {
-    let mut fixture = Fixture::new();
-    fixture.mount_dir(&["b.mle", "a.mle", "\u{e9}-\u{df}.mle"]);
-
-    let table = fixture
-        .load("", ".mle", MatchType::Suffix)
-        .expect("three entries")
-        .into_raw();
-    unsafe {
-        let base = table.cast::<u8>();
-        assert_eq!(read_at::<u16>(base, 0), 0, "flags: no clips, no stamps");
-        assert_eq!(read_at::<c_int>(base, 4), 3, "size");
-        assert!(read_at::<*mut c_void>(base, 16).is_null(), "no name index");
-        let strings: *mut u8 = read_at(base, 8);
-
-        let expected: [&[u8]; 3] = [b"a.mle", b"b.mle", "\u{e9}-\u{df}.mle".as_bytes()];
-        for (slot, name) in expected.iter().enumerate() {
-            let entry = strings.add(slot * 24);
-            let data: *const u8 = read_at(entry, 0);
-            let length: c_int = read_at(entry, 8);
-            assert_eq!(length as usize, name.len() + 1, "length counts the NUL");
-            let stored = std::slice::from_raw_parts(data, name.len() + 1);
-            assert_eq!(&stored[..name.len()], *name);
-            assert_eq!(stored[name.len()], 0);
-            assert_eq!(read_at::<c_int>(entry, 12), slot as c_int, "index");
-            assert_eq!(read_at::<*mut u8>(entry, 16), table.cast::<u8>(), "parent");
-        }
-        c_free_string_table(table);
-    }
-}
-
-#[test]
-#[serial]
-fn the_rust_view_of_the_layout_matches_the_table() {
-    let mut fixture = Fixture::new();
-    fixture.mount_dir(&["one.mle", "two.mle"]);
-
-    let table = fixture.load("", ".mle", MatchType::Suffix).unwrap();
-    assert_eq!(table.len(), 2);
-    assert!(!table.is_empty());
-    let raw = table.into_raw();
-    unsafe {
-        let StringTable {
-            flags,
-            size,
-            strings,
-            name_index,
-        } = raw.read();
-        assert_eq!((flags, size), (0, 2));
-        assert!(name_index.is_null());
-        let StringTableEntry {
-            data,
-            length,
-            index,
-            parent,
-        } = strings.add(1).read();
-        assert_eq!(CStr::from_ptr(data).to_bytes(), b"two.mle");
-        assert_eq!((length, index), (8, 1));
-        assert_eq!(parent, raw);
-        c_free_string_table(raw);
-    }
-}
-
-#[test]
-#[serial]
-fn a_table_nobody_took_is_freed_when_dropped() {
-    let mut fixture = Fixture::new();
-    fixture.mount_dir(&["one.mle"]);
-    drop(fixture.load("", ".mle", MatchType::Suffix).unwrap());
-}
-
 #[test]
 #[serial]
 fn a_large_directory_keeps_count_order_and_indices() {
@@ -585,3 +480,66 @@ proptest! {
         prop_assert_eq!(fixture.scan("", &pattern, match_type), expected);
     }
 }
+
+// --- caller bugs abort, never unwind into C ----------------------------------
+
+/// Runs the violation in a child process; see `abort_child`.
+macro_rules! aborts {
+    ($name:ident, $stderr:expr, |$fixture:ident| $violation:expr) => {
+        #[test]
+        fn $name() {
+            crate::resource::abort_child::expect_abort(
+                module_path!(),
+                stringify!($name),
+                $stderr,
+                || {
+                    let $fixture = Fixture::new();
+                    // SAFETY: the violation passes a null or invalid argument
+                    // on purpose; the entry point must abort before using it.
+                    let _ = unsafe { $violation };
+                },
+            );
+        }
+    };
+}
+
+aborts!(
+    a_null_directory_handle_aborts,
+    "LoadDirEntryTable: directory handle is null",
+    |_fixture| LoadDirEntryTable(
+        ptr::null_mut(),
+        c"".as_ptr(),
+        c".mle".as_ptr(),
+        MatchType::Suffix as c_int
+    )
+);
+aborts!(
+    a_null_path_aborts,
+    "LoadDirEntryTable: path or pattern is null",
+    |fixture| LoadDirEntryTable(
+        fixture.root,
+        ptr::null(),
+        c".mle".as_ptr(),
+        MatchType::Suffix as c_int
+    )
+);
+aborts!(
+    a_null_pattern_aborts,
+    "LoadDirEntryTable: path or pattern is null",
+    |fixture| LoadDirEntryTable(
+        fixture.root,
+        c"".as_ptr(),
+        ptr::null(),
+        MatchType::Suffix as c_int
+    )
+);
+aborts!(
+    an_unknown_match_type_aborts,
+    "LoadDirEntryTable: unknown match type",
+    |fixture| LoadDirEntryTable(fixture.root, c"".as_ptr(), c".mle".as_ptr(), 5)
+);
+aborts!(
+    a_negative_match_type_aborts,
+    "LoadDirEntryTable: unknown match type",
+    |fixture| LoadDirEntryTable(fixture.root, c"".as_ptr(), c".mle".as_ptr(), -1)
+);

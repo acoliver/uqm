@@ -14,6 +14,8 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
+use crate::resource::string_table::{StringTable, StringTableEntry};
+
 /// Wrap a closure so panics don't cross the FFI boundary (which would call
 /// abort).  Logs the panic payload to stderr.
 ///
@@ -126,24 +128,6 @@ unsafe fn AllocStringTable(_n: c_int, _f: c_int) -> *mut c_void {
 #[allow(non_snake_case, reason = "test stub mirrors the legacy C ABI symbol")]
 unsafe fn FreeStringTable(_p: *mut c_void) {}
 // HMalloc/HFree use crate::memory directly (no test stubs needed)
-
-/// C STRING_TABLE_ENTRY_DESC layout — must match sc2/src/libs/strings/strintrn.h
-#[repr(C)]
-struct CStringTableEntry {
-    data: *mut c_char,
-    length: c_int,
-    index: c_int,
-    parent: *mut c_void,
-}
-
-/// C STRING_TABLE_DESC layout — must match sc2/src/libs/strings/strintrn.h
-#[repr(C)]
-struct CStringTable {
-    flags: u16,
-    size: c_int,
-    strings: *mut CStringTableEntry,
-    name_index: *mut c_void,
-}
 
 /// Read a file via UIO into a byte vector.
 unsafe fn uio_read_file(path: *const c_char) -> Option<Vec<u8>> {
@@ -1134,7 +1118,7 @@ pub unsafe extern "C" fn PlayChannel(
             return;
         }
         // snd_ptr is a STRING_TABLE_ENTRY_DESC*. First field is `data` (a char*).
-        let entry = &*(snd_ptr as *const CStringTableEntry);
+        let entry = &*(snd_ptr as *const StringTableEntry);
         if entry.data.is_null() {
             return;
         }
@@ -1232,7 +1216,7 @@ pub unsafe extern "C" fn DestroySound(bank_ptr: *mut c_void) {
     if bank_ptr.is_null() {
         return;
     }
-    let strtab = &*(bank_ptr as *const CStringTable);
+    let strtab = &*(bank_ptr as *const StringTable);
     for i in 0..strtab.size as usize {
         let entry = &mut *strtab.strings.add(i);
         if !entry.data.is_null() {
@@ -1496,7 +1480,7 @@ pub unsafe extern "C" fn LoadSoundFile(filename: *const c_char) -> *mut c_void {
         return null_mut();
     }
 
-    let strtab = &*(strtab_ptr as *const CStringTable);
+    let strtab = &*(strtab_ptr as *const StringTable);
 
     // Populate each entry's .data with a pointer to the SoundSample
     for (i, sample) in samples.into_iter().enumerate() {

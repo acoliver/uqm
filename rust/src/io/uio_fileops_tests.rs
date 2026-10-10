@@ -272,7 +272,7 @@ fn copying_a_file_duplicates_every_byte_across_chunk_boundaries() {
     let big: Vec<u8> = (0..20_000u32).map(|i| (i % 251) as u8).collect();
     let root = stack.mount_dir(&[("big.bin", &big)], UIO_MOUNT_TOP);
     unsafe {
-        let result = uio_copyFile(
+        let result = uio_copy_file(
             stack.root,
             c("big.bin").as_ptr(),
             stack.root,
@@ -298,7 +298,7 @@ fn copying_never_overwrites_and_reports_a_missing_source() {
     );
     unsafe {
         assert_eq!(
-            uio_copyFile(
+            uio_copy_file(
                 stack.root,
                 c("a.txt").as_ptr(),
                 stack.root,
@@ -308,7 +308,7 @@ fn copying_never_overwrites_and_reports_a_missing_source() {
         );
         assert_eq!(errno_value(), libc::EEXIST);
         assert_eq!(
-            uio_copyFile(
+            uio_copy_file(
                 stack.root,
                 c("gone.txt").as_ptr(),
                 stack.root,
@@ -334,7 +334,7 @@ fn an_archive_entry_can_be_copied_out_to_a_writable_directory() {
     let root = stack.mount_dir(&[], UIO_MOUNT_TOP);
     unsafe {
         assert_eq!(
-            uio_copyFile(
+            uio_copy_file(
                 stack.root,
                 c("packed.txt").as_ptr(),
                 stack.root,
@@ -356,20 +356,20 @@ fn copying_refuses_missing_arguments() {
     unsafe {
         let a = c("a");
         assert_eq!(
-            uio_copyFile(ptr::null_mut(), a.as_ptr(), stack.root, a.as_ptr()),
+            uio_copy_file(ptr::null_mut(), a.as_ptr(), stack.root, a.as_ptr()),
             -1
         );
         assert_eq!(errno_value(), libc::EINVAL);
         assert_eq!(
-            uio_copyFile(stack.root, a.as_ptr(), ptr::null_mut(), a.as_ptr()),
+            uio_copy_file(stack.root, a.as_ptr(), ptr::null_mut(), a.as_ptr()),
             -1
         );
         assert_eq!(
-            uio_copyFile(stack.root, ptr::null(), stack.root, a.as_ptr()),
+            uio_copy_file(stack.root, ptr::null(), stack.root, a.as_ptr()),
             -1
         );
         assert_eq!(
-            uio_copyFile(stack.root, a.as_ptr(), stack.root, ptr::null()),
+            uio_copy_file(stack.root, a.as_ptr(), stack.root, ptr::null()),
             -1
         );
     }

@@ -10,8 +10,8 @@ use std::ptr::{self, NonNull};
 
 use crate::io::uio_bridge::uio_DirHandle;
 
-use super::string_table::StringTable;
 use super::{load_dir_entry_table, MatchType};
+use crate::resource::string_table::StringTable;
 
 /// Reports a violated caller contract the way the C `assert` did, without
 /// unwinding across the C boundary.

@@ -72,7 +72,7 @@ To test these, manually add `-DUSE_RUST_FOO` to CCOMMONFLAGS in `build.config`.
 | C Define | Rust Module(s) | C Code Replaced | Plan Directory |
 |---|---|---|---|
 | `USE_RUST_BRIDGE` | `bridge_log`, `c_bindings` | Bridge init, logging | — |
-| `USE_RUST_FILE` | `io::{dirs,files,temp}` | `files.c`, `dirs.c`, `temp.c` | `timeandfile/` |
+| `USE_RUST_FILE` | `io::{ffi,files}` | `files.c`, `dirs.c`, `temp.c` | `timeandfile/` |
 | `USE_RUST_CLOCK` | `time::clock_bridge` | Game clock, date arithmetic | `timeandfile/` |
 | `USE_RUST_UIO` | `io::uio_bridge` | `uio_open`/`uio_read`/`uio_close`/`uio_fstat` | `timeandfile/` |
 | `USE_RUST_OGG` | `sound::ogg` | OGG Vorbis decoder | `audiorust/decoder/` |

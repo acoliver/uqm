@@ -21,7 +21,7 @@ fn locate(stack: &Stack, name: &str) -> Option<(*mut uio_MountHandle, String)> {
     let name = cstr(name);
     let mut mount: *mut uio_MountHandle = ptr::null_mut();
     let mut out: *mut c_char = ptr::null_mut();
-    let rc = unsafe { uio_getFileLocation(stack.root, name.as_ptr(), 0, &mut mount, &mut out) };
+    let rc = unsafe { uio_get_file_location(stack.root, name.as_ptr(), 0, &mut mount, &mut out) };
     if rc != 0 {
         assert!(
             mount.is_null() && out.is_null(),
@@ -61,7 +61,7 @@ fn file_location_outputs_are_optional() {
     stack.mount_dir(&[("a.txt", b"a")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     let name = cstr("a.txt");
     let rc = unsafe {
-        uio_getFileLocation(
+        uio_get_file_location(
             stack.root,
             name.as_ptr(),
             0,
@@ -80,7 +80,7 @@ fn file_location_outside_every_mount_is_enoent() {
     assert_eq!(errno_value(), libc::ENOENT);
     let name = cstr("x");
     let rc = unsafe {
-        uio_getFileLocation(
+        uio_get_file_location(
             ptr::null_mut(),
             name.as_ptr(),
             0,
@@ -101,9 +101,9 @@ fn mounts_report_their_file_system_type() {
     unsafe {
         let stdio = mount_ptr(&stack, 0);
         let zip = mount_ptr(&stack, 1);
-        assert_eq!(uio_getMountFileSystemType(stdio), UIO_FSTYPE_STDIO);
-        assert_eq!(uio_getMountFileSystemType(zip), UIO_FSTYPE_ZIP);
-        assert_eq!(uio_getMountFileSystemType(ptr::null_mut()), 0);
+        assert_eq!(uio_get_mount_file_system_type(stdio), UIO_FSTYPE_STDIO);
+        assert_eq!(uio_get_mount_file_system_type(zip), UIO_FSTYPE_ZIP);
+        assert_eq!(uio_get_mount_file_system_type(ptr::null_mut()), 0);
     }
 }
 
@@ -159,7 +159,7 @@ fn unmount_all_clears_only_the_given_repository() {
     );
     assert!(!other.is_null());
 
-    assert_eq!(unsafe { uio_unmountAllDirs(stack.repo) }, 0);
+    assert_eq!(unsafe { uio_unmount_all_dirs(stack.repo) }, 0);
 
     let registry = get_mount_registry().lock().unwrap();
     assert_eq!(registry.len(), 1);
