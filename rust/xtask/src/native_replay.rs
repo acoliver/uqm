@@ -892,4 +892,144 @@ mod tests {
         let error = identity(&members, "inputs/content/version").unwrap_err();
         assert!(error.contains("inputs/content/version"), "{error}");
     }
+
+    fn request<'a>(scenarios: Option<&'a str>) -> ReplayRequest<'a> {
+        ReplayRequest {
+            prior: Path::new("/prior"),
+            output: Path::new("/output"),
+            scenarios,
+            seed: None,
+        }
+    }
+
+    #[test]
+    fn a_selection_may_be_named_by_path_and_separated_by_commas_spaces_or_lines() {
+        let mut recorded = identity_fixture();
+        recorded.selection = vec![
+            pinned("rust/scripts/main-menu-v1.json"),
+            pinned("rust/scripts/battle-v1.json"),
+        ];
+        for spelled in [
+            "main-menu-v1,battle-v1",
+            "main-menu-v1 battle-v1",
+            "main-menu-v1\nbattle-v1",
+            "rust/scripts/main-menu-v1.json, rust/scripts/battle-v1.json",
+            " main-menu-v1 ,, battle-v1 ",
+        ] {
+            assert!(
+                check_requested_selection(&recorded, &request(Some(spelled))).is_ok(),
+                "{spelled:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_reordered_or_narrowed_selection_is_refused_with_both_lists() {
+        let mut recorded = identity_fixture();
+        recorded.selection = vec![
+            pinned("rust/scripts/main-menu-v1.json"),
+            pinned("rust/scripts/battle-v1.json"),
+        ];
+        for spelled in ["battle-v1,main-menu-v1", "main-menu-v1", "battle-v1", ""] {
+            let error = check_requested_selection(&recorded, &request(Some(spelled))).unwrap_err();
+            assert!(
+                error.contains("rust/scripts/main-menu-v1.json rust/scripts/battle-v1.json"),
+                "{spelled:?}: the recorded selection is named: {error}"
+            );
+            assert!(error.contains("refused"), "{spelled:?}: {error}");
+        }
+    }
+
+    #[test]
+    fn a_seed_mismatch_names_every_script_whose_seed_differs() {
+        let mut recorded = identity_fixture();
+        let mut second = scenario(9);
+        second.script = pinned("rust/scripts/battle-v1.json");
+        recorded.scenarios.push(second);
+        let error = check_requested_selection(
+            &recorded,
+            &ReplayRequest {
+                seed: Some(7),
+                ..request(None)
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("--seed 7"), "{error}");
+        assert!(error.contains("rust/scripts/battle-v1.json"), "{error}");
+        assert!(
+            !error.contains("main-menu-v1"),
+            "the script whose seed matches is not blamed: {error}"
+        );
+    }
+
+    #[test]
+    fn a_changed_scenario_count_is_one_difference_not_a_pairwise_comparison() {
+        let recorded = identity_fixture();
+        let mut produced = identity_fixture();
+        produced.scenarios.push(scenario(7));
+        let error = bind(&recorded, &produced).unwrap_err();
+        assert!(error.contains("scenario count 1 became 2"), "{error}");
+        assert!(!error.contains("identity changed"), "{error}");
+    }
+
+    #[test]
+    fn a_changed_selection_is_reported_by_field_name() {
+        let recorded = identity_fixture();
+        let mut produced = identity_fixture();
+        produced.selection = vec![pinned("rust/scripts/battle-v1.json")];
+        let error = bind(&recorded, &produced).unwrap_err();
+        assert!(error.contains("selection"), "{error}");
+        assert!(error.contains("battle-v1"), "{error}");
+    }
+
+    #[test]
+    fn staged_files_are_created_once_and_never_overwritten() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("nested/inputs/uqm");
+        write_new(&path, b"first", 0o700).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"first");
+
+        let error = write_new(&path, b"second", 0o700).unwrap_err();
+        assert!(error.starts_with("stage "), "{error}");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"first",
+            "a retained input is not replaced by a later write"
+        );
+    }
+
+    #[test]
+    fn a_pinned_script_needs_a_file_name() {
+        assert_eq!(
+            script_filename(&pinned("rust/scripts/main-menu-v1.json")).unwrap(),
+            "main-menu-v1.json"
+        );
+        let error = script_filename(&pinned("..")).unwrap_err();
+        assert!(error.contains("has no filename"), "{error}");
+    }
+
+    #[test]
+    fn staging_names_the_retained_member_that_is_missing() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../ci/gates.json")).unwrap();
+        let recorded = identity_fixture();
+        let package = format!(
+            "inputs/content/packages/{}",
+            authority.native_acceptance.content_filename
+        );
+        let complete = BTreeMap::from([
+            ("inputs/uqm".to_string(), b"executable".to_vec()),
+            ("inputs/main-menu-v1.json".to_string(), b"{}".to_vec()),
+            (package.clone(), b"content".to_vec()),
+            (LINKED_BUILD_RECEIPT.to_string(), b"{}".to_vec()),
+        ]);
+        for missing in ["inputs/uqm", "inputs/main-menu-v1.json", package.as_str()] {
+            let mut members = complete.clone();
+            members.remove(missing);
+            let Err(error) = stage(&members, &recorded, &authority) else {
+                panic!("staging without {missing} must fail");
+            };
+            assert!(error.contains(missing), "{missing}: {error}");
+        }
+    }
 }
