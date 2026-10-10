@@ -66,6 +66,16 @@ fn inject_menu_key(index: i32, value: i32) -> bool {
     !input_ffi::injection_rejected()
 }
 
+/// Discard the repeat pulse of a menu key that a scripted tap only holds.
+///
+/// Returns `false` when the native owner has no such key.
+fn discard_held_repeat(
+    held: Option<crate::automation::script::MenuKey>,
+    discard: impl FnOnce(i32) -> bool,
+) -> bool {
+    held.is_none_or(|key| discard(i32::from(crate::automation::input::menu_key_to_index(key))))
+}
+
 fn prepare_player_input(index: i32, value: i32) -> Option<PendingPlayerInput> {
     input_ffi::inject_player_key(index, value);
     (!input_ffi::injection_rejected()).then_some(PendingPlayerInput {
@@ -224,6 +234,8 @@ struct CoordInner {
     last_observed: Instant,
     accepted_player_inputs: u64,
     pending_player_input: Option<PendingAcceptedPlayerInput>,
+    /// Menu key a scripted tap held down this update after its press.
+    held_repeat_key: Option<crate::automation::script::MenuKey>,
     verified_battle_frames: u64,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
@@ -377,6 +389,7 @@ impl Coordinator {
                 last_observed: now,
                 accepted_player_inputs: 0,
                 pending_player_input: None,
+                held_repeat_key: None,
                 verified_battle_frames: 0,
                 finalized: false,
                 terminal_class: None,
@@ -517,7 +530,17 @@ impl Coordinator {
 
     fn process_player_input_observation_inner(&self) -> bool {
         let mut inner = self.inner.lock();
+        let held = inner.held_repeat_key.take();
         if inner.terminal_class.is_some() {
+            return true;
+        }
+        if !discard_held_repeat(held, input_ffi::discard_menu_pulse) {
+            self.write_trace_labeled(
+                &mut inner,
+                RecordKind::SemanticAssertion,
+                "held_menu_repeat_discard_rejected".to_string(),
+            );
+            self.set_terminal(&mut inner, TerminalClass::SemanticMismatch);
             return true;
         }
         let Some(pending) = inner.pending_player_input.take() else {
@@ -1999,6 +2022,7 @@ impl Coordinator {
                 return false;
             }
         }
+        inner.held_repeat_key = effects.held_repeat_key;
         if let Some(key) = effects.release_key {
             let index = crate::automation::input::menu_key_to_index(key);
             if !inject_menu_key(i32::from(index), 0) {
@@ -2576,6 +2600,26 @@ mod tests {
             observe_player_input_with(press, |_| None),
             PlayerInputObservation::Missing
         );
+    }
+
+    #[test]
+    fn held_tap_discards_the_repeat_pulse_of_exactly_its_key() {
+        use crate::automation::script::MenuKey;
+
+        let mut discarded = Vec::new();
+        assert!(discard_held_repeat(Some(MenuKey::Down), |index| {
+            discarded.push(index);
+            true
+        }));
+        assert_eq!(discarded, [6]);
+
+        assert!(discard_held_repeat(None, |index| {
+            discarded.push(index);
+            true
+        }));
+        assert_eq!(discarded, [6], "a press or an idle update discards nothing");
+
+        assert!(!discard_held_repeat(Some(MenuKey::Select), |_| false));
     }
 
     #[test]

@@ -204,6 +204,10 @@ pub struct EffectPlan {
     pub write_key: Option<(MenuKey, u8)>,
     /// Release an owned menu key (write 0).
     pub release_key: Option<MenuKey>,
+    /// A tapped menu key that this update only holds down after the press
+    /// that already registered. Its production auto-repeat pulse must not
+    /// register as another press.
+    pub held_repeat_key: Option<MenuKey>,
     /// Write an owned player-one gameplay key to `value`.
     pub write_player_key: Option<(PlayerKey, u8)>,
     /// Release an owned player-one gameplay key.
@@ -223,6 +227,7 @@ impl EffectPlan {
         Self {
             write_key: None,
             release_key: None,
+            held_repeat_key: None,
             write_player_key: None,
             release_player_key: None,
             arm_capture: None,
@@ -236,6 +241,7 @@ impl EffectPlan {
     pub const fn is_empty(self) -> bool {
         self.write_key.is_none()
             && self.release_key.is_none()
+            && self.held_repeat_key.is_none()
             && self.write_player_key.is_none()
             && self.release_player_key.is_none()
             && self.arm_capture.is_none()
@@ -612,6 +618,7 @@ fn reduce_menu_key(
         (Action::TapMenuKey(t), ActionPhase::TapHolding { remaining }) if remaining > 1 => {
             let effects = EffectPlan {
                 write_key: Some((t.key, if t.value != 0 { 1 } else { 0 })),
+                held_repeat_key: Some(t.key),
                 ..EffectPlan::none()
             };
             SchedulerTransition {
@@ -630,6 +637,7 @@ fn reduce_menu_key(
         (Action::TapMenuKey(t), ActionPhase::TapHolding { remaining: 1 }) => {
             let effects = EffectPlan {
                 write_key: Some((t.key, if t.value != 0 { 1 } else { 0 })),
+                held_repeat_key: Some(t.key),
                 ..EffectPlan::none()
             };
             SchedulerTransition {
@@ -1856,6 +1864,60 @@ mod tests {
         assert_eq!(release.effects.release_player_key, Some(PlayerKey::Thrust));
         assert_eq!(release.new_state.step_index, 1);
     }
+    /// The production input loop turns a key that stays down into a repeat
+    /// pulse once half a second of wall-clock time has passed. A scripted tap
+    /// is one press, so every update after the first one only holds the key
+    /// and must say so, otherwise a slow host turns one tap into several.
+    #[test]
+    fn tap_marks_only_the_updates_after_the_press_as_held() {
+        let actions = [
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Down,
+                value: 1,
+                hold: 3,
+                settle: 0,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        let mut held = Vec::new();
+        for _ in 0..4 {
+            let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            held.push((t.effects.write_key.is_some(), t.effects.held_repeat_key));
+            state = t.new_state;
+        }
+        assert_eq!(
+            held,
+            [
+                (true, None),
+                (true, Some(MenuKey::Down)),
+                (true, Some(MenuKey::Down)),
+                (false, None),
+            ]
+        );
+    }
+
+    #[test]
+    fn single_update_tap_never_marks_a_held_repeat() {
+        let actions = [
+            Action::TapMenuKey(TapMenuKeyStep {
+                key: MenuKey::Select,
+                value: 1,
+                hold: 1,
+                settle: 0,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let press = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        assert_eq!(press.effects.held_repeat_key, None);
+    }
+
     // --- Tap edge: hold=1, settle=1 (no infinite loop) ---
 
     #[test]

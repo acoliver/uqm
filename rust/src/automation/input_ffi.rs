@@ -513,6 +513,38 @@ pub extern "C" fn rust_automation_set_immediate_player_key(index: i32, _value: i
     }
 }
 
+/// Discard the pulse the production input loop derived for a menu key.
+///
+/// `UpdateInputState` turns a key that stays down into a repeat pulse once
+/// `MENU_REPEAT_DELAY` of wall-clock time has passed since the last pulse. A
+/// scripted tap counts input updates, so on a slow host that clock fires
+/// inside one tap and the game sees several presses. Returns `false` for an
+/// index outside the menu key table.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn discard_menu_pulse(index: i32) -> bool {
+    let Some(index) = menu_key_slot(index) else {
+        return false;
+    };
+    // SAFETY: the single game thread runs `DoInput`, between
+    // `UpdateInputState` and the consumers of the pulsed state.
+    unsafe {
+        (*std::ptr::addr_of_mut!(PulsedInputState)).menu[index] = 0;
+    }
+    true
+}
+
+/// Stub for builds without the linked C archive, which have no pulsed state.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn discard_menu_pulse(index: i32) -> bool {
+    menu_key_slot(index).is_some()
+}
+
+fn menu_key_slot(index: i32) -> Option<usize> {
+    usize::try_from(index)
+        .ok()
+        .filter(|slot| *slot < usize::from(crate::automation::input::NUM_MENU_KEYS))
+}
+
 /// Set when the native owner refuses an automation input write.
 static INJECTION_REJECTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
