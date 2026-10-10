@@ -3134,15 +3134,7 @@ pub unsafe extern "C" fn uio_closeDir(dir: *mut uio_DirHandle) -> c_int {
 /// is allowed.
 fn valid_mount_point(mount_point: &Path) -> bool {
     let bytes = mount_point.as_os_str().as_bytes();
-    let bytes = bytes.strip_prefix(b"/").unwrap_or(bytes);
-    let bytes = match bytes.strip_suffix(b"/") {
-        Some(rest) if !rest.is_empty() => rest,
-        _ => bytes,
-    };
-    bytes.is_empty()
-        || bytes
-            .split(|&b| b == b'/')
-            .all(|name| !name.is_empty() && name != b"." && name != b"..")
+    super::paths::components::valid_path_name(bytes.strip_prefix(b"/").unwrap_or(bytes))
 }
 
 /// What `uio_mountDir` was asked, with the C arguments read and checked.

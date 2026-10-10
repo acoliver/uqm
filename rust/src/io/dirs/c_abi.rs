@@ -120,7 +120,7 @@ unsafe fn required_string<'a>(function: &str, argument: &str, value: *const c_ch
     unsafe { CStr::from_ptr(value) }
 }
 
-fn contract_violation(function: &str, reason: &str) -> ! {
+pub(crate) fn contract_violation(function: &str, reason: &str) -> ! {
     // SAFETY: `log_add` has no preconditions beyond a valid message.
     unsafe {
         log_add(
@@ -132,13 +132,13 @@ fn contract_violation(function: &str, reason: &str) -> ! {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "freebsd"))]
-fn set_errno(code: c_int) {
+pub(crate) fn set_errno(code: c_int) {
     // SAFETY: `__error` returns this thread's errno location.
     unsafe { *libc::__error() = code };
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn set_errno(code: c_int) {
+pub(crate) fn set_errno(code: c_int) {
     // SAFETY: `__errno_location` returns this thread's errno location.
     unsafe { *libc::__errno_location() = code };
 }
