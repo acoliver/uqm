@@ -158,15 +158,16 @@ the longer scenarios get a longer outer timeout while the short ones remain at
 
 Scope of the rule:
 
-- A script whose declared `max_wallclock_seconds` is above 300 and below 900
-  must carry the 900000 ms pin. A script at or below 300 must not carry it. The
-  wall budget is read from the pinned script bytes during admission, so a pin
-  that disagrees with the script's own budget is refused before any build or launch.
-- A 900 s wall budget cannot fit inside a 900000 ms outer deadline, and the
-  approval does not cover raising the value further. `real-sol-earth-moon-base`,
-  `real-sol-luna-moonbase-departure` and `real-sol-starbase-to-mars` therefore
-  keep the 300000 ms default, and admission refuses a pin that tries to give them
-  an override.
+- A script whose declared `max_wallclock_seconds` is above 300 must carry the
+  900000 ms pin. A script at or below 300 must not carry it. The wall budget is
+  read from the pinned script bytes during admission, so a pin that disagrees
+  with the script's own budget is refused before any build or launch. All 14
+  pinned scripts above 300 s carry the pin and the other 22 keep the default.
+- A wall budget is a failure ceiling, not a promise that every run takes that
+  long. `real-sol-earth-moon-base`, `real-sol-luna-moonbase-departure` and
+  `real-sol-starbase-to-mars` declare 900 s, carry the same 900000 ms pin, and
+  are ended by the outer deadline if a run does not finish first. The approval
+  does not cover raising the value further.
 - Every other runtime value is shared and unchanged: capture, observer and
   acknowledgement timeouts, kill grace, stream and capture budgets, the 1 MiB
   manifest limit and the inventory limits. The acknowledgement window stays at
@@ -180,7 +181,8 @@ Scope of the rule:
 - A retained bundle recorded before this change holds the 300000 ms contract for
   its long scripts. The current authority does not declare that contract for
   them, so such a bundle is checked by the source revision that produced it. It
-  is not reinterpreted under the new pins.
+  is not reinterpreted under the new pins. This includes the earlier revision
+  a35d65d64, which covered 11 of the 14 scripts.
 
 Candidate-policy admission against a base that predates this field sees a changed
 base pin and rejects it. The installed base controller has to carry this policy

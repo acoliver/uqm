@@ -370,12 +370,14 @@
           {
                 "path": "rust/scripts/real-sol-earth-moon-base.json",
                 "sha256": "9eab0bf6f3277e55bee7a682c156fbfb24ddb38e770d1c87d92d81e4d683f201",
-                "byte_length": 2760
+                "byte_length": 2760,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-luna-moonbase-departure.json",
                 "sha256": "9fab2ddec32b26062e1fd0d236d2bd905fef334dc6a88f22c18f723dc2e6fbf2",
-                "byte_length": 2906
+                "byte_length": 2906,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-planetside-collision-proof.json",
@@ -414,7 +416,8 @@
           {
                 "path": "rust/scripts/real-sol-starbase-to-mars.json",
                 "sha256": "0c986e147f40a4d0fecc8fc7c2818877f4abd68f129863ce98e1633455b2fa6a",
-                "byte_length": 2262
+                "byte_length": 2262,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/repro-comm-menu-initial.json",

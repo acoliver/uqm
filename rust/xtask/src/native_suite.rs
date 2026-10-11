@@ -64,8 +64,9 @@ pub fn admit_script(
 /// Tie a pin's outer deadline to the wall budget its own script declares.
 ///
 /// A script that outlasts the default outer deadline must carry the approved
-/// long one, and a script that does not outlast it must not. A budget the long
-/// deadline cannot contain is refused rather than given a larger value.
+/// long one, and a script that does not outlast it must not. The wall budget is
+/// a failure ceiling, so a script may finish earlier than its budget and the
+/// outer deadline simply ends a run that does not.
 fn validate_outer_deadline_class(
     pinned: &PinnedScript,
     default_timeout_ms: u64,
@@ -78,19 +79,12 @@ fn validate_outer_deadline_class(
              budget fits the {default_timeout_ms} ms default",
             pinned.path
         )),
-        Some(timeout_ms) if wall_ms >= timeout_ms => Err(format!(
-            "native script {} declares a {wall_seconds} s wall budget the {timeout_ms} ms outer \
-             deadline cannot contain",
+        None if wall_ms > default_timeout_ms => Err(format!(
+            "native script {} declares a {wall_seconds} s wall budget past the \
+             {default_timeout_ms} ms default and needs the approved \
+             {LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS} ms outer deadline pin",
             pinned.path
         )),
-        None if wall_ms > default_timeout_ms && wall_ms < LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS => {
-            Err(format!(
-                "native script {} declares a {wall_seconds} s wall budget past the \
-                 {default_timeout_ms} ms default and needs the approved \
-                 {LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS} ms outer deadline pin",
-                pinned.path
-            ))
-        }
         _ => Ok(()),
     }
 }

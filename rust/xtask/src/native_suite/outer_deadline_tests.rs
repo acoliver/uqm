@@ -1,15 +1,15 @@
 //! Regressions for the user-approved long outer child deadline.
 //!
 //! Approval, verbatim: "yeah you can switch them to 15m". It covers pinned
-//! scripts whose declared wall budget is longer than the 300 s default and
-//! shorter than 15 minutes, and nothing else.
+//! scripts whose declared wall budget is longer than the 300 s default. A
+//! wall budget is a failure ceiling, so a 900 s budget is covered as well.
 
 use super::*;
 use crate::ci::authority::load_authority;
 use uqm_rust::automation::native_window::NativeWindowRuntimeContract;
 
-/// Pinned scripts whose wall budget is above 300 s and below 900 s.
-pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 11] = [
+/// Pinned scripts whose declared wall budget is above 300 s.
+pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 14] = [
     "rust/scripts/probe-encounter-v2.json",
     "rust/scripts/probe-encounter-v3.json",
     "rust/scripts/probe-encounter-v4.json",
@@ -17,15 +17,17 @@ pub(crate) const APPROVED_LONG_SCRIPTS: [&str; 11] = [
     "rust/scripts/probe-encounter-v6.json",
     "rust/scripts/probe-encounter-v7.json",
     "rust/scripts/real-sol-commander-completion.json",
+    "rust/scripts/real-sol-earth-moon-base.json",
+    "rust/scripts/real-sol-luna-moonbase-departure.json",
     "rust/scripts/real-sol-planetside-collision-proof.json",
     "rust/scripts/real-sol-probe-to-commander-responses.json",
     "rust/scripts/real-sol-probe-to-starbase.json",
     "rust/scripts/real-sol-rust-planetside-smoke.json",
+    "rust/scripts/real-sol-starbase-to-mars.json",
 ];
 
-/// Pinned scripts whose 900 s wall budget a 900 s outer deadline cannot contain.
-/// They are not covered by the approval and keep the default.
-const OVER_CLASS_SCRIPTS: [&str; 3] = [
+/// Pinned scripts that declare a 900 s wall budget.
+const WALL_900_SCRIPTS: [&str; 3] = [
     "rust/scripts/real-sol-earth-moon-base.json",
     "rust/scripts/real-sol-luna-moonbase-departure.json",
     "rust/scripts/real-sol-starbase-to-mars.json",
@@ -98,7 +100,7 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
         if wall > 300 {
             longer.push(path);
         }
-        let expected = if wall > 300 && wall < 900 {
+        let expected = if wall > 300 {
             LONG_OUTER_MS
         } else {
             DEFAULT_OUTER_MS
@@ -110,19 +112,15 @@ fn every_pin_runs_under_the_deadline_its_wall_budget_class_names() {
             "{path}"
         );
     }
-    let mut expected_longer: Vec<&str> = APPROVED_LONG_SCRIPTS
-        .iter()
-        .chain(OVER_CLASS_SCRIPTS.iter())
-        .copied()
-        .collect();
+    let mut expected_longer = APPROVED_LONG_SCRIPTS.to_vec();
     expected_longer.sort_unstable();
     longer.sort_unstable();
     assert_eq!(longer, expected_longer);
     assert_eq!(longer.len(), 14);
-    for path in OVER_CLASS_SCRIPTS {
+    for path in WALL_900_SCRIPTS {
         let admission = admitted.iter().find(|a| a.script.path == path).unwrap();
         assert_eq!(admission.budgets.max_wallclock_seconds, 900);
-        assert_eq!(admission.outer_child_timeout_ms, DEFAULT_OUTER_MS);
+        assert_eq!(admission.outer_child_timeout_ms, LONG_OUTER_MS);
     }
 }
 
@@ -207,15 +205,17 @@ fn admit_rehashed(fixture: &RehashedScript) -> Result<ScriptAdmission, String> {
 
 #[test]
 fn rehashed_scripts_admit_the_pinned_class_at_its_budget_edges() {
-    let long = rehashed_script(
-        "rust/scripts/probe-encounter-v3.json",
-        899,
-        Some(LONG_OUTER_MS),
-    );
-    assert_eq!(
-        admit_rehashed(&long).unwrap().outer_child_timeout_ms,
-        LONG_OUTER_MS
-    );
+    for wall in [899, 900] {
+        let long = rehashed_script(
+            "rust/scripts/probe-encounter-v3.json",
+            wall,
+            Some(LONG_OUTER_MS),
+        );
+        assert_eq!(
+            admit_rehashed(&long).unwrap().outer_child_timeout_ms,
+            LONG_OUTER_MS
+        );
+    }
 
     let promoted = rehashed_script("rust/scripts/main-menu-v1.json", 301, Some(LONG_OUTER_MS));
     assert_eq!(
@@ -255,28 +255,59 @@ fn rehashed_scripts_with_the_wrong_class_are_refused_for_the_class_not_the_hash(
     let grown = rehashed_script("rust/scripts/main-menu-v1.json", 420, None);
     let error = admit_rehashed(&grown).unwrap_err();
     assert!(error.contains("needs the approved 900000 ms"), "{error}");
-
-    let uncontained = rehashed_script(
-        "rust/scripts/probe-encounter-v3.json",
-        900,
-        Some(LONG_OUTER_MS),
-    );
-    let error = admit_rehashed(&uncontained).unwrap_err();
-    assert!(error.contains("cannot contain"), "{error}");
 }
 
 #[test]
-fn a_budget_of_fifteen_minutes_without_an_override_keeps_the_default_and_is_reported_by_inventory()
-{
-    let over = rehashed_script("rust/scripts/probe-encounter-v3.json", 900, None);
+fn a_900_second_budget_without_the_override_is_refused() {
+    let missing = rehashed_script("rust/scripts/probe-encounter-v3.json", 900, None);
+    let error = admit_rehashed(&missing).unwrap_err();
+    assert!(error.contains("needs the approved 900000 ms"), "{error}");
+}
+
+#[test]
+fn the_three_900_second_scripts_carry_the_override_in_the_authority() {
+    let authority = authority();
+    for path in WALL_900_SCRIPTS {
+        assert_eq!(
+            pin(&authority, path).outer_child_timeout_ms,
+            Some(LONG_OUTER_MS)
+        );
+    }
+}
+
+#[test]
+fn removing_the_override_from_any_longer_script_is_refused_at_admission() {
+    let root = repository_root();
+    for path in APPROVED_LONG_SCRIPTS {
+        let mut authority = authority();
+        let slot = authority
+            .native_acceptance
+            .scenario_scripts
+            .iter_mut()
+            .find(|entry| entry.path == path)
+            .unwrap();
+        slot.outer_child_timeout_ms = None;
+        let stripped = slot.clone();
+        let error = admit_script(root, &stripped, &authority).unwrap_err();
+        assert!(
+            error.contains("needs the approved 900000 ms"),
+            "{path}: {error}"
+        );
+    }
+}
+
+#[test]
+fn the_primary_native_script_keeps_the_default_deadline() {
+    let authority = authority();
+    let primary = pin(&authority, &authority.native_acceptance.script);
+    assert_eq!(primary.outer_child_timeout_ms, None);
     assert_eq!(
-        admit_rehashed(&over).unwrap().outer_child_timeout_ms,
+        authority
+            .native_runtime_contract_for(primary)
+            .unwrap()
+            .outer_child_timeout_ms,
         DEFAULT_OUTER_MS
     );
-    let authority = authority();
-    for path in OVER_CLASS_SCRIPTS {
-        assert_eq!(pin(&authority, path).outer_child_timeout_ms, None);
-    }
 }
 
 #[test]
