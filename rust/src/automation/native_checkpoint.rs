@@ -129,68 +129,161 @@ impl NativeCheckpointPlan {
         &'a self,
         records: &[TraceRecord],
     ) -> Result<Vec<&'a NativeCheckpoint>, String> {
-        if records.iter().enumerate().any(|(index, record)| {
-            record.sequence != index as u64
-                || record.schema != TraceRecord::SCHEMA
-                || records.first().is_some_and(|first| first.run != record.run)
-        }) {
-            return Err("native trace sequence, schema or run identity differs".into());
+        let mut scan = CheckpointScan::default();
+        scan.advance(self, records)?;
+        Ok(self.checkpoints[..scan.committed()].iter().collect())
+    }
+}
+
+/// Resumable form of [`NativeCheckpointPlan::committed`].
+///
+/// Each checkpoint marker is judged by the records between it and the previous
+/// marker, and by the last presentation before it. Once a marker has passed, no
+/// later record can change that verdict, so a growing trace is checked by
+/// continuing from the first record not yet examined.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct CheckpointScan {
+    /// Records whose sequence, schema and run identity have been checked.
+    identified: usize,
+    /// Records already classified as marker, presentation or neither.
+    classified: usize,
+    committed: usize,
+    marker_positions: Vec<usize>,
+    previous_marker: usize,
+    previous_presentation: u64,
+    last_presentation: Option<usize>,
+    history: super::native_predicate::PredicateHistory,
+    /// Records examined over the scan's lifetime, kept across restarts.
+    #[cfg(test)]
+    visits: u64,
+}
+
+impl CheckpointScan {
+    /// Forget all progress, for a trace whose earlier records changed or a
+    /// shorter prefix than the one already scanned.
+    pub(crate) fn restart(&mut self) {
+        *self = Self {
+            #[cfg(test)]
+            visits: self.visits,
+            ..Self::default()
+        };
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn visits(&self) -> u64 {
+        self.visits
+    }
+
+    /// Number of selected obligations committed in the scanned prefix.
+    pub(crate) const fn committed(&self) -> usize {
+        self.committed
+    }
+
+    /// Positions of the committed markers, in trace order.
+    pub(crate) fn marker_positions(&self) -> &[usize] {
+        &self.marker_positions
+    }
+
+    /// Check the records of `records` not yet examined. `records` must be the
+    /// whole current prefix, extending the one scanned earlier. A failure
+    /// leaves the scan at the failing marker so the same prefix fails again.
+    pub(crate) fn advance(
+        &mut self,
+        plan: &NativeCheckpointPlan,
+        records: &[TraceRecord],
+    ) -> Result<(), String> {
+        if self.identified > records.len() {
+            self.restart();
         }
-        let mut committed = Vec::new();
-        let mut previous_marker = 0;
-        let mut previous_presentation = 0;
-        let mut history = super::native_predicate::PredicateHistory::default();
-        for (position, record) in records
-            .iter()
-            .enumerate()
-            .filter(|(_, record)| record.kind == RecordKind::Checkpoint)
-        {
-            let Some(evidence) = &record.checkpoint else {
-                return Err("native checkpoint has no typed identity".into());
-            };
-            let expected = self
-                .checkpoints
-                .get(committed.len())
-                .ok_or("native checkpoint exceeds selected obligations")?;
-            if evidence.id != expected.id || record.presentation.is_none() {
-                return Err("native checkpoint action identity or committed frame differs".into());
-            }
-            let frame = record
-                .presentation
-                .as_ref()
-                .ok_or("native checkpoint lacks frame")?;
-            let (present_position, presented) = records[..position]
-                .iter()
-                .enumerate()
-                .rev()
-                .find(|(_, item)| item.kind == RecordKind::Presentation)
-                .ok_or("native checkpoint has no committed presentation")?;
-            if frame.count <= previous_presentation
-                || frame.width == 0
-                || frame.height == 0
-                || present_position < previous_marker
-                || presented.presentation.as_ref() != Some(frame)
+        self.check_identities(records)?;
+        while let Some(record) = records.get(self.classified) {
+            #[cfg(test)]
             {
-                return Err(
-                    "native checkpoint reused or misidentified a committed presentation".into(),
-                );
+                self.visits += 1;
             }
-            let evidence_range = if expected.class == CheckpointClass::Capture {
-                present_position + 1..position
-            } else {
-                previous_marker..present_position
-            };
-            if !history.verify(&expected.action, &records[evidence_range], frame) {
-                return Err(
-                    "native checkpoint lacks its action's successful semantic/frame evidence"
-                        .into(),
-                );
+            match record.kind {
+                RecordKind::Checkpoint => self.commit(plan, records, self.classified)?,
+                RecordKind::Presentation => self.last_presentation = Some(self.classified),
+                _ => {}
             }
-            previous_presentation = frame.count;
-            previous_marker = position + 1;
-            committed.push(expected);
+            self.classified += 1;
         }
-        Ok(committed)
+        Ok(())
+    }
+
+    fn check_identities(&mut self, records: &[TraceRecord]) -> Result<(), String> {
+        let Some(first) = records.first() else {
+            return Ok(());
+        };
+        for (index, record) in records.iter().enumerate().skip(self.identified) {
+            if record.sequence != index as u64
+                || record.schema != TraceRecord::SCHEMA
+                || first.run != record.run
+            {
+                return Err("native trace sequence, schema or run identity differs".into());
+            }
+            self.identified = index + 1;
+        }
+        Ok(())
+    }
+
+    fn commit(
+        &mut self,
+        plan: &NativeCheckpointPlan,
+        records: &[TraceRecord],
+        position: usize,
+    ) -> Result<(), String> {
+        let record = &records[position];
+        let Some(evidence) = &record.checkpoint else {
+            return Err("native checkpoint has no typed identity".into());
+        };
+        let expected = plan
+            .checkpoints
+            .get(self.committed)
+            .ok_or("native checkpoint exceeds selected obligations")?;
+        if evidence.id != expected.id || record.presentation.is_none() {
+            return Err("native checkpoint action identity or committed frame differs".into());
+        }
+        let frame = record
+            .presentation
+            .as_ref()
+            .ok_or("native checkpoint lacks frame")?;
+        let present_position = self
+            .last_presentation
+            .ok_or("native checkpoint has no committed presentation")?;
+        let presented = &records[present_position];
+        if frame.count <= self.previous_presentation
+            || frame.width == 0
+            || frame.height == 0
+            || present_position < self.previous_marker
+            || presented.presentation.as_ref() != Some(frame)
+        {
+            return Err(
+                "native checkpoint reused or misidentified a committed presentation".into(),
+            );
+        }
+        let evidence_range = if expected.class == CheckpointClass::Capture {
+            present_position + 1..position
+        } else {
+            self.previous_marker..present_position
+        };
+        #[cfg(test)]
+        {
+            self.visits += evidence_range.len() as u64;
+        }
+        if !self
+            .history
+            .verify(&expected.action, &records[evidence_range], frame)
+        {
+            return Err(
+                "native checkpoint lacks its action's successful semantic/frame evidence".into(),
+            );
+        }
+        self.previous_presentation = frame.count;
+        self.previous_marker = position + 1;
+        self.marker_positions.push(position);
+        self.committed += 1;
+        Ok(())
     }
 }
 

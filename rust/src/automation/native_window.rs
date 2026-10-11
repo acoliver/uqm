@@ -2809,40 +2809,130 @@ fn validate_native_acceptance_failure_provenance(
 pub fn native_window_trace_semantic_snapshot(
     records: &[crate::automation::trace::TraceRecord],
 ) -> Result<NativeWindowSemanticSnapshot, NativeWindowProofError> {
-    let mut accepted_player_inputs = 0_u64;
-    let mut verified_battle_frames = 0_u64;
-    let mut index = 0;
-    while let Some(record) = records.get(index) {
-        let Some(label) = record.label.as_deref() else {
-            index += 1;
-            continue;
+    SemanticScan::default().finish(records)
+}
+
+/// Resumable form of [`native_window_trace_semantic_snapshot`].
+///
+/// A snapshot depends only on the records it has already passed, apart from one
+/// record of lookahead that pairs each observed player input with its accepted
+/// input. The scan therefore keeps its position and counters between calls on a
+/// growing trace instead of replaying every earlier record.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct SemanticScan {
+    index: usize,
+    accepted_player_inputs: u64,
+    verified_battle_frames: u64,
+    /// Records examined over the scan's lifetime, kept across restarts.
+    #[cfg(test)]
+    visits: u64,
+}
+
+impl SemanticScan {
+    /// Forget all progress, for a trace whose earlier records changed or a
+    /// shorter prefix than the one already scanned.
+    pub(crate) fn restart(&mut self) {
+        *self = Self {
+            #[cfg(test)]
+            visits: self.visits,
+            ..Self::default()
         };
-        if label.starts_with("player_input_observed:") {
-            let observed = parse_player_input_observed(record, label)?;
-            let accepted = records
-                .get(index + 1)
-                .ok_or(NativeWindowProofError::Receipt)?;
-            let accepted_label = accepted
-                .label
-                .as_deref()
-                .ok_or(NativeWindowProofError::Receipt)?;
-            let (accepted_key, accepted_value) = parse_player_input(accepted, accepted_label)?;
-            if observed.0 != accepted_key
-                || observed.1 != accepted_value
-                || observed.1 != observed.2
-                || (observed.1 == 0 && observed.3 != 0)
-            {
-                return Err(NativeWindowProofError::Receipt);
-            }
-            accepted_player_inputs = accepted_player_inputs
-                .checked_add(u64::from(observed.3))
-                .ok_or(NativeWindowProofError::Receipt)?;
-            index += 2;
-            continue;
-        }
-        if label.starts_with("player_input") {
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn visits(&self) -> u64 {
+        self.visits
+    }
+
+    /// Scan every record of `records`, the whole current prefix, and return
+    /// its snapshot. An observed input at the end, still waiting for its
+    /// accepted input, is a receipt error exactly as in a one-shot scan.
+    pub(crate) fn finish(
+        &mut self,
+        records: &[crate::automation::trace::TraceRecord],
+    ) -> Result<NativeWindowSemanticSnapshot, NativeWindowProofError> {
+        if !self.advance(records)? {
             return Err(NativeWindowProofError::Receipt);
         }
+        Ok(NativeWindowSemanticSnapshot {
+            trace_record_count: records
+                .len()
+                .try_into()
+                .map_err(|_| NativeWindowProofError::Receipt)?,
+            accepted_player_inputs: self.accepted_player_inputs,
+            verified_battle_frames: self.verified_battle_frames,
+        })
+    }
+
+    /// Scan forward through `records`. Returns false when the last record is an
+    /// observed input whose accepted input is not in `records` yet; the scan
+    /// then stays on that record so a longer prefix resumes there.
+    pub(crate) fn advance(
+        &mut self,
+        records: &[crate::automation::trace::TraceRecord],
+    ) -> Result<bool, NativeWindowProofError> {
+        if self.index > records.len() {
+            self.restart();
+        }
+        while let Some(record) = records.get(self.index) {
+            #[cfg(test)]
+            {
+                self.visits += 1;
+            }
+            let Some(label) = record.label.as_deref() else {
+                self.index += 1;
+                continue;
+            };
+            if label.starts_with("player_input_observed:") {
+                let Some(accepted) = records.get(self.index + 1) else {
+                    // Fail on a malformed observed record before waiting.
+                    parse_player_input_observed(record, label)?;
+                    return Ok(false);
+                };
+                self.accept_observed_input(record, label, accepted)?;
+                self.index += 2;
+                continue;
+            }
+            if label.starts_with("player_input") {
+                return Err(NativeWindowProofError::Receipt);
+            }
+            self.count_battle_frames(record, label)?;
+            self.index += 1;
+        }
+        Ok(true)
+    }
+
+    fn accept_observed_input(
+        &mut self,
+        record: &crate::automation::trace::TraceRecord,
+        label: &str,
+        accepted: &crate::automation::trace::TraceRecord,
+    ) -> Result<(), NativeWindowProofError> {
+        let observed = parse_player_input_observed(record, label)?;
+        let accepted_label = accepted
+            .label
+            .as_deref()
+            .ok_or(NativeWindowProofError::Receipt)?;
+        let (accepted_key, accepted_value) = parse_player_input(accepted, accepted_label)?;
+        if observed.0 != accepted_key
+            || observed.1 != accepted_value
+            || observed.1 != observed.2
+            || (observed.1 == 0 && observed.3 != 0)
+        {
+            return Err(NativeWindowProofError::Receipt);
+        }
+        self.accepted_player_inputs = self
+            .accepted_player_inputs
+            .checked_add(u64::from(observed.3))
+            .ok_or(NativeWindowProofError::Receipt)?;
+        Ok(())
+    }
+
+    fn count_battle_frames(
+        &mut self,
+        record: &crate::automation::trace::TraceRecord,
+        label: &str,
+    ) -> Result<(), NativeWindowProofError> {
         if label.starts_with("battle_frames_reached:") {
             let values = label
                 .strip_prefix("battle_frames_reached:count=")
@@ -2864,7 +2954,7 @@ pub fn native_window_trace_semantic_snapshot(
             {
                 return Err(NativeWindowProofError::Receipt);
             }
-            verified_battle_frames = verified_battle_frames.max(actual);
+            self.verified_battle_frames = self.verified_battle_frames.max(actual);
         }
         if label.starts_with("battle_frames_verified:") {
             let value = label
@@ -2878,18 +2968,10 @@ pub fn native_window_trace_semantic_snapshot(
             {
                 return Err(NativeWindowProofError::Receipt);
             }
-            verified_battle_frames = verified_battle_frames.max(parsed);
+            self.verified_battle_frames = self.verified_battle_frames.max(parsed);
         }
-        index += 1;
+        Ok(())
     }
-    Ok(NativeWindowSemanticSnapshot {
-        trace_record_count: records
-            .len()
-            .try_into()
-            .map_err(|_| NativeWindowProofError::Receipt)?,
-        accepted_player_inputs,
-        verified_battle_frames,
-    })
 }
 
 fn parse_player_input_observed<'a>(

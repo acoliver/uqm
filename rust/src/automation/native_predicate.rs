@@ -209,7 +209,7 @@ fn menu_transition_satisfied(label: &str, value: &super::script::MainMenuTransit
 }
 
 /// Consumption history mirrors the one-shot production observation contracts.
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 pub(super) struct PredicateHistory {
     dispatch: u64,
     response: u64,

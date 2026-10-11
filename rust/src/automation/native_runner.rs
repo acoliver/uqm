@@ -1,4 +1,5 @@
 use super::native_capture::{normalize_native_capture, validate_playable_screenshot_difference};
+use super::native_trace_cursor::{PrefixClaim, PrefixError};
 #[cfg(test)]
 use crate::automation::command_executable_digest;
 #[cfg(test)]
@@ -594,36 +595,31 @@ impl NativeObservationSession {
         let bytes = read_regular_file_nofollow_bounded(&self.trace_path, self.trace_limit)
             .map_err(io::Error::other)?;
         let count = usize::try_from(state.semantic.trace_record_count).map_err(io::Error::other)?;
-        let records = self
+        let verified = self
             .trace_cursor
-            .records(&bytes, count)
-            .map_err(io::Error::other)?;
-        if records.len() != count
-            || native_window_trace_semantic_snapshot(&records).map_err(io::Error::other)?
-                != state.semantic
-        {
-            return Err(io::Error::other(
-                "native checkpoint trace cursor differs from publication",
-            ));
-        }
-        let committed = plan.committed(&records).map_err(io::Error::other)?;
-        if committed.len() < self.checkpoint_count {
+            .verify_prefix(
+                &bytes,
+                &PrefixClaim {
+                    count,
+                    plan,
+                    semantic: &state.semantic,
+                    handled_checkpoints: self.checkpoint_count,
+                },
+            )
+            .map_err(prefix_error)?;
+        if verified.committed < self.checkpoint_count {
             return Err(io::Error::other("native committed checkpoints regressed"));
         }
-        for record in records
+        if verified
+            .new_marker_frames
             .iter()
-            .filter(|record| record.kind == super::trace::RecordKind::Checkpoint)
-            .skip(self.checkpoint_count)
+            .any(|frame| *frame != Some(state.committed_presentation))
         {
-            if record.presentation.as_ref().map(|frame| frame.count)
-                != Some(state.committed_presentation)
-            {
-                return Err(io::Error::other(
-                    "native checkpoint missed its committed presentation",
-                ));
-            }
+            return Err(io::Error::other(
+                "native checkpoint missed its committed presentation",
+            ));
         }
-        Ok(committed[self.checkpoint_count..]
+        Ok(plan.checkpoints[self.checkpoint_count..verified.committed]
             .iter()
             .map(|item| item.action_index)
             .collect())
@@ -3360,6 +3356,18 @@ fn copy_failure_cleanup(destination: &Path, failure: String) -> Result<(), Strin
     }
 }
 
+/// Present a rejected publication prefix with the failure the controller reports.
+fn prefix_error(error: PrefixError) -> io::Error {
+    match error {
+        PrefixError::Trace(error) => io::Error::other(error),
+        PrefixError::Short | PrefixError::SemanticMismatch => {
+            io::Error::other("native checkpoint trace cursor differs from publication")
+        }
+        PrefixError::Semantic(error) => io::Error::other(error),
+        PrefixError::Checkpoint(message) => io::Error::other(message),
+    }
+}
+
 fn read_regular_file_nofollow_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     #[cfg(unix)]
     use std::os::unix::fs::OpenOptionsExt as _;
@@ -4195,6 +4203,102 @@ mod tests {
         )
         .unwrap();
         assert!(session.pending_checkpoints(&state).is_err());
+    }
+
+    #[test]
+    fn checkpoint_polls_follow_a_growing_trace_and_reject_regressions_and_wrong_frames() {
+        use crate::automation::trace::{CheckpointEvidence, PresentationEvidence, RecordKind};
+        let root = tempfile::tempdir().unwrap();
+        let bounds = runtime_contract().expected_client_bounds;
+        let nonce = "a".repeat(64);
+        let prior = child_state(&nonce, 123, bounds, 0, 0, 0);
+        let state = child_state(&nonce, 123, bounds, 1, 0, 0);
+        let (mut session, identity) = final_publication_session(root.path(), &state, &prior);
+        let source = br#"{"version":1,"name":"capture","budgets":{"max_input_ticks":100,"max_presentations":100,"max_wallclock_seconds":60},"steps":[{"action":"capture","label":"menu"},{"action":"finish"}]}"#;
+        let script =
+            validate_script(parse_script(source, "script.json").unwrap(), "script.json").unwrap();
+        let plan =
+            crate::automation::native_checkpoint::NativeCheckpointPlan::derive(source, &script)
+                .unwrap();
+        let frame = PresentationEvidence {
+            count: 1,
+            generation: 1,
+            width: 320,
+            height: 240,
+        };
+        let mut capture = crate::automation::capture_trace_record(
+            1,
+            0,
+            crate::automation::scheduler::CaptureGeneration(1),
+            "menu",
+        );
+        capture.presentation = Some(frame);
+        let mut presented = capture.clone();
+        presented.sequence = 0;
+        presented.kind = RecordKind::Presentation;
+        let mut marker = capture.clone();
+        marker.sequence = 2;
+        marker.kind = RecordKind::Checkpoint;
+        marker.checkpoint = Some(CheckpointEvidence {
+            id: plan.checkpoints[0].id.clone(),
+        });
+        let records = [presented, capture, marker];
+        fs::write(
+            root.path().join("automation/trace.jsonl"),
+            records
+                .iter()
+                .map(|record| record.to_jsonl().unwrap())
+                .collect::<String>(),
+        )
+        .unwrap();
+        session.proof = NativeWindowProof::new(
+            native_identity(&identity, &nonce),
+            bounds,
+            acceptance_policy(),
+        )
+        .for_script(plan);
+        let covering = |count: usize, presentation: u64| {
+            let mut covered = child_state(&nonce, 123, bounds, presentation, 0, 0);
+            covered.semantic = native_window_trace_semantic_snapshot(&records[..count]).unwrap();
+            covered
+        };
+
+        assert_eq!(
+            session.pending_checkpoints(&covering(2, 1)).unwrap(),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            session.pending_checkpoints(&covering(3, 1)).unwrap(),
+            vec![0]
+        );
+        assert_eq!(
+            session.pending_checkpoints(&covering(3, 1)).unwrap(),
+            vec![0]
+        );
+        let wrong_frame = session.pending_checkpoints(&covering(3, 2)).unwrap_err();
+        assert!(wrong_frame
+            .to_string()
+            .contains("missed its committed presentation"));
+
+        session.checkpoint_count = 1;
+        assert_eq!(
+            session.pending_checkpoints(&covering(3, 1)).unwrap(),
+            Vec::<usize>::new()
+        );
+        let regressed = session.pending_checkpoints(&covering(2, 1)).unwrap_err();
+        assert!(regressed
+            .to_string()
+            .contains("committed checkpoints regressed"));
+        let mut mismatched = covering(3, 1);
+        mismatched.semantic.accepted_player_inputs += 1;
+        let mismatch = session.pending_checkpoints(&mismatched).unwrap_err();
+        assert!(mismatch
+            .to_string()
+            .contains("trace cursor differs from publication"));
+        assert!(!root
+            .path()
+            .join("automation/native-window-ack.json")
+            .exists());
     }
 
     #[test]

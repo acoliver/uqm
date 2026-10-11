@@ -53,6 +53,8 @@ pub mod native_runner;
 mod native_trace;
 #[cfg(all(unix, feature = "debug-process"))]
 mod native_trace_cursor;
+#[cfg(all(test, unix, feature = "debug-process"))]
+mod native_trace_oracle;
 #[cfg(feature = "debug-process")]
 pub mod native_window;
 pub mod navigation;
