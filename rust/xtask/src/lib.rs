@@ -1101,6 +1101,19 @@ pub(crate) struct NativeScenarioLaunch<'a> {
     pub requested: Option<&'a str>,
 }
 
+/// The runtime contract handed to one scenario's child, as the child parses it.
+///
+/// Each scenario is handed its own pinned contract, so a long script's outer
+/// deadline reaches the child supervisor and a short script keeps the default.
+fn native_runtime_contract_argument(
+    authority: &ci::authority::Authority,
+    pinned: &ci::authority::PinnedScript,
+) -> Result<String, String> {
+    let contract = authority.native_runtime_contract_for(pinned)?;
+    serde_json::to_string(&contract)
+        .map_err(|error| format!("serialize native acceptance runtime contract: {error}"))
+}
+
 pub(crate) fn execute_native_scenarios(
     launch: &NativeScenarioLaunch<'_>,
     selected: &[ci::authority::PinnedScript],
@@ -1113,8 +1126,6 @@ pub(crate) fn execute_native_scenarios(
     )?;
     let linked_length = linked_bytes.len().to_string();
     let linked_sha256 = hex_sha256(&linked_bytes);
-    let runtime_contract = serde_json::to_string(&authority.native_runtime_contract())
-        .map_err(|error| format!("serialize native acceptance runtime contract: {error}"))?;
     let acceptance_policy =
         serde_json::to_string(&authority.native_acceptance.acceptance_policy)
             .map_err(|error| format!("serialize native acceptance policy: {error}"))?;
@@ -1140,6 +1151,7 @@ pub(crate) fn execute_native_scenarios(
         let prepared = (|| -> Result<Command, String> {
             let script = launch.source.join(&pinned.path);
             native_suite::admit_script(launch.source, pinned, authority)?;
+            let runtime_contract = native_runtime_contract_argument(authority, pinned)?;
             let scenario_evidence = suite.directory(index)?;
             shared.verify()?;
             let names = native_shared_member_names(pinned, authority)?;
@@ -3253,6 +3265,41 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// What the child is handed is what it enforces: a long script receives its
+    /// pinned outer deadline and a short script receives the default.
+    #[test]
+    fn each_scenario_child_is_handed_its_own_outer_deadline() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let authority = ci::authority::load_authority(root).unwrap();
+        let mut long_seen = 0;
+        let mut short_seen = 0;
+        for pinned in &authority.native_acceptance.scenario_scripts {
+            let argument = native_runtime_contract_argument(&authority, pinned).unwrap();
+            let handed: uqm_rust::automation::native_window::NativeWindowRuntimeContract =
+                serde_json::from_str(&argument).unwrap();
+            let expected = pinned.outer_child_timeout_ms.unwrap_or(300_000);
+            assert_eq!(handed.outer_child_timeout_ms, expected, "{}", pinned.path);
+            assert_eq!(handed.acknowledgement_timeout_ms, 95_000);
+            assert_eq!(handed.outer_child_kill_grace_ms, 5_000);
+            assert!(handed.has_valid_deadline_order());
+            if expected == 900_000 {
+                long_seen += 1;
+            } else {
+                short_seen += 1;
+            }
+        }
+        assert_eq!((long_seen, short_seen), (11, 25));
+
+        let mut forged = authority.native_acceptance.scenario_scripts[0].clone();
+        forged.outer_child_timeout_ms = Some(900_000);
+        assert!(native_runtime_contract_argument(&authority, &forged).is_err());
+    }
+
     /// The build script must not shell out to `rustfmt`.
     ///
     /// The base-owned controller bootstrap installs the pinned toolchain with

@@ -251,7 +251,6 @@ pub(crate) fn read_bundle(
             .map_err(|error| format!("parse retained linked-build receipt: {error}"))?;
     let mut scenarios = Vec::with_capacity(manifest.scenarios.len());
     let mut outcomes = Vec::with_capacity(manifest.scenarios.len());
-    let mut contracts: Option<(NativeWindowRuntimeContract, NativeAcceptancePolicy)> = None;
     for row in &manifest.scenarios {
         let proof: NativeAcceptanceManifest = serde_json::from_slice(
             snapshot
@@ -259,7 +258,7 @@ pub(crate) fn read_bundle(
                 .map_err(|error| format!("read {} proof: {error}", row.directory))?,
         )
         .map_err(|error| format!("parse {} proof: {error}", row.directory))?;
-        if proof.runtime_contract != authority.native_runtime_contract()
+        if proof.runtime_contract != authority.native_runtime_contract_for(&row.script)?
             || proof.acceptance_policy != authority.native_acceptance.acceptance_policy
         {
             return Err(format!(
@@ -268,17 +267,17 @@ pub(crate) fn read_bundle(
                 row.script.path
             ));
         }
-        if let Some(established) = &contracts {
-            if *established != (proof.runtime_contract, proof.acceptance_policy) {
-                return Err("retained scenarios disagree on runtime contract or policy".into());
-            }
-        }
-        contracts = Some((proof.runtime_contract, proof.acceptance_policy));
         scenarios.push(scenario_identity(&snapshot, &members, row)?);
         outcomes.push(scenario_outcome(&row.script.path, &proof));
     }
-    let (runtime_contract, acceptance_policy) =
-        contracts.ok_or("retained suite has no scenarios to replay")?;
+    if scenarios.is_empty() {
+        return Err("retained suite has no scenarios to replay".into());
+    }
+    // Every proof was just checked against the authority, so the shared identity
+    // is the authority's base contract. Each script's own outer deadline is
+    // bound by its pin in `selection`.
+    let runtime_contract = authority.native_runtime_contract();
+    let acceptance_policy = authority.native_acceptance.acceptance_policy;
     Ok((
         ReplayIdentity {
             schema: REPLAY_IDENTITY_SCHEMA.to_string(),
@@ -616,6 +615,7 @@ mod tests {
             path: path.into(),
             sha256: "a".repeat(64),
             byte_length: 4,
+            outer_child_timeout_ms: None,
         }
     }
 

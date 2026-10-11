@@ -1109,6 +1109,24 @@ fn launchd_manager_value(subcommand: &str) -> Result<String, String> {
         .map_err(|error| format!("launchd {subcommand} is not UTF-8: {error}"))
 }
 
+/// The supervision bounds for the game child, taken from the contract this
+/// scenario was handed, including its own outer deadline.
+fn child_session_config(
+    root: &Path,
+    runtime_contract: NativeWindowRuntimeContract,
+    executable_digest: String,
+) -> ChildSessionConfig {
+    ChildSessionConfig {
+        stdout_log: root.join("stdout.log"),
+        stderr_log: root.join("stderr.log"),
+        stdout_budget: runtime_contract.child_stdout_budget_bytes,
+        stderr_budget: runtime_contract.child_stderr_budget_bytes,
+        timeout: runtime_contract.outer_child_timeout(),
+        grace: runtime_contract.outer_child_kill_grace(),
+        executable_digest,
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn native_execution_identity() -> Result<NativeExecutionIdentity, String> {
     let launchd_manager_uid = launchd_manager_value("manageruid")?
@@ -1497,15 +1515,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
         child_spawn_attempted = true;
         let session = ChildSession::spawn_leaf(
             command,
-            ChildSessionConfig {
-                stdout_log: root.join("stdout.log"),
-                stderr_log: root.join("stderr.log"),
-                stdout_budget: runtime_contract.child_stdout_budget_bytes,
-                stderr_budget: runtime_contract.child_stderr_budget_bytes,
-                timeout: runtime_contract.outer_child_timeout(),
-                grace: runtime_contract.outer_child_kill_grace(),
-                executable_digest: executable_input.sha256.clone(),
-            },
+            child_session_config(root, runtime_contract, executable_input.sha256.clone()),
         )
         .map_err(|error| format!("spawn exact linked executable: {error}"))?;
         child_spawned = true;
@@ -4764,6 +4774,24 @@ mod tests {
         fs::write(requested.join("stale"), b"stale").unwrap();
 
         assert!(create_fresh_root(&requested, true).is_err());
+    }
+
+    #[test]
+    fn child_supervisor_deadline_is_the_outer_timeout_of_the_scenario_contract() {
+        let root = Path::new("/evidence");
+        let short = runtime_contract();
+        let mut long = short;
+        long.outer_child_timeout_ms = 900_000;
+        assert!(long.has_valid_deadline_order());
+
+        let short_config = child_session_config(root, short, "d".repeat(64));
+        let long_config = child_session_config(root, long, "d".repeat(64));
+        assert_eq!(short_config.timeout, Duration::from_secs(300));
+        assert_eq!(long_config.timeout, Duration::from_secs(900));
+        assert_eq!(long_config.grace, short_config.grace);
+        assert_eq!(long_config.stdout_budget, short_config.stdout_budget);
+        assert_eq!(long_config.stderr_budget, short_config.stderr_budget);
+        assert_eq!(long_config.stdout_log, root.join("stdout.log"));
     }
 
     #[test]

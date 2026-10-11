@@ -865,6 +865,7 @@ mod tests {
             path: "rust/scripts/report-fixture.json".into(),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }];
         let mut suite =
             crate::native_suite::SuiteAccounting::create(root, &selected, false).unwrap();

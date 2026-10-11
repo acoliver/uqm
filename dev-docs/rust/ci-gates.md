@@ -146,6 +146,47 @@ permission, secret or checkout-reference bypass is part of this migration.
 `Required S4 gates` remains the merge-context name; push runs retain the
 `Required S4 gates (non-merge)` name.
 
+### Outer child deadline for long scenarios
+
+The native runtime contract carries one outer child deadline,
+`native_acceptance.runtime_contract.outer_child_timeout_ms` (300000 ms). A pinned
+script may carry its own `outer_child_timeout_ms` in `scenario_scripts`, and the
+only value accepted is 900000 ms (15 minutes). Approval, verbatim from the
+repository owner: "yeah you can switch them to 15m", given for the proposal that
+the longer scenarios get a longer outer timeout while the short ones remain at
+300 s.
+
+Scope of the rule:
+
+- A script whose declared `max_wallclock_seconds` is above 300 and below 900
+  must carry the 900000 ms pin. A script at or below 300 must not carry it. The
+  wall budget is read from the pinned script bytes during admission, so a pin
+  that disagrees with the script's own budget is refused before any build or launch.
+- A 900 s wall budget cannot fit inside a 900000 ms outer deadline, and the
+  approval does not cover raising the value further. `real-sol-earth-moon-base`,
+  `real-sol-luna-moonbase-departure` and `real-sol-starbase-to-mars` therefore
+  keep the 300000 ms default, and admission refuses a pin that tries to give them
+  an override.
+- Every other runtime value is shared and unchanged: capture, observer and
+  acknowledgement timeouts, kill grace, stream and capture budgets, the 1 MiB
+  manifest limit and the inventory limits. The acknowledgement window stays at
+  95000 ms, below both outer deadlines.
+- The primary `native_acceptance.script` cannot carry the override because the
+  single-script gate uses the shared contract.
+- The controller hands each scenario child the contract of its own pin, the child
+  supervisor uses that value as the `ChildSession` timeout, and the proof,
+  failure-manifest, suite-success and replay consumers compare the recorded
+  contract with the one the authority declares for that script.
+- A retained bundle recorded before this change holds the 300000 ms contract for
+  its long scripts. The current authority does not declare that contract for
+  them, so such a bundle is checked by the source revision that produced it. It
+  is not reinterpreted under the new pins.
+
+Candidate-policy admission against a base that predates this field sees a changed
+base pin and rejects it. The installed base controller has to carry this policy
+before a candidate with the override can be admitted, and nothing in this change
+relaxes that comparison.
+
 Autoplay selection is bound to a typed `uqm-s4-selection-v1` document. The base-owned
 plan controller records event, exact source/controller/base revisions, merge base,
 raw NUL-delimited changed paths, policy digest and the derived ordered scenario set.

@@ -832,6 +832,7 @@ mod tests {
             path: path.to_string(),
             sha256: crate::hex_sha256(bytes),
             byte_length: bytes.len() as u64,
+            outer_child_timeout_ms: None,
         }
     }
 
@@ -1088,6 +1089,7 @@ mod tests {
                     path: hostile.into(),
                     sha256: "0".repeat(64),
                     byte_length: 1,
+                    outer_child_timeout_ms: None,
                 },
                 directory: "scenarios/0000".into(),
                 state: "failed".into(),

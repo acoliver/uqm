@@ -13,7 +13,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use super::authority::{Authority, Gate, GateKind, Step, AUTHORITY_RELATIVE};
+use super::authority::{Authority, Gate, GateKind, PinnedScript, Step, AUTHORITY_RELATIVE};
 use super::cache::{self, CacheEnvironment};
 use super::delta;
 use super::doctor;
@@ -1680,11 +1680,16 @@ fn execute_process_gate(
 
 pub(crate) fn validate_native_runtime_authority(
     authority: &Authority,
+    script: &PinnedScript,
     observed: uqm_rust::automation::native_window::NativeWindowRuntimeContract,
 ) -> Result<(), CiError> {
-    if observed != authority.native_runtime_contract() {
+    let contract = "tests.post.native-acceptance.native-window-acceptance";
+    let expected = authority
+        .native_runtime_contract_for(script)
+        .map_err(|error| CiError::new(contract, &error))?;
+    if observed != expected {
         return Err(CiError::new(
-            "tests.post.native-acceptance.native-window-acceptance",
+            contract,
             "native acceptance runtime contract differs from machine authority",
         ));
     }
@@ -2812,12 +2817,36 @@ mod tests {
     fn native_runtime_contract_must_match_machine_authority() {
         let authority: Authority =
             serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
-        let expected = authority.native_runtime_contract();
-        validate_native_runtime_authority(&authority, expected).unwrap();
+        let script = authority.native_acceptance.scenario_scripts[0].clone();
+        let expected = authority.native_runtime_contract_for(&script).unwrap();
+        validate_native_runtime_authority(&authority, &script, expected).unwrap();
 
         let mut forged = expected;
         forged.capture_timeout_ms += 1;
-        assert!(validate_native_runtime_authority(&authority, forged).is_err());
+        assert!(validate_native_runtime_authority(&authority, &script, forged).is_err());
+    }
+
+    #[test]
+    fn native_runtime_contract_is_checked_against_the_scripts_own_outer_deadline() {
+        let authority: Authority =
+            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
+        let scripts = &authority.native_acceptance.scenario_scripts;
+        let long = scripts
+            .iter()
+            .find(|pin| pin.outer_child_timeout_ms.is_some())
+            .unwrap();
+        let short = scripts
+            .iter()
+            .find(|pin| pin.outer_child_timeout_ms.is_none())
+            .unwrap();
+        let default_contract = authority.native_runtime_contract();
+        let mut long_contract = default_contract;
+        long_contract.outer_child_timeout_ms = 900_000;
+
+        validate_native_runtime_authority(&authority, long, long_contract).unwrap();
+        validate_native_runtime_authority(&authority, short, default_contract).unwrap();
+        assert!(validate_native_runtime_authority(&authority, long, default_contract).is_err());
+        assert!(validate_native_runtime_authority(&authority, short, long_contract).is_err());
     }
 
     #[test]

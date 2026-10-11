@@ -1,6 +1,6 @@
 //! Source-only admission for the native autoplay suite.
 
-use crate::ci::authority::{Authority, PinnedScript};
+use crate::ci::authority::{Authority, PinnedScript, LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use uqm_rust::automation::{parse_script, validate_script, Budgets};
@@ -33,16 +33,22 @@ pub fn admit_script(
     }
     let document = parse_script(&bytes, &path).map_err(|error| error.to_string())?;
     let script = validate_script(document, &path).map_err(|error| error.to_string())?;
-    let runtime = authority.native_runtime_contract();
+    let runtime = authority.native_runtime_contract_for(pinned)?;
     if !runtime.has_valid_deadline_order() {
         return Err("native acceptance runtime has invalid deadline ordering".into());
     }
+    let script_budgets = script.budgets();
+    validate_outer_deadline_class(
+        pinned,
+        authority.native_runtime_contract().outer_child_timeout_ms,
+        script_budgets.max_wallclock_seconds,
+    )?;
     // The script watchdog and ChildSession supervisor run concurrently. Neither
     // promises a minimum runtime; expiry of either fails the entire scenario.
     // Observer operations occur inside the child's lifetime, not after it.
     Ok(ScriptAdmission {
         script: pinned.clone(),
-        budgets: script.budgets(),
+        budgets: script_budgets,
         seed: script.seed(),
         action_count: script.steps().len(),
         capture_count: script
@@ -53,6 +59,40 @@ pub fn admit_script(
         outer_child_timeout_ms: runtime.outer_child_timeout_ms,
         outer_child_kill_grace_ms: runtime.outer_child_kill_grace_ms,
     })
+}
+
+/// Tie a pin's outer deadline to the wall budget its own script declares.
+///
+/// A script that outlasts the default outer deadline must carry the approved
+/// long one, and a script that does not outlast it must not. A budget the long
+/// deadline cannot contain is refused rather than given a larger value.
+fn validate_outer_deadline_class(
+    pinned: &PinnedScript,
+    default_timeout_ms: u64,
+    wall_seconds: u64,
+) -> Result<(), String> {
+    let wall_ms = wall_seconds.saturating_mul(1000);
+    match pinned.outer_child_timeout_ms {
+        Some(timeout_ms) if wall_ms <= default_timeout_ms => Err(format!(
+            "native script {} pins outer deadline {timeout_ms} ms but its {wall_seconds} s wall \
+             budget fits the {default_timeout_ms} ms default",
+            pinned.path
+        )),
+        Some(timeout_ms) if wall_ms >= timeout_ms => Err(format!(
+            "native script {} declares a {wall_seconds} s wall budget the {timeout_ms} ms outer \
+             deadline cannot contain",
+            pinned.path
+        )),
+        None if wall_ms > default_timeout_ms && wall_ms < LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS => {
+            Err(format!(
+                "native script {} declares a {wall_seconds} s wall budget past the \
+                 {default_timeout_ms} ms default and needs the approved \
+                 {LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS} ms outer deadline pin",
+                pinned.path
+            ))
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Inspect the entire requested set before building or spawning any game.
@@ -154,7 +194,7 @@ fn validate_success_policy(
 ) -> Result<(), String> {
     validate_script_identity(script, &proof.script)?;
     let content = &authority.native_acceptance;
-    crate::ci::run::validate_native_runtime_authority(authority, proof.runtime_contract)
+    crate::ci::run::validate_native_runtime_authority(authority, script, proof.runtime_contract)
         .map_err(|error| error.to_string())?;
     if proof.acceptance_policy != content.acceptance_policy {
         return Err("native suite runtime or acceptance policy differs from authority".into());
@@ -251,7 +291,7 @@ fn validate_member_failure(
         MemberFailure::Runtime(failure) => (failure.runtime_contract, failure.acceptance_policy),
         MemberFailure::Setup(failure) => (failure.runtime_contract, failure.acceptance_policy),
     };
-    if runtime != authority.native_runtime_contract()
+    if runtime != authority.native_runtime_contract_for(&row.script)?
         || policy != authority.native_acceptance.acceptance_policy
     {
         return Err(
@@ -514,6 +554,7 @@ mod journal_regressions {
             path: format!("rust/scripts/{name}.json"),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }
     }
 
@@ -639,6 +680,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
         suite.begin(0).unwrap();
@@ -680,6 +722,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
         suite.begin(0).unwrap();
@@ -730,6 +773,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
         suite.begin(0).unwrap();
@@ -758,6 +802,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
         suite
@@ -791,6 +836,7 @@ mod journal_regressions {
             path: "rust/scripts/a.json".into(),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
         suite.begin(0).unwrap();
@@ -840,6 +886,7 @@ mod teardown_regressions {
             path: format!("rust/scripts/{name}.json"),
             sha256: "a".repeat(64),
             byte_length: 12,
+            outer_child_timeout_ms: None,
         }
     }
 
@@ -2850,6 +2897,7 @@ mod tests {
                     path: format!("rust/scripts/{id}.json"),
                     sha256: "a".repeat(64),
                     byte_length: 12,
+                    outer_child_timeout_ms: None,
                 })
                 .to_vec()
         }
@@ -2940,9 +2988,27 @@ mod tests {
                 .count(),
             16
         );
-        assert!(admitted
-            .iter()
-            .all(|entry| entry.outer_child_timeout_ms == 300_000));
+        assert_eq!(
+            admitted
+                .iter()
+                .filter(|entry| entry.budgets.max_wallclock_seconds > 300)
+                .count(),
+            14
+        );
+        for admission in &admitted {
+            let expected = if outer_deadline_tests::APPROVED_LONG_SCRIPTS
+                .contains(&admission.script.path.as_str())
+            {
+                900_000
+            } else {
+                300_000
+            };
+            assert_eq!(
+                admission.outer_child_timeout_ms, expected,
+                "{}",
+                admission.script.path
+            );
+        }
         for admission in admitted {
             let path = root.join(&admission.script.path);
             let bytes = std::fs::read(&path).unwrap();
@@ -3317,6 +3383,7 @@ mod finalization_regressions {
             path: "rust/scripts/fixture.json".into(),
             sha256: "a".repeat(64),
             byte_length: 1,
+            outer_child_timeout_ms: None,
         }];
         let mut suite = SuiteAccounting::create(&root, &selected, false).unwrap();
         suite
@@ -3373,3 +3440,6 @@ mod finalization_regressions {
         }
     }
 }
+
+#[cfg(test)]
+mod outer_deadline_tests;

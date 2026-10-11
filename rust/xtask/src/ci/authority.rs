@@ -633,6 +633,13 @@ pub struct NativeAcceptanceAuthority {
     pub runtime_contract: NativeRuntimeAuthority,
 }
 
+/// The only outer child deadline a pin may carry instead of the default.
+///
+/// User-approved for scripts whose declared wall budget is longer than the
+/// default outer deadline ("yeah you can switch them to 15m"). It is a fixed
+/// value, not a per-script choice: a pin either carries exactly this or nothing.
+pub const LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS: u64 = 900_000;
+
 /// One scenario script, pinned by content.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -640,6 +647,10 @@ pub struct PinnedScript {
     pub path: String,
     pub sha256: String,
     pub byte_length: u64,
+    /// Present only on the approved long scripts. Absent means the shared
+    /// `runtime_contract.outer_child_timeout_ms` applies unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outer_child_timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -744,6 +755,34 @@ impl Authority {
             },
             expected_client_bounds: runtime.expected_client_bounds,
         }
+    }
+
+    /// The runtime contract one pinned script runs under.
+    ///
+    /// Identical to [`Self::native_runtime_contract`] except for the outer
+    /// child deadline of a pin that carries the approved long value. The pin
+    /// must be the authority's own entry, so a forged override cannot choose
+    /// a deadline.
+    pub fn native_runtime_contract_for(
+        &self,
+        script: &PinnedScript,
+    ) -> Result<uqm_rust::automation::native_window::NativeWindowRuntimeContract, String> {
+        let pinned = self
+            .native_acceptance
+            .scenario_scripts
+            .iter()
+            .find(|entry| *entry == script)
+            .ok_or_else(|| {
+                format!(
+                    "native script {} is not the pin the authority declares",
+                    script.path
+                )
+            })?;
+        let mut contract = self.native_runtime_contract();
+        if let Some(timeout) = pinned.outer_child_timeout_ms {
+            contract.outer_child_timeout_ms = timeout;
+        }
+        Ok(contract)
     }
 
     /// Explicit canonical toolchain environment for linked-test gate steps.
@@ -1295,6 +1334,7 @@ fn validate_scenario_scripts(authority: &Authority) -> Result<(), String> {
         if !seen.insert(entry.path.as_str()) {
             return Err(format!("authority pins {} more than once", entry.path));
         }
+        validate_pin_outer_deadline(authority, entry)?;
     }
     // The scenario the native gate runs today must itself be pinned, or the
     // inventory and the gate disagree about what is allowed to execute.
@@ -1302,6 +1342,40 @@ fn validate_scenario_scripts(authority: &Authority) -> Result<(), String> {
         return Err(format!(
             "authority native_acceptance script {} is not in the pinned inventory",
             authority.native_acceptance.script
+        ));
+    }
+    Ok(())
+}
+
+/// A pin may carry only the approved long outer deadline, and it must still
+/// leave every other deadline in the runtime contract correctly ordered.
+fn validate_pin_outer_deadline(authority: &Authority, entry: &PinnedScript) -> Result<(), String> {
+    let Some(timeout) = entry.outer_child_timeout_ms else {
+        return Ok(());
+    };
+    let default_timeout = authority
+        .native_acceptance
+        .runtime_contract
+        .outer_child_timeout_ms;
+    if timeout != LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS || timeout <= default_timeout {
+        return Err(format!(
+            "authority pins {} with outer_child_timeout_ms {timeout}; only the approved \
+             {LONG_SCRIPT_OUTER_CHILD_TIMEOUT_MS} ms above the {default_timeout} ms default is allowed",
+            entry.path
+        ));
+    }
+    if entry.path == authority.native_acceptance.script {
+        return Err(format!(
+            "authority gives the primary native script {} an outer deadline the single-script gate does not use",
+            entry.path
+        ));
+    }
+    let mut contract = authority.native_runtime_contract();
+    contract.outer_child_timeout_ms = timeout;
+    if !contract.has_valid_deadline_order() {
+        return Err(format!(
+            "authority pins {} with an outer deadline that breaks the deadline ordering",
+            entry.path
         ));
     }
     Ok(())

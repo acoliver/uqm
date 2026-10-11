@@ -313,32 +313,38 @@
           {
                 "path": "rust/scripts/probe-encounter-v2.json",
                 "sha256": "32a5f064f05095c8df6a90761c649c5d5fb696ce278c245a57646dbf0ecb93f0",
-                "byte_length": 3350
+                "byte_length": 3350,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v3.json",
                 "sha256": "1b40fea5dcc41a7e4c7986fb74a7a0618a7aa4a395dbfeef980d2354ee45e442",
-                "byte_length": 1491
+                "byte_length": 1491,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v4.json",
                 "sha256": "8eda2ca3ee21079342dfecefd514acabe6914a3e2f910a47c977f3d3be3143a2",
-                "byte_length": 1491
+                "byte_length": 1491,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v5.json",
                 "sha256": "bad3d51f4b10b90d5714655353c59b9987520a7dd1220701a41acc7cd9222db0",
-                "byte_length": 3732
+                "byte_length": 3732,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v6.json",
                 "sha256": "58630de7ca2d8aa6e9810f49a550a471436edf43e1220e3aca5d6ddb62ac66f8",
-                "byte_length": 2592
+                "byte_length": 2592,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v7.json",
                 "sha256": "a5773bf1e3420e059d4cfdd1c233d21b5a4ff97b2f56dd7527df67a496280bd1",
-                "byte_length": 2933
+                "byte_length": 2933,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-wait.json",
@@ -358,7 +364,8 @@
           {
                 "path": "rust/scripts/real-sol-commander-completion.json",
                 "sha256": "6956c7e3db97bda5147a2f5eed7277905628bd80a5c88656cbc27c1206543166",
-                "byte_length": 2176
+                "byte_length": 2176,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-earth-moon-base.json",
@@ -373,7 +380,8 @@
           {
                 "path": "rust/scripts/real-sol-planetside-collision-proof.json",
                 "sha256": "30bca462cac1f0a33a6f41a06ed50ef3d0b4751f1f2365f036b0f781e5a8534f",
-                "byte_length": 3534
+                "byte_length": 3534,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-probe-completion.json",
@@ -388,17 +396,20 @@
           {
                 "path": "rust/scripts/real-sol-probe-to-commander-responses.json",
                 "sha256": "cf847af6ce13c2ad7a7d20b198fb1c0aaaa639bd4695168119db84c9ac59f37b",
-                "byte_length": 1294
+                "byte_length": 1294,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-probe-to-starbase.json",
                 "sha256": "fbed30215d984325d39872f74374d4abb935844da84ae90a30c46ebcabd19e25",
-                "byte_length": 1203
+                "byte_length": 1203,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-rust-planetside-smoke.json",
                 "sha256": "39dd688c8359f146468a8abdb92432b4ab50d0834aaee285c2dfcab7d3f9b4b0",
-                "byte_length": 1771
+                "byte_length": 1771,
+                "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/real-sol-starbase-to-mars.json",
