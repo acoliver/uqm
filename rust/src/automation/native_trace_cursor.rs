@@ -1025,19 +1025,16 @@ mod tests {
             assert!(checkpoints <= 3 * total, "checkpoint visits {checkpoints}");
         }
 
-        /// Reads a retained run: `UQM_ARCHIVED_TRACE` is its trace journal and
-        /// `UQM_ARCHIVED_SCRIPT` the script that produced it. The old validators
-        /// judge predeclared prefixes; the incremental cursor judges every
-        /// prefix against a tally of the records themselves.
+        /// A generated run of more than eleven thousand records. The incremental
+        /// cursor judges every prefix against a tally of the records themselves,
+        /// and the old validators judge fourteen prefixes declared up front.
         #[test]
-        #[ignore = "needs a retained run: UQM_ARCHIVED_TRACE and UQM_ARCHIVED_SCRIPT"]
-        fn every_prefix_of_a_retained_run_matches_the_records_it_covers() {
-            let trace = std::fs::read(std::env::var("UQM_ARCHIVED_TRACE").unwrap()).unwrap();
-            let source = std::fs::read(std::env::var("UQM_ARCHIVED_SCRIPT").unwrap()).unwrap();
-            let doc = crate::automation::script::parse_script(&source, "retained.json").unwrap();
-            let script = crate::automation::script::validate_script(doc, "retained.json").unwrap();
-            let plan = NativeCheckpointPlan::derive(&source, &script).unwrap();
-            let records = fresh_parse(&trace, usize::MAX).unwrap();
+        fn every_prefix_of_a_long_generated_run_matches_the_records_it_covers() {
+            let mut journal = Journal::new(plan_with_rounds(400));
+            journal.grow(3_200);
+            let plan = journal.plan.clone();
+            let records = std::mem::take(&mut journal.records);
+            let trace = bytes_of(&records);
             let mut ends = Vec::new();
             let mut offset = 0;
             for line in trace.split_inclusive(|byte| *byte == b'\n') {
@@ -1045,25 +1042,17 @@ mod tests {
                 ends.push(offset);
             }
             let total = records.len();
+            assert!(total > 10_000, "{total} records");
             let is_observed = |record: &TraceRecord| {
                 record
                     .label
                     .as_deref()
                     .is_some_and(|label| label.starts_with("player_input_observed:"))
             };
-            let samples: Vec<usize> = (1..=total)
-                .filter(|count| {
-                    count % 1_000 == 1
-                        || *count == total
-                        || records[count - 1].kind == RecordKind::Checkpoint
-                            && records[count - 1]
-                                .checkpoint
-                                .as_ref()
-                                .is_some_and(|marker| {
-                                    marker.id.ends_with(":0") || marker.id.ends_with(":7")
-                                })
-                })
-                .collect();
+            let mut samples: Vec<usize> = (0..12).map(|slice| 1 + slice * (total / 12)).collect();
+            samples.push(total / 2 + 1);
+            samples.push(total);
+            assert_eq!(samples.len(), 14);
             let mut cursor = TraceCursor::default();
             let (mut accepted, mut verified, mut markers) = (0_u64, 0_u64, 0_usize);
             for count in 1..=total {
@@ -1074,10 +1063,6 @@ mod tests {
                 }
                 if let Some(value) = label.strip_prefix("battle_frames_verified:count=") {
                     verified = verified.max(value.parse().unwrap());
-                }
-                if label.starts_with("battle_frames_reached:") {
-                    let value = label.split(':').nth(1).unwrap();
-                    verified = verified.max(value.strip_prefix("count=").unwrap().parse().unwrap());
                 }
                 if is_observed(record) {
                     // Its accepted input is the next record; the prefix ends too early.
@@ -1116,15 +1101,13 @@ mod tests {
                     assert_same_verdict(&mut cursor, bytes, &plan, count, markers / 2, false);
                 }
             }
+            assert_eq!(markers, 800);
             let (semantic, checkpoints) = cursor.scan_visits();
-            eprintln!(
-                "records {total} markers {markers} semantic visits {semantic} \
-                 checkpoint visits {checkpoints} samples {}",
-                samples.len()
+            assert!(
+                semantic <= 2 * total as u64 && checkpoints <= 3 * total as u64,
+                "semantic visits {semantic} checkpoint visits {checkpoints}"
             );
-            assert!(semantic <= 2 * total as u64 && checkpoints <= 3 * total as u64);
         }
-
         #[test]
         fn the_scans_agree_with_the_oracle_on_every_boundary_snapshot() {
             let mut journal = Journal::new(plan_with_rounds(20));
