@@ -43,13 +43,13 @@ pub(crate) enum Target {
 }
 
 impl Target {
-    const ALL: &'static [Self] = &[
+    pub(crate) const ALL: &'static [Self] = &[
         Self::TraceJournal,
         Self::StateFile,
         Self::AcknowledgementFile,
     ];
 
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::TraceJournal => "trace_journal",
             Self::StateFile => "state_file",
@@ -57,7 +57,7 @@ impl Target {
         }
     }
 
-    fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         self as usize
     }
 }
@@ -209,7 +209,7 @@ impl AccountingError {
     }
 }
 
-fn nanos(duration: Duration) -> Result<u64, AccountingError> {
+pub(crate) fn nanos(duration: Duration) -> Result<u64, AccountingError> {
     u64::try_from(duration.as_nanos()).map_err(|_| AccountingError::DurationOverflow)
 }
 
@@ -372,15 +372,34 @@ pub(crate) fn begin(target: Target, syscall: Syscall) -> Scope {
     }
 }
 
+/// The wall and thread CPU readings one finished scope added to the
+/// aggregate, kept so a caller can bind them to facts of the same call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SameCall {
+    pub(crate) wall_start: Instant,
+    pub(crate) wall: Duration,
+    pub(crate) cpu: Result<Duration, CpuClockError>,
+}
+
 impl Scope {
-    pub(crate) fn finish(mut self, outcome: Outcome) {
-        let Some(open) = &self.open else {
-            return;
-        };
+    pub(crate) fn finish(self, outcome: Outcome) {
+        self.finish_measured(outcome);
+    }
+
+    /// Finish the scope and hand back the exact readings it recorded. A
+    /// scope begun inside another is not timed and returns `None`.
+    pub(crate) fn finish_measured(mut self, outcome: Outcome) -> Option<SameCall> {
+        let open = self.open.as_ref()?;
         let wall = open.wall_start.elapsed();
         let cpu = cpu_elapsed(open.cpu_start, thread_cpu_time());
+        let measured = SameCall {
+            wall_start: open.wall_start,
+            wall,
+            cpu,
+        };
         AGGREGATE.with_borrow_mut(|aggregate| aggregate.record(open.slot, wall, cpu, outcome));
         self.finished = true;
+        Some(measured)
     }
 }
 

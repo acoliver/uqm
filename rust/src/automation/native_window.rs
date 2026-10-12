@@ -404,7 +404,6 @@ impl BoundOutputDirectory {
     ) -> Result<Vec<u8>, String> {
         use super::syscall_latency::{self as latency, Outcome, Syscall};
         use std::ffi::CString;
-        use std::io::Read as _;
         use std::os::fd::{AsRawFd as _, FromRawFd as _};
         use std::os::unix::ffi::OsStrExt as _;
 
@@ -431,19 +430,17 @@ impl BoundOutputDirectory {
         let inspect = latency::begin(target, Syscall::Fstat);
         let metadata = file.metadata();
         inspect.finish(Outcome::of_result(&metadata, 0));
-        if !metadata
-            .map_err(|error| format!("inspect native-window {label}: {error}"))?
-            .is_file()
-        {
+        let metadata =
+            metadata.map_err(|error| format!("inspect native-window {label}: {error}"))?;
+        if !metadata.is_file() {
             return Err(format!("native-window {label} is not a regular file"));
         }
-        let mut bytes = Vec::new();
-        let read_scope = latency::begin(target, Syscall::ReadToEnd);
-        let read = file
-            .by_ref()
-            .take(byte_limit.saturating_add(1))
-            .read_to_end(&mut bytes);
-        read_scope.finish(Outcome::read(bytes.len() as u64, read.is_err()));
+        let (bytes, read) = super::paired_read_latency::timed_read_to_end(
+            target,
+            &mut file,
+            byte_limit,
+            super::paired_read_latency::FdIdentity::of_metadata(&metadata),
+        );
         latency::timed_close_by_drop(target, file);
         read.map_err(|error| format!("read native-window {label}: {error}"))?;
         if bytes.len() as u64 > byte_limit {
@@ -6669,6 +6666,133 @@ mod tests {
             assert_eq!(counts_of(&report, STATE, "renameat"), (0, 0, 0));
             assert_eq!(counts_of(&report, ACK, "read_to_end"), (0, 0, 0));
             assert_eq!(counts_of(&report, "trace_journal", "write_all"), (0, 0, 0));
+        }
+    }
+
+    #[cfg(unix)]
+    mod paired_read_binding {
+        use super::super::super::paired_read_latency::{drain_for_tests, PairedReadReport};
+        use super::super::*;
+        use std::os::unix::fs::MetadataExt as _;
+
+        fn drained() -> PairedReadReport {
+            drain_for_tests().expect("the test thread read a handshake file")
+        }
+
+        fn summary<'a>(
+            report: &'a PairedReadReport,
+            target: &str,
+        ) -> &'a super::super::super::paired_read_latency::TargetSummary {
+            report
+                .targets
+                .iter()
+                .find(|summary| summary.target == target)
+                .unwrap_or_else(|| panic!("no {target} summary in {report:?}"))
+        }
+
+        #[test]
+        fn atomic_renames_change_the_read_identity_and_stable_rereads_keep_it() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let name = std::ffi::OsStr::new("state.json");
+            let path = root.path().join("state.json");
+            drain_for_tests();
+
+            bound.publish(name, b"one", ControlFile::State).unwrap();
+            let first_inode = fs::metadata(&path).unwrap().ino();
+            bound.read(name, 4096, ControlFile::State).unwrap();
+            bound.read(name, 4096, ControlFile::State).unwrap();
+            bound.publish(name, b"two!", ControlFile::State).unwrap();
+            let second = fs::metadata(&path).unwrap();
+            bound.read(name, 4096, ControlFile::State).unwrap();
+
+            let report = drained();
+            let state = summary(&report, "state_file");
+            assert_eq!(state.reads, 3);
+            assert_eq!(state.failed, 0);
+            assert_eq!(
+                (
+                    state.identity_first,
+                    state.identity_same,
+                    state.identity_different,
+                    state.identity_unknown
+                ),
+                (1, 1, 1, 0)
+            );
+            assert_ne!(first_inode, second.ino());
+            let last = state.slowest.as_ref().unwrap();
+            // Whichever read was slowest, it carries the identity of the file
+            // it opened: either generation, never an invented one.
+            assert!(last.ino == Some(first_inode) || last.ino == Some(second.ino()));
+            assert_eq!(last.dev, Some(second.dev()));
+            assert!(last.metadata_available);
+        }
+
+        #[test]
+        fn the_state_and_acknowledgement_files_keep_separate_identity_history() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let state = std::ffi::OsStr::new("state.json");
+            let ack = std::ffi::OsStr::new("native-window-ack.json");
+            bound.publish(state, b"s", ControlFile::State).unwrap();
+            bound
+                .publish(ack, b"a", ControlFile::Acknowledgement)
+                .unwrap();
+            drain_for_tests();
+
+            bound.read(state, 4096, ControlFile::State).unwrap();
+            bound.read(ack, 4096, ControlFile::Acknowledgement).unwrap();
+            bound.read(state, 4096, ControlFile::State).unwrap();
+
+            let report = drained();
+            let state = summary(&report, "state_file");
+            let ack = summary(&report, "acknowledgement_file");
+            assert_eq!((state.identity_first, state.identity_same), (1, 1));
+            assert_eq!((ack.identity_first, ack.identity_same), (1, 0));
+        }
+
+        #[test]
+        fn a_missing_file_and_a_directory_are_not_reads_and_leave_the_history_alone() {
+            let root = tempfile::tempdir().unwrap();
+            fs::create_dir(root.path().join("dir.json")).unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            drain_for_tests();
+
+            let missing = bound
+                .read(
+                    std::ffi::OsStr::new("absent.json"),
+                    4096,
+                    ControlFile::State,
+                )
+                .unwrap_err();
+            let directory = bound
+                .read(std::ffi::OsStr::new("dir.json"), 4096, ControlFile::State)
+                .unwrap_err();
+
+            assert!(
+                missing.starts_with("open native-window state:"),
+                "{missing}"
+            );
+            assert_eq!(directory, "native-window state is not a regular file");
+            assert!(drain_for_tests().is_none());
+        }
+
+        #[test]
+        fn an_over_budget_read_keeps_its_error_text_and_is_a_successful_paired_read() {
+            let root = tempfile::tempdir().unwrap();
+            fs::write(root.path().join("state.json"), b"0123456789").unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            drain_for_tests();
+
+            let error = bound
+                .read(std::ffi::OsStr::new("state.json"), 3, ControlFile::State)
+                .unwrap_err();
+
+            assert_eq!(error, "native-window state exceeds its byte budget");
+            let report = drained();
+            let state = summary(&report, "state_file");
+            assert_eq!((state.reads, state.failed), (1, 0));
+            assert_eq!(state.slowest.as_ref().unwrap().bytes, 4);
         }
     }
 }

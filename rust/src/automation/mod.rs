@@ -60,6 +60,8 @@ pub mod native_window;
 pub mod navigation;
 pub mod outcome;
 #[cfg(feature = "debug-process")]
+pub(crate) mod paired_read_latency;
+#[cfg(feature = "debug-process")]
 pub(crate) mod presentation_timing;
 pub mod proof;
 pub mod runtime;

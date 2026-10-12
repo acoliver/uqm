@@ -14,7 +14,8 @@
 //! `UQM_PRESENTATION_TIMING` line to stderr and starts a new window. The
 //! stderr write is excluded from every window: the next window begins after it.
 //! The same boundary also writes the completing thread's
-//! [`super::syscall_latency`] line, when that thread timed any file operation.
+//! [`super::syscall_latency`] line, when that thread timed any file operation,
+//! and its [`super::paired_read_latency`] line, when it read a handshake file.
 //!
 //! A reporter that cannot account or write a sample records why, warns once
 //! through `log`, and stops sampling. It never changes the run's outcome.
@@ -360,7 +361,8 @@ impl<S: Stage> TimingReporter<S> {
             Ok(None) => {}
             Ok(Some(sample)) => {
                 let written = write_sample(out, &sample)
-                    .and_then(|()| super::syscall_latency::write_window_report(out, &sample));
+                    .and_then(|()| super::syscall_latency::write_window_report(out, &sample))
+                    .and_then(|()| super::paired_read_latency::write_window_report(out, &sample));
                 self.note(written);
                 // The write is outside every window: the next one opens now.
                 self.sampler.begin_window(Instant::now());
