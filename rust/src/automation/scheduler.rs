@@ -1260,6 +1260,8 @@ fn reduce_capture_and_assertion(
         | (Action::AssertGameOptions(_), ActionPhase::WaitingForInput)
         | (Action::AssertCommunicationResponses(_), ActionPhase::WaitingForInput)
         | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput)
+        | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
+        | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
         | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -1868,6 +1870,75 @@ mod tests {
         assert_eq!(release.effects.release_player_key, Some(PlayerKey::Thrust));
         assert_eq!(release.new_state.step_index, 1);
     }
+    /// Issue #214: a menu tap reaches `menu[]` and a player tap reaches the
+    /// ship's `key[]`. Neither routes through the other's effect for the
+    /// whole hold, release and settle.
+    #[test]
+    fn menu_and_player_taps_never_cross_input_classes() {
+        let drive = |action: Action| {
+            let actions = [action, Action::Finish];
+            let config = cfg(&actions);
+            let mut state = SchedulerState::initial();
+            let mut effects = Vec::new();
+            while state.step_index == 0 {
+                let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+                effects.push(t.effects);
+                state = t.new_state;
+            }
+            effects
+        };
+        let menu = drive(Action::TapMenuKey(TapMenuKeyStep {
+            key: MenuKey::Up,
+            value: 1,
+            hold: 3,
+            settle: 2,
+        }));
+        assert!(menu.iter().any(|e| e.write_key == Some((MenuKey::Up, 1))));
+        assert!(menu
+            .iter()
+            .all(|e| e.write_player_key.is_none() && e.release_player_key.is_none()));
+
+        let player = drive(Action::TapPlayerKey(TapPlayerKeyStep {
+            key: PlayerKey::Thrust,
+            value: 1,
+            hold: 3,
+            settle: 2,
+        }));
+        let writes = player
+            .iter()
+            .filter(|e| e.write_player_key == Some((PlayerKey::Thrust, 1)))
+            .count();
+        assert_eq!(writes, 3, "thrust is written on every held update");
+        assert!(player
+            .iter()
+            .any(|e| e.release_player_key == Some(PlayerKey::Thrust)));
+        assert!(player
+            .iter()
+            .all(|e| e.write_key.is_none() && e.release_key.is_none()));
+    }
+
+    #[test]
+    fn position_record_and_displacement_assertion_advance_without_input_effects() {
+        use crate::automation::script::{
+            HyperspaceDisplacementAssertion, RecordHyperspacePositionStep,
+        };
+        let actions = [
+            Action::RecordHyperspacePosition(RecordHyperspacePositionStep {}),
+            Action::AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion {
+                minimum_logical_units: 16,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = SchedulerState::initial();
+        for expected in [1, 2] {
+            let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+            assert_eq!(t.new_state.step_index, expected);
+            assert_eq!(t.effects, EffectPlan::none());
+            state = t.new_state;
+        }
+    }
+
     /// The production input loop turns a key that stays down into a repeat
     /// pulse once half a second of wall-clock time has passed. A scripted tap
     /// is one press, so every update after the first one only holds the key

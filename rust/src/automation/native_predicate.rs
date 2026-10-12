@@ -101,6 +101,14 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
             shape(label, "battle_frames_verified", &["count="])
                 && at_least(label, "count=", value.minimum)
         }
+        Action::AssertHyperspaceDisplacement(value) => {
+            shape(
+                label,
+                "hyperspace_displacement_verified",
+                &["from=", "to=", "moved=", "minimum="],
+            ) && number(label, "minimum=") == Some(u64::from(value.minimum_logical_units))
+                && at_least(label, "moved=", u64::from(value.minimum_logical_units))
+        }
         Action::AssertPlanetSideCollisions(value) => collision_satisfied(label, value),
         Action::AssertMainMenuTransition(value) => menu_transition_satisfied(label, value),
         _ => wait_or_navigation_satisfied(action, label),
@@ -497,5 +505,33 @@ mod tests {
             &[record("communication_completed:count=4:minimum=2")],
             &frame()
         ));
+    }
+    #[test]
+    fn only_a_verified_displacement_label_that_meets_the_minimum_satisfies_the_action() {
+        let satisfies = |minimum: u32, label: &str| {
+            semantic_satisfied(
+                &Action::AssertHyperspaceDisplacement(
+                    crate::automation::script::HyperspaceDisplacementAssertion {
+                        minimum_logical_units: minimum,
+                    },
+                ),
+                label,
+            )
+        };
+        let verified = "hyperspace_displacement_verified:from=0,0:to=0,40:moved=40:minimum=16";
+        assert!(satisfies(16, verified));
+        assert!(
+            !satisfies(32, verified),
+            "a different minimum is another assertion"
+        );
+        assert!(!satisfies(
+            16,
+            "hyperspace_displacement_verified:from=0,0:to=0,4:moved=4:minimum=16"
+        ));
+        assert!(!satisfies(
+            16,
+            "hyperspace_displacement_failed:from=0,0:to=0,0:moved=0:minimum=16"
+        ));
+        assert!(!satisfies(16, "hyperspace_position_recorded:x=0:y=0"));
     }
 }

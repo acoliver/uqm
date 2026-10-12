@@ -15,7 +15,9 @@
 //! @plan PLAN-20260723-RUNTIME-AUTOMATION.P08
 //! @requirement REQ-FFI-001..005, REQ-SCHED-001, REQ-WATCH-001
 
+use crate::automation::flight_position::{self, FlightPositionTracker};
 use crate::automation::input_ffi;
+use crate::automation::mode;
 use crate::automation::outcome::TerminalClass;
 use crate::automation::runtime::{FinalizationResult, RuntimeModel};
 use crate::automation::scenario::{self, PendingStartScene, SceneActivationBoundary};
@@ -256,6 +258,8 @@ struct CoordInner {
     /// Menu key a scripted tap held down this update after its press.
     held_repeat_key: Option<crate::automation::script::MenuKey>,
     verified_battle_frames: u64,
+    /// Hyperspace position snapshot awaiting its displacement assertion.
+    flight_position: FlightPositionTracker,
     finalized: bool,
     terminal_class: Option<TerminalClass>,
     /// Queued menu transition events that arrived while the scheduler
@@ -410,6 +414,7 @@ impl Coordinator {
                 pending_player_input: None,
                 held_repeat_key: None,
                 verified_battle_frames: 0,
+                flight_position: FlightPositionTracker::default(),
                 finalized: false,
                 terminal_class: None,
                 pending_transitions: Vec::new(),
@@ -1456,6 +1461,53 @@ impl Coordinator {
                 }
                 Err(error) => {
                     self.write_trace_labeled(inner, RecordKind::SemanticAssertion, error);
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::RecordHyperspacePosition(_)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner
+                .flight_position
+                .record(mode::require_live(), flight_position::live_position())
+            {
+                Ok(position) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    flight_position::recorded_trace_label(position),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertHyperspaceDisplacement(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match inner.flight_position.assert_displacement(
+                mode::require_live(),
+                flight_position::live_position(),
+                assertion.minimum_logical_units,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
                     self.set_terminal(inner, TerminalClass::SemanticMismatch);
                     return true;
                 }

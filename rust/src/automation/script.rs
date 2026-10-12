@@ -607,6 +607,19 @@ pub struct BattleFramesAssertion {
     pub minimum: u64,
 }
 
+/// The no-payload step that snapshots the hyperspace ship's logical position.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RecordHyperspacePositionStep {}
+
+/// Assert the hyperspace ship moved at least `minimum_logical_units` since
+/// the last `record_hyperspace_position`, measured on `GLOBAL_SIS(log_x/log_y)`.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct HyperspaceDisplacementAssertion {
+    pub minimum_logical_units: u32,
+}
+
 /// Wait for the current battle to complete at least `minimum` real frames.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -709,6 +722,8 @@ pub enum Action {
     AssertGameOptions(GameOptionsAssertion),
     AssertCommunicationResponses(CommunicationResponsesAssertion),
     AssertBattleFrames(BattleFramesAssertion),
+    RecordHyperspacePosition(RecordHyperspacePositionStep),
+    AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
@@ -1861,6 +1876,15 @@ fn validate_assertion_step(
                     path,
                     index,
                     "assert_battle_frames: minimum must be greater than zero",
+                ));
+            }
+        }
+        Action::AssertHyperspaceDisplacement(assertion) => {
+            if assertion.minimum_logical_units == 0 {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_hyperspace_displacement: minimum_logical_units must be greater than zero",
                 ));
             }
         }
