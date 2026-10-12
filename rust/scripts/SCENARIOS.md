@@ -73,6 +73,14 @@ ship before the original flight sequence, using only the inputs a player has:
    visit. With the moon base on board the Commander pays 2500 RU through
    `DeltaSISGauges`, and `assert_ship_resources` requires 1000 raw fuel and
    2500 RU once the Starbase menu is up.
+   The second visit's dispatch only starts the conversation; the Commander's
+   callback registers its response choices afterwards, while the greeting plays.
+   `wait_for_communication_responses` (minimum 2, at most 1000 ticks) waits for a
+   response list of the current conversation, newer than any list already
+   selected, with that many choices. Only then does the unchanged
+   `assert_communication_responses` (minimum 2) run. The wait never selects or
+   skips speech, and a timeout ends the run with a trace record naming the
+   observed state.
 4. In the Outfit screen, 50 presses of Up each buy 100 raw fuel for 20 RU.
    `assert_ship_resources` requires 6000 raw fuel (reserve 1000 plus the
    5000 tank) and 1500 RU.

@@ -763,6 +763,42 @@ impl Coordinator {
                     format!("communication_replay_active:generation={generation}"),
                 );
             }
+        } else if let Some(Action::WaitForCommunicationResponses(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            let snapshot = crate::automation::ui_observation::conversation_snapshot();
+            if snapshot.has_fresh_responses(
+                wait.minimum,
+                inner.consumed_communication_completions,
+                inner.consumed_response_generation,
+            ) {
+                scheduler_event = SchedulerEvent::ConditionReached;
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "communication_responses_reached:generation={}:count={}:minimum={}",
+                        snapshot.response_generation, snapshot.response_count, wait.minimum
+                    ),
+                );
+            } else if inner.sched_state.phase == (ActionPhase::WaitingCondition { remaining: 0 }) {
+                // The scheduler ends the proof on this tick; say what the
+                // production state was instead of leaving a bare mismatch.
+                self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    format!(
+                        "communication_responses_wait_expired:minimum={}:active={}:completions={}:consumed_completions={}:response_generation={}:consumed_generation={}:count={}",
+                        wait.minimum,
+                        snapshot.active,
+                        snapshot.completions,
+                        inner.consumed_communication_completions,
+                        snapshot.response_generation,
+                        inner.consumed_response_generation,
+                        snapshot.response_count
+                    ),
+                );
+            }
         } else if let Some(Action::SelectCommunicationResponse(select)) =
             self.actions.get(inner.sched_state.step_index)
         {

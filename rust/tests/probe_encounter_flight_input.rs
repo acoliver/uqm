@@ -291,7 +291,7 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
 
 #[test]
 fn preparation_uses_only_player_and_menu_inputs_and_queries() {
-    const ALLOWED: [&str; 18] = [
+    const ALLOWED: [&str; 19] = [
         "wait_for_main_menu_ready",
         "tap_menu_key",
         "set_menu_key",
@@ -309,6 +309,7 @@ fn preparation_uses_only_player_and_menu_inputs_and_queries() {
         "wait_for_planet_side_end",
         "wait_for_dispatch",
         "wait_for_communication_end",
+        "wait_for_communication_responses",
         "select_communication_response",
     ];
     for name in PREPARED {
@@ -419,4 +420,51 @@ fn both_prepared_scripts_share_one_identical_preparation() {
     let v3 = prep_of("probe-encounter-v3");
     let v4 = prep_of("probe-encounter-v4");
     assert_eq!(v3, v4);
+}
+
+/// The second Commander dispatch only starts the conversation: the NPC
+/// callback registers its response choices afterwards, while speech plays.
+/// The immediate response-count assertion must therefore follow a bounded
+/// wait for the current conversation's choices, and the assertion itself must
+/// stay exactly as strict as before.
+#[test]
+fn the_second_commander_response_assertion_follows_a_bounded_response_wait() {
+    for name in PREPARED {
+        let steps = prep_of(name);
+        let dispatches: Vec<usize> = steps
+            .iter()
+            .enumerate()
+            .filter(|(_, step)| action_of(step) == "wait_for_dispatch" && step["encounter"] == 2)
+            .map(|(index, _)| index)
+            .collect();
+        let second_dispatch = dispatches[1];
+        let assertion = position(&steps, second_dispatch, |step| {
+            action_of(step) == "assert_communication_responses"
+        });
+        assert_eq!(
+            steps[assertion],
+            serde_json::json!({"action": "assert_communication_responses", "minimum": 2}),
+            "{name} keeps the original assertion unchanged"
+        );
+        assert_eq!(
+            assertion - second_dispatch,
+            2,
+            "{name}: exactly one step separates the dispatch from the assertion"
+        );
+        let wait = &steps[second_dispatch + 1];
+        assert_eq!(
+            action_of(wait),
+            "wait_for_communication_responses",
+            "{name}"
+        );
+        assert_eq!(wait["minimum"], 2, "{name} waits for as many as it asserts");
+        let max_ticks = wait["max_ticks"].as_u64().expect("bounded wait");
+        assert!((1..=2000).contains(&max_ticks), "{name}: bounded wait");
+        assert_eq!(
+            steps[assertion + 1]["action"],
+            "select_communication_response",
+            "{name} still chooses only after the assertion"
+        );
+        assert_eq!(steps[assertion + 1]["index"], 1, "{name} says goodbye");
+    }
 }

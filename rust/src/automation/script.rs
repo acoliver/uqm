@@ -676,6 +676,17 @@ pub struct SelectCommunicationResponseStep {
     pub max_ticks: u64,
 }
 
+/// Wait until the current conversation has registered at least `minimum`
+/// response choices. The production NPC callback registers them after the
+/// dispatch is observed, while speech is still playing; this wait observes
+/// that registration and neither selects nor skips anything.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WaitForCommunicationResponsesStep {
+    pub minimum: usize,
+    pub max_ticks: u64,
+}
+
 /// Wait for at least `minimum_completions` communication loops to return naturally.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -743,6 +754,7 @@ pub enum Action {
     WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
+    WaitForCommunicationResponses(WaitForCommunicationResponsesStep),
     WaitForCommunicationEnd(WaitForCommunicationEndStep),
     WaitForCommunicationReplay(WaitForCommunicationReplayStep),
     AssertMainMenuTransition(MainMenuTransitionDto),
@@ -1749,6 +1761,16 @@ fn validate_wait_step(
             }
             (select.max_ticks, "select_communication_response")
         }
+        Action::WaitForCommunicationResponses(wait) => {
+            if wait.minimum == 0 {
+                return Some(Err(AutomationError::step(
+                    path,
+                    index,
+                    "wait_for_communication_responses minimum must be positive",
+                )));
+            }
+            (wait.max_ticks, "wait_for_communication_responses")
+        }
         Action::WaitForCommunicationEnd(wait) => {
             if wait.minimum_completions == 0 {
                 return Some(Err(AutomationError::step(
@@ -2429,10 +2451,40 @@ mod tests {
     }
 
     #[test]
+    fn communication_response_wait_is_bounded_and_needs_a_positive_minimum() {
+        let ok = r#"{"version":1,"name":"x","budgets":{"max_input_ticks":9,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"wait_for_communication_responses","minimum":2,"max_ticks":6},{"action":"finish"}]}"#;
+        let script = validate_script(parse_script(ok.as_bytes(), p()).unwrap(), p()).unwrap();
+        assert_eq!(
+            script.steps()[0],
+            Action::WaitForCommunicationResponses(WaitForCommunicationResponsesStep {
+                minimum: 2,
+                max_ticks: 6
+            })
+        );
+        // 6 ticks for the wait plus the finish callback need a max of 8; 7 is too small.
+        let tight = ok.replace("\"max_input_ticks\":9", "\"max_input_ticks\":7");
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+        for (field, message) in [
+            ("\"minimum\":0,\"max_ticks\":6", "minimum must be positive"),
+            (
+                "\"minimum\":2,\"max_ticks\":0",
+                "max_ticks must be positive",
+            ),
+        ] {
+            let bad = ok.replace("\"minimum\":2,\"max_ticks\":6", field);
+            let err = validate_script(parse_script(bad.as_bytes(), p()).unwrap(), p()).unwrap_err();
+            assert!(format!("{err}").contains(message), "{err}");
+        }
+        let unknown = ok.replace("\"minimum\":2", "\"minimum\":2,\"bogus\":1");
+        assert!(parse_script(unknown.as_bytes(), p()).is_err());
+    }
+
+    #[test]
     fn rejects_zero_budgets_for_real_gameplay_waits() {
         for action in [
             r#"{"action":"wait_for_communication_end","minimum_completions":1,"max_ticks":0}"#,
             r#"{"action":"wait_for_communication_replay","max_ticks":0}"#,
+            r#"{"action":"wait_for_communication_responses","minimum":1,"max_ticks":0}"#,
             r#"{"action":"select_communication_response","index":0,"max_ticks":0}"#,
             r#"{"action":"navigate_to_moon","planet":2,"moon":0,"max_ticks":0}"#,
             r#"{"action":"wait_for_dispatch","encounter":2,"dialogue":2,"max_ticks":0}"#,

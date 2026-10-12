@@ -317,6 +317,7 @@ fn valid_action_phase(action: &Action, phase: ActionPhase) -> bool {
         | Action::WaitForBattleFrames(_)
         | Action::WaitForDispatch(_)
         | Action::SelectCommunicationResponse(_)
+        | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
         | Action::WaitForCommunicationReplay(_) => matches!(
             phase,
@@ -432,6 +433,7 @@ pub fn scheduler_reduce(
                     | Action::WaitForBattleFrames(_)
                     | Action::WaitForDispatch(_)
                     | Action::SelectCommunicationResponse(_)
+                    | Action::WaitForCommunicationResponses(_)
                     | Action::WaitForPlanetSideStart(_)
                     | Action::WaitForPlanetSideEnd(_)
                     | Action::SelectPlanetMenu(_)
@@ -1090,6 +1092,41 @@ fn reduce_condition_wait(
             effects: EffectPlan::none(),
         },
         (Action::SelectCommunicationResponse(_), ActionPhase::WaitingCondition { remaining }) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: remaining.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (Action::WaitForCommunicationResponses(wait), ActionPhase::WaitingForInput) => {
+            SchedulerTransition {
+                new_state: SchedulerState {
+                    phase: ActionPhase::WaitingCondition {
+                        remaining: wait.max_ticks.saturating_sub(1),
+                    },
+                    state_version: sv,
+                    ..*state
+                },
+                effects: EffectPlan::none(),
+            }
+        }
+        (
+            Action::WaitForCommunicationResponses(_),
+            ActionPhase::WaitingCondition { remaining: 0 },
+        ) => SchedulerTransition {
+            new_state: SchedulerState {
+                terminal: Some(TerminalOutcome::SemanticMismatch),
+                state_version: sv,
+                ..*state
+            },
+            effects: EffectPlan::none(),
+        },
+        (Action::WaitForCommunicationResponses(_), ActionPhase::WaitingCondition { remaining }) => {
             SchedulerTransition {
                 new_state: SchedulerState {
                     phase: ActionPhase::WaitingCondition {
@@ -2843,6 +2880,50 @@ mod tests {
             SchedulerEvent::ConditionReached,
         );
 
+        assert_eq!(reached.new_state.step_index, 1);
+        assert_eq!(reached.new_state.terminal, None);
+    }
+
+    #[test]
+    fn communication_response_wait_holds_until_condition_and_expires_as_a_mismatch() {
+        use crate::automation::script::WaitForCommunicationResponsesStep;
+        let actions = [
+            Action::WaitForCommunicationResponses(WaitForCommunicationResponsesStep {
+                minimum: 2,
+                max_ticks: 3,
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let mut state = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        )
+        .new_state;
+        assert_eq!(state.phase, ActionPhase::WaitingCondition { remaining: 2 });
+        for remaining in [1, 0] {
+            state = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput).new_state;
+            assert_eq!(state.step_index, 0, "ticks alone never satisfy the wait");
+            assert_eq!(state.terminal, None);
+            assert_eq!(state.phase, ActionPhase::WaitingCondition { remaining });
+        }
+        let expired = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(
+            expired.new_state.terminal,
+            Some(TerminalOutcome::SemanticMismatch)
+        );
+
+        let waiting = scheduler_reduce(
+            &SchedulerState::initial(),
+            &config,
+            SchedulerEvent::AdmittedInput,
+        );
+        let reached = scheduler_reduce(
+            &waiting.new_state,
+            &config,
+            SchedulerEvent::ConditionReached,
+        );
         assert_eq!(reached.new_state.step_index, 1);
         assert_eq!(reached.new_state.terminal, None);
     }
