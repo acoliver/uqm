@@ -350,9 +350,6 @@ mod ffi {
         // TFB_Random for PickCaptainName (libs/misc.h)
         pub fn TFB_Random() -> u32;
 
-        // CommIntroMode (comm.c) — C: SetCommIntroMode(mode, howLong)
-        pub fn SetCommIntroMode(mode: u32, how_long: u32);
-
         // CommData global for direct encounter function pointer calls
         pub static mut CommData: crate::comm::locdata::CLocData;
 
@@ -1162,7 +1159,7 @@ pub unsafe fn rust_visit_starbase() -> Result<(), crate::starbase::StarbaseError
     if get_game_state("STARBASE_AVAILABLE") == 0 {
         // Unallied Starbase conversation
         crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
-        ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
+        crate::comm::ffi::set_comm_intro_mode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
         // Check if the Ur-Quan probe Ilwrath encounter should happen
@@ -1195,7 +1192,7 @@ pub unsafe fn rust_visit_starbase() -> Result<(), crate::starbase::StarbaseError
         }
 
         // After Ilwrath battle, about-to-ally Starbase conversation
-        ffi::SetCommIntroMode(cim::CROSSFADE_SCREEN, 0);
+        crate::comm::ffi::set_comm_intro_mode(cim::CROSSFADE_SCREEN, 0);
         init_communication(conv::COMMANDER);
 
         if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
@@ -1227,7 +1224,7 @@ pub unsafe fn rust_visit_starbase() -> Result<(), crate::starbase::StarbaseError
         }
 
         crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
-        ffi::SetCommIntroMode(cim::FADE_IN_SCREEN, ONE_SECOND * 2);
+        crate::comm::ffi::set_comm_intro_mode(cim::FADE_IN_SCREEN, ONE_SECOND * 2);
         init_communication(conv::COMMANDER);
 
         if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {

@@ -168,6 +168,17 @@ impl CommState {
         self.initialized
     }
 
+    /// Reset for a new encounter's hail, keeping the intro transition that
+    /// the caller set before `InitCommunication`. In the C game
+    /// `SetCommIntroMode` precedes the hail and only `CommIntroTransition`
+    /// resets the mode (comm.c:730-767, 1357-1362).
+    pub fn reset_for_encounter(&mut self) {
+        let (intro_mode, fade_time) = (self.intro_mode, self.fade_time);
+        self.clear();
+        self.intro_mode = intro_mode;
+        self.fade_time = fade_time;
+    }
+
     /// Clear all state (but stay initialized)
     pub fn clear(&mut self) {
         self.comm_data = None;
@@ -742,6 +753,28 @@ mod tests {
         assert!(state.responses().is_empty());
         assert_eq!(state.fade_time(), 0);
         // Should still be initialized
+        assert!(state.is_initialized());
+    }
+
+    #[test]
+    #[serial]
+    fn reset_for_encounter_keeps_the_intro_transition_set_before_the_hail() {
+        // `SetCommIntroMode (CIM_FADE_IN_SCREEN, ...)` runs before
+        // `InitCommunication`, and only `CommIntroTransition` consumes it
+        // (comm.c:730-767), so the hail's own state reset must not drop it.
+        let mut state = CommState::new();
+        state.init().unwrap();
+        state.set_comm_data(CommData::new());
+        state.add_response(1, "Test", None);
+        state.set_intro_mode(CommIntroMode::from(3));
+        state.set_fade_time(1680);
+
+        state.reset_for_encounter();
+
+        assert!(state.comm_data().is_none());
+        assert!(state.responses().is_empty());
+        assert_eq!(state.intro_mode(), CommIntroMode::from(3));
+        assert_eq!(state.fade_time(), 1680);
         assert!(state.is_initialized());
     }
 }

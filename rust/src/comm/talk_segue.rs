@@ -1734,19 +1734,45 @@ fn draw_alien_frame(state: &mut CommState) {
     }
 }
 
+/// What `CommIntroTransition` (comm.c:730-767) does for an intro mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntroTransition {
+    CrossfadeSpace,
+    CrossfadeWindow,
+    CrossfadeScreen,
+    /// `FadeScreen (FadeAllToColor, fadeTime)` after a fade to black.
+    FadeInScreen {
+        fade_time: u32,
+    },
+}
+
+/// Map a `CommIntroMode` value (comm.h:125-131) to its transition.
+///
+/// # Panics
+/// On a value outside the enum, as the C `assert (0 && "Unknown comm intro
+/// transition")` does.
+fn intro_transition(mode: u32, fade_time: u32) -> IntroTransition {
+    match mode {
+        0 => IntroTransition::CrossfadeSpace,
+        1 => IntroTransition::CrossfadeWindow,
+        2 => IntroTransition::CrossfadeScreen,
+        3 => IntroTransition::FadeInScreen { fade_time },
+        _ => panic!("Unknown comm intro transition: {mode}"),
+    }
+}
+
 fn comm_intro_transition() {
     #[cfg(not(test))]
     unsafe {
+        use crate::mainloop::restart_menu::c_extern::{FadeScreen, FADE_ALL_TO_COLOR};
         use std::ffi::{c_uint, c_void};
 
         // Ported from c_CommIntroTransition in rust_comm.c
         let mode = crate::comm::ffi::rust_GetCommIntroMode();
+        let fade_time = crate::comm::ffi::rust_GetCommFadeTime();
 
-        // CIM constants from comm.h
-        const CIM_CROSSFADE_SPACE: c_uint = 0;
-        const CIM_CROSSFADE_WINDOW: c_uint = 1;
-        const CIM_CROSSFADE_SCREEN: c_uint = 2;
-        const CIM_DEFAULT: c_uint = CIM_CROSSFADE_SPACE;
+        // CIM_DEFAULT from comm.h
+        const CIM_DEFAULT: c_uint = 0;
 
         // SIS constants from units.h
         let sis_org_x: c_int = 12; // SAFE_X + SIS_X_OFFSET
@@ -1754,12 +1780,12 @@ fn comm_intro_transition() {
         let sis_screen_width: c_int = 320 - 64 - 14; // SPACE_WIDTH - 14
         let sis_screen_height: c_int = 240 - 13; // SPACE_HEIGHT - 13
 
-        match mode {
-            CIM_CROSSFADE_SCREEN => {
+        match intro_transition(mode, fade_time) {
+            IntroTransition::CrossfadeScreen => {
                 c_bridge::ScreenTransition(3, std::ptr::null());
                 c_bridge::UnbatchGraphics();
             }
-            CIM_CROSSFADE_SPACE => {
+            IntroTransition::CrossfadeSpace => {
                 let mut rect = crate::comm::locdata::CRect {
                     corner: crate::comm::locdata::CPoint {
                         x: sis_org_x as i16,
@@ -1771,15 +1797,18 @@ fn comm_intro_transition() {
                 c_bridge::ScreenTransition(3, &mut rect as *mut _ as *const c_void);
                 c_bridge::UnbatchGraphics();
             }
-            CIM_CROSSFADE_WINDOW => {
+            IntroTransition::CrossfadeWindow => {
                 let rect_ptr = std::ptr::addr_of_mut!(crate::comm::hail::c_bridge::CommWndRect)
                     as *const c_void;
                 c_bridge::ScreenTransition(3, rect_ptr);
                 c_bridge::UnbatchGraphics();
             }
-            _ => {
-                // CIM_FADE_IN_SCREEN or unknown — unbatch to avoid lockup
+            IntroTransition::FadeInScreen { fade_time } => {
                 c_bridge::UnbatchGraphics();
+                FadeScreen(
+                    FADE_ALL_TO_COLOR,
+                    i16::try_from(fade_time).expect("comm fade time fits a SIZE"),
+                );
             }
         }
 
@@ -3016,5 +3045,44 @@ mod tests {
             search_pos = abs + fn_name.len();
         }
         None
+    }
+
+    // ---- intro transition (comm.c:730-767) ---------------------------------
+
+    #[test]
+    fn every_comm_intro_mode_has_its_c_transition() {
+        assert_eq!(
+            intro_transition(0, 0),
+            IntroTransition::CrossfadeSpace,
+            "CIM_CROSSFADE_SPACE"
+        );
+        assert_eq!(
+            intro_transition(1, 0),
+            IntroTransition::CrossfadeWindow,
+            "CIM_CROSSFADE_WINDOW"
+        );
+        assert_eq!(
+            intro_transition(2, 0),
+            IntroTransition::CrossfadeScreen,
+            "CIM_CROSSFADE_SCREEN"
+        );
+    }
+
+    /// After `DoTimePassage` faded the screen to black, the Commander's
+    /// conversation brings the colors back with `FadeScreen (FadeAllToColor,
+    /// fadeTime)`. Without that fade the whole conversation and the Starbase
+    /// menu stay black.
+    #[test]
+    fn fade_in_screen_intro_fades_all_to_color_over_the_set_time() {
+        assert_eq!(
+            intro_transition(3, 1680),
+            IntroTransition::FadeInScreen { fade_time: 1680 }
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Unknown comm intro transition")]
+    fn an_unknown_comm_intro_mode_is_an_invariant_failure() {
+        let _ = intro_transition(4, 0);
     }
 }
