@@ -221,7 +221,7 @@ fn the_reward_is_proven_between_the_commander_conversation_and_any_purchase() {
     for name in PREPARED {
         let steps = prep_of(name);
         let reward = position(&steps, 0, |step| {
-            resources(step) == Some((Some(1000), Some(2500)))
+            resources(step) == Some(post_landing_state(name))
         });
         let docked = steps[..reward]
             .iter()
@@ -265,7 +265,7 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
     for name in PREPARED {
         let steps = prep_of(name);
         let enter = position(&steps, 0, |step| {
-            resources(step) == Some((Some(1000), Some(2500)))
+            resources(step) == Some(post_landing_state(name))
         });
         let leave = position(&steps, enter, |step| {
             resources(step) == Some((Some(6000), Some(1500)))
@@ -275,8 +275,12 @@ fn fifty_unit_purchases_buy_five_thousand_raw_fuel_for_one_thousand_ru() {
             .filter(|step| is_tap(step, "up"))
             .count();
         assert_eq!(purchases, 50, "{name}: +100 raw per press, 20 RU per press");
-        assert_eq!(1000 + purchases * 100, 6000);
-        assert_eq!(2500 - purchases * 20, 1500);
+        // Outfit entry rounds the post-landing fuel to a whole unit first.
+        let (landed_fuel, reward_ru) = post_landing_state(name);
+        let rounded = round_fuel_on_outfit_entry(u32::try_from(landed_fuel.unwrap()).unwrap())
+            .expect("rounds");
+        assert_eq!(rounded as usize + purchases * 100, 6000);
+        assert_eq!(reward_ru.unwrap() as usize - purchases * 20, 1500);
         // Nothing other than Outfit navigation and purchases happens in between.
         for step in &steps[enter + 1..leave] {
             let ordinary = action_of(step) == "tap_menu_key"
@@ -466,5 +470,206 @@ fn the_second_commander_response_assertion_follows_a_bounded_response_wait() {
             "{name} still chooses only after the assertion"
         );
         assert_eq!(steps[assertion + 1]["index"], 1, "{name} says goodbye");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Resource conservation of the preparation (issue #214).
+//
+// The expected fuel and RU of every `assert_ship_resources` in the
+// preparation are derived here from the game's own rules and data: the
+// opening tank and fuel price in `globdata.c`, Luna's density and radius in
+// `gensol.c`, the landing cost and Outfit rounding of the Rust port, and the
+// Commander's reward in `starbas.c`. Nothing below copies an observed value.
+// ---------------------------------------------------------------------------
+
+use uqm_rust::planet_side::selection::landing_fuel_needed;
+use uqm_rust::starbase::sis_modules::{FUEL_RESERVE, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE};
+use uqm_rust::starbase::{
+    change_fuel_quantity, round_fuel_on_outfit_entry, FuelChange, FuelKey, FuelRuState,
+};
+
+fn c_source(relative: &str) -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("sc2/src/uqm")
+        .join(relative);
+    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("read {path:?}: {error}"))
+}
+
+/// The unsigned integer that directly follows `needle` in `text`.
+fn number_after(text: &str, needle: &str) -> u32 {
+    let start = text
+        .find(needle)
+        .unwrap_or_else(|| panic!("source no longer contains {needle:?}"))
+        + needle.len();
+    let digits: String = text[start..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits
+        .parse()
+        .unwrap_or_else(|_| panic!("no number after {needle:?}"))
+}
+
+/// The state the preparation must be in once the Starbase menu is up: the
+/// opening tank minus exactly one Luna landing, plus the Commander's reward.
+struct DerivedPreparation {
+    opening_fuel: u32,
+    opening_res_units: u32,
+    fuel_price: u8,
+    landing_cost: u32,
+    reward: u32,
+}
+
+impl DerivedPreparation {
+    fn from_game_data(opening_res_units: u32) -> Self {
+        let globdata = c_source("globdata.c");
+        let opening_fuel = number_after(&globdata, "GLOBAL_SIS (FuelOnBoard) = ") * FUEL_TANK_SCALE;
+        let fuel_price = u8::try_from(number_after(&globdata, "GLOBAL (FuelCost) = "))
+            .expect("fuel price fits a byte");
+
+        // Luna is the second moon of Earth; `gensol.c` fixes its density and
+        // radius, and `CalcGravity` (`calc.c`) is density * radius / 100.
+        let gensol = c_source("planets/generate/gensol.c");
+        let moon_properties = &gensol[gensol
+            .find("// World is a moon.")
+            .expect("moon properties block")..];
+        let earth_moons = &moon_properties[moon_properties
+            .find("case 2: /* moons of EARTH */")
+            .expect("Earth moons block")..];
+        let earth_moons = &earth_moons[..earth_moons
+            .find("case 4: /* moons of JUPITER */")
+            .expect("Jupiter moons block")];
+        let density = number_after(earth_moons, "PlanetInfo.PlanetDensity = ");
+        let radius = number_after(earth_moons, "PlanetInfo.PlanetRadius = ");
+        let gravity = u16::try_from(density * radius / 100).expect("gravity fits");
+        let landing_cost = u32::from(landing_fuel_needed(
+            gravity,
+            u16::try_from(FUEL_TANK_SCALE).expect("scale fits"),
+        ));
+
+        let reward = number_after(
+            &c_source("comm/starbas/starbas.c"),
+            "DeltaSISGauges (0, 0, ",
+        );
+        Self {
+            opening_fuel,
+            opening_res_units,
+            fuel_price,
+            landing_cost,
+            reward,
+        }
+    }
+
+    fn after_landing_and_reward(&self) -> (u32, u32) {
+        (
+            self.opening_fuel - self.landing_cost,
+            self.opening_res_units + self.reward,
+        )
+    }
+}
+
+fn derived_preparation(name: &str) -> DerivedPreparation {
+    let steps = prep_of(name);
+    let opening = steps
+        .iter()
+        .find_map(resources)
+        .expect("opening resource proof");
+    assert_eq!(
+        opening.0,
+        Some(u64::from(
+            DerivedPreparation::from_game_data(0).opening_fuel
+        )),
+        "{name} opens with the game's starting tank"
+    );
+    DerivedPreparation::from_game_data(
+        u32::try_from(opening.1.expect("opening RU")).expect("RU fits"),
+    )
+}
+
+/// The fuel and RU the script must expect once the Starbase menu is up.
+fn post_landing_state(name: &str) -> (Option<u64>, Option<u64>) {
+    let (fuel, res_units) = derived_preparation(name).after_landing_and_reward();
+    (Some(u64::from(fuel)), Some(u64::from(res_units)))
+}
+
+#[test]
+fn luna_landing_costs_thirty_raw_fuel() {
+    let derived = DerivedPreparation::from_game_data(0);
+    assert_eq!(derived.opening_fuel, 1000);
+    assert_eq!(derived.landing_cost, 30);
+}
+
+/// The preparation lands on Luna exactly once and flies no hyperspace before
+/// the Starbase menu, so the only fuel deduction that precedes the check is
+/// one Luna landing.
+#[test]
+fn the_starbase_menu_check_expects_the_opening_tank_minus_one_luna_landing() {
+    for name in PREPARED {
+        let steps = prep_of(name);
+        let docked = position(&steps, 0, |step| {
+            action_of(step) == "assert_mode" && step["mode"] == "starbase"
+        });
+        let landings = steps[..docked]
+            .iter()
+            .filter(|step| action_of(step) == "wait_for_planet_side_start")
+            .count();
+        assert_eq!(landings, 1, "{name} lands exactly once before the check");
+        let derived = derived_preparation(name);
+        let (fuel, res_units) = derived.after_landing_and_reward();
+        assert_eq!(
+            resources(&steps[docked + 1]),
+            Some((Some(u64::from(fuel)), Some(u64::from(res_units)))),
+            "{name} must expect {} raw fuel less one {}-raw Luna landing and the reward",
+            derived.opening_fuel,
+            derived.landing_cost
+        );
+    }
+}
+
+/// Entering Outfit rounds to the nearest whole unit, then 50 ordinary
+/// purchases of one unit each end exactly at the script's final proof.
+#[test]
+fn outfit_entry_rounding_and_fifty_purchases_conserve_to_the_final_proof() {
+    for name in PREPARED {
+        let derived = derived_preparation(name);
+        let (fuel, res_units) = derived.after_landing_and_reward();
+        let rounded = round_fuel_on_outfit_entry(fuel).expect("rounds");
+        assert_eq!(rounded, 1000, "{name}: 970 rounds half up to the unit");
+        let mut state = FuelRuState {
+            fuel_on_board: rounded,
+            res_units,
+        };
+        let capacity = FUEL_RESERVE + FUEL_TANK_CAPACITY;
+        let steps = prep_of(name);
+        let enter = position(&steps, 0, |step| {
+            resources(step).is_some_and(|found| found.1 == Some(u64::from(res_units)))
+        });
+        let leave = steps
+            .iter()
+            .rposition(|step| resources(step).is_some())
+            .expect("final proof");
+        let purchases = steps[enter..leave]
+            .iter()
+            .filter(|step| is_tap(step, "up"))
+            .count();
+        for _ in 0..purchases {
+            let FuelChange::Apply(delta) =
+                change_fuel_quantity(state, capacity, derived.fuel_price, FuelKey::UnitUp)
+                    .expect("purchase arithmetic")
+            else {
+                panic!("{name}: a purchase was rejected");
+            };
+            state = state.apply(delta, capacity).expect("applies");
+        }
+        assert_eq!(
+            resources(&steps[leave]),
+            Some((
+                Some(u64::from(state.fuel_on_board)),
+                Some(u64::from(state.res_units))
+            )),
+            "{name} final proof is what the purchases really leave"
+        );
     }
 }

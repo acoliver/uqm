@@ -69,8 +69,12 @@ ship before the original flight sequence, using only the inputs a player has:
    lander picks the node up, which sets `MOONBASE_ON_SHIP`.
 3. A first Starbase visit (the unallied Commander conversation), then a second
    visit. With the moon base on board the Commander pays 2500 RU through
-   `DeltaSISGauges`, and `assert_ship_resources` requires 1000 raw fuel and
-   2500 RU once the Starbase menu is up.
+   `DeltaSISGauges`, and `assert_ship_resources` requires 970 raw fuel and
+   2500 RU once the Starbase menu is up. The 30 raw fuel are the one Luna
+   landing that precedes it: `DispatchLander` pays
+   `min(SurfaceGravity << 1, 3 * FUEL_TANK_SCALE)`, Luna's gravity is
+   60 * 25 / 100 = 15, so the cost is 30. No hyperspace flight happens before
+   this check.
    The second visit's dispatch only starts the conversation; the Commander's
    callback registers its response choices afterwards, while the greeting plays.
    `wait_for_communication_responses` (minimum 2, at most 1000 ticks) waits for a
@@ -81,7 +85,9 @@ ship before the original flight sequence, using only the inputs a player has:
    observed state.
 4. In the Outfit screen, 50 presses of Up each buy 100 raw fuel for 20 RU.
    `assert_ship_resources` requires 6000 raw fuel (reserve 1000 plus the
-   5000 tank) and 1500 RU.
+   5000 tank) and 1500 RU. Entering Outfit first rounds the 970 raw fuel to
+   the nearest whole unit, 1000, so the 50 purchases end at
+   1000 + 50 * 100 = 6000 and 2500 - 50 * 20 = 1500.
 5. Depart, then require the same state again before the flight starts.
 
 `assert_ship_resources` reads `GLOBAL_SIS(FuelOnBoard)` and
