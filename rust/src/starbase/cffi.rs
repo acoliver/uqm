@@ -63,7 +63,7 @@ extern "C" {
     fn SetRelFrameIndex(frame: *mut c_void, offset: i16) -> *mut c_void;
     fn IncFrameIndex(frame: *mut c_void) -> *mut c_void;
     fn DecFrameIndex(frame: *mut c_void) -> *mut c_void;
-    fn GetFrameCount(frame: *mut c_void) -> c_int;
+    fn GetFrameCount(frame: *mut c_void) -> u16;
     fn GetFrameIndex(frame: *mut c_void) -> u16;
     fn SetFlashRect(rect: *const c_void);
     fn PreUpdateFlashRect();
@@ -74,7 +74,7 @@ extern "C" {
     fn DrawSISTitle(title: *const c_char);
     fn FlushInput();
     fn PlayMenuSound(effect: c_int);
-    fn SetAbsStringTableIndex(table: *mut c_void, index: c_int) -> *mut c_void;
+    fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn GetStringAddress(entry: *mut c_void) -> *const c_char;
 }
 
@@ -323,8 +323,7 @@ impl Gfx for CffiPlatform {
 
     fn frame_count(&self, frame: FrameId) -> u16 {
         // SAFETY: `frame` is a frame handle owned by the caller.
-        let count = unsafe { GetFrameCount(frame as *mut c_void) };
-        u16::try_from(count).expect("frame counts fit a COUNT")
+        unsafe { GetFrameCount(frame as *mut c_void) }
     }
 
     fn frame_index(&self, frame: FrameId) -> u16 {
@@ -394,6 +393,7 @@ impl Gfx for CffiPlatform {
         // SAFETY: `GameStrings` is loaded before any screen runs; the
         // returned string lives as long as the table.
         unsafe {
+            let index = u16::try_from(index).expect("game string indexes fit a COUNT");
             let entry = SetAbsStringTableIndex(std::ptr::addr_of!(GameStrings).read(), index);
             let text = GetStringAddress(entry);
             if text.is_null() {

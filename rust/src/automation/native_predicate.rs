@@ -109,6 +109,9 @@ fn semantic_satisfied(action: &Action, label: &str) -> bool {
             ) && number(label, "minimum=") == Some(u64::from(value.minimum_logical_units))
                 && at_least(label, "moved=", u64::from(value.minimum_logical_units))
         }
+        Action::AssertShipResources(value) => {
+            super::ship_resources::verified_label_satisfies(label, *value)
+        }
         Action::AssertPlanetSideCollisions(value) => collision_satisfied(label, value),
         Action::AssertMainMenuTransition(value) => menu_transition_satisfied(label, value),
         _ => wait_or_navigation_satisfied(action, label),
@@ -533,5 +536,27 @@ mod tests {
             "hyperspace_displacement_failed:from=0,0:to=0,0:moved=0:minimum=16"
         ));
         assert!(!satisfies(16, "hyperspace_position_recorded:x=0:y=0"));
+    }
+
+    #[test]
+    fn only_the_verified_label_of_the_same_resource_expectation_satisfies_the_action() {
+        use crate::automation::script::ShipResourcesAssertion;
+        let action = Action::AssertShipResources(ShipResourcesAssertion {
+            fuel_on_board: Some(6000),
+            res_units: Some(1500),
+        });
+        assert!(semantic_satisfied(
+            &action,
+            "ship_resources_verified:fuel=6000:ru=1500:expected_fuel=6000:expected_ru=1500"
+        ));
+        for label in [
+            "ship_resources_failed:fuel=5900:ru=1500:expected_fuel=6000:expected_ru=1500",
+            "ship_resources_verified:fuel=5900:ru=1500:expected_fuel=6000:expected_ru=1500",
+            "ship_resources_verified:fuel=6000:ru=1500:expected_fuel=6000:expected_ru=any",
+            "ship_resources_verified:fuel=1000:ru=2500:expected_fuel=1000:expected_ru=2500",
+            "ship_resources_unavailable",
+        ] {
+            assert!(!semantic_satisfied(&action, label), "{label}");
+        }
     }
 }

@@ -38,7 +38,7 @@ unsafe fn ptr_to_string(ptr: *const u8) -> Option<String> {
 #[cfg(not(test))]
 pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Option<String> {
     extern "C" {
-        fn SetAbsStringTableIndex(table: *mut c_void, index: i32) -> *mut c_void;
+        fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
         #[allow(clashing_extern_declarations)]
         fn GetStringAddress(s: *mut c_void) -> *const u8;
         static mut GlobData: crate::comm::locdata::CGlobData;
@@ -59,7 +59,7 @@ pub unsafe fn resolve_phrase(phrases_handle: *const c_void, index: i32) -> Optio
             crate::comm::ffi::get_alliance_name(index)
         } else if !phrases_handle.is_null() {
             // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-            let s = SetAbsStringTableIndex(phrases_handle as *mut _, index - 1);
+            let s = SetAbsStringTableIndex(phrases_handle as *mut _, (index - 1) as u16);
             GetStringAddress(s)
         } else {
             return None;

@@ -318,14 +318,14 @@
           },
           {
                 "path": "rust/scripts/probe-encounter-v3.json",
-                "sha256": "6185e16c1e37448463c7e33d9fae20232bc6bc12d719aa2fd5da2990cd03eeaa",
-                "byte_length": 1757,
+                "sha256": "9355e5af39d26807bbf2d8d3ce8a35fc315b39742ad3fe55b6a583a058ba9bd9",
+                "byte_length": 9699,
                 "outer_child_timeout_ms": 900000
           },
           {
                 "path": "rust/scripts/probe-encounter-v4.json",
-                "sha256": "324436821f29cb5c3c9b09d09366d43afaf404a1fe99f5b2bb69c4d9313a09c0",
-                "byte_length": 1753,
+                "sha256": "b9a2dc0015ec6bb874d998e570c0aa8010b7263ac26b24b84d5f3ee15b3e67ce",
+                "byte_length": 9695,
                 "outer_child_timeout_ms": 900000
           },
           {

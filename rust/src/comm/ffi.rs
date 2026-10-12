@@ -1405,7 +1405,7 @@ const ALLIANCE_NAME_BUF_SIZE: usize = 400;
 #[cfg(not(test))]
 extern "C" {
     // Direct C functions for phrase access (replacing c_get_* wrappers)
-    fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: c_int) -> *mut std::ffi::c_void;
+    fn SetAbsStringTableIndex(table: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
     fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
     fn GetStringSoundClip(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
     fn GetStringTimeStamp(s: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
@@ -1437,7 +1437,7 @@ pub(crate) unsafe fn get_alliance_name(index: c_int) -> *const u8 {
     if phrases.is_null() {
         return std::ptr::null();
     }
-    let s = SetAbsStringTableIndex(phrases, index + i);
+    let s = SetAbsStringTableIndex(phrases, (index + i) as u16);
     GetStringAddress(s).cast::<u8>()
 }
 
@@ -1456,7 +1456,7 @@ unsafe fn get_alliance_name_full(
     }
 
     let i = crate::state::game_state_keys::get_game_state("NEW_ALLIANCE_NAME") as c_int;
-    let s = SetAbsStringTableIndex(phrases, (adjusted_index - 1) + i);
+    let s = SetAbsStringTableIndex(phrases, ((adjusted_index - 1) + i) as u16);
     let src = GetStringAddress(s);
     if src.is_null() {
         return std::ptr::null();
@@ -1583,12 +1583,12 @@ pub unsafe extern "C" fn rust_NPCPhrase_cb(index: c_int, cb: Option<unsafe exter
             }
 
             // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-            let s = SetAbsStringTableIndex(phrases as *mut _, index - 1);
+            let s = SetAbsStringTableIndex(phrases as *mut _, (index - 1) as u16);
             let text = GetStringAddress(s);
             if text.is_null() {
                 return;
             }
-            let table_idx = index - 1;
+            let table_idx = (index - 1) as u16;
             let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
             let clip = GetStringSoundClip(s2);
             let s3 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
@@ -1644,13 +1644,13 @@ pub unsafe extern "C" fn rust_NPCPhrase_splice(index: c_int) {
         }
 
         // Direct SetAbsStringTableIndex + GetStringAddress (1-based phrase index)
-        let s = SetAbsStringTableIndex(phrases as *mut _, index - 1);
+        let s = SetAbsStringTableIndex(phrases as *mut _, (index - 1) as u16);
         let text = GetStringAddress(s);
         if text.is_null() {
             return;
         }
 
-        let table_idx = index - 1;
+        let table_idx = (index - 1) as u16;
         let s2 = SetAbsStringTableIndex(phrases as *mut _, table_idx);
         let clip = GetStringSoundClip(s2);
 

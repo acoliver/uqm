@@ -122,7 +122,7 @@ pub(super) mod c_bridge {
         // C functions used by direct-access replacements
         pub fn SetAbsStringTableIndex(
             table: *mut std::ffi::c_void,
-            index: c_int,
+            index: u16,
         ) -> *mut std::ffi::c_void;
         pub fn GetStringAddress(s: *mut std::ffi::c_void) -> *const c_char;
         #[allow(dead_code)]
@@ -185,7 +185,7 @@ unsafe fn planet_name() -> *const std::ffi::c_char {
 /// Get a game string via GAME_STRING macro: SetAbsStringTableIndex(GameStrings, i) → GetStringAddress.
 #[cfg(not(test))]
 unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
-    let s = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, index);
+    let s = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, index as u16);
     c_bridge::GetStringAddress(s)
 }
 

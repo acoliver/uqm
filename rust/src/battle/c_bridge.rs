@@ -97,7 +97,7 @@ extern "C" {
     pub fn GetFrameRect(frame: Frame, rect: *mut c_void);
 
     /// Get the number of frames in a frame array
-    pub fn GetFrameCount(frame: Frame) -> c_int;
+    pub fn GetFrameCount(frame: Frame) -> u16;
 
     /// Set trilinear mipmap for a frame
     pub fn TFB_DrawScreen_SetMipmap(

@@ -66,6 +66,7 @@ pub mod scenario;
 pub mod scheduler;
 pub mod script;
 pub mod setup;
+pub mod ship_resources;
 pub mod suite;
 pub mod sync_model;
 pub mod trace;
@@ -135,8 +136,8 @@ pub use script::{
     NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
     PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep, RootDocument, SceneAssertion,
     ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep,
-    SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep,
-    ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+    SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, ShipResourcesAssertion, TapMenuKeyStep,
+    TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
     WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
     WaitForPlanetSideStartStep, WaitInputTicksStep, WaitPresentationsStep,
     CAPABILITY_REQUIRED_FLAGS,

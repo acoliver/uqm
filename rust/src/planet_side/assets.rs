@@ -47,7 +47,7 @@ struct SoundPosition {
 
 #[cfg(feature = "linked_c_archive")]
 extern "C" {
-    fn SetAbsStringTableIndex(sound: *mut c_void, index: i32) -> *mut c_void;
+    fn SetAbsStringTableIndex(sound: *mut c_void, index: u16) -> *mut c_void;
     fn NotPositional() -> SoundPosition;
     fn PlaySound(
         sound: *mut c_void,
@@ -65,7 +65,7 @@ impl PlanetSideAudio for CffiPlanetSideAudio {
 
         #[cfg(feature = "linked_c_archive")]
         unsafe {
-            let sound = SetAbsStringTableIndex(self.sounds.0, i32::from(sound_index(cue)));
+            let sound = SetAbsStringTableIndex(self.sounds.0, sound_index(cue));
             let priority = if matches!(cue, SoundCue::Returns | SoundCue::Destroyed) {
                 3
             } else {
