@@ -13,6 +13,8 @@
 //! Every [`SAMPLE_PRESENTATIONS`] presentations the reporter writes a single
 //! `UQM_PRESENTATION_TIMING` line to stderr and starts a new window. The
 //! stderr write is excluded from every window: the next window begins after it.
+//! The same boundary also writes the completing thread's
+//! [`super::syscall_latency`] line, when that thread timed any file operation.
 //!
 //! A reporter that cannot account or write a sample records why, warns once
 //! through `log`, and stops sampling. It never changes the run's outcome.
@@ -357,7 +359,8 @@ impl<S: Stage> TimingReporter<S> {
         match self.sampler.complete(presentation, now) {
             Ok(None) => {}
             Ok(Some(sample)) => {
-                let written = write_sample(out, &sample);
+                let written = write_sample(out, &sample)
+                    .and_then(|()| super::syscall_latency::write_window_report(out, &sample));
                 self.note(written);
                 // The write is outside every window: the next one opens now.
                 self.sampler.begin_window(Instant::now());
@@ -617,6 +620,45 @@ mod tests {
             baseline.as_nanos() / u128::from(SPANS),
             recorded.as_nanos() / u128::from(SPANS)
         );
+    }
+
+    #[test]
+    fn each_window_line_is_followed_by_the_threads_syscall_latency_line() {
+        use crate::automation::syscall_latency::{
+            begin, drain_for_tests, Outcome, Syscall, Target, REPORT_PREFIX, REPORT_SCHEMA,
+        };
+
+        drain_for_tests();
+        let base = Instant::now();
+        let mut reporter = TimingReporter::<GameStage>::new("game");
+        let mut out = Vec::new();
+        for presentation in 1..=2 * SAMPLE_PRESENTATIONS {
+            begin(Target::TraceJournal, Syscall::WriteAll).finish(Outcome::read(10, false));
+            reporter.complete_into(presentation, at(base, 1_000_000), &mut out);
+        }
+        let text = String::from_utf8(out).unwrap();
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines.len(), 4);
+        for window in 0..2u64 {
+            let timing = lines[2 * window as usize]
+                .strip_prefix(SAMPLE_PREFIX)
+                .unwrap();
+            let timing: serde_json::Value = serde_json::from_str(timing).unwrap();
+            let latency = lines[2 * window as usize + 1]
+                .strip_prefix(REPORT_PREFIX)
+                .unwrap();
+            let latency: serde_json::Value = serde_json::from_str(latency).unwrap();
+            assert_eq!(latency["schema"], REPORT_SCHEMA);
+            assert_eq!(latency["role"], "game");
+            assert_eq!(latency["pid"], timing["pid"]);
+            assert_eq!(latency["first_presentation"], timing["first_presentation"]);
+            assert_eq!(latency["last_presentation"], timing["last_presentation"]);
+            let write = &latency["operations"][0];
+            assert_eq!(write["target"], "trace_journal");
+            assert_eq!(write["calls"], SAMPLE_PRESENTATIONS);
+            assert_eq!(write["bytes"], 10 * SAMPLE_PRESENTATIONS);
+        }
+        assert_eq!(reporter.failure(), None);
     }
 
     struct FailingWriter;

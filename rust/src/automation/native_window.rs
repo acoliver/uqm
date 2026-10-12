@@ -227,6 +227,29 @@ pub struct NativeWindowPublication {
     pub acknowledgement: NativeWindowAck,
 }
 
+/// The handshake files that cross between the game and its controller.
+#[derive(Debug, Clone, Copy)]
+enum ControlFile {
+    State,
+    Acknowledgement,
+}
+
+impl ControlFile {
+    fn label(self) -> &'static str {
+        match self {
+            Self::State => "state",
+            Self::Acknowledgement => "acknowledgement",
+        }
+    }
+
+    fn target(self) -> super::syscall_latency::Target {
+        match self {
+            Self::State => super::syscall_latency::Target::StateFile,
+            Self::Acknowledgement => super::syscall_latency::Target::AcknowledgementFile,
+        }
+    }
+}
+
 #[derive(Debug)]
 struct BoundOutputDirectory {
     #[cfg(unix)]
@@ -276,16 +299,24 @@ impl BoundOutputDirectory {
     /// presentation was a large share of each frame. The controller syncs the
     /// final state and acknowledgement once before it hashes them.
     #[cfg(unix)]
-    fn publish(&self, name: &std::ffi::OsStr, bytes: &[u8], label: &str) -> Result<(), String> {
+    fn publish(
+        &self,
+        name: &std::ffi::OsStr,
+        bytes: &[u8],
+        control: ControlFile,
+    ) -> Result<(), String> {
+        use super::syscall_latency::{self as latency, Outcome, Syscall};
         use std::ffi::CString;
-        use std::io::Write as _;
         use std::os::fd::{AsRawFd as _, FromRawFd as _};
         use std::os::unix::ffi::OsStrExt as _;
 
+        let label = control.label();
+        let target = control.target();
         let name = CString::new(name.as_bytes())
             .map_err(|_| format!("native-window {label} filename contains NUL"))?;
         let temporary = CString::new(format!(".{}.tmp", name.to_string_lossy()))
             .map_err(|_| format!("native-window {label} temporary filename contains NUL"))?;
+        let create = latency::begin(target, Syscall::OpenAt);
         let descriptor = unsafe {
             libc::openat(
                 self.directory.as_raw_fd(),
@@ -294,6 +325,7 @@ impl BoundOutputDirectory {
                 0o600,
             )
         };
+        create.finish(Outcome::of_status(descriptor >= 0));
         if descriptor < 0 {
             return Err(format!(
                 "create native-window {label} temporary: {}",
@@ -301,23 +333,29 @@ impl BoundOutputDirectory {
             ));
         }
         let mut file = unsafe { fs::File::from_raw_fd(descriptor) };
-        if let Err(error) = file.write_all(bytes).and_then(|()| file.write_all(b"\n")) {
+        if let Err(error) = latency::timed_write_all(target, Syscall::WriteAll, &mut file, bytes)
+            .and_then(|()| {
+                latency::timed_write_all(target, Syscall::WriteAllNewline, &mut file, b"\n")
+            })
+        {
             drop(file);
             unsafe {
                 libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0);
             }
             return Err(format!("write native-window {label}: {error}"));
         }
-        drop(file);
-        if unsafe {
+        latency::timed_close_by_drop(target, file);
+        let rename = latency::begin(target, Syscall::RenameAt);
+        let renamed = unsafe {
             libc::renameat(
                 self.directory.as_raw_fd(),
                 temporary.as_ptr(),
                 self.directory.as_raw_fd(),
                 name.as_ptr(),
             )
-        } != 0
-        {
+        };
+        rename.finish(Outcome::of_status(renamed == 0));
+        if renamed != 0 {
             let error = std::io::Error::last_os_error();
             unsafe {
                 libc::unlinkat(self.directory.as_raw_fd(), temporary.as_ptr(), 0);
@@ -328,9 +366,15 @@ impl BoundOutputDirectory {
     }
 
     #[cfg(not(unix))]
-    fn publish(&self, name: &std::ffi::OsStr, bytes: &[u8], label: &str) -> Result<(), String> {
+    fn publish(
+        &self,
+        name: &std::ffi::OsStr,
+        bytes: &[u8],
+        control: ControlFile,
+    ) -> Result<(), String> {
         use std::io::Write as _;
 
+        let label = control.label();
         let destination = self.path.join(name);
         let temporary = destination.with_extension("json.tmp");
         let mut file = fs::OpenOptions::new()
@@ -356,15 +400,19 @@ impl BoundOutputDirectory {
         &self,
         name: &std::ffi::OsStr,
         byte_limit: u64,
-        label: &str,
+        control: ControlFile,
     ) -> Result<Vec<u8>, String> {
+        use super::syscall_latency::{self as latency, Outcome, Syscall};
         use std::ffi::CString;
         use std::io::Read as _;
         use std::os::fd::{AsRawFd as _, FromRawFd as _};
         use std::os::unix::ffi::OsStrExt as _;
 
+        let label = control.label();
+        let target = control.target();
         let name = CString::new(name.as_bytes())
             .map_err(|_| format!("native-window {label} filename contains NUL"))?;
+        let open = latency::begin(target, Syscall::OpenAt);
         let descriptor = unsafe {
             libc::openat(
                 self.directory.as_raw_fd(),
@@ -372,6 +420,7 @@ impl BoundOutputDirectory {
                 libc::O_RDONLY | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK,
             )
         };
+        open.finish(Outcome::of_status(descriptor >= 0));
         if descriptor < 0 {
             return Err(format!(
                 "open native-window {label}: {}",
@@ -379,18 +428,24 @@ impl BoundOutputDirectory {
             ));
         }
         let mut file = unsafe { fs::File::from_raw_fd(descriptor) };
-        if !file
-            .metadata()
+        let inspect = latency::begin(target, Syscall::Fstat);
+        let metadata = file.metadata();
+        inspect.finish(Outcome::of_result(&metadata, 0));
+        if !metadata
             .map_err(|error| format!("inspect native-window {label}: {error}"))?
             .is_file()
         {
             return Err(format!("native-window {label} is not a regular file"));
         }
         let mut bytes = Vec::new();
-        file.by_ref()
+        let read_scope = latency::begin(target, Syscall::ReadToEnd);
+        let read = file
+            .by_ref()
             .take(byte_limit.saturating_add(1))
-            .read_to_end(&mut bytes)
-            .map_err(|error| format!("read native-window {label}: {error}"))?;
+            .read_to_end(&mut bytes);
+        read_scope.finish(Outcome::read(bytes.len() as u64, read.is_err()));
+        latency::timed_close_by_drop(target, file);
+        read.map_err(|error| format!("read native-window {label}: {error}"))?;
         if bytes.len() as u64 > byte_limit {
             return Err(format!("native-window {label} exceeds its byte budget"));
         }
@@ -402,8 +457,9 @@ impl BoundOutputDirectory {
         &self,
         name: &std::ffi::OsStr,
         byte_limit: u64,
-        label: &str,
+        control: ControlFile,
     ) -> Result<Vec<u8>, String> {
+        let label = control.label();
         let bytes = read_regular_nofollow_bounded(&self.path.join(name), byte_limit)
             .map_err(|error| format!("read native-window {label}: {error}"))?;
         if bytes.len() as u64 > byte_limit {
@@ -415,7 +471,8 @@ impl BoundOutputDirectory {
 
 impl BoundOutputDirectory {
     #[cfg(unix)]
-    fn contains(&self, name: &std::ffi::OsStr) -> Result<bool, String> {
+    fn contains(&self, name: &std::ffi::OsStr, control: ControlFile) -> Result<bool, String> {
+        use super::syscall_latency::{self as latency, Outcome, Syscall};
         use std::ffi::CString;
         use std::mem::MaybeUninit;
         use std::os::fd::AsRawFd as _;
@@ -424,18 +481,23 @@ impl BoundOutputDirectory {
         let name = CString::new(name.as_bytes())
             .map_err(|_| "native-window output filename contains NUL".to_string())?;
         let mut metadata = MaybeUninit::<libc::stat>::uninit();
-        if unsafe {
+        let inspect = latency::begin(control.target(), Syscall::FstatAt);
+        let status = unsafe {
             libc::fstatat(
                 self.directory.as_raw_fd(),
                 name.as_ptr(),
                 metadata.as_mut_ptr(),
                 libc::AT_SYMLINK_NOFOLLOW,
             )
-        } == 0
-        {
+        };
+        // A missing file is the expected idle answer of a poll, not a failure.
+        let error = std::io::Error::last_os_error();
+        inspect.finish(Outcome::of_status(
+            status == 0 || error.kind() == std::io::ErrorKind::NotFound,
+        ));
+        if status == 0 {
             return Ok(true);
         }
-        let error = std::io::Error::last_os_error();
         if error.kind() == std::io::ErrorKind::NotFound {
             Ok(false)
         } else {
@@ -444,7 +506,7 @@ impl BoundOutputDirectory {
     }
 
     #[cfg(not(unix))]
-    fn contains(&self, name: &std::ffi::OsStr) -> Result<bool, String> {
+    fn contains(&self, name: &std::ffi::OsStr, _control: ControlFile) -> Result<bool, String> {
         match fs::symlink_metadata(self.path.join(name)) {
             Ok(_) => Ok(true),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -485,7 +547,7 @@ impl NativeWindowAckPublisher {
         })
         .map_err(|error| format!("serialize native-window acknowledgement: {error}"))?;
         self.output_directory
-            .publish(&self.filename, &bytes, "acknowledgement")
+            .publish(&self.filename, &bytes, ControlFile::Acknowledgement)
     }
 }
 
@@ -520,9 +582,9 @@ impl NativeWindowStateReader {
         expected_pid: u32,
         expected_bounds: NativeWindowBounds,
     ) -> Result<NativeWindowChildState, String> {
-        let bytes = self
-            .output_directory
-            .read(&self.filename, self.byte_limit, "state")?;
+        let bytes =
+            self.output_directory
+                .read(&self.filename, self.byte_limit, ControlFile::State)?;
         validate_native_window_state_bytes(&bytes, expected_nonce, expected_pid, expected_bounds)
     }
 
@@ -532,7 +594,10 @@ impl NativeWindowStateReader {
         expected_pid: u32,
         expected_bounds: NativeWindowBounds,
     ) -> Result<Option<NativeWindowChildState>, String> {
-        if !self.output_directory.contains(&self.filename)? {
+        if !self
+            .output_directory
+            .contains(&self.filename, ControlFile::State)?
+        {
             return Ok(None);
         }
         self.read(expected_nonce, expected_pid, expected_bounds)
@@ -1945,7 +2010,7 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
     config.output_directory.publish(
         std::ffi::OsStr::new("native-window-state.json"),
         &bytes,
-        "state",
+        ControlFile::State,
     )?;
     super::presentation_timing::game::span_since(
         super::presentation_timing::GameStage::PublishWrite,
@@ -1977,7 +2042,7 @@ fn wait_for_native_window_ack(
         let read = output_directory.read(
             std::ffi::OsStr::new("native-window-ack.json"),
             byte_limit,
-            "acknowledgement",
+            ControlFile::Acknowledgement,
         );
         game::span_since(GameStage::AckRead, read_started);
         if let Ok(bytes) = read {
@@ -6085,7 +6150,11 @@ mod tests {
         fs::create_dir(&visible).unwrap();
 
         bound
-            .publish(std::ffi::OsStr::new("state.json"), b"bound", "state")
+            .publish(
+                std::ffi::OsStr::new("state.json"),
+                b"bound",
+                ControlFile::State,
+            )
             .unwrap();
 
         assert_eq!(fs::read(retained.join("state.json")).unwrap(), b"bound\n");
@@ -6398,5 +6467,208 @@ mod tests {
         let alias = root.path().join("state.json");
         symlink(target, &alias).unwrap();
         assert!(read_native_window_state(&alias, &"a".repeat(64), 42, bounds).is_err());
+    }
+
+    #[cfg(unix)]
+    mod syscall_latency_attribution {
+        use super::super::super::syscall_latency::{counts_of, drain_for_tests, LatencyReport};
+        use super::super::*;
+
+        fn drained() -> LatencyReport {
+            drain_for_tests().expect("the test thread timed file operations")
+        }
+
+        const STATE: &str = "state_file";
+        const ACK: &str = "acknowledgement_file";
+
+        #[test]
+        fn publishing_times_each_step_once_and_only_for_its_own_file() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            drain_for_tests();
+
+            bound
+                .publish(
+                    std::ffi::OsStr::new("state.json"),
+                    b"bound",
+                    ControlFile::State,
+                )
+                .unwrap();
+
+            let report = drained();
+            assert_eq!(counts_of(&report, STATE, "openat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, STATE, "write_all"), (1, 0, 5));
+            assert_eq!(counts_of(&report, STATE, "write_all_newline"), (1, 0, 1));
+            assert_eq!(counts_of(&report, STATE, "close_by_drop"), (1, 0, 0));
+            assert_eq!(counts_of(&report, STATE, "renameat"), (1, 0, 0));
+            assert_eq!(report.operations.len(), 5);
+            assert_eq!(report.nested_scopes_not_recorded, 0);
+            assert_eq!(report.unfinished_scopes, 0);
+            assert_eq!(
+                fs::read(root.path().join("state.json")).unwrap(),
+                b"bound\n"
+            );
+        }
+
+        #[test]
+        fn an_acknowledgement_read_is_attributed_to_the_acknowledgement_file() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let name = std::ffi::OsStr::new("native-window-ack.json");
+            bound
+                .publish(name, b"0123456789", ControlFile::Acknowledgement)
+                .unwrap();
+            drain_for_tests();
+
+            assert_eq!(
+                bound
+                    .read(name, 4096, ControlFile::Acknowledgement)
+                    .unwrap(),
+                b"0123456789\n"
+            );
+
+            let report = drained();
+            assert_eq!(counts_of(&report, ACK, "openat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, ACK, "fstat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, ACK, "read_to_end"), (1, 0, 11));
+            assert_eq!(counts_of(&report, ACK, "close_by_drop"), (1, 0, 0));
+            assert_eq!(report.operations.len(), 4);
+        }
+
+        #[test]
+        fn a_read_of_a_missing_file_counts_one_failed_open_and_nothing_after_it() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            drain_for_tests();
+
+            let error = bound
+                .read(
+                    std::ffi::OsStr::new("absent.json"),
+                    4096,
+                    ControlFile::Acknowledgement,
+                )
+                .unwrap_err();
+
+            assert!(
+                error.starts_with("open native-window acknowledgement:"),
+                "{error}"
+            );
+            let report = drained();
+            assert_eq!(counts_of(&report, ACK, "openat"), (1, 1, 0));
+            assert_eq!(report.operations.len(), 1);
+        }
+
+        #[test]
+        fn a_read_beyond_its_budget_still_reports_the_bytes_read_and_the_close() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let name = std::ffi::OsStr::new("state.json");
+            fs::write(root.path().join("state.json"), b"0123456789").unwrap();
+            drain_for_tests();
+
+            let error = bound.read(name, 3, ControlFile::State).unwrap_err();
+
+            assert_eq!(error, "native-window state exceeds its byte budget");
+            let report = drained();
+            // The read is capped at the budget plus the one byte that proves
+            // the overrun, and the read itself succeeded.
+            assert_eq!(counts_of(&report, STATE, "read_to_end"), (1, 0, 4));
+            assert_eq!(counts_of(&report, STATE, "close_by_drop"), (1, 0, 0));
+        }
+
+        #[test]
+        fn a_directory_in_place_of_the_file_fails_the_read_after_the_open_and_inspection() {
+            let root = tempfile::tempdir().unwrap();
+            fs::create_dir(root.path().join("state.json")).unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            drain_for_tests();
+
+            let error = bound
+                .read(std::ffi::OsStr::new("state.json"), 4096, ControlFile::State)
+                .unwrap_err();
+
+            assert_eq!(error, "native-window state is not a regular file");
+            let report = drained();
+            assert_eq!(counts_of(&report, STATE, "openat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, STATE, "fstat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, STATE, "read_to_end"), (0, 0, 0));
+        }
+
+        #[test]
+        fn a_colliding_temporary_fails_the_open_and_publishes_nothing() {
+            let root = tempfile::tempdir().unwrap();
+            fs::write(root.path().join(".state.json.tmp"), b"stale").unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            drain_for_tests();
+
+            let error = bound
+                .publish(
+                    std::ffi::OsStr::new("state.json"),
+                    b"bound",
+                    ControlFile::State,
+                )
+                .unwrap_err();
+
+            assert!(
+                error.starts_with("create native-window state temporary:"),
+                "{error}"
+            );
+            let report = drained();
+            assert_eq!(counts_of(&report, STATE, "openat"), (1, 1, 0));
+            assert_eq!(report.operations.len(), 1);
+            assert!(!root.path().join("state.json").exists());
+            assert_eq!(
+                fs::read(root.path().join(".state.json.tmp")).unwrap(),
+                b"stale"
+            );
+        }
+
+        #[test]
+        fn existence_checks_count_a_missing_file_as_an_answer_not_a_failure() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            fs::write(root.path().join("present.json"), b"x").unwrap();
+            drain_for_tests();
+
+            assert!(!bound
+                .contains(std::ffi::OsStr::new("absent.json"), ControlFile::State)
+                .unwrap());
+            assert!(bound
+                .contains(std::ffi::OsStr::new("present.json"), ControlFile::State)
+                .unwrap());
+
+            let report = drained();
+            assert_eq!(counts_of(&report, STATE, "fstatat"), (2, 0, 0));
+            assert_eq!(report.operations.len(), 1);
+        }
+
+        #[test]
+        fn the_controllers_binding_types_attribute_state_polls_and_acknowledgements() {
+            let root = tempfile::tempdir().unwrap();
+            let nonce = "a".repeat(64);
+            let reader =
+                NativeWindowStateReader::bind(&root.path().join("native-window-state.json"), 4096)
+                    .unwrap();
+            let publisher =
+                NativeWindowAckPublisher::bind(&root.path().join("native-window-ack.json"))
+                    .unwrap();
+            let bounds = NativeWindowBounds {
+                x: 0,
+                y: 0,
+                width: 1,
+                height: 1,
+            };
+            drain_for_tests();
+
+            assert_eq!(reader.read_if_present(&nonce, 1, bounds), Ok(None));
+            publisher.acknowledge(&nonce, 3).unwrap();
+
+            let report = drained();
+            assert_eq!(counts_of(&report, STATE, "fstatat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, ACK, "renameat"), (1, 0, 0));
+            assert_eq!(counts_of(&report, STATE, "renameat"), (0, 0, 0));
+            assert_eq!(counts_of(&report, ACK, "read_to_end"), (0, 0, 0));
+            assert_eq!(counts_of(&report, "trace_journal", "write_all"), (0, 0, 0));
+        }
     }
 }

@@ -44,7 +44,16 @@ impl Write for NativeTraceJournal {
                 "native trace exhausted its authority byte reservation",
             ));
         }
-        self.file.write_all(bytes)?;
+        #[cfg(feature = "debug-process")]
+        let written = super::syscall_latency::timed_write_all(
+            super::syscall_latency::Target::TraceJournal,
+            super::syscall_latency::Syscall::WriteAll,
+            &mut self.file,
+            bytes,
+        );
+        #[cfg(not(feature = "debug-process"))]
+        let written = self.file.write_all(bytes);
+        written?;
         self.remaining -= bytes.len() as u64;
         Ok(bytes.len())
     }
@@ -92,5 +101,27 @@ mod tests {
             std::fs::read(root.path().join("trace.jsonl")).unwrap(),
             b"first\n"
         );
+    }
+
+    #[cfg(feature = "debug-process")]
+    #[test]
+    fn journal_writes_are_counted_once_per_record_with_their_actual_bytes() {
+        use crate::automation::syscall_latency::{counts_of, drain_for_tests};
+
+        drain_for_tests();
+        let root = tempfile::tempdir().unwrap();
+        let commit = OrderedCommit::new();
+        let mut journal = NativeTraceJournal::create(root.path(), 13).unwrap();
+        commit.reserve().commit_record("first\n".into());
+        commit.reserve().commit_record("second\n".into());
+        journal.publish(&commit).unwrap();
+        let report = drain_for_tests().unwrap();
+        assert_eq!(counts_of(&report, "trace_journal", "write_all"), (2, 0, 13));
+        assert_eq!(report.operations.len(), 1);
+
+        // A record beyond the reservation is refused before any write.
+        commit.reserve().commit_record("third\n".into());
+        assert!(journal.publish(&commit).is_err());
+        assert_eq!(drain_for_tests(), None);
     }
 }

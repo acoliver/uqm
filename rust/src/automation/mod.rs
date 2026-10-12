@@ -69,6 +69,8 @@ pub mod script;
 pub mod setup;
 pub mod suite;
 pub mod sync_model;
+#[cfg(feature = "debug-process")]
+pub(crate) mod syscall_latency;
 pub mod trace;
 pub mod transport;
 pub mod ui_observation;
