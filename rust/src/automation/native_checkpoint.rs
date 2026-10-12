@@ -28,6 +28,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertCommunicationResponses(_)
         | Action::AssertBattleFrames(_)
         | Action::AssertHyperspaceDisplacement(_)
+        | Action::AssertShipResources(_)
         | Action::AssertPlanetSideCollisions(_)
         | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
         Action::WaitForMainMenuReady(_)

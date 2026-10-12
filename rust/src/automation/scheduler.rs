@@ -1262,6 +1262,7 @@ fn reduce_capture_and_assertion(
         | (Action::AssertBattleFrames(_), ActionPhase::WaitingForInput)
         | (Action::RecordHyperspacePosition(_), ActionPhase::WaitingForInput)
         | (Action::AssertHyperspaceDisplacement(_), ActionPhase::WaitingForInput)
+        | (Action::AssertShipResources(_), ActionPhase::WaitingForInput)
         | (Action::AssertPlanetSideCollisions(_), ActionPhase::WaitingForInput) => {
             advance_to_next(state, config, sv, EffectPlan::none())
         }
@@ -1915,6 +1916,23 @@ mod tests {
         assert!(player
             .iter()
             .all(|e| e.write_key.is_none() && e.release_key.is_none()));
+    }
+
+    #[test]
+    fn ship_resources_assertion_advances_without_input_effects() {
+        use crate::automation::script::ShipResourcesAssertion;
+        let actions = [
+            Action::AssertShipResources(ShipResourcesAssertion {
+                fuel_on_board: Some(1000),
+                res_units: Some(0),
+            }),
+            Action::Finish,
+        ];
+        let config = cfg(&actions);
+        let state = SchedulerState::initial();
+        let t = scheduler_reduce(&state, &config, SchedulerEvent::AdmittedInput);
+        assert_eq!(t.new_state.step_index, 1);
+        assert_eq!(t.effects, EffectPlan::none());
     }
 
     #[test]

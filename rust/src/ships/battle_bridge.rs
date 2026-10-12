@@ -185,7 +185,7 @@ extern "C" {
     // Frame operations (real C functions)
     fn SetAbsFrameIndex(frame: Frame, index: u16) -> Frame;
     fn IncFrameIndex(frame: Frame) -> Frame;
-    fn GetFrameCount(frame: Frame) -> c_int;
+    fn GetFrameCount(frame: Frame) -> u16;
 
     // Velocity
     fn SetVelocityVector(vel: *mut c_void, magnitude: c_int, facing: c_int, direction: c_int);
@@ -415,7 +415,7 @@ pub mod bridge {
     ///
     /// This is an FFI function called from C. The caller must ensure pointers are valid.
     pub unsafe fn get_frame_count(frame: Frame) -> i32 {
-        GetFrameCount(frame) as i32
+        i32::from(GetFrameCount(frame))
     }
     /// # Safety
     ///

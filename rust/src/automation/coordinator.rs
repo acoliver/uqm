@@ -26,6 +26,7 @@ use crate::automation::scheduler::{
     SchedulerState, TerminalOutcome,
 };
 use crate::automation::script::{Action, ActivityAssertion, ValidatedScript};
+use crate::automation::ship_resources;
 use crate::automation::trace::{
     ActivityEvidence, ReadinessEvidence, RecordKind, SeedApplication, SeedDomain, TraceRecord,
 };
@@ -1496,6 +1497,30 @@ impl Coordinator {
                 mode::require_live(),
                 flight_position::live_position(),
                 assertion.minimum_logical_units,
+            ) {
+                Ok(proof) => self.write_trace_labeled(
+                    inner,
+                    RecordKind::SemanticAssertion,
+                    proof.trace_label(),
+                ),
+                Err(error) => {
+                    self.write_trace_labeled(
+                        inner,
+                        RecordKind::SemanticAssertion,
+                        error.trace_label(),
+                    );
+                    self.set_terminal(inner, TerminalClass::SemanticMismatch);
+                    return true;
+                }
+            }
+        }
+        if let Some(Action::AssertShipResources(assertion)) =
+            self.actions.get(inner.sched_state.step_index)
+        {
+            match ship_resources::assert_ship_resources(
+                mode::require_live(),
+                ship_resources::live_resources(),
+                *assertion,
             ) {
                 Ok(proof) => self.write_trace_labeled(
                     inner,

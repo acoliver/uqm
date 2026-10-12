@@ -60,6 +60,47 @@ dispatch_verified:encounter=24:dialogue=18
 
 The output capture is `captures/real-probe-encounter.png`.
 
+## Fuel preparation for long hyperspace flights
+
+`probe-encounter-v3` and `probe-encounter-v4` thrust for more hyperspace
+distance than the opening tank (1000 raw fuel) can pay for, so they prepare the
+ship before the original flight sequence, using only the inputs a player has:
+
+1. `assert_ship_resources` requires the new-game state, 1000 raw fuel and 0 RU.
+2. The opening probe broadcast, then a Luna landing on the moon base node. The
+   lander picks the node up, which sets `MOONBASE_ON_SHIP`.
+3. A first Starbase visit (the unallied Commander conversation), then a second
+   visit. With the moon base on board the Commander pays 2500 RU through
+   `DeltaSISGauges`, and `assert_ship_resources` requires 1000 raw fuel and
+   2500 RU once the Starbase menu is up.
+4. In the Outfit screen, 50 presses of Up each buy 100 raw fuel for 20 RU.
+   `assert_ship_resources` requires 6000 raw fuel (reserve 1000 plus the
+   5000 tank) and 1500 RU.
+5. Depart, then require the same state again before the flight starts.
+
+`assert_ship_resources` reads `GLOBAL_SIS(FuelOnBoard)` and
+`GLOBAL_SIS(ResUnits)`. It only reads: no script action grants fuel or RU, and
+a mismatch ends the run with a `SemanticMismatch` trace record that names the
+observed and the expected values.
+
+Limits of this preparation:
+
+- Only `probe-encounter-v3` and `probe-encounter-v4` carry the preparation.
+  `probe-encounter-v1`, `-v2`, `-v5`, `-v6` and `-v7` still start from the
+  opening 1000 raw fuel. Whether their flights fit that tank is an estimate,
+  not a measurement, and no live run has shown it either way. They keep their
+  original holds and turns; nothing was shortened to make them fit.
+- The preparation has not run live. The Moon base pickup, the 2500 RU reward
+  and the 50 Outfit purchases are checked only by unit tests of the pure
+  transaction model and by the script invariants in
+  `tests/probe_encounter_flight_input.rs`. The first live run decides whether
+  the `assert_ship_resources` expectations hold.
+- Shipyard, module installation and Save/Load from Outfit are not ported and
+  end the game loop with a typed `Unported` error. The scripts never select
+  them.
+- `repro-comm-menu-initial` starts in the Commander conversation and finishes
+  inside it, so it never reaches the Starbase menu. It is unchanged.
+
 ## Player controls and navigation
 
 Use `set_player_key` or `tap_player_key` for raw production gameplay controls.

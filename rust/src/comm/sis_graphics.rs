@@ -189,7 +189,7 @@ mod c_bridge {
         pub static mut GameStrings: *mut std::ffi::c_void;
         pub fn SetAbsStringTableIndex(
             table: *mut std::ffi::c_void,
-            index: std::ffi::c_int,
+            index: u16,
         ) -> *mut std::ffi::c_void;
         pub fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
 
@@ -431,7 +431,7 @@ const FEEDBACK_STRING_BASE: i32 = 0x0100;
 /// Inline GAME_STRING(i) macro: GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
 #[cfg(not(test))]
 unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
-    let table = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, id as std::ffi::c_int);
+    let table = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, id as u16);
     c_bridge::GetStringAddress(table)
 }
 

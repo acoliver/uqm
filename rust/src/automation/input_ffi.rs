@@ -231,6 +231,29 @@ pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
     None
 }
 
+/// The flagship's authoritative `FuelOnBoard` and `ResUnits`, in that order.
+///
+/// `DeltaSISGauges` changes exactly these `SIS_STATE` fields, so a reward or
+/// a purchase is visible here only after the game applied it.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some((
+            std::ptr::addr_of!((*sis_state).fuel_on_board).read(),
+            std::ptr::addr_of!((*sis_state).res_units).read(),
+        ))
+    }
+}
+
+/// Without the linked game there is no flagship state to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn ship_resources() -> Option<(u32, u32)> {
+    None
+}
+
 /// Sample the live solar system for flying out of it, without a target.
 ///
 /// `active` is 0 whenever no solar system is live, which is how a departure

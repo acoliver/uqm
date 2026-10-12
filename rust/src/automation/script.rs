@@ -620,6 +620,21 @@ pub struct HyperspaceDisplacementAssertion {
     pub minimum_logical_units: u32,
 }
 
+/// Assert the flagship's live `FuelOnBoard` and `ResUnits` equal the stated
+/// values. A field left out is not checked; at least one must be stated.
+///
+/// Both are read from `GLOBAL_SIS`, the state `DeltaSISGauges` changes, so
+/// the assertion proves a reward or purchase the game really applied. It can
+/// only read: nothing here grants fuel or resource units.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ShipResourcesAssertion {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fuel_on_board: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub res_units: Option<u32>,
+}
+
 /// Wait for the current battle to complete at least `minimum` real frames.
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -724,6 +739,7 @@ pub enum Action {
     AssertBattleFrames(BattleFramesAssertion),
     RecordHyperspacePosition(RecordHyperspacePositionStep),
     AssertHyperspaceDisplacement(HyperspaceDisplacementAssertion),
+    AssertShipResources(ShipResourcesAssertion),
     WaitForBattleFrames(WaitForBattleFramesStep),
     AssertPlanetSideCollisions(PlanetSideCollisionAssertion),
     SelectCommunicationResponse(SelectCommunicationResponseStep),
@@ -1885,6 +1901,15 @@ fn validate_assertion_step(
                     path,
                     index,
                     "assert_hyperspace_displacement: minimum_logical_units must be greater than zero",
+                ));
+            }
+        }
+        Action::AssertShipResources(assertion) => {
+            if assertion.fuel_on_board.is_none() && assertion.res_units.is_none() {
+                return Err(AutomationError::step(
+                    path,
+                    index,
+                    "assert_ship_resources: state fuel_on_board, res_units or both",
                 ));
             }
         }
@@ -3230,6 +3255,79 @@ mod tests {
         let roomy = r#"{"version":1,"name":"fixture-162","budgets":{"max_input_ticks":3,"max_presentations":1,"max_wallclock_seconds":1},"steps":[{"action":"setup_planet_side_collision_fixture"},{"action":"finish"}]}"#;
         let roomy = validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).unwrap();
         assert_eq!(roomy.steps().len(), 2);
+    }
+
+    // --- assert_ship_resources ---
+
+    fn resource_script(step: &str) -> String {
+        format!(
+            r#"{{"version":1,"name":"r","budgets":{{"max_input_ticks":4,"max_presentations":4,"max_wallclock_seconds":1}},"steps":[{step},{{"action":"finish"}}]}}"#
+        )
+    }
+
+    #[test]
+    fn assert_ship_resources_parses_either_or_both_fields() {
+        for (step, fuel, ru) in [
+            (
+                r#"{"action":"assert_ship_resources","fuel_on_board":6000,"res_units":1500}"#,
+                Some(6000),
+                Some(1500),
+            ),
+            (
+                r#"{"action":"assert_ship_resources","fuel_on_board":1000}"#,
+                Some(1000),
+                None,
+            ),
+            (
+                r#"{"action":"assert_ship_resources","res_units":0}"#,
+                None,
+                Some(0),
+            ),
+        ] {
+            let text = resource_script(step);
+            let validated =
+                validate_script(parse_script(text.as_bytes(), p()).unwrap(), p()).unwrap();
+            assert_eq!(
+                validated.steps()[0],
+                Action::AssertShipResources(ShipResourcesAssertion {
+                    fuel_on_board: fuel,
+                    res_units: ru,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn assert_ship_resources_with_nothing_to_check_is_rejected() {
+        let text = resource_script(r#"{"action":"assert_ship_resources"}"#);
+        let error = validate_script(parse_script(text.as_bytes(), p()).unwrap(), p()).unwrap_err();
+        assert!(
+            error.to_string().contains("assert_ship_resources"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn assert_ship_resources_rejects_unknown_negative_and_oversized_values() {
+        for step in [
+            r#"{"action":"assert_ship_resources","fuel_on_board":1,"grant":5}"#,
+            r#"{"action":"assert_ship_resources","fuel_on_board":-1}"#,
+            r#"{"action":"assert_ship_resources","res_units":4294967296}"#,
+            r#"{"action":"assert_ship_resources","res_units":"2500"}"#,
+        ] {
+            let text = resource_script(step);
+            assert!(parse_script(text.as_bytes(), p()).is_err(), "{step}");
+        }
+    }
+
+    #[test]
+    fn assert_ship_resources_costs_one_input_callback_like_every_assertion() {
+        // The assertion and `finish` are two callbacks, so a cap of 3 admits
+        // exactly two and a cap of 2 admits one.
+        let tight = r#"{"version":1,"name":"r","budgets":{"max_input_ticks":2,"max_presentations":4,"max_wallclock_seconds":1},"steps":[{"action":"assert_ship_resources","res_units":0},{"action":"finish"}]}"#;
+        assert!(validate_script(parse_script(tight.as_bytes(), p()).unwrap(), p()).is_err());
+        let roomy = tight.replace("\"max_input_ticks\":2", "\"max_input_ticks\":3");
+        assert!(validate_script(parse_script(roomy.as_bytes(), p()).unwrap(), p()).is_ok());
     }
 
     // --- capability contract ---
