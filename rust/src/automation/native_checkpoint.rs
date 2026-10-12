@@ -171,7 +171,7 @@ impl CheckpointScan {
         };
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix, feature = "debug-process"))]
     pub(crate) const fn visits(&self) -> u64 {
         self.visits
     }
@@ -181,7 +181,9 @@ impl CheckpointScan {
         self.committed
     }
 
-    /// Positions of the committed markers, in trace order.
+    /// Positions of the committed markers, in trace order. Only the
+    /// controller's trace cursor reads them.
+    #[cfg(all(unix, feature = "debug-process"))]
     pub(crate) fn marker_positions(&self) -> &[usize] {
         &self.marker_positions
     }
