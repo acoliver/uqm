@@ -368,11 +368,14 @@ pub fn observe(observations: Observations) -> ModeObservation {
 /// Starbase has no activity state of its own in a live run: `IN_STARBASE` is
 /// reserved for save summaries, and docking presents the commander as a scene.
 /// The scene is therefore the observation, which is why this is read here
-/// rather than inferred from the activity word.
+/// rather than inferred from the activity word. A real visit is observed
+/// while the Starbase menu or the Outfit screen is the active input loop.
 #[must_use]
 pub fn live() -> Observations {
     use crate::automation::scenario::{active_scene, AutomationScene};
-    use crate::automation::ui_observation::{planet_menu_phase, PlanetMenuPhase};
+    use crate::automation::ui_observation::{
+        planet_menu_phase, starbase_menu_active, PlanetMenuPhase,
+    };
 
     let phase = planet_menu_phase();
     Observations {
@@ -382,7 +385,8 @@ pub fn live() -> Observations {
         } else {
             SurfacePresence::InOrbit
         },
-        docked_at_starbase: active_scene() == Some(AutomationScene::StarbaseCommander),
+        docked_at_starbase: active_scene() == Some(AutomationScene::StarbaseCommander)
+            || starbase_menu_active(),
         in_planet_orbit: phase != PlanetMenuPhase::Inactive,
     }
 }

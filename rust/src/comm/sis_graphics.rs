@@ -37,12 +37,12 @@ use crate::comm::locdata::{CColor, CRect};
 /// TEXT_ALIGN is a C enum (int-sized). Layout: i16, i16, pad[4], ptr, i32, u16, pad[2].
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct CText {
-    baseline: CPoint,
+pub(crate) struct CText {
+    pub(crate) baseline: CPoint,
     _pad0: [u8; 4], // align pointer to 8 bytes
-    p_str: *const std::ffi::c_char,
-    align: std::ffi::c_int, // TEXT_ALIGN: 0=LEFT, 1=CENTER, 2=RIGHT
-    char_count: u16,
+    pub(crate) p_str: *const std::ffi::c_char,
+    pub(crate) align: std::ffi::c_int, // TEXT_ALIGN: 0=LEFT, 1=CENTER, 2=RIGHT
+    pub(crate) char_count: u16,
     _pad1: [u8; 2], // align struct size to 8
 }
 

@@ -39,10 +39,17 @@
 //!   `VisitStarBase`, `CleanupAfterStarBase`).
 //! - [`outfit_menu`]: Outfit menu states (`outfit.c` `DoOutfit`).
 
+#[cfg(not(test))]
+pub mod cffi;
+pub mod draw;
 pub mod fuel;
+pub mod gfx;
+pub mod ids;
 pub mod input;
 pub mod module_guard;
 pub mod outfit_menu;
+pub mod platform;
+pub mod screen;
 pub mod sis_modules;
 pub mod starbase_menu;
 pub mod visit;
@@ -57,6 +64,10 @@ pub use module_guard::{
     ModuleCosts, ModuleCostsError, ShipLoad, SlotIndexOutOfRange,
 };
 pub use outfit_menu::{OutfitFrameInput, OutfitMenu, OutfitState, OutfitStep, SaveLoadReturn};
+pub use platform::{Platform, StarbaseError, UnportedRoute};
+pub use screen::{
+    cleanup_after_visit, do_time_passage, run_outfit, run_starbase_menu, StatusModeGuard,
+};
 pub use sis_modules::{
     fuel_bar_layout, FuelBar, FuelLayoutError, ModuleSlot, ModuleSlots, ModuleSlotsError,
     ModuleType,
@@ -68,3 +79,8 @@ pub use visit::{
     cleanup_after_starbase, entry_time_passage, CleanupOutcome, TimePassage, IN_STARBASE_MARK,
     LOST_DAYS,
 };
+
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod tests;
