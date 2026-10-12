@@ -924,6 +924,7 @@ impl Coordinator {
                 velocity_y: snapshot.velocity_y,
                 view_center_x: snapshot.view_center_x,
                 view_center_y: snapshot.view_center_y,
+                target_guard_active: false,
             },
         );
         if !Self::set_navigation_controls(control) {
@@ -962,6 +963,7 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
+                    target_guard_active: false,
                 },
             );
             if reached {
@@ -1006,6 +1008,7 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
+                    target_guard_active: false,
                 },
             );
             if reached {
@@ -1065,6 +1068,13 @@ impl Coordinator {
                     velocity_y: snapshot.velocity_y,
                     view_center_x: snapshot.view_center_x,
                     view_center_y: snapshot.view_center_y,
+                    // The collision guard still holds this moon, so the ship is sitting in
+                    // it without having entered orbit.
+                    target_guard_active: snapshot.wait_intersect
+                        == crate::automation::navigation::moon_wait_intersect(
+                            navigation.planet,
+                            navigation.moon,
+                        ),
                 },
             );
             if let ActionPhase::Navigating { remaining } = inner.sched_state.phase {
