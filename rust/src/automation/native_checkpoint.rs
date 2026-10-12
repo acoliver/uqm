@@ -36,6 +36,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::WaitForPlanetSideEnd(_)
         | Action::WaitForDispatch(_)
         | Action::WaitForBattleFrames(_)
+        | Action::WaitForCommunicationResponses(_)
         | Action::WaitForCommunicationEnd(_)
         | Action::WaitForCommunicationReplay(_) => Some(CheckpointClass::SemanticWait),
         Action::NavigateToPlanet(_)

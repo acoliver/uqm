@@ -144,6 +144,15 @@ fn wait_or_navigation_satisfied(action: &Action, label: &str) -> bool {
                 && number(label, "encounter=") == Some(u64::from(value.encounter))
                 && number(label, "dialogue=") == Some(u64::from(value.dialogue))
         }
+        Action::WaitForCommunicationResponses(value) => {
+            shape(
+                label,
+                "communication_responses_reached",
+                &["generation=", "count=", "minimum="],
+            ) && at_least(label, "generation=", 1)
+                && at_least(label, "count=", value.minimum as u64)
+                && number(label, "minimum=") == Some(value.minimum as u64)
+        }
         Action::WaitForCommunicationEnd(value) => {
             shape(label, "communication_completed", &["count=", "minimum="])
                 && at_least(label, "count=", value.minimum_completions)
@@ -249,6 +258,11 @@ impl PredicateHistory {
             Action::WaitForDispatch(_) => advance(&mut self.dispatch, number(label, "generation=")),
             Action::SelectCommunicationResponse(_) => {
                 advance(&mut self.response, number(label, "generation="))
+            }
+            // Waiting observes a list but consumes nothing: only a list newer
+            // than the last one a selection consumed belongs to this conversation.
+            Action::WaitForCommunicationResponses(_) => {
+                number(label, "generation=").is_some_and(|observed| observed > self.response)
             }
             Action::WaitForCommunicationReplay(_) => {
                 advance(&mut self.replay, number(label, "generation="))
@@ -367,6 +381,10 @@ mod tests {
                 "dispatch_observed:generation=1:encounter=1:dialogue=2",
             ),
             (
+                json!({"action":"wait_for_communication_responses","minimum":2,"max_ticks":100}),
+                "communication_responses_reached:generation=1:count=2:minimum=2",
+            ),
+            (
                 json!({"action":"wait_for_communication_end","minimum_completions":2,"max_ticks":100}),
                 "communication_completed:count=2:minimum=2",
             ),
@@ -462,6 +480,44 @@ mod tests {
                 &frame()
             ));
         }
+    }
+
+    #[test]
+    fn a_response_wait_is_not_satisfied_by_a_list_a_selection_already_consumed() {
+        let select: Action = serde_json::from_value(
+            json!({"action":"select_communication_response","index":0,"max_ticks":100}),
+        )
+        .unwrap();
+        let wait: Action = serde_json::from_value(
+            json!({"action":"wait_for_communication_responses","minimum":2,"max_ticks":100}),
+        )
+        .unwrap();
+        let mut history = PredicateHistory::default();
+        assert!(history.verify(
+            &select,
+            &[record(
+                "communication_response_selected:generation=2:count=3:index=0"
+            )],
+            &frame()
+        ));
+        let reached = |generation: u64, count: u64| {
+            record(&format!(
+                "communication_responses_reached:generation={generation}:count={count}:minimum=2"
+            ))
+        };
+        assert!(!history.verify(&wait, &[reached(2, 3)], &frame()));
+        assert!(!history.verify(&wait, &[reached(1, 3)], &frame()));
+        assert!(history.verify(&wait, &[reached(3, 2)], &frame()));
+        // Waiting consumes nothing, so the selection of that list still counts.
+        assert!(history.verify(
+            &select,
+            &[record(
+                "communication_response_selected:generation=3:count=2:index=0"
+            )],
+            &frame()
+        ));
+        // A count below the declared minimum never satisfies the wait.
+        assert!(!history.verify(&wait, &[reached(4, 1)], &frame()));
     }
 
     #[test]

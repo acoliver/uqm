@@ -138,9 +138,9 @@ pub use script::{
     ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep,
     SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, ShipResourcesAssertion, TapMenuKeyStep,
     TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
-    WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
-    WaitForPlanetSideStartStep, WaitInputTicksStep, WaitPresentationsStep,
-    CAPABILITY_REQUIRED_FLAGS,
+    WaitForCommunicationReplayStep, WaitForCommunicationResponsesStep, WaitForDispatchStep,
+    WaitForPlanetSideEndStep, WaitForPlanetSideStartStep, WaitInputTicksStep,
+    WaitPresentationsStep, CAPABILITY_REQUIRED_FLAGS,
 };
 pub use setup::{setup_automation, AutomationOptions, AutomationSetup, BuildCapabilities};
 pub use trace::{
