@@ -41,6 +41,20 @@ unsafe fn present_complete_transaction() {
     TFB_SwapBuffers(0);
 }
 
+/// Execute every committed draw command without presenting a frame.
+///
+/// Queued draw commands hold pointers into the resources they draw with
+/// (glyph data of a font, for example). Owners call this before freeing such a
+/// resource. A build without the C archive has no draw queue to drain.
+pub fn drain_committed_draws() {
+    #[cfg(feature = "linked_c_archive")]
+    // SAFETY: Called on the game/main thread, where the legacy renderer
+    // consumes the draw queue.
+    unsafe {
+        TFB_FlushGraphicsEx(1)
+    };
+}
+
 /// Present drawing committed before a synchronous `DoInput` loop begins.
 ///
 /// Nested menus often draw their initial state immediately before calling

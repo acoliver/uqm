@@ -22,10 +22,7 @@
 #![allow(clippy::field_reassign_with_default)]
 #![allow(static_mut_refs)]
 
-use crate::comm::locdata::CPoint;
-
-#[cfg(not(test))]
-use crate::comm::locdata::{CColor, CRect};
+use crate::comm::locdata::{CColor, CPoint, CRect};
 
 // ============================================================================
 // C ABI types matching gfxlib.h
@@ -99,18 +96,14 @@ const SLIDER_Y: i16 = 107;
 const SLIDER_HEIGHT: i16 = 15;
 const SIS_SCREEN_WIDTH: i16 = 242; // 320 - STATUS_WIDTH(64) - 14
 const SIS_SCREEN_HEIGHT: i16 = 227; // 240 - 13
-#[cfg(not(test))]
 const TEXT_X_OFFS: i16 = 1; // comm.h
-#[cfg(not(test))]
 const PLAYER_TEXT_WIDTH: i16 = SIS_SCREEN_WIDTH - 8 - (TEXT_X_OFFS << 2);
 #[cfg(not(test))]
 const DELTA_Y_SUMMARY: i16 = 8;
 #[cfg(not(test))]
 const MAX_SUMM_ROWS: i16 = (SIS_SCREEN_HEIGHT - SLIDER_Y - SLIDER_HEIGHT) / DELTA_Y_SUMMARY - 1;
 
-#[cfg(not(test))]
 const ALIGN_LEFT: std::ffi::c_int = 0;
-#[cfg(not(test))]
 const ALIGN_CENTER: std::ffi::c_int = 1;
 
 // CHECK_ABORT = 0x4000
@@ -176,9 +169,7 @@ mod c_bridge {
         pub fn BatchGraphics();
         pub fn UnbatchGraphics();
 
-        // Font/resource management
-        pub fn LoadGraphicInstance(resource: *const std::ffi::c_char) -> *mut std::ffi::c_void;
-        pub fn DestroyFont(font: *mut std::ffi::c_void) -> std::ffi::c_int;
+        // Frame management
         pub fn SetAbsFrameIndex(frame: *mut std::ffi::c_void, index: u16) -> *mut std::ffi::c_void;
 
         // Input
@@ -192,9 +183,6 @@ mod c_bridge {
             index: u16,
         ) -> *mut std::ffi::c_void;
         pub fn GetStringAddress(s: *mut std::ffi::c_void) -> *const std::ffi::c_char;
-
-        // Player font constant (ifontres.h) — PLAYER_FONT = "font.player"
-        // Not a variable, it's a #define string
 
         // Colors — computed from #define macros in colors.h/gfxlib.h
         // MAKE_RGB15(r,g,b) = { CC5TO8(r), CC5TO8(g), CC5TO8(b), 0xFF }
@@ -379,13 +367,11 @@ unsafe fn copy_cstr(src: *const std::ffi::c_char, buf: &mut [u8; 80], offset: us
 const ONE_SECOND: std::ffi::c_int = 840;
 
 /// Convert 5-bit color component to 8-bit (matches C CC5TO8 macro).
-#[cfg(not(test))]
 const fn cc5to8(c: u8) -> u8 {
     (c << 3) | (c >> 2)
 }
 
 /// Build a Color from RGB15 components (matches C MAKE_RGB15).
-#[cfg(not(test))]
 const fn make_rgb15(r: u8, g: u8, b: u8) -> CColor {
     CColor {
         r: cc5to8(r),
@@ -395,15 +381,10 @@ const fn make_rgb15(r: u8, g: u8, b: u8) -> CColor {
     }
 }
 
-#[cfg(not(test))]
 const COMM_PLAYER_TEXT_NORMAL_COLOR: CColor = make_rgb15(0x00, 0x14, 0x14);
-#[cfg(not(test))]
 const COMM_PLAYER_TEXT_HIGHLIGHT_COLOR: CColor = make_rgb15(0x1A, 0x1A, 0x1A);
-#[cfg(not(test))]
 const COMM_PLAYER_BACKGROUND_COLOR: CColor = make_rgb15(0x00, 0x00, 0x14);
-#[cfg(not(test))]
 const COMM_RESPONSE_INTRO_TEXT_COLOR: CColor = make_rgb15(0x0A, 0x0C, 0x1F);
-#[cfg(not(test))]
 const COMM_FEEDBACK_TEXT_COLOR: CColor = make_rgb15(0x12, 0x14, 0x4F);
 #[cfg(not(test))]
 const COMM_HISTORY_BACKGROUND_COLOR: CColor = make_rgb15(0x00, 0x05, 0x00);
@@ -412,12 +393,7 @@ const COMM_HISTORY_TEXT_COLOR: CColor = make_rgb15(0x00, 0x10, 0x00);
 #[cfg(not(test))]
 const COMM_MORE_TEXT_COLOR: CColor = make_rgb15(0x00, 0x17, 0x00);
 
-/// PLAYER_FONT #define: "font.player"
-#[cfg(not(test))]
-const PLAYER_FONT_STR: &[u8] = b"font.player\0";
-
 /// STR_BULLET #define: "\xE2\x80\xA2" (•)
-#[cfg(not(test))]
 const STR_BULLET_BYTES: &[u8] = b"\xE2\x80\xA2\0";
 
 /// STR_MIDDLE_DOT #define: "\xC2\xB7" (·)
@@ -425,7 +401,6 @@ const STR_BULLET_BYTES: &[u8] = b"\xE2\x80\xA2\0";
 const STR_MIDDLE_DOT_BYTES: &[u8] = b"\xC2\xB7\0";
 
 /// FEEDBACK_STRING_BASE from gamestr.h
-#[cfg(not(test))]
 const FEEDBACK_STRING_BASE: i32 = 0x0100;
 
 /// Inline GAME_STRING(i) macro: GetStringAddress(SetAbsStringTableIndex(GameStrings, i))
@@ -436,16 +411,54 @@ unsafe fn game_string(id: i32) -> *const std::ffi::c_char {
 }
 
 // ============================================================================
+// Drawing surface for the SIS communication window
+// ============================================================================
+
+/// The graphics operations the communication window renderers use.
+///
+/// Text drawn through [`CommWindowGfx::draw_text`] is queued: the draw command
+/// keeps pointers into the context font until the draw queue is consumed, so a
+/// font must stay alive until then.
+pub(crate) trait CommWindowGfx {
+    fn current_activity(&self) -> u16;
+    fn space_context(&self) -> *mut std::ffi::c_void;
+    fn set_context(&mut self, ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn set_context_font(&mut self, font: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
+    fn set_foreground_color(&mut self, color: CColor);
+    fn font_leading(&mut self) -> i16;
+    fn batch(&mut self);
+    fn unbatch(&mut self);
+    fn fill_rect(&mut self, rect: &mut CRect);
+    fn draw_text(&mut self, text: &mut CText);
+    fn line_within_width(
+        &mut self,
+        text: &mut CText,
+        next: &mut *const std::ffi::c_char,
+        width: i16,
+        max_chars: u16,
+    ) -> std::ffi::c_int;
+    fn game_string(&mut self, id: i32) -> *const std::ffi::c_char;
+    /// Copies response `index` into `buf`; false when there is no such text.
+    fn response_text(&mut self, index: u8, buf: &mut [u8]) -> bool;
+    /// Draws activity frame `frame_index` at the right edge, `origin_y` down.
+    fn draw_scroll_indicator(&mut self, frame_index: u16, origin_y: i16);
+    /// The player font of the running conversation. It is owned by the
+    /// conversation, not by the renderer: queued draws still read it after
+    /// the renderer returns.
+    fn conversation_player_font(&mut self) -> *mut std::ffi::c_void;
+}
+
+// ============================================================================
 // Ported functions
 // ============================================================================
 
 /// Draw the SIS communication window background.
 /// Ported from `c_DrawSISComWindow()` in rust_comm.c.
-#[cfg(not(test))]
-pub unsafe fn draw_sis_com_window() {
-    let activity = crate::mainloop::ffi::get_current_activity().0;
+pub(crate) fn draw_sis_com_window_with<G: CommWindowGfx>(gfx: &mut G) {
+    let activity = gfx.current_activity();
     if activity as u8 != WON_LAST_BATTLE {
-        let old_ctx = c_bridge::SetContext(c_bridge::SpaceContext);
+        let space = gfx.space_context();
+        let old_ctx = gfx.set_context(space);
         let mut rect = CRect {
             corner: CPoint {
                 x: 0,
@@ -454,9 +467,9 @@ pub unsafe fn draw_sis_com_window() {
             width: SIS_SCREEN_WIDTH,
             height: SIS_SCREEN_HEIGHT - (SLIDER_Y + SLIDER_HEIGHT),
         };
-        c_bridge::SetContextForeGroundColor(COMM_PLAYER_BACKGROUND_COLOR);
-        c_bridge::DrawFilledRectangle(&mut rect);
-        c_bridge::SetContext(old_ctx);
+        gfx.set_foreground_color(COMM_PLAYER_BACKGROUND_COLOR);
+        gfx.fill_rect(&mut rect);
+        gfx.set_context(old_ctx);
     }
 }
 
@@ -464,36 +477,36 @@ pub unsafe fn draw_sis_com_window() {
 /// Ported from `c_FeedbackPlayerPhrase()` in rust_comm.c.
 ///
 /// # Safety
-/// Caller must ensure `text` is a valid null-terminated C string or null,
-/// and that the graphics subsystem is initialized.
-#[cfg(not(test))]
-pub unsafe fn feedback_player_phrase(text: *const std::ffi::c_char) {
-    let old_ctx = c_bridge::SetContext(c_bridge::SpaceContext);
+/// `text` must be a valid null-terminated C string or null.
+pub(crate) unsafe fn feedback_player_phrase_with<G: CommWindowGfx>(
+    gfx: &mut G,
+    text: *const std::ffi::c_char,
+) {
+    let space = gfx.space_context();
+    let old_ctx = gfx.set_context(space);
 
-    c_bridge::BatchGraphics();
-    draw_sis_com_window();
+    gfx.batch();
+    draw_sis_com_window_with(gfx);
 
     if !text.is_null() && *text != 0 {
-        let player_font =
-            c_bridge::LoadGraphicInstance(PLAYER_FONT_STR.as_ptr() as *const std::ffi::c_char);
-        let old_font = c_bridge::SetContextFont(player_font);
+        let player_font = gfx.conversation_player_font();
+        let old_font = gfx.set_context_font(player_font);
 
         let mut ct = CText::default();
         ct.baseline.x = SIS_SCREEN_WIDTH >> 1;
         ct.baseline.y = SLIDER_Y + SLIDER_HEIGHT + 13;
         ct.align = ALIGN_CENTER;
         ct.char_count = u16::MAX;
-        ct.p_str = game_string(FEEDBACK_STRING_BASE);
-        c_bridge::SetContextForeGroundColor(COMM_RESPONSE_INTRO_TEXT_COLOR);
-        c_bridge::font_DrawText(&mut ct);
+        ct.p_str = gfx.game_string(FEEDBACK_STRING_BASE);
+        gfx.set_foreground_color(COMM_RESPONSE_INTRO_TEXT_COLOR);
+        gfx.draw_text(&mut ct);
 
         ct.baseline.y += 16;
         ct.align = ALIGN_CENTER;
         ct.p_str = text;
-        c_bridge::SetContextForeGroundColor(COMM_FEEDBACK_TEXT_COLOR);
+        gfx.set_foreground_color(COMM_FEEDBACK_TEXT_COLOR);
 
-        let mut leading: i16 = 0;
-        c_bridge::GetContextFontLeading(&mut leading);
+        let leading = gfx.font_leading();
 
         let mut p_str = text;
         let mut maxchars: u16 = u16::MAX;
@@ -502,56 +515,49 @@ pub unsafe fn feedback_player_phrase(text: *const std::ffi::c_char) {
             let mut next: *const std::ffi::c_char = std::ptr::null();
             ct.p_str = p_str;
             ct.baseline.y += leading;
-            let eol = c_bridge::getLineWithinWidth(&mut ct, &mut next, PLAYER_TEXT_WIDTH, maxchars);
+            let eol = gfx.line_within_width(&mut ct, &mut next, PLAYER_TEXT_WIDTH, maxchars);
             maxchars = maxchars.wrapping_sub(ct.char_count);
             maxchars = maxchars.saturating_sub(1);
             p_str = next;
             if ct.baseline.y < SIS_SCREEN_HEIGHT {
-                c_bridge::font_DrawText(&mut ct);
+                gfx.draw_text(&mut ct);
             }
             if eol != 0 || maxchars == 0 {
                 break;
             }
         }
 
-        c_bridge::SetContextFont(old_font);
-        c_bridge::DestroyFont(player_font);
+        gfx.set_context_font(old_font);
     }
 
-    c_bridge::UnbatchGraphics();
-    c_bridge::SetContext(old_ctx);
+    gfx.unbatch();
+    gfx.set_context(old_ctx);
 }
 
 /// Render the response list in the SIS comm window.
 /// Ported from `c_RefreshResponses()` in rust_comm.c.
-#[cfg(not(test))]
-pub unsafe fn refresh_responses(top: u8, num_responses: u8, cur_response: u8) {
-    LAST_TOP_RESPONSE = top;
-    LAST_NUM_RESPONSES = num_responses;
-    LAST_CUR_RESPONSE = cur_response;
+pub(crate) fn refresh_responses_with<G: CommWindowGfx>(
+    gfx: &mut G,
+    top: u8,
+    num_responses: u8,
+    cur_response: u8,
+) {
+    let space = gfx.space_context();
+    let old_ctx = gfx.set_context(space);
+    let player_font = gfx.conversation_player_font();
+    let old_font = gfx.set_context_font(player_font);
 
-    let old_ctx = c_bridge::SetContext(c_bridge::SpaceContext);
-    let player_font =
-        c_bridge::LoadGraphicInstance(PLAYER_FONT_STR.as_ptr() as *const std::ffi::c_char);
-    let old_font = c_bridge::SetContextFont(player_font);
+    let leading = gfx.font_leading();
 
-    let mut leading: i16 = 0;
-    c_bridge::GetContextFontLeading(&mut leading);
-
-    c_bridge::BatchGraphics();
-    draw_sis_com_window();
+    gfx.batch();
+    draw_sis_com_window_with(gfx);
 
     let mut y: i16 = SLIDER_Y + SLIDER_HEIGHT + 1;
     let mut response = top;
     let mut text_buf = [0u8; 1024];
 
     while response < num_responses {
-        if c_bridge::rust_GetResponseText(
-            response as std::ffi::c_int,
-            text_buf.as_mut_ptr() as *mut std::ffi::c_char,
-            text_buf.len(),
-        ) == 0
-        {
+        if !gfx.response_text(response, &mut text_buf) {
             response += 1;
             continue;
         }
@@ -564,52 +570,35 @@ pub unsafe fn refresh_responses(top: u8, num_responses: u8, cur_response: u8) {
         rt.align = ALIGN_LEFT;
 
         if response == cur_response {
-            c_bridge::SetContextForeGroundColor(COMM_PLAYER_TEXT_HIGHLIGHT_COLOR);
+            gfx.set_foreground_color(COMM_PLAYER_TEXT_HIGHLIGHT_COLOR);
         } else {
-            c_bridge::SetContextForeGroundColor(COMM_PLAYER_TEXT_NORMAL_COLOR);
+            gfx.set_foreground_color(COMM_PLAYER_TEXT_NORMAL_COLOR);
         }
 
         let mut bullet = rt;
         bullet.baseline.x -= 8;
         bullet.p_str = STR_BULLET_BYTES.as_ptr() as *const std::ffi::c_char;
-        c_bridge::font_DrawText(&mut bullet);
+        gfx.draw_text(&mut bullet);
 
-        y = draw_player_text_wrapped(&mut rt, leading);
+        y = draw_player_text_wrapped(gfx, &mut rt, leading);
 
         response += 1;
     }
 
     // Scroll indicator
-    let mut stamp = CStamp::default();
-    stamp.frame = std::ptr::null_mut();
-
     if top != 0 {
-        stamp.origin.y = SLIDER_Y + SLIDER_HEIGHT + 1;
-        stamp.frame = c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, 6);
+        gfx.draw_scroll_indicator(6, SLIDER_Y + SLIDER_HEIGHT + 1);
     } else if y > SIS_SCREEN_HEIGHT {
-        stamp.origin.y = SIS_SCREEN_HEIGHT - 2;
-        stamp.frame = c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, 7);
+        gfx.draw_scroll_indicator(7, SIS_SCREEN_HEIGHT - 2);
     }
 
-    if !stamp.frame.is_null() {
-        let mut rw: std::ffi::c_int = 0;
-        let mut rh: std::ffi::c_int = 0;
-        let mut rx: std::ffi::c_int = 0;
-        let mut ry: std::ffi::c_int = 0;
-        c_bridge::GetFrameRect(stamp.frame, &mut rx, &mut ry, &mut rw, &mut rh);
-        stamp.origin.x = SIS_SCREEN_WIDTH - rw as i16 - 1;
-        c_bridge::DrawStamp(&mut stamp);
-    }
-
-    c_bridge::UnbatchGraphics();
-    c_bridge::SetContextFont(old_font);
-    c_bridge::DestroyFont(player_font);
-    c_bridge::SetContext(old_ctx);
+    gfx.unbatch();
+    gfx.set_context_font(old_font);
+    gfx.set_context(old_ctx);
 }
 
 /// Word-wrap and draw player text, returning the final baseline.y.
-#[cfg(not(test))]
-unsafe fn draw_player_text_wrapped(text: &mut CText, leading: i16) -> i16 {
+fn draw_player_text_wrapped<G: CommWindowGfx>(gfx: &mut G, text: &mut CText, leading: i16) -> i16 {
     let mut p_str = text.p_str;
     let mut maxchars: u16 = u16::MAX;
 
@@ -619,13 +608,13 @@ unsafe fn draw_player_text_wrapped(text: &mut CText, leading: i16) -> i16 {
         let mut next: *const std::ffi::c_char = std::ptr::null();
         text.p_str = p_str;
         text.baseline.y += leading;
-        let eol = c_bridge::getLineWithinWidth(text, &mut next, PLAYER_TEXT_WIDTH, maxchars);
+        let eol = gfx.line_within_width(text, &mut next, PLAYER_TEXT_WIDTH, maxchars);
         maxchars = maxchars.wrapping_sub(text.char_count);
         maxchars = maxchars.saturating_sub(1);
         p_str = next;
 
         if text.baseline.y < SIS_SCREEN_HEIGHT {
-            c_bridge::font_DrawText(text);
+            gfx.draw_text(text);
         }
         if eol != 0 || maxchars == 0 {
             break;
@@ -633,6 +622,137 @@ unsafe fn draw_player_text_wrapped(text: &mut CText, leading: i16) -> i16 {
     }
 
     text.baseline.y
+}
+
+/// The game's drawing surface: the C graphics exports.
+#[cfg(not(test))]
+struct CommWindow;
+
+#[cfg(not(test))]
+impl CommWindowGfx for CommWindow {
+    fn current_activity(&self) -> u16 {
+        crate::mainloop::ffi::get_current_activity().0
+    }
+
+    fn space_context(&self) -> *mut std::ffi::c_void {
+        // SAFETY: set once at startup, read on the game thread.
+        unsafe { c_bridge::SpaceContext }
+    }
+
+    fn set_context(&mut self, ctx: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        // SAFETY: `ctx` is a live context handle owned by the game.
+        unsafe { c_bridge::SetContext(ctx) }
+    }
+
+    fn set_context_font(&mut self, font: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+        // SAFETY: `font` is a live font handle or the previous context font.
+        unsafe { c_bridge::SetContextFont(font) }
+    }
+
+    fn set_foreground_color(&mut self, color: CColor) {
+        // SAFETY: plain value call.
+        unsafe { c_bridge::SetContextForeGroundColor(color) };
+    }
+
+    fn font_leading(&mut self) -> i16 {
+        let mut leading: i16 = 0;
+        // SAFETY: `leading` is valid for the call.
+        unsafe { c_bridge::GetContextFontLeading(&mut leading) };
+        leading
+    }
+
+    fn batch(&mut self) {
+        // SAFETY: plain call.
+        unsafe { c_bridge::BatchGraphics() };
+    }
+
+    fn unbatch(&mut self) {
+        // SAFETY: plain call.
+        unsafe { c_bridge::UnbatchGraphics() };
+    }
+
+    fn fill_rect(&mut self, rect: &mut CRect) {
+        // SAFETY: `rect` is valid for the call.
+        unsafe { c_bridge::DrawFilledRectangle(rect) };
+    }
+
+    fn draw_text(&mut self, text: &mut CText) {
+        // SAFETY: `text` and its string are valid for the call.
+        unsafe { c_bridge::font_DrawText(text) };
+    }
+
+    fn line_within_width(
+        &mut self,
+        text: &mut CText,
+        next: &mut *const std::ffi::c_char,
+        width: i16,
+        max_chars: u16,
+    ) -> std::ffi::c_int {
+        // SAFETY: `text` and `next` are valid for the call.
+        unsafe { c_bridge::getLineWithinWidth(text, next, width, max_chars) }
+    }
+
+    fn game_string(&mut self, id: i32) -> *const std::ffi::c_char {
+        // SAFETY: `GameStrings` is loaded before any communication starts.
+        unsafe { game_string(id) }
+    }
+
+    fn response_text(&mut self, index: u8, buf: &mut [u8]) -> bool {
+        // SAFETY: `buf` is valid for `buf.len()` bytes.
+        unsafe {
+            c_bridge::rust_GetResponseText(
+                std::ffi::c_int::from(index),
+                buf.as_mut_ptr() as *mut std::ffi::c_char,
+                buf.len(),
+            ) != 0
+        }
+    }
+
+    fn draw_scroll_indicator(&mut self, frame_index: u16, origin_y: i16) {
+        let mut stamp = CStamp::default();
+        // SAFETY: `ActivityFrame` is loaded before any communication starts.
+        stamp.frame = unsafe { c_bridge::SetAbsFrameIndex(c_bridge::ActivityFrame, frame_index) };
+        stamp.origin.y = origin_y;
+        let mut rw: std::ffi::c_int = 0;
+        let mut rh: std::ffi::c_int = 0;
+        let mut rx: std::ffi::c_int = 0;
+        let mut ry: std::ffi::c_int = 0;
+        // SAFETY: `stamp.frame` is a live frame; the outputs are valid for the call.
+        unsafe {
+            c_bridge::GetFrameRect(stamp.frame, &mut rx, &mut ry, &mut rw, &mut rh);
+            stamp.origin.x = SIS_SCREEN_WIDTH - rw as i16 - 1;
+            c_bridge::DrawStamp(&mut stamp);
+        }
+    }
+
+    fn conversation_player_font(&mut self) -> *mut std::ffi::c_void {
+        crate::comm::player_font::CONVERSATION_PLAYER_FONT.current()
+    }
+}
+
+/// Draw the SIS communication window background.
+#[cfg(not(test))]
+pub unsafe fn draw_sis_com_window() {
+    draw_sis_com_window_with(&mut CommWindow);
+}
+
+/// Render the player's selected response text in the SIS comm window.
+///
+/// # Safety
+/// Caller must ensure `text` is a valid null-terminated C string or null,
+/// and that the graphics subsystem is initialized.
+#[cfg(not(test))]
+pub unsafe fn feedback_player_phrase(text: *const std::ffi::c_char) {
+    feedback_player_phrase_with(&mut CommWindow, text);
+}
+
+/// Render the response list in the SIS comm window.
+#[cfg(not(test))]
+pub unsafe fn refresh_responses(top: u8, num_responses: u8, cur_response: u8) {
+    LAST_TOP_RESPONSE = top;
+    LAST_NUM_RESPONSES = num_responses;
+    LAST_CUR_RESPONSE = cur_response;
+    refresh_responses_with(&mut CommWindow, top, num_responses, cur_response);
 }
 
 /// Show conversation history summary page.
