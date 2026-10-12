@@ -238,7 +238,7 @@ pub unsafe fn hail_alien() {
         // C statics (pCurInputState, TalkingFinished) via bridges.
         // ----------------------------------------------------------------
         eprintln!("[DBG] hail_alien: clearing COMM_STATE");
-        super::state::COMM_STATE.write().clear();
+        super::state::COMM_STATE.write().reset_for_encounter();
         {
             let s = super::state::COMM_STATE.read();
             eprintln!(
