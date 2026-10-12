@@ -28,6 +28,7 @@ pub mod planet_side;
 pub mod resource;
 pub mod ships;
 pub mod sound;
+pub mod starbase;
 pub mod state;
 pub mod threading;
 pub mod time;
