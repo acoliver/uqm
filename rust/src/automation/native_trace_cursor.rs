@@ -1122,5 +1122,160 @@ mod tests {
                 );
             }
         }
+
+        /// A journal grown to at least `target` bytes, as one buffer with the
+        /// end offset of each record.
+        fn journal_of_size(target: usize) -> (Journal, Vec<u8>, Vec<usize>) {
+            let mut journal = Journal::new(plan_with_rounds(target / 3_000));
+            let mut bytes = Vec::new();
+            while bytes.len() < target {
+                journal.grow(200);
+                bytes = bytes_of(&journal.records);
+            }
+            let ends = bytes
+                .iter()
+                .enumerate()
+                .filter(|(_, byte)| **byte == b'\n')
+                .map(|(position, _)| position + 1)
+                .collect();
+            (journal, bytes, ends)
+        }
+
+        /// Where one acknowledgement's controller work goes on a trace of a
+        /// given size, using the controller's own read and verify calls, one
+        /// window of acknowledgements, and the diagnostic accounting. Counters
+        /// are asserted exactly. Durations are measured and printed, never
+        /// asserted: run with `--nocapture` to read them.
+        #[test]
+        fn controller_ack_cost_components_on_generated_traces() {
+            use crate::automation::native_runner::read_regular_file_nofollow_bounded;
+            use crate::automation::presentation_timing::{
+                ControllerStage, WindowSampler, SAMPLE_PRESENTATIONS,
+            };
+            use std::io::Write as _;
+            use std::time::{Duration, Instant};
+
+            let acks = SAMPLE_PRESENTATIONS as usize;
+            for target in [500_000, 1_000_000, 5_000_000] {
+                let (journal, bytes, ends) = journal_of_size(target);
+                let plan = journal.plan.clone();
+                let first = journal.boundaries.len() - acks - 1;
+                let claim_of = |index: usize| {
+                    let (count, snapshot) = &journal.boundaries[index];
+                    (*count, *snapshot)
+                };
+
+                // Cold: a cursor that has seen nothing verifies the prefix the
+                // window starts from.
+                let (count0, snapshot0) = claim_of(first);
+                let mut cursor = TraceCursor::default();
+                let cold_started = Instant::now();
+                let verified = cursor
+                    .verify_prefix(
+                        &bytes[..ends[count0 - 1]],
+                        &PrefixClaim {
+                            count: count0,
+                            plan: &plan,
+                            semantic: &snapshot0,
+                            handled_checkpoints: 0,
+                        },
+                    )
+                    .unwrap();
+                let cold = cold_started.elapsed();
+                assert_eq!(cursor.parsed_lines(), count0 as u64);
+                let mut handled = verified.committed;
+
+                // Warm: the file grows by one boundary per acknowledgement and
+                // each acknowledgement reads all of it and verifies the prefix.
+                let directory = tempfile::tempdir().unwrap();
+                let path = directory.path().join("trace.jsonl");
+                let mut file = std::fs::File::create(&path).unwrap();
+                file.write_all(&bytes[..ends[count0 - 1]]).unwrap();
+                let mut written = ends[count0 - 1];
+                let parsed_before = cursor.parsed_lines();
+                let mut sampler = WindowSampler::<ControllerStage>::new("controller");
+                let mut sample = None;
+                let mut logical_bytes = 0u64;
+                let mut compare = Duration::ZERO;
+                for ack in 1..=acks {
+                    let (count, snapshot) = claim_of(first + ack);
+                    let end = ends[count - 1];
+                    file.write_all(&bytes[written..end]).unwrap();
+                    written = end;
+
+                    let read_started = Instant::now();
+                    let read = read_regular_file_nofollow_bounded(&path, 64 * 1024 * 1024).unwrap();
+                    sampler
+                        .record_span(ControllerStage::TraceRead, read_started, Instant::now())
+                        .unwrap();
+                    assert_eq!(read.len(), end);
+                    logical_bytes += read.len() as u64;
+
+                    let compare_started = Instant::now();
+                    assert!(read.starts_with(&cursor.prefix));
+                    compare += compare_started.elapsed();
+
+                    let verify_started = Instant::now();
+                    let verified = cursor
+                        .verify_prefix(
+                            &read,
+                            &PrefixClaim {
+                                count,
+                                plan: &plan,
+                                semantic: &snapshot,
+                                handled_checkpoints: handled,
+                            },
+                        )
+                        .unwrap();
+                    sampler
+                        .record_span(
+                            ControllerStage::PrefixVerify,
+                            verify_started,
+                            Instant::now(),
+                        )
+                        .unwrap();
+                    handled = verified.committed;
+                    sample = sampler.complete(ack as u64, Instant::now()).unwrap();
+                }
+                let sample = sample.expect("a full window of acknowledgements closes");
+
+                let count_last = journal.boundaries[first + acks].0;
+                assert_eq!(
+                    cursor.parsed_lines() - parsed_before,
+                    (count_last - count0) as u64
+                );
+                assert_eq!(sample.presentations, SAMPLE_PRESENTATIONS);
+                assert_eq!(
+                    sample.attributed_us + sample.unattributed_us,
+                    sample.window_wall_us
+                );
+                for stage in &sample.stages {
+                    let expected = match stage.stage {
+                        "trace_read" | "prefix_verify" => SAMPLE_PRESENTATIONS,
+                        _ => 0,
+                    };
+                    assert_eq!(stage.count, expected, "{}", stage.stage);
+                }
+                let stage = |name: &str| sample.stages.iter().find(|s| s.stage == name).unwrap();
+                println!(
+                    "ACK_COST trace_bytes={} records={} acks={acks} new_records={} \
+                     logical_bytes_read={logical_bytes} cold_verify_us={} \
+                     read_total_us={} read_max_us={} verify_total_us={} verify_max_us={} \
+                     prefix_compare_total_us={} (compare is inside verify) \
+                     window_wall_us={} unattributed_us={}",
+                    bytes.len(),
+                    journal.records.len(),
+                    count_last - count0,
+                    cold.as_micros(),
+                    stage("trace_read").total_us,
+                    stage("trace_read").max_us,
+                    stage("prefix_verify").total_us,
+                    stage("prefix_verify").max_us,
+                    compare.as_micros(),
+                    sample.window_wall_us,
+                    sample.unattributed_us,
+                );
+            }
+        }
     }
 }

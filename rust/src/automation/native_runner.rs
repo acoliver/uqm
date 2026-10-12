@@ -1,5 +1,6 @@
 use super::native_capture::{normalize_native_capture, validate_playable_screenshot_difference};
 use super::native_trace_cursor::{PrefixClaim, PrefixError};
+use super::presentation_timing::{ControllerStage, TimingReporter};
 #[cfg(test)]
 use crate::automation::command_executable_digest;
 #[cfg(test)]
@@ -33,6 +34,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 #[cfg(test)]
 use std::time::Duration;
+use std::time::Instant;
 
 const NATIVE_OBSERVER_HELPER_SCHEMA: &str = "uqm-native-observer-helper-v1";
 const MAX_CONTENT_ARCHIVE_ENTRIES: usize = 100_000;
@@ -582,6 +584,8 @@ struct NativeObservationSession {
     trace_path: PathBuf,
     trace_cursor: super::native_trace_cursor::TraceCursor,
     publications: Vec<NativeWindowPublication>,
+    /// Diagnostic only: where each acknowledgement's time goes.
+    timing: TimingReporter<ControllerStage>,
 }
 
 impl NativeObservationSession {
@@ -592,9 +596,13 @@ impl NativeObservationSession {
         if state.semantic.trace_record_count == 0 {
             return Ok(Vec::new());
         }
+        let read_started = Instant::now();
         let bytes = read_regular_file_nofollow_bounded(&self.trace_path, self.trace_limit)
             .map_err(io::Error::other)?;
+        self.timing
+            .span_since(ControllerStage::TraceRead, read_started);
         let count = usize::try_from(state.semantic.trace_record_count).map_err(io::Error::other)?;
+        let verify_started = Instant::now();
         let verified = self
             .trace_cursor
             .verify_prefix(
@@ -607,6 +615,8 @@ impl NativeObservationSession {
                 },
             )
             .map_err(prefix_error)?;
+        self.timing
+            .span_since(ControllerStage::PrefixVerify, verify_started);
         if verified.committed < self.checkpoint_count {
             return Err(io::Error::other("native committed checkpoints regressed"));
         }
@@ -640,9 +650,12 @@ impl NativeObservationSession {
         }
         self.recorded_input_events = state.semantic.accepted_player_inputs;
         self.recorded_battle_frames = state.semantic.verified_battle_frames;
+        let ack_started = Instant::now();
         self.ack_publisher
             .acknowledge(&self.nonce, state.committed_presentation)
             .map_err(io::Error::other)?;
+        self.timing
+            .span_since(ControllerStage::AckWrite, ack_started);
         self.publications.push(NativeWindowPublication {
             acknowledgement: NativeWindowAck {
                 schema: NATIVE_WINDOW_ACK_SCHEMA.to_string(),
@@ -652,6 +665,7 @@ impl NativeObservationSession {
             state: state.clone(),
         });
         self.last_presentation = state.committed_presentation;
+        self.timing.complete(state.committed_presentation);
         Ok(())
     }
 
@@ -716,11 +730,14 @@ impl NativeObservationSession {
         if let Err(error) = &self.backing_verification {
             return Err(io::Error::other(error.clone()));
         }
-        let Some(state) = self
+        let poll_started = Instant::now();
+        let polled = self
             .state_reader
             .read_if_present(&self.nonce, identity.pid, self.requested_bounds)
-            .map_err(io::Error::other)?
-        else {
+            .map_err(io::Error::other)?;
+        self.timing
+            .span_since(ControllerStage::StatePoll, poll_started);
+        let Some(state) = polled else {
             return Ok(());
         };
         if state.committed_presentation == self.last_presentation {
@@ -740,6 +757,7 @@ impl NativeObservationSession {
             return self.acknowledge_publication(&state);
         }
         let expected_window_id = self.proof.bound_window_id().or(self.provisional_window_id);
+        let observe_started = Instant::now();
         let observed = match observer.observe(identity.pid, expected_window_id) {
             Ok(observed) => observed,
             Err(NativeWindowObserverError::NotFound { .. })
@@ -749,6 +767,9 @@ impl NativeObservationSession {
             }
             Err(error) => return Err(io::Error::other(error)),
         };
+        self.timing
+            .span_since(ControllerStage::OsObserve, observe_started);
+        let evidence_started = Instant::now();
         let diagnostic = serde_json::to_vec_pretty(&serde_json::json!({
             "schema": "uqm-native-observation-diagnostic-v1",
             "state": state,
@@ -764,6 +785,8 @@ impl NativeObservationSession {
             &diagnostic,
         )
         .map_err(io::Error::other)?;
+        self.timing
+            .span_since(ControllerStage::EvidenceWrite, evidence_started);
         if !observed.visible || observed.minimized {
             if self.first_visible_presentation.is_some() {
                 return Err(io::Error::other(
@@ -812,6 +835,7 @@ impl NativeObservationSession {
             .get_or_insert(state.committed_presentation);
         let stage = self.linked_stage(&state)?;
         if let Some(stage) = stage {
+            let capture_started = Instant::now();
             self.capture_stage(
                 observer,
                 &observed,
@@ -820,8 +844,11 @@ impl NativeObservationSession {
                 state.semantic,
                 stage,
             )?;
+            self.timing
+                .span_since(ControllerStage::OsCapture, capture_started);
         }
         for action_index in checkpoints {
+            let capture_started = Instant::now();
             self.capture_stage(
                 observer,
                 &observed,
@@ -830,12 +857,17 @@ impl NativeObservationSession {
                 state.semantic,
                 NativeScreenshotStage::Checkpoint { action_index },
             )?;
+            self.timing
+                .span_since(ControllerStage::OsCapture, capture_started);
             self.checkpoint_count += 1;
         }
+        let recheck_started = Instant::now();
         let after = self
             .state_reader
             .read(&self.nonce, identity.pid, self.requested_bounds)
             .map_err(io::Error::other)?;
+        self.timing
+            .span_since(ControllerStage::StatePoll, recheck_started);
         if after != state {
             return Err(io::Error::other(
                 "native publication changed during capture",
@@ -1547,6 +1579,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             trace_path: automation.join("trace.jsonl"),
             trace_cursor: Default::default(),
             publications: Vec::new(),
+            timing: TimingReporter::new("controller"),
         };
         let session_result =
             session.finish_observing(|identity| observation.observe(identity, &mut observer));
@@ -3378,7 +3411,10 @@ fn prefix_error(error: PrefixError) -> io::Error {
     }
 }
 
-fn read_regular_file_nofollow_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
+pub(crate) fn read_regular_file_nofollow_bounded(
+    path: &Path,
+    limit: u64,
+) -> Result<Vec<u8>, String> {
     #[cfg(unix)]
     use std::os::unix::fs::OpenOptionsExt as _;
 
@@ -4131,6 +4167,7 @@ mod tests {
                 acknowledgement,
                 state: prior_state.clone(),
             }],
+            timing: TimingReporter::new("controller"),
         };
         (session, identity)
     }
@@ -4348,6 +4385,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(acknowledgement.committed_presentation, 10);
+        assert_eq!(session.timing.stage_count(ControllerStage::AckWrite), 1);
+        assert_eq!(session.timing.failure(), None);
     }
 
     #[test]

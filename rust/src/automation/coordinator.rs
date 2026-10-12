@@ -1582,8 +1582,23 @@ impl Coordinator {
         };
         #[cfg(feature = "debug-process")]
         let committed_presentation = frame.as_ref().map(|frame| frame.count);
+        #[cfg(feature = "debug-process")]
+        let inner_started = Instant::now();
         let stop = coord.process_present_inner(frame);
-        if let Err(error) = coord.flush_native_trace() {
+        #[cfg(feature = "debug-process")]
+        super::presentation_timing::game::span_since(
+            super::presentation_timing::GameStage::ProcessPresentInner,
+            inner_started,
+        );
+        #[cfg(feature = "debug-process")]
+        let flush_started = Instant::now();
+        let flushed = coord.flush_native_trace();
+        #[cfg(feature = "debug-process")]
+        super::presentation_timing::game::span_since(
+            super::presentation_timing::GameStage::FlushNativeTrace,
+            flush_started,
+        );
+        if let Err(error) = flushed {
             Self::external_trace_failure(format!(
                 "native trace prefix publication failed: {error}"
             ));
@@ -1599,6 +1614,7 @@ impl Coordinator {
                 ));
                 return true;
             }
+            super::presentation_timing::game::presentation_committed(committed_presentation);
         }
         stop
     }

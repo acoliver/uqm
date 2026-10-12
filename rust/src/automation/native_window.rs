@@ -1875,9 +1875,12 @@ pub fn active_native_window_config() -> Option<&'static ActiveNativeWindowConfig
 pub(crate) fn publish_native_window_presentation(
     committed_presentation: u64,
 ) -> Result<(), String> {
+    use super::presentation_timing::{game, GameStage};
+
     let Some(config) = active_native_window_config() else {
         return Ok(());
     };
+    let query_started = std::time::Instant::now();
     let window = crate::graphics::ffi::with_gfx_state(|canvas, _, _| {
         if committed_presentation == 1 {
             canvas.window_mut().set_position(
@@ -1900,9 +1903,12 @@ pub(crate) fn publish_native_window_presentation(
         )
     })
     .ok_or_else(|| "graphics state is unavailable for native-window proof".to_string())?;
+    game::span_since(GameStage::WindowQuery, query_started);
+    let snapshot_started = std::time::Instant::now();
     let (trace_record_count, accepted_player_inputs, verified_battle_frames) =
         crate::automation::Coordinator::native_window_semantic_snapshot()
             .ok_or_else(|| "native-window semantic snapshot is unavailable".to_string())?;
+    game::span_since(GameStage::SemanticSnapshot, snapshot_started);
     publish_native_window_state(&NativeWindowChildState {
         schema: NATIVE_WINDOW_STATE_SCHEMA.to_string(),
         nonce: config.nonce.clone(),
@@ -1933,6 +1939,7 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
     {
         return Err("native-window child state violates its identity contract".to_string());
     }
+    let write_started = std::time::Instant::now();
     let bytes = serde_json::to_vec_pretty(state)
         .map_err(|error| format!("serialize native-window state: {error}"))?;
     config.output_directory.publish(
@@ -1940,6 +1947,10 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
         &bytes,
         "state",
     )?;
+    super::presentation_timing::game::span_since(
+        super::presentation_timing::GameStage::PublishWrite,
+        write_started,
+    );
     wait_for_native_window_ack(
         &config.output_directory,
         &config.nonce,
@@ -1959,12 +1970,17 @@ fn wait_for_native_window_ack(
     let deadline = std::time::Instant::now()
         .checked_add(timeout)
         .ok_or_else(|| "native-window acknowledgement deadline overflowed".to_string())?;
+    use super::presentation_timing::{game, GameStage};
+
     loop {
-        if let Ok(bytes) = output_directory.read(
+        let read_started = std::time::Instant::now();
+        let read = output_directory.read(
             std::ffi::OsStr::new("native-window-ack.json"),
             byte_limit,
             "acknowledgement",
-        ) {
+        );
+        game::span_since(GameStage::AckRead, read_started);
+        if let Ok(bytes) = read {
             if let Ok(ack) = serde_json::from_slice::<NativeWindowAck>(&bytes) {
                 if ack.schema == NATIVE_WINDOW_ACK_SCHEMA
                     && ack.nonce == nonce
@@ -1979,7 +1995,9 @@ fn wait_for_native_window_ack(
                 "native-window state presentation {committed_presentation} was not acknowledged"
             ));
         }
+        let sleep_started = std::time::Instant::now();
         std::thread::sleep(std::time::Duration::from_micros(200));
+        game::span_since(GameStage::AckSleep, sleep_started);
     }
 }
 

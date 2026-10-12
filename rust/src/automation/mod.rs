@@ -59,6 +59,8 @@ mod native_trace_oracle;
 pub mod native_window;
 pub mod navigation;
 pub mod outcome;
+#[cfg(feature = "debug-process")]
+pub(crate) mod presentation_timing;
 pub mod proof;
 pub mod runtime;
 pub mod scenario;

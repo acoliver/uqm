@@ -550,10 +550,17 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
         if crate::automation::Coordinator::is_active() {
             let generation = crate::automation::input_ffi::get_runtime()
                 .map(|runtime| runtime.mirror.capture_generation());
-            match state
+            #[cfg(feature = "debug-process")]
+            let read_started = std::time::Instant::now();
+            let readback = state
                 .canvas
-                .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32)
-            {
+                .read_pixels(None, sdl2::pixels::PixelFormatEnum::RGBA32);
+            #[cfg(feature = "debug-process")]
+            crate::automation::presentation_timing::game::span_since(
+                crate::automation::presentation_timing::GameStage::ReadPixels,
+                read_started,
+            );
+            match readback {
                 Ok(mut rgba) => {
                     for pixel in rgba.as_chunks_mut::<4>().0 {
                         pixel[3] = u8::MAX;
@@ -576,7 +583,14 @@ pub unsafe extern "C" fn rust_gfx_postprocess() {
             }
         }
 
+        #[cfg(feature = "debug-process")]
+        let present_started = std::time::Instant::now();
         state.canvas.present();
+        #[cfg(feature = "debug-process")]
+        crate::automation::presentation_timing::game::span_since(
+            crate::automation::presentation_timing::GameStage::CanvasPresent,
+            present_started,
+        );
     }
 }
 
