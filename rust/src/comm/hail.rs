@@ -146,6 +146,22 @@ const LDASF_USE_ALTERNATE: u32 = 0x0001;
 #[cfg(not(test))]
 const STARBASE_STRING_BASE: i32 = 0x0200;
 
+/// Frees conversation fonts through the C graphics exports.
+#[cfg(not(test))]
+struct CFontRelease;
+
+#[cfg(not(test))]
+impl super::player_font::FontRelease for CFontRelease {
+    fn drain_draw_queue(&mut self) {
+        crate::mainloop::input_frame::drain_committed_draws();
+    }
+
+    fn destroy_font(&mut self, font: *mut std::ffi::c_void) {
+        // SAFETY: `font` is the conversation font, released exactly once.
+        unsafe { c_bridge::DestroyFont(font) };
+    }
+}
+
 /// Call a CommData function pointer (init/post/uninit encounter func).
 /// The pointer is stored as *const c_void in CLocData — cast to extern fn and call.
 #[cfg(not(test))]
@@ -212,6 +228,7 @@ const NORMAL_VOLUME: i32 = 128;
 pub unsafe fn hail_alien() {
     #[cfg(not(test))]
     {
+        use super::player_font::CONVERSATION_PLAYER_FONT;
         use c_bridge::*;
         use std::ptr;
 
@@ -236,6 +253,11 @@ pub unsafe fn hail_alien() {
         // ----------------------------------------------------------------
         let player_font_res = c"font.player".as_ptr();
         let player_font = LoadGraphicInstance(player_font_res);
+        // The conversation owns this font: the response and feedback renderers
+        // borrow it, and it is freed only at teardown after queued draws drain.
+        CONVERSATION_PLAYER_FONT
+            .install(player_font)
+            .unwrap_or_else(|error| panic!("HailAlien: {error}"));
 
         // ----------------------------------------------------------------
         // Step 3: Load and set alien resources
@@ -527,8 +549,9 @@ pub unsafe fn hail_alien() {
         // TextCacheFrame — captured; ReleaseDrawable to get back raw handle, then DestroyDrawable
         DestroyDrawable(ReleaseDrawable(text_cache_frame));
 
-        // PlayerFont — not captured, direct Destroy
-        DestroyFont(player_font);
+        // PlayerFont — not captured; queued response/feedback glyph draws may
+        // still read it, so the release drains the draw queue first.
+        CONVERSATION_PLAYER_FONT.release(&mut CFontRelease);
 
         // ----------------------------------------------------------------
         // Steps 19–20: Clear CommData fields and pCurInputState
