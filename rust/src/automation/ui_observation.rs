@@ -9,6 +9,7 @@ static COMMUNICATION_RESPONSES_READY: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_REPLAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COMMUNICATION_REPLAY_GENERATION: AtomicU64 = AtomicU64::new(0);
+static STARBASE_MENU_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PLANET_MENU_PHASE: AtomicUsize = AtomicUsize::new(0);
 static PLANET_MENU_GENERATION: AtomicU64 = AtomicU64::new(0);
 
@@ -54,6 +55,18 @@ pub fn planet_menu_phase() -> PlanetMenuPhase {
 }
 
 static COMMUNICATION_COMPLETIONS: AtomicU64 = AtomicU64::new(0);
+
+/// Record whether the Starbase menu, or the Outfit screen it opens, is the
+/// active input loop.
+pub fn observe_starbase_menu(active: bool) {
+    STARBASE_MENU_ACTIVE.store(active, Ordering::Release);
+}
+
+/// Whether the Starbase menu or the Outfit screen is the active input loop.
+#[must_use]
+pub fn starbase_menu_active() -> bool {
+    STARBASE_MENU_ACTIVE.load(Ordering::Acquire)
+}
 
 /// Record entry to or exit from the production Game Options input loop.
 #[no_mangle]
@@ -163,6 +176,16 @@ mod tests {
         assert!(verify_game_options_active().is_ok());
         rust_automation_observe_game_options(0);
         assert!(verify_game_options_active().is_err());
+    }
+
+    #[test]
+    fn starbase_menu_observation_tracks_entry_and_exit() {
+        observe_starbase_menu(false);
+        assert!(!starbase_menu_active());
+        observe_starbase_menu(true);
+        assert!(starbase_menu_active());
+        observe_starbase_menu(false);
+        assert!(!starbase_menu_active());
     }
 
     #[test]

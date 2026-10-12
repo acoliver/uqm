@@ -1141,11 +1141,18 @@ pub mod smm {
 pub const ONE_SECOND: u32 = 840;
 
 /// Port of C `VisitStarBase()`. Handles the starbase dispatch logic:
-/// unallied conversations, Ilwrath encounter, time passage, and starbase menu.
+/// unallied conversations, Ilwrath encounter, time passage, the starbase
+/// menu and the cleanup that returns the ship to interplanetary space.
+///
+/// # Errors
+/// Returns the error of a Starbase or Outfit route that this port cannot
+/// serve; the game loop ends on it.
 ///
 /// # Safety
 /// Calls C FFI functions that access global state and rendering.
-pub unsafe extern "C" fn rust_visit_starbase() {
+#[cfg(not(test))]
+pub unsafe fn rust_visit_starbase() -> Result<(), crate::starbase::StarbaseError> {
+    let platform = crate::starbase::cffi::CffiPlatform;
     // CHMMR_BOMB_STATE == 2: transported by Chmmr to Starbase
     if get_game_state("CHMMR_BOMB_STATE") == 2 {
         ffi::CurStarDescPtr = std::ptr::null_mut();
@@ -1168,7 +1175,8 @@ pub unsafe extern "C" fn rust_visit_starbase() {
             set_game_state("STARBASE_AVAILABLE", 1);
             set_game_state("STARBASE_VISITED", 1);
             crate::automation::input_ffi::rust_automation_service_boundary();
-            return;
+            crate::starbase::cleanup_after_visit(&platform);
+            return Ok(());
         }
 
         // Create an Ilwrath ship responding to the Ur-Quan probe's broadcast
@@ -1183,7 +1191,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew == 0xFFFF || (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
-            return;
+            return Ok(());
         }
 
         // After Ilwrath battle, about-to-ally Starbase conversation
@@ -1191,7 +1199,7 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         init_communication(conv::COMMANDER);
 
         if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
-            return;
+            return Ok(());
         }
         // This marks that we are in Starbase.
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
@@ -1199,18 +1207,23 @@ pub unsafe extern "C" fn rust_visit_starbase() {
 
     // The Commander's moon-base conversation changes resource units, and the
     // status gauges only accept that change while they show resource units.
-    let previous_message_mode = c_extern::SetStatusMessageMode(smm::RES_UNITS as i32);
+    let message_mode = crate::starbase::StatusModeGuard::enter(
+        &platform,
+        crate::starbase::platform::StatusMessageMode::ResUnits,
+    );
 
-    if get_game_state("MOONBASE_ON_SHIP") != 0 || get_game_state("CHMMR_BOMB_STATE") == 2 {
-        // Go immediately into a conversation with the Commander
-        // Time passage — DoTimePassage is static in starbase.c.
-        // TODO: Port DoTimePassage to Rust.
-        // For now, skip time passage (the C archive handles this when
-        // starbase is entered via the C path).
+    if let Some(passage) = crate::starbase::entry_time_passage(
+        get_game_state("MOONBASE_ON_SHIP") != 0,
+        get_game_state("CHMMR_BOMB_STATE") as u8,
+    ) {
+        // Go immediately into a conversation with the Commander when the
+        // Starbase becomes available for the first time, or after Chmmr
+        // install the bomb.
+        crate::starbase::do_time_passage(&platform, passage);
 
         let crew = crate::mainloop::ffi::get_crew_enlisted();
         if crew == 0xFFFF {
-            return; // You are now dead!
+            return Ok(()); // You are now dead!
         }
 
         crate::automation::scenario::observe_encounter_dispatch(conv::COMMANDER);
@@ -1218,16 +1231,16 @@ pub unsafe extern "C" fn rust_visit_starbase() {
         init_communication(conv::COMMANDER);
 
         if (crate::mainloop::ffi::get_current_activity().0 & CHECK_ABORT) != 0 {
-            return;
+            return Ok(());
         }
         set_game_state("GLOBAL_FLAGS_AND_DATA", 0xFF);
     }
 
-    // Starbase menu input loop — DoStarBase/DoInput are in starbase.c/controls.c.
-    // TODO: Port starbase menu to Rust. For now, skip menu input.
-    // ffi::rust_do_starbase_menu_input();
+    crate::starbase::run_starbase_menu(&platform)?;
 
-    c_extern::SetStatusMessageMode(previous_message_mode);
+    drop(message_mode);
+    crate::starbase::cleanup_after_visit(&platform);
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

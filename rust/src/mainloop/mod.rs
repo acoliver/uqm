@@ -65,4 +65,7 @@ pub enum MainLoopError {
     /// LoadKernel returned FALSE — kernel initialization failed.
     #[error("LoadKernel failed — kernel initialization error")]
     LoadKernelFailed,
+    /// A Starbase or Outfit route ended with an error.
+    #[error("starbase: {0}")]
+    Starbase(#[from] crate::starbase::StarbaseError),
 }
