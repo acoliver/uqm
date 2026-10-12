@@ -27,6 +27,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::AssertGameOptions(_)
         | Action::AssertCommunicationResponses(_)
         | Action::AssertBattleFrames(_)
+        | Action::AssertHyperspaceDisplacement(_)
         | Action::AssertPlanetSideCollisions(_)
         | Action::AssertMainMenuTransition(_) => Some(CheckpointClass::Assertion),
         Action::WaitForMainMenuReady(_)
@@ -49,6 +50,7 @@ pub fn checkpoint_class(action: &Action) -> Option<CheckpointClass> {
         | Action::TapMenuKey(_)
         | Action::SetPlayerKey(_)
         | Action::TapPlayerKey(_)
+        | Action::RecordHyperspacePosition(_)
         | Action::Finish => None,
     }
 }

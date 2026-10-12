@@ -26,6 +26,7 @@ pub mod capture;
 pub mod child_session;
 pub mod coordinator;
 pub mod error;
+pub mod flight_position;
 pub mod identity;
 pub mod input;
 pub mod input_ffi;
@@ -129,12 +130,13 @@ pub use proof::{
 pub use scenario::{AutomationScene, SceneActivationBoundary, SceneError, ScenePlan};
 pub use script::{
     parse_script, validate_script, Action, ActivityAssertion, Budgets, CaptureStep,
-    CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion, MainMenuTransition,
-    MenuKey, NavigateToHyperspaceStep, NavigateToMoonStep, NavigateToOrbitStep,
-    NavigateToPlanetStep, PlanetMenuPhaseName, PlanetSideOutcomeName, PlayerKey, RootDocument,
-    SceneAssertion, ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep,
-    SetMenuKeyStep, SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep,
-    TapPlayerKeyStep, ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
+    CommunicationResponsesAssertion, DispatchAssertion, GameOptionsAssertion,
+    HyperspaceDisplacementAssertion, MainMenuTransition, MenuKey, NavigateToHyperspaceStep,
+    NavigateToMoonStep, NavigateToOrbitStep, NavigateToPlanetStep, PlanetMenuPhaseName,
+    PlanetSideOutcomeName, PlayerKey, RecordHyperspacePositionStep, RootDocument, SceneAssertion,
+    ScriptStep, SelectCommunicationResponseStep, SelectPlanetMenuStep, SetMenuKeyStep,
+    SetPlayerKeyStep, SetupPlanetSideCollisionFixtureStep, TapMenuKeyStep, TapPlayerKeyStep,
+    ValidatedScript, WaitForBattleFramesStep, WaitForCommunicationEndStep,
     WaitForCommunicationReplayStep, WaitForDispatchStep, WaitForPlanetSideEndStep,
     WaitForPlanetSideStartStep, WaitInputTicksStep, WaitPresentationsStep,
     CAPABILITY_REQUIRED_FLAGS,

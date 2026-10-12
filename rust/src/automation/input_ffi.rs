@@ -208,6 +208,29 @@ unsafe fn read_flight_state(solar_system: &CSolarSystemState, snapshot: &mut Nav
     }
 }
 
+/// The flagship's authoritative logical coordinates, `GLOBAL_SIS(log_x/log_y)`.
+///
+/// Hyperspace flight moves exactly these fields (`hyper.c`), so they are the
+/// position a movement assertion must read.
+#[cfg(feature = "linked_c_archive")]
+pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
+    // SAFETY: the production game invokes the automation hooks synchronously
+    // on the game thread, so `GlobData` cannot change during this read.
+    unsafe {
+        let sis_state = std::ptr::addr_of!(GLOB_DATA.sis_state);
+        Some((
+            std::ptr::addr_of!((*sis_state).log_x).read(),
+            std::ptr::addr_of!((*sis_state).log_y).read(),
+        ))
+    }
+}
+
+/// Without the linked game there is no position to read.
+#[cfg(not(feature = "linked_c_archive"))]
+pub(crate) fn hyperspace_position() -> Option<(i32, i32)> {
+    None
+}
+
 /// Sample the live solar system for flying out of it, without a target.
 ///
 /// `active` is 0 whenever no solar system is live, which is how a departure
