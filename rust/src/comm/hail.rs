@@ -200,7 +200,7 @@ unsafe fn planet_name() -> *const std::ffi::c_char {
 
 /// Get a game string via GAME_STRING macro: SetAbsStringTableIndex(GameStrings, i) → GetStringAddress.
 #[cfg(not(test))]
-unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
+pub(crate) unsafe fn game_string(index: i32) -> *const std::ffi::c_char {
     let s = c_bridge::SetAbsStringTableIndex(c_bridge::GameStrings, index as u16);
     c_bridge::GetStringAddress(s)
 }

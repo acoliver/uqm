@@ -13,9 +13,8 @@
 //!   without `START_INTERPLANETARY` or `START_ENCOUNTER`
 //!   (`saves_ip_group_queue`); in every other activity the section is absent
 //!   and the capture is empty. The npc ship queue has the mirror-image
-//!   condition (`START_ENCOUNTER`) in `SaveGame`; that selection belongs to
-//!   the save orchestration, which is not ported, and `queues` captures the
-//!   queue whatever the activity.
+//!   condition (`START_ENCOUNTER`) in `SaveGame`, which is
+//!   `queues::saves_npc_ship_queue`.
 //! * "Enct" is written whenever the encounter queue holds an element.
 //!
 //! Restore follows `LoadGame`, which empties both queues before it reads the

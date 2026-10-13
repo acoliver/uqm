@@ -140,7 +140,7 @@ impl LiveGame {
 
     /// Append a fragment straight to `queue`, the way a test of the game's own
     /// ship building would, without the code under test.
-    fn push_fragment(&mut self, npc: bool, race: u8, captain: u8) {
+    pub(super) fn push_fragment(&mut self, npc: bool, race: u8, captain: u8) {
         let queue = if npc {
             std::ptr::addr_of_mut!(self.0.npc_built_ship_q).cast::<Queue>()
         } else {
@@ -914,4 +914,119 @@ fn restore_refuses_ship_queues_that_were_never_initialised() {
         }
     );
     game.npc_built_ship_q.pq_tab = pool;
+}
+
+// ---------------------------------------------------------------------------
+// Which queues a save made in an activity writes
+// ---------------------------------------------------------------------------
+
+/// `START_ENCOUNTER` and `START_INTERPLANETARY` (globdata.h): bits 2 and 3 of
+/// the high byte of the activity word.
+const START_ENCOUNTER_BIT: u16 = 1 << 10;
+const START_INTERPLANETARY_BIT: u16 = 1 << 11;
+
+#[test]
+fn npc_queue_is_saved_exactly_when_save_game_saves_it() {
+    // Every 16-bit activity: `SaveGame` writes "NpcQ" when START_INTERPLANETARY
+    // is clear and START_ENCOUNTER is set, whatever the low byte says.
+    for activity in 0..=u16::MAX {
+        let encounter = (activity >> 10) & 1 == 1;
+        let interplanetary = (activity >> 11) & 1 == 1;
+        assert_eq!(
+            saves_npc_ship_queue(activity),
+            encounter && !interplanetary,
+            "{activity:#06x}"
+        );
+    }
+    for (activity, saved) in [
+        (START_ENCOUNTER_BIT | 2, true),
+        (START_ENCOUNTER_BIT | 3, true),
+        (START_ENCOUNTER_BIT | 4, true),
+        (START_ENCOUNTER_BIT | START_INTERPLANETARY_BIT | 4, false),
+        (START_INTERPLANETARY_BIT | 4, false),
+        (4, false),
+        (3, false),
+        (0, false),
+        (START_ENCOUNTER_BIT | 0x0001 | 0x0002 | 0x4000, true),
+    ] {
+        assert_eq!(saves_npc_ship_queue(activity), saved, "{activity:#06x}");
+    }
+}
+
+#[test]
+fn npc_and_group_queues_are_never_both_written_and_the_group_one_is_the_else() {
+    use super::groups::saves_ip_group_queue;
+    for activity in 0..=u16::MAX {
+        let npc = saves_npc_ship_queue(activity);
+        let groups = saves_ip_group_queue(activity);
+        assert!(!(npc && groups), "{activity:#06x}");
+        // With START_INTERPLANETARY clear, the low byte decides the other case.
+        if (activity >> 11) & 1 == 0 && (activity >> 10) & 1 == 0 {
+            assert_eq!(groups, activity & 0xff == 4, "{activity:#06x}");
+        }
+    }
+}
+
+#[test]
+fn capture_for_activity_writes_the_npc_queue_only_for_an_encounter() {
+    let mut game = LiveGame::new();
+    game.push_fragment(true, HUMAN_SHIP as u8, 3);
+    game.push_fragment(true, URQUAN_DRONE_SHIP as u8, 0);
+    game.push_fragment(false, HUMAN_SHIP as u8, 5);
+    let raw = capture_queues(&game).unwrap();
+    assert_eq!(raw.npc_ship_queue.len(), 2);
+
+    for (activity, with_npc) in [
+        (START_ENCOUNTER_BIT | 2, true),
+        (START_ENCOUNTER_BIT | 3, true),
+        (START_ENCOUNTER_BIT | START_INTERPLANETARY_BIT | 4, false),
+        (START_INTERPLANETARY_BIT | 4, false),
+        (4, false),
+        (3, false),
+        (2, false),
+        (0, false),
+    ] {
+        game.current_activity = activity;
+        let selected = capture_queues_for_activity(&game).unwrap();
+        assert_eq!(selected.race_queue, raw.race_queue, "{activity:#06x}");
+        assert_eq!(selected.ship_queue, raw.ship_queue, "{activity:#06x}");
+        assert_eq!(
+            selected.npc_ship_queue,
+            if with_npc {
+                raw.npc_ship_queue.clone()
+            } else {
+                Vec::new()
+            },
+            "{activity:#06x}"
+        );
+    }
+}
+
+#[test]
+fn an_npc_queue_that_is_not_saved_is_not_read() {
+    let mut game = LiveGame::new();
+    game.push_fragment(true, HUMAN_SHIP as u8, 3);
+    let head = game.npc_built_ship_q.head;
+    game.npc_built_ship_q.head = (head as usize + 1) as *mut std::ffi::c_void;
+
+    game.current_activity = 4;
+    let selected = capture_queues_for_activity(&game).unwrap();
+    assert!(selected.npc_ship_queue.is_empty());
+    assert!(matches!(
+        capture_queues(&game).unwrap_err(),
+        QueueError::CorruptQueue {
+            queue: QueueKind::NpcShips,
+            ..
+        }
+    ));
+
+    game.current_activity = START_ENCOUNTER_BIT | 2;
+    assert!(matches!(
+        capture_queues_for_activity(&game).unwrap_err(),
+        QueueError::CorruptQueue {
+            queue: QueueKind::NpcShips,
+            ..
+        }
+    ));
+    game.npc_built_ship_q.head = head;
 }
