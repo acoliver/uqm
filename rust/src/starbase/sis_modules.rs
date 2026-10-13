@@ -15,8 +15,13 @@
 pub const NUM_MODULE_SLOTS: usize = 16;
 /// `NUM_MODULES` (`sis.h:89`), also the length of `GlobData.ModuleCost`.
 pub const NUM_MODULES: usize = 20;
-/// `EMPTY_SLOT` (`sis.h:92`): the slot byte meaning "no module".
+/// `EMPTY_SLOT` (`sis.h:92`): first byte past the module numbers. The C code
+/// adds a kind to it to mark an empty slot: `+ 0` in a drive slot, `+ 1` in a
+/// jet slot and `+ 2` in a module slot (`globdata.c:387-395`).
 pub const EMPTY_SLOT: u8 = NUM_MODULES as u8;
+/// `EMPTY_SLOT + 2`: the byte an empty `ModuleSlots[]` entry holds
+/// (`globdata.c:395`, `outfit.c:258`).
+pub const EMPTY_MODULE_SLOT: u8 = EMPTY_SLOT + 2;
 
 /// `FUEL_TANK_SCALE` (`sis.h:40`): raw fuel points per displayed fuel unit.
 pub const FUEL_TANK_SCALE: u32 = 100;
@@ -127,7 +132,10 @@ impl ModuleSlot {
 pub enum ModuleSlotsError {
     #[error("expected {expected} module slots, got {actual}")]
     WrongLength { expected: usize, actual: usize },
-    #[error("module slot {slot} holds byte {value}, above EMPTY_SLOT ({EMPTY_SLOT})")]
+    #[error(
+        "module slot {slot} holds byte {value}, neither a module (below {NUM_MODULES}) \
+         nor EMPTY_MODULE_SLOT ({EMPTY_MODULE_SLOT})"
+    )]
     InvalidByte { slot: usize, value: u8 },
 }
 
@@ -154,7 +162,7 @@ impl ModuleSlots {
         for (slot, (&value, out)) in raw.iter().zip(slots.iter_mut()).enumerate() {
             *out = match ModuleType::from_u8(value) {
                 Some(module) => ModuleSlot::Installed(module),
-                None if value == EMPTY_SLOT => ModuleSlot::Empty,
+                None if value == EMPTY_MODULE_SLOT => ModuleSlot::Empty,
                 None => return Err(ModuleSlotsError::InvalidByte { slot, value }),
             };
         }
@@ -262,11 +270,36 @@ mod tests {
     use std::mem::offset_of;
 
     fn slots_with(entries: &[(usize, ModuleType)]) -> ModuleSlots {
-        let mut raw = [EMPTY_SLOT; NUM_MODULE_SLOTS];
+        let mut raw = [EMPTY_MODULE_SLOT; NUM_MODULE_SLOTS];
         for (index, module) in entries {
             raw[*index] = *module as u8;
         }
         ModuleSlots::from_raw(&raw).expect("fixture slots are valid")
+    }
+
+    /// `GLOBAL_SIS (ModuleSlots)` as `InitGameStructures` leaves it for a new
+    /// game (`globdata.c:393-401`): every slot is `EMPTY_SLOT + 2`, then the
+    /// starting modules are placed.
+    fn new_game_module_slots() -> [u8; NUM_MODULE_SLOTS] {
+        let mut raw = [EMPTY_SLOT + 2; NUM_MODULE_SLOTS];
+        raw[15] = ModuleType::GunWeapon as u8;
+        raw[2] = ModuleType::CrewPod as u8;
+        raw[8] = ModuleType::StorageBay as u8;
+        raw[1] = ModuleType::FuelTank as u8;
+        raw
+    }
+
+    #[test]
+    fn new_game_module_slots_from_the_c_initializer_validate() {
+        let slots = ModuleSlots::from_raw(&new_game_module_slots())
+            .expect("the native new-game hull is valid");
+        assert_eq!(slots.get(0), Some(ModuleSlot::Empty));
+        assert_eq!(
+            slots.get(1),
+            Some(ModuleSlot::Installed(ModuleType::FuelTank))
+        );
+        assert_eq!(slots.fuel_tank_capacity(), 6000);
+        assert_eq!(slots.count(ModuleType::FuelTank), 1);
     }
 
     #[test]
@@ -362,17 +395,29 @@ mod tests {
                 actual: 15
             })
         );
-        let mut raw = [EMPTY_SLOT; NUM_MODULE_SLOTS];
-        raw[9] = EMPTY_SLOT + 1;
+        let mut raw = [EMPTY_MODULE_SLOT; NUM_MODULE_SLOTS];
+        // The drive-slot (20) and jet-slot (21) empties, the lander marker
+        // (23) and out-of-range bytes never belong in `ModuleSlots[]`.
+        for value in [EMPTY_SLOT, EMPTY_SLOT + 1, EMPTY_SLOT + 3, 255] {
+            raw[9] = value;
+            assert_eq!(
+                ModuleSlots::from_raw(&raw),
+                Err(ModuleSlotsError::InvalidByte { slot: 9, value })
+            );
+        }
+    }
+
+    #[test]
+    fn empty_module_slot_is_the_byte_the_c_code_stores() {
+        assert_eq!(EMPTY_MODULE_SLOT, 22);
+        let mut raw = [EMPTY_MODULE_SLOT; NUM_MODULE_SLOTS];
+        raw[3] = ModuleType::BombModule5 as u8;
+        let slots = ModuleSlots::from_raw(&raw).unwrap();
+        assert_eq!(slots.get(2), Some(ModuleSlot::Empty));
         assert_eq!(
-            ModuleSlots::from_raw(&raw),
-            Err(ModuleSlotsError::InvalidByte {
-                slot: 9,
-                value: EMPTY_SLOT + 1
-            })
+            slots.get(3),
+            Some(ModuleSlot::Installed(ModuleType::BombModule5))
         );
-        raw[9] = 255;
-        assert!(ModuleSlots::from_raw(&raw).is_err());
     }
 
     #[test]

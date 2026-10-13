@@ -16,7 +16,7 @@ use super::input::MenuPulses;
 use super::platform::{
     MenuSounds, MusicId, Platform, SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
 };
-use super::sis_modules::ModuleSlots;
+use super::sis_modules::{ModuleSlots, EMPTY_MODULE_SLOT};
 use crate::mainloop::types::ActivityValue;
 
 /// Everything a screen asked the platform to do, in order.
@@ -104,7 +104,7 @@ pub struct RecordingPlatform {
 }
 
 pub fn default_sis() -> SisView {
-    let mut module_slots = [20u8; 16];
+    let mut module_slots = [EMPTY_MODULE_SLOT; 16];
     module_slots[0] = 5;
     SisView {
         res_units: 2500,
