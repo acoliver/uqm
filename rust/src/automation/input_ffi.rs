@@ -180,9 +180,7 @@ unsafe fn read_flight_state(solar_system: &CSolarSystemState, snapshot: &mut Nav
     if !ship_stamp.frame.is_null() {
         snapshot.ship_facing = i32::from(GetFrameIndex(ship_stamp.frame));
     }
-    let velocity = std::ptr::addr_of!((*game_state)._velocity)
-        .cast::<crate::battle::velocity::VelocityDesc>()
-        .read_unaligned();
+    let velocity = std::ptr::addr_of!((*game_state).velocity).read();
     (snapshot.velocity_x, snapshot.velocity_y) = velocity.get_current_components();
 
     if !solar_system.orbital.is_null() {
