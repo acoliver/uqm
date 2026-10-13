@@ -57,7 +57,7 @@ pub const NUM_SAVED_BATTLE_GROUPS: usize = 64;
 /// Size of `GROUP_HEADER` as `WriteGroupHeader` writes it.
 pub const GROUP_HEADER_BYTES: usize = GROUP_OFFSETS_AT + 4 * (NUM_SAVED_BATTLE_GROUPS + 1);
 /// Where the offset array starts inside a header; `GroupOffset[0]` is first.
-const GROUP_OFFSETS_AT: usize = 8;
+pub(super) const GROUP_OFFSETS_AT: usize = 8;
 /// The 16 bytes `WriteIpGroup` writes.
 const IP_GROUP_BYTES: usize = 16;
 /// Outer race byte plus the `IP_GROUP`.
@@ -114,6 +114,14 @@ pub enum StateSectionError {
         encounter_id: u32,
         offset: u32,
     },
+    /// A group id that is not one of the `NUM_SAVED_BATTLE_GROUPS` slots.
+    GroupIdOutOfRange {
+        group_id: u8,
+    },
+    /// A group that left the system has no slot in its header to flush into.
+    GroupSlotUnallocated {
+        group_id: u8,
+    },
     /// A value does not fit the byte or nibble the state file stores.
     ValueTooWide {
         field: &'static str,
@@ -157,6 +165,12 @@ impl fmt::Display for StateSectionError {
                 f,
                 "game state keeps offset {offset} for defined group {encounter_id}, which the save does not hold"
             ),
+            Self::GroupIdOutOfRange { group_id } => {
+                write!(f, "group id {group_id} is not one of the {NUM_SAVED_BATTLE_GROUPS} slots")
+            }
+            Self::GroupSlotUnallocated { group_id } => {
+                write!(f, "group {group_id} has no slot to flush into")
+            }
             Self::ValueTooWide { field, value } => {
                 write!(f, "{field} {value} does not fit the state file")
             }
@@ -190,14 +204,14 @@ pub struct StateFileSections {
 // Reading the working layout
 // ---------------------------------------------------------------------------
 
-struct Reader<'a> {
+pub(super) struct Reader<'a> {
     file: usize,
     bytes: &'a [u8],
     at: usize,
 }
 
 impl<'a> Reader<'a> {
-    fn at(file: usize, bytes: &'a [u8], offset: usize) -> Self {
+    pub(super) fn at(file: usize, bytes: &'a [u8], offset: usize) -> Self {
         Self {
             file,
             bytes,
@@ -243,13 +257,13 @@ impl<'a> Reader<'a> {
 
 /// `GROUP_HEADER`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct GroupHeader {
-    num_groups: u8,
-    day_index: u8,
-    month_index: u8,
-    star_index: u16,
-    year_index: u16,
-    group_offset: [u32; NUM_SAVED_BATTLE_GROUPS + 1],
+pub(super) struct GroupHeader {
+    pub(super) num_groups: u8,
+    pub(super) day_index: u8,
+    pub(super) month_index: u8,
+    pub(super) star_index: u16,
+    pub(super) year_index: u16,
+    pub(super) group_offset: [u32; NUM_SAVED_BATTLE_GROUPS + 1],
 }
 
 impl GroupHeader {
@@ -266,7 +280,7 @@ impl GroupHeader {
     }
 
     /// `ReadGroupHeader`.
-    fn read(r: &mut Reader<'_>) -> Result<Self, StateSectionError> {
+    pub(super) fn read(r: &mut Reader<'_>) -> Result<Self, StateSectionError> {
         let num_groups = r.u8()?;
         let day_index = r.u8()?;
         let month_index = r.u8()?;
@@ -288,7 +302,7 @@ impl GroupHeader {
     }
 
     /// `WriteGroupHeader` into `image` at `at`, which must hold a header.
-    fn write_over(&self, image: &mut [u8], at: usize) {
+    pub(super) fn write_over(&self, image: &mut [u8], at: usize) {
         let out = &mut image[at..at + GROUP_HEADER_BYTES];
         out[0] = self.num_groups;
         out[1] = self.day_index;
@@ -535,8 +549,10 @@ fn count_byte(count: usize) -> Result<u8, StateSectionError> {
     u8::try_from(count).map_err(|_| StateSectionError::TooManyEntries { count })
 }
 
-/// `LoadGroupList`: append the list to `image` and point `GroupOffset[0]` at it.
-fn append_group_list(image: &mut Vec<u8>, list: &GroupList) -> Result<(), StateSectionError> {
+/// The bytes of a group list as `SaveGroupList` and `FlushGroupInfo` lay them
+/// out in the file: `LastEncGroup`, the count, then one outer race byte plus
+/// `WriteIpGroup` per entry.
+pub(super) fn group_list_bytes(list: &GroupList) -> Result<Vec<u8>, StateSectionError> {
     let count = count_byte(list.entries.len())?;
     let mut records = Vec::with_capacity(2 + list.entries.len() * GROUP_LIST_RECORD_BYTES);
     records.push(list.last_encounter);
@@ -552,6 +568,12 @@ fn append_group_list(image: &mut Vec<u8>, list: &GroupList) -> Result<(), StateS
         records.extend_from_slice(&g.loc.x.to_le_bytes());
         records.extend_from_slice(&g.loc.y.to_le_bytes());
     }
+    Ok(records)
+}
+
+/// `LoadGroupList`: append the list to `image` and point `GroupOffset[0]` at it.
+fn append_group_list(image: &mut Vec<u8>, list: &GroupList) -> Result<(), StateSectionError> {
+    let records = group_list_bytes(list)?;
     let offset = image.len() as u32;
     image.extend_from_slice(&records);
     image[GROUP_OFFSETS_AT..GROUP_OFFSETS_AT + 4].copy_from_slice(&offset.to_le_bytes());
