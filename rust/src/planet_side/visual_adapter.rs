@@ -11,10 +11,7 @@ use super::hazards::HazardKind;
 use super::mask_adapter::extract_frame_mask;
 use super::resources::{LanderGraphic, PlanetSideAssetAccess};
 use super::runtime::AdapterError;
-
-const NUM_SCANDOT_TRANSITIONS: u16 = 8;
-const MINERAL_FRAME_BASE: u16 = NUM_SCANDOT_TRANSITIONS * 2;
-const MINERAL_FRAMES_PER_CATEGORY: u16 = 5;
+use super::scan_frames::{mineral_surface_sprite, ScanFrameError};
 
 /// Captured production frame sources needed by generated surface nodes.
 pub struct CffiSurfaceVisuals {
@@ -150,18 +147,15 @@ fn life_animation_frame(frame_index: u16) -> u16 {
     frame_index % 4
 }
 
-/// Select the surface mineral frame: the category cluster offset by the gross
-/// deposit size.  The fine collectible quantity never participates.  Shared by
-/// the generated-node path and the fixture mineral path so category validation
-/// and frame selection cannot drift.
+/// Select the lander surface sprite for a mineral deposit from its category
+/// and gross size (never the fine collectible quantity).  Shared by the
+/// generated-node path and the fixture mineral path so validation and frame
+/// selection cannot drift.
 fn mineral_visual_frame(category: usize, size: u16) -> Result<u16, AdapterError> {
-    let category = u16::try_from(category).map_err(|_| AdapterError::new("mineral_category"))?;
-    if category >= 8 {
-        return Err(AdapterError::new("mineral_category"));
-    }
-    Ok(MINERAL_FRAME_BASE
-        + category * MINERAL_FRAMES_PER_CATEGORY
-        + size.min(MINERAL_FRAMES_PER_CATEGORY - 1))
+    mineral_surface_sprite(category, size).map_err(|error| match error {
+        ScanFrameError::Category => AdapterError::new("mineral_category"),
+        ScanFrameError::GrossSize => AdapterError::new("mineral_gross_size"),
+    })
 }
 
 /// Production visual port for dynamically-spawned world entities.
@@ -372,13 +366,15 @@ mod tests {
         // gross size (0..2 from surface.c), and every representable fine
         // density byte (0..=255).  Typed MineralNode entities differ only in
         // fine quantity: the selected frame must be identical for all fine
-        // values, and each gross size must select its category-relative frame.
-        // The expected frame comes from the category cluster formula itself, so
-        // the assertion is not a helper-to-itself comparison.
-        for category in 0..MINERAL_CATEGORY_COUNT {
+        // values.  The lander surface sprite is `8 + 5*category + gross + 2`
+        // in the original C; the gross-0 sprite of each category is written
+        // out literally here so the expectation does not reuse the code under
+        // test.
+        const GROSS_ZERO_SURFACE_SPRITE: [u16; MINERAL_CATEGORY_COUNT] =
+            [10, 15, 20, 25, 30, 35, 40, 45];
+        for (category, gross_zero_sprite) in GROSS_ZERO_SURFACE_SPRITE.into_iter().enumerate() {
             for size in 0..MINERAL_GROSS_SIZE_COUNT {
-                let expected =
-                    MINERAL_FRAME_BASE + category as u16 * MINERAL_FRAMES_PER_CATEGORY + size;
+                let expected = gross_zero_sprite + size;
                 for fine in 0..=MINERAL_FINE_DENSITY_MAX {
                     assert_eq!(
                         mineral_visual_frame_from_mineral(
@@ -389,6 +385,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn luna_base_metal_deposit_selects_the_small_grey_sprite() {
+        // Category 2 (base metals), gross 0: C frame 20, not the noble-gas
+        // cluster frame 26 the old base of 16 selected.
+        assert_eq!(mineral_visual_frame(2, 0), Ok(20));
+        assert_eq!(mineral_visual_frame(7, 2), Ok(47));
+    }
+
+    #[test]
+    fn out_of_range_gross_size_is_rejected_not_clamped() {
+        assert_eq!(
+            mineral_visual_frame(2, 3),
+            Err(AdapterError::new("mineral_gross_size"))
+        );
     }
 
     #[test]
