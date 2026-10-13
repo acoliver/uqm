@@ -1,20 +1,26 @@
 //! Capture and restore of the running game's "GlSt", "GmSt", "Evts", "Scan",
-//! "Grps", "BtGp", "RacQ", "NpcQ", "ShpQ", "IGpQ" and "Enct" sections.
+//! "Grps", "BtGp", "RacQ", "NpcQ", "ShpQ", "IGpQ" and "Enct" sections, plus the
+//! "Summ" summary and the "Star" location of a save.
 //!
 //! The first three are the part of a save that lives in `GlobData`, the Rust
 //! game-state singleton and the game clock's event queue; the next three are
 //! the state files (`statefiles`); then come the fleet and ship queues of
 //! `GlobData` (`queues`) and its interplanetary group and encounter queues
-//! (`groups`). The functions here work on those live structures, not on
-//! copies. The other sections (location, summary) and the
-//! `SaveGame`/`LoadGame` orchestration are not ported yet, so nothing here is
-//! wired to a menu.
+//! (`groups`). `summary` and `star` read the flagship, the clock, the game
+//! state and the star catalog the same way. The functions here work on those
+//! live structures, not on copies. The `SaveGame`/`LoadGame` orchestration, the
+//! solar-system owner and the owner of the star catalog are not ported yet, so
+//! nothing here is wired to a menu and no selector here makes a save atomic.
 
 pub mod events;
 pub mod global;
 pub mod groups;
+#[cfg(not(test))]
+pub mod live;
 pub mod queues;
+pub mod star;
 pub mod statefiles;
+pub mod summary;
 
 use std::fmt;
 
@@ -127,5 +133,7 @@ mod group_tests;
 mod queue_tests;
 #[cfg(test)]
 mod statefile_tests;
+#[cfg(test)]
+mod summary_tests;
 #[cfg(test)]
 mod tests;

@@ -47,7 +47,7 @@ use std::mem::{align_of, size_of};
 use crate::collections::queue::{Queue, ReinitQueue};
 use crate::comm::dispatch::{
     clone_ship_fragment_from, production_captain_name, CFleetInfo, CPoint, CShipFragment,
-    INFINITE_FLEET,
+    INFINITE_FLEET, START_ENCOUNTER, START_INTERPLANETARY,
 };
 use crate::comm::locdata::{CGameState, CQueue};
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
@@ -369,8 +369,17 @@ fn capture_ships(
     Ok(entries)
 }
 
-/// The three queues of `game`, head to tail, as a save writes them.
-pub fn capture_queues(game: &CGameState) -> Result<QueueSections, QueueError> {
+/// Whether `SaveGame` writes "NpcQ" in a save made in `activity`.
+///
+/// `SaveGame` skips both queues when `START_INTERPLANETARY` is set (the
+/// homeworld encounter is built anew on load) and otherwise writes "NpcQ" when
+/// `START_ENCOUNTER` is set. The "IGpQ" test in `groups::saves_ip_group_queue`
+/// is the `else` of the same branch.
+pub fn saves_npc_ship_queue(activity: u16) -> bool {
+    activity & START_INTERPLANETARY == 0 && activity & START_ENCOUNTER != 0
+}
+
+fn capture_queues_with(game: &CGameState, with_npc: bool) -> Result<QueueSections, QueueError> {
     let fleets = walk::<CFleetInfo>(&game.avail_race_q, QueueKind::AvailableRaces)?;
     let race_queue = fleets
         .iter()
@@ -379,11 +388,31 @@ pub fn capture_queues(game: &CGameState) -> Result<QueueSections, QueueError> {
         .map(|(index, &link)| race_entry(index, unsafe { &*link }))
         .collect::<Vec<_>>();
     validate_races(&race_queue, fleets.len())?;
+    let npc_ship_queue = if with_npc {
+        capture_ships(&game.npc_built_ship_q, QueueKind::NpcShips, fleets.len())?
+    } else {
+        Vec::new()
+    };
     Ok(QueueSections {
         race_queue,
-        npc_ship_queue: capture_ships(&game.npc_built_ship_q, QueueKind::NpcShips, fleets.len())?,
+        npc_ship_queue,
         ship_queue: capture_ships(&game.built_ship_q, QueueKind::BuiltShips, fleets.len())?,
     })
+}
+
+/// The three queues of `game`, head to tail, whatever the game's activity.
+pub fn capture_queues(game: &CGameState) -> Result<QueueSections, QueueError> {
+    capture_queues_with(game, true)
+}
+
+/// The queues a save made in the game's current activity writes: "RacQ" and
+/// "ShpQ" always, "NpcQ" only when `saves_npc_ship_queue` holds. An npc queue
+/// that is not written is not read, so it is empty here and is not validated.
+///
+/// This reads each queue on its own; it is not a snapshot of the whole game
+/// taken under one lock, and nothing here makes a save atomic.
+pub fn capture_queues_for_activity(game: &CGameState) -> Result<QueueSections, QueueError> {
+    capture_queues_with(game, saves_npc_ship_queue(game.current_activity))
 }
 
 /// Make the live queues hold the given sections, drawing captain names from
