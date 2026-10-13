@@ -93,7 +93,7 @@ pub trait GameStrings {
 
 /// A world of the live system, by position in its table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum World {
+pub(super) enum World {
     /// `PlanetDesc[planet]`.
     Planet { planet: usize },
     /// `MoonDesc[moon]`, orbiting `PlanetDesc[planet]`.
@@ -102,7 +102,7 @@ enum World {
 
 /// The position of `world` in `table`, if it is exactly one of its elements.
 /// Only addresses are compared; nothing is dereferenced.
-fn position_in(table: &[PLANET_DESC], world: *const PLANET_DESC) -> Option<usize> {
+pub(super) fn position_in(table: &[PLANET_DESC], world: *const PLANET_DESC) -> Option<usize> {
     let size = std::mem::size_of::<PLANET_DESC>();
     let offset = (world as usize).wrapping_sub(table.as_ptr() as usize);
     (offset < std::mem::size_of_val(table) && offset.is_multiple_of(size)).then_some(offset / size)
@@ -136,7 +136,7 @@ impl<'a> SolarSystem<'a> {
     }
 
     /// `playerInInnerSystem ()` for a flagship that is in a solar system.
-    fn in_inner_system(state: &SOLARSYS_STATE) -> bool {
+    pub(super) fn in_inner_system(state: &SOLARSYS_STATE) -> bool {
         let planets = state.PlanetDesc.as_ptr();
         let moons = state.MoonDesc.as_ptr();
         assert!(
@@ -147,7 +147,7 @@ impl<'a> SolarSystem<'a> {
     }
 
     /// The world `pOrbitalDesc` names, checked against both tables.
-    fn orbital_world(state: &SOLARSYS_STATE) -> Result<World, SolarError> {
+    pub(super) fn orbital_world(state: &SOLARSYS_STATE) -> Result<World, SolarError> {
         let orbital = state.pOrbitalDesc.cast_const();
         if orbital.is_null() {
             return Err(SolarError::OrbitalWorldMissing);

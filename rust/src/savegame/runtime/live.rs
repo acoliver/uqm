@@ -14,6 +14,9 @@
 //!
 //! All of them must run on the game thread.
 
+use std::fmt;
+
+use super::location::{self, LocationError};
 use super::solar::{GameStrings, SolarSystem};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
 use super::summary::{self, SummaryError};
@@ -95,4 +98,50 @@ pub unsafe fn resolve_live_star(
     saved: &StarDesc,
 ) -> Result<star::LoadedStar, StarError> {
     star::resolve_star(live_catalog(), arilou_space_side, saved)
+}
+
+/// Why the live solar-system location could not be prepared.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LiveLocationError {
+    /// `CurStarDescPtr` is not an entry of the star catalog.
+    Star(StarError),
+    Location(LocationError),
+}
+
+impl fmt::Display for LiveLocationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Star(error) => write!(f, "star: {error}"),
+            Self::Location(error) => write!(f, "solar location: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for LiveLocationError {}
+
+/// `SaveSolarSysLocation ()` over the live `GlobData`, `pSolarSysState` and
+/// `CurStarDescPtr`: the step of a save that writes where the flagship is in
+/// its solar system, and persists the planet's scan record when
+/// `PLANETARY_CHANGE` is set.
+///
+/// Panics when `pSolarSysState` is NULL, which is the `assert (playerInSolarSystem ())`
+/// of the C function; a caller outside a solar system has a bug, not an error
+/// to report.
+///
+/// The solar-system state is borrowed once, for this call only.
+///
+/// # Safety
+/// Game thread only; `GlobData` must be initialised, `pSolarSysState` must be
+/// NULL or point at the live solar-system state, `CurStarDescPtr` must point at
+/// a catalog entry and `GlobData.Game_state.ShipStamp.frame` must be NULL or a
+/// live frame.
+pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
+    let state = solar_system::current();
+    assert!(!state.is_null(), "not in a solar system");
+    let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
+    let star_index =
+        star::catalog_index(live_catalog(), current).map_err(LiveLocationError::Star)?;
+    let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
+    location::save_solar_location(&mut glob.game_state, &*state, star_index)
+        .map_err(LiveLocationError::Location)
 }
