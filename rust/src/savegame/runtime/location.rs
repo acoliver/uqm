@@ -43,34 +43,25 @@
 //! written, and `ip_location` only takes the sun's location, which is where
 //! the inner system puts the ship's saved position.
 
-use std::ffi::c_void;
 use std::fmt;
 
 use super::solar::{position_in, SolarError, SolarSystem, World};
-use crate::c_bindings::global_state::{MAX_PLANETS, SOLARSYS_STATE};
+use crate::c_bindings::global_state::{FRAME_DESC, MAX_PLANETS, SOLARSYS_STATE};
 use crate::comm::locdata::{CGameState, CPoint};
 use crate::state::ffi::{with_state_owners, GameStateOwnerError};
 use crate::state::game_state::GameState;
 use crate::state::planet_info::{PlanetInfoManager, ScanRetrieveMask};
 use crate::state::state_file::StateFileError;
 
-/// The first bytes of `FRAME_DESC` (drawable.h): `Type`, then `Index`. The
-/// rest of the frame is not read.
-#[repr(C)]
-struct FramePrefix {
-    _frame_type: u16,
-    index: u16,
-}
-
 /// `GetFrameIndex (frame)`: 0 for NULL, else the frame's `Index`.
 ///
 /// # Safety
 /// `frame` must be NULL or point at a live `FRAME_DESC`.
-unsafe fn frame_index(frame: *const c_void) -> u16 {
+unsafe fn frame_index(frame: *const FRAME_DESC) -> u16 {
     if frame.is_null() {
         return 0;
     }
-    (*frame.cast::<FramePrefix>()).index
+    (*frame).Index
 }
 
 /// Why the location could not be prepared.
@@ -210,7 +201,7 @@ unsafe fn save_non_orbital_location(
     game: &mut CGameState,
     state: &SOLARSYS_STATE,
 ) -> Result<(), LocationError> {
-    let ship_facing = frame_index(game.ship_stamp.frame)
+    let ship_facing = frame_index(game.ship_stamp.frame.cast::<FRAME_DESC>())
         .checked_add(1)
         .ok_or(LocationError::FrameIndexOverflow)?;
     // (ip_planet, ip_location): the outer system keeps the location.

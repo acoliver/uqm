@@ -22,30 +22,24 @@ use serial_test::serial;
 use super::location::*;
 use super::solar::SolarError;
 use super::solar_tests::System;
-use crate::c_bindings::global_state::{PLANET_DESC, POINT};
+use crate::c_bindings::global_state::{EXTENT, FRAME_DESC, PLANET_DESC, POINT};
 use crate::comm::locdata::CGameState;
 use crate::state::ffi::{
     replace_game_state, rust_init_game_state, snapshot_game_state, with_state_files,
 };
 use crate::state::state_file::{StateFileError, STARINFO_FILE};
 
-/// `FRAME_DESC` (drawable.h): Type, Index, HotSpot, Bounds, image, parent.
-#[repr(C)]
-struct FrameDesc {
-    frame_type: u16,
-    index: u16,
-    hot_spot: [i16; 2],
-    bounds: [i16; 2],
-    image: *mut c_void,
-    parent: *mut c_void,
-}
-
-fn frame(index: u16) -> Box<FrameDesc> {
-    Box::new(FrameDesc {
-        frame_type: 3,
-        index,
-        hot_spot: [0, 0],
-        bounds: [64, 64],
+/// A frame as C lays it out: the generated `FRAME_DESC`, so the tests read and
+/// write the same `Index` the code under test does.
+fn frame(index: u16) -> Box<FRAME_DESC> {
+    Box::new(FRAME_DESC {
+        Type: 3,
+        Index: index,
+        HotSpot: POINT { x: 0, y: 0 },
+        Bounds: EXTENT {
+            width: 64,
+            height: 64,
+        },
         image: std::ptr::null_mut(),
         parent: std::ptr::null_mut(),
     })
@@ -53,7 +47,7 @@ fn frame(index: u16) -> Box<FrameDesc> {
 
 /// A flagship with a recognisable value in every field the step may touch or
 /// must leave alone.
-fn game(ship_frame: Option<&mut FrameDesc>) -> Box<CGameState> {
+fn game(ship_frame: Option<&mut FRAME_DESC>) -> Box<CGameState> {
     // SAFETY: `CGameState` is integers and raw pointers; zero is valid.
     let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
     game.ship_stamp.frame = ship_frame.map_or(std::ptr::null_mut(), |f| {
@@ -74,7 +68,7 @@ fn game(ship_frame: Option<&mut FrameDesc>) -> Box<CGameState> {
 }
 
 /// Same as [`game`] with `ip_planet` set as stage one leaves it.
-fn game_in_system(ship_frame: Option<&mut FrameDesc>, ip_planet: u8) -> Box<CGameState> {
+fn game_in_system(ship_frame: Option<&mut FRAME_DESC>, ip_planet: u8) -> Box<CGameState> {
     let mut game = game(ship_frame);
     game.ip_planet = ip_planet;
     game
