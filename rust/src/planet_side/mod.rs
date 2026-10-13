@@ -30,6 +30,7 @@ pub mod orbit_scan;
 pub mod report_adapter;
 pub mod resources;
 pub mod runtime;
+pub mod scan_frames;
 pub mod selection;
 pub mod session;
 pub mod session_factory;

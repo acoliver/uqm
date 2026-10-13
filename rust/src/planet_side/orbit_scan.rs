@@ -13,11 +13,11 @@ mod production {
 
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
     use super::super::generation_adapter::CffiSurfaceGenerator;
+    use super::super::scan_frames::{
+        mineral_scan_dot, mineral_surface_sprite, ScanFrameError, BIO_SCAN_DOT, ENERGY_SCAN_DOT,
+    };
 
     const MAG_SHIFT: i32 = 2;
-    const NUM_SCANDOT_TRANSITIONS: u16 = 8;
-    const MINERAL_FRAME_BASE: u16 = NUM_SCANDOT_TRANSITIONS * 2;
-    const MINERAL_FRAMES_PER_CATEGORY: u16 = 5;
     const MAX_SCROUNGED: u8 = 50;
     const STAMP_PRIM: u8 = 1;
     const PS_NON_PLAYER: i16 = 1;
@@ -55,8 +55,6 @@ mod production {
         fn rust_bridge_UnlockElement(element: usize);
         fn rust_bridge_PutElement(element: usize);
         fn SetAbsFrameIndex(frame: *mut c_void, index: u16) -> *mut c_void;
-        fn SetRelFrameIndex(frame: *mut c_void, index: i16) -> *mut c_void;
-        fn IncFrameIndex(frame: *mut c_void) -> *mut c_void;
     }
 
     pub unsafe fn generate() {
@@ -100,8 +98,13 @@ mod production {
                     FreeElement(handle);
                     continue;
                 }
-                initialize_element(element.cast::<Element>(), solar, scan, raw_node, generated);
+                let initialized =
+                    initialize_element(element.cast::<Element>(), solar, scan, raw_node, generated);
                 rust_bridge_UnlockElement(handle);
+                if initialized.is_err() {
+                    FreeElement(handle);
+                    continue;
+                }
                 rust_bridge_PutElement(handle);
             }
         }
@@ -113,7 +116,7 @@ mod production {
         scan: ScanType,
         raw_node: u8,
         generated: super::super::generation::GeneratedNode,
-    ) {
+    ) -> Result<(), ScanFrameError> {
         let element = &mut *element;
         element.life_span = u16::from(scan as u8) | (u16::from(raw_node + 1) << 8);
         element.player_nr = PS_NON_PLAYER;
@@ -135,17 +138,15 @@ mod production {
             } => {
                 element.turn_wait = category as u8;
                 element.mass_points = fine_quantity as u8;
-                element.current.frame = SetAbsFrameIndex(
-                    MiscDataFrame,
-                    MINERAL_FRAME_BASE + category as u16 * MINERAL_FRAMES_PER_CATEGORY,
-                );
-                element.next.frame = SetRelFrameIndex(element.current.frame, gross_size as i16 + 1);
-                primitive.stamp.frame = IncFrameIndex(element.next.frame);
+                let dot = mineral_scan_dot(category, gross_size)?;
+                let surface = mineral_surface_sprite(category, gross_size)?;
+                element.current.frame = SetAbsFrameIndex(MiscDataFrame, dot.current);
+                element.next.frame = SetAbsFrameIndex(MiscDataFrame, dot.next);
+                primitive.stamp.frame = SetAbsFrameIndex(MiscDataFrame, surface);
             }
             super::super::generation::GeneratedNodeKind::Energy => {
-                element.current.frame = SetAbsFrameIndex(MiscDataFrame, NUM_SCANDOT_TRANSITIONS);
-                element.next.frame =
-                    SetRelFrameIndex(element.current.frame, (NUM_SCANDOT_TRANSITIONS - 1) as i16);
+                element.current.frame = SetAbsFrameIndex(MiscDataFrame, ENERGY_SCAN_DOT.current);
+                element.next.frame = SetAbsFrameIndex(MiscDataFrame, ENERGY_SCAN_DOT.next);
                 element.turn_wait = 0x44;
                 element.mass_points = MAX_SCROUNGED;
                 primitive.stamp.frame = (*solar).planet_side_frames[1];
@@ -155,15 +156,15 @@ mod production {
                 hit_points,
                 ..
             } => {
-                element.current.frame = SetAbsFrameIndex(MiscDataFrame, 0);
-                element.next.frame =
-                    SetRelFrameIndex(element.current.frame, (NUM_SCANDOT_TRANSITIONS - 1) as i16);
+                element.current.frame = SetAbsFrameIndex(MiscDataFrame, BIO_SCAN_DOT.current);
+                element.next.frame = SetAbsFrameIndex(MiscDataFrame, BIO_SCAN_DOT.next);
                 element.turn_wait = 0x44;
                 element.mass_points = creature.index();
                 element.crew_or_hp = u16::from(hit_points);
                 primitive.stamp.frame = (*solar).planet_side_frames[3];
             }
         }
+        Ok(())
     }
 
     #[cfg(test)]
