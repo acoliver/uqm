@@ -13,8 +13,8 @@ use std::{collections::BTreeMap, os::fd::RawFd};
 use uqm_rust::automation::child_session::NESTED_GROUP_REGISTRATION_FD_ENV;
 #[cfg(unix)]
 use uqm_rust::automation::child_session::{
-    read_nested_group_request, write_nested_group_response, NestedGroupOperation,
-    NestedGroupProtocol,
+    guard_descriptor_inheritance, read_nested_group_request, spawn_guarded,
+    write_nested_group_response, NestedGroupOperation, NestedGroupProtocol,
 };
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -769,8 +769,7 @@ fn run_uid_process_command(
     uid: &str,
     selector: &str,
 ) -> Result<bool, String> {
-    let mut child = command
-        .spawn()
+    let mut child = spawn_guarded(&mut command)
         .map_err(|error| format!("cannot launch {operation} for {selector} {uid}: {error}"))?;
     let deadline = Instant::now()
         .checked_add(PRIVILEGED_CLEANUP_TIMEOUT)
@@ -1408,7 +1407,7 @@ impl Containment {
                 Ok(())
             });
         }
-        let monitor = command.spawn();
+        let monitor = spawn_guarded(&mut command);
         close_fd(monitor_registration);
         close_fd(lifeline_read);
         let monitor = match monitor {
@@ -1509,6 +1508,8 @@ impl Containment {
 #[cfg(unix)]
 fn pipe_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
     let mut fds = [-1; 2];
+    // Darwin sets FD_CLOEXEC in a second call; no thread may fork in between.
+    let _inheritance = guard_descriptor_inheritance();
     // Linux can close the fork/exec inheritance race atomically. Darwin lacks
     // pipe2, so the monitor also treats registration EOF as owner completion.
     #[cfg(target_os = "linux")]
@@ -1533,6 +1534,8 @@ fn pipe_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
 #[cfg(unix)]
 fn socket_pair_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
     let mut fds = [-1; 2];
+    // Darwin sets FD_CLOEXEC in a second call; no thread may fork in between.
+    let _inheritance = guard_descriptor_inheritance();
     #[cfg(target_os = "linux")]
     let socket_type = libc::SOCK_STREAM | libc::SOCK_CLOEXEC;
     #[cfg(not(target_os = "linux"))]
@@ -1552,6 +1555,24 @@ fn socket_pair_cloexec() -> Result<(RawFd, RawFd), std::io::Error> {
         }
     }
     Ok((fds[0], fds[1]))
+}
+
+/// Every descriptor this process holds open except `keep`, read from the
+/// kernel's per-process table so it covers descriptors no caller tracks.
+#[cfg(unix)]
+fn open_descriptors_except(keep: &[RawFd]) -> Result<Vec<RawFd>, std::io::Error> {
+    let mut open = Vec::new();
+    for entry in std::fs::read_dir("/dev/fd")? {
+        let name = entry?.file_name();
+        let fd = name
+            .to_str()
+            .and_then(|name| name.parse::<RawFd>().ok())
+            .ok_or_else(|| std::io::Error::other("unparseable /dev/fd entry"))?;
+        if !keep.contains(&fd) {
+            open.push(fd);
+        }
+    }
+    Ok(open)
 }
 
 #[cfg(unix)]
@@ -1639,11 +1660,9 @@ fn anchor_child(
     leader: libc::pid_t,
     command_read: RawFd,
     result_write: RawFd,
-    inherited: &[RawFd],
+    release: &[RawFd],
 ) -> ! {
-    for &fd in inherited {
-        close_fd(fd);
-    }
+    close_fds(release);
     // SAFETY: the child runs only async-signal-safe operations after fork.
     unsafe {
         libc::signal(libc::SIGTERM, libc::SIG_IGN);
@@ -1691,24 +1710,11 @@ fn anchor_child(
 
 #[cfg(unix)]
 impl MonitorAnchor {
-    fn spawn(
-        leader: libc::pid_t,
-        leader_start: u64,
-        registration_fd: RawFd,
-        lifeline_fd: RawFd,
-    ) -> Result<Self, String> {
-        Self::spawn_checked(leader, leader_start, registration_fd, lifeline_fd, || {
-            monitor_process_start(leader)
-        })
+    fn spawn(leader: libc::pid_t, leader_start: u64) -> Result<Self, String> {
+        Self::spawn_checked(leader, leader_start, || monitor_process_start(leader))
     }
 
-    fn spawn_checked<F>(
-        leader: libc::pid_t,
-        leader_start: u64,
-        registration_fd: RawFd,
-        lifeline_fd: RawFd,
-        recheck: F,
-    ) -> Result<Self, String>
+    fn spawn_checked<F>(leader: libc::pid_t, leader_start: u64, recheck: F) -> Result<Self, String>
     where
         F: FnOnce() -> Option<u64>,
     {
@@ -1720,19 +1726,33 @@ impl MonitorAnchor {
                 return Err(error.to_string());
             }
         };
-        // SAFETY: the monitor is single-threaded; the child immediately enters
-        // anchor_child and uses only async-signal-safe operations.
+        // The anchor outlives its caller's interest in every other descriptor,
+        // so it keeps only its two pipes. Listing before the fork allocates
+        // outside the child; holding the guard keeps a descriptor created by
+        // another thread from landing between the listing and the fork.
+        let inheritance = guard_descriptor_inheritance();
+        let release = match open_descriptors_except(&[
+            libc::STDIN_FILENO,
+            libc::STDOUT_FILENO,
+            libc::STDERR_FILENO,
+            command_read,
+            result_write,
+        ]) {
+            Ok(release) => release,
+            Err(error) => {
+                close_fds(&[command_read, command_write, result_read, result_write]);
+                return Err(format!(
+                    "cannot list descriptors before anchor fork: {error}"
+                ));
+            }
+        };
+        // SAFETY: the child immediately enters anchor_child and uses only
+        // async-signal-safe operations on descriptors listed above.
         let pid = unsafe { libc::fork() };
         if pid == 0 {
-            close_fd(command_write);
-            close_fd(result_read);
-            anchor_child(
-                leader,
-                command_read,
-                result_write,
-                &[registration_fd, lifeline_fd],
-            );
+            anchor_child(leader, command_read, result_write, &release);
         }
+        drop(inheritance);
         close_fd(command_read);
         close_fd(result_write);
         if pid == -1 {
@@ -1855,7 +1875,6 @@ fn monitor_reply(
 #[cfg(unix)]
 fn monitor_request(
     fd: RawFd,
-    lifeline_fd: RawFd,
     registrations: &mut BTreeMap<i32, MonitorAnchor>,
 ) -> Result<(), String> {
     let request = read_nested_group_request(fd).map_err(|error| error.to_string())?;
@@ -1872,7 +1891,7 @@ fn monitor_request(
             })?;
             match registrations.entry(pid) {
                 std::collections::btree_map::Entry::Vacant(entry) => {
-                    MonitorAnchor::spawn(pid, start, fd, lifeline_fd).map(|anchor| {
+                    MonitorAnchor::spawn(pid, start).map(|anchor| {
                         let anchor_pid = anchor.pid;
                         entry.insert(anchor);
                         anchor_pid
@@ -2034,7 +2053,7 @@ pub fn run_containment_monitor_from_env() -> Result<(), String> {
             }
         }
         if registration_events & (libc::POLLIN | libc::POLLHUP) != 0 {
-            if let Err(error) = monitor_request(registration_fd, lifeline_fd, &mut registrations) {
+            if let Err(error) = monitor_request(registration_fd, &mut registrations) {
                 break Err(error);
             }
         }
@@ -2541,7 +2560,7 @@ fn launch(
             command.env(name, value);
         }
     }
-    let mut child = match command.spawn() {
+    let mut child = match spawn_guarded(&mut command) {
         Ok(child) => child,
         Err(error) => {
             let _ = containment.finish(limits.pipe_drain_timeout);
@@ -3886,7 +3905,14 @@ mod tests {
         ] {
             command.env(denied, "must-not-reach-child");
         }
-        let output = command.output().unwrap();
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let output = spawn_guarded(&mut command)
+            .unwrap()
+            .wait_with_output()
+            .unwrap();
         assert!(output.status.success(), "{test_name}: {output:?}");
         assert!(String::from_utf8(output.stdout)
             .unwrap()
@@ -4649,7 +4675,7 @@ mod tests {
                     Ok(())
                 });
             }
-            let child = command.spawn();
+            let child = spawn_guarded(&mut command);
             close_fd(lifeline_read);
             match child {
                 Ok(child) => Self {
@@ -4944,7 +4970,7 @@ mod tests {
         let mut leader = OwnedHelper::spawn_anchor_target("wait");
         let leader_pid = leader.pid();
         let start = monitor_process_start(leader_pid).expect("leader start identity");
-        let anchor = MonitorAnchor::spawn(leader_pid, start, -1, -1).expect("stable anchor");
+        let anchor = MonitorAnchor::spawn(leader_pid, start).expect("stable anchor");
         thread::sleep(FD_HANDSHAKE_TIMEOUT + Duration::from_millis(500));
         anchor
             .signal_group(libc::SIGCONT)
@@ -4961,7 +4987,7 @@ mod tests {
         let mut leader = OwnedHelper::spawn_anchor_target("exit");
         let leader_pid = leader.pid();
         let start = monitor_process_start(leader_pid).expect("leader start identity");
-        let anchor = MonitorAnchor::spawn(leader_pid, start, -1, -1).expect("stable anchor");
+        let anchor = MonitorAnchor::spawn(leader_pid, start).expect("stable anchor");
         leader.wait().expect("reap leader");
         assert_eq!(monitor_process_start(leader_pid), None);
         assert_eq!(unsafe { libc::getpgid(anchor.pid) }, leader_pid);
@@ -4978,10 +5004,9 @@ mod tests {
         let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
         let candidate_pid = candidate.pid();
         let start = monitor_process_start(candidate_pid).expect("candidate start identity");
-        let error = MonitorAnchor::spawn_checked(candidate_pid, start, -1, -1, || {
-            Some(start.wrapping_add(1))
-        })
-        .expect_err("changed identity must reject registration");
+        let error =
+            MonitorAnchor::spawn_checked(candidate_pid, start, || Some(start.wrapping_add(1)))
+                .expect_err("changed identity must reject registration");
         assert!(error.contains("changed identity"));
         assert!(process_exists(candidate_pid));
         assert!(process_exists(unrelated.pid()));

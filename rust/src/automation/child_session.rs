@@ -37,6 +37,48 @@ pub const NESTED_GROUP_TOKEN_READ_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_READ
 #[cfg(unix)]
 pub const NESTED_GROUP_TOKEN_WRITE_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_WRITE_FD";
 
+/// Held while a thread creates a descriptor that must not outlive an exec, or
+/// while it forks a child that would inherit every descriptor then open.
+///
+/// Linux creates close-on-exec descriptors atomically (`pipe2`,
+/// `SOCK_CLOEXEC`), so the guard is empty there. Darwin has neither: it
+/// creates the descriptor and sets `FD_CLOEXEC` in a second call, and a child
+/// forked from another thread between the two calls keeps the descriptor for
+/// its whole life. This lock makes the two steps and every fork exclusive.
+#[cfg(unix)]
+#[derive(Debug)]
+pub struct DescriptorInheritanceGuard {
+    #[cfg(not(target_os = "linux"))]
+    _exclusive: std::sync::MutexGuard<'static, ()>,
+}
+
+/// Block until no other thread is creating a close-on-exec descriptor or
+/// spawning a child, and keep it that way until the guard is dropped.
+#[cfg(unix)]
+pub fn guard_descriptor_inheritance() -> DescriptorInheritanceGuard {
+    #[cfg(not(target_os = "linux"))]
+    {
+        static EXCLUSIVE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        // The mutex protects no data, so a panic while it was held leaves no
+        // broken invariant to propagate.
+        DescriptorInheritanceGuard {
+            _exclusive: EXCLUSIVE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        }
+    }
+    #[cfg(target_os = "linux")]
+    DescriptorInheritanceGuard {}
+}
+
+/// Spawn `command` while no other thread is between creating a descriptor and
+/// marking it close-on-exec.
+#[cfg(unix)]
+pub fn spawn_guarded(command: &mut std::process::Command) -> io::Result<std::process::Child> {
+    let _guard = guard_descriptor_inheritance();
+    command.spawn()
+}
+
 /// Operation in the fixed nested process-group registration protocol.
 #[cfg(unix)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2369,7 +2411,7 @@ mod os {
                     Ok(())
                 });
             }
-            let mut child = command.spawn().map_err(ChildSessionError::Spawn)?;
+            let mut child = super::spawn_guarded(&mut command).map_err(ChildSessionError::Spawn)?;
             let pid = child.id();
             let monitor_anchor_pid = match protocol {
                 Some(protocol) => match libc::pid_t::try_from(pid)
