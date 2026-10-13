@@ -78,7 +78,8 @@ fn stat_describes_archive_files_and_directories() {
     );
     let file = stat_of(&stack, "data/blob.bin").expect("entry");
     assert_eq!(file.st_size, 10);
-    assert_eq!(file.st_mode as u32, 0o100444);
+    // The mode the archive writer recorded for the entry, not a constant.
+    assert_eq!(file.st_mode as u32, 0o100644);
     let dir = stat_of(&stack, "data").expect("directory");
     assert_eq!(dir.st_size, 0);
     assert_eq!(dir.st_mode as u32, 0o040555);
@@ -137,10 +138,12 @@ fn a_read_only_mount_refuses_directory_changes() {
     let root = stack.mount_dir(&[], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     std::fs::create_dir(root.join("fixed")).unwrap();
     unsafe {
+        // The original finds no writable mount for the new name (EPERM) and
+        // meets a read-only mount holding the old one (EROFS).
         assert_eq!(uio_mkdir(stack.root, c("new").as_ptr(), 0o755), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EPERM);
         assert_eq!(uio_rmdir(stack.root, c("fixed").as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EROFS);
     }
     assert!(root.join("fixed").is_dir());
     assert!(!root.join("new").exists());
@@ -260,7 +263,7 @@ fn unlinking_removes_a_writable_file_and_spares_a_read_only_mount() {
     let root = stack.mount_dir(&[("keep.txt", b"x")], UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     unsafe {
         assert_eq!(uio_unlink(stack.root, c("keep.txt").as_ptr()), -1);
-        assert_eq!(errno_value(), libc::EACCES);
+        assert_eq!(errno_value(), libc::EROFS);
     }
     assert!(root.join("keep.txt").exists());
 }
@@ -272,7 +275,7 @@ fn copying_a_file_duplicates_every_byte_across_chunk_boundaries() {
     let big: Vec<u8> = (0..20_000u32).map(|i| (i % 251) as u8).collect();
     let root = stack.mount_dir(&[("big.bin", &big)], UIO_MOUNT_TOP);
     unsafe {
-        let result = uio_copyFile(
+        let result = uio_copy_file(
             stack.root,
             c("big.bin").as_ptr(),
             stack.root,
@@ -298,7 +301,7 @@ fn copying_never_overwrites_and_reports_a_missing_source() {
     );
     unsafe {
         assert_eq!(
-            uio_copyFile(
+            uio_copy_file(
                 stack.root,
                 c("a.txt").as_ptr(),
                 stack.root,
@@ -308,7 +311,7 @@ fn copying_never_overwrites_and_reports_a_missing_source() {
         );
         assert_eq!(errno_value(), libc::EEXIST);
         assert_eq!(
-            uio_copyFile(
+            uio_copy_file(
                 stack.root,
                 c("gone.txt").as_ptr(),
                 stack.root,
@@ -334,7 +337,7 @@ fn an_archive_entry_can_be_copied_out_to_a_writable_directory() {
     let root = stack.mount_dir(&[], UIO_MOUNT_TOP);
     unsafe {
         assert_eq!(
-            uio_copyFile(
+            uio_copy_file(
                 stack.root,
                 c("packed.txt").as_ptr(),
                 stack.root,
@@ -356,20 +359,20 @@ fn copying_refuses_missing_arguments() {
     unsafe {
         let a = c("a");
         assert_eq!(
-            uio_copyFile(ptr::null_mut(), a.as_ptr(), stack.root, a.as_ptr()),
+            uio_copy_file(ptr::null_mut(), a.as_ptr(), stack.root, a.as_ptr()),
             -1
         );
         assert_eq!(errno_value(), libc::EINVAL);
         assert_eq!(
-            uio_copyFile(stack.root, a.as_ptr(), ptr::null_mut(), a.as_ptr()),
+            uio_copy_file(stack.root, a.as_ptr(), ptr::null_mut(), a.as_ptr()),
             -1
         );
         assert_eq!(
-            uio_copyFile(stack.root, ptr::null(), stack.root, a.as_ptr()),
+            uio_copy_file(stack.root, ptr::null(), stack.root, a.as_ptr()),
             -1
         );
         assert_eq!(
-            uio_copyFile(stack.root, a.as_ptr(), stack.root, ptr::null()),
+            uio_copy_file(stack.root, a.as_ptr(), stack.root, ptr::null()),
             -1
         );
     }

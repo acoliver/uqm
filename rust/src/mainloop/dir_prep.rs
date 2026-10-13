@@ -6,12 +6,16 @@
 //! pure Rust; uio mounting calls into `crate::io::uio_bridge` (already
 //! Rust-implemented), and C-side globals are set via bridge accessors.
 
-use std::ffi::CString;
-use std::path::PathBuf;
+use std::ffi::{CStr, CString, OsStr, OsString};
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
 use std::ptr;
 
 use libc::{c_char, c_int};
 
+use crate::io::dirs::expand::{expand_path, EP_ALL_SYSTEM};
+use crate::io::dirs::mkdirhier::mkdirhier;
+use crate::io::dirs::process_env::ProcessEnvironment;
 use crate::io::uio_bridge::{uio_DirHandle, uio_MountHandle, uio_Repository};
 
 // ---------------------------------------------------------------------------
@@ -31,6 +35,9 @@ const MATCH_REGEX: c_int = 4;
 
 const CONFIGDIR_DEFAULT: &str = "~/.uqm/";
 
+/// Bound for destinations that live in a `PathBuf`: nothing to overflow.
+const UNBOUNDED: usize = usize::MAX;
+
 // ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
@@ -38,6 +45,11 @@ const CONFIGDIR_DEFAULT: &str = "~/.uqm/";
 #[derive(Debug)]
 pub enum DirPrepError {
     Io(std::io::Error),
+    /// A configured path that cannot be expanded or does not fit its consumer.
+    InvalidPath {
+        path: PathBuf,
+        source: std::io::Error,
+    },
     NotFound(String),
     MountFailed(String),
 }
@@ -49,90 +61,27 @@ impl From<std::io::Error> for DirPrepError {
 }
 
 // ---------------------------------------------------------------------------
-// Path resolution (pure Rust — replaces C expandPath)
+// Path resolution: the `io::dirs` port of C `expandPath`
 // ---------------------------------------------------------------------------
 
-/// Expand `~` and `${VAR}` patterns in a path string, returning an
-/// absolute [`PathBuf`].
+/// Expands a configured directory exactly as C `expandPath(buf, len, path,
+/// EP_ALL_SYSTEM)` does, against the real process environment (`getenv`,
+/// `getHomeDir`, `getcwd`), and keeps the raw bytes of the result.
 ///
-/// Mirrors C `expandPath(buf, len, path, EP_ALL_SYSTEM)`:
-/// - `~` or `~/...` → `$HOME/...`
-/// - `${VAR}` / `$VAR` → env value
-pub fn expand_path(input: &str) -> Result<PathBuf, DirPrepError> {
-    let expanded = expand_env_vars(input);
-
-    let path = PathBuf::from(&expanded);
-    if path.is_absolute() {
-        Ok(path)
-    } else {
-        // Relative path — make absolute against CWD
-        Ok(std::env::current_dir()?.join(path))
-    }
-}
-
-/// Replace `~` prefix with `$HOME` and expand `${VAR}` / `$VAR`.
-fn expand_env_vars(input: &str) -> String {
-    let home = std::env::var("HOME").unwrap_or_default();
-
-    let with_home = if input == "~" {
-        home.clone()
-    } else if let Some(rest) = input.strip_prefix("~/") {
-        format!("{home}/{rest}")
-    } else {
-        input.to_string()
-    };
-
-    expand_dollar_vars(&with_home)
-}
-
-/// Expand `$VAR` and `${VAR}` references using `std::env::var`.
-fn expand_dollar_vars(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-    let bytes = input.as_bytes();
-    let mut i = 0;
-
-    while i < bytes.len() {
-        if bytes[i] == b'$' {
-            if i + 1 < bytes.len() && bytes[i + 1] == b'{' {
-                // ${VAR}
-                if let Some(end) = input[i + 2..].find('}') {
-                    let var_name = &input[i + 2..i + 2 + end];
-                    if let Ok(val) = std::env::var(var_name) {
-                        result.push_str(&val);
-                    }
-                    i = i + 2 + end + 1;
-                    continue;
-                }
-            } else if i + 1 < bytes.len()
-                && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'_')
-            {
-                // $VAR (no braces)
-                let start = i + 1;
-                let mut end = start;
-                while end < bytes.len()
-                    && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_')
-                {
-                    end += 1;
-                }
-                let var_name = &input[start..end];
-                if let Ok(val) = std::env::var(var_name) {
-                    result.push_str(&val);
-                }
-                i = end;
-                continue;
-            }
-        }
-        // `i` only ever advances over ASCII delimiters or whole characters,
-        // so it always sits on a char boundary and multi-byte text survives.
-        let ch = input[i..]
-            .chars()
-            .next()
-            .expect("index is inside the input");
-        result.push(ch);
-        i += ch.len_utf8();
-    }
-
-    result
+/// `len` is the size of the buffer the result goes into; a destination that
+/// is only a `PathBuf` passes [`UNBOUNDED`]. Failures carry the errno C sets.
+pub(crate) fn expand_startup_path(input: &Path, len: usize) -> Result<PathBuf, DirPrepError> {
+    expand_path(
+        &ProcessEnvironment,
+        input.as_os_str().as_bytes(),
+        len,
+        EP_ALL_SYSTEM,
+    )
+    .map(|bytes| PathBuf::from(OsString::from_vec(bytes)))
+    .map_err(|source| DirPrepError::InvalidPath {
+        path: input.to_path_buf(),
+        source,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -161,11 +110,12 @@ extern "C" {
     pub static mut contentMountHandle: *mut std::ffi::c_void;
     #[link_name = "baseContentPath"]
     #[allow(non_upper_case_globals)]
-    pub static mut baseContentPath: [std::ffi::c_char; 4096];
+    pub static mut baseContentPath: [std::ffi::c_char; PATH_MAX];
 }
 
-/// Maximum path length, matching C's PATH_MAX on macOS.
-const PATH_MAX: usize = 4096;
+/// Size of the C `baseContentPath[PATH_MAX]` buffer: the platform `<limits.h>`
+/// value the C object is compiled with (1024 on macOS, 4096 on Linux).
+pub const PATH_MAX: usize = libc::PATH_MAX as usize;
 
 #[cfg(test)]
 #[allow(non_upper_case_globals)]
@@ -176,7 +126,7 @@ mod c_dir_globals {
     pub static mut saveDir: *mut std::ffi::c_void = std::ptr::null_mut();
     pub static mut meleeDir: *mut std::ffi::c_void = std::ptr::null_mut();
     pub static mut contentMountHandle: *mut std::ffi::c_void = std::ptr::null_mut();
-    pub static mut baseContentPath: [std::ffi::c_char; 4096] = [0; 4096];
+    pub static mut baseContentPath: [std::ffi::c_char; super::PATH_MAX] = [0; super::PATH_MAX];
 }
 
 #[cfg(test)]
@@ -192,15 +142,22 @@ use crate::io::uio_bridge::{
 // Helper: null AutoMount pointer (C uses `static uio_AutoMount *autoMount[] = { NULL }`)
 // ---------------------------------------------------------------------------
 
+/// The path's own bytes as a C string; a path built from C strings and
+/// environment values cannot contain NUL.
+fn c_string_of(path: &Path) -> CString {
+    CString::new(path.as_os_str().as_bytes())
+        .expect("a path from C strings and the environment holds no NUL")
+}
+
 /// Mount a stdio directory at "/" (or mountPoint) and return the handle.
 unsafe fn mount_stdio_dir(
     repo: *mut uio_Repository,
     mount_point: &str,
-    source_path: &str,
+    source_path: &Path,
     flags: c_int,
 ) -> *mut uio_MountHandle {
     let mp = CString::new(mount_point).unwrap();
-    let sp = CString::new(source_path).unwrap();
+    let sp = c_string_of(source_path);
     uio_mountDir(
         repo,
         mp.as_ptr(),
@@ -212,6 +169,61 @@ unsafe fn mount_stdio_dir(
         flags,
         ptr::null_mut(),
     )
+}
+
+/// Opens the directory `name` below the config directory, for a directory
+/// the user wants kept at `host`. The original opened `<config>/name` whatever
+/// `host` was and could not follow an override elsewhere (its own TODO). When
+/// `host` is not `<config>/name`, it is mounted at `/name` first, so the
+/// handle reaches the directory that was created.
+unsafe fn open_config_subdir(name: &str, host: &Path) -> Result<*mut uio_DirHandle, DirPrepError> {
+    let repo = repository as *mut uio_Repository;
+    let config_dir = configDir as *mut uio_DirHandle;
+    let config_host = std::env::var_os("UQM_CONFIG_DIR")
+        .expect("prepare_config_dir runs before the directories below it");
+    if host != Path::new(&config_host).join(name) {
+        let mount = mount_stdio_dir(repo, name, host, UIO_MOUNT_TOP);
+        if mount.is_null() {
+            return Err(DirPrepError::MountFailed(format!(
+                "Could not mount {name} dir: {}",
+                host.display()
+            )));
+        }
+    }
+    let relative = CString::new(name).expect("a fixed directory name holds no NUL");
+    let dir = uio_openDirRelative(config_dir, relative.as_ptr(), 0);
+    if dir.is_null() {
+        return Err(DirPrepError::MountFailed(format!(
+            "Could not open {name} dir: {}",
+            host.display()
+        )));
+    }
+    Ok(dir)
+}
+
+/// Creates `path` and its missing parents with the C `mkdirhier` semantics.
+fn create_hierarchy(path: &Path) -> Result<(), DirPrepError> {
+    mkdirhier(path.as_os_str().as_bytes()).map_err(DirPrepError::Io)
+}
+
+/// Records the content path in the C `baseContentPath[PATH_MAX]` buffer, the
+/// one consumer with a fixed size. A path that does not fit with its NUL is
+/// refused rather than truncated or written past the buffer.
+pub fn store_base_content_path(path: &Path) -> Result<(), DirPrepError> {
+    let bytes = path.as_os_str().as_bytes();
+    if bytes.len() >= PATH_MAX {
+        return Err(DirPrepError::InvalidPath {
+            path: path.to_path_buf(),
+            source: std::io::Error::from_raw_os_error(libc::ENAMETOOLONG),
+        });
+    }
+    // SAFETY: `bytes.len() < PATH_MAX`, so the bytes and their NUL fit the buffer.
+    unsafe {
+        let dst = std::ptr::addr_of_mut!(baseContentPath) as *mut u8;
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), dst, bytes.len());
+        *dst.add(bytes.len()) = 0;
+    }
+    Ok(())
 }
 
 /// Open a directory in the repository and return the handle.
@@ -228,27 +240,25 @@ unsafe fn open_dir(repo: *mut uio_Repository, path: &str) -> *mut uio_DirHandle 
 ///
 /// Resolves the path (default `~/.uqm/`), creates it if needed, mounts
 /// it at "/" in the uio repository, and sets the C `configDir` global.
-pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> {
-    let raw = config_dir.unwrap_or(CONFIGDIR_DEFAULT);
-    let path = expand_path(raw)?;
-    let path_str = path.to_string_lossy().to_string();
+pub fn prepare_config_dir(config_dir: Option<&Path>) -> Result<(), DirPrepError> {
+    let raw = config_dir.unwrap_or(Path::new(CONFIGDIR_DEFAULT));
+    let path = expand_startup_path(raw, UNBOUNDED)?;
 
     // Set env var so UQM_SAVE_DIR / UQM_MELEE_DIR can reference it
-    std::env::set_var("UQM_CONFIG_DIR", &path_str);
+    std::env::set_var("UQM_CONFIG_DIR", &path);
 
-    // Create directory hierarchy
-    std::fs::create_dir_all(&path)?;
+    create_hierarchy(&path)?;
 
-    tracing::debug!("Using config dir '{}'", path_str);
+    tracing::debug!("Using config dir '{}'", path.display());
 
     let repo = unsafe { repository };
 
     // Mount config dir at "/"
-    let mount =
-        unsafe { mount_stdio_dir(repo as *mut uio_Repository, "/", &path_str, UIO_MOUNT_TOP) };
+    let mount = unsafe { mount_stdio_dir(repo as *mut uio_Repository, "/", &path, UIO_MOUNT_TOP) };
     if mount.is_null() {
         return Err(DirPrepError::MountFailed(format!(
-            "Could not mount config dir: {path_str}"
+            "Could not mount config dir: {}",
+            path.display()
         )));
     }
 
@@ -274,25 +284,16 @@ pub fn prepare_config_dir(config_dir: Option<&str>) -> Result<(), DirPrepError> 
 /// Resolves `$UQM_SAVE_DIR` (default `${UQM_CONFIG_DIR}/save`), creates
 /// it, and opens `save` relative to the config dir.
 pub fn prepare_save_dir() -> Result<(), DirPrepError> {
-    let raw =
-        std::env::var("UQM_SAVE_DIR").unwrap_or_else(|_| "${UQM_CONFIG_DIR}/save".to_string());
-    let path = expand_path(&raw)?;
-    let path_str = path.to_string_lossy().to_string();
+    let raw = std::env::var_os("UQM_SAVE_DIR")
+        .unwrap_or_else(|| OsString::from("${UQM_CONFIG_DIR}/save"));
+    let path = expand_startup_path(Path::new(&raw), UNBOUNDED)?;
 
-    std::env::set_var("UQM_SAVE_DIR", &path_str);
-    std::fs::create_dir_all(&path)?;
+    std::env::set_var("UQM_SAVE_DIR", &path);
+    create_hierarchy(&path)?;
 
-    tracing::debug!("Saved games are kept in {}.", path_str);
+    tracing::debug!("Saved games are kept in {}.", path.display());
 
-    let config_dir = unsafe { configDir as *mut uio_DirHandle };
-    let save = CString::new("save").unwrap();
-    let dir = unsafe { uio_openDirRelative(config_dir, save.as_ptr(), 0) };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not open save dir: {path_str}"
-        )));
-    }
-
+    let dir = unsafe { open_config_subdir("save", &path)? };
     unsafe { saveDir = dir as *mut std::ffi::c_void };
     Ok(())
 }
@@ -306,23 +307,14 @@ pub fn prepare_save_dir() -> Result<(), DirPrepError> {
 /// Resolves `$UQM_MELEE_DIR` (default `${UQM_CONFIG_DIR}/teams`), creates
 /// it, and opens `teams` relative to the config dir.
 pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
-    let raw =
-        std::env::var("UQM_MELEE_DIR").unwrap_or_else(|_| "${UQM_CONFIG_DIR}/teams".to_string());
-    let path = expand_path(&raw)?;
-    let path_str = path.to_string_lossy().to_string();
+    let raw = std::env::var_os("UQM_MELEE_DIR")
+        .unwrap_or_else(|| OsString::from("${UQM_CONFIG_DIR}/teams"));
+    let path = expand_startup_path(Path::new(&raw), UNBOUNDED)?;
 
-    std::env::set_var("UQM_MELEE_DIR", &path_str);
-    std::fs::create_dir_all(&path)?;
+    std::env::set_var("UQM_MELEE_DIR", &path);
+    create_hierarchy(&path)?;
 
-    let config_dir = unsafe { configDir as *mut uio_DirHandle };
-    let teams = CString::new("teams").unwrap();
-    let dir = unsafe { uio_openDirRelative(config_dir, teams.as_ptr(), 0) };
-    if dir.is_null() {
-        return Err(DirPrepError::MountFailed(format!(
-            "Could not open melee teams dir: {path_str}"
-        )));
-    }
-
+    let dir = unsafe { open_config_subdir("teams", &path)? };
     unsafe { meleeDir = dir as *mut std::ffi::c_void };
     Ok(())
 }
@@ -336,12 +328,12 @@ pub fn prepare_melee_dir() -> Result<(), DirPrepError> {
 /// Finds the content dir (by looking for a `version` file), mounts it at
 /// "/", mounts any `/packages/*.zip` files, and mounts addon packs.
 pub fn prepare_content_dir(
-    content_dir: Option<&str>,
-    addon_dir: Option<&str>,
+    content_dir: Option<&Path>,
+    addon_dir: Option<&Path>,
 ) -> Result<(), DirPrepError> {
     // Find the content path
     let content_path = if let Some(dir) = content_dir {
-        let expanded = expand_path(dir)?;
+        let expanded = expand_startup_path(dir, PATH_MAX)?;
         if !expanded.join("version").exists() {
             return Err(DirPrepError::NotFound(format!(
                 "Content dir '{}' does not contain a 'version' file",
@@ -354,23 +346,9 @@ pub fn prepare_content_dir(
             .ok_or_else(|| DirPrepError::NotFound("Could not find content.".to_string()))?
     };
 
-    let path_str = content_path.to_string_lossy().to_string();
+    tracing::debug!("Using '{}' as base content dir.", content_path.display());
 
-    tracing::debug!("Using '{}' as base content dir.", path_str);
-
-    // Set the C global
-    let c_path = CString::new(path_str.as_str()).unwrap();
-    let path_len = c_path.as_bytes().len();
-    unsafe {
-        let dst = std::ptr::addr_of_mut!(baseContentPath) as *mut u8;
-        std::ptr::copy_nonoverlapping(c_path.as_ptr().cast::<u8>(), dst, path_len);
-        // Null-terminate at path_len (at most PATH_MAX - 1)
-        if path_len < PATH_MAX {
-            *dst.add(path_len) = 0;
-        } else {
-            *dst.add(PATH_MAX - 1) = 0;
-        }
-    }
+    store_base_content_path(&content_path)?;
 
     let repo = unsafe { repository };
 
@@ -379,13 +357,14 @@ pub fn prepare_content_dir(
         mount_stdio_dir(
             repo as *mut uio_Repository,
             "/",
-            &path_str,
+            &content_path,
             UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
         )
     };
     if mount.is_null() {
         return Err(DirPrepError::MountFailed(format!(
-            "Could not mount content dir: {path_str}"
+            "Could not mount content dir: {}",
+            content_path.display()
         )));
     }
     unsafe { contentMountHandle = mount as *mut std::ffi::c_void };
@@ -404,7 +383,7 @@ pub fn prepare_content_dir(
 
     // Mount addon dir
     if let Some(ad) = addon_dir {
-        tracing::debug!("Using '{}' as addon dir.", ad);
+        tracing::debug!("Using '{}' as addon dir.", ad.display());
         unsafe { mount_addon_dir_explicit(repo as *mut uio_Repository, ad) };
     }
 
@@ -457,17 +436,17 @@ unsafe fn mount_packages_zips(repo: *mut uio_Repository, _content_dir: *mut uio_
     if pkg_dir.is_null() {
         return;
     }
-    mount_dir_zips(pkg_dir, "/", UIO_MOUNT_BELOW);
+    mount_dir_zips(pkg_dir, c"/", UIO_MOUNT_BELOW);
     uio_closeDir(pkg_dir);
 }
 
 /// Mount an explicit addon directory (from `--addondir`).
-unsafe fn mount_addon_dir_explicit(repo: *mut uio_Repository, addon_dir: &str) {
+unsafe fn mount_addon_dir_explicit(repo: *mut uio_Repository, addon_dir: &Path) {
     let mount = mount_stdio_dir(repo, "addons", addon_dir, UIO_MOUNT_TOP | UIO_MOUNT_RDONLY);
     if mount.is_null() {
         tracing::warn!(
             "Could not mount addon directory: {}; '--addon' options are ignored.",
-            addon_dir
+            addon_dir.display()
         );
     }
 }
@@ -486,7 +465,7 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
     }
 
     // Mount zips directly in addons/
-    mount_dir_zips(addons_dir, "addons", UIO_MOUNT_BELOW);
+    mount_dir_zips(addons_dir, c"addons", UIO_MOUNT_BELOW);
 
     // List and log addon subdirectories
     let empty = CString::new("").unwrap();
@@ -502,21 +481,23 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
                 if name_ptr.is_null() {
                     continue;
                 }
+                // The name's own bytes open the directory; only the log is lossy.
                 let name = std::ffi::CStr::from_ptr(*name_ptr);
-                let name_str = name.to_string_lossy();
 
-                if name_str.starts_with('.') {
+                if name.to_bytes().starts_with(b".") {
                     continue;
                 }
 
                 count += 1;
-                tracing::info!("    {}. {}", count, name_str);
+                tracing::info!("    {}. {}", count, name.to_string_lossy());
 
                 // Mount zips inside each addon subdir
-                let addon_c = CString::new(name_str.to_string()).unwrap();
-                let addon_dir_handle = uio_openDirRelative(addons_dir, addon_c.as_ptr(), 0);
+                let addon_dir_handle = uio_openDirRelative(addons_dir, name.as_ptr(), 0);
                 if !addon_dir_handle.is_null() {
-                    let mountname = format!("addons/{name_str}");
+                    let mut mountname = b"addons/".to_vec();
+                    mountname.extend_from_slice(name.to_bytes());
+                    let mountname =
+                        CString::new(mountname).expect("a C string name has no interior NUL");
                     mount_dir_zips(addon_dir_handle, &mountname, UIO_MOUNT_BELOW);
                     uio_closeDir(addon_dir_handle);
                 }
@@ -542,7 +523,11 @@ unsafe fn scan_addon_packs(content_dir: *mut uio_DirHandle) {
 }
 
 /// Mount all `.zip` / `.uqm` files found in `dir_handle` at `mount_point`.
-unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, relative_flags: c_int) {
+unsafe fn mount_dir_zips(
+    dir_handle: *mut uio_DirHandle,
+    mount_point: &CStr,
+    relative_flags: c_int,
+) {
     let empty = CString::new("").unwrap();
     let pattern = CString::new("\\.([zZ][iI][pP]|[uU][qQ][mM])$").unwrap();
     let content_mount = unsafe { contentMountHandle as *mut uio_MountHandle };
@@ -565,10 +550,9 @@ unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, rela
         }
         let name = std::ffi::CStr::from_ptr(*name_ptr);
 
-        let mp = CString::new(mount_point).unwrap();
         let result = uio_mountDir(
             unsafe { repository as *mut uio_Repository },
-            mp.as_ptr(),
+            mount_point.as_ptr(),
             UIO_FSTYPE_ZIP,
             dir_handle,
             *name_ptr,
@@ -597,7 +581,7 @@ unsafe fn mount_dir_zips(dir_handle: *mut uio_DirHandle, mount_point: &str, rela
 ///
 /// For each addon, looks for a `shadow-content` subdirectory and mounts
 /// its zips (and non-zip content) on top of "/".
-pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
+pub fn prepare_shadow_addons(addons: &[&OsStr]) -> Result<(), DirPrepError> {
     let content_dir = unsafe { contentDir as *mut uio_DirHandle };
     if content_dir.is_null() {
         return Ok(());
@@ -613,7 +597,7 @@ pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
     let shadow_name = "shadow-content";
 
     for addon in addons {
-        let addon_c = CString::new(addon.as_str()).unwrap();
+        let addon_c = CString::new(addon.as_bytes()).expect("a C string name has no interior NUL");
         let addon_dir = unsafe { uio_openDirRelative(addons_dir, addon_c.as_ptr(), 0) };
         if addon_dir.is_null() {
             continue;
@@ -622,11 +606,14 @@ pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
         let shadow_c = CString::new(shadow_name).unwrap();
         let shadow_dir = unsafe { uio_openDirRelative(addon_dir, shadow_c.as_ptr(), 0) };
         if !shadow_dir.is_null() {
-            tracing::debug!("Mounting shadow content of '{}' addon", addon);
+            tracing::debug!(
+                "Mounting shadow content of '{}' addon",
+                addon.to_string_lossy()
+            );
 
             unsafe {
                 // Mount shadow zips
-                mount_dir_zips(shadow_dir, "/", UIO_MOUNT_ABOVE);
+                mount_dir_zips(shadow_dir, c"/", UIO_MOUNT_ABOVE);
 
                 // Mount non-zipped shadow content
                 let slash = CString::new("/").unwrap();
@@ -652,91 +639,70 @@ pub fn prepare_shadow_addons(addons: &[String]) -> Result<(), DirPrepError> {
 // FFI exports (called from C when RUST_OWNS_MAIN)
 // ---------------------------------------------------------------------------
 
+/// The bytes of an optional C path argument, unvalidated.
+///
 /// # Safety
-/// C strings must be valid UTF-8 or NULL.
-#[no_mangle]
-pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c_int {
-    let dir = if config_dir.is_null() {
+/// `value` is null or a NUL-terminated string that outlives `'a`.
+unsafe fn optional_path<'a>(value: *const c_char) -> Option<&'a Path> {
+    if value.is_null() {
         None
     } else {
-        Some(
-            std::ffi::CStr::from_ptr(config_dir)
-                .to_string_lossy()
-                .to_string(),
-        )
-    };
-    match prepare_config_dir(dir.as_deref()) {
+        Some(Path::new(OsStr::from_bytes(
+            CStr::from_ptr(value).to_bytes(),
+        )))
+    }
+}
+
+fn status_of(step: &str, result: Result<(), DirPrepError>) -> c_int {
+    match result {
         Ok(()) => 0,
         Err(e) => {
-            tracing::error!("prepare_config_dir failed: {:?}", e);
+            tracing::error!("{step} failed: {:?}", e);
             -1
         }
     }
 }
 
 /// # Safety
-/// C strings must be valid UTF-8 or NULL.
+/// `config_dir` is NULL or a NUL-terminated string.
+#[no_mangle]
+pub unsafe extern "C" fn rust_prepare_config_dir(config_dir: *const c_char) -> c_int {
+    status_of(
+        "prepare_config_dir",
+        prepare_config_dir(optional_path(config_dir)),
+    )
+}
+
+/// # Safety
+/// `content_dir` and `addon_dir` are NULL or NUL-terminated strings.
 #[no_mangle]
 pub unsafe extern "C" fn rust_prepare_content_dir(
     content_dir: *const c_char,
     addon_dir: *const c_char,
     _exec_file: *const c_char,
 ) -> c_int {
-    let cdir = if content_dir.is_null() {
-        None
-    } else {
-        Some(
-            std::ffi::CStr::from_ptr(content_dir)
-                .to_string_lossy()
-                .to_string(),
-        )
-    };
-    let adir = if addon_dir.is_null() {
-        None
-    } else {
-        Some(
-            std::ffi::CStr::from_ptr(addon_dir)
-                .to_string_lossy()
-                .to_string(),
-        )
-    };
-    match prepare_content_dir(cdir.as_deref(), adir.as_deref()) {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_content_dir failed: {:?}", e);
-            -1
-        }
-    }
+    status_of(
+        "prepare_content_dir",
+        prepare_content_dir(optional_path(content_dir), optional_path(addon_dir)),
+    )
 }
 
 /// # Safety
 /// No parameters — safe to call.
 #[no_mangle]
 pub unsafe extern "C" fn rust_prepare_save_dir() -> c_int {
-    match prepare_save_dir() {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_save_dir failed: {:?}", e);
-            -1
-        }
-    }
+    status_of("prepare_save_dir", prepare_save_dir())
 }
 
 /// # Safety
 /// No parameters — safe to call.
 #[no_mangle]
 pub unsafe extern "C" fn rust_prepare_melee_dir() -> c_int {
-    match prepare_melee_dir() {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_melee_dir failed: {:?}", e);
-            -1
-        }
-    }
+    status_of("prepare_melee_dir", prepare_melee_dir())
 }
 
 /// # Safety
-/// `addons` must be a NULL-terminated array of C strings.
+/// `addons` is NULL or a NULL-terminated array of NUL-terminated strings.
 #[no_mangle]
 pub unsafe extern "C" fn rust_prepare_shadow_addons(addons: *const *const c_char) -> c_int {
     if addons.is_null() {
@@ -749,16 +715,10 @@ pub unsafe extern "C" fn rust_prepare_shadow_addons(addons: *const *const c_char
         if ptr.is_null() {
             break;
         }
-        list.push(std::ffi::CStr::from_ptr(ptr).to_string_lossy().to_string());
+        list.push(OsStr::from_bytes(CStr::from_ptr(ptr).to_bytes()));
         i += 1;
     }
-    match prepare_shadow_addons(&list) {
-        Ok(()) => 0,
-        Err(e) => {
-            tracing::error!("prepare_shadow_addons failed: {:?}", e);
-            -1
-        }
-    }
+    status_of("prepare_shadow_addons", prepare_shadow_addons(&list))
 }
 
 // ---------------------------------------------------------------------------
@@ -770,80 +730,17 @@ pub unsafe extern "C" fn rust_prepare_shadow_addons(addons: *const *const c_char
 mod lifecycle_tests;
 
 #[cfg(test)]
+#[path = "dir_prep_startup_tests.rs"]
+mod startup_tests;
+
+#[cfg(test)]
+#[path = "dir_prep_joint_tests.rs"]
+mod joint_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serial_test::serial;
-
-    #[test]
-    #[serial]
-    fn test_expand_path_home() {
-        std::env::set_var("HOME", "/tmp/testhome");
-        let p = expand_path("~/foo").unwrap();
-        assert_eq!(p, PathBuf::from("/tmp/testhome/foo"));
-    }
-
-    #[test]
-    #[serial]
-    fn test_expand_path_tilde_only() {
-        std::env::set_var("HOME", "/tmp/testhome");
-        let p = expand_path("~").unwrap();
-        assert_eq!(p, PathBuf::from("/tmp/testhome"));
-    }
-
-    #[test]
-    fn test_expand_path_absolute() {
-        let p = expand_path("/usr/local").unwrap();
-        assert_eq!(p, PathBuf::from("/usr/local"));
-    }
-
-    #[test]
-    #[serial]
-    fn test_expand_env_var_braces() {
-        std::env::set_var("MY_TEST_VAR", "/opt/data");
-        let p = expand_path("${MY_TEST_VAR}/sub").unwrap();
-        assert_eq!(p, PathBuf::from("/opt/data/sub"));
-    }
-
-    #[test]
-    #[serial]
-    fn test_expand_env_var_no_braces() {
-        std::env::set_var("MY_TEST_VAR2", "/opt/data2");
-        let p = expand_path("$MY_TEST_VAR2/sub").unwrap();
-        assert_eq!(p, PathBuf::from("/opt/data2/sub"));
-    }
-
-    #[test]
-    #[serial]
-    fn test_expand_env_var_undefined() {
-        // Undefined var → expands to empty string
-        std::env::remove_var("UNDEFINED_UQM_VAR");
-        let p = expand_path("$UNDEFINED_UQM_VAR/path").unwrap();
-        assert_eq!(p, PathBuf::from("/path"));
-    }
-
-    #[test]
-    fn test_expand_path_relative() {
-        let p = expand_path("foo/bar").unwrap();
-        assert!(p.is_absolute());
-        assert!(p.ends_with("foo/bar"));
-    }
-
-    #[test]
-    #[serial]
-    fn test_expand_dollar_vars_nested() {
-        std::env::set_var("UQM_CONFIG_DIR", "/home/user/.uqm");
-        let result = expand_dollar_vars("${UQM_CONFIG_DIR}/save");
-        assert_eq!(result, "/home/user/.uqm/save");
-    }
-
-    #[test]
-    #[serial]
-    fn test_expand_dollar_vars_multiple() {
-        std::env::set_var("A", "/a");
-        std::env::set_var("B", "/b");
-        let result = expand_dollar_vars("$A/${B}/end");
-        assert_eq!(result, "/a//b/end");
-    }
 
     #[test]
     #[serial]

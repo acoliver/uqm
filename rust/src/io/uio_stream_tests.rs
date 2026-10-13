@@ -25,14 +25,7 @@ impl Dir {
         for (name, data) in files {
             std::fs::write(temp.path().join(name), data).unwrap();
         }
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp.path().to_path_buf(),
-            virtual_path: temp.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: temp.path().to_path_buf(),
-        }));
+        let (repo, handle) = super::layered_open_tests::mount_host_root(temp.path());
         Dir { temp, repo, handle }
     }
 
@@ -55,10 +48,7 @@ impl Dir {
 
 impl Drop for Dir {
     fn drop(&mut self) {
-        unsafe {
-            let _ = Box::from_raw(self.handle);
-            let _ = Box::from_raw(self.repo);
-        }
+        unsafe { super::layered_open_tests::release_host_root(self.repo, self.handle) };
     }
 }
 
@@ -87,8 +77,17 @@ fn fgets_returns_one_line_at_a_time_including_the_newline() {
     let stream = dir.must_open("t.txt", "r");
     assert_eq!(gets(stream, 64).as_deref(), Some("alpha\n"));
     assert_eq!(gets(stream, 64).as_deref(), Some("beta\r\n"));
+    assert_eq!(
+        status(stream),
+        UIO_STREAM_STATUS_OK,
+        "a line ended by its newline has not reached the end of the file"
+    );
     assert_eq!(gets(stream, 64).as_deref(), Some("last"));
-    assert_eq!(status(stream), UIO_STREAM_STATUS_OK);
+    assert_eq!(
+        status(stream),
+        UIO_STREAM_STATUS_EOF,
+        "the unterminated last line ran into the end of the file"
+    );
     unsafe { uio_fclose(stream) };
 }
 
@@ -187,20 +186,19 @@ fn ungetc_steps_back_so_the_byte_is_read_again() {
 
 #[test]
 #[serial]
-fn ungetc_of_a_byte_that_was_not_read_is_refused_and_keeps_the_position() {
+fn ungetc_pushes_back_the_byte_it_is_given_even_when_the_file_held_another() {
     let dir = Dir::new(&[("t.txt", b"QRS")]);
     let stream = dir.must_open("t.txt", "r");
     unsafe {
         assert_eq!(uio_fgetc(stream), b'Q' as c_int);
-        assert_eq!(
-            uio_ungetc(b'Z' as c_int, stream),
-            -1,
-            "the stream cannot hand back a byte it never held"
-        );
-        assert_eq!(uio_ftell(stream), 1, "a refused pushback moves nothing");
-        assert_eq!(uio_fgetc(stream), b'R' as c_int);
+        assert_eq!(uio_ungetc(b'Z' as c_int, stream), b'Z' as c_int);
+        assert_eq!(uio_ftell(stream), 0, "the parked byte is back in front");
+        assert_eq!(uio_fgetc(stream), b'Z' as c_int);
+        assert_eq!(uio_ftell(stream), 1);
+        assert_eq!(uio_fgetc(stream), b'R' as c_int, "the file is unchanged");
         uio_fclose(stream);
     }
+    assert_eq!(std::fs::read(dir.host("t.txt")).unwrap(), b"QRS");
 }
 
 #[test]
@@ -212,6 +210,11 @@ fn ungetc_of_end_of_file_is_refused() {
         assert_eq!(uio_fgetc(stream), b'Q' as c_int);
         assert_eq!(uio_ungetc(-1, stream), -1);
         assert_eq!(uio_ftell(stream), 1);
+        assert_eq!(
+            uio_fgetc(stream),
+            b'R' as c_int,
+            "a refused pushback parks nothing"
+        );
         uio_fclose(stream);
     }
 }
@@ -240,13 +243,14 @@ fn a_successful_ungetc_clears_the_end_of_file_flag() {
 
 #[test]
 #[serial]
-fn ungetc_at_the_start_of_the_file_fails() {
+fn ungetc_before_any_read_parks_the_byte_in_front_of_the_file() {
     let dir = Dir::new(&[("t.txt", b"QRS")]);
     let stream = dir.must_open("t.txt", "r");
     unsafe {
-        assert_eq!(uio_ungetc(b'Q' as c_int, stream), -1);
+        assert_eq!(uio_ungetc(b'X' as c_int, stream), b'X' as c_int);
+        assert_eq!(uio_fgetc(stream), b'X' as c_int);
+        assert_eq!(uio_fgetc(stream), b'Q' as c_int);
         assert_eq!(uio_ungetc(b'Q' as c_int, ptr::null_mut()), -1);
-        assert_eq!(uio_ftell(stream), 0);
         uio_fclose(stream);
     }
 }
@@ -393,7 +397,7 @@ fn errno_value() -> c_int {
 
 #[test]
 #[serial]
-fn fread_returns_whole_items_and_flags_eof_only_when_nothing_is_left() {
+fn fread_returns_whole_items_and_flags_eof_when_the_file_runs_out() {
     let dir = Dir::new(&[("t.bin", b"0123456789")]);
     let stream = dir.must_open("t.bin", "r");
     let mut buf = [0u8; 16];
@@ -401,7 +405,11 @@ fn fread_returns_whole_items_and_flags_eof_only_when_nothing_is_left() {
         let items = uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 4, 4, stream);
         assert_eq!(items, 2, "ten bytes hold two four-byte items");
         assert_eq!(&buf[..8], b"01234567");
-        assert_eq!(status(stream), UIO_STREAM_STATUS_OK);
+        assert_eq!(
+            status(stream),
+            UIO_STREAM_STATUS_EOF,
+            "a read that comes up short has run into the end of the file"
+        );
         assert_eq!(
             uio_fread(buf.as_mut_ptr() as *mut libc::c_void, 4, 4, stream),
             0
@@ -490,3 +498,7 @@ fn host_path_is_unchanged_by_reading() {
     assert!(Path::new(&dir.host("t.txt")).exists());
     assert_eq!(std::fs::read(dir.host("t.txt")).unwrap(), b"keep");
 }
+
+#[cfg(test)]
+#[path = "uio_pushback_tests.rs"]
+mod pushback_tests;

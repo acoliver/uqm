@@ -24,11 +24,9 @@ impl Stack {
         }
         let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
         let root = Box::into_raw(Box::new(uio_DirHandle {
-            path: PathBuf::from("/"),
             virtual_path: PathBuf::from("/"),
             refcount: std::sync::atomic::AtomicI32::new(1),
             repository: repo,
-            root_end: PathBuf::from("/"),
         }));
         Stack {
             repo,
@@ -106,6 +104,45 @@ impl Stack {
             uio_close(handle);
             Some(bytes)
         }
+    }
+}
+
+/// A fresh repository whose only mount is `host`, on top at "/", and a handle
+/// on "/" opened the way the game opens its root directory. Every file the
+/// handle reaches comes through the mount registry, like in play.
+pub(super) fn mount_host_root(host: &Path) -> (*mut uio_Repository, *mut uio_DirHandle) {
+    if let Ok(mut registry) = get_mount_registry().lock() {
+        registry.clear();
+    }
+    let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
+    let mount = register_mount(
+        repo,
+        Path::new("/"),
+        host.to_path_buf(),
+        UIO_FSTYPE_STDIO,
+        UIO_MOUNT_TOP,
+        ptr::null_mut(),
+        true,
+    );
+    assert!(!mount.is_null(), "mount of {host:?} failed");
+    let root = Box::into_raw(Box::new(uio_DirHandle {
+        virtual_path: PathBuf::from("/"),
+        refcount: std::sync::atomic::AtomicI32::new(1),
+        repository: repo,
+    }));
+    (repo, root)
+}
+
+/// Frees what `mount_host_root` made and drops its mount.
+///
+/// # Safety
+///
+/// Both pointers must come from one `mount_host_root` call and not be used again.
+pub(super) unsafe fn release_host_root(repo: *mut uio_Repository, root: *mut uio_DirHandle) {
+    drop(Box::from_raw(root));
+    drop(Box::from_raw(repo));
+    if let Ok(mut registry) = get_mount_registry().lock() {
+        registry.clear();
     }
 }
 
@@ -194,6 +231,129 @@ fn a_file_found_in_no_mount_cannot_be_opened() {
     );
 
     assert_eq!(stack.read("nowhere.txt"), None);
+}
+
+fn errno_of_failure() -> c_int {
+    std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
+}
+
+/// A root handle over a repository whose only mount sits at "/game", plus a
+/// host directory that no mount covers.
+struct UncoveredHost {
+    stack: Stack,
+    outside: TempDir,
+}
+
+impl UncoveredHost {
+    fn new() -> Self {
+        let stack = Stack::new();
+        let game = TempDir::new().unwrap();
+        let mount = register_mount(
+            stack.repo,
+            Path::new("/game"),
+            game.path().to_path_buf(),
+            UIO_FSTYPE_STDIO,
+            UIO_MOUNT_TOP,
+            ptr::null_mut(),
+            true,
+        );
+        assert!(!mount.is_null());
+        let mut stack = stack;
+        stack._dirs.push(game);
+        UncoveredHost {
+            stack,
+            outside: TempDir::new().unwrap(),
+        }
+    }
+
+    fn outside(&self, name: &str) -> CString {
+        CString::new(self.outside.path().join(name).to_str().unwrap()).unwrap()
+    }
+}
+
+#[test]
+#[serial]
+fn mkdir_where_no_mount_covers_the_path_does_not_create_a_host_directory() {
+    let world = UncoveredHost::new();
+    let target = world.outside("made");
+    set_errno(0);
+    assert_eq!(
+        unsafe { uio_mkdir(world.stack.root, target.as_ptr(), 0o755) },
+        -1
+    );
+    assert_eq!(errno_of_failure(), libc::ENOENT);
+    assert!(!world.outside.path().join("made").exists());
+}
+
+#[test]
+#[serial]
+fn rmdir_where_no_mount_covers_the_path_leaves_the_host_directory() {
+    let world = UncoveredHost::new();
+    std::fs::create_dir(world.outside.path().join("kept")).unwrap();
+    let target = world.outside("kept");
+    set_errno(0);
+    assert_eq!(unsafe { uio_rmdir(world.stack.root, target.as_ptr()) }, -1);
+    assert_eq!(errno_of_failure(), libc::ENOENT);
+    assert!(world.outside.path().join("kept").is_dir());
+}
+
+#[test]
+#[serial]
+fn unlink_where_no_mount_covers_the_path_leaves_the_host_file() {
+    let world = UncoveredHost::new();
+    std::fs::write(world.outside.path().join("kept.txt"), b"keep").unwrap();
+    let target = world.outside("kept.txt");
+    set_errno(0);
+    assert_eq!(unsafe { uio_unlink(world.stack.root, target.as_ptr()) }, -1);
+    assert_eq!(errno_of_failure(), libc::ENOENT);
+    assert_eq!(
+        std::fs::read(world.outside.path().join("kept.txt")).unwrap(),
+        b"keep"
+    );
+}
+
+#[test]
+#[serial]
+fn creating_a_file_where_no_mount_covers_the_path_does_not_touch_the_host() {
+    let world = UncoveredHost::new();
+    let target = world.outside("created.txt");
+    set_errno(0);
+    let handle = unsafe { uio_open(world.stack.root, target.as_ptr(), O_WRONLY | O_CREAT, 0o644) };
+    assert!(handle.is_null());
+    assert_eq!(errno_of_failure(), libc::ENOENT);
+    assert!(!world.outside.path().join("created.txt").exists());
+}
+
+#[test]
+#[serial]
+fn reading_where_no_mount_covers_the_path_does_not_reach_the_host() {
+    let world = UncoveredHost::new();
+    std::fs::write(world.outside.path().join("host.txt"), b"HOST").unwrap();
+    let target = world.outside("host.txt");
+    set_errno(0);
+    let handle = unsafe { uio_open(world.stack.root, target.as_ptr(), 0, 0) };
+    assert!(handle.is_null());
+    assert_eq!(errno_of_failure(), libc::ENOENT);
+}
+
+#[test]
+#[serial]
+fn rename_in_a_nested_directory_handle_works_on_the_mounted_files() {
+    let mut stack = Stack::new();
+    let host = stack.mount_dir(&[], UIO_MOUNT_TOP);
+    std::fs::create_dir(host.join("d")).unwrap();
+    std::fs::write(host.join("d").join("a.txt"), b"moved").unwrap();
+    let nested = unsafe { uio_openDirRelative(stack.root, c"d".as_ptr(), 0) };
+    assert!(!nested.is_null());
+
+    let renamed = unsafe { uio_rename(nested, c"a.txt".as_ptr(), nested, c"b.txt".as_ptr()) };
+    assert_eq!(renamed, 0, "errno {}", errno_of_failure());
+    assert!(!host.join("d").join("a.txt").exists());
+    assert_eq!(
+        std::fs::read(host.join("d").join("b.txt")).unwrap(),
+        b"moved"
+    );
+    unsafe { uio_closeDir(nested) };
 }
 
 impl Stack {

@@ -1,7 +1,7 @@
 //! Lifecycle tests for the directory preparation steps, run against a real
 //! uio repository and real temporary directories.
 
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_void, CStr, CString, OsStr};
 use std::io::Write;
 use std::path::Path;
 
@@ -54,7 +54,7 @@ impl Fixture {
 
     fn prepare_config(&self) {
         let path = self.config_path();
-        prepare_config_dir(Some(path.to_str().unwrap())).unwrap();
+        prepare_config_dir(Some(path.as_path())).unwrap();
     }
 }
 
@@ -73,7 +73,7 @@ impl Drop for Fixture {
             saveDir = ptr::null_mut();
             meleeDir = ptr::null_mut();
             contentMountHandle = ptr::null_mut();
-            baseContentPath = [0; 4096];
+            baseContentPath = [0; PATH_MAX];
             uio_unInit();
         }
         for (key, value) in &self.saved_env {
@@ -85,7 +85,7 @@ impl Drop for Fixture {
     }
 }
 
-fn read_through_uio(dir: *mut c_void, name: &str) -> Option<Vec<u8>> {
+pub(super) fn read_through_uio(dir: *mut c_void, name: &str) -> Option<Vec<u8>> {
     let name = CString::new(name).unwrap();
     unsafe {
         let handle = uio_open(dir as *mut uio_DirHandle, name.as_ptr(), 0, 0);
@@ -177,7 +177,7 @@ fn config_dir_is_created_exported_and_mounted() {
     let path = fx.config_path();
     assert!(!path.exists());
 
-    prepare_config_dir(Some(path.to_str().unwrap())).unwrap();
+    prepare_config_dir(Some(path.as_path())).unwrap();
 
     assert!(path.is_dir());
     assert_eq!(
@@ -214,7 +214,7 @@ fn config_dir_below_a_regular_file_is_an_io_error() {
     std::fs::write(&blocker, b"not a directory").unwrap();
     let path = blocker.join("cfg");
 
-    let result = prepare_config_dir(Some(path.to_str().unwrap()));
+    let result = prepare_config_dir(Some(path.as_path()));
 
     assert!(matches!(result, Err(DirPrepError::Io(_))), "{result:?}");
     assert!(unsafe { configDir.is_null() });
@@ -255,6 +255,30 @@ fn save_dir_expands_variables_in_an_override() {
     assert_eq!(
         std::env::var("UQM_SAVE_DIR").unwrap(),
         expected.to_str().unwrap()
+    );
+    // The handle reaches the override, not a "save" directory that is not there.
+    std::fs::write(expected.join("slot1.sav"), b"saved game").unwrap();
+    assert_eq!(
+        read_through_uio(unsafe { saveDir }, "slot1.sav").as_deref(),
+        Some(&b"saved game"[..])
+    );
+}
+
+#[test]
+#[serial]
+fn melee_dir_override_is_reached_through_the_handle() {
+    let fx = Fixture::new();
+    fx.prepare_config();
+    std::env::set_var("UQM_MELEE_DIR", "${UQM_CONFIG_DIR}/my_teams");
+
+    prepare_melee_dir().unwrap();
+
+    let expected = fx.config_path().join("my_teams");
+    assert!(expected.is_dir());
+    std::fs::write(expected.join("mine.mle"), b"team").unwrap();
+    assert_eq!(
+        read_through_uio(unsafe { meleeDir }, "mine.mle").as_deref(),
+        Some(&b"team"[..])
     );
 }
 
@@ -301,7 +325,7 @@ fn explicit_content_dir_without_version_file_is_rejected() {
     let bare = fx.home().join("bare_content");
     std::fs::create_dir_all(&bare).unwrap();
 
-    let result = prepare_content_dir(Some(bare.to_str().unwrap()), None);
+    let result = prepare_content_dir(Some(bare.as_path()), None);
 
     match result {
         Err(DirPrepError::NotFound(message)) => {
@@ -320,7 +344,7 @@ fn content_dir_is_mounted_with_packages_and_addon_packs() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
 
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(Some(content.as_path()), None).unwrap();
 
     let recorded = unsafe {
         CStr::from_ptr(std::ptr::addr_of!(baseContentPath) as *const c_char)
@@ -359,11 +383,7 @@ fn explicit_addon_dir_is_mounted_under_addons() {
     std::fs::create_dir_all(&extra).unwrap();
     std::fs::write(extra.join("extra.txt"), b"extra data").unwrap();
 
-    prepare_content_dir(
-        Some(content.to_str().unwrap()),
-        Some(extra.to_str().unwrap()),
-    )
-    .unwrap();
+    prepare_content_dir(Some(content.as_path()), Some(extra.as_path())).unwrap();
 
     assert_eq!(
         read_through_uio(unsafe { contentDir }, "addons/extra.txt").as_deref(),
@@ -379,7 +399,7 @@ fn content_dir_without_an_addons_directory_still_prepares() {
     std::fs::create_dir_all(&content).unwrap();
     std::fs::write(content.join("version"), b"0.8.0\n").unwrap();
 
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(Some(content.as_path()), None).unwrap();
 
     assert_eq!(
         read_through_uio(unsafe { contentDir }, "version").as_deref(),
@@ -393,7 +413,7 @@ fn shadow_addons_without_content_dir_do_nothing() {
     let _fx = Fixture::new();
     assert!(unsafe { contentDir.is_null() });
 
-    prepare_shadow_addons(&["alpha".to_string()]).unwrap();
+    prepare_shadow_addons(&[OsStr::new("alpha")]).unwrap();
 
     assert!(unsafe { contentMountHandle.is_null() });
 }
@@ -403,11 +423,11 @@ fn shadow_addons_without_content_dir_do_nothing() {
 fn shadow_content_of_a_listed_addon_overlays_the_content_dir() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(Some(content.as_path()), None).unwrap();
     let dir = unsafe { contentDir };
     assert_eq!(read_through_uio(dir, "shadowed.txt"), None);
 
-    prepare_shadow_addons(&["missing".to_string(), "alpha".to_string()]).unwrap();
+    prepare_shadow_addons(&[OsStr::new("missing"), OsStr::new("alpha")]).unwrap();
 
     assert_eq!(
         read_through_uio(dir, "shadowed.txt").as_deref(),
@@ -461,7 +481,7 @@ fn ffi_exports_report_success_and_failure_as_zero_and_minus_one() {
 fn the_mounted_content_dir_lists_its_top_level_entries() {
     let fx = Fixture::new();
     let content = build_content_tree(fx.home());
-    prepare_content_dir(Some(content.to_str().unwrap()), None).unwrap();
+    prepare_content_dir(Some(content.as_path()), None).unwrap();
 
     let names = list_through_uio(unsafe { contentDir }, "", MATCH_PREFIX);
 
@@ -471,38 +491,4 @@ fn the_mounted_content_dir_lists_its_top_level_entries() {
             "{expected} missing from {names:?}"
         );
     }
-}
-
-#[test]
-#[serial]
-fn expanding_a_path_keeps_non_ascii_characters_intact() {
-    let _fx = Fixture::new();
-    std::env::set_var("UQM_CONFIG_DIR", "/opt/café");
-
-    let expanded = expand_path("${UQM_CONFIG_DIR}/sauvegarde-é/日本").unwrap();
-
-    assert_eq!(expanded, PathBuf::from("/opt/café/sauvegarde-é/日本"));
-}
-
-#[test]
-#[serial]
-fn dollar_signs_that_do_not_start_a_variable_stay_literal() {
-    let _fx = Fixture::new();
-
-    assert_eq!(expand_dollar_vars("cost$"), "cost$");
-    assert_eq!(expand_dollar_vars("a$1b"), "a$1b");
-    assert_eq!(expand_dollar_vars("${unclosed"), "${unclosed");
-    assert_eq!(expand_dollar_vars("$$"), "$$");
-}
-
-#[test]
-#[serial]
-fn tilde_is_only_expanded_as_a_leading_home_reference() {
-    let fx = Fixture::new();
-    let home = fx.home().to_str().unwrap().to_string();
-
-    assert_eq!(expand_env_vars("~"), home);
-    assert_eq!(expand_env_vars("~/x"), format!("{home}/x"));
-    assert_eq!(expand_env_vars("~other/x"), "~other/x");
-    assert_eq!(expand_env_vars("a/~/x"), "a/~/x");
 }

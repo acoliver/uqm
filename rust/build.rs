@@ -116,6 +116,7 @@ fn run() -> Result<(), String> {
     println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
+    generate_options_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
@@ -686,6 +687,26 @@ fn generate_hash_abi_bindings() -> Result<(), String> {
     fs::write(out_dir.join("hash_table_abi.rs"), generated)
         .map_err(|error| format!("cannot write generated hash-table ABI bindings: {error}"))
 }
+/// The C declaration of `baseContentPath`, whose length is the compiled
+/// object's bound: `options.c` includes this header, so its definition must
+/// match. Linked tests compare it with the bound the Rust crate assumes.
+fn generate_options_abi_bindings() -> Result<(), String> {
+    let out_dir = output_directory()?;
+    let header = "../sc2/src/options.h";
+    println!("cargo:rerun-if-changed={header}");
+    let bindings = bindgen::Builder::default()
+        .header(header)
+        .clang_arg("-I../sc2")
+        .clang_arg("-I../sc2/src")
+        .allowlist_var("baseContentPath")
+        .generate_comments(false)
+        .formatter(ABI_BINDING_FORMATTER)
+        .generate()
+        .map_err(|error| format!("cannot generate options ABI bindings: {error}"))?;
+    fs::write(out_dir.join("options_abi.rs"), bindings.to_string())
+        .map_err(|error| format!("cannot write generated options ABI bindings: {error}"))
+}
+
 fn generate_input_abi_bindings() -> Result<(), String> {
     let out_dir = output_directory()?;
     let header = "../sc2/src/uqm/controls.h";

@@ -19,10 +19,132 @@
 /// Synthetic directories:
 /// - Implied parent directories are synthesized (e.g., "a/b/c.txt" creates "a" and "a/b")
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::path::{Path, PathBuf};
+use std::os::unix::fs::FileExt;
+use std::path::Path;
+use std::sync::Arc;
 use zip::ZipArchive;
+
+use super::zip_stat::{CentralRecord, UnsupportedEntry, ZipEntryStat, ZipObject};
+
+/// The bytes of an archive, owned by the index built over them. Every read of
+/// the archive goes through the source the index was made from, never through
+/// a path looked up again: a host archive keeps the descriptor it was opened
+/// with, and an archive inside another archive keeps the decoded bytes of its
+/// entry, so neither depends on what its parent mount or file does later.
+#[derive(Clone)]
+pub enum ArchiveSource {
+    /// A host file, opened once when the archive was indexed.
+    Host(Arc<File>),
+    /// The decoded, checksum-verified bytes of an entry of another archive.
+    Entry(Arc<[u8]>),
+}
+
+impl fmt::Debug for ArchiveSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ArchiveSource::Host(file) => f.debug_tuple("Host").field(file).finish(),
+            ArchiveSource::Entry(bytes) => write!(f, "Entry({} bytes)", bytes.len()),
+        }
+    }
+}
+
+impl ArchiveSource {
+    /// Opens the host archive at `path` and keeps it open.
+    pub fn open_host(path: &Path) -> std::io::Result<Self> {
+        File::open(path).map(|file| ArchiveSource::Host(Arc::new(file)))
+    }
+
+    /// A reader of its own over the source, positioned at the start.
+    fn reader(&self) -> SourceReader {
+        SourceReader {
+            source: self.clone(),
+            position: 0,
+        }
+    }
+
+    fn len(&self) -> std::io::Result<u64> {
+        match self {
+            ArchiveSource::Host(file) => file.metadata().map(|meta| meta.len()),
+            ArchiveSource::Entry(bytes) => Ok(bytes.len() as u64),
+        }
+    }
+
+    /// Whether anything still holds the source, for tests that check which
+    /// owner keeps an archive alive.
+    #[cfg(test)]
+    pub fn probe(&self) -> SourceProbe {
+        match self {
+            ArchiveSource::Host(file) => SourceProbe::Host(Arc::downgrade(file)),
+            ArchiveSource::Entry(bytes) => SourceProbe::Entry(Arc::downgrade(bytes)),
+        }
+    }
+}
+
+/// A weak view of an [`ArchiveSource`] that does not keep it alive.
+#[cfg(test)]
+pub enum SourceProbe {
+    Host(std::sync::Weak<File>),
+    Entry(std::sync::Weak<[u8]>),
+}
+
+#[cfg(test)]
+impl SourceProbe {
+    pub fn is_alive(&self) -> bool {
+        match self {
+            SourceProbe::Host(file) => file.strong_count() > 0,
+            SourceProbe::Entry(bytes) => bytes.strong_count() > 0,
+        }
+    }
+}
+
+/// A `Read + Seek` view of an [`ArchiveSource`] with its own position. Reads
+/// are positional, so several readers share one descriptor without sharing
+/// an offset.
+struct SourceReader {
+    source: ArchiveSource,
+    position: u64,
+}
+
+impl Read for SourceReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = match &self.source {
+            ArchiveSource::Host(file) => file.read_at(buf, self.position)?,
+            ArchiveSource::Entry(bytes) => {
+                let start = usize::try_from(self.position)
+                    .unwrap_or(usize::MAX)
+                    .min(bytes.len());
+                let count = buf.len().min(bytes.len() - start);
+                buf[..count].copy_from_slice(&bytes[start..start + count]);
+                count
+            }
+        };
+        self.position += read as u64;
+        Ok(read)
+    }
+}
+
+impl Seek for SourceReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let (base, offset) = match pos {
+            SeekFrom::Start(offset) => {
+                self.position = offset;
+                return Ok(offset);
+            }
+            SeekFrom::Current(offset) => (self.position, offset),
+            SeekFrom::End(offset) => (self.source.len()?, offset),
+        };
+        self.position = base.checked_add_signed(offset).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid seek to negative position",
+            )
+        })?;
+        Ok(self.position)
+    }
+}
 
 /// Metadata for a single entry in a ZIP archive
 #[derive(Debug, Clone)]
@@ -43,6 +165,9 @@ pub struct ZipEntry {
     pub is_directory: bool,
     /// Index in the ZIP archive
     pub index: usize,
+    /// What `stat` reports for the entry, from its central-directory record;
+    /// the reason when the record describes nothing a file system can show.
+    pub stat: Result<ZipEntryStat, UnsupportedEntry>,
 }
 
 /// Index of a ZIP archive, built at mount time
@@ -52,8 +177,8 @@ pub struct ZipIndex {
     pub entries: HashMap<String, ZipEntry>,
     /// Set of all directory paths (including synthetic)
     pub directories: HashSet<String>,
-    /// Path to the archive file
-    pub archive_path: PathBuf,
+    /// Where the archive's bytes are read from, for the life of the index
+    source: ArchiveSource,
 }
 
 impl ZipIndex {
@@ -65,14 +190,28 @@ impl ZipIndex {
     ///
     /// Returns Err if the archive cannot be opened or parsed.
     pub fn new(archive_path: &Path) -> Result<Self, std::io::Error> {
-        let file = File::open(archive_path)?;
-        let mut archive = ZipArchive::new(file).map_err(|e| {
+        Self::from_source(ArchiveSource::open_host(archive_path)?)
+    }
+
+    /// Indexes the archive held in `bytes`, the decoded data of an entry of
+    /// another archive.
+    pub fn from_entry_bytes(bytes: Arc<[u8]>) -> Result<Self, std::io::Error> {
+        Self::from_source(ArchiveSource::Entry(bytes))
+    }
+
+    /// Indexes the archive `source` holds, the same way for every source.
+    pub fn from_source(source: ArchiveSource) -> Result<Self, std::io::Error> {
+        let mut archive = ZipArchive::new(source.reader()).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to parse ZIP archive: {}", e),
             )
         })?;
 
+        // The `zip` crate does not expose the host that made an entry or its
+        // raw attributes, so the central headers are read from the source the
+        // archive reads, through a reader of their own.
+        let mut central = source.reader();
         let mut entries = HashMap::new();
         let mut directories = HashSet::new();
 
@@ -102,6 +241,9 @@ impl ZipIndex {
                 _ => 99, // Unknown/unsupported methods
             };
 
+            let record = CentralRecord::read(&mut central, entry.central_header_start())?;
+            let stat = record.stat(is_dir, entry.size(), entry.last_modified());
+
             let zip_entry = ZipEntry {
                 path: normalized.clone(),
                 compressed_size: entry.compressed_size(),
@@ -111,6 +253,7 @@ impl ZipIndex {
                 local_header_offset: entry.data_start(),
                 is_directory: is_dir,
                 index: i,
+                stat,
             };
 
             // Last entry wins for duplicates
@@ -130,8 +273,14 @@ impl ZipIndex {
         Ok(ZipIndex {
             entries,
             directories,
-            archive_path: archive_path.to_path_buf(),
+            source,
         })
+    }
+
+    /// A weak view of the archive's source, for tests of who keeps it alive.
+    #[cfg(test)]
+    pub fn source_probe(&self) -> SourceProbe {
+        self.source.probe()
     }
 
     /// Check if a path exists in the archive (file or directory)
@@ -150,6 +299,24 @@ impl ZipIndex {
     pub fn is_directory(&self, path: &str) -> bool {
         let normalized = normalize_zip_path(path);
         self.directories.contains(&normalized)
+    }
+
+    /// What `stat` reports for the object at `path`; `None` when the archive
+    /// holds nothing there. A directory wins over a file of the same name, as
+    /// it does for every lookup of the archive.
+    pub fn stat(&self, path: &str) -> Option<Result<ZipObject, UnsupportedEntry>> {
+        let normalized = normalize_zip_path(path);
+        if normalized.is_empty() {
+            return Some(Ok(ZipObject::ImpliedDirectory));
+        }
+        let entry = self.entries.get(&normalized);
+        if self.directories.contains(&normalized) {
+            return Some(match entry {
+                Some(entry) if entry.is_directory => entry.stat.map(ZipObject::Recorded),
+                _ => Ok(ZipObject::ImpliedDirectory),
+            });
+        }
+        entry.map(|entry| entry.stat.map(ZipObject::Recorded))
     }
 
     /// List all entries in a directory (non-recursive)
@@ -197,8 +364,7 @@ impl ZipIndex {
             ));
         }
 
-        let file = File::open(&self.archive_path)?;
-        let mut archive = ZipArchive::new(file).map_err(|e| {
+        let mut archive = ZipArchive::new(self.source.reader()).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to open ZIP archive: {}", e),
@@ -244,7 +410,7 @@ impl ZipIndex {
             ));
         }
 
-        ZipEntryReader::new(&self.archive_path, entry.index, entry.uncompressed_size)
+        ZipEntryReader::new(&self.source, entry.index, entry.stat)
     }
 }
 
@@ -255,27 +421,34 @@ impl ZipIndex {
 pub struct ZipEntryReader {
     data: Vec<u8>,
     position: u64,
+    /// The entry's central-directory `stat`, captured when the handle was
+    /// opened so that `fstat` answers from the handle and never from the
+    /// archive path, which may have left the mount stack or the host by then.
+    stat: Result<ZipEntryStat, UnsupportedEntry>,
 }
 
 impl ZipEntryReader {
-    fn new(archive_path: &Path, index: usize, _size: u64) -> Result<Self, std::io::Error> {
-        let file = File::open(archive_path)?;
-        let mut archive = ZipArchive::new(file).map_err(|e| {
+    fn new(
+        source: &ArchiveSource,
+        index: usize,
+        stat: Result<ZipEntryStat, UnsupportedEntry>,
+    ) -> Result<Self, std::io::Error> {
+        let mut archive = ZipArchive::new(source.reader()).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 format!("Failed to open ZIP archive: {}", e),
             )
         })?;
 
-        let expected_crc = {
-            let entry = archive.by_index_raw(index).map_err(|e| {
+        let expected_crc = archive
+            .by_index_raw(index)
+            .map_err(|e| {
                 std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Failed to read ZIP entry metadata: {}", e),
                 )
-            })?;
-            entry.crc32()
-        };
+            })?
+            .crc32();
 
         let mut zip_file = archive.by_index(index).map_err(|e| {
             std::io::Error::new(
@@ -298,11 +471,28 @@ impl ZipEntryReader {
             ));
         }
 
-        Ok(ZipEntryReader { data, position: 0 })
+        Ok(ZipEntryReader {
+            data,
+            position: 0,
+            stat,
+        })
     }
 
     pub fn size(&self) -> u64 {
         self.data.len() as u64
+    }
+
+    /// The length, mode and time `fstat` reports: the entry's record, with
+    /// the length of the decoded bytes the handle serves, so it agrees with
+    /// every read and with a file block over the handle. An entry whose
+    /// record describes no regular file has no `stat` and is refused as
+    /// unsupported.
+    pub fn stat(&self) -> Result<ZipEntryStat, std::io::Error> {
+        let recorded = self.stat?;
+        Ok(ZipEntryStat {
+            size: self.size(),
+            ..recorded
+        })
     }
 
     pub fn position(&self) -> u64 {
@@ -584,6 +774,82 @@ mod tests {
         assert_eq!(n, 3);
         assert_eq!(&buf[..3], b"789");
 
+        Ok(())
+    }
+
+    fn stored_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for (name, data) in entries {
+            zip.start_file(*name, options).unwrap();
+            zip.write_all(data).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn an_index_over_entry_bytes_matches_the_index_over_the_same_host_file(
+    ) -> Result<(), std::io::Error> {
+        let bytes = stored_archive(&[("a/b.txt", b"bee"), ("c.txt", b"sea")]);
+        let temp_dir = TempDir::new()?;
+        let path = temp_dir.path().join("same.zip");
+        std::fs::write(&path, &bytes)?;
+
+        let host = ZipIndex::new(&path)?;
+        let memory = ZipIndex::from_entry_bytes(Arc::from(bytes))?;
+        let mut host_names: Vec<_> = host.entries.keys().cloned().collect();
+        let mut memory_names: Vec<_> = memory.entries.keys().cloned().collect();
+        host_names.sort();
+        memory_names.sort();
+        assert_eq!(host_names, memory_names);
+        assert!(memory.is_directory("a"));
+        assert_eq!(memory.read_entry("a/b.txt")?, b"bee");
+        assert_eq!(
+            memory.get_entry("c.txt").unwrap().stat,
+            host.get_entry("c.txt").unwrap().stat
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn bytes_that_are_not_an_archive_are_invalid_data_not_a_host_guess() {
+        let error = ZipIndex::from_entry_bytes(Arc::from(&b"plain text"[..])).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(error.raw_os_error(), None);
+    }
+
+    #[test]
+    fn a_source_reader_seeks_like_a_file_and_refuses_a_negative_position() {
+        let source = ArchiveSource::Entry(Arc::from(&b"0123456789"[..]));
+        let mut reader = source.reader();
+        assert_eq!(reader.seek(SeekFrom::End(-3)).unwrap(), 7);
+        let mut buf = [0u8; 8];
+        assert_eq!(reader.read(&mut buf).unwrap(), 3);
+        assert_eq!(&buf[..3], b"789");
+        assert_eq!(reader.read(&mut buf).unwrap(), 0);
+        assert_eq!(reader.seek(SeekFrom::Current(-10)).unwrap(), 0);
+        assert!(reader.seek(SeekFrom::Current(-1)).is_err());
+        assert_eq!(reader.seek(SeekFrom::Start(99)).unwrap(), 99);
+        assert_eq!(reader.read(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
+    fn a_host_source_reader_keeps_its_own_position_over_a_shared_descriptor(
+    ) -> Result<(), std::io::Error> {
+        let temp_dir = TempDir::new()?;
+        let path = temp_dir.path().join("shared.bin");
+        std::fs::write(&path, b"abcdefghij")?;
+        let source = ArchiveSource::open_host(&path)?;
+        let (mut first, mut second) = (source.reader(), source.reader());
+        let mut buf = [0u8; 4];
+        first.read_exact(&mut buf)?;
+        assert_eq!(&buf, b"abcd");
+        second.seek(SeekFrom::End(-2))?;
+        second.read_exact(&mut buf[..2])?;
+        assert_eq!(&buf[..2], b"ij");
+        first.read_exact(&mut buf)?;
+        assert_eq!(&buf, b"efgh");
         Ok(())
     }
 }

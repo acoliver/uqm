@@ -12,30 +12,37 @@ use std::path::Path;
 #[cfg(test)]
 use std::env;
 
-/// Parse a property file string, invoking `handler` for each key-value pair.
+/// Longest key the C parser hands to its handler when a prefix is given:
+/// `snprintf (buf, 255, "%s%s", prefix, key)` leaves 254 bytes and the NUL.
+const MAX_PREFIXED_KEY_BYTES: usize = 254;
+
+/// `isspace` in the C locale: space, \t, \n, \v, \f, \r.
+fn is_c_space(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r')
+}
+
+/// Parse a property file given as raw bytes, invoking `handler` for each
+/// key-value pair.
 ///
-/// This is the replacement for `PropertyFile::from_string`, matching the C
-/// `PropFile_from_string` behavior: preserves key case, handles inline `#`
-/// comments, and supports an optional key prefix.
-///
-/// # Arguments
-/// * `data` - The property file content to parse
-/// * `handler` - Callback invoked with `(key, value)` for each entry
-/// * `prefix` - Optional prefix to prepend to all keys (total key length capped at 255)
-///
-/// @plan PLAN-20260224-RES-SWAP.P05
-/// @requirement REQ-RES-018, REQ-RES-R007, REQ-RES-006-012
-pub fn parse_propfile(data: &str, handler: &mut dyn FnMut(&str, &str), prefix: Option<&str>) {
-    const NL: u8 = b'\x0A';
+/// This is `PropFile_from_string` byte for byte: the text is read up to its
+/// first NUL (the C code works on `strlen`), keys and values are whatever
+/// bytes sit between the delimiters, and no encoding is assumed. With a prefix
+/// the key handed over is the prefix plus the key cut to 254 bytes.
+pub fn parse_propfile_bytes(
+    data: &[u8],
+    handler: &mut dyn FnMut(&[u8], &[u8]),
+    prefix: Option<&[u8]>,
+) {
+    const NL: u8 = b'\n';
     const HASH: u8 = b'#';
     const EQ: u8 = b'=';
 
-    let bytes = data.as_bytes();
+    let bytes = data.split(|&b| b == 0).next().unwrap_or_default();
     let len = bytes.len();
     let mut i = 0;
 
     while i < len {
-        while i < len && bytes[i].is_ascii_whitespace() {
+        while i < len && is_c_space(bytes[i]) {
             i += 1;
         }
         if i >= len {
@@ -74,14 +81,14 @@ pub fn parse_propfile(data: &str, handler: &mut dyn FnMut(&str, &str), prefix: O
         }
 
         let mut key_end = i;
-        while key_end > key_start && bytes[key_end - 1].is_ascii_whitespace() {
+        while key_end > key_start && is_c_space(bytes[key_end - 1]) {
             key_end -= 1;
         }
-        let key = &data[key_start..key_end];
+        let key = &bytes[key_start..key_end];
 
         i += 1;
 
-        while i < len && bytes[i] != HASH && bytes[i] != NL && bytes[i].is_ascii_whitespace() {
+        while i < len && bytes[i] != HASH && bytes[i] != NL && is_c_space(bytes[i]) {
             i += 1;
         }
         let value_start = i;
@@ -91,10 +98,10 @@ pub fn parse_propfile(data: &str, handler: &mut dyn FnMut(&str, &str), prefix: O
         }
         let mut value_end = i;
 
-        while value_end > value_start && bytes[value_end - 1].is_ascii_whitespace() {
+        while value_end > value_start && is_c_space(bytes[value_end - 1]) {
             value_end -= 1;
         }
-        let value = &data[value_start..value_end];
+        let value = &bytes[value_start..value_end];
 
         while i < len && bytes[i] != NL {
             i += 1;
@@ -104,15 +111,37 @@ pub fn parse_propfile(data: &str, handler: &mut dyn FnMut(&str, &str), prefix: O
         }
 
         if let Some(pfx) = prefix {
-            let mut full_key = format!("{}{}", pfx, key);
-            if full_key.len() > 255 {
-                full_key.truncate(255);
-            }
+            let mut full_key = [pfx, key].concat();
+            full_key.truncate(MAX_PREFIXED_KEY_BYTES);
             handler(&full_key, value);
         } else {
             handler(key, value);
         }
     }
+}
+
+/// Parse a property file string, invoking `handler` for each key-value pair.
+///
+/// The `&str` form of [`parse_propfile_bytes`]. A prefixed key cut at 254
+/// bytes inside a multi-byte character reaches the handler without the
+/// partial character, since a `&str` cannot hold it.
+///
+/// @plan PLAN-20260224-RES-SWAP.P05
+/// @requirement REQ-RES-018, REQ-RES-R007, REQ-RES-006-012
+pub fn parse_propfile(data: &str, handler: &mut dyn FnMut(&str, &str), prefix: Option<&str>) {
+    parse_propfile_bytes(
+        data.as_bytes(),
+        &mut |key, value| {
+            let key = match std::str::from_utf8(key) {
+                Ok(key) => key,
+                Err(cut) => std::str::from_utf8(&key[..cut.valid_up_to()])
+                    .expect("prefix up to valid_up_to is valid UTF-8"),
+            };
+            let value = std::str::from_utf8(value).expect("values are cut at ASCII delimiters");
+            handler(key, value);
+        },
+        prefix.map(str::as_bytes),
+    );
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

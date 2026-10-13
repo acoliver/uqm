@@ -10,15 +10,17 @@
 //! @plan PLAN-20260224-RES-SWAP.P20
 //! @requirement REQ-RES-002-003, REQ-RES-088, REQ-RES-075-079, REQ-RES-R001-R004
 
-use std::ffi::{c_char, c_int, c_long, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_long, c_void, CStr};
 use std::ptr;
 use std::sync::Mutex;
 
-use super::dispatch::ResourceDispatch;
+use super::dispatch::{FullResourceDesc, ResourceDispatch};
 use super::ffi_types::{
     ResourceData, ResourceFreeFun, ResourceLoadFileFun, ResourceLoadFun, ResourceStringFun,
 };
+#[cfg(test)]
 use super::propfile::parse_propfile;
+use super::propfile::parse_propfile_bytes;
 use super::type_registry;
 #[cfg(not(test))]
 use crate::io::ffi::{uio_DirHandle, uio_Stream};
@@ -180,11 +182,9 @@ static mut contentDir: *mut c_void = ptr::null_mut();
 // Global state
 // =============================================================================
 
-/// Holds the ResourceDispatch and any CStrings that must outlive their pointers.
+/// Holds the ResourceDispatch; the type identifiers handed to C live in its registry.
 struct ResourceState {
     dispatch: ResourceDispatch,
-    /// CString returned by res_GetResourceType — kept alive for pointer stability
-    type_cache: std::collections::HashMap<String, CString>,
     /// Whether C subsystem type registration has been performed
     c_types_registered: bool,
 }
@@ -204,58 +204,43 @@ const STREAM_SENTINEL: *mut c_void = !0usize as *mut c_void;
 // Internal helpers
 // =============================================================================
 
-// @plan PLAN-20260314-RESOURCE.P04
-// @requirement REQ-RES-UNK-001
-/// UNKNOWNRES load function: stores the descriptor as str_ptr.
-///
-/// This allows unknown fallback entries to be treated as value types,
-/// where the descriptor string is preserved as the resource data.
-unsafe extern "C" fn unknownres_load_fun(descriptor: *const c_char, data: *mut ResourceData) {
-    if descriptor.is_null() || data.is_null() {
-        return;
-    }
-    (*data).str_ptr = descriptor;
-}
-
-/// Initialize a fresh ResourceState with the 5 built-in value types.
+/// Initialize a fresh ResourceState with the 5 built-in value types
+/// (`UNKNOWNRES` is installed by `ResourceDispatch::new`).
 fn create_initial_state() -> ResourceState {
     let mut dispatch = ResourceDispatch::new();
 
-    // Register the 5 built-in value types matching C resinit.c
-    dispatch.type_registry.install(
-        "STRING",
-        Some(type_registry::use_descriptor_as_res as ResourceLoadFun),
-        None,
-        Some(type_registry::raw_descriptor as ResourceStringFun),
-    );
-    dispatch.type_registry.install(
-        "INT32",
-        Some(type_registry::descriptor_to_int as ResourceLoadFun),
-        None,
-        Some(type_registry::int_to_string as ResourceStringFun),
-    );
-    dispatch.type_registry.install(
-        "BOOLEAN",
-        Some(type_registry::descriptor_to_boolean as ResourceLoadFun),
-        None,
-        Some(type_registry::boolean_to_string as ResourceStringFun),
-    );
-    dispatch.type_registry.install(
-        "COLOR",
-        Some(type_registry::descriptor_to_color as ResourceLoadFun),
-        None,
-        Some(type_registry::color_to_string as ResourceStringFun),
-    );
-
-    // @plan PLAN-20260314-RESOURCE.P04
-    // @requirement REQ-RES-UNK-001
-    dispatch
-        .type_registry
-        .install("UNKNOWNRES", Some(unknownres_load_fun), None, None);
+    // Register the 4 built-in value types matching C resinit.c
+    let builtins: [(&str, ResourceLoadFun, ResourceStringFun); 4] = [
+        (
+            "STRING",
+            type_registry::use_descriptor_as_res,
+            type_registry::raw_descriptor,
+        ),
+        (
+            "INT32",
+            type_registry::descriptor_to_int,
+            type_registry::int_to_string,
+        ),
+        (
+            "BOOLEAN",
+            type_registry::descriptor_to_boolean,
+            type_registry::boolean_to_string,
+        ),
+        (
+            "COLOR",
+            type_registry::descriptor_to_color,
+            type_registry::color_to_string,
+        ),
+    ];
+    for (name, load, to_string) in builtins {
+        dispatch
+            .type_registry
+            .install(name, Some(load), None, Some(to_string))
+            .expect("the built-in types are installed once into an empty registry");
+    }
 
     ResourceState {
         dispatch,
-        type_cache: std::collections::HashMap::new(),
         c_types_registered: false,
     }
 }
@@ -267,12 +252,36 @@ fn ensure_init(guard: &mut std::sync::MutexGuard<'_, Option<ResourceState>>) {
     }
 }
 
-/// Helper: safely convert a *const c_char to &str, returning None on null/invalid UTF-8.
-unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
-    if ptr.is_null() {
+/// The bytes of a C string key, which need not be UTF-8; `None` for NULL.
+unsafe fn cstr_bytes<'a>(ptr: *const c_char) -> Option<&'a [u8]> {
+    (!ptr.is_null()).then(|| CStr::from_ptr(ptr).to_bytes())
+}
+
+/// Store `descriptor` under `key` as a `put` or an index line would. A
+/// descriptor that cannot become an entry is reported and the call goes on,
+/// as C does.
+fn put_descriptor(state: &mut ResourceState, key: &[u8], descriptor: &[u8]) {
+    if let Err(err) = state.dispatch.process_resource_desc(key, descriptor) {
+        log::warn!(
+            "Resource '{}' not stored: {}",
+            String::from_utf8_lossy(key),
+            err
+        );
+    }
+}
+
+/// The numeric payload of `key` when it is stored as `type_name`; `None` for
+/// a missing key or any other type, as the C typed getters answer.
+///
+/// `ResourceData` is a union: reading `num` from a STRING entry would hand
+/// back part of a pointer.
+fn typed_number(state: &ResourceState, key: &[u8], type_name: &str) -> Option<u32> {
+    let entry = state.dispatch.entry(key)?;
+    if entry.res_type != type_name {
         return None;
     }
-    CStr::from_ptr(ptr).to_str().ok()
+    // SAFETY: value types store their parsed number in `num` when loaded.
+    Some(unsafe { entry.data.num })
 }
 
 // =============================================================================
@@ -423,28 +432,50 @@ pub unsafe extern "C" fn LoadResourceIndex(
     // Truncate to actual bytes read
     buf.truncate(bytes_read);
 
-    let content = match std::str::from_utf8(&buf) {
-        Ok(s) => s,
-        Err(_) => {
-            log::warn!("LoadResourceIndex: file contains invalid UTF-8");
-            return;
-        }
-    };
-
-    let prefix_str = if prefix.is_null() {
-        None
-    } else {
-        cstr_to_str(prefix)
-    };
+    // The index is bytes, not text: a Latin-1 value on one line must not cost
+    // the rest of the file.
+    let prefix_bytes = (!prefix.is_null()).then(|| CStr::from_ptr(prefix).to_bytes());
 
     let state = guard.as_mut().unwrap();
-    parse_propfile(
-        content,
-        &mut |key, value| {
-            state.dispatch.process_resource_desc(key, value);
-        },
-        prefix_str,
+    parse_propfile_bytes(
+        &buf,
+        &mut |key, value| put_descriptor(state, key, value),
+        prefix_bytes,
     );
+}
+
+/// The `key = TYPE:text` line `SaveResourceIndex` writes for `desc` under
+/// the name `written_key`; `None` for an entry whose handler has no
+/// `toString` (the heap types and `UNKNOWNRES`).
+///
+/// @plan PLAN-20260314-RESOURCE.P07
+/// @requirement REQ-RES-IDX-005
+fn index_line(
+    dispatch: &ResourceDispatch,
+    written_key: &[u8],
+    desc: &FullResourceDesc,
+) -> Option<Vec<u8>> {
+    let to_string_fn = dispatch.type_registry.lookup(&desc.res_type)?.to_string?;
+
+    // STRING writes the owned descriptor bytes as loaded: the `str_ptr` may
+    // dangle after a type change, and the bytes may not be UTF-8.
+    let mut line = written_key.to_vec();
+    line.extend_from_slice(b" = ");
+    line.extend_from_slice(desc.res_type.as_bytes());
+    line.push(b':');
+    if desc.res_type == "STRING" {
+        line.extend_from_slice(desc.descriptor_bytes());
+    } else {
+        let mut buf = [0u8; 256];
+        let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
+        unsafe {
+            to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
+        }
+        let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
+        line.extend_from_slice(&buf[..len]);
+    }
+    line.push(b'\n');
+    Some(line)
 }
 
 /// Save resource index entries matching `root` prefix to a file via UIO.
@@ -470,68 +501,28 @@ pub unsafe extern "C" fn SaveResourceIndex(
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
+    let root = cstr_bytes(root);
 
-    let root_str = if root.is_null() {
-        None
-    } else {
-        cstr_to_str(root)
-    };
+    // Entries under the root, in key order so the file is reproducible.
+    let mut entries: Vec<(&[u8], &FullResourceDesc)> = state
+        .dispatch
+        .entries
+        .iter()
+        .map(|(key, desc)| (&key[..], desc))
+        .filter(|(key, _)| root.is_none_or(|prefix| key.starts_with(prefix)))
+        .collect();
+    entries.sort_unstable_by_key(|&(key, _)| key);
 
-    // Collect entries matching root prefix and serialize
-    let mut lines: Vec<String> = Vec::new();
-    let mut keys: Vec<&String> = state.dispatch.entries.keys().collect();
-    keys.sort();
-
-    for key in keys {
-        if let Some(prefix) = root_str {
-            if !key.starts_with(prefix) {
-                continue;
-            }
-        }
-
-        let desc = &state.dispatch.entries[key];
-
-        // @plan PLAN-20260314-RESOURCE.P07
-        // @requirement REQ-RES-IDX-005
-        // Skip entries without toString function — this filters out heap types
-        // and unknown types that can't be serialized back to config format.
-
-        // Look up the handler for this entry's type_handler_key (not res_type,
-        // since unknown types have res_type != type_handler_key)
-        let handler = state.dispatch.type_registry.lookup(&desc.type_handler_key);
-        let to_string_fn = match handler.and_then(|h| h.to_string) {
-            Some(f) => f,
-            None => continue, // Skip entries without toString
-        };
-
-        // Serialize the entry using toString.
-        // STRING types: use the Rust fname directly — avoids unsafe str_ptr
-        // which can hold a dangling/invalid pointer after type changes.
-        let serialized = if desc.res_type == "STRING" {
-            format!("{}:{}", desc.res_type, desc.fname)
-        } else {
-            let mut buf = [0u8; 256];
-            let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
-            unsafe {
-                to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
-            }
-            let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
-            let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
-            format!("{}:{}", desc.res_type, value_str)
-        };
-
-        let output_key = if strip_root != 0 {
-            if let Some(prefix) = root_str {
-                key.strip_prefix(prefix).unwrap_or(key)
-            } else {
-                key.as_str()
-            }
-        } else {
-            key.as_str()
-        };
-
-        lines.push(format!("{} = {}\n", output_key, serialized));
-    }
+    let lines: Vec<Vec<u8>> = entries
+        .into_iter()
+        .filter_map(|(key, desc)| {
+            let written_key = match root {
+                Some(prefix) if strip_root != 0 => &key[prefix.len()..],
+                _ => key,
+            };
+            index_line(&state.dispatch, written_key, desc)
+        })
+        .collect();
 
     // Open output file
     let mode = c"wt".as_ptr() as *const c_char;
@@ -542,8 +533,7 @@ pub unsafe extern "C" fn SaveResourceIndex(
     }
 
     for line in &lines {
-        let bytes = line.as_bytes();
-        uio_fwrite(bytes.as_ptr() as *const c_void, 1, bytes.len(), fp);
+        uio_fwrite(line.as_ptr() as *const c_void, 1, line.len(), fp);
     }
 
     uio_fclose(fp);
@@ -554,7 +544,9 @@ pub unsafe extern "C" fn SaveResourceIndex(
 // =============================================================================
 
 /// Install resource type vectors (load/free/toString) for a named type.
-/// Returns 1 on success, 0 on failure.
+/// The name is a C string of any bytes. Returns 1 on success, 0 when the name
+/// is NULL, its first 27 bytes are already registered (the first registration
+/// stays, as in C), or an ordinary resource already has the type's `sys.` key.
 ///
 /// # Safety
 ///
@@ -566,9 +558,8 @@ pub unsafe extern "C" fn InstallResTypeVectors(
     free_fun: Option<ResourceFreeFun>,
     string_fun: Option<ResourceStringFun>,
 ) -> c_int {
-    let type_name = match cstr_to_str(res_type) {
-        Some(s) => s,
-        None => return 0,
+    let Some(identifier) = cstr_bytes(res_type) else {
+        return 0;
     };
 
     let mut guard = match RESOURCE_STATE.lock() {
@@ -578,14 +569,19 @@ pub unsafe extern "C" fn InstallResTypeVectors(
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    if state
+    match state
         .dispatch
-        .type_registry
-        .install(type_name, load_fun, free_fun, string_fun)
+        .install_type(identifier, load_fun, free_fun, string_fun)
     {
-        1
-    } else {
-        0
+        Ok(()) => 1,
+        Err(err) => {
+            log::warn!(
+                "Type '{}' not installed: {}",
+                identifier.escape_ascii(),
+                err
+            );
+            0
+        }
     }
 }
 
@@ -600,7 +596,7 @@ pub unsafe extern "C" fn InstallResTypeVectors(
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetResource(key: *const c_char) -> *mut c_void {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return ptr::null_mut(),
     };
@@ -622,7 +618,7 @@ pub unsafe extern "C" fn res_GetResource(key: *const c_char) -> *mut c_void {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_DetachResource(key: *const c_char) -> *mut c_void {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return ptr::null_mut(),
     };
@@ -644,7 +640,7 @@ pub unsafe extern "C" fn res_DetachResource(key: *const c_char) -> *mut c_void {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_FreeResource(key: *const c_char) {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return,
     };
@@ -666,7 +662,7 @@ pub unsafe extern "C" fn res_FreeResource(key: *const c_char) {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_Remove(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -681,6 +677,12 @@ pub unsafe extern "C" fn res_Remove(key: *const c_char) -> c_int {
     if state.dispatch.remove_resource(key_str) {
         1
     } else {
+        if state.dispatch.is_type_key(key_str) {
+            log::warn!(
+                "Not removing '{}': a registered type lasts until UninitResourceSystem",
+                key_str.escape_ascii()
+            );
+        }
         0
     }
 }
@@ -696,7 +698,7 @@ pub unsafe extern "C" fn res_Remove(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetIntResource(key: *const c_char) -> u32 {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -718,7 +720,7 @@ pub unsafe extern "C" fn res_GetIntResource(key: *const c_char) -> u32 {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetBooleanResource(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -749,7 +751,7 @@ pub unsafe extern "C" fn res_GetBooleanResource(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetResourceType(key: *const c_char) -> *const c_char {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return ptr::null(),
     };
@@ -760,24 +762,23 @@ pub unsafe extern "C" fn res_GetResourceType(key: *const c_char) -> *const c_cha
     };
     ensure_init(&mut guard);
 
-    let state = guard.as_mut().unwrap();
-    let type_name = match state.dispatch.get_resource_type(key_str) {
-        Some(t) => t.to_string(),
-        None => return ptr::null(),
-    };
-
-    let entry = state
-        .type_cache
-        .entry(key_str.to_string())
-        .or_insert_with(|| CString::new(type_name.as_str()).unwrap_or_default());
-
-    // Update if changed
-    let current = entry.to_str().unwrap_or("");
-    if current != type_name {
-        *entry = CString::new(type_name.as_str()).unwrap_or_default();
+    let state = guard.as_ref().unwrap();
+    match state.dispatch.get_resource_type(key_str) {
+        // The pointer is into the registry's own copy of the identifier, which
+        // lives, unmoved, until UninitResourceSystem drops the registry.
+        Some(type_name) => type_name.as_c_str().as_ptr(),
+        None => {
+            if state.dispatch.is_type_key(key_str) {
+                // C reads `desc->vtable->resType` here and faults: a type's
+                // key has no vtable.
+                log::warn!(
+                    "Trying to get the type of '{}', which names a registered type",
+                    key_str.escape_ascii()
+                );
+            }
+            ptr::null()
+        }
     }
-
-    entry.as_ptr()
 }
 
 /// Count the number of registered resource types.
@@ -810,7 +811,7 @@ pub unsafe extern "C" fn CountResourceTypes() -> u32 {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -822,11 +823,7 @@ pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state.dispatch.entries.contains_key(key_str) {
-        1
-    } else {
-        0
-    }
+    c_int::from(state.dispatch.has_key(key_str))
 }
 
 /// Check if a key is a STRING type.
@@ -836,7 +833,7 @@ pub unsafe extern "C" fn res_HasKey(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_IsString(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -848,10 +845,12 @@ pub unsafe extern "C" fn res_IsString(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("STRING") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "STRING"),
+    )
 }
 
 /// Check if a key is an INT32 type.
@@ -861,7 +860,7 @@ pub unsafe extern "C" fn res_IsString(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_IsInteger(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -873,10 +872,12 @@ pub unsafe extern "C" fn res_IsInteger(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("INT32") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "INT32"),
+    )
 }
 
 /// Check if a key is a BOOLEAN type.
@@ -886,7 +887,7 @@ pub unsafe extern "C" fn res_IsInteger(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_IsBoolean(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -898,10 +899,12 @@ pub unsafe extern "C" fn res_IsBoolean(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("BOOLEAN") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "BOOLEAN"),
+    )
 }
 
 /// Check if a key is a COLOR type.
@@ -911,7 +914,7 @@ pub unsafe extern "C" fn res_IsBoolean(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_IsColor(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -923,10 +926,12 @@ pub unsafe extern "C" fn res_IsColor(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    match state.dispatch.get_resource_type(key_str) {
-        Some("COLOR") => 1,
-        _ => 0,
-    }
+    c_int::from(
+        state
+            .dispatch
+            .get_resource_type(key_str)
+            .is_some_and(|type_name| type_name == "COLOR"),
+    )
 }
 
 /// Get a string value. Returns pointer that lives as long as the state entry.
@@ -944,7 +949,7 @@ pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
         return EMPTY.as_ptr() as *const c_char;
     }
 
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return EMPTY.as_ptr() as *const c_char,
     };
@@ -958,7 +963,7 @@ pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
     let state = guard.as_mut().unwrap();
 
     // Check if entry exists
-    let entry = match state.dispatch.entries.get(key_str) {
+    let entry = match state.dispatch.entry(key_str) {
         Some(e) => e,
         None => return EMPTY.as_ptr() as *const c_char,
     };
@@ -984,7 +989,7 @@ pub unsafe extern "C" fn res_GetString(key: *const c_char) -> *const c_char {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -996,11 +1001,7 @@ pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    state
-        .dispatch
-        .get_int_resource(key_str)
-        .map(|v| v as c_int)
-        .unwrap_or(0)
+    typed_number(state, key_str, "INT32").map_or(0, |v| v as c_int)
 }
 
 /// Get a boolean config value.
@@ -1010,7 +1011,7 @@ pub unsafe extern "C" fn res_GetInteger(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetBoolean(key: *const c_char) -> c_int {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -1022,15 +1023,7 @@ pub unsafe extern "C" fn res_GetBoolean(key: *const c_char) -> c_int {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    if state
-        .dispatch
-        .get_boolean_resource(key_str)
-        .unwrap_or(false)
-    {
-        1
-    } else {
-        0
-    }
+    c_int::from(typed_number(state, key_str, "BOOLEAN").is_some_and(|v| v != 0))
 }
 
 /// Get a color config value as packed (r<<24)|(g<<16)|(b<<8)|a.
@@ -1040,7 +1033,7 @@ pub unsafe extern "C" fn res_GetBoolean(key: *const c_char) -> c_int {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_GetColor(key: *const c_char) -> u32 {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return 0,
     };
@@ -1052,7 +1045,7 @@ pub unsafe extern "C" fn res_GetColor(key: *const c_char) -> u32 {
     ensure_init(&mut guard);
 
     let state = guard.as_ref().unwrap();
-    state.dispatch.get_int_resource(key_str).unwrap_or(0)
+    typed_number(state, key_str, "COLOR").unwrap_or(0)
 }
 
 // =============================================================================
@@ -1066,11 +1059,11 @@ pub unsafe extern "C" fn res_GetColor(key: *const c_char) -> u32 {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_PutString(key: *const c_char, value: *const c_char) {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return,
     };
-    let value_str = match cstr_to_str(value) {
+    let value_str = match cstr_bytes(value) {
         Some(s) => s,
         None => return,
     };
@@ -1082,9 +1075,7 @@ pub unsafe extern "C" fn res_PutString(key: *const c_char, value: *const c_char)
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    state
-        .dispatch
-        .process_resource_desc(key_str, &format!("STRING:{}", value_str));
+    put_descriptor(state, key_str, &[b"STRING:", value_str].concat());
 }
 
 /// Put an integer value into the resource map.
@@ -1094,7 +1085,7 @@ pub unsafe extern "C" fn res_PutString(key: *const c_char, value: *const c_char)
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_PutInteger(key: *const c_char, value: c_int) {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return,
     };
@@ -1106,9 +1097,7 @@ pub unsafe extern "C" fn res_PutInteger(key: *const c_char, value: c_int) {
     ensure_init(&mut guard);
 
     let state = guard.as_mut().unwrap();
-    state
-        .dispatch
-        .process_resource_desc(key_str, &format!("INT32:{}", value));
+    put_descriptor(state, key_str, format!("INT32:{value}").as_bytes());
 }
 
 /// Put a boolean value into the resource map.
@@ -1118,7 +1107,7 @@ pub unsafe extern "C" fn res_PutInteger(key: *const c_char, value: c_int) {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_PutBoolean(key: *const c_char, value: c_int) {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return,
     };
@@ -1131,9 +1120,7 @@ pub unsafe extern "C" fn res_PutBoolean(key: *const c_char, value: c_int) {
 
     let state = guard.as_mut().unwrap();
     let bool_str = if value != 0 { "true" } else { "false" };
-    state
-        .dispatch
-        .process_resource_desc(key_str, &format!("BOOLEAN:{}", bool_str));
+    put_descriptor(state, key_str, format!("BOOLEAN:{bool_str}").as_bytes());
 }
 
 /// Put a color value into the resource map. Color is packed (r<<24)|(g<<16)|(b<<8)|a.
@@ -1143,7 +1130,7 @@ pub unsafe extern "C" fn res_PutBoolean(key: *const c_char, value: c_int) {
 /// Caller must ensure pointer arguments are valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn res_PutColor(key: *const c_char, value: u32) {
-    let key_str = match cstr_to_str(key) {
+    let key_str = match cstr_bytes(key) {
         Some(s) => s,
         None => return,
     };
@@ -1161,9 +1148,7 @@ pub unsafe extern "C" fn res_PutColor(key: *const c_char, value: u32) {
 
     let state = guard.as_mut().unwrap();
     let color_str = super::resource_type::serialize_color(r, g, b, a);
-    state
-        .dispatch
-        .process_resource_desc(key_str, &format!("COLOR:{}", color_str));
+    put_descriptor(state, key_str, format!("COLOR:{color_str}").as_bytes());
 }
 
 // =============================================================================
@@ -1518,6 +1503,22 @@ mod tests {
         *guard = None;
     }
 
+    /// A heap type that loads nothing: enough to see that a registered
+    /// non-value type keeps its type name and path and is not loaded early.
+    unsafe extern "C" fn mock_heap_load(_path: *const c_char, _data: *mut ResourceData) {}
+
+    unsafe extern "C" fn mock_heap_free(_data: *mut c_void) -> c_int {
+        1
+    }
+
+    fn install_mock_gfxres(state: &mut ResourceState) {
+        state
+            .dispatch
+            .type_registry
+            .install("GFXRES", Some(mock_heap_load), Some(mock_heap_free), None)
+            .unwrap();
+    }
+
     // =========================================================================
     // P19: Init/Uninit tests
     // =========================================================================
@@ -1636,19 +1637,19 @@ mod tests {
             let state = guard.as_mut().unwrap();
 
             // Simulate LoadResourceIndex by parsing propfile content directly
+            install_mock_gfxres(state);
             let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 None,
             );
 
-            assert!(state.dispatch.entries.contains_key("comm.arilou.graphics"));
-            let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
+            let desc = state.dispatch.entry("comm.arilou.graphics").unwrap();
             assert_eq!(desc.res_type, "GFXRES");
-            assert_eq!(desc.fname, "base/comm/arilou/arilou.ani");
+            assert_eq!(desc.descriptor_bytes(), b"base/comm/arilou/arilou.ani");
         }
     }
 
@@ -1666,12 +1667,12 @@ mod tests {
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 Some("config."),
             );
 
-            assert!(state.dispatch.entries.contains_key("config.sfxvol"));
+            assert!(state.dispatch.entry("config.sfxvol").is_some());
             assert_eq!(state.dispatch.get_int_resource("config.sfxvol"), Some(20));
         }
     }
@@ -1690,7 +1691,7 @@ mod tests {
             parse_propfile(
                 content_a,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 None,
             );
@@ -1699,13 +1700,13 @@ mod tests {
             parse_propfile(
                 content_b,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 None,
             );
 
-            assert!(state.dispatch.entries.contains_key("key.a"));
-            assert!(state.dispatch.entries.contains_key("key.b"));
+            assert!(state.dispatch.entry("key.a").is_some());
+            assert!(state.dispatch.entry("key.b").is_some());
         }
     }
 
@@ -1723,7 +1724,7 @@ mod tests {
             parse_propfile(
                 content_a,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 None,
             );
@@ -1732,13 +1733,13 @@ mod tests {
             parse_propfile(
                 content_b,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 None,
             );
 
-            let desc = state.dispatch.entries.get("music.battle").unwrap();
-            assert_eq!(desc.fname, "addons/3domusic/battle.ogg");
+            let desc = state.dispatch.entry("music.battle").unwrap();
+            assert_eq!(desc.descriptor_bytes(), b"addons/3domusic/battle.ogg");
         }
     }
 
@@ -1756,13 +1757,13 @@ mod tests {
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 Some("config."),
             );
 
             // INT32 is a value type — parsed immediately, data.num should be 20
-            let desc = state.dispatch.entries.get("config.sfxvol").unwrap();
+            let desc = state.dispatch.entry("config.sfxvol").unwrap();
             assert_eq!({ desc.data.num }, 20);
         }
     }
@@ -1777,27 +1778,52 @@ mod tests {
             let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
             let state = guard.as_mut().unwrap();
 
+            install_mock_gfxres(state);
             let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 None,
             );
 
-            // @plan PLAN-20260314-RESOURCE.P04
-            // @requirement REQ-RES-UNK-001
-            // GFXRES has no registered handler in test mode (C subsystem types not
-            // available), so dispatch falls back to UNKNOWNRES for the handler_key,
-            // but preserves the original type name for serialization.
-            // UNKNOWNRES is now a value type with a load function, so str_ptr is set
-            // (eagerly loaded) to the descriptor string.
-            let desc = state.dispatch.entries.get("comm.arilou.graphics").unwrap();
-            assert_eq!(desc.res_type, "GFXRES", "Original type name preserved");
+            // A registered heap type is not loaded until the resource is asked for.
+            let desc = state.dispatch.entry("comm.arilou.graphics").unwrap();
+            assert_eq!(desc.res_type, "GFXRES");
+            assert!(desc.data.ptr.is_null(), "heap data is loaded lazily");
+            assert_eq!(desc.refcount, 0);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_index_unregistered_type_is_unknownres_with_whole_descriptor() {
+        // @plan PLAN-20260314-RESOURCE.P04
+        // @requirement REQ-RES-UNK-001
+        // C `newResourceDesc`: a type nobody registered is not kept; the entry
+        // is UNKNOWNRES and its descriptor is the whole value.
+        unsafe {
+            reset_state();
+            InitResourceSystem();
+
+            let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
+            let state = guard.as_mut().unwrap();
+
+            let content = "comm.arilou.graphics = GFXRES:base/comm/arilou/arilou.ani\n";
+            parse_propfile(
+                content,
+                &mut |key, value| {
+                    state.dispatch.process_resource_desc(key, value).unwrap();
+                },
+                None,
+            );
+
+            let desc = state.dispatch.entry("comm.arilou.graphics").unwrap();
+            assert_eq!(desc.res_type, "UNKNOWNRES");
             assert_eq!(
-                desc.type_handler_key, "UNKNOWNRES",
-                "Falls back to UNKNOWNRES handler"
+                desc.descriptor_bytes(),
+                b"GFXRES:base/comm/arilou/arilou.ani"
             );
             assert!(
                 !{ desc.data.str_ptr.is_null() },
@@ -1820,7 +1846,7 @@ mod tests {
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 Some("config."),
             );
@@ -1846,7 +1872,7 @@ mod tests {
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 Some("config."),
             );
@@ -1872,12 +1898,12 @@ mod tests {
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 Some("config."),
             );
 
-            let desc = state.dispatch.entries.get("config.color").unwrap();
+            let desc = state.dispatch.entry("config.color").unwrap();
             let packed = { desc.data.num };
             let r = ((packed >> 24) & 0xFF) as u8;
             let g = ((packed >> 16) & 0xFF) as u8;
@@ -1901,14 +1927,14 @@ mod tests {
             parse_propfile(
                 content,
                 &mut |key, value| {
-                    state.dispatch.process_resource_desc(key, value);
+                    state.dispatch.process_resource_desc(key, value).unwrap();
                 },
                 Some("keys."),
             );
 
             assert_eq!(
                 state.dispatch.get_string_resource("keys.up.1"),
-                Some("key Up")
+                Some(b"key Up".as_slice())
             );
         }
     }
@@ -2320,7 +2346,10 @@ mod tests {
 
             let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
             let state = guard.as_mut().unwrap();
-            state.dispatch.process_resource_desc("vol.sfx", "INT32:20");
+            state
+                .dispatch
+                .process_resource_desc("vol.sfx", "INT32:20")
+                .unwrap();
             drop(guard);
 
             let key = CString::new("vol.sfx").unwrap();
@@ -2340,7 +2369,8 @@ mod tests {
             let state = guard.as_mut().unwrap();
             state
                 .dispatch
-                .process_resource_desc("config.fullscreen", "BOOLEAN:true");
+                .process_resource_desc("config.fullscreen", "BOOLEAN:true")
+                .unwrap();
             drop(guard);
 
             let key = CString::new("config.fullscreen").unwrap();
@@ -2388,7 +2418,8 @@ mod tests {
             let state = guard.as_mut().unwrap();
             state
                 .dispatch
-                .process_resource_desc("config.sfxvol", "INT32:128");
+                .process_resource_desc("config.sfxvol", "INT32:128")
+                .unwrap();
             drop(guard);
 
             let key = CString::new("config.sfxvol").unwrap();
@@ -2416,7 +2447,8 @@ mod tests {
             let state = guard.as_mut().unwrap();
             state
                 .dispatch
-                .process_resource_desc("config.fullscreen", "BOOLEAN:true");
+                .process_resource_desc("config.fullscreen", "BOOLEAN:true")
+                .unwrap();
             drop(guard);
 
             let key = CString::new("config.fullscreen").unwrap();
@@ -2444,7 +2476,8 @@ mod tests {
             let state = guard.as_mut().unwrap();
             state
                 .dispatch
-                .process_resource_desc("config.name", "STRING:Player");
+                .process_resource_desc("config.name", "STRING:Player")
+                .unwrap();
             drop(guard);
 
             let key = CString::new("config.name").unwrap();
@@ -2495,7 +2528,8 @@ mod tests {
             let state = guard.as_mut().unwrap();
             state
                 .dispatch
-                .process_resource_desc("unknown.key", "FAKETYPE:somedata.dat");
+                .process_resource_desc("unknown.key", "FAKETYPE:somedata.dat")
+                .unwrap();
             drop(guard);
 
             let key = CString::new("unknown.key").unwrap();
@@ -2519,43 +2553,26 @@ mod tests {
     /// filtering logic. This tests the filtering at the dispatch level since UIO
     /// isn't available in tests.
     fn get_saveable_entries(state: &ResourceState, root: Option<&str>) -> Vec<(String, String)> {
-        let mut results = Vec::new();
-        let mut keys: Vec<&String> = state.dispatch.entries.keys().collect();
-        keys.sort();
+        let mut entries: Vec<_> = state
+            .dispatch
+            .entries
+            .iter()
+            .filter(|(key, _)| root.is_none_or(|prefix| key.starts_with(prefix.as_bytes())))
+            .collect();
+        entries.sort_unstable_by_key(|&(key, _)| key);
 
-        for key in keys {
-            if let Some(prefix) = root {
-                if !key.starts_with(prefix) {
-                    continue;
-                }
-            }
-
-            let desc = &state.dispatch.entries[key];
-
-            // Apply same filtering logic as SaveResourceIndex
-            let handler = state.dispatch.type_registry.lookup(&desc.type_handler_key);
-            let to_string_fn = match handler.and_then(|h| h.to_string) {
-                Some(f) => f,
-                None => continue, // Skip entries without toString
-            };
-
-            let serialized = if desc.res_type == "STRING" {
-                format!("{}:{}", desc.res_type, desc.fname)
-            } else {
-                let mut buf = [0u8; 256];
-                let mut data_copy: ResourceData = unsafe { std::ptr::read(&desc.data) };
-                unsafe {
-                    to_string_fn(&mut data_copy, buf.as_mut_ptr() as *mut c_char, 256);
-                }
-                let len = buf.iter().position(|&b| b == 0).unwrap_or(256);
-                let value_str = std::str::from_utf8(&buf[..len]).unwrap_or("");
-                format!("{}:{}", desc.res_type, value_str)
-            };
-
-            results.push((key.clone(), serialized));
-        }
-
-        results
+        entries
+            .into_iter()
+            .filter_map(|(key, desc)| {
+                let line = index_line(&state.dispatch, key, desc)?;
+                let line = String::from_utf8(line).expect("test entries are UTF-8");
+                let (name, value) = line
+                    .trim_end()
+                    .split_once(" = ")
+                    .expect("a key = value line");
+                Some((name.to_string(), value.to_string()))
+            })
+            .collect()
     }
 
     #[test]
@@ -2587,17 +2604,22 @@ mod tests {
             {
                 let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
                 let state = guard.as_mut().unwrap();
-                state.dispatch.type_registry.install(
-                    "HEAPTYPE",
-                    Some(dummy_heap_load),
-                    Some(dummy_heap_free),
-                    None, // No toString
-                );
+                state
+                    .dispatch
+                    .type_registry
+                    .install(
+                        "HEAPTYPE",
+                        Some(dummy_heap_load),
+                        Some(dummy_heap_free),
+                        None, // No toString
+                    )
+                    .unwrap();
 
                 // Add a heap entry
                 state
                     .dispatch
-                    .process_resource_desc("gfx.test", "HEAPTYPE:test.gfx");
+                    .process_resource_desc("gfx.test", "HEAPTYPE:test.gfx")
+                    .unwrap();
             }
 
             // Get saveable entries
@@ -2635,7 +2657,8 @@ mod tests {
                 let state = guard.as_mut().unwrap();
                 state
                     .dispatch
-                    .process_resource_desc("addon.bar", "FAKETYPE:addon/bar.dat");
+                    .process_resource_desc("addon.bar", "FAKETYPE:addon/bar.dat")
+                    .unwrap();
             }
 
             // Get saveable entries
@@ -2767,22 +2790,28 @@ mod tests {
             {
                 let mut guard = RESOURCE_STATE.lock().unwrap_or_else(|p| p.into_inner());
                 let state = guard.as_mut().unwrap();
-                state.dispatch.type_registry.install(
-                    "HEAPTYPE",
-                    Some(dummy_heap_load),
-                    Some(dummy_heap_free),
-                    None,
-                );
+                state
+                    .dispatch
+                    .type_registry
+                    .install(
+                        "HEAPTYPE",
+                        Some(dummy_heap_load),
+                        Some(dummy_heap_free),
+                        None,
+                    )
+                    .unwrap();
 
                 // Add heap entry with "config." prefix
                 state
                     .dispatch
-                    .process_resource_desc("config.gfx", "HEAPTYPE:test.gfx");
+                    .process_resource_desc("config.gfx", "HEAPTYPE:test.gfx")
+                    .unwrap();
 
                 // Add unknown entry with "config." prefix
                 state
                     .dispatch
-                    .process_resource_desc("config.unknown", "FAKETYPE:test.dat");
+                    .process_resource_desc("config.unknown", "FAKETYPE:test.dat")
+                    .unwrap();
             }
 
             // Add valid STRING entry

@@ -1,6 +1,7 @@
 // FFI bindings for I/O module
 // Provides C-compatible interface for file and directory operations
 
+use libc::stat;
 use std::ffi::CStr;
 use std::os::raw::{c_char, c_int};
 use std::path::PathBuf;
@@ -45,24 +46,6 @@ pub struct uio_Handle {
     _private: [u8; 0],
 }
 
-// stat struct for uio_fstat
-#[repr(C)]
-pub struct stat {
-    pub st_dev: u64,
-    pub st_mode: u32,
-    pub st_nlink: u32,
-    pub st_ino: u64,
-    pub st_uid: u32,
-    pub st_gid: u32,
-    pub st_rdev: u64,
-    pub st_size: i64,
-    pub st_atime: i64,
-    pub st_mtime: i64,
-    pub st_ctime: i64,
-    pub st_blksize: i64,
-    pub st_blocks: i64,
-}
-
 // FFI bindings to C uio_* functions
 extern "C" {
     // uio_fopen/uio_fclose - for fileExists2
@@ -104,10 +87,10 @@ fn current_errno() -> c_int {
 }
 
 // Constants for uio_open flags
-const O_RDONLY: c_int = 0;
-const O_WRONLY: c_int = 1;
-const O_CREAT: c_int = 0o100;
-const O_EXCL: c_int = 0o200;
+const O_RDONLY: c_int = libc::O_RDONLY;
+const O_WRONLY: c_int = libc::O_WRONLY;
+const O_CREAT: c_int = libc::O_CREAT;
+const O_EXCL: c_int = libc::O_EXCL;
 const O_BINARY: c_int = 0;
 
 // Constants for file permissions (mode)

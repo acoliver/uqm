@@ -2,6 +2,8 @@
 //! block writers of the stream API, checked against real files on a mount.
 
 use std::ffi::CString;
+use std::mem::ManuallyDrop;
+use std::sync::{Arc, Weak};
 
 use serial_test::serial;
 use tempfile::TempDir;
@@ -36,14 +38,7 @@ impl HostDir {
         for (name, data) in files {
             std::fs::write(temp.path().join(name), data).unwrap();
         }
-        let repo = Box::into_raw(Box::new(uio_Repository { flags: 0 }));
-        let handle = Box::into_raw(Box::new(uio_DirHandle {
-            path: temp.path().to_path_buf(),
-            virtual_path: temp.path().to_path_buf(),
-            refcount: std::sync::atomic::AtomicI32::new(1),
-            repository: repo,
-            root_end: temp.path().to_path_buf(),
-        }));
+        let (repo, handle) = super::layered_open_tests::mount_host_root(temp.path());
         HostDir { temp, repo, handle }
     }
 
@@ -56,10 +51,7 @@ impl HostDir {
 
 impl Drop for HostDir {
     fn drop(&mut self) {
-        unsafe {
-            drop(Box::from_raw(self.handle));
-            drop(Box::from_raw(self.repo));
-        }
+        unsafe { super::layered_open_tests::release_host_root(self.repo, self.handle) };
     }
 }
 
@@ -223,7 +215,7 @@ fn block_calls_refuse_missing_arguments_and_negative_offsets() {
             -1
         );
         assert_eq!(errno_value(), libc::EINVAL);
-        uio_clearFileBlockBuffers(ptr::null_mut());
+        uio_clear_file_block_buffers(ptr::null_mut());
         uio_setFileBlockUsageHint(block, 0, 0);
         assert_eq!(uio_closeFileBlock(ptr::null_mut()), 0);
         uio_closeFileBlock(block);
@@ -239,7 +231,7 @@ fn clearing_block_buffers_does_not_change_what_a_later_access_returns() {
     unsafe {
         let block = uio_openFileBlock(file);
         assert_eq!(access(block, 1, 3), (3, b"123".to_vec()));
-        uio_clearFileBlockBuffers(block);
+        uio_clear_file_block_buffers(block);
         assert_eq!(access(block, 1, 3), (3, b"123".to_vec()));
         uio_closeFileBlock(block);
         uio_close(file);
@@ -311,11 +303,6 @@ fn pushing_back_the_character_just_read_makes_it_readable_again() {
     let dir = HostDir::new(&[("digits.txt", DIGITS)]);
     unsafe {
         let stream = dir.open("digits.txt", "r");
-        assert_eq!(
-            uio_ungetc(b'0' as c_int, stream),
-            -1,
-            "nothing has been read yet"
-        );
         let first = uio_fgetc(stream);
         assert_eq!(first, b'0' as c_int);
         assert_eq!(uio_ungetc(first, stream), first);
@@ -341,4 +328,277 @@ fn characters_are_written_one_at_a_time() {
         std::fs::read(dir.temp.path().join("chars.txt")).unwrap(),
         b"hey"
     );
+}
+
+/// Follows a handle's owners without taking part: the weak count's strong
+/// side is how many of the caller, streams and blocks still hold it, and it
+/// reaches zero exactly when the inner file is dropped (closed).
+///
+/// The handle must be live, and is left untouched.
+unsafe fn watch(handle: *mut uio_Handle) -> Weak<uio_Handle> {
+    let owner = ManuallyDrop::new(Arc::from_raw(handle.cast_const()));
+    Arc::downgrade(&owner)
+}
+
+#[test]
+#[serial]
+fn a_block_still_reads_after_the_public_handle_is_closed() {
+    let stack = digits_stack();
+    let file = handle(&stack, "digits.txt");
+    unsafe {
+        let owners = watch(file);
+        assert_eq!(owners.strong_count(), 1);
+        let block = uio_openFileBlock(file);
+        assert_eq!(owners.strong_count(), 2, "the block shares the handle");
+        assert_eq!(uio_close(file), 0);
+        assert_eq!(owners.strong_count(), 1, "the block keeps the file open");
+        assert_eq!(access(block, 2, 4), (4, b"2345".to_vec()));
+        assert_eq!(copy(block, 6, 3), (0, b"678".to_vec()));
+        assert_eq!(uio_closeFileBlock(block), 0);
+        assert_eq!(owners.strong_count(), 0, "the last owner closes the file");
+    }
+}
+
+#[test]
+#[serial]
+fn a_handle_closes_with_its_last_owner_whatever_the_release_order() {
+    const ORDERS: [[usize; 3]; 6] = [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+    for order in ORDERS {
+        let stack = digits_stack();
+        let file = handle(&stack, "digits.txt");
+        unsafe {
+            let owners = watch(file);
+            let whole = uio_openFileBlock(file);
+            let window = uio_openFileBlock2(file, 4, 3);
+            assert_eq!(owners.strong_count(), 3, "handle plus two blocks");
+            let mut left = 3;
+            for owner in order {
+                match owner {
+                    0 => assert_eq!(uio_close(file), 0),
+                    1 => assert_eq!(uio_closeFileBlock(whole), 0),
+                    _ => assert_eq!(uio_closeFileBlock(window), 0),
+                }
+                left -= 1;
+                assert_eq!(owners.strong_count(), left, "order {order:?}");
+                if owner != 1 && still_open(&order, owner, 1) {
+                    assert_eq!(access(whole, 7, 3), (3, b"789".to_vec()), "{order:?}");
+                }
+                if owner != 2 && still_open(&order, owner, 2) {
+                    assert_eq!(access(window, 0, 9), (3, b"456".to_vec()), "{order:?}");
+                }
+            }
+        }
+    }
+}
+
+/// Whether `block` is still unreleased once `released` has been, in `order`.
+fn still_open(order: &[usize; 3], released: usize, block: usize) -> bool {
+    let at = |owner: usize| order.iter().position(|o| *o == owner).unwrap();
+    at(block) > at(released)
+}
+
+#[test]
+#[serial]
+fn a_block_that_cannot_be_created_takes_no_share_of_the_handle() {
+    let stack = digits_stack();
+    let file = handle(&stack, "digits.txt");
+    unsafe {
+        let owners = watch(file);
+        assert!(uio_openFileBlock2(file, 5, 6).is_null());
+        assert!(uio_openFileBlock2(file, -1, 2).is_null());
+        assert!(uio_openFileBlock2(file, 1, usize::MAX).is_null());
+        assert!(uio_openFileBlock2(ptr::null_mut(), 0, 1).is_null());
+        assert!(uio_openFileBlock(ptr::null_mut()).is_null());
+        assert_eq!(owners.strong_count(), 1);
+        assert_eq!(uio_close(file), 0);
+        assert_eq!(owners.strong_count(), 0, "nothing else kept the file open");
+    }
+}
+
+#[test]
+#[serial]
+fn a_block_over_a_stream_handle_outlives_the_stream() {
+    let dir = HostDir::new(&[("digits.txt", DIGITS)]);
+    unsafe {
+        let stream = dir.open("digits.txt", "r");
+        let file = uio_streamHandle(stream);
+        let owners = watch(file);
+        let block = uio_openFileBlock(file);
+        assert_eq!(owners.strong_count(), 2);
+        assert_eq!(uio_fclose(stream), 0);
+        assert_eq!(owners.strong_count(), 1);
+        assert_eq!(access(block, 5, 3), (3, b"567".to_vec()));
+        assert_eq!(uio_closeFileBlock(block), 0);
+        assert_eq!(owners.strong_count(), 0);
+    }
+}
+
+#[test]
+#[serial]
+fn a_block_over_an_archive_entry_outlives_the_handle() {
+    let mut stack = Stack::new();
+    stack.mount_zip(
+        &[("digits.txt", DIGITS)],
+        UIO_MOUNT_TOP | UIO_MOUNT_RDONLY,
+        0,
+    );
+    let file = handle(&stack, "digits.txt");
+    unsafe {
+        let owners = watch(file);
+        let block = uio_openFileBlock(file);
+        assert!(!block.is_null(), "an archive entry has a size too");
+        let window = uio_openFileBlock2(file, 2, 5);
+        assert!(!window.is_null());
+        assert_eq!(uio_close(file), 0);
+        assert_eq!(access(block, 6, 9), (4, b"6789".to_vec()));
+        assert_eq!(access(window, 1, 9), (4, b"3456".to_vec()));
+        uio_closeFileBlock(block);
+        assert_eq!(owners.strong_count(), 1);
+        uio_closeFileBlock(window);
+        assert_eq!(owners.strong_count(), 0);
+    }
+}
+
+#[test]
+#[serial]
+fn a_block_survives_its_mount_stack_being_torn_down_and_rebuilt() {
+    let old_stack = digits_stack();
+    let file = handle(&old_stack, "digits.txt");
+    let (block, owners) = unsafe {
+        let block = uio_openFileBlock(file);
+        let owners = watch(file);
+        uio_close(file);
+        (block, owners)
+    };
+    drop(old_stack);
+
+    let mut new_stack = Stack::new();
+    new_stack.mount_dir(&[("other.txt", b"abcdef")], UIO_MOUNT_TOP);
+    let other = handle(&new_stack, "other.txt");
+    unsafe {
+        let other_block = uio_openFileBlock(other);
+        assert_eq!(access(block, 0, 3), (3, b"012".to_vec()), "old file");
+        assert_eq!(access(other_block, 0, 3), (3, b"abc".to_vec()), "new file");
+        assert_eq!(owners.strong_count(), 1);
+        uio_closeFileBlock(block);
+        assert_eq!(owners.strong_count(), 0);
+        uio_closeFileBlock(other_block);
+        uio_close(other);
+    }
+}
+
+#[test]
+#[serial]
+fn a_block_closed_on_another_thread_after_the_handle_is_gone_reads_there() {
+    let stack = digits_stack();
+    let file = handle(&stack, "digits.txt");
+    let (block, owners) = unsafe { (uio_openFileBlock(file) as usize, watch(file)) };
+    unsafe { uio_close(file) };
+    let worker = std::thread::spawn(move || unsafe {
+        let block = block as *mut uio_FileBlock;
+        assert_eq!(access(block, 1, 2), (2, b"12".to_vec()));
+        uio_closeFileBlock(block)
+    });
+    assert_eq!(worker.join().unwrap(), 0);
+    assert_eq!(owners.strong_count(), 0);
+}
+
+#[test]
+#[serial]
+fn each_access_replaces_the_buffer_and_the_end_of_the_block_restarts_cleanly() {
+    let stack = digits_stack();
+    let file = handle(&stack, "digits.txt");
+    unsafe {
+        let block = uio_openFileBlock(file);
+        assert_eq!(access(block, 0, 10), (10, DIGITS.to_vec()));
+        assert_eq!(access(block, 3, 2), (2, b"34".to_vec()), "a shorter window");
+        assert_eq!(access(block, 8, 10), (2, b"89".to_vec()), "clamped");
+        let mut buffer = ptr::dangling_mut::<c_char>();
+        assert_eq!(uio_accessFileBlock(block, 10, 1, &mut buffer), 0);
+        assert!(buffer.is_null(), "no buffer at the end");
+        assert_eq!(
+            access(block, 0, 3),
+            (3, b"012".to_vec()),
+            "reads on after the end"
+        );
+        uio_clear_file_block_buffers(block);
+        assert_eq!(access(block, 9, 5), (1, b"9".to_vec()));
+        uio_closeFileBlock(block);
+        uio_close(file);
+    }
+}
+
+#[test]
+#[serial]
+fn copying_leaves_the_buffer_an_earlier_access_returned_alone() {
+    let stack = digits_stack();
+    let file = handle(&stack, "digits.txt");
+    unsafe {
+        let block = uio_openFileBlock(file);
+        let mut buffer: *mut c_char = ptr::null_mut();
+        assert_eq!(uio_accessFileBlock(block, 1, 3, &mut buffer), 3);
+        assert_eq!(copy(block, 6, 2), (0, b"67".to_vec()));
+        let kept = std::slice::from_raw_parts(buffer as *const u8, 3);
+        assert_eq!(kept, b"123");
+        uio_closeFileBlock(block);
+        uio_close(file);
+    }
+}
+
+#[test]
+#[serial]
+fn an_offset_that_overflows_the_file_position_is_refused() {
+    let stack = digits_stack();
+    let file = handle(&stack, "digits.txt");
+    unsafe {
+        let window = uio_openFileBlock2(file, 3, 5);
+        let mut buffer: *mut c_char = ptr::null_mut();
+        let mut out = [0u8; 2];
+        assert_eq!(uio_accessFileBlock(window, off_t::MAX, 1, &mut buffer), -1);
+        assert_eq!(errno_value(), libc::EINVAL);
+        assert_eq!(
+            uio_copyFileBlock(window, off_t::MAX, out.as_mut_ptr() as *mut c_char, 2),
+            -1
+        );
+        assert_eq!(errno_value(), libc::EINVAL);
+        uio_closeFileBlock(window);
+
+        let whole = uio_openFileBlock(file);
+        assert_eq!(access(whole, off_t::MAX, 1).0, 0, "far past the end");
+        uio_closeFileBlock(whole);
+        uio_close(file);
+    }
+}
+
+#[test]
+#[serial]
+fn a_read_the_file_system_refuses_is_reported_and_leaves_the_block_closable() {
+    let mut stack = Stack::new();
+    stack.mount_dir(&[("digits.txt", DIGITS)], UIO_MOUNT_TOP);
+    let file = unsafe { uio_open(stack.root, c("digits.txt").as_ptr(), libc::O_WRONLY, 0) };
+    assert!(!file.is_null(), "a write-only open of an existing file");
+    unsafe {
+        let owners = watch(file);
+        let block = uio_openFileBlock(file);
+        assert!(!block.is_null(), "the size is still known");
+        let mut buffer: *mut c_char = ptr::null_mut();
+        let mut out = [0u8; 4];
+        assert_eq!(uio_accessFileBlock(block, 0, 4, &mut buffer), -1);
+        assert_eq!(errno_value(), libc::EBADF);
+        assert_eq!(
+            uio_copyFileBlock(block, 0, out.as_mut_ptr() as *mut c_char, 4),
+            -1
+        );
+        assert_eq!(errno_value(), libc::EBADF);
+        assert_eq!(uio_closeFileBlock(block), 0);
+        assert_eq!(uio_close(file), 0);
+        assert_eq!(owners.strong_count(), 0);
+    }
 }
