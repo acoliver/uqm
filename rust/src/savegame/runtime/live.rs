@@ -7,7 +7,8 @@
 //! owner yet, so Rust borrows them. The capture logic stays in `summary`,
 //! `solar` and `star`: the solar-system questions of the summary (the planet
 //! or moon name, the orbit test, the final-battle name) are computed in Rust
-//! over the borrowed `SOLARSYS_STATE`, and no C function of solarsys.c is
+//! over the borrowed `SOLARSYS_STATE` (declared once, in
+//! `c_bindings::solar_system`), and no C function of solarsys.c is
 //! called for them. They are not in the unit-test build, which has no C
 //! archive; the tests of those modules build the same state by hand.
 //!
@@ -16,7 +17,7 @@
 use super::solar::{GameStrings, SolarSystem};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
 use super::summary::{self, SummaryError};
-use crate::c_bindings::global_state::SOLARSYS_STATE;
+use crate::c_bindings::solar_system;
 use crate::comm::locdata::CGlobData;
 use crate::savegame::types::{StarDesc, Summary};
 
@@ -27,11 +28,6 @@ extern "C" {
     static mut CUR_STAR_DESC_PTR: *mut CStarDesc;
     #[link_name = "star_array"]
     static mut STAR_ARRAY: *mut CStarDesc;
-    // Other modules declare this symbol with their own prefix views of the
-    // struct; this one has the whole bindgen layout.
-    #[allow(clashing_extern_declarations)]
-    #[link_name = "pSolarSysState"]
-    static mut P_SOLAR_SYSTEM_STATE: *mut SOLARSYS_STATE;
 }
 
 /// `GAME_STRING (index)` over the loaded `GameStrings` table.
@@ -60,7 +56,7 @@ impl GameStrings for LiveGameStrings {
 /// NULL or point at a catalog entry.
 pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
     let glob = &*std::ptr::addr_of!(GLOB_DATA);
-    let state = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read();
+    let state = solar_system::current();
     let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
     let solar = SolarSystem::new(
         state.as_ref(),

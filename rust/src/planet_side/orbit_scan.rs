@@ -9,6 +9,8 @@ mod production {
     use std::ffi::c_void;
 
     use crate::battle::element::{Element, ElementFlags};
+    use crate::c_bindings::global_state::SOLARSYS_STATE;
+    use crate::c_bindings::solar_system;
     use crate::comm::locdata::{CColor, CPoint, CStamp};
 
     use super::super::generation::{ScanNodeId, ScanPersistence, ScanType, SurfaceGenerator};
@@ -32,20 +34,7 @@ mod production {
         _tail: [u8; 8],
     }
 
-    #[repr(C)]
-    struct CSolarSystemScanView {
-        _before_orbital: [u8; 1032],
-        orbital: *mut c_void,
-        _before_planet_info: [u8; 40],
-        _planet_info_before_masks: [u8; 44],
-        retrieval_masks: [u32; 3],
-        _before_frames: [u8; 32],
-        planet_side_frames: [*mut c_void; 6],
-    }
-
     extern "C" {
-        #[link_name = "pSolarSysState"]
-        static mut P_SOLAR_SYSTEM_STATE: *mut CSolarSystemScanView;
         static mut MiscDataFrame: *mut c_void;
         static mut DisplayArray: [CPrimitive; 150];
         fn InitDisplayList();
@@ -60,16 +49,16 @@ mod production {
     pub unsafe fn generate() {
         InitDisplayList();
 
-        let solar = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read();
-        if solar.is_null() || (*solar).orbital.is_null() || MiscDataFrame.is_null() {
+        let solar = solar_system::current();
+        if solar.is_null() || (*solar).pOrbitalDesc.is_null() || MiscDataFrame.is_null() {
             return;
         }
-        let persistence = ScanPersistence::from_masks((*solar).retrieval_masks);
+        let persistence = ScanPersistence::from_masks((*solar).SysInfo.PlanetInfo.ScanRetrieveMask);
         // Orbit-scan rendering only builds the display list; the returned
         // biological initial frame is a deterministic placeholder that the scan never
         // reads, so it must not consume the gameplay random stream.
         let Ok(mut generator) =
-            CffiSurfaceGenerator::for_orbit_scan(solar.cast(), (*solar).orbital)
+            CffiSurfaceGenerator::for_orbit_scan(solar.cast(), (*solar).pOrbitalDesc.cast())
         else {
             return;
         };
@@ -112,7 +101,7 @@ mod production {
 
     unsafe fn initialize_element(
         element: *mut Element,
-        solar: *mut CSolarSystemScanView,
+        solar: *mut SOLARSYS_STATE,
         scan: ScanType,
         raw_node: u8,
         generated: super::super::generation::GeneratedNode,
@@ -149,7 +138,7 @@ mod production {
                 element.next.frame = SetAbsFrameIndex(MiscDataFrame, ENERGY_SCAN_DOT.next);
                 element.turn_wait = 0x44;
                 element.mass_points = MAX_SCROUNGED;
-                primitive.stamp.frame = (*solar).planet_side_frames[1];
+                primitive.stamp.frame = (*solar).PlanetSideFrame[1].cast();
             }
             super::super::generation::GeneratedNodeKind::Biological {
                 creature,
@@ -161,7 +150,7 @@ mod production {
                 element.turn_wait = 0x44;
                 element.mass_points = creature.index();
                 element.crew_or_hp = u16::from(hit_points);
-                primitive.stamp.frame = (*solar).planet_side_frames[3];
+                primitive.stamp.frame = (*solar).PlanetSideFrame[3].cast();
             }
         }
         Ok(())
@@ -176,16 +165,6 @@ mod production {
             assert_eq!(std::mem::size_of::<CPrimitive>(), 40);
             assert_eq!(std::mem::offset_of!(CPrimitive, primitive_type), 4);
             assert_eq!(std::mem::offset_of!(CPrimitive, stamp), 16);
-            assert_eq!(std::mem::size_of::<CSolarSystemScanView>(), 1216);
-            assert_eq!(std::mem::offset_of!(CSolarSystemScanView, orbital), 1032);
-            assert_eq!(
-                std::mem::offset_of!(CSolarSystemScanView, retrieval_masks),
-                1124
-            );
-            assert_eq!(
-                std::mem::offset_of!(CSolarSystemScanView, planet_side_frames),
-                1168
-            );
         }
     }
 }
