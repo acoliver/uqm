@@ -685,7 +685,9 @@ fn run_gate_with_session(root: &Path, gate_arg: &str) -> Result<(), String> {
         &gates[0].id,
         &controller_command,
     )?;
-    let source_receipt_path = session.evidence_root.join("source-preflight.json");
+    let source_receipt_path = session
+        .evidence_root
+        .join(evidence::SOURCE_PREFLIGHT_RELATIVE);
     let source_failure = source_receipt_failure(&preflight_failure, clean);
     let source_receipt = serde_json::json!({
         "schema": "uqm-s4-source-preflight-v2",
@@ -1726,7 +1728,7 @@ fn validate_collected_native_suite(session: &RunSession, root: &Path) -> Result<
     )?;
     let policy = evidence::read_regular_relative(
         &session.evidence_root,
-        "payloads/authority.snapshot/gates.json",
+        evidence::AUTHORITY_SNAPSHOT_RELATIVE,
     )
     .map_err(|e| e.to_string())?;
     crate::native_suite::validate_success(

@@ -96,13 +96,11 @@ pub fn retained_selection(
     source: &str,
 ) -> Result<Vec<PinnedScript>, String> {
     let policy =
-        super::evidence::read_regular_relative(root, "payloads/authority.snapshot/gates.json")
+        super::evidence::read_regular_relative(root, super::evidence::AUTHORITY_SNAPSHOT_RELATIVE)
             .map_err(|e| e.to_string())?;
-    let receipt = super::evidence::read_regular_relative(
-        root,
-        "payloads/preflight.source/source-preflight.json",
-    )
-    .map_err(|e| e.to_string())?;
+    let receipt =
+        super::evidence::read_regular_relative(root, super::evidence::SOURCE_PREFLIGHT_RELATIVE)
+            .map_err(|e| e.to_string())?;
     let receipt: serde_json::Value = serde_json::from_slice(&receipt).map_err(|e| e.to_string())?;
     let binding: SelectionBinding =
         serde_json::from_value(receipt["selection"].clone()).map_err(|e| e.to_string())?;

@@ -2090,6 +2090,13 @@ fn read_bundle_file(root: &Path, relative: &str) -> std::io::Result<Vec<u8>> {
     }
 }
 
+/// Bundle path of the retained authority snapshot. `RunSession::entry_from_file`
+/// derives it as `payloads/<role>/<file>`; every reader and the validator use this one value.
+pub(crate) const AUTHORITY_SNAPSHOT_RELATIVE: &str = "payloads/authority.snapshot/gates.json";
+/// Run-root path of the source-preflight receipt written by the runner and recorded
+/// in the evidence index under the `preflight.source` role.
+pub(crate) const SOURCE_PREFLIGHT_RELATIVE: &str = "source-preflight.json";
+
 pub(crate) fn read_regular_relative(root: &Path, relative: &str) -> std::io::Result<Vec<u8>> {
     read_bundle_file(root, relative)
 }
@@ -3929,8 +3936,18 @@ fn validate_failed_process_gate(
     first_failed: &str,
     contracts: &mut Vec<String>,
 ) {
-    if failed_gate.id == "probes-harnesses" && first_failed.starts_with("probes-harnesses.pre.") {
+    if failed_gate.id == "probes-harnesses"
+        && first_failed.starts_with("probes-harnesses.pre.")
+        && first_failed.ends_with(".subordinate-output")
+    {
         contracts.extend(validate_failed_subordinate_preprocess(
+            root,
+            index,
+            failed_gate,
+            first_failed,
+        ));
+    } else if first_failed.starts_with(&format!("{}.pre.", failed_gate.id)) {
+        contracts.extend(validate_failed_prelaunch(
             root,
             index,
             failed_gate,
@@ -4048,11 +4065,8 @@ fn validate_gate_and_step_receipts(
     };
     let setup_gate = requested_gates[0].id.as_str();
     for (role, path) in [
-        (
-            "authority.snapshot",
-            "payloads/authority.snapshot/gates.json",
-        ),
-        ("preflight.source", "source-preflight.json"),
+        ("authority.snapshot", AUTHORITY_SNAPSHOT_RELATIVE),
+        ("preflight.source", SOURCE_PREFLIGHT_RELATIVE),
         ("preflight.tools", "tool-preflight.json"),
         ("cache.initial-state", "cache-initial-state.json"),
     ] {
@@ -4565,7 +4579,7 @@ fn validate_native_acceptance_evidence(
         }
     }
     let selected = super::controller::retained_selection(root, authority, &index.source_sha);
-    let policy = read_bundle_file(root, "payloads/authority.snapshot/gates.json");
+    let policy = read_bundle_file(root, AUTHORITY_SNAPSHOT_RELATIVE);
     match (selected, policy) {
         (Ok(selected), Ok(policy)) => {
             if let Err(error) = crate::native_suite::validate_success(
@@ -4987,7 +5001,6 @@ fn validate_failed_subordinate_preprocess(
     gate: &super::authority::Gate,
     first_failed: &str,
 ) -> Vec<String> {
-    let mut contracts = Vec::new();
     let Some(step_id) = first_failed
         .strip_prefix(&format!("{}.pre.", gate.id))
         .and_then(|suffix| suffix.strip_suffix(".subordinate-output"))
@@ -4997,6 +5010,60 @@ fn validate_failed_subordinate_preprocess(
     let Some(position) = gate.steps.iter().position(|step| step.id == step_id) else {
         return vec![format!("evidence.subordinate.{}.failure_step", gate.id)];
     };
+    validate_steps_before_prelaunch_failure(root, index, gate, position)
+}
+
+/// Position of the step a `<gate>.pre.*` contract refers to.
+///
+/// The runner emits `<gate>.pre.<step>.<reason>` before a step launches, and
+/// `package.pre.package-root` before any step of the package gate has run.
+fn prelaunch_failed_position(
+    gate: &super::authority::Gate,
+    first_failed: &str,
+) -> Result<usize, String> {
+    let Some(suffix) = first_failed.strip_prefix(&format!("{}.pre.", gate.id)) else {
+        return Err(format!("evidence.prelaunch.{}.failure_contract", gate.id));
+    };
+    if suffix == "package-root" {
+        return if gate.id == "package" {
+            Ok(0)
+        } else {
+            Err(format!("evidence.prelaunch.{}.failure_contract", gate.id))
+        };
+    }
+    let Some((step_id, reason)) = suffix.split_once('.') else {
+        return Err(format!("evidence.prelaunch.{}.failure_contract", gate.id));
+    };
+    if reason.is_empty() {
+        return Err(format!("evidence.prelaunch.{}.failure_contract", gate.id));
+    }
+    gate.steps
+        .iter()
+        .position(|step| step.id == step_id)
+        .ok_or_else(|| format!("evidence.prelaunch.{}.failure_step", gate.id))
+}
+
+fn validate_failed_prelaunch(
+    root: &Path,
+    index: &EvidenceIndex,
+    gate: &super::authority::Gate,
+    first_failed: &str,
+) -> Vec<String> {
+    match prelaunch_failed_position(gate, first_failed) {
+        Ok(position) => validate_steps_before_prelaunch_failure(root, index, gate, position),
+        Err(contract) => vec![contract],
+    }
+}
+
+/// A step that failed before launching has no receipts; every step before it
+/// has exactly its stdout, stderr and result receipts and succeeded.
+fn validate_steps_before_prelaunch_failure(
+    root: &Path,
+    index: &EvidenceIndex,
+    gate: &super::authority::Gate,
+    position: usize,
+) -> Vec<String> {
+    let mut contracts = Vec::new();
     let actual_step_entries = index
         .entries
         .iter()
@@ -11038,7 +11105,7 @@ mod tests {
                 policy,
             );
             let receipt = serde_json::to_vec(&serde_json::json!({"selection":binding})).unwrap();
-            let receipt_path = "payloads/preflight.source/source-preflight.json";
+            let receipt_path = SOURCE_PREFLIGHT_RELATIVE;
             write_bundle_entry(
                 root.path(),
                 &mut index.entries,
@@ -17933,6 +18000,167 @@ mod tests {
             contracts,
             vec!["evidence.gate.check.failed_step_identity".to_string()]
         );
+    }
+
+    /// A bundle for a gate whose step at `position` failed before launching:
+    /// the preceding steps succeeded and the failed step has no receipts.
+    fn prelaunch_failure_fixture(
+        root: &Path,
+        gate: &super::super::authority::Gate,
+        position: usize,
+        contract: &str,
+    ) -> EvidenceIndex {
+        let mut index = if position == 0 {
+            let mut empty = failed_process_fixture(root, gate, 0);
+            empty.entries.clear();
+            empty
+        } else {
+            let mut prior = failed_process_fixture(root, gate, position - 1);
+            for step in gate.steps.iter().take(position) {
+                let result = root.join(format!("{}/{}.result.json", gate.id, step.id));
+                let mut receipt: serde_json::Value =
+                    serde_json::from_slice(&fs::read(&result).unwrap()).unwrap();
+                receipt["exit_code"] = serde_json::json!(0);
+                receipt["success"] = serde_json::json!(true);
+                let bytes = serde_json::to_vec(&receipt).unwrap();
+                fs::write(&result, &bytes).unwrap();
+                let path = format!("{}/{}.result.json", gate.id, step.id);
+                for entry in prior.entries.iter_mut().filter(|entry| entry.path == path) {
+                    entry.byte_length = bytes.len() as u64;
+                    entry.sha256 = hex_sha256(&bytes);
+                }
+            }
+            prior
+        };
+        index.first_failed_contract = Some(contract.to_string());
+        index
+    }
+
+    fn prelaunch_contracts(
+        root: &Path,
+        index: &EvidenceIndex,
+        gate: &super::super::authority::Gate,
+    ) -> Vec<String> {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let mut contracts = Vec::new();
+        validate_failed_process_gate(
+            root,
+            index,
+            &authority,
+            gate,
+            index.first_failed_contract.as_deref().unwrap(),
+            &mut contracts,
+        );
+        contracts
+    }
+
+    #[test]
+    fn prelaunch_failure_of_the_native_acceptance_step_validates() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let position = gate
+            .steps
+            .iter()
+            .position(|step| step.id == "native-acceptance")
+            .unwrap();
+        for reason in [
+            "selection",
+            "native-acceptance-root",
+            "launch-context",
+            "dedicated_containment",
+            "trusted-control-plane-integrity",
+        ] {
+            let bundle = tempfile::tempdir().unwrap();
+            let index = prelaunch_failure_fixture(
+                bundle.path(),
+                gate,
+                position,
+                &format!("tests.pre.native-acceptance.{reason}"),
+            );
+            assert_eq!(
+                prelaunch_contracts(bundle.path(), &index, gate),
+                Vec::<String>::new(),
+                "{reason}"
+            );
+        }
+    }
+
+    #[test]
+    fn prelaunch_failure_of_the_package_root_has_no_step_receipts() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("package").unwrap();
+        let bundle = tempfile::tempdir().unwrap();
+        let index = prelaunch_failure_fixture(bundle.path(), gate, 0, "package.pre.package-root");
+        assert_eq!(
+            prelaunch_contracts(bundle.path(), &index, gate),
+            Vec::<String>::new()
+        );
+
+        let stray_bundle = tempfile::tempdir().unwrap();
+        let mut stray = failed_process_fixture(stray_bundle.path(), gate, 0);
+        stray.first_failed_contract = Some("package.pre.package-root".into());
+        assert!(prelaunch_contracts(stray_bundle.path(), &stray, gate)
+            .iter()
+            .any(|contract| contract.starts_with("evidence.subordinate.package.step_entry_count")));
+
+        let other = authority.gate("tests").unwrap();
+        let mut elsewhere =
+            prelaunch_failure_fixture(bundle.path(), other, 0, "tests.pre.package-root");
+        elsewhere.entries.clear();
+        assert_eq!(
+            prelaunch_contracts(bundle.path(), &elsewhere, other),
+            vec!["evidence.prelaunch.tests.failure_contract".to_string()]
+        );
+    }
+
+    #[test]
+    fn prelaunch_failure_rejects_a_receipt_for_the_step_that_never_launched() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        let position = gate
+            .steps
+            .iter()
+            .position(|step| step.id == "native-acceptance")
+            .unwrap();
+        let bundle = tempfile::tempdir().unwrap();
+        let mut index = failed_process_fixture(bundle.path(), gate, position);
+        index.first_failed_contract = Some("tests.pre.native-acceptance.selection".into());
+        assert!(prelaunch_contracts(bundle.path(), &index, gate)
+            .iter()
+            .any(|contract| contract.starts_with("evidence.subordinate.tests.step_entry_count")));
+    }
+
+    #[test]
+    fn prelaunch_failure_rejects_unknown_steps_and_malformed_contracts() {
+        let authority: Authority =
+            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
+        let gate = authority.gate("tests").unwrap();
+        for (contract, expected) in [
+            (
+                "tests.pre.not-a-step.selection",
+                "evidence.prelaunch.tests.failure_step",
+            ),
+            (
+                "tests.pre.native-acceptance",
+                "evidence.prelaunch.tests.failure_contract",
+            ),
+            (
+                "tests.pre.native-acceptance.",
+                "evidence.prelaunch.tests.failure_contract",
+            ),
+        ] {
+            let bundle = tempfile::tempdir().unwrap();
+            let index = prelaunch_failure_fixture(bundle.path(), gate, 0, contract);
+            assert_eq!(
+                prelaunch_contracts(bundle.path(), &index, gate),
+                vec![expected.to_string()],
+                "{contract}"
+            );
+        }
     }
 
     #[test]
