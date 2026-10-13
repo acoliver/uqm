@@ -9,8 +9,8 @@
 //! Resources a screen loads are owned by guard values, so every exit
 //! releases them: a normal exit, an abort or load request, and an error.
 //!
-//! Routes the Rust game cannot serve (Shipyard, Save/Load) end the screen with
-//! [`StarbaseError::Unported`].
+//! Routes the Rust game cannot serve (Save/Load, the Shipyard ship spin) end
+//! the screen with [`StarbaseError::Unported`].
 
 use super::draw::{
     display_landers, draw_base_state_strings, draw_flagship_name, draw_flagship_stats,
@@ -241,7 +241,10 @@ impl<'a, P: Platform + ?Sized> StarbaseScreen<'a, P> {
                 p.set_menu_sounds(MenuSounds::ARROWS_SELECT);
                 run_outfit(p)
             }
-            MenuCommand::Shipyard => Err(StarbaseError::Unported(UnportedRoute::Shipyard)),
+            MenuCommand::Shipyard => {
+                p.set_menu_sounds(MenuSounds::ARROWS_SELECT);
+                run_shipyard(p)
+            }
         }
     }
 }
@@ -548,7 +551,7 @@ fn draw_lander_shields<G: Gfx + ?Sized>(g: &G, module_frame: FrameId, shield_fla
 
 /// Run the screen frames inside the platform's input loop and report the
 /// first error.
-fn run_loop(
+pub(super) fn run_loop(
     platform: &(impl Platform + ?Sized),
     mut frame: impl FnMut() -> Result<bool, StarbaseError>,
 ) -> Result<(), StarbaseError> {
@@ -566,6 +569,12 @@ fn run_loop(
 /// Run the Outfit screen to its end (`DoInput (pMS, TRUE)` with `DoOutfit`).
 pub fn run_outfit<P: Platform + ?Sized>(platform: &P) -> Result<(), StarbaseError> {
     let mut screen = OutfitScreen::new(platform);
+    run_loop(platform, || screen.frame())
+}
+
+/// Run the Shipyard to its end (`DoInput (pMS, TRUE)` with `DoShipyard`).
+pub fn run_shipyard<P: Platform + ?Sized>(platform: &P) -> Result<(), StarbaseError> {
+    let mut screen = super::shipyard_screen::ShipyardScreen::new(platform);
     run_loop(platform, || screen.frame())
 }
 

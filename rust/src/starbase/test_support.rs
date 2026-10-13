@@ -13,10 +13,10 @@ use super::gfx::{
     Point, Rect, Rgba, Stamp, TextDraw,
 };
 use super::input::MenuPulses;
-use super::new_game_reference::NewGameFlagship;
+use super::new_game_reference::{new_game_crew_cost, NewGameFlagship};
 use super::platform::{
-    MenuSounds, MusicId, Platform, ResUnitsUpdate, SisView, StarbaseError, StateKey,
-    StatusMessageMode, UiStyle,
+    AlliedState, ColorMapId, Escort, MenuSounds, MusicId, Platform, RaceTemplate, ResUnitsUpdate,
+    SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
 };
 use super::sis_modules::{ModuleSlots, EMPTY_MODULE_SLOT};
 use crate::mainloop::types::ActivityValue;
@@ -76,6 +76,15 @@ pub enum Event {
     AdvanceDays(u32),
     Conversation,
     Docked(bool),
+    SetClipRect(Rect),
+    CrewGaugeDelta(i16, i32),
+    SetCrewCost(u8),
+    AddEscort(u8, u8),
+    SetEscortCrew(u8, u16),
+    RemoveEscort(u8),
+    LoadColorMap(String, ColorMapId),
+    DestroyColorMap(ColorMapId),
+    ApplyColorMap(ColorMapId),
 }
 
 /// Frames the mock hands out are `1000 * set + index`.
@@ -102,6 +111,19 @@ pub struct RecordingPlatform {
     pub corrupt_res_units: Cell<bool>,
     /// A resource name that fails to load.
     pub failing_resource: RefCell<Option<String>>,
+    /// `GLOBAL (CrewCost)`.
+    pub crew_cost: Cell<u8>,
+    /// The `avail_race_q`.
+    pub races: RefCell<Vec<RaceTemplate>>,
+    /// The `built_ship_q`.
+    pub escorts: RefCell<Vec<Escort>>,
+    /// `AnyButtonPress` reports a press.
+    pub any_button: Cell<bool>,
+    /// `CloneShipFragment` fails: the queue is full.
+    pub queue_full: Cell<bool>,
+    /// The crew update applies one crew member more than requested.
+    pub corrupt_crew: Cell<bool>,
+    next_color_map: Cell<ColorMapId>,
     /// Abort the game after this many pulses were consumed in total.
     pub abort_after_pulses: Cell<Option<usize>>,
     consumed: Cell<usize>,
@@ -110,6 +132,78 @@ pub struct RecordingPlatform {
     next_frame_set: Cell<usize>,
     next_music: Cell<MusicId>,
     message_mode: Cell<StatusMessageMode>,
+}
+
+/// The value of the `#define NAME value` line of a source file.
+fn source_define(path: &str, name: &str) -> String {
+    let source = std::fs::read_to_string(path).expect("the source file exists");
+    let prefix = format!("#define {name} ");
+    let line = source
+        .lines()
+        .find(|line| line.starts_with(&prefix))
+        .expect("the source file defines the macro");
+    line[prefix.len()..].trim().to_owned()
+}
+
+/// `#define MAX_CREW N` of a ship's source file; a few ships spell it
+/// `MAX_CREW_SIZE`, which `element.h` defines.
+fn source_max_crew(ship_dir: &str) -> u16 {
+    let uqm = format!("{}/../sc2/src/uqm", env!("CARGO_MANIFEST_DIR"));
+    let value = source_define(&format!("{uqm}/ships/{ship_dir}/{ship_dir}.c"), "MAX_CREW");
+    let number = if value == "MAX_CREW_SIZE" {
+        source_define(&format!("{uqm}/element.h"), "MAX_CREW_SIZE")
+    } else {
+        value
+    };
+    number.parse().expect("MAX_CREW is a number")
+}
+
+/// Directories of the ship sources, in `avail_race_q` order.
+const SHIP_DIRS: [&str; 23] = [
+    "arilou", "chmmr", "human", "orz", "pkunk", "shofixti", "spathi", "supox", "thradd", "utwig",
+    "vux", "yehat", "melnorme", "druuge", "ilwrath", "mycon", "slylandr", "umgah", "urquan",
+    "zoqfot", "syreen", "blackurq", "yehat",
+];
+
+/// The `avail_race_q` position of the Earthling Cruiser.
+pub const HUMAN_SHIP: u8 = 2;
+/// The `avail_race_q` position of the Shofixti Scout.
+pub const SHOFIXTI_SHIP: u8 = 5;
+
+/// A frame the mock gives the melee icon of a race.
+pub fn melee_icon(race: u8) -> FrameId {
+    50_000 + usize::from(race)
+}
+
+/// The fleet queue of a new game (`globdata.c`): every race is a
+/// `BAD_GUY`, only the Earthlings are allied.
+pub fn new_game_races() -> Vec<RaceTemplate> {
+    SHIP_DIRS
+        .iter()
+        .enumerate()
+        .map(|(index, dir)| RaceTemplate {
+            allied: if index == usize::from(HUMAN_SHIP) {
+                AlliedState::GoodGuy
+            } else {
+                AlliedState::BadGuy
+            },
+            melee_icon: melee_icon(index as u8),
+            crew_level: source_max_crew(dir),
+        })
+        .collect()
+}
+
+/// The escort queue of a new game: the Earthling Cruiser with its template
+/// crew in the first hangar slot (`CloneShipFragment (HUMAN_SHIP, ..., 0)`).
+pub fn new_game_escorts() -> Vec<Escort> {
+    let human = source_max_crew("human");
+    vec![Escort {
+        slot: 0,
+        race_id: HUMAN_SHIP,
+        crew_level: human,
+        max_crew: human,
+        melee_icon: melee_icon(HUMAN_SHIP),
+    }]
 }
 
 pub fn default_sis() -> SisView {
@@ -143,6 +237,13 @@ impl RecordingPlatform {
             font_style: Cell::new(UiStyle::ThreeDo),
             corrupt_gauge: Cell::new(false),
             corrupt_res_units: Cell::new(false),
+            crew_cost: Cell::new(new_game_crew_cost()),
+            races: RefCell::new(new_game_races()),
+            escorts: RefCell::new(new_game_escorts()),
+            any_button: Cell::new(false),
+            queue_full: Cell::new(false),
+            corrupt_crew: Cell::new(false),
+            next_color_map: Cell::new(100),
             failing_resource: RefCell::new(None),
             abort_after_pulses: Cell::new(None),
             consumed: Cell::new(0),
@@ -182,6 +283,19 @@ impl RecordingPlatform {
 
     fn record(&self, event: Event) {
         self.events.borrow_mut().push(event);
+    }
+
+    /// Color maps that were loaded and never destroyed.
+    pub fn leaked_color_maps(&self) -> Vec<ColorMapId> {
+        let mut maps = Vec::new();
+        for event in self.events.borrow().iter() {
+            match event {
+                Event::LoadColorMap(_, map) => maps.push(*map),
+                Event::DestroyColorMap(map) => maps.retain(|m| m != map),
+                _ => {}
+            }
+        }
+        maps
     }
 
     /// Count of loaded graphics and music that were never destroyed.
@@ -288,6 +402,10 @@ impl Gfx for RecordingPlatform {
 
     fn font_leading(&self) -> i16 {
         9
+    }
+
+    fn set_context_clip_rect(&self, rect: Rect) {
+        self.record(Event::SetClipRect(rect));
     }
 
     fn fill_rect(&self, rect: Rect) {
@@ -446,6 +564,73 @@ impl Platform for RecordingPlatform {
         }
     }
 
+    fn apply_crew_gauge_delta(&self, crew: i16, res_units: i32) {
+        self.record(Event::CrewGaugeDelta(crew, res_units));
+        let mut sis = self.sis.borrow_mut();
+        sis.crew_enlisted = (i32::from(sis.crew_enlisted) + i32::from(crew)) as u16;
+        sis.res_units = sis.res_units.saturating_add_signed(res_units);
+        if self.corrupt_crew.get() {
+            sis.crew_enlisted += 1;
+        }
+    }
+
+    fn crew_cost(&self) -> u8 {
+        self.crew_cost.get()
+    }
+
+    fn set_crew_cost(&self, cost: u8) {
+        self.crew_cost.set(cost);
+        self.record(Event::SetCrewCost(cost));
+    }
+
+    fn race_templates(&self) -> Result<Vec<RaceTemplate>, StarbaseError> {
+        Ok(self.races.borrow().clone())
+    }
+
+    fn escorts(&self) -> Result<Vec<Escort>, StarbaseError> {
+        Ok(self.escorts.borrow().clone())
+    }
+
+    fn add_escort(&self, race: u8, slot: u8) -> Result<bool, StarbaseError> {
+        self.record(Event::AddEscort(race, slot));
+        if self.queue_full.get() {
+            return Ok(false);
+        }
+        let template = self.races.borrow()[usize::from(race)];
+        let mut escorts = self.escorts.borrow_mut();
+        escorts.push(Escort {
+            slot,
+            race_id: race,
+            crew_level: 1,
+            max_crew: template.crew_level,
+            melee_icon: template.melee_icon,
+        });
+        escorts.sort_by_key(|escort| escort.slot);
+        Ok(true)
+    }
+
+    fn set_escort_crew(&self, slot: u8, crew_level: u16) -> Result<(), StarbaseError> {
+        self.record(Event::SetEscortCrew(slot, crew_level));
+        let mut escorts = self.escorts.borrow_mut();
+        let escort = escorts
+            .iter_mut()
+            .find(|escort| escort.slot == slot)
+            .ok_or(StarbaseError::EscortSlot(slot))?;
+        escort.crew_level = crew_level;
+        Ok(())
+    }
+
+    fn remove_escort(&self, slot: u8) -> Result<(), StarbaseError> {
+        self.record(Event::RemoveEscort(slot));
+        let mut escorts = self.escorts.borrow_mut();
+        let index = escorts
+            .iter()
+            .position(|escort| escort.slot == slot)
+            .ok_or(StarbaseError::EscortSlot(slot))?;
+        escorts.remove(index);
+        Ok(())
+    }
+
     fn set_drive_slot(&self, index: usize, piece: u8) {
         self.sis.borrow_mut().drive_slots[index] = piece;
         self.record(Event::SetDriveSlot(index, piece));
@@ -506,6 +691,10 @@ impl Platform for RecordingPlatform {
         self.record(Event::FlushInput);
     }
 
+    fn any_button_press(&self) -> bool {
+        self.any_button.get()
+    }
+
     fn menu_style(&self) -> UiStyle {
         self.menu_style.get()
     }
@@ -527,6 +716,32 @@ impl Platform for RecordingPlatform {
 
     fn destroy_drawable(&self, frame: FrameId) {
         self.record(Event::DestroyDrawable(frame));
+    }
+
+    fn load_color_map(&self, resource: &str) -> Result<ColorMapId, StarbaseError> {
+        if self.failing_resource.borrow().as_deref() == Some(resource) {
+            return Err(StarbaseError::ResourceLoad(resource.to_owned()));
+        }
+        let map = self.next_color_map.get();
+        self.next_color_map.set(map + 100);
+        self.record(Event::LoadColorMap(resource.to_owned(), map));
+        Ok(map)
+    }
+
+    fn destroy_color_map(&self, map: ColorMapId) {
+        self.record(Event::DestroyColorMap(map));
+    }
+
+    fn abs_color_map(&self, map: ColorMapId, index: u16) -> ColorMapId {
+        map / 100 * 100 + usize::from(index)
+    }
+
+    fn rel_color_map(&self, map: ColorMapId, offset: i16) -> ColorMapId {
+        (map as i64 + i64::from(offset)) as ColorMapId
+    }
+
+    fn apply_color_map(&self, map: ColorMapId) {
+        self.record(Event::ApplyColorMap(map));
     }
 
     fn load_music(&self, resource: &str) -> Result<MusicId, StarbaseError> {

@@ -285,22 +285,6 @@ fn abort_and_load_end_the_menu_without_clearing_starbase_visited() {
 }
 
 #[test]
-fn shipyard_fails_fast_with_a_typed_error_and_releases_resources() {
-    let platform = RecordingPlatform::new();
-    platform.push_pulses([idle(), right(), right(), select()]);
-    let result = run_starbase_menu(&platform);
-
-    assert_eq!(
-        result,
-        Err(StarbaseError::Unported(UnportedRoute::Shipyard))
-    );
-    assert_nothing_leaked(&platform);
-    // No stand-in sound, no success marker.
-    assert!(!platform.events().contains(&Event::FailureSound));
-    assert_eq!(platform.state(StateKey::StarbaseVisited), 0);
-}
-
-#[test]
 fn art_load_failure_releases_what_was_already_loaded() {
     let platform = RecordingPlatform::new();
     *platform.failing_resource.borrow_mut() = Some(STARBASE_MUSIC.to_owned());

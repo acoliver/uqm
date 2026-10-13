@@ -15,13 +15,15 @@ use super::gfx::{
 };
 use super::input::MenuPulses;
 use super::platform::{
-    MenuSounds, MusicId, Platform, ResUnitsUpdate, SisView, StarbaseError, StateKey,
-    StatusMessageMode, UiStyle,
+    AlliedState, ColorMapId, Escort, MenuSounds, MusicId, Platform, RaceTemplate, ResUnitsUpdate,
+    SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
 };
 use crate::c_bindings::controller_input::{
     PulsedInputState, KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_PAGE_DOWN,
-    KEY_MENU_PAGE_UP, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_UP,
+    KEY_MENU_PAGE_UP, KEY_MENU_RIGHT, KEY_MENU_SELECT, KEY_MENU_SPECIAL, KEY_MENU_UP,
 };
+use crate::collections::queue::{FreeLink, InsertQueue, Queue, RemoveQueue};
+use crate::comm::dispatch::{CFleetInfo, CShipFragment};
 use crate::comm::locdata::{CColor, CGlobData, CPoint, CRect, CStamp};
 use crate::comm::sis_graphics::CText;
 use crate::mainloop::restart_menu::c_extern as base;
@@ -81,6 +83,53 @@ extern "C" {
     fn PlayMenuSound(effect: c_int);
     fn SetAbsStringTableIndex(table: *mut c_void, index: u16) -> *mut c_void;
     fn GetStringAddress(entry: *mut c_void) -> *const c_char;
+    fn SetContextClipRect(rect: *mut CRect);
+    fn AnyButtonPress(detect_special: u8) -> u8;
+    fn LoadStringTableInstance(resource: *const c_char) -> *mut c_void;
+    fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
+    fn ReleaseStringTable(entry: *mut c_void) -> *mut c_void;
+    fn DestroyStringTable(table: *mut c_void) -> u8;
+    fn SetRelStringTableIndex(entry: *mut c_void, offset: i16) -> *mut c_void;
+    fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
+    fn SetColorMap(map: *mut c_void) -> u8;
+}
+
+/// `&GLOBAL (built_ship_q)`.
+fn built_ship_queue() -> *mut Queue {
+    // SAFETY: only the address of the game thread's `GlobData` is taken.
+    unsafe { std::ptr::addr_of_mut!(GlobData.game_state.built_ship_q) as *mut Queue }
+}
+
+/// `&GLOBAL (avail_race_q)`.
+fn avail_race_queue() -> *mut Queue {
+    // SAFETY: only the address of the game thread's `GlobData` is taken.
+    unsafe { std::ptr::addr_of_mut!(GlobData.game_state.avail_race_q) as *mut Queue }
+}
+
+/// The links of a queue of `T` in queue order.
+///
+/// # Safety
+/// `queue` is one of the game's queues, whose links are all `T`.
+unsafe fn queue_links(queue: *mut Queue) -> Vec<*mut c_void> {
+    let mut links = Vec::new();
+    // SAFETY: the caller guarantees the queue is well formed.
+    let mut link = unsafe { (*queue).head };
+    while !link.is_null() {
+        links.push(link);
+        // SAFETY: every link starts with the `pred` and `succ` pointers.
+        link = unsafe { (*link.cast::<CShipFragment>()).succ };
+    }
+    links
+}
+
+/// The escort link in a hangar slot.
+fn escort_link(slot: u8) -> Result<*mut c_void, StarbaseError> {
+    // SAFETY: `built_ship_q` holds `SHIP_FRAGMENT` links.
+    unsafe { queue_links(built_ship_queue()) }
+        .into_iter()
+        // SAFETY: as above.
+        .find(|link| unsafe { &*link.cast::<CShipFragment>() }.index == slot)
+        .ok_or(StarbaseError::EscortSlot(slot))
 }
 
 fn to_c_color(color: Rgba) -> CColor {
@@ -260,6 +309,12 @@ impl Gfx for CffiPlatform {
         leading
     }
 
+    fn set_context_clip_rect(&self, rect: Rect) {
+        let mut rect = to_c_rect(rect);
+        // SAFETY: `rect` is valid for the call and copied by it.
+        unsafe { SetContextClipRect(&mut rect) };
+    }
+
     fn fill_rect(&self, rect: Rect) {
         let mut rect = to_c_rect(rect);
         // SAFETY: `rect` is valid for the call.
@@ -420,6 +475,8 @@ fn state_key_name(key: StateKey) -> &'static str {
         StateKey::MoonbaseOnShip => "MOONBASE_ON_SHIP",
         StateKey::ChmmrBombState => "CHMMR_BOMB_STATE",
         StateKey::LanderShields => "LANDER_SHIELDS",
+        StateKey::CrewPurchased0 => "CREW_PURCHASED0",
+        StateKey::CrewPurchased1 => "CREW_PURCHASED1",
     }
 }
 
@@ -531,6 +588,107 @@ impl Platform for CffiPlatform {
         unsafe { DeltaSISGauges(0, delta.fuel, delta.res_units) };
     }
 
+    fn apply_crew_gauge_delta(&self, crew: i16, res_units: i32) {
+        // SAFETY: plain value call; the status gauges redraw themselves.
+        unsafe { DeltaSISGauges(crew, 0, res_units) };
+    }
+
+    fn crew_cost(&self) -> u8 {
+        // SAFETY: the game thread owns `GlobData`.
+        unsafe { (*std::ptr::addr_of!(GlobData)).game_state.crew_cost }
+    }
+
+    fn set_crew_cost(&self, cost: u8) {
+        // SAFETY: the game thread owns `GlobData`.
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).game_state.crew_cost = cost };
+    }
+
+    fn race_templates(&self) -> Result<Vec<RaceTemplate>, StarbaseError> {
+        // SAFETY: `avail_race_q` holds `FLEET_INFO` links.
+        unsafe { queue_links(avail_race_queue()) }
+            .into_iter()
+            .map(|link| {
+                // SAFETY: as above.
+                let info = unsafe { &*link.cast::<CFleetInfo>() };
+                let allied = match info.allied_state {
+                    0 => AlliedState::DeadGuy,
+                    1 => AlliedState::GoodGuy,
+                    2 => AlliedState::BadGuy,
+                    other => return Err(StarbaseError::UnknownAlliedState(other)),
+                };
+                Ok(RaceTemplate {
+                    allied,
+                    melee_icon: info.melee_icon as FrameId,
+                    crew_level: info.crew_level,
+                })
+            })
+            .collect()
+    }
+
+    fn escorts(&self) -> Result<Vec<Escort>, StarbaseError> {
+        // SAFETY: `built_ship_q` holds `SHIP_FRAGMENT` links.
+        Ok(unsafe { queue_links(built_ship_queue()) }
+            .into_iter()
+            .map(|link| {
+                // SAFETY: as above.
+                let fragment = unsafe { &*link.cast::<CShipFragment>() };
+                Escort {
+                    slot: fragment.index,
+                    race_id: fragment.race_id,
+                    crew_level: fragment.crew_level,
+                    max_crew: fragment.max_crew,
+                    melee_icon: fragment.melee_icon as FrameId,
+                }
+            })
+            .collect())
+    }
+
+    fn add_escort(&self, race: u8, slot: u8) -> Result<bool, StarbaseError> {
+        if escort_link(slot).is_ok() {
+            return Err(StarbaseError::EscortQueue("the hangar slot is occupied"));
+        }
+        let queue = built_ship_queue();
+        // SAFETY: `queue` is the game's `built_ship_q`; the clone is its tail.
+        let link = unsafe { crate::comm::dispatch::clone_ship_fragment(race, queue, 1) };
+        if link.is_null() {
+            return Ok(false);
+        }
+        // `ShowCombatShip`: keep the queue ordered by slot.
+        // SAFETY: the queue and its links are well formed.
+        unsafe {
+            RemoveQueue(queue, link);
+            let mut after = (*queue).head;
+            while !after.is_null() {
+                let fragment = &*after.cast::<CShipFragment>();
+                if fragment.index > slot {
+                    break;
+                }
+                after = fragment.succ;
+            }
+            InsertQueue(queue, link, after);
+            (*link.cast::<CShipFragment>()).index = slot;
+        }
+        Ok(true)
+    }
+
+    fn set_escort_crew(&self, slot: u8, crew_level: u16) -> Result<(), StarbaseError> {
+        let link = escort_link(slot)?;
+        // SAFETY: `link` is a `SHIP_FRAGMENT` of `built_ship_q`.
+        unsafe { (*link.cast::<CShipFragment>()).crew_level = crew_level };
+        Ok(())
+    }
+
+    fn remove_escort(&self, slot: u8) -> Result<(), StarbaseError> {
+        let link = escort_link(slot)?;
+        let queue = built_ship_queue();
+        // SAFETY: `link` belongs to `queue`.
+        unsafe {
+            RemoveQueue(queue, link);
+            FreeLink(queue, link);
+        }
+        Ok(())
+    }
+
     fn set_drive_slot(&self, index: usize, piece: u8) {
         // SAFETY: the game thread owns `GlobData`; the caller bounds `index`
         // by `NUM_DRIVE_SLOTS`, and the array index checks it again.
@@ -588,6 +746,7 @@ impl Platform for CffiPlatform {
             left: pressed(KEY_MENU_LEFT),
             right: pressed(KEY_MENU_RIGHT),
             select: pressed(KEY_MENU_SELECT),
+            special: pressed(KEY_MENU_SPECIAL),
             cancel: pressed(KEY_MENU_CANCEL),
             page_up: pressed(KEY_MENU_PAGE_UP),
             page_down: pressed(KEY_MENU_PAGE_DOWN),
@@ -607,6 +766,11 @@ impl Platform for CffiPlatform {
     fn flush_input(&self) {
         // SAFETY: plain call.
         unsafe { FlushInput() };
+    }
+
+    fn any_button_press(&self) -> bool {
+        // SAFETY: plain call.
+        unsafe { AnyButtonPress(0) != 0 }
     }
 
     fn menu_style(&self) -> UiStyle {
@@ -640,6 +804,36 @@ impl Platform for CffiPlatform {
     fn destroy_drawable(&self, frame: FrameId) {
         // SAFETY: `frame` was returned by `load_graphic` and is released once.
         unsafe { base::DestroyDrawable(base::ReleaseDrawable(frame as *mut c_void)) };
+    }
+
+    fn load_color_map(&self, resource: &str) -> Result<ColorMapId, StarbaseError> {
+        let loaded = Self::load_resource(resource, LoadStringTableInstance)?;
+        // SAFETY: `loaded` is the result of `LoadStringTableInstance`.
+        let map = unsafe { CaptureStringTable(loaded) };
+        if map.is_null() {
+            return Err(StarbaseError::ResourceLoad(resource.to_owned()));
+        }
+        Ok(map as ColorMapId)
+    }
+
+    fn destroy_color_map(&self, map: ColorMapId) {
+        // SAFETY: `map` was returned by `load_color_map` and is released once.
+        unsafe { DestroyStringTable(ReleaseStringTable(map as *mut c_void)) };
+    }
+
+    fn abs_color_map(&self, map: ColorMapId, index: u16) -> ColorMapId {
+        // SAFETY: `map` is a colour map handle owned by the caller.
+        unsafe { SetAbsStringTableIndex(map as *mut c_void, index) as ColorMapId }
+    }
+
+    fn rel_color_map(&self, map: ColorMapId, offset: i16) -> ColorMapId {
+        // SAFETY: `map` is a colour map handle owned by the caller.
+        unsafe { SetRelStringTableIndex(map as *mut c_void, offset) as ColorMapId }
+    }
+
+    fn apply_color_map(&self, map: ColorMapId) {
+        // SAFETY: `map` is a colour map handle owned by the caller.
+        unsafe { SetColorMap(GetColorMapAddress(map as *mut c_void)) };
     }
 
     fn load_music(&self, resource: &str) -> Result<MusicId, StarbaseError> {
