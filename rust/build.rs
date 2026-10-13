@@ -718,6 +718,15 @@ fn generate_input_abi_bindings() -> Result<(), String> {
 /// bounds. The solar-system state (`SOLARSYS_STATE`, `PLANET_DESC`) the
 /// Save/Load summary reads comes from `planets.h`, with the game-string bases
 /// of `gamestr.h` and the star-index enum of `gendef.h` that name its worlds.
+/// `FRAME_DESC` comes from `drawable.h`, where it is defined: every other
+/// header only forward-declares it, which bindgen renders as an empty struct.
+/// The image and parent drawable it points at are never dereferenced from
+/// Rust, so they stay opaque rather than pulling the graphics driver types in.
+///
+/// Bindgen's layout tests are on: each one compares a generated type's size,
+/// alignment and member offsets with what clang computed from the header, which
+/// is the check that a Rust read of a C struct (such as `FRAME_DESC.Index`)
+/// lands on the field C means.
 ///
 /// The hand-written mirrors in `comm/locdata.rs` and `time/clock_bridge.rs`
 /// compare every offset, size and alignment against these at compile time, so
@@ -733,6 +742,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
     let planets = "../sc2/src/uqm/planets/planets.h";
     let game_strings = "../sc2/src/uqm/gamestr.h";
     let star_indexes = "../sc2/src/uqm/gendef.h";
+    let drawable = "../sc2/src/libs/graphics/drawable.h";
     for header in [
         globdata,
         events,
@@ -742,6 +752,7 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         planets,
         game_strings,
         star_indexes,
+        drawable,
     ] {
         println!("cargo:rerun-if-changed={header}");
     }
@@ -754,19 +765,21 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(planets)
         .header(game_strings)
         .header(star_indexes)
+        .header(drawable)
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
             "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
-             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC)",
+             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|FRAME_DESC)",
         )
+        .opaque_type("(tfb_image|drawable_desc)")
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
              |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
              |SAMATRA_DEFINED)",
         )
         .generate_comments(false)
-        .layout_tests(false)
+        .layout_tests(true)
         .formatter(ABI_BINDING_FORMATTER)
         .generate()
         .map_err(|error| format!("cannot generate global-state ABI bindings: {error}"))?;
