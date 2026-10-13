@@ -818,6 +818,7 @@ mod tests {
         assert!(check_declared(&accepted, &authority).is_ok());
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn run_refuses_a_missing_artifact_destination_before_touching_the_repository() {
         let error = run_suite(
@@ -831,10 +832,18 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn run_rejects_positional_arguments_that_look_like_a_scenario() {
         let error = run_suite(Path::new("/"), &parse("battle-v1").unwrap()).unwrap_err();
         assert!(error.contains("no positional arguments"), "{error}");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn run_refuses_before_reading_any_argument_when_the_host_is_not_macos() {
+        let error = run_suite(Path::new("/"), &parse("battle-v1").unwrap()).unwrap_err();
+        assert!(error.contains("requires macOS"), "{error}");
     }
 
     #[test]
