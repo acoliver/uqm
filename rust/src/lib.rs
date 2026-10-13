@@ -26,6 +26,7 @@ pub mod math;
 pub mod memory;
 pub mod planet_side;
 pub mod resource;
+pub mod savegame;
 pub mod ships;
 pub mod sound;
 pub mod starbase;
