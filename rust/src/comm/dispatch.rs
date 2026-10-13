@@ -169,6 +169,34 @@ assert_c_layout!(
         dest_loc: dest_loc,
     }
 );
+assert_c_layout!(
+    BriefShipInfo,
+    global_state::BRIEF_SHIP_INFO {
+        race_id: race_id,
+        crew_level: crew_level,
+        max_crew: max_crew,
+        max_energy: max_energy,
+    }
+);
+assert_c_layout!(
+    CEncounter,
+    global_state::ENCOUNTER {
+        pred: pred,
+        succ: succ,
+        h_element: hElement,
+        transition_state: transition_state,
+        origin: origin,
+        radius: radius,
+        race_id: race_id,
+        num_ships: num_ships,
+        flags: flags,
+        loc_pt: loc_pt,
+        ship_list: ShipList,
+        log_x: log_x,
+        log_y: log_y,
+    }
+);
+const _: () = assert!(MAX_HYPER_SHIPS == global_state::MAX_HYPER_SHIPS as usize);
 
 // ---------------------------------------------------------------------------
 // C constants
