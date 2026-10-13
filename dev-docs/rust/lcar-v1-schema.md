@@ -14,7 +14,7 @@ or resolved v1 receipts that omitted the actual steps.
 - Emit a proof: `uqm-gameplay-proof run <repo> <production-manifest> <script> <output>`
 - Validate one offline: `uqm-gameplay-proof validate <output>/lcar-v2.json`
 - Validate a retained failure: `uqm-gameplay-proof validate <output>/failure-lcar-v2.json`
-- Replay a passing bundle: `uqm-gameplay-proof replay <repo> <prior-bundle> <new-output>`
+- Replay a passing bundle: `uqm-gameplay-proof replay <repo> <prior-bundle> <content-dir> <new-output>`
 - Check rejection fixtures: `uqm-gameplay-proof validate-negative-fixtures`
 
 ## What the letters mean
@@ -60,7 +60,8 @@ and both result files cannot coexist. Unknown fields are rejected.
 Running or replaying requires a clean source worktree at the exact production
 commit and a matching native target. There is no implemented dirty-source
 exception. Offline validation reads retained inputs without requiring the old
-workspace or historical output directory to exist. The child environment is
+workspace or historical output directory to exist; it checks the content identity
+snapshot but cannot re-hash content bytes the bundle does not carry. The child environment is
 cleared before the two declared SDL variables are set.
 
 ### Resolved scenario v2 and selected/applied seeds
@@ -140,11 +141,16 @@ comparing outcomes. Neither comparison establishes deterministic pixels.
 `final_config_tree_sha256`. The retained production manifest must bind the same
 source, build profile, target, features and executable digest.
 
-Replay copies the verified retained production manifest, executable, script and
-content into a fresh output bundle. It does not substitute the repository's
-current executable or content. Content bytes are retained and executed from
-`snapshots/sc2/content/`, not merely described by a digest. The copied identities
-are checked before spawning.
+Replay copies the verified retained production manifest, executable and script
+into a fresh output bundle. It does not substitute the repository's current
+executable. The game content is large (hundreds of MiB), so the bundle records its
+tree identity in `snapshots/content-identity.json` and does not retain the bytes.
+Replay takes the content directory as an explicit `<content-dir>` argument, which
+must be an `sc2/content` directory. It hashes that tree and refuses to start
+unless the tree hash equals the recorded `content_tree_sha256`; there is no
+fallback to the repository's content. The producer re-hashes the content after the
+game exits and refuses to write an LCAR if it changed during the run. The copied
+identities are checked before spawning.
 
 The supported initial configuration is a fresh empty directory. Its tree
 snapshot must have no entries, and replay recreates that empty configuration.
@@ -177,8 +183,8 @@ that the mutable root was removed.
 Tree snapshots use `uqm-tree-identity-v1`, with `root_role`, `tree_sha256` and
 ordered `entries` containing `path`, `sha256`, `bytes`. For each sorted entry,
 the tree digest hashes path bytes, a NUL byte, digest text, a NUL byte, decimal
-byte length and a newline. Retained content files must exactly match the content
-tree, including empty files. Both producer and S4 validators require an exact
+byte length and a newline. The content tree is recorded as an identity only; its files
+are not retained. Both producer and S4 validators require an exact
 match between the final-config tree entries and the `final_config_snapshot_file`
 inventory under `snapshots/config-final/`. Paths, digests and lengths must match;
 recomputing artifact hashes does not excuse a mismatch with the tree. Empty
@@ -193,8 +199,10 @@ retention and cleanup failures, and detached replay preparation using only
 initial inputs. These tests do not establish a live configuration-writing game
 run through this producer/consumer boundary.
 
-All historical command operands must refer to one recorded bundle root:
-`snapshots/uqm`, `--contentdir=<root>/snapshots/sc2/content`,
+All historical command operands other than the content directory must refer to one
+recorded bundle root:
+`snapshots/uqm`, `--contentdir=<absolute normalized path ending in sc2/content>`
+(the content directory the run read, outside the bundle),
 `--configdir=<root>/config`, `--automation-script=<root>/snapshots/script.json`,
 `--automation-output=<root>/run`, followed by `--res=640x480`, `--windowed`, and
 `--scroll=pc`. Validation opens only the current retained artifacts. A relocated
@@ -228,7 +236,6 @@ must not traverse or repeat, and must match their declared role.
 | `executable_snapshot` | `snapshots/uqm` |
 | `script_snapshot` | `snapshots/script.json` |
 | `content_identity_snapshot` | `snapshots/content-identity.json` |
-| `content_snapshot_file` | `snapshots/sc2/content/<relative-path>` |
 | `initial_config_snapshot`, `final_config_snapshot` | `snapshots/config-initial.json`, `snapshots/config-final.json` |
 | `final_config_snapshot_file` | `snapshots/config-final/<relative-path>`, including zero-byte files |
 | `retained_config_file` | `config/<relative-path>` when cleanup leaves files; a subset of the final snapshot |

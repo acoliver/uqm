@@ -6085,7 +6085,6 @@ fn validate_failure_lcar_inventory(
                             role,
                             "stdout_log"
                                 | "stderr_log"
-                                | "content_snapshot_file"
                                 | "final_config_snapshot_file"
                                 | "retained_config_file"
                         ))
@@ -6167,7 +6166,6 @@ fn validate_success_lcar_inventory(
                             role,
                             "stdout_log"
                                 | "stderr_log"
-                                | "content_snapshot_file"
                                 | "final_config_snapshot_file"
                                 | "retained_config_file"
                         ))
@@ -7156,7 +7154,6 @@ fn valid_lcar_artifact_role(role: &str, path: &str) -> bool {
         _ if path.starts_with("snapshots/config-final/") => role == "final_config_snapshot_file",
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => role == "capture",
         _ if path.starts_with("config/") => role == "retained_config_file",
-        _ if path.starts_with("snapshots/sc2/content/") => role == "content_snapshot_file",
         _ => false,
     }
 }
@@ -7199,21 +7196,9 @@ fn validate_lcar_inputs(
         .and_then(|value| value.get("entries"))
         .and_then(serde_json::Value::as_array)
         .is_some_and(Vec::is_empty);
-    let content_matches = roles.get("content_identity_snapshot").is_some_and(|path| {
-        validate_lcar_retained_tree(
-            root,
-            path,
-            manifest
-                .get("artifacts")
-                .and_then(serde_json::Value::as_array),
-            "content_snapshot_file",
-            "snapshots/sc2/content/",
-        )
-    });
     let production: Option<serde_json::Value> = read_role("production_manifest_snapshot")
         .and_then(|bytes| serde_json::from_slice(&bytes).ok());
     fresh_config
-        && content_matches
         && production
             .as_ref()
             .is_some_and(|production| valid_package_manifest_content(index, authority, production))
@@ -7304,10 +7289,17 @@ fn validate_lcar_command(
         && role_paths.get("executable_snapshot").map(String::as_str) == Some("snapshots/uqm")
         && command[0] == output_root.join("snapshots/uqm").to_string_lossy()
         && command[1]
-            == format!(
-                "--contentdir={}",
-                output_root.join("snapshots/sc2/content").display()
-            )
+            .strip_prefix("--contentdir=")
+            .is_some_and(|content| {
+                // The content bytes are not part of the evidence; the content
+                // identity snapshot binds them by tree hash.
+                let content = Path::new(content);
+                content.is_absolute()
+                    && content.ends_with("sc2/content")
+                    && !content
+                        .components()
+                        .any(|component| component == std::path::Component::ParentDir)
+            })
         && command[2] == format!("--configdir={}", output_root.join("config").display())
         && command[3]
             == format!(
@@ -14764,13 +14756,19 @@ mod tests {
                     lcar["input_identity"] =
                         serde_json::json!(lcar_input_fixture(&lcar, &receipt.replay_identity));
                 }
-                "content" => rewrite_lcar_artifact(
-                    root,
-                    &mut index.entries,
-                    &mut lcar,
-                    "snapshots/sc2/content/version",
-                    b"changed content",
-                ),
+                "content" => {
+                    let tree = lcar_tree_fixture(
+                        "content",
+                        serde_json::json!([{"path": "version", "bytes": 15, "sha256": hex_sha256(b"changed content")}]),
+                    );
+                    rewrite_lcar_artifact(
+                        root,
+                        &mut index.entries,
+                        &mut lcar,
+                        "snapshots/content-identity.json",
+                        &serde_json::to_vec(&tree).unwrap(),
+                    );
+                }
                 "initial_config" => {
                     let tree = lcar_tree_fixture(
                         "initial_config",
@@ -14965,17 +14963,15 @@ mod tests {
             .unwrap();
         for (position, operand) in [
             (
-                1,
-                format!("--contentdir={}", workspace.join("sc2/content").display()),
-            ),
-            (
                 3,
                 format!(
                     "--automation-script={}",
                     workspace.join("rust/scripts/main-menu-v1.json").display()
                 ),
             ),
-            (1, "--contentdir=/elsewhere/snapshots/sc2/content".into()),
+            (1, "--contentdir=sc2/content".into()),
+            (1, "--contentdir=/elsewhere/content".into()),
+            (1, "--contentdir=/elsewhere/../sc2/content".into()),
             (0, "/elsewhere/snapshots/uqm".into()),
             (0, "/elsewhere/../snapshots/uqm".into()),
         ] {
@@ -14997,14 +14993,10 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_v2_content_inventory_is_exact_even_for_empty_files() {
+    fn bootstrap_v2_carries_content_identity_without_content_bytes() {
         for mutation in [
             "extra_file",
             "extra_indexed_file",
-            "missing_empty",
-            "wrong_role",
-            "outside_path",
-            "non_normal_path",
             "wrong_tree_role",
             "wrong_tree_hash",
             "duplicate_tree_path",
@@ -15016,11 +15008,16 @@ mod tests {
                 lcar_fixture_contracts(root, &index, &command),
                 Vec::<String>::new()
             );
+            assert!(!root
+                .join("payloads/bootstrap-proof.lcar-artifact/snapshots/sc2")
+                .exists());
             match mutation {
                 "extra_file" | "extra_indexed_file" => {
                     let path = "snapshots/sc2/content/extra.tmp";
                     let full = format!("payloads/bootstrap-proof.lcar-artifact/{path}");
-                    fs::write(root.join(&full), b"").unwrap();
+                    let full_path = root.join(&full);
+                    fs::create_dir_all(full_path.parent().unwrap()).unwrap();
+                    fs::write(full_path, b"").unwrap();
                     if mutation == "extra_indexed_file" {
                         write_bundle_entry(
                             root,
@@ -15036,27 +15033,6 @@ mod tests {
                             .as_array_mut()
                             .unwrap()
                             .sort_by(|a, b| a["path"].as_str().cmp(&b["path"].as_str()));
-                    }
-                }
-                "missing_empty" => fs::remove_file(
-                    root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/sc2/content/empty"),
-                )
-                .unwrap(),
-                "wrong_role" | "outside_path" | "non_normal_path" => {
-                    let entry = lcar["artifacts"]
-                        .as_array_mut()
-                        .unwrap()
-                        .iter_mut()
-                        .find(|entry| entry["path"] == "snapshots/sc2/content/empty")
-                        .unwrap();
-                    if mutation == "wrong_role" {
-                        entry["role"] = serde_json::json!("stdout_log");
-                    } else {
-                        entry["path"] = serde_json::json!(if mutation == "outside_path" {
-                            "snapshots/sc2/content/../../outside"
-                        } else {
-                            "snapshots/sc2/content/./empty"
-                        });
                     }
                 }
                 "wrong_tree_role" | "wrong_tree_hash" | "duplicate_tree_path" => {
@@ -15156,32 +15132,6 @@ mod tests {
                 .iter()
                 .any(|contract| contract == "evidence.builtin.bootstrap-proof.profile_content")
         );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn bootstrap_v2_retained_content_never_follows_symlinks() {
-        use std::os::unix::fs::symlink;
-        for directory in [false, true] {
-            let temp = tempfile::tempdir().unwrap();
-            let root = temp.path().join("bundle");
-            let (index, _, command, _) = successful_bootstrap_bundle(&root);
-            let retained =
-                root.join("payloads/bootstrap-proof.lcar-artifact/snapshots/sc2/content");
-            let outside = temp.path().join("outside");
-            if directory {
-                fs::rename(&retained, &outside).unwrap();
-                symlink(&outside, &retained).unwrap();
-            } else {
-                fs::rename(retained.join("version"), &outside).unwrap();
-                symlink(&outside, retained.join("version")).unwrap();
-            }
-            let contracts =
-                with_snapshot(&root, || lcar_fixture_contracts(&root, &index, &command)).unwrap();
-            assert!(contracts
-                .iter()
-                .any(|contract| contract.ends_with(".inventory")));
-        }
     }
 
     fn lcar_tree_fixture(role: &str, entries: serde_json::Value) -> serde_json::Value {
@@ -15454,16 +15404,6 @@ mod tests {
                 "snapshots/production-manifest.json",
                 package_manifest.clone(),
             ),
-            (
-                "content_snapshot_file",
-                "snapshots/sc2/content/empty",
-                Vec::new(),
-            ),
-            (
-                "content_snapshot_file",
-                "snapshots/sc2/content/version",
-                b"content fixture".to_vec(),
-            ),
             ("script_snapshot", "snapshots/script.json", profile.to_vec()),
             ("executable_snapshot", "snapshots/uqm", executable.to_vec()),
             ("stderr_log", "stderr.log", Vec::new()),
@@ -15517,7 +15457,7 @@ mod tests {
             "git_head": index.source_sha,
             "command": [
                 "/tmp/bootstrap-output/snapshots/uqm",
-                "--contentdir=/tmp/bootstrap-output/snapshots/sc2/content",
+                "--contentdir=/tmp/bootstrap-repository/sc2/content",
                 "--configdir=/tmp/bootstrap-output/config",
                 "--automation-script=/tmp/bootstrap-output/snapshots/script.json",
                 "--automation-output=/tmp/bootstrap-output/run",

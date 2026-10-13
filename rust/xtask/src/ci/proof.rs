@@ -623,7 +623,7 @@ mod tests {
     }
 
     #[test]
-    fn lcar_v2_retention_accounts_for_empty_content_and_rejects_extra_files() {
+    fn lcar_v2_retention_accounts_for_empty_files_and_rejects_extra_files() {
         let project_root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
@@ -631,13 +631,12 @@ mod tests {
         for extra in [None, Some("extra.tmp"), Some("lcar-v2.json")] {
             let output = tempfile::tempdir().unwrap();
             let evidence = tempfile::tempdir().unwrap();
-            let content_path = "snapshots/sc2/content/empty";
-            fs::create_dir_all(output.path().join("snapshots/sc2/content")).unwrap();
-            fs::write(output.path().join(content_path), b"").unwrap();
+            let empty_path = "stdout.log";
+            fs::write(output.path().join(empty_path), b"").unwrap();
             let lcar = output.path().join("failure-lcar-v2.json");
             fs::write(&lcar, serde_json::to_vec(&serde_json::json!({
                 "schema": "uqm-lcar-v2",
-                "artifacts": [{"role": "content_snapshot_file", "path": content_path, "sha256": super::super::evidence::hex_sha256(b""), "bytes": 0}]
+                "artifacts": [{"role": "stdout_log", "path": empty_path, "sha256": super::super::evidence::hex_sha256(b""), "bytes": 0}]
             })).unwrap()).unwrap();
             if let Some(extra) = extra {
                 fs::write(output.path().join(extra), b"{}").unwrap();
@@ -659,14 +658,14 @@ mod tests {
             } else {
                 result.unwrap();
                 assert_eq!(session.entries.len(), 2);
-                let content = session
+                let empty = session
                     .entries
                     .iter()
-                    .find(|entry| entry.path.ends_with(content_path))
+                    .find(|entry| entry.path.ends_with(empty_path))
                     .unwrap();
-                assert_eq!(content.byte_length, 0);
-                assert_eq!(content.sha256, super::super::evidence::hex_sha256(b""));
-                assert_eq!(fs::read(evidence.path().join(&content.path)).unwrap(), b"");
+                assert_eq!(empty.byte_length, 0);
+                assert_eq!(empty.sha256, super::super::evidence::hex_sha256(b""));
+                assert_eq!(fs::read(evidence.path().join(&empty.path)).unwrap(), b"");
             }
         }
     }

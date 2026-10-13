@@ -21,7 +21,7 @@ compare-battle FIRST_LCAR SECOND_LCAR | \
 list [DOMAIN] | \
 select CHANGED_PATH... | \
 report BUNDLE_DIR | \
-replay REPO_ROOT PRIOR_BUNDLE OUTPUT_ROOT | \
+replay REPO_ROOT PRIOR_BUNDLE CONTENT_DIR OUTPUT_ROOT | \
 gallery SUITE_ROOT";
 
 const SCHEMA: &str = "uqm-lcar-v2";
@@ -81,7 +81,6 @@ enum ArtifactRole {
     ExecutableSnapshot,
     ScriptSnapshot,
     ContentIdentitySnapshot,
-    ContentSnapshotFile,
     InitialConfigSnapshot,
     FinalConfigSnapshot,
     FinalConfigSnapshotFile,
@@ -191,6 +190,9 @@ struct TreeEntry {
 
 struct RunEvidence {
     output_root: PathBuf,
+    /// The content directory the game reads. It lives outside the evidence
+    /// bundle; the bundle keeps only its tree identity.
+    content_root: PathBuf,
     config_root: PathBuf,
     production: ProductionManifest,
     seed: u32,
@@ -208,6 +210,10 @@ fn main() {
 
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
+    dispatch(&args)
+}
+
+fn dispatch(args: &[String]) -> Result<(), String> {
     match args.get(1).map(String::as_str) {
         Some("run") if args.len() == 6 => run_proof(
             Path::new(&args[2]),
@@ -227,10 +233,11 @@ fn run() -> Result<(), String> {
         Some("select") if args.len() >= 2 => select_scenarios(&args[2..]),
         Some("report") if args.len() == 3 => report_bundle(Path::new(&args[2])),
         Some("gallery") if args.len() == 3 => build_gallery(Path::new(&args[2])),
-        Some("replay") if args.len() == 5 => replay_bundle(
+        Some("replay") if args.len() == 6 => replay_bundle(
             Path::new(&args[2]),
             Path::new(&args[3]),
             Path::new(&args[4]),
+            Path::new(&args[5]),
         ),
         _ => Err(USAGE.into()),
     }
@@ -243,7 +250,7 @@ fn run_proof(
     output_root: &Path,
 ) -> Result<(), String> {
     // Record interruptions before the first byte of work. Preparing evidence
-    // copies the executable and snapshots the whole content tree, which takes
+    // copies the executable and hashes the whole content tree, which takes
     // long enough that a signal arriving during it is likely rather than
     // theoretical. Installing after that leaves the longest phase of the run
     // under the default disposition, where a signal kills the process outright
@@ -297,10 +304,13 @@ fn execute_prepared(repo_root: &Path, evidence: &mut RunEvidence) -> Result<(), 
     let receipt = supervise_child(
         repo_root,
         &evidence.output_root.join("snapshots/uqm"),
-        &evidence.output_root.join("snapshots/sc2/content"),
+        &evidence.content_root,
         &evidence.output_root.join("snapshots/script.json"),
         evidence,
     );
+    // The bundle binds the content by tree hash and does not carry the bytes,
+    // so a run whose content moved underneath it cannot be bound to that hash.
+    verify_content_unchanged(evidence)?;
     complete_run(evidence, receipt)
 }
 
@@ -325,8 +335,9 @@ fn prepare_evidence(
     copy_new(production_path, &snapshots.join("production-manifest.json"))?;
     copy_new(executable, &snapshots.join("uqm"))?;
     copy_new(script, &snapshots.join("script.json"))?;
-    let content_snapshot = retain_content(content, &snapshots.join("sc2/content"))?;
-    let content = snapshots.join("sc2/content");
+    let content = fs::canonicalize(content)
+        .map_err(|error| format!("canonicalize content {}: {error}", content.display()))?;
+    let content_snapshot = snapshot_tree(&content, "content")?;
     let seed = read_validated_script(&snapshots.join("script.json"))?.seed();
     write_new_json(&snapshots.join("content-identity.json"), &content_snapshot)?;
     let initial_config = snapshot_tree(&config_root, "initial_config")?;
@@ -361,6 +372,7 @@ fn prepare_evidence(
     let _ = repo_root;
     Ok(RunEvidence {
         output_root,
+        content_root: content,
         config_root,
         production: production.clone(),
         seed,
@@ -840,22 +852,15 @@ fn validate_scenario_binding(root: &Path, manifest: &LcarManifest) -> Result<(),
     Ok(())
 }
 
-fn retain_content(source: &Path, destination: &Path) -> Result<TreeSnapshot, String> {
-    let expected = snapshot_tree(source, "content")?;
-    fs::create_dir_all(destination).map_err(|error| format!("create retained content: {error}"))?;
-    for entry in &expected.entries {
-        let target = destination.join(&entry.path);
-        let parent = target
-            .parent()
-            .ok_or_else(|| "content entry has no parent".to_string())?;
-        fs::create_dir_all(parent).map_err(|error| format!("create content directory: {error}"))?;
-        copy_new(&source.join(&entry.path), &target)?;
+fn verify_content_unchanged(evidence: &RunEvidence) -> Result<(), String> {
+    let current = snapshot_tree(&evidence.content_root, "content")?;
+    if current.tree_sha256 != evidence.provenance.content_tree_sha256 {
+        return Err(format!(
+            "content {} changed while the game ran; the recorded content identity no longer describes this run",
+            evidence.content_root.display()
+        ));
     }
-    let copied = snapshot_tree(destination, "content")?;
-    if copied.tree_sha256 != expected.tree_sha256 {
-        return Err("content changed while retaining replay inputs".into());
-    }
-    Ok(copied)
+    Ok(())
 }
 
 /// Print the published matrix, optionally for one domain.
@@ -1013,8 +1018,17 @@ fn scenario_name(run: &Path) -> Option<String> {
 
 /// Replay only verified retained inputs. Outcome comparison is separate from
 /// input identity and excludes pixels and callback/wall-clock timing.
-fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(), String> {
+fn replay_bundle(
+    repo_root: &Path,
+    prior: &Path,
+    content: &Path,
+    output_root: &Path,
+) -> Result<(), String> {
     with_verified_replay(prior, |manifest| {
+        let content = fs::canonicalize(content).map_err(|error| {
+            format!("canonicalize replay content {}: {error}", content.display())
+        })?;
+        verify_replay_content(&content, manifest)?;
         interrupt::install().map_err(|error| error.to_string())?;
         let repo_root = fs::canonicalize(repo_root)
             .map_err(|error| format!("canonicalize replay repository: {error}"))?;
@@ -1030,7 +1044,7 @@ fn replay_bundle(repo_root: &Path, prior: &Path, output_root: &Path) -> Result<(
             &production,
             &artifact_path(prior, manifest, ArtifactRole::ExecutableSnapshot)?,
             &artifact_path(prior, manifest, ArtifactRole::ScriptSnapshot)?,
-            &prior.join("snapshots/sc2/content"),
+            &content,
             output_root,
         )?;
         // Check the newly copied bytes too, before starting a child. The source
@@ -1063,6 +1077,28 @@ fn with_verified_replay<T>(
         return Err("replay requires a passing prior bundle".into());
     }
     execute(&manifest)
+}
+
+/// Replay runs against a content directory the caller supplies, since the
+/// bundle carries the content identity but not the content bytes. Refuse any
+/// directory whose tree hash is not the one the prior run recorded.
+fn verify_replay_content(content: &Path, prior: &LcarManifest) -> Result<(), String> {
+    if !content.ends_with("sc2/content") {
+        return Err(format!(
+            "replay content {} must be an sc2/content directory",
+            content.display()
+        ));
+    }
+    let supplied = snapshot_tree(content, "content")?;
+    if supplied.tree_sha256 != prior.provenance.content_tree_sha256 {
+        return Err(format!(
+            "replay content {} has tree hash {} but the prior bundle recorded {}",
+            content.display(),
+            supplied.tree_sha256,
+            prior.provenance.content_tree_sha256
+        ));
+    }
+    Ok(())
 }
 
 fn verify_replay_copy(evidence: &RunEvidence, prior: &LcarManifest) -> Result<(), String> {
@@ -1389,10 +1425,6 @@ fn validate_provenance(root: &Path, manifest: &LcarManifest) -> Result<(), Strin
     if !initial.entries.is_empty() {
         return Err("initial config must be the fresh empty profile this runner executes".into());
     }
-    let retained_content = snapshot_tree(&root.join("snapshots/sc2/content"), "content")?;
-    if retained_content.tree_sha256 != content.tree_sha256 {
-        return Err("retained content does not match content identity snapshot".into());
-    }
     let production_path = artifact_path(root, manifest, ArtifactRole::ProductionManifestSnapshot)?;
     validate_final_config_files(root, manifest, &final_config)?;
     let production = parse_production(&read_json_value(&production_path)?)?;
@@ -1482,12 +1514,16 @@ fn validate_command(manifest: &LcarManifest) -> Result<(), String> {
         .parent()
         .and_then(Path::parent)
         .ok_or_else(|| "recorded executable lacks a bundle root".to_string())?;
+    let content_argument = manifest
+        .command
+        .get(1)
+        .filter(|argument| content_argument_is_valid(argument))
+        .ok_or_else(|| {
+            "recorded content command path is not an absolute normalized sc2/content".to_string()
+        })?;
     let expected = vec![
         recorded_root.join("snapshots/uqm").display().to_string(),
-        format!(
-            "--contentdir={}",
-            recorded_root.join("snapshots/sc2/content").display()
-        ),
+        content_argument.clone(),
         format!("--configdir={}", recorded_root.join("config").display()),
         format!(
             "--automation-script={}",
@@ -1502,9 +1538,22 @@ fn validate_command(manifest: &LcarManifest) -> Result<(), String> {
         "--scroll=pc".into(),
     ];
     if manifest.command != expected {
-        return Err("recorded gameplay command is not the exact supported snapshot command".into());
+        return Err("recorded gameplay command is not the exact supported command".into());
     }
     Ok(())
+}
+
+/// The content directory is recorded by path only; its bytes are bound by the
+/// tree hash in the content identity snapshot, not retained in the bundle.
+fn content_argument_is_valid(argument: &str) -> bool {
+    argument.strip_prefix("--contentdir=").is_some_and(|path| {
+        let path = Path::new(path);
+        path.is_absolute()
+            && path.ends_with("sc2/content")
+            && !path
+                .components()
+                .any(|component| matches!(component, Component::ParentDir | Component::CurDir))
+    })
 }
 
 fn validate_result(root: &Path, manifest: &LcarManifest) -> Result<(), String> {
@@ -2063,7 +2112,6 @@ fn role_for_path(path: &str) -> Result<ArtifactRole, String> {
         _ if path.starts_with("snapshots/config-final/") => ArtifactRole::FinalConfigSnapshotFile,
         _ if path.starts_with("run/captures/") && path.ends_with(".png") => ArtifactRole::Capture,
         _ if path.starts_with("config/") => ArtifactRole::RetainedConfigFile,
-        _ if path.starts_with("snapshots/sc2/content/") => ArtifactRole::ContentSnapshotFile,
         _ => return Err(format!("unexpected evidence artifact: {path}")),
     };
     Ok(role)
@@ -2090,7 +2138,6 @@ fn allows_empty(role: ArtifactRole) -> bool {
         role,
         ArtifactRole::StdoutLog
             | ArtifactRole::StderrLog
-            | ArtifactRole::ContentSnapshotFile
             | ArtifactRole::FinalConfigSnapshotFile
             | ArtifactRole::RetainedConfigFile
     )
@@ -2466,7 +2513,11 @@ mod tests {
 
     pub(super) struct Fixture {
         _temp: tempfile::TempDir,
+        _content_temp: tempfile::TempDir,
         path: PathBuf,
+        /// The `sc2/content` directory the fixture run read. It is outside the
+        /// bundle, which carries only its tree identity.
+        content: PathBuf,
     }
 
     fn record(sequence: u64, kind: RecordKind) -> TraceRecord {
@@ -2507,8 +2558,12 @@ mod tests {
                 {"action":"assert_battle_frames","minimum":1},
                 {"action":"capture","label":"frame"}, {"action":"finish"}]
         })).unwrap();
-        fs::create_dir_all(root.join("snapshots/sc2/content")).unwrap();
-        fs::write(root.join("snapshots/sc2/content/test-data"), b"content").unwrap();
+        let content_temp = tempfile::tempdir().unwrap();
+        let content_root = fs::canonicalize(content_temp.path())
+            .unwrap()
+            .join("sc2/content");
+        fs::create_dir_all(&content_root).unwrap();
+        fs::write(content_root.join("test-data"), b"content").unwrap();
         let target = if cfg!(target_arch = "aarch64") {
             if cfg!(target_os = "macos") {
                 "aarch64-apple-darwin"
@@ -2535,7 +2590,7 @@ mod tests {
             &production,
         )
         .unwrap();
-        let content = snapshot_tree(&root.join("snapshots/sc2/content"), "content").unwrap();
+        let content = snapshot_tree(&content_root, "content").unwrap();
         let initial = TreeSnapshot {
             schema: "uqm-tree-identity-v1".into(),
             root_role: "initial_config".into(),
@@ -2615,10 +2670,7 @@ mod tests {
             git_head: "a".repeat(40),
             command: vec![
                 canonical_root.join("snapshots/uqm").display().to_string(),
-                format!(
-                    "--contentdir={}",
-                    canonical_root.join("snapshots/sc2/content").display()
-                ),
+                format!("--contentdir={}", content_root.display()),
                 format!("--configdir={}", canonical_root.join("config").display()),
                 format!(
                     "--automation-script={}",
@@ -2680,7 +2732,12 @@ mod tests {
         manifest.input_identity = input_identity(root, &manifest).unwrap();
         let path = root.join(PASS_FILE);
         write_new_json(&path, &manifest).unwrap();
-        Fixture { _temp: temp, path }
+        Fixture {
+            _temp: temp,
+            _content_temp: content_temp,
+            path,
+            content: content_root,
+        }
     }
 
     pub(super) fn pending_config(fixture: &Fixture) -> RunEvidence {
@@ -2692,6 +2749,7 @@ mod tests {
         fs::create_dir(root.join("config")).unwrap();
         RunEvidence {
             output_root: fs::canonicalize(root).unwrap(),
+            content_root: fixture.content.clone(),
             config_root: root.join("config"),
             production: parse_production(
                 &read_json_value(&root.join("snapshots/production-manifest.json")).unwrap(),
@@ -3110,8 +3168,13 @@ mod tests {
         let prior = fixture.path.parent().unwrap();
         fs::write(prior.join("snapshots/script.json"), b"tampered").unwrap();
         let output = prior.join("must-not-be-created");
-        let error =
-            replay_bundle(Path::new("/nonexistent-replay-repo"), prior, &output).unwrap_err();
+        let error = replay_bundle(
+            Path::new("/nonexistent-replay-repo"),
+            prior,
+            &fixture.content,
+            &output,
+        )
+        .unwrap_err();
         assert!(error.contains("artifact identity mismatch"), "{error}");
         assert!(!output.exists());
     }
@@ -3136,7 +3199,7 @@ mod tests {
                 &production,
                 &artifact_path(prior, manifest, ArtifactRole::ExecutableSnapshot)?,
                 &artifact_path(prior, manifest, ArtifactRole::ScriptSnapshot)?,
-                &prior.join("snapshots/sc2/content"),
+                &fixture.content,
                 &destination.path().join("replay"),
             )?;
             verify_replay_copy(&evidence, manifest)?;
@@ -3151,17 +3214,11 @@ mod tests {
                 fs::read(evidence.output_root.join("snapshots/uqm")).unwrap(),
                 b"executable"
             );
-            assert_eq!(
-                fs::read(evidence.output_root.join("snapshots/sc2/content/test-data")).unwrap(),
-                b"content"
-            );
+            assert!(!evidence.output_root.join("snapshots/sc2").exists());
             assert_eq!(evidence.seed, 42);
             assert_eq!(
                 evidence.command[1],
-                format!(
-                    "--contentdir={}",
-                    evidence.output_root.join("snapshots/sc2/content").display()
-                )
+                format!("--contentdir={}", fixture.content.display())
             );
             let mut changed = manifest.clone();
             changed.seed = 43;
@@ -3184,6 +3241,126 @@ mod tests {
             fs::copy(source, target).unwrap();
         }
         with_verified_replay(destination.path(), |_| Ok(())).unwrap();
+    }
+
+    #[test]
+    fn bundle_carries_content_identity_but_no_content_bytes() {
+        let fixture = fixture();
+        let root = fixture.path.parent().unwrap();
+        assert!(!root.join("snapshots/sc2").exists());
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        assert!(manifest
+            .artifacts
+            .iter()
+            .any(|entry| entry.role == ArtifactRole::ContentIdentitySnapshot));
+        assert!(manifest
+            .artifacts
+            .iter()
+            .all(|entry| !entry.path.starts_with("snapshots/sc2/")));
+        // A retained content copy is not part of the artifact contract, so a
+        // bundle that smuggles one back in cannot validate.
+        fs::create_dir_all(root.join("snapshots/sc2/content")).unwrap();
+        fs::write(root.join("snapshots/sc2/content/test-data"), b"content").unwrap();
+        let error = with_verified_replay(root, |_| Ok(())).unwrap_err();
+        assert!(error.contains("artifact inventory is not exact"), "{error}");
+    }
+
+    #[test]
+    fn run_refuses_to_bind_content_that_changed_while_the_game_ran() {
+        let fixture = fixture();
+        let evidence = pending_config(&fixture);
+        verify_content_unchanged(&evidence).unwrap();
+        fs::write(fixture.content.join("test-data"), b"changed").unwrap();
+        let error = verify_content_unchanged(&evidence).unwrap_err();
+        assert!(error.contains("changed while the game ran"), "{error}");
+    }
+
+    #[test]
+    fn replay_accepts_content_whose_tree_hash_matches_the_record() {
+        let fixture = fixture();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        verify_replay_content(&fixture.content, &manifest).unwrap();
+    }
+
+    #[test]
+    fn replay_rejects_content_with_one_changed_file_before_creating_output() {
+        let fixture = fixture();
+        let prior = fixture.path.parent().unwrap();
+        fs::write(fixture.content.join("test-data"), b"changed").unwrap();
+        let output = prior.join("must-not-be-created");
+        let error = replay_bundle(
+            Path::new("/nonexistent-replay-repo"),
+            prior,
+            &fixture.content,
+            &output,
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("has tree hash") && error.contains("prior bundle recorded"),
+            "{error}"
+        );
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn replay_rejects_content_with_an_added_file() {
+        let fixture = fixture();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        fs::write(fixture.content.join("extra"), b"x").unwrap();
+        let error = verify_replay_content(&fixture.content, &manifest).unwrap_err();
+        assert!(error.contains("has tree hash"), "{error}");
+    }
+
+    #[test]
+    fn replay_rejects_content_that_is_not_an_sc2_content_directory() {
+        let fixture = fixture();
+        let manifest: LcarManifest = read_json(&fixture.path).unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        fs::write(elsewhere.path().join("test-data"), b"content").unwrap();
+        let error = verify_replay_content(elsewhere.path(), &manifest).unwrap_err();
+        assert!(
+            error.contains("must be an sc2/content directory"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn replay_requires_a_content_path_argument() {
+        let arguments = |parts: &[&str]| -> Vec<String> {
+            parts.iter().map(|part| (*part).to_string()).collect()
+        };
+        let error = dispatch(&arguments(&["proof", "replay", "repo", "prior", "out"])).unwrap_err();
+        assert!(
+            error.contains("replay REPO_ROOT PRIOR_BUNDLE CONTENT_DIR OUTPUT_ROOT"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn replay_rejects_a_missing_content_directory() {
+        let fixture = fixture();
+        let prior = fixture.path.parent().unwrap();
+        let error = replay_bundle(
+            Path::new("/nonexistent-replay-repo"),
+            prior,
+            &prior.join("no-such-content"),
+            &prior.join("must-not-be-created"),
+        )
+        .unwrap_err();
+        assert!(error.contains("canonicalize replay content"), "{error}");
+    }
+
+    #[test]
+    fn recorded_content_directory_must_be_absolute_normalized_sc2_content() {
+        for argument in [
+            "--contentdir=relative/sc2/content",
+            "--contentdir=/repo/sc2/content/../other",
+            "--contentdir=/repo/elsewhere",
+            "--content=/repo/sc2/content",
+        ] {
+            assert!(!content_argument_is_valid(argument), "{argument}");
+        }
+        assert!(content_argument_is_valid("--contentdir=/repo/sc2/content"));
     }
 
     #[test]
@@ -3210,7 +3387,6 @@ mod tests {
         for path in [
             "snapshots/uqm",
             "snapshots/script.json",
-            "snapshots/sc2/content/test-data",
             "snapshots/config-initial.json",
             "run/resolved-scenario.json",
             "run/trace.jsonl",
