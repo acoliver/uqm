@@ -25,8 +25,8 @@ fn stat_of(stack: &Stack, path: &str) -> Option<stat> {
     (result == 0).then_some(buf)
 }
 
-fn mode_kind(buf: &stat) -> u32 {
-    buf.st_mode as u32 & 0o170000
+fn mode_kind(buf: &stat) -> libc::mode_t {
+    buf.st_mode & libc::S_IFMT
 }
 
 fn open(stack: &Stack, path: &str, flags: c_int) -> *mut uio_Handle {
@@ -44,7 +44,7 @@ fn stat_reports_size_and_kind_of_host_files_and_directories() {
     let file = stat_of(&stack, "five.txt").expect("file");
     assert_eq!(file.st_size, 5);
     assert_eq!(mode_kind(&file), 0o100000, "regular file");
-    assert_ne!(file.st_mode as u32 & 0o200, 0, "owner can write");
+    assert_ne!(file.st_mode & 0o200, 0, "owner can write");
 
     let dir = stat_of(&stack, "folder").expect("directory");
     assert_eq!(mode_kind(&dir), 0o040000);
@@ -64,7 +64,7 @@ fn stat_marks_a_host_read_only_file_as_unwritable() {
     )
     .unwrap();
     let file = stat_of(&stack, "frozen.txt").unwrap();
-    assert_eq!(file.st_mode as u32 & 0o777, 0o444);
+    assert_eq!(file.st_mode & 0o777, 0o444);
 }
 
 #[test]
@@ -78,10 +78,10 @@ fn stat_describes_archive_files_and_directories() {
     );
     let file = stat_of(&stack, "data/blob.bin").expect("entry");
     assert_eq!(file.st_size, 10);
-    assert_eq!(file.st_mode as u32, 0o100444);
+    assert_eq!(file.st_mode, 0o100444);
     let dir = stat_of(&stack, "data").expect("directory");
     assert_eq!(dir.st_size, 0);
-    assert_eq!(dir.st_mode as u32, 0o040555);
+    assert_eq!(dir.st_mode, 0o040555);
     assert!(stat_of(&stack, "data/none.bin").is_none());
     assert_eq!(errno_value(), libc::ENOENT);
 }

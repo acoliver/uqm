@@ -2019,6 +2019,7 @@ fn retain_crash_report(
     }
 }
 
+#[cfg(target_os = "macos")]
 fn crash_report_matches(bytes: &[u8], process: &NativeProcessIdentity, executable: &str) -> bool {
     if bytes.len() > 1024 * 1024 {
         return false;
@@ -2063,6 +2064,7 @@ fn crash_report_matches(bytes: &[u8], process: &NativeProcessIdentity, executabl
         if launch / 1000 == start / 1000 && capture >= start && capture <= now)
 }
 
+#[cfg(target_os = "macos")]
 fn apple_timestamp_micros(text: &str) -> Option<u64> {
     let (date, rest) = text.split_once(' ')?;
     let (clock, zone) = rest.split_once(' ')?;
@@ -5497,11 +5499,10 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod crash_identity_regressions {
     use super::*;
 
-    #[cfg(target_os = "macos")]
     #[test]
     fn macos_process_identity_is_epoch_microseconds_for_apple_report_correlation() {
         let start =
