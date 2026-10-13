@@ -9,8 +9,9 @@
 //! (`groups`). `summary` and `star` read the flagship, the clock, the game
 //! state and the star catalog the same way. The functions here work on those
 //! live structures, not on copies. The `SaveGame`/`LoadGame` orchestration, the
-//! solar-system owner and the owner of the star catalog are not ported yet, so
-//! nothing here is wired to a menu and no selector here makes a save atomic.
+//! initialisation of the solar-system state and the owner of the star catalog
+//! are not ported yet (`solar` ports only the reads of the summary), so nothing
+//! here is wired to a menu and no selector here makes a save atomic.
 
 pub mod events;
 pub mod global;
@@ -18,6 +19,7 @@ pub mod groups;
 #[cfg(not(test))]
 pub mod live;
 pub mod queues;
+pub mod solar;
 pub mod star;
 pub mod statefiles;
 pub mod summary;
@@ -131,6 +133,8 @@ pub fn restore_runtime(
 mod group_tests;
 #[cfg(test)]
 mod queue_tests;
+#[cfg(test)]
+mod solar_tests;
 #[cfg(test)]
 mod statefile_tests;
 #[cfg(test)]

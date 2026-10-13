@@ -715,7 +715,9 @@ fn generate_input_abi_bindings() -> Result<(), String> {
 /// `VELOCITY_DESC`, the `FLEET_INFO`, `SHIP_FRAGMENT`, `IP_GROUP` and
 /// `ENCOUNTER` queue elements (with `BRIEF_SHIP_INFO`), the `NUM_EVENTS` pool
 /// size and the `MAX_BATTLE_GROUPS`, `MAX_ENCOUNTERS` and `MAX_HYPER_SHIPS`
-/// bounds.
+/// bounds. The solar-system state (`SOLARSYS_STATE`, `PLANET_DESC`) the
+/// Save/Load summary reads comes from `planets.h`, with the game-string bases
+/// of `gamestr.h` and the star-index enum of `gendef.h` that name its worlds.
 ///
 /// The hand-written mirrors in `comm/locdata.rs` and `time/clock_bridge.rs`
 /// compare every offset, size and alignment against these at compile time, so
@@ -728,7 +730,19 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
     let races = "../sc2/src/uqm/races.h";
     let groups = "../sc2/src/uqm/grpinfo.h";
     let encounters = "../sc2/src/uqm/encount.h";
-    for header in [globdata, events, races, groups, encounters] {
+    let planets = "../sc2/src/uqm/planets/planets.h";
+    let game_strings = "../sc2/src/uqm/gamestr.h";
+    let star_indexes = "../sc2/src/uqm/gendef.h";
+    for header in [
+        globdata,
+        events,
+        races,
+        groups,
+        encounters,
+        planets,
+        game_strings,
+        star_indexes,
+    ] {
         println!("cargo:rerun-if-changed={header}");
     }
     let bindings = bindgen::Builder::default()
@@ -737,13 +751,20 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .header(races)
         .header(groups)
         .header(encounters)
+        .header(planets)
+        .header(game_strings)
+        .header(star_indexes)
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
             "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
-             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO)",
+             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC)",
         )
-        .allowlist_var("(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS)")
+        .allowlist_var(
+            "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
+             |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
+             |SAMATRA_DEFINED)",
+        )
         .generate_comments(false)
         .layout_tests(false)
         .formatter(ABI_BINDING_FORMATTER)

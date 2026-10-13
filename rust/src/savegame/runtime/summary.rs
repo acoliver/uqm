@@ -13,10 +13,11 @@
 //!
 //! The activity of a summary is the low byte of `CurrentActivity`, refined the
 //! way `PrepareSummary` does. Two of its branches read the solar-system
-//! owner, which is still C (`GetPlanetOrMoonName` and `playerInPlanetOrbit`
-//! depend on `pSolarSysState`) and, for the final battle, the game string
-//! table. They reach this module through [`SolarSystemOwner`]; `live` supplies
-//! the C-backed implementation, and nothing here guesses a name when that owner
+//! state (`GetPlanetOrMoonName` and `playerInPlanetOrbit` depend on
+//! `pSolarSysState`) and, for the final battle, the game string table. They
+//! reach this module through [`SolarSystemOwner`]. The computation of those
+//! answers is Rust (`solar`, over the C-owned `SOLARSYS_STATE` that
+//! `ExploreSolarSys` initialises); nothing here guesses a name when the state
 //! cannot answer.
 //!
 //! The device list is `InventoryDevices` (planets/devices.c) over the same
@@ -31,6 +32,7 @@
 use std::fmt;
 
 use super::queues::{walk, QueueError, QueueKind};
+use super::solar::SolarError;
 use crate::comm::dispatch::{CShipFragment, IN_HYPERSPACE, IN_INTERPLANETARY, IN_LAST_BATTLE};
 use crate::comm::locdata::{CGameState, CSisState};
 use crate::savegame::types::{
@@ -98,13 +100,13 @@ const DEVICES: [OnBoard; NUM_DEVICES] = [
     OnBoard::Flag("MOONBASE_ON_SHIP"),       // LUNAR_BASE_DEVICE
 ];
 
-/// What the solar-system and string owners, still in C, say about the game.
+/// What the solar-system state and the game strings say about the game.
 ///
-/// Each method is one call `PrepareSummary` makes. An implementation reads the
-/// live owner; it does not invent an answer when the owner has none.
+/// Each method is one question `PrepareSummary` asks. An implementation reads
+/// the live state; it does not invent an answer when the state has none.
 pub trait SolarSystemOwner {
     /// `GetPlanetOrMoonName` into a `PlanetName`-sized buffer.
-    fn planet_or_moon_name(&self) -> [u8; SIS_NAME_SIZE];
+    fn planet_or_moon_name(&self) -> Result<[u8; SIS_NAME_SIZE], SolarError>;
     /// `playerInPlanetOrbit ()`.
     fn player_in_planet_orbit(&self) -> bool;
     /// `GAME_STRING (PLANET_NUMBER_BASE + 32)` copied into a `PlanetName`
@@ -116,6 +118,8 @@ pub trait SolarSystemOwner {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SummaryError {
     GameState(GameStateOwnerError),
+    /// The solar-system state is not the shape `ExploreSolarSys` leaves.
+    Solar(SolarError),
     /// The built-ship queue is corrupt.
     Queue(QueueError),
     /// The built-ship queue holds more escorts than `ShipList` has places.
@@ -135,6 +139,12 @@ impl std::error::Error for SummaryError {}
 impl From<GameStateOwnerError> for SummaryError {
     fn from(error: GameStateOwnerError) -> Self {
         Self::GameState(error)
+    }
+}
+
+impl From<SolarError> for SummaryError {
+    fn from(error: SolarError) -> Self {
+        Self::Solar(error)
     }
 }
 
@@ -237,7 +247,7 @@ pub fn capture_summary(
             }
         }
         IN_INTERPLANETARY => {
-            sis_copy.planet_name = solar.planet_or_moon_name();
+            sis_copy.planet_name = solar.planet_or_moon_name()?;
             if state_value(&state, "GLOBAL_FLAGS_AND_DATA") == IN_STARBASE_FLAGS {
                 activity = IN_STARBASE;
             } else if solar.player_in_planet_orbit() {

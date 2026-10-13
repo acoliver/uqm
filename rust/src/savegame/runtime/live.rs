@@ -1,21 +1,24 @@
 //! The C-owned live state that `summary` and `star` borrow in a running game.
 //!
-//! Everything here is a read of a C global or a call into a C owner that has
-//! no Rust owner yet: `GlobData` (globdata.c), `CurStarDescPtr` and
-//! `star_array` (starmap.c), the solar-system owner (`GetPlanetOrMoonName`,
-//! `playerInPlanetOrbit`) and the game string table. The capture logic stays in
-//! `summary` and `star`; these functions only hand it the live owners. They are
-//! not in the unit-test build, which has no C archive; the tests of those two
-//! modules build the same owners by hand.
+//! Everything here is a read of a C global: `GlobData` (globdata.c),
+//! `pSolarSysState` (solarsys.c), `CurStarDescPtr` and `star_array`
+//! (starmap.c) and the game string table. Those are still initialised by C
+//! (`ExploreSolarSys`, the star map, the resource loader) and have no Rust
+//! owner yet, so Rust borrows them. The capture logic stays in `summary`,
+//! `solar` and `star`: the solar-system questions of the summary (the planet
+//! or moon name, the orbit test, the final-battle name) are computed in Rust
+//! over the borrowed `SOLARSYS_STATE`, and no C function of solarsys.c is
+//! called for them. They are not in the unit-test build, which has no C
+//! archive; the tests of those modules build the same state by hand.
 //!
 //! All of them must run on the game thread.
 
-use std::ffi::c_char;
-
+use super::solar::{GameStrings, SolarSystem};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
-use super::summary::{self, SolarSystemOwner, SummaryError, SA_MATRA_STRING};
+use super::summary::{self, SummaryError};
+use crate::c_bindings::global_state::SOLARSYS_STATE;
 use crate::comm::locdata::CGlobData;
-use crate::savegame::types::{StarDesc, Summary, SIS_NAME_SIZE};
+use crate::savegame::types::{StarDesc, Summary};
 
 extern "C" {
     #[link_name = "GlobData"]
@@ -24,44 +27,48 @@ extern "C" {
     static mut CUR_STAR_DESC_PTR: *mut CStarDesc;
     #[link_name = "star_array"]
     static mut STAR_ARRAY: *mut CStarDesc;
-    fn GetPlanetOrMoonName(buf: *mut c_char, bufsize: u16);
-    fn playerInPlanetOrbit() -> bool;
+    // Other modules declare this symbol with their own prefix views of the
+    // struct; this one has the whole bindgen layout.
+    #[allow(clashing_extern_declarations)]
+    #[link_name = "pSolarSysState"]
+    static mut P_SOLAR_SYSTEM_STATE: *mut SOLARSYS_STATE;
 }
 
-/// The solar-system and string owners of the running C game.
-pub struct LiveSolarSystem;
+/// `GAME_STRING (index)` over the loaded `GameStrings` table.
+struct LiveGameStrings;
 
-impl SolarSystemOwner for LiveSolarSystem {
-    fn planet_or_moon_name(&self) -> [u8; SIS_NAME_SIZE] {
-        let mut buf = [0u8; SIS_NAME_SIZE];
-        // SAFETY: the buffer is `SIS_NAME_SIZE` bytes and that size is passed;
-        // game thread only.
-        unsafe { GetPlanetOrMoonName(buf.as_mut_ptr().cast::<c_char>(), SIS_NAME_SIZE as u16) };
-        buf
-    }
-
-    fn player_in_planet_orbit(&self) -> bool {
-        // SAFETY: reads the solar-system state; game thread only.
-        unsafe { playerInPlanetOrbit() }
-    }
-
-    fn last_battle_planet_name(&self) -> [u8; SIS_NAME_SIZE] {
-        // SAFETY: `GameStrings` is loaded for the whole game; the string is
-        // NUL-terminated.
-        let text = unsafe {
-            std::ffi::CStr::from_ptr(crate::comm::hail::game_string(i32::from(SA_MATRA_STRING)))
-        };
-        summary::utf8_string_copy(text.to_bytes())
+impl GameStrings for LiveGameStrings {
+    fn game_string(&self, index: u16) -> Vec<u8> {
+        // SAFETY: `GameStrings` is loaded for the whole game and every string
+        // of it is NUL-terminated; game thread only.
+        unsafe {
+            let text = crate::comm::hail::game_string(i32::from(index));
+            assert!(!text.is_null(), "GAME_STRING ({index}) has no text");
+            std::ffi::CStr::from_ptr(text).to_bytes().to_vec()
+        }
     }
 }
 
-/// `PrepareSummary` over the live `GlobData`.
+/// `PrepareSummary` over the live `GlobData`, `pSolarSysState` and
+/// `CurStarDescPtr`.
+///
+/// The solar-system state is borrowed once, for this call only.
 ///
 /// # Safety
-/// Game thread only; `GlobData` and the solar-system owner must be initialised.
+/// Game thread only; `GlobData` must be initialised, `pSolarSysState` must be
+/// NULL or point at the live solar-system state, and `CurStarDescPtr` must be
+/// NULL or point at a catalog entry.
 pub unsafe fn capture_live_summary(name: &[u8]) -> Result<Summary, SummaryError> {
     let glob = &*std::ptr::addr_of!(GLOB_DATA);
-    summary::capture_summary(&glob.sis_state, &glob.game_state, &LiveSolarSystem, name)
+    let state = std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read();
+    let current = std::ptr::addr_of!(CUR_STAR_DESC_PTR).read();
+    let solar = SolarSystem::new(
+        state.as_ref(),
+        current.as_ref().map(|star| star.index),
+        glob.sis_state.planet_name,
+        &LiveGameStrings,
+    );
+    summary::capture_summary(&glob.sis_state, &glob.game_state, &solar, name)
 }
 
 /// The live star catalog.
