@@ -317,6 +317,13 @@ pub extern "C" fn Alarm_processOne() -> bool {
     }
 }
 
+/// Milliseconds from now until the earliest live alarm is due.
+///
+/// The value is RELATIVE: 0 when an alarm is already overdue, `u32::MAX` when
+/// none is queued. The original C returned the alarm's absolute tick time
+/// here, which `netInputBlocking` then used as a timeout and `SleepThreadUntil`
+/// compared against the clock; callers in this port (`pacing::sleep_until`,
+/// `netInputBlocking`) all use it as a duration.
 #[no_mangle]
 pub extern "C" fn Alarm_timeBeforeNextMs() -> u32 {
     let heap = match ALARM_HEAP.get() {
@@ -582,6 +589,45 @@ mod alarm_and_async_tests {
             "only a cancelled alarm remained"
         );
         assert!(!Alarm_processOne());
+    }
+
+    #[test]
+    #[serial]
+    fn an_overdue_alarm_has_no_wait_left() {
+        fresh();
+        Alarm_addAbsoluteMs(5, record, id(1));
+
+        assert_eq!(Alarm_timeBeforeNextMs(), 0);
+        assert_eq!(Async_timeBeforeNextMs(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn the_wait_is_a_duration_not_a_clock_time() {
+        fresh();
+        let wait = 60_000;
+        Alarm_addAbsoluteMs(now_ms() + wait, record, id(1));
+
+        let measured = Alarm_timeBeforeNextMs();
+
+        assert!(
+            measured <= wait && measured > wait - 5_000,
+            "expected about {wait} ms, got {measured}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn queued_callbacks_report_a_one_millisecond_wait_ahead_of_any_alarm() {
+        fresh();
+        Alarm_addAbsoluteMs(now_ms() + FAR, record, id(1));
+        Callback_add(record, id(2));
+
+        assert_eq!(Async_timeBeforeNextMs(), 1);
+
+        Callback_process();
+        let wait = Async_timeBeforeNextMs();
+        assert!(wait > FAR - 10_000 && wait <= FAR, "wait was {wait}");
     }
 
     #[test]
