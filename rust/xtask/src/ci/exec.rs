@@ -1730,29 +1730,31 @@ impl MonitorAnchor {
         // so it keeps only its two pipes. Listing before the fork allocates
         // outside the child; holding the guard keeps a descriptor created by
         // another thread from landing between the listing and the fork.
-        let inheritance = guard_descriptor_inheritance();
-        let release = match open_descriptors_except(&[
-            libc::STDIN_FILENO,
-            libc::STDOUT_FILENO,
-            libc::STDERR_FILENO,
-            command_read,
-            result_write,
-        ]) {
-            Ok(release) => release,
-            Err(error) => {
-                close_fds(&[command_read, command_write, result_read, result_write]);
-                return Err(format!(
-                    "cannot list descriptors before anchor fork: {error}"
-                ));
+        let pid = {
+            let _inheritance = guard_descriptor_inheritance();
+            let release = match open_descriptors_except(&[
+                libc::STDIN_FILENO,
+                libc::STDOUT_FILENO,
+                libc::STDERR_FILENO,
+                command_read,
+                result_write,
+            ]) {
+                Ok(release) => release,
+                Err(error) => {
+                    close_fds(&[command_read, command_write, result_read, result_write]);
+                    return Err(format!(
+                        "cannot list descriptors before anchor fork: {error}"
+                    ));
+                }
+            };
+            // SAFETY: the child immediately enters anchor_child and uses only
+            // async-signal-safe operations on descriptors listed above.
+            let pid = unsafe { libc::fork() };
+            if pid == 0 {
+                anchor_child(leader, command_read, result_write, &release);
             }
+            pid
         };
-        // SAFETY: the child immediately enters anchor_child and uses only
-        // async-signal-safe operations on descriptors listed above.
-        let pid = unsafe { libc::fork() };
-        if pid == 0 {
-            anchor_child(leader, command_read, result_write, &release);
-        }
-        drop(inheritance);
         close_fd(command_read);
         close_fd(result_write);
         if pid == -1 {
