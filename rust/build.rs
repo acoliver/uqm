@@ -723,6 +723,11 @@ fn generate_input_abi_bindings() -> Result<(), String> {
 /// The image and parent drawable it points at are never dereferenced from
 /// Rust, so they stay opaque rather than pulling the graphics driver types in.
 ///
+/// `ELEMENT` (element.h) and `STARSHIP` (races.h) are the display-list element
+/// and the ship record the save of a hyperspace flagship follows; the race
+/// descriptor a `STARSHIP` points at is never dereferenced from Rust, so it
+/// stays opaque with the drawables.
+///
 /// Bindgen's layout tests are on: each one compares a generated type's size,
 /// alignment and member offsets with what clang computed from the header, which
 /// is the check that a Rust read of a C struct (such as `FRAME_DESC.Index`)
@@ -770,13 +775,14 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
         .clang_arg("-I../sc2/src")
         .allowlist_type(
             "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
-             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|FRAME_DESC)",
+             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO|SOLARSYS_STATE|PLANET_DESC|FRAME_DESC|ELEMENT\
+             |STARSHIP)",
         )
-        .opaque_type("(tfb_image|drawable_desc)")
+        .opaque_type("(tfb_image|drawable_desc|race_desc|RACE_DESC)")
         .allowlist_var(
             "(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS|MAX_SUNS|MAX_PLANETS\
              |MAX_MOONS|PLANET_NUMBER_BASE|STARBASE_STRING_BASE|SOL_DEFINED|SPATHI_DEFINED\
-             |SAMATRA_DEFINED)",
+             |SAMATRA_DEFINED|PLAYER_SHIP|RPG_PLAYER_NUM)",
         )
         .generate_comments(false)
         .layout_tests(true)

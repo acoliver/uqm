@@ -66,7 +66,8 @@ const ALLIED_STATES: u16 = 3;
 /// `(BYTE) ~0`: a fleet with no function to call on arrival.
 const NO_FLEET_FUNCTION: u8 = u8::MAX;
 
-/// The three queues of this module.
+/// The queues the runtime walks: the three of this module, the two of
+/// `groups`, and the ship and display queues of `hyper_save`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueueKind {
     AvailableRaces,
@@ -74,6 +75,10 @@ pub enum QueueKind {
     BuiltShips,
     IpGroups,
     Encounters,
+    /// `race_q[RPG_PLAYER_NUM]`: the `STARSHIP`s of the human player's side.
+    PlayerShips,
+    /// `disp_q`: every live `ELEMENT`.
+    DisplayList,
 }
 
 /// Why the queue sections could not be captured or restored.

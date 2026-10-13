@@ -16,11 +16,13 @@
 
 use std::fmt;
 
+use super::hyper_save::{self, HyperFlagship, HyperSaveError};
 use super::location::{self, LocationError};
 use super::solar::{GameStrings, SolarSystem};
 use super::star::{self, CStarDesc, StarError, CATALOG_LEN};
 use super::summary::{self, SummaryError};
-use crate::c_bindings::solar_system;
+use crate::c_bindings::global_state::RPG_PLAYER_NUM;
+use crate::c_bindings::{live_queues, solar_system};
 use crate::comm::locdata::CGlobData;
 use crate::savegame::types::{StarDesc, Summary};
 
@@ -144,4 +146,20 @@ pub unsafe fn prepare_live_solar_location() -> Result<(), LiveLocationError> {
     let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
     location::save_solar_location(&mut glob.game_state, &*state, star_index)
         .map_err(LiveLocationError::Location)
+}
+
+/// `SaveSisHyperState ()` over the live `GlobData`, `race_q[RPG_PLAYER_NUM]`
+/// and `disp_q`: the step of a save made in hyperspace that records which way
+/// the flagship faces.
+///
+/// Both queues are borrowed once, for this call only.
+///
+/// # Safety
+/// Game thread only; `GlobData` must be initialised and `race_q` and `disp_q`
+/// must have been set up by `InitQueue` (`InitKernel` and `InitSpace`).
+pub unsafe fn prepare_live_hyper_state() -> Result<HyperFlagship, HyperSaveError> {
+    let player_ships = &*live_queues::player_ships(RPG_PLAYER_NUM as usize);
+    let display_list = &*live_queues::display_list();
+    let glob = &mut *std::ptr::addr_of_mut!(GLOB_DATA);
+    hyper_save::save_hyper_facing(&mut glob.game_state, player_ships, display_list)
 }

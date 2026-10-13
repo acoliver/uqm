@@ -61,6 +61,50 @@ pub mod solar_system {
     }
 }
 
+/// The C-owned ship and display queues of the running battle or flight:
+/// `race_q` (setup.c, one `STARSHIP` pool per side) and `disp_q` (setup.c, the
+/// `ELEMENT` pool of everything on screen).
+///
+/// Both are `QUEUE_TABLE` pools that C initialises with `InitQueue`; Rust only
+/// borrows them, through [`player_ships`] and [`display_list`], so each symbol
+/// is declared once, here. What the slots hold is checked by the reader, which
+/// walks the queue against its pool before it follows a link.
+///
+/// The declaration exists where a consumer exists: the game build, and the
+/// unit-test build of the `linked_c_archive` feature.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod live_queues {
+    use crate::battle::battle_controls::NUM_PLAYERS;
+    use crate::comm::locdata::CQueue;
+
+    extern "C" {
+        #[link_name = "race_q"]
+        static mut RACE_Q: [CQueue; NUM_PLAYERS];
+        #[link_name = "disp_q"]
+        static mut DISP_Q: CQueue;
+    }
+
+    /// `&race_q[player]`, the `STARSHIP` queue of one side (`RPG_PLAYER_NUM` is
+    /// the human player's).
+    ///
+    /// # Safety
+    /// Game thread only. The caller may read the queue only while C is not
+    /// changing it.
+    pub unsafe fn player_ships(player: usize) -> *const CQueue {
+        assert!(player < NUM_PLAYERS, "race_q has no side {player}");
+        std::ptr::addr_of!(RACE_Q).cast::<CQueue>().add(player)
+    }
+
+    /// `&disp_q`, the queue of every live `ELEMENT`.
+    ///
+    /// # Safety
+    /// Game thread only. The caller may read the queue only while C is not
+    /// changing it.
+    pub unsafe fn display_list() -> *const CQueue {
+        std::ptr::addr_of!(DISP_Q)
+    }
+}
+
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the
 /// bindgen reading of the same C struct: total size, alignment, and for each
 /// listed field its offset and size.
@@ -157,6 +201,36 @@ mod solar_system_declaration_tests {
         let text = std::fs::read_to_string(declaring[0]).expect("source file is UTF-8");
         assert_eq!(text.matches(&needle).count(), 1);
         assert!(text.contains("static mut P_SOLAR_SYSTEM_STATE: *mut SOLARSYS_STATE;"));
+    }
+
+    /// The ship and display queues follow the same rule as `pSolarSysState`:
+    /// one declaration, in this file, with the pool type the readers use.
+    #[test]
+    fn race_q_and_disp_q_are_declared_once_with_the_queue_type() {
+        let mut sources = Vec::new();
+        rust_sources(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut sources,
+        );
+        let this_file = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/c_bindings.rs");
+        for (symbol, declaration) in [
+            ("race_q", "static mut RACE_Q: [CQueue; NUM_PLAYERS];"),
+            ("disp_q", "static mut DISP_Q: CQueue;"),
+        ] {
+            let needle = format!("link_name = \"{symbol}\"");
+            let declaring: Vec<_> = sources
+                .iter()
+                .filter(|path| {
+                    std::fs::read_to_string(path)
+                        .expect("source file is UTF-8")
+                        .contains(&needle)
+                })
+                .collect();
+            assert_eq!(declaring, [&this_file], "{symbol}");
+            let text = std::fs::read_to_string(&this_file).expect("source file is UTF-8");
+            assert_eq!(text.matches(&needle).count(), 1, "{symbol}");
+            assert!(text.contains(declaration), "{symbol}");
+        }
     }
 
     /// The prefix views that other modules used to write by hand read these
