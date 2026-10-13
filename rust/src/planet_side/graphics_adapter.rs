@@ -133,8 +133,6 @@ struct CStamp {
 extern "C" {
     static mut PlanetContext: *mut c_void;
     static mut RadarContext: *mut c_void;
-    #[link_name = "pSolarSysState"]
-    static mut P_SOLAR_SYSTEM_STATE: *mut u8;
     fn SetContext(context: *mut c_void) -> *mut c_void;
     fn BatchGraphics();
     fn UnbatchGraphics();
@@ -408,10 +406,13 @@ unsafe fn draw_cargo_meters(lander_base: *mut c_void, snapshot: &RenderSnapshot)
 
 #[cfg(feature = "linked_c_archive")]
 unsafe fn surface_topography_frame() -> Result<*mut c_void, AdapterError> {
-    if P_SOLAR_SYSTEM_STATE.is_null() {
+    let state = crate::c_bindings::solar_system::current();
+    if state.is_null() {
         return Err(AdapterError::new("solar_system_not_initialized"));
     }
-    let frame = std::ptr::read_unaligned(P_SOLAR_SYSTEM_STATE.add(1224).cast::<*mut c_void>());
+    let frame = std::ptr::addr_of!((*state).Orbit.TopoZoomFrame)
+        .read()
+        .cast::<c_void>();
     if frame.is_null() {
         Err(AdapterError::new("surface_topography_not_loaded"))
     } else {

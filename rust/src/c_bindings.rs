@@ -31,6 +31,36 @@ pub mod global_state {
     include!(concat!(env!("OUT_DIR"), "/global_state_abi.rs"));
 }
 
+/// The C-owned live solar-system state, `pSolarSysState` (solarsys.c).
+///
+/// Every Rust reader of this global goes through [`current`], so the symbol is
+/// declared once with the whole bindgen layout of `SOLARSYS_STATE`. C still
+/// allocates, initialises and tears the state down; Rust only borrows it, and
+/// no field is reached through an offset written by hand.
+///
+/// The declaration exists where a consumer exists: the game build, and the
+/// unit-test build of the `linked_c_archive` feature. The plain unit-test
+/// build has no C archive and no consumer.
+#[cfg(any(not(test), feature = "linked_c_archive"))]
+pub mod solar_system {
+    use super::global_state::SOLARSYS_STATE;
+
+    extern "C" {
+        #[link_name = "pSolarSysState"]
+        static mut P_SOLAR_SYSTEM_STATE: *mut SOLARSYS_STATE;
+    }
+
+    /// The live `pSolarSysState`; NULL outside a solar system.
+    ///
+    /// # Safety
+    /// Game thread only: C replaces the pointer while entering and leaving a
+    /// solar system. The caller may dereference the result only while it knows
+    /// the state is not being torn down.
+    pub unsafe fn current() -> *mut SOLARSYS_STATE {
+        std::ptr::addr_of!(P_SOLAR_SYSTEM_STATE).read()
+    }
+}
+
 /// Fail the build when a hand-written `#[repr(C)]` mirror disagrees with the
 /// bindgen reading of the same C struct: total size, alignment, and for each
 /// listed field its offset and size.
@@ -82,4 +112,84 @@ pub unsafe fn player_control_template(player: usize) -> Option<controller_input:
     }
     let controls = std::ptr::addr_of!(PlayerControls).cast::<controller_input::CONTROL_TEMPLATE>();
     Some(unsafe { controls.add(player).read_volatile() })
+}
+
+#[cfg(test)]
+mod solar_system_declaration_tests {
+    use super::global_state::{planet_desc, SOLARSYS_STATE};
+    use std::mem::{offset_of, size_of};
+    use std::path::{Path, PathBuf};
+
+    fn rust_sources(dir: &Path, found: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("source directory is readable") {
+            let path = entry.expect("directory entry is readable").path();
+            if path.is_dir() {
+                rust_sources(&path, found);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                found.push(path);
+            }
+        }
+    }
+
+    /// Two declarations of one C symbol with different types are an ABI clash
+    /// that only a lint suppression can hide, so the symbol has one owner and
+    /// every reader goes through it.
+    #[test]
+    fn p_solar_sys_state_is_declared_once_with_the_generated_type() {
+        let needle = format!("link_name = \"{}\"", "pSolarSysState");
+        let mut sources = Vec::new();
+        rust_sources(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut sources,
+        );
+        let declaring: Vec<_> = sources
+            .iter()
+            .filter(|path| {
+                std::fs::read_to_string(path)
+                    .expect("source file is UTF-8")
+                    .contains(&needle)
+            })
+            .collect();
+        assert_eq!(
+            declaring,
+            [&Path::new(env!("CARGO_MANIFEST_DIR")).join("src/c_bindings.rs")]
+        );
+        let text = std::fs::read_to_string(declaring[0]).expect("source file is UTF-8");
+        assert_eq!(text.matches(&needle).count(), 1);
+        assert!(text.contains("static mut P_SOLAR_SYSTEM_STATE: *mut SOLARSYS_STATE;"));
+    }
+
+    /// The prefix views that other modules used to write by hand read these
+    /// offsets; the generated layout still puts every one of those fields
+    /// there, so the views could be replaced by the generated type.
+    #[test]
+    fn generated_layout_matches_the_retired_prefix_views() {
+        assert_eq!(size_of::<planet_desc>(), 48);
+        assert_eq!(offset_of!(planet_desc, data_index), 4);
+        assert_eq!(offset_of!(planet_desc, NumPlanets), 5);
+        assert_eq!(offset_of!(planet_desc, radius), 6);
+        assert_eq!(offset_of!(planet_desc, image), 24);
+        assert_eq!(offset_of!(planet_desc, pPrevDesc), 40);
+
+        assert_eq!(size_of::<SOLARSYS_STATE>(), 1304);
+        assert_eq!(offset_of!(SOLARSYS_STATE, InIpFlight), 8);
+        assert_eq!(offset_of!(SOLARSYS_STATE, WaitIntersect), 12);
+        assert_eq!(offset_of!(SOLARSYS_STATE, SunDesc), 16);
+        assert_eq!(offset_of!(SOLARSYS_STATE, PlanetDesc), 64);
+        assert_eq!(offset_of!(SOLARSYS_STATE, MoonDesc), 832);
+        assert_eq!(offset_of!(SOLARSYS_STATE, pBaseDesc), 1024);
+        assert_eq!(offset_of!(SOLARSYS_STATE, pOrbitalDesc), 1032);
+        assert_eq!(
+            offset_of!(SOLARSYS_STATE, SysInfo)
+                + offset_of!(super::global_state::SYSTEM_INFO, PlanetInfo)
+                + offset_of!(super::global_state::PLANET_INFO, ScanRetrieveMask),
+            1124
+        );
+        assert_eq!(offset_of!(SOLARSYS_STATE, PlanetSideFrame), 1168);
+        assert_eq!(
+            offset_of!(SOLARSYS_STATE, Orbit)
+                + offset_of!(super::global_state::PLANET_ORBIT, TopoZoomFrame),
+            1224
+        );
+    }
 }
