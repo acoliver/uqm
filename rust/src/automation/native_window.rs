@@ -413,6 +413,167 @@ impl BoundOutputDirectory {
     }
 }
 
+/// Wakes a waiter when something is published into a [`BoundOutputDirectory`].
+///
+/// Every publish renames a new file over the target, which replaces the file
+/// inode, so the directory is watched rather than either file. The kernel
+/// remembers a change that happened before [`Self::wait`] was called, so a
+/// publish racing the waiter is not lost. A wake only means "look again":
+/// callers still read and validate the files themselves and keep their own
+/// deadlines.
+#[derive(Debug)]
+pub struct DirectoryChangeWake {
+    #[cfg(target_os = "macos")]
+    queue: std::os::fd::OwnedFd,
+    #[cfg(target_os = "macos")]
+    _directory: std::os::fd::OwnedFd,
+}
+
+impl BoundOutputDirectory {
+    /// Watch this directory through the descriptor it is already bound to, so
+    /// replacing the directory path afterwards cannot redirect the watch.
+    pub(crate) fn change_wake(&self) -> Result<DirectoryChangeWake, String> {
+        #[cfg(target_os = "macos")]
+        {
+            self.change_wake_macos()
+                .map_err(|error| format!("create native-window change wake: {error}"))
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            Ok(DirectoryChangeWake {})
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn change_wake_macos(&self) -> std::io::Result<DirectoryChangeWake> {
+        use std::os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd};
+
+        let here = c".";
+        // SAFETY: the bound descriptor is open and `here` is NUL-terminated.
+        let raw_directory = unsafe {
+            libc::openat(
+                self.directory.as_raw_fd(),
+                here.as_ptr(),
+                libc::O_RDONLY
+                    | libc::O_DIRECTORY
+                    | libc::O_NOFOLLOW
+                    | libc::O_CLOEXEC
+                    | libc::O_EVTONLY,
+            )
+        };
+        if raw_directory < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: openat returned a new descriptor that nothing else owns.
+        let directory = unsafe { OwnedFd::from_raw_fd(raw_directory) };
+
+        // Darwin creates kqueue descriptors without close-on-exec and sets it
+        // in a second call, so no child may be forked in between.
+        let queue = {
+            let _guard = super::child_session::guard_descriptor_inheritance();
+            // SAFETY: kqueue takes no arguments.
+            let raw_queue = unsafe { libc::kqueue() };
+            if raw_queue < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // SAFETY: kqueue returned a new descriptor that nothing else owns.
+            let queue = unsafe { OwnedFd::from_raw_fd(raw_queue) };
+            // SAFETY: the queue descriptor is open.
+            if unsafe { libc::fcntl(queue.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            queue
+        };
+
+        let registration = libc::kevent {
+            ident: directory.as_raw_fd() as libc::uintptr_t,
+            filter: libc::EVFILT_VNODE,
+            flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
+            fflags: libc::NOTE_WRITE | libc::NOTE_EXTEND,
+            data: 0,
+            udata: std::ptr::null_mut(),
+        };
+        // SAFETY: one valid change record, no event list, no timeout.
+        let registered = unsafe {
+            libc::kevent(
+                queue.as_raw_fd(),
+                &registration,
+                1,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null(),
+            )
+        };
+        if registered != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(DirectoryChangeWake {
+            queue,
+            _directory: directory,
+        })
+    }
+}
+
+impl DirectoryChangeWake {
+    /// Return when the directory changed or after `timeout`, whichever is
+    /// first. An interrupted wait counts as a wake.
+    pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+        #[cfg(target_os = "macos")]
+        {
+            use std::os::fd::AsRawFd as _;
+
+            let limit = libc::timespec {
+                tv_sec: libc::time_t::try_from(timeout.as_secs()).unwrap_or(libc::time_t::MAX),
+                tv_nsec: libc::c_long::from(timeout.subsec_nanos()),
+            };
+            let mut event = libc::kevent {
+                ident: 0,
+                filter: 0,
+                flags: 0,
+                fflags: 0,
+                data: 0,
+                udata: std::ptr::null_mut(),
+            };
+            // SAFETY: no change list, room for exactly one event, valid timeout.
+            let ready = unsafe {
+                libc::kevent(
+                    self.queue.as_raw_fd(),
+                    std::ptr::null(),
+                    0,
+                    &mut event,
+                    1,
+                    &limit,
+                )
+            };
+            match ready {
+                1 if event.flags & libc::EV_ERROR != 0 => {
+                    Err(std::io::Error::from_raw_os_error(event.data as i32))
+                }
+                0 | 1 => Ok(()),
+                _ => {
+                    let error = std::io::Error::last_os_error();
+                    if error.kind() == std::io::ErrorKind::Interrupted {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            std::thread::sleep(timeout);
+            Ok(())
+        }
+    }
+}
+
+impl super::child_session::ChangeWait for DirectoryChangeWake {
+    fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+        DirectoryChangeWake::wait(self, timeout)
+    }
+}
+
 impl BoundOutputDirectory {
     #[cfg(unix)]
     fn contains(&self, name: &std::ffi::OsStr) -> Result<bool, String> {
@@ -514,6 +675,11 @@ impl NativeWindowStateReader {
         })
     }
 
+    /// Wake when the directory holding the state file changes.
+    pub fn change_wake(&self) -> Result<DirectoryChangeWake, String> {
+        self.output_directory.change_wake()
+    }
+
     pub fn read(
         &self,
         expected_nonce: &str,
@@ -547,6 +713,7 @@ pub struct ActiveNativeWindowConfig {
     pub state_path: std::path::PathBuf,
     pub ack_path: std::path::PathBuf,
     output_directory: std::sync::Arc<BoundOutputDirectory>,
+    ack_wake: std::sync::Arc<DirectoryChangeWake>,
     pub runtime_contract: NativeWindowRuntimeContract,
     pub acceptance_policy: NativeAcceptancePolicy,
 }
@@ -1853,6 +2020,7 @@ pub fn activate_native_window_proof(config_path: &Path, output_root: &Path) -> R
         return Err("native-window config violates its schema contract".to_string());
     }
     let output_directory = std::sync::Arc::new(BoundOutputDirectory::open(output_root)?);
+    let ack_wake = std::sync::Arc::new(output_directory.change_wake()?);
     ACTIVE_NATIVE_WINDOW_CONFIG
         .set(ActiveNativeWindowConfig {
             nonce: config.nonce,
@@ -1860,6 +2028,7 @@ pub fn activate_native_window_proof(config_path: &Path, output_root: &Path) -> R
             state_path: output_root.join("native-window-state.json"),
             ack_path: output_root.join("native-window-ack.json"),
             output_directory,
+            ack_wake,
             runtime_contract: config.runtime_contract,
             acceptance_policy: config.acceptance_policy,
         })
@@ -1942,6 +2111,7 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
     )?;
     wait_for_native_window_ack(
         &config.output_directory,
+        &*config.ack_wake,
         &config.nonce,
         state.committed_presentation,
         config.runtime_contract.acknowledgement_timeout(),
@@ -1949,8 +2119,13 @@ pub fn publish_native_window_state(state: &NativeWindowChildState) -> Result<(),
     )
 }
 
+/// How long the game waits for a wake before it reads the acknowledgement
+/// again; a change the wake missed costs at most this long.
+const ACK_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_micros(200);
+
 fn wait_for_native_window_ack(
     output_directory: &BoundOutputDirectory,
+    wake: &impl super::child_session::ChangeWait,
     nonce: &str,
     committed_presentation: u64,
     timeout: std::time::Duration,
@@ -1979,7 +2154,10 @@ fn wait_for_native_window_ack(
                 "native-window state presentation {committed_presentation} was not acknowledged"
             ));
         }
-        std::thread::sleep(std::time::Duration::from_micros(200));
+        wake.wait(
+            ACK_POLL_INTERVAL.min(deadline.saturating_duration_since(std::time::Instant::now())),
+        )
+        .map_err(|error| format!("wait for native-window acknowledgement: {error}"))?;
     }
 }
 
@@ -6003,11 +6181,13 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("native-window-ack.json");
         let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
+        let wake = output_directory.change_wake().unwrap();
         let nonce = "a".repeat(64);
         let wrong_nonce = "b".repeat(64);
         assert_eq!(
             wait_for_native_window_ack(
                 &output_directory,
+                &wake,
                 &nonce,
                 41,
                 std::time::Duration::MAX,
@@ -6020,6 +6200,7 @@ mod tests {
         acknowledge_native_window_state(&path, &wrong_nonce, 41).unwrap();
         assert!(wait_for_native_window_ack(
             &output_directory,
+            &wake,
             &nonce,
             41,
             std::time::Duration::from_millis(5),
@@ -6030,6 +6211,7 @@ mod tests {
         acknowledge_native_window_state(&path, &nonce, 40).unwrap();
         assert!(wait_for_native_window_ack(
             &output_directory,
+            &wake,
             &nonce,
             41,
             std::time::Duration::from_millis(5),
@@ -6046,6 +6228,7 @@ mod tests {
         });
         wait_for_native_window_ack(
             &output_directory,
+            &wake,
             &nonce,
             41,
             std::time::Duration::from_secs(60),
@@ -6055,6 +6238,172 @@ mod tests {
         writer.join().unwrap();
         assert!(!root.path().join(".native-window-ack.json.tmp").exists());
     }
+
+    /// Answers every wait at once, or fails it, and records the timeouts.
+    struct ScriptedAckWake {
+        calls: std::sync::Mutex<Vec<(std::time::Instant, std::time::Duration)>>,
+        failure: Option<&'static str>,
+    }
+
+    impl ScriptedAckWake {
+        fn new(failure: Option<&'static str>) -> Self {
+            Self {
+                calls: std::sync::Mutex::new(Vec::new()),
+                failure,
+            }
+        }
+    }
+
+    impl super::super::child_session::ChangeWait for ScriptedAckWake {
+        fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+            self.calls
+                .lock()
+                .unwrap()
+                .push((std::time::Instant::now(), timeout));
+            match self.failure {
+                Some(message) => Err(std::io::Error::other(message)),
+                None => Ok(()),
+            }
+        }
+    }
+
+    #[test]
+    fn immediate_wake_rejects_a_wrong_nonce_and_still_times_out() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("native-window-ack.json");
+        let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
+        let wake = ScriptedAckWake::new(None);
+        acknowledge_native_window_state(&path, &"b".repeat(64), 41).unwrap();
+
+        let error = wait_for_native_window_ack(
+            &output_directory,
+            &wake,
+            &"a".repeat(64),
+            41,
+            std::time::Duration::from_millis(20),
+            4096,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "native-window state presentation 41 was not acknowledged"
+        );
+        let returned = std::time::Instant::now();
+        let calls = wake.calls.lock().unwrap();
+        assert!(!calls.is_empty());
+        for (called, timeout) in calls.iter() {
+            assert!(*timeout <= ACK_POLL_INTERVAL);
+            // The deadline had passed by the time the wait returned an error,
+            // so a wait that fits before the deadline also ends before then.
+            assert!(*called + *timeout <= returned);
+        }
+    }
+
+    #[test]
+    fn acknowledgement_wait_reports_a_wake_failure() {
+        let root = tempfile::tempdir().unwrap();
+        let output_directory = BoundOutputDirectory::open(root.path()).unwrap();
+        let wake = ScriptedAckWake::new(Some("queue broke"));
+
+        let error = wait_for_native_window_ack(
+            &output_directory,
+            &wake,
+            &"a".repeat(64),
+            41,
+            std::time::Duration::from_secs(60),
+            4096,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, "wait for native-window acknowledgement: queue broke");
+        assert_eq!(wake.calls.lock().unwrap().len(), 1);
+    }
+
+    #[cfg(target_os = "macos")]
+    mod change_wake {
+        use super::*;
+        use std::os::fd::AsRawFd as _;
+        use std::time::{Duration, Instant};
+
+        fn publish(bound: &BoundOutputDirectory) {
+            bound
+                .publish(std::ffi::OsStr::new("state.json"), b"{}", "state")
+                .unwrap();
+        }
+
+        #[test]
+        fn publish_wakes_a_long_wait() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = std::sync::Arc::new(BoundOutputDirectory::open(root.path()).unwrap());
+            let wake = bound.change_wake().unwrap();
+            let publisher = {
+                let bound = std::sync::Arc::clone(&bound);
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(50));
+                    publish(&bound);
+                })
+            };
+            let started = Instant::now();
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(5));
+            publisher.join().unwrap();
+        }
+
+        #[test]
+        fn wait_times_out_without_a_change() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            let started = Instant::now();
+            wake.wait(Duration::from_millis(20)).unwrap();
+            assert!(started.elapsed() >= Duration::from_millis(20));
+        }
+
+        #[test]
+        fn change_before_the_wait_is_not_lost() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            publish(&bound);
+            let started = Instant::now();
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(5));
+        }
+
+        #[test]
+        fn watch_follows_the_bound_directory_after_the_path_is_replaced() {
+            let root = tempfile::tempdir().unwrap();
+            let visible = root.path().join("output");
+            let retained = root.path().join("output-retained");
+            fs::create_dir(&visible).unwrap();
+            let bound = BoundOutputDirectory::open(&visible).unwrap();
+            let wake = bound.change_wake().unwrap();
+            fs::rename(&visible, &retained).unwrap();
+            fs::create_dir(&visible).unwrap();
+
+            publish(&bound);
+
+            assert!(retained.join("state.json").exists());
+            let started = Instant::now();
+            wake.wait(Duration::from_secs(10)).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(5));
+        }
+
+        #[test]
+        fn descriptors_do_not_survive_an_exec() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            for descriptor in [&wake.queue, &wake._directory] {
+                // SAFETY: the descriptor is open for the life of `wake`.
+                let flags = unsafe { libc::fcntl(descriptor.as_raw_fd(), libc::F_GETFD) };
+                assert!(flags >= 0);
+                assert_ne!(flags & libc::FD_CLOEXEC, 0);
+            }
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn bound_output_publication_ignores_a_replacement_root_path() {

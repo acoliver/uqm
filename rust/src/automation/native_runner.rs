@@ -1471,6 +1471,7 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             &automation.join("native-window-state.json"),
             runtime_contract.observer_response_budget_bytes,
         )?;
+        let state_wake = state_reader.change_wake()?;
         let mut observer = BoundedNativeObserver::spawn(&nonce, runtime_contract)?;
         let command_arguments = vec![
             retained_executable.to_string_lossy().into_owned(),
@@ -1548,8 +1549,10 @@ fn run(inputs: RunInputs<'_>) -> Result<(), String> {
             trace_cursor: Default::default(),
             publications: Vec::new(),
         };
-        let session_result =
-            session.finish_observing(|identity| observation.observe(identity, &mut observer));
+        let session_result = session.finish_observing_with_wake(
+            |identity| observation.observe(identity, &mut observer),
+            &state_wake,
+        );
 
         let final_observation_result = if session_result
             .as_ref()

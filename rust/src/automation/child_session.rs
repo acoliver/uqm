@@ -37,6 +37,27 @@ pub const NESTED_GROUP_TOKEN_READ_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_READ
 #[cfg(unix)]
 pub const NESTED_GROUP_TOKEN_WRITE_FD_ENV: &str = "UQM_CI_NESTED_GROUP_TOKEN_WRITE_FD";
 
+/// Blocks a polling loop for up to `timeout`, returning early when the peer
+/// it is waiting on is known to have changed something.
+///
+/// A return, whether early or at the timeout, only says the caller should
+/// poll again. Callers keep their own deadlines and always pass a bounded
+/// timeout, so a lost wake-up degrades to plain polling.
+pub trait ChangeWait {
+    fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()>;
+}
+
+/// [`ChangeWait`] that always sleeps for the full timeout.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SleepWait;
+
+impl ChangeWait for SleepWait {
+    fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
+        std::thread::sleep(timeout);
+        Ok(())
+    }
+}
+
 /// Held while a thread creates a descriptor that must not outlive an exec, or
 /// while it forks a child that would inherit every descriptor then open.
 ///
@@ -732,7 +753,9 @@ mod os {
 
     use crate::automation::identity::{digest_hex, sha256_file};
 
-    use super::{NestedGroupOperation, NestedGroupProtocol, ProcessIdentity};
+    use super::{
+        ChangeWait, NestedGroupOperation, NestedGroupProtocol, ProcessIdentity, SleepWait,
+    };
 
     // --- Errors -----------------------------------------------------------
 
@@ -1075,7 +1098,7 @@ mod os {
     const RUN_LOCK_MAX_BYTES: u64 = 16 * 1024;
     /// The game blocks on the observer's acknowledgement for every
     /// presentation, so the gap between observer polls is added to each frame.
-    const OBSERVER_POLL_INTERVAL: Duration = Duration::from_millis(1);
+    pub(super) const OBSERVER_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -2564,13 +2587,28 @@ mod os {
         /// Observer failure triggers the same targeted stop-and-reap path as
         /// reader and wait failures. The callback never owns child cleanup.
         pub fn finish_observing<F>(
-            mut self,
-            mut observer: F,
+            self,
+            observer: F,
         ) -> Result<ChildSessionReceipt, ChildSessionFailure>
         where
             F: FnMut(&ProcessIdentity) -> io::Result<()>,
         {
-            let event = self.wait_for_event(self.config.timeout, &mut observer);
+            self.finish_observing_with_wake(observer, &SleepWait)
+        }
+
+        /// [`Self::finish_observing`] where the gap between polls ends early
+        /// when `wake` reports a change. `wake` is never given more than one
+        /// poll interval, so a missed change costs one interval, not a hang.
+        pub fn finish_observing_with_wake<F, W>(
+            mut self,
+            mut observer: F,
+            wake: &W,
+        ) -> Result<ChildSessionReceipt, ChildSessionFailure>
+        where
+            F: FnMut(&ProcessIdentity) -> io::Result<()>,
+            W: ChangeWait,
+        {
+            let event = self.wait_for_event(self.config.timeout, &mut observer, wake);
             let outcome = match event {
                 Ok(SupervisorEvent::Exited) => self.teardown_and_reap(None),
                 Ok(SupervisorEvent::Reader(fault)) => {
@@ -2621,6 +2659,7 @@ mod os {
             &mut self,
             duration: Duration,
             observer: &mut impl FnMut(&ProcessIdentity) -> io::Result<()>,
+            wake: &impl ChangeWait,
         ) -> Result<SupervisorEvent, ChildSessionError> {
             let deadline = Instant::now()
                 .checked_add(duration)
@@ -2643,10 +2682,16 @@ mod os {
                     Ok(false) if Instant::now() >= deadline => {
                         return Ok(SupervisorEvent::Deadline)
                     }
-                    Ok(false) => thread::sleep(
-                        OBSERVER_POLL_INTERVAL
-                            .min(deadline.saturating_duration_since(Instant::now())),
-                    ),
+                    Ok(false) => {
+                        match wake.wait(
+                            OBSERVER_POLL_INTERVAL
+                                .min(deadline.saturating_duration_since(Instant::now())),
+                        ) {
+                            Ok(()) => {}
+                            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                            Err(error) => return Err(ChildSessionError::Observer(error)),
+                        }
+                    }
                     Err(error) if error.kind() == ErrorKind::Interrupted => {}
                     Err(error) => return Err(ChildSessionError::Wait(error)),
                 }
@@ -3873,6 +3918,117 @@ mod os_tests {
         assert!(matches!(failure.error, ChildSessionError::Observer(_)));
         assert!(failure.receipt.term_sent);
         assert!(failure.receipt.orphan_check_passed);
+    }
+
+    /// Records every timeout it is given and answers with `respond`.
+    struct ScriptedWake<F: Fn(Duration) -> io::Result<()>> {
+        timeouts: std::sync::Mutex<Vec<Duration>>,
+        respond: F,
+    }
+
+    impl<F: Fn(Duration) -> io::Result<()>> ScriptedWake<F> {
+        fn new(respond: F) -> Self {
+            Self {
+                timeouts: std::sync::Mutex::new(Vec::new()),
+                respond,
+            }
+        }
+
+        fn timeouts(&self) -> Vec<Duration> {
+            self.timeouts.lock().unwrap().clone()
+        }
+    }
+
+    impl<F: Fn(Duration) -> io::Result<()>> ChangeWait for ScriptedWake<F> {
+        fn wait(&self, timeout: Duration) -> io::Result<()> {
+            self.timeouts.lock().unwrap().push(timeout);
+            (self.respond)(timeout)
+        }
+    }
+
+    #[test]
+    fn immediate_wake_cannot_defeat_the_deadline_and_never_gets_more_than_a_poll() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_millis(50), Duration::from_secs(1));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 10"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|_| Ok(()));
+        let failure = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect_err("an always-ready wake must still time out");
+        assert!(matches!(
+            failure.error,
+            ChildSessionError::Timeout {
+                term_sent: true,
+                ..
+            }
+        ));
+        assert!(failure.receipt.orphan_check_passed);
+        let timeouts = wake.timeouts();
+        assert!(!timeouts.is_empty());
+        assert!(timeouts.iter().all(|t| *t <= os::OBSERVER_POLL_INTERVAL));
+        assert!(
+            timeouts.iter().any(|t| *t < os::OBSERVER_POLL_INTERVAL),
+            "the last waits must be clamped to the time left before the deadline"
+        );
+    }
+
+    #[test]
+    fn wake_failure_stops_and_reaps_the_exact_child() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 10"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|_| Err(io::Error::other("wake failed")));
+        let failure = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect_err("wake failure");
+        assert!(
+            matches!(&failure.error, ChildSessionError::Observer(error) if error.to_string() == "wake failed"),
+            "{:?}",
+            failure.error
+        );
+        assert!(failure.receipt.term_sent);
+        assert!(failure.receipt.orphan_check_passed);
+    }
+
+    #[test]
+    fn interrupted_wake_counts_as_a_wake() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 0.05; exit 0"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|timeout| {
+            std::thread::sleep(timeout);
+            Err(io::Error::from(io::ErrorKind::Interrupted))
+        });
+        let receipt = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect("an interrupted wake is not an error");
+        assert_eq!(receipt.exit_code, Some(0));
+        assert!(!wake.timeouts().is_empty());
+    }
+
+    #[test]
+    fn child_exit_is_detected_while_the_wake_sleeps() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 0.05; exit 0"]);
+        let session = ChildSession::spawn(command, config).expect("spawn");
+        let wake = ScriptedWake::new(|timeout| {
+            std::thread::sleep(timeout);
+            Ok(())
+        });
+        let receipt = session
+            .finish_observing_with_wake(|_| Ok(()), &wake)
+            .expect("finish");
+        assert_eq!(receipt.exit_code, Some(0));
+        assert!(!receipt.term_sent);
+        assert!(receipt.orphan_check_passed);
     }
 
     #[test]
