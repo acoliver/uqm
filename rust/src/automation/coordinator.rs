@@ -178,6 +178,25 @@ fn planet_side_wait_satisfied(
         && observation.terminal == outcome.terminal_code()
 }
 
+/// Describe the trip state a `wait_for_planet_side_end` last observed before
+/// it exhausted its ticks.
+fn planet_side_wait_mismatch_label(
+    awaited: Option<u64>,
+    observation: &crate::planet_side::telemetry::PlanetSideObservation,
+    outcome: crate::automation::script::PlanetSideOutcomeName,
+) -> String {
+    format!(
+        "planet_side_wait_unsatisfied:awaited={awaited:?}:expected_terminal={}:\
+         generation={}:active={}:terminal={}:phase={}:crew={}",
+        outcome.terminal_code(),
+        observation.generation,
+        observation.active,
+        observation.terminal,
+        crate::planet_side::telemetry::phase_name(observation.phase),
+        observation.current_crew
+    )
+}
+
 /// Rotating phase for the orbital-exit key sequence.
 static ORBIT_EXIT_PHASE: AtomicU64 = AtomicU64::new(0);
 
@@ -1270,11 +1289,30 @@ impl Coordinator {
                 "[automation] scheduler terminal: {:?} -> class={:?}",
                 inner.sched_state.terminal, class
             );
+            if class == TerminalClass::SemanticMismatch {
+                self.trace_unsatisfied_planet_side_wait(&mut inner);
+            }
             self.set_terminal(&mut inner, class);
             return true;
         }
 
         false
+    }
+
+    /// When a `wait_for_planet_side_end` ran out of ticks, record the last
+    /// observation it saw so the failure names the state the trip stalled in.
+    fn trace_unsatisfied_planet_side_wait(&self, inner: &mut CoordInner) {
+        let Some(Action::WaitForPlanetSideEnd(wait)) =
+            self.actions.get(inner.sched_state.step_index)
+        else {
+            return;
+        };
+        let label = planet_side_wait_mismatch_label(
+            inner.awaited_planet_side_generation,
+            &crate::planet_side::telemetry::observation(),
+            wait.outcome,
+        );
+        self.write_trace_labeled(inner, RecordKind::SemanticAssertion, label);
     }
 
     fn verify_runtime_assertions(&self, inner: &mut CoordInner) -> bool {
@@ -3113,6 +3151,20 @@ mod tests {
             &settled(2, code),
             outcome
         ));
+    }
+
+    #[test]
+    fn exhausted_planet_side_wait_names_the_state_it_last_observed() {
+        let outcome = crate::automation::script::PlanetSideOutcomeName::Returned;
+        let mut observation = settled(1, crate::planet_side::telemetry::terminal::DESTROYED);
+        observation.active = true;
+        observation.phase = 8;
+        observation.current_crew = 0;
+        assert_eq!(
+            planet_side_wait_mismatch_label(Some(1), &observation, outcome),
+            "planet_side_wait_unsatisfied:awaited=Some(1):expected_terminal=1:\
+             generation=1:active=true:terminal=2:phase=Complete:crew=0"
+        );
     }
 
     #[test]
