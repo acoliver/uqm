@@ -344,7 +344,12 @@ fn validate_native_suite_bundle(
     if manifest.passed {
         let policy = ci::authority::load_policy_bytes(root)?;
         if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
-            let binding = ci::controller::derive_binding(root, &authority, &policy)?;
+            let binding = ci::controller::derive_binding(
+                root,
+                &authority,
+                &policy,
+                &ci::controller::WorkflowInputs::from_env(),
+            )?;
             let required = binding.selected(&authority, &binding.source_sha, &policy)?;
             if selected != required {
                 return Err(
@@ -727,7 +732,12 @@ pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Resul
     let selected = selected_acceptance_scripts(&authority, request.scenarios.as_deref())?;
     if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
         let policy = ci::authority::load_policy_bytes(root)?;
-        let binding = ci::controller::derive_binding(root, &authority, &policy)?;
+        let binding = ci::controller::derive_binding(
+            root,
+            &authority,
+            &policy,
+            &ci::controller::WorkflowInputs::from_env(),
+        )?;
         if binding.selected(&authority, &binding.source_sha, &policy)? != selected {
             return Err("requested native suite differs from trusted workflow selection".into());
         }

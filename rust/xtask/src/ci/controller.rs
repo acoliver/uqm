@@ -256,6 +256,44 @@ fn git(root: &Path, authority: &Authority, arguments: &[&str]) -> Result<Vec<u8>
     Ok(captured.stdout)
 }
 
+/// Workflow-owned inputs that decide event selection.
+///
+/// Production reads them from the process environment once, at the entry
+/// point, so selection itself takes plain data. Each field keeps the error its
+/// lookup produced, so a missing input is reported only when the selected event
+/// needs it.
+#[derive(Clone, Debug)]
+pub struct WorkflowInputs {
+    event: Result<WorkflowEvent, String>,
+    controller_sha: Result<String, String>,
+    expected_sha: Option<String>,
+    base_sha: Result<String, String>,
+}
+
+impl WorkflowInputs {
+    pub fn from_env() -> Self {
+        let var = |name: &str| std::env::var(name).map_err(|e| e.to_string());
+        Self {
+            event: workflow_event(),
+            controller_sha: var("UQM_CI_CONTROLLER_SHA"),
+            expected_sha: std::env::var("UQM_CI_EXPECTED_SHA").ok(),
+            base_sha: var("UQM_CI_EVENT_BASE_SHA"),
+        }
+    }
+
+    /// A developer checkout: no trusted workflow event, nothing else bound.
+    #[cfg(test)]
+    pub fn local() -> Self {
+        let unbound = || Err("not bound for a local run".to_string());
+        Self {
+            event: Ok(WorkflowEvent::Local),
+            controller_sha: unbound(),
+            expected_sha: None,
+            base_sha: unbound(),
+        }
+    }
+}
+
 pub fn workflow_event() -> Result<WorkflowEvent, String> {
     match std::env::var("UQM_CI_EVENT_NAME").as_deref() {
         Ok("pull_request_target") => Ok(WorkflowEvent::PullRequestTarget),
@@ -273,8 +311,9 @@ pub fn derive_binding(
     root: &Path,
     authority: &Authority,
     policy: &[u8],
+    inputs: &WorkflowInputs,
 ) -> Result<SelectionBinding, String> {
-    let event = workflow_event()?;
+    let event = inputs.event.clone()?;
     let source = String::from_utf8(git(root, authority, &["rev-parse", "HEAD"])?)
         .map_err(|e| e.to_string())?
         .trim()
@@ -282,11 +321,9 @@ pub fn derive_binding(
     let controller = if event == WorkflowEvent::Local {
         source.clone()
     } else {
-        std::env::var("UQM_CI_CONTROLLER_SHA").map_err(|e| e.to_string())?
+        inputs.controller_sha.clone()?
     };
-    if event != WorkflowEvent::Local
-        && std::env::var("UQM_CI_EXPECTED_SHA").ok().as_deref() != Some(&source)
-    {
+    if event != WorkflowEvent::Local && inputs.expected_sha.as_deref() != Some(&source) {
         return Err("workflow source differs from checkout".into());
     }
     let mut binding = SelectionBinding {
@@ -301,7 +338,7 @@ pub fn derive_binding(
         autoplay: event_selection(event, None),
     };
     if event == WorkflowEvent::PullRequestTarget {
-        let base = std::env::var("UQM_CI_EVENT_BASE_SHA").map_err(|e| e.to_string())?;
+        let base = inputs.base_sha.clone()?;
         if !revision(&base) {
             return Err("invalid workflow PR base revision".into());
         }

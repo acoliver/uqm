@@ -123,6 +123,42 @@ pub fn plan(root: &Path) -> Result<Plan, CiError> {
 }
 
 pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
+    derive_plan_with(root, &super::controller::WorkflowInputs::from_env())
+}
+
+/// Tuple identity only: it needs no workflow event, so it never consults one.
+pub fn derive_tuples(root: &Path) -> Result<Vec<String>, CiError> {
+    derive_unselected_plan(root).map(|unselected| unselected.plan.tuple_names())
+}
+
+struct UnselectedPlan {
+    plan: Plan,
+    source_root: std::path::PathBuf,
+    authority: super::authority::Authority,
+    authority_contract: serde_json::Value,
+    policy: Vec<u8>,
+}
+
+pub fn derive_plan_with(
+    root: &Path,
+    inputs: &super::controller::WorkflowInputs,
+) -> Result<Plan, CiError> {
+    let UnselectedPlan {
+        mut plan,
+        source_root,
+        authority,
+        authority_contract,
+        policy,
+    } = derive_unselected_plan(root)?;
+    let binding = super::controller::derive_binding(&source_root, &authority, &policy, inputs)
+        .map_err(|e| CiError::new("ci.plan.selection", e))?;
+    plan.authority_contract = Some(authority_contract);
+    plan.autoplay = binding.autoplay.clone();
+    plan.selection = Some(binding);
+    Ok(plan)
+}
+
+fn derive_unselected_plan(root: &Path) -> Result<UnselectedPlan, CiError> {
     let source_root = super::controller::runtime_source_root(root)
         .map_err(|error| CiError::new("ci.plan.source", error))?;
     if !source_root.is_absolute() {
@@ -143,7 +179,7 @@ pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
     .map_err(|error| CiError::new("ci.plan.matrix", error))?;
     let matrix: Matrix = serde_json::from_slice(&bytes)
         .map_err(|error| CiError::new("ci.plan.matrix", error.to_string()))?;
-    let mut plan = build_plan(&matrix, &authority.runner_mapping, AUTHORITY_RELATIVE)
+    let plan = build_plan(&matrix, &authority.runner_mapping, AUTHORITY_RELATIVE)
         .map_err(|error| CiError::new("ci.plan.matrix", error))?;
     let policy = super::bounded_io::read_regular_nofollow(
         &source_root.join(AUTHORITY_RELATIVE),
@@ -158,12 +194,13 @@ pub fn derive_plan(root: &Path) -> Result<Plan, CiError> {
             "source policy differs from admitted controller policy",
         ));
     }
-    let binding = super::controller::derive_binding(&source_root, &authority, &policy)
-        .map_err(|e| CiError::new("ci.plan.selection", e))?;
-    plan.authority_contract = Some(authority_contract);
-    plan.autoplay = binding.autoplay.clone();
-    plan.selection = Some(binding);
-    Ok(plan)
+    Ok(UnselectedPlan {
+        plan,
+        source_root,
+        authority,
+        authority_contract,
+        policy,
+    })
 }
 
 fn write_plan(root: &Path, plan: &Plan) -> Result<(), CiError> {
@@ -246,7 +283,8 @@ mod tests {
             .join("../..")
             .canonicalize()
             .unwrap();
-        let plan = derive_plan(&root).unwrap();
+        let plan =
+            derive_plan_with(&root, &super::super::controller::WorkflowInputs::local()).unwrap();
         let raw: serde_json::Value =
             serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
         assert_eq!(plan.authority_contract, Some(raw));

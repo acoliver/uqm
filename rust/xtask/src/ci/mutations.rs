@@ -1084,7 +1084,7 @@ fn validate_workflow_mutant(
     let yaml = String::from_utf8(read("rust-quality.yaml")?)
         .map_err(|error| format!("workflow mutation fixture is not UTF-8: {error}"))?;
     let document = super::workflow::parse_yaml(&yaml)?;
-    let tuples = super::plan::derive_plan(root)?.tuple_names();
+    let tuples = super::plan::derive_tuples(root)?;
     let failed = super::workflow::validate_semantics(&document, &tuples, authority)
         .into_iter()
         .filter(|rule| !rule.passed)
