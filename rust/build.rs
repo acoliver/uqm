@@ -116,6 +116,7 @@ fn run() -> Result<(), String> {
     println!("cargo:rerun-if-changed={EXTERNAL_NATIVE_ALLOWLIST}");
     generate_hash_abi_bindings()?;
     generate_input_abi_bindings()?;
+    generate_global_state_abi_bindings()?;
     let mut packages = discover_packages(&SDL_PACKAGE)?;
     let target_os = env_value("CARGO_CFG_TARGET_OS")?;
     if env::var_os("CARGO_FEATURE_LINKED_C_ARCHIVE").is_some() {
@@ -707,6 +708,37 @@ fn generate_input_abi_bindings() -> Result<(), String> {
         bindings.to_string(),
     )
     .map_err(|error| format!("cannot write generated controller-input ABI bindings: {error}"))
+}
+
+/// Bindgen layout of the live game-state record the Save/Load runtime reads
+/// and writes: `GAME_STATE`, `GLOBDATA`, `CLOCK_STATE`, `EVENT`,
+/// `VELOCITY_DESC` and the `NUM_EVENTS` pool size.
+///
+/// The hand-written mirrors in `comm/locdata.rs` and `time/clock_bridge.rs`
+/// compare every offset, size and alignment against these at compile time, so
+/// a header change that moves a field stops the build instead of corrupting a
+/// save.
+fn generate_global_state_abi_bindings() -> Result<(), String> {
+    let out_dir = output_directory()?;
+    let globdata = "../sc2/src/uqm/globdata.h";
+    let events = "../sc2/src/uqm/gameev.h";
+    for header in [globdata, events] {
+        println!("cargo:rerun-if-changed={header}");
+    }
+    let bindings = bindgen::Builder::default()
+        .header(globdata)
+        .header(events)
+        .clang_arg("-I../sc2")
+        .clang_arg("-I../sc2/src")
+        .allowlist_type("(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC)")
+        .allowlist_var("NUM_EVENTS")
+        .generate_comments(false)
+        .layout_tests(false)
+        .formatter(ABI_BINDING_FORMATTER)
+        .generate()
+        .map_err(|error| format!("cannot generate global-state ABI bindings: {error}"))?;
+    fs::write(out_dir.join("global_state_abi.rs"), bindings.to_string())
+        .map_err(|error| format!("cannot write generated global-state ABI bindings: {error}"))
 }
 
 /// Rename the generated hash-table ABI to this crate's spelling, and restore

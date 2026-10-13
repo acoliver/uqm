@@ -1,14 +1,15 @@
 //! UQM Save version 1 ("UMS\x01") persistence.
 //!
 //! This module owns the on-disk format and the slot files of the Starbase
-//! Save/Load menu. It does not capture the running game into a [`SaveFile`]
-//! or restore one into the running game; those need the live queues, clock
-//! and state files and are not part of this module.
+//! Save/Load menu. [`runtime`] captures and restores the part of a save that
+//! lives in `GlobData`, the game-state singleton and the clock's event queue;
+//! the other sections need the live queues and state files and are not ported.
 
 pub mod decode;
 pub mod encode;
 pub mod error;
 pub mod format;
+pub mod runtime;
 pub mod slots;
 pub mod types;
 

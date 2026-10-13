@@ -315,12 +315,11 @@ pub fn get_crew_enlisted() -> u16 {
 pub fn zero_global_velocity() {
     #[cfg(not(test))]
     {
-        // SAFETY: zeroes the velocity field (18 bytes) in the C GlobData global.
+        // SAFETY: zeroes the velocity field in the C GlobData global.
         unsafe {
             let velocity_ptr =
-                std::ptr::addr_of_mut!(c_globals::globdata_ffi::GlobData.game_state._velocity)
-                    as *mut u8;
-            std::ptr::write_bytes(velocity_ptr, 0, 18);
+                std::ptr::addr_of_mut!(c_globals::globdata_ffi::GlobData.game_state.velocity);
+            std::ptr::write_bytes(velocity_ptr, 0, 1);
         }
     }
     #[cfg(test)]
