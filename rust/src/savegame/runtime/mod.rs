@@ -1,15 +1,17 @@
-//! Capture and restore of the running game's "GlSt", "GmSt" and "Evts"
-//! sections.
+//! Capture and restore of the running game's "GlSt", "GmSt", "Evts", "Scan",
+//! "Grps" and "BtGp" sections.
 //!
-//! These three are the part of a save that lives in `GlobData`, the Rust
-//! game-state singleton and the game clock's event queue. The functions here
+//! The first three are the part of a save that lives in `GlobData`, the Rust
+//! game-state singleton and the game clock's event queue; the last three are
+//! the state files (`statefiles`). The functions here
 //! work on those live structures, not on copies. The other sections (race,
-//! group, ship and encounter queues, state files, location, summary) and the
+//! group, ship and encounter queues, location, summary) and the
 //! `SaveGame`/`LoadGame` orchestration are not ported yet, so nothing here is
 //! wired to a menu.
 
 pub mod events;
 pub mod global;
+pub mod statefiles;
 
 use std::fmt;
 
@@ -40,6 +42,7 @@ pub struct Restored {
 pub enum RuntimeError {
     Events(EventError),
     GameState(GameStateOwnerError),
+    StateFiles(statefiles::StateSectionError),
 }
 
 impl fmt::Display for RuntimeError {
@@ -47,6 +50,7 @@ impl fmt::Display for RuntimeError {
         match self {
             Self::Events(error) => write!(f, "event queue: {error}"),
             Self::GameState(error) => write!(f, "game state: {error}"),
+            Self::StateFiles(error) => write!(f, "state files: {error}"),
         }
     }
 }
@@ -98,5 +102,7 @@ pub fn restore_runtime(
     })
 }
 
+#[cfg(test)]
+mod statefile_tests;
 #[cfg(test)]
 mod tests;
