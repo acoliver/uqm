@@ -1,17 +1,18 @@
 //! Capture and restore of the running game's "GlSt", "GmSt", "Evts", "Scan",
-//! "Grps", "BtGp", "RacQ", "NpcQ" and "ShpQ" sections.
+//! "Grps", "BtGp", "RacQ", "NpcQ", "ShpQ", "IGpQ" and "Enct" sections.
 //!
 //! The first three are the part of a save that lives in `GlobData`, the Rust
 //! game-state singleton and the game clock's event queue; the next three are
-//! the state files (`statefiles`); the last three are the fleet and ship
-//! queues of `GlobData` (`queues`). The functions here
-//! work on those live structures, not on copies. The other sections (the
-//! interplanetary group and encounter queues, location, summary) and the
+//! the state files (`statefiles`); then come the fleet and ship queues of
+//! `GlobData` (`queues`) and its interplanetary group and encounter queues
+//! (`groups`). The functions here work on those live structures, not on
+//! copies. The other sections (location, summary) and the
 //! `SaveGame`/`LoadGame` orchestration are not ported yet, so nothing here is
 //! wired to a menu.
 
 pub mod events;
 pub mod global;
+pub mod groups;
 pub mod queues;
 pub mod statefiles;
 
@@ -46,6 +47,7 @@ pub enum RuntimeError {
     GameState(GameStateOwnerError),
     StateFiles(statefiles::StateSectionError),
     Queues(queues::QueueError),
+    Groups(groups::GroupError),
 }
 
 impl fmt::Display for RuntimeError {
@@ -55,6 +57,7 @@ impl fmt::Display for RuntimeError {
             Self::GameState(error) => write!(f, "game state: {error}"),
             Self::StateFiles(error) => write!(f, "state files: {error}"),
             Self::Queues(error) => write!(f, "ship queues: {error}"),
+            Self::Groups(error) => write!(f, "group queues: {error}"),
         }
     }
 }
@@ -70,6 +73,12 @@ impl From<EventError> for RuntimeError {
 impl From<queues::QueueError> for RuntimeError {
     fn from(error: queues::QueueError) -> Self {
         Self::Queues(error)
+    }
+}
+
+impl From<groups::GroupError> for RuntimeError {
+    fn from(error: groups::GroupError) -> Self {
+        Self::Groups(error)
     }
 }
 
@@ -112,6 +121,8 @@ pub fn restore_runtime(
     })
 }
 
+#[cfg(test)]
+mod group_tests;
 #[cfg(test)]
 mod queue_tests;
 #[cfg(test)]

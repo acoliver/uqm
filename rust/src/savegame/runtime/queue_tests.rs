@@ -11,21 +11,22 @@
 use std::mem::{offset_of, size_of};
 use std::ops::{Deref, DerefMut};
 
+use super::groups::CIpGroup;
 use super::queues::*;
 use crate::collections::queue::{AllocLink, HLink, InitQueue, PutQueue, Queue, UninitQueue};
-use crate::comm::dispatch::{CFleetInfo, CPoint, CShipFragment, INFINITE_FLEET};
+use crate::comm::dispatch::{CEncounter, CFleetInfo, CPoint, CShipFragment, INFINITE_FLEET};
 use crate::comm::locdata::{CGameState, CQueue};
 use crate::savegame::decode::decode_save;
 use crate::savegame::types::{Point, RaceEntry, ShipFragmentEntry};
 use crate::time::clock_bridge::NUM_EVENTS;
 
 /// Tracked evidence from a real run of the C game: epic 20 load/save proof.
-const C_WRITTEN_SAVE: &[u8] = include_bytes!(
+pub(super) const C_WRITTEN_SAVE: &[u8] = include_bytes!(
     "../../../../docs/evidence/epic-20/exact-production-79e68744e/load-save/seed-uqmsave.00"
 );
 
 /// `NUM_AVAILABLE_RACES` (races.h): the fleets `InitGameStructures` queues.
-const RACES: usize = 24;
+pub(super) const RACES: usize = 24;
 const NPC_SLOTS: u16 = 14;
 const BUILT_SLOTS: u16 = 12;
 
@@ -39,15 +40,15 @@ const HUMAN_SHIP: u16 = 2;
 
 /// A `GAME_STATE` whose three queues were made by `InitQueue`, with a template
 /// in `avail_race_q` for every race.
-struct LiveGame(Box<CGameState>);
+pub(super) struct LiveGame(Box<CGameState>);
 
 /// Resource handles of the template of `race`; never dereferenced.
-fn handle(race: usize, which: usize) -> *mut std::ffi::c_void {
+pub(super) fn handle(race: usize, which: usize) -> *mut std::ffi::c_void {
     (0x1_0000 + race * 0x100 + which * 0x10) as *mut std::ffi::c_void
 }
 
 impl LiveGame {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let mut game = Self::bare();
         for race in 0..RACES {
             let queue = game.avail_ptr();
@@ -86,7 +87,7 @@ impl LiveGame {
     }
 
     /// The three pools with nothing queued in `avail_race_q`.
-    fn bare() -> Self {
+    pub(super) fn bare() -> Self {
         // SAFETY: `CGameState` is integers and raw pointers; all zeroes is a
         // valid value, and it is what C's static storage starts as.
         let mut game: Box<CGameState> = Box::new(unsafe { std::mem::zeroed() });
@@ -105,14 +106,25 @@ impl LiveGame {
             BUILT_SLOTS,
             size_of::<CShipFragment>() as u16
         ));
+        // `MAX_BATTLE_GROUPS` and `MAX_ENCOUNTERS`, as `InitGameStructures` sizes them.
+        assert!(InitQueue(
+            std::ptr::addr_of_mut!(game.ip_group_q).cast::<Queue>(),
+            32,
+            size_of::<CIpGroup>() as u16
+        ));
+        assert!(InitQueue(
+            std::ptr::addr_of_mut!(game.encounter_q).cast::<Queue>(),
+            16,
+            size_of::<CEncounter>() as u16
+        ));
         Self(game)
     }
 
-    fn avail_ptr(&mut self) -> *mut Queue {
+    pub(super) fn avail_ptr(&mut self) -> *mut Queue {
         std::ptr::addr_of_mut!(self.0.avail_race_q).cast::<Queue>()
     }
 
-    fn template(&self, race: usize) -> &CFleetInfo {
+    pub(super) fn template(&self, race: usize) -> &CFleetInfo {
         let fleets: Vec<*mut CFleetInfo> = links(&self.avail_race_q);
         // SAFETY: the links are slots of the `FLEET_INFO` pool.
         unsafe { &*fleets[race] }
@@ -156,6 +168,8 @@ impl Drop for LiveGame {
             std::ptr::addr_of_mut!(self.0.avail_race_q),
             std::ptr::addr_of_mut!(self.0.npc_built_ship_q),
             std::ptr::addr_of_mut!(self.0.built_ship_q),
+            std::ptr::addr_of_mut!(self.0.ip_group_q),
+            std::ptr::addr_of_mut!(self.0.encounter_q),
         ] {
             UninitQueue(queue.cast::<Queue>());
         }
@@ -177,7 +191,7 @@ impl DerefMut for LiveGame {
 
 /// The links of a queue by following the raw `succ` pointers, independent of
 /// the walker under test.
-fn links<T>(queue: &CQueue) -> Vec<*mut T> {
+pub(super) fn links<T>(queue: &CQueue) -> Vec<*mut T> {
     let mut out = Vec::new();
     let mut link = queue.head;
     while !link.is_null() {
@@ -198,7 +212,7 @@ fn fragments(queue: &CQueue) -> Vec<&CShipFragment> {
 }
 
 /// Slots on the free list of `queue`.
-fn free_slots(queue: &CQueue) -> usize {
+pub(super) fn free_slots(queue: &CQueue) -> usize {
     let mut count = 0;
     let mut link: HLink = queue.free_list;
     while !link.is_null() {

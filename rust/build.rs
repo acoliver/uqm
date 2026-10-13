@@ -712,8 +712,10 @@ fn generate_input_abi_bindings() -> Result<(), String> {
 
 /// Bindgen layout of the live game-state record the Save/Load runtime reads
 /// and writes: `GAME_STATE`, `GLOBDATA`, `CLOCK_STATE`, `EVENT`,
-/// `VELOCITY_DESC`, the `FLEET_INFO` and `SHIP_FRAGMENT` queue elements and
-/// the `NUM_EVENTS` pool size.
+/// `VELOCITY_DESC`, the `FLEET_INFO`, `SHIP_FRAGMENT`, `IP_GROUP` and
+/// `ENCOUNTER` queue elements (with `BRIEF_SHIP_INFO`), the `NUM_EVENTS` pool
+/// size and the `MAX_BATTLE_GROUPS`, `MAX_ENCOUNTERS` and `MAX_HYPER_SHIPS`
+/// bounds.
 ///
 /// The hand-written mirrors in `comm/locdata.rs` and `time/clock_bridge.rs`
 /// compare every offset, size and alignment against these at compile time, so
@@ -724,19 +726,24 @@ fn generate_global_state_abi_bindings() -> Result<(), String> {
     let globdata = "../sc2/src/uqm/globdata.h";
     let events = "../sc2/src/uqm/gameev.h";
     let races = "../sc2/src/uqm/races.h";
-    for header in [globdata, events, races] {
+    let groups = "../sc2/src/uqm/grpinfo.h";
+    let encounters = "../sc2/src/uqm/encount.h";
+    for header in [globdata, events, races, groups, encounters] {
         println!("cargo:rerun-if-changed={header}");
     }
     let bindings = bindgen::Builder::default()
         .header(globdata)
         .header(events)
         .header(races)
+        .header(groups)
+        .header(encounters)
         .clang_arg("-I../sc2")
         .clang_arg("-I../sc2/src")
         .allowlist_type(
-            "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT)",
+            "(GAME_STATE|GLOBDATA|CLOCK_STATE|EVENT|VELOCITY_DESC|FLEET_INFO|SHIP_FRAGMENT\
+             |IP_GROUP|ENCOUNTER|BRIEF_SHIP_INFO)",
         )
-        .allowlist_var("NUM_EVENTS")
+        .allowlist_var("(NUM_EVENTS|MAX_BATTLE_GROUPS|MAX_ENCOUNTERS|MAX_HYPER_SHIPS)")
         .generate_comments(false)
         .layout_tests(false)
         .formatter(ABI_BINDING_FORMATTER)

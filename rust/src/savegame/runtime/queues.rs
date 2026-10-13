@@ -37,7 +37,8 @@
 //!   an escort that has more crew than its ship holds are rejected.
 //!
 //! Not ported here: `InitGameStructures`, which makes `avail_race_q` and its
-//! templates, and the "IGpQ" and "Enct" queues.
+//! templates. The "IGpQ" and "Enct" queues are in `groups`, which reuses the
+//! pool walker of this module.
 
 use std::ffi::c_void;
 use std::fmt;
@@ -71,6 +72,8 @@ pub enum QueueKind {
     AvailableRaces,
     NpcShips,
     BuiltShips,
+    IpGroups,
+    Encounters,
 }
 
 /// Why the queue sections could not be captured or restored.
@@ -142,7 +145,7 @@ pub struct QueueSections {
 }
 
 /// An element that starts with the `LINK` fields.
-trait QueueElement {
+pub(super) trait QueueElement {
     fn pred(&self) -> *mut c_void;
     fn succ(&self) -> *mut c_void;
 }
@@ -166,7 +169,10 @@ impl QueueElement for CShipFragment {
 }
 
 /// Slots of a queue that really is a pool of `T`.
-fn pool_slots<T: QueueElement>(queue: &CQueue, kind: QueueKind) -> Result<usize, QueueError> {
+pub(super) fn pool_slots<T: QueueElement>(
+    queue: &CQueue,
+    kind: QueueKind,
+) -> Result<usize, QueueError> {
     if queue.pq_tab.is_null() {
         return Err(QueueError::PoolMissing { queue: kind });
     }
@@ -187,7 +193,10 @@ fn pool_slots<T: QueueElement>(queue: &CQueue, kind: QueueKind) -> Result<usize,
 ///
 /// Every link is checked against the pool, so a queue the game corrupted is an
 /// error and not a save of whatever the pointers reach.
-fn walk<T: QueueElement>(queue: &CQueue, kind: QueueKind) -> Result<Vec<*mut T>, QueueError> {
+pub(super) fn walk<T: QueueElement>(
+    queue: &CQueue,
+    kind: QueueKind,
+) -> Result<Vec<*mut T>, QueueError> {
     let slots = pool_slots::<T>(queue, kind)?;
     let pool = queue.pq_tab as usize;
     let slot_size = usize::from(queue.object_size);
@@ -227,11 +236,11 @@ fn walk<T: QueueElement>(queue: &CQueue, kind: QueueKind) -> Result<Vec<*mut T>,
     Ok(links)
 }
 
-fn point(p: CPoint) -> Point {
+pub(super) fn point(p: CPoint) -> Point {
     Point { x: p.x, y: p.y }
 }
 
-fn c_point(p: Point) -> CPoint {
+pub(super) fn c_point(p: Point) -> CPoint {
     CPoint { x: p.x, y: p.y }
 }
 
