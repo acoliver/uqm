@@ -2298,9 +2298,24 @@ mod os {
         }
 
         fn spawn_inner(
+            command: Command,
+            config: ChildSessionConfig,
+            inherit_protocol: bool,
+        ) -> Result<Self, ChildSessionError> {
+            let protocol =
+                NestedGroupProtocol::inherited().map_err(ChildSessionError::Registration)?;
+            Self::spawn_with_protocol(command, config, inherit_protocol, protocol)
+        }
+
+        /// Spawn under an explicit containment-monitor protocol.
+        ///
+        /// Both monitor exchanges are bounded by `config.timeout`, the same
+        /// budget the session's run is allowed, rather than a private constant.
+        pub(super) fn spawn_with_protocol(
             mut command: Command,
             config: ChildSessionConfig,
             inherit_protocol: bool,
+            protocol: Option<NestedGroupProtocol>,
         ) -> Result<Self, ChildSessionError> {
             if !inherit_protocol {
                 for name in [
@@ -2324,8 +2339,8 @@ mod os {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .stdin(Stdio::null());
-            let protocol =
-                NestedGroupProtocol::inherited().map_err(ChildSessionError::Registration)?;
+            // Captured by value so pre_exec only reads a Copy Duration after fork.
+            let exchange_timeout = config.timeout;
             // SAFETY: setsid, setpgid, fcntl, read, write, and getpid are
             // async-signal-safe. A nested group stays in the monitor's session
             // so its stable anchor can join; an unmonitored child owns a session.
@@ -2336,7 +2351,11 @@ mod os {
                             return Err(io::Error::last_os_error());
                         }
                         protocol.make_inheritable()?;
-                        protocol.exchange(NestedGroupOperation::Register, libc::getpid())?;
+                        protocol.exchange_with_timeout(
+                            NestedGroupOperation::Register,
+                            libc::getpid(),
+                            exchange_timeout,
+                        )?;
                         if !inherit_protocol {
                             for descriptor in protocol.descriptors() {
                                 if libc::fcntl(descriptor, libc::F_SETFD, libc::FD_CLOEXEC) == -1 {
@@ -2355,8 +2374,13 @@ mod os {
             let monitor_anchor_pid = match protocol {
                 Some(protocol) => match libc::pid_t::try_from(pid)
                     .map_err(|_| io::Error::other("child PID does not fit pid_t"))
-                    .and_then(|pid| protocol.exchange(NestedGroupOperation::Query, pid))
-                {
+                    .and_then(|pid| {
+                        protocol.exchange_with_timeout(
+                            NestedGroupOperation::Query,
+                            pid,
+                            exchange_timeout,
+                        )
+                    }) {
                     Ok(anchor_pid) => Some(anchor_pid),
                     Err(error) => {
                         let mut anchor = LeaderAnchor::new(pid, None)?;
@@ -3807,6 +3831,48 @@ mod os_tests {
         assert!(matches!(failure.error, ChildSessionError::Observer(_)));
         assert!(failure.receipt.term_sent);
         assert!(failure.receipt.orphan_check_passed);
+    }
+
+    #[test]
+    fn nested_registration_is_bounded_by_the_session_timeout_not_a_fixed_constant() {
+        let dir = TempDir::new().expect("tempdir");
+        let config = make_config(&dir, Duration::from_millis(50), Duration::from_secs(1));
+        let mut registration = [0; 2];
+        let mut token = [0; 2];
+        // SAFETY: each array has storage for both descriptors of one pipe.
+        assert_eq!(unsafe { libc::pipe(registration.as_mut_ptr()) }, 0);
+        assert_eq!(unsafe { libc::pipe(token.as_mut_ptr()) }, 0);
+        // Nothing ever writes the token, so the monitor "never answers".
+        let protocol = NestedGroupProtocol::new(registration[1], token[0], token[1]);
+        let started = std::time::Instant::now();
+        let result =
+            ChildSession::spawn_with_protocol(Command::new("sh"), config, true, Some(protocol));
+        let elapsed = started.elapsed();
+        // SAFETY: all four descriptors were returned by pipe and are closed once.
+        unsafe {
+            libc::close(registration[0]);
+            libc::close(registration[1]);
+            libc::close(token[0]);
+            libc::close(token[1]);
+        }
+        let error = match result {
+            Ok(session) => panic!(
+                "registration unexpectedly succeeded for pid {}",
+                session.pid()
+            ),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(
+                &error,
+                ChildSessionError::Spawn(source) if source.raw_os_error() == Some(libc::ETIMEDOUT)
+            ),
+            "a stalled monitor must time out registration, got {error:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(4),
+            "registration must honour the 50ms session timeout, not a fixed 5s: {elapsed:?}"
+        );
     }
 
     #[test]

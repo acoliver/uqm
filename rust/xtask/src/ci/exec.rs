@@ -4288,7 +4288,7 @@ mod tests {
             stderr_log: pid_file.with_extension("stderr.log"),
             stdout_budget: 1_024,
             stderr_budget: 1_024,
-            timeout: Duration::from_secs(30),
+            timeout: HELPER_REGISTRATION_TIMEOUT,
             grace: Duration::from_millis(100),
             executable_digest: "nested-test".into(),
         };
@@ -4315,7 +4315,7 @@ mod tests {
         }
         let executable = std::env::current_exe().expect("test executable");
         let mut test_limits = limits_for_current_executable();
-        test_limits.timeout = Duration::from_secs(30);
+        test_limits.timeout = HELPER_REGISTRATION_TIMEOUT;
         test_limits.termination_grace = Duration::from_millis(100);
         test_limits.pipe_drain_timeout = Duration::from_secs(2);
         let captured = run_captured_with_limits(
@@ -4340,11 +4340,23 @@ mod tests {
             test_limits,
         );
         panic!(
-            "outer supervisor was not terminated: exit {:?}, signal {:?}, launch error {:?}\n\
+            "outer supervisor was not terminated: exit {:?}, signal {:?}, launch error {:?}, \
+             timed out {}, termination reason {:?}, termination signal {:?}, \
+             supervision error {:?}, process group cleanup {:?}, pipe cleanup {:?}, \
+             descendant survivors {:?}, stdout truncated {}, stderr truncated {}\n\
              controller stdout:\n{}\ncontroller stderr:\n{}",
             captured.exit_code,
             captured.signal,
             captured.launch_error,
+            captured.timed_out,
+            captured.termination_reason,
+            captured.termination_signal,
+            captured.supervision_error,
+            captured.process_group_cleanup,
+            captured.pipe_cleanup,
+            captured.descendant_survivors,
+            captured.stdout_truncated,
+            captured.stderr_truncated,
             String::from_utf8_lossy(&captured.stdout),
             String::from_utf8_lossy(&captured.stderr),
         );
@@ -4666,29 +4678,46 @@ mod tests {
         /// The exit status of a helper that has already ended on its own, or
         /// `None` while it is still running.
         ///
-        /// The helper's group is killed before it is marked reaped: a helper
-        /// that died may have left descendants that ignore `SIGTERM`, and
-        /// `Drop` no longer reaches them once the leader is reaped. The kernel
-        /// does not recycle a process identifier while a group of that number
-        /// has members, so the kill cannot reach an unrelated group.
-        fn exited_early(&mut self) -> Option<std::process::ExitStatus> {
-            if self.reaped {
-                return None;
+        /// The exit is detected without reaping, so the zombie leader keeps
+        /// pinning the helper's process identifier and group number. The group
+        /// is then killed in that window, because a helper that died may have
+        /// left descendants that ignore `SIGTERM` and `Drop` no longer reaches
+        /// them once the leader is reaped, and only afterwards is the leader
+        /// reaped. Reaping first would free the number for reuse before the
+        /// kill and let it hit an unrelated group.
+        fn exited_early(&mut self) -> Result<Option<std::process::ExitStatus>, String> {
+            if self.reaped || !self.has_exited_unreaped()? {
+                return Ok(None);
             }
-            let status = self.child.try_wait().expect("poll owned helper")?;
+            self.kill_group_and_reap().map(Some)
+        }
+
+        /// Whether the helper has ended, leaving it as an unreaped zombie.
+        fn has_exited_unreaped(&self) -> Result<bool, String> {
             let pid = self.pid();
-            // SAFETY: see above; at worst the group no longer exists.
-            if unsafe { libc::kill(-pid, libc::SIGKILL) } == -1 {
+            // SAFETY: an all-zero siginfo_t is a valid value for waitid to fill.
+            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            loop {
+                // SAFETY: info is writable, and WNOWAIT leaves the child
+                // waitable so ownership of its reaping stays with this helper.
+                let result = unsafe {
+                    libc::waitid(
+                        libc::P_PID,
+                        self.child.id(),
+                        &mut info,
+                        libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+                    )
+                };
+                if result == 0 {
+                    // With WNOHANG, waitid leaves si_signo zero when the child
+                    // has not changed state.
+                    return Ok(info.si_signo != 0);
+                }
                 let error = std::io::Error::last_os_error();
-                assert_eq!(
-                    error.raw_os_error(),
-                    Some(libc::ESRCH),
-                    "cannot kill group of exited helper {pid}: {error}"
-                );
+                if error.kind() != std::io::ErrorKind::Interrupted {
+                    return Err(format!("cannot poll owned helper {pid}: {error}"));
+                }
             }
-            self.release_lifeline();
-            self.reaped = true;
-            Some(status)
         }
 
         fn release_lifeline(&mut self) {
@@ -4697,13 +4726,14 @@ mod tests {
             }
         }
 
-        fn reap(&mut self) -> Result<(), String> {
+        fn reap(&mut self) -> Result<std::process::ExitStatus, String> {
             let pid = self.pid();
-            self.child
+            let status = self
+                .child
                 .wait()
                 .map_err(|error| format!("cannot reap owned helper {pid}: {error}"))?;
             self.reaped = true;
-            Ok(())
+            Ok(status)
         }
 
         /// Wait for a helper that ends on its own, and reap it.
@@ -4711,7 +4741,7 @@ mod tests {
             if self.reaped {
                 return Err(format!("owned helper {} was already reaped", self.pid()));
             }
-            self.reap()
+            self.reap().map(|_| ())
         }
 
         /// Kill the helper's whole process group and reap it.
@@ -4719,6 +4749,12 @@ mod tests {
             if self.reaped {
                 return Ok(());
             }
+            self.kill_group_and_reap().map(|_| ())
+        }
+
+        /// Kill the group while the unreaped leader still pins its number, then
+        /// reap the leader.
+        fn kill_group_and_reap(&mut self) -> Result<std::process::ExitStatus, String> {
             self.release_lifeline();
             let pid = self.pid();
             // SAFETY: the helper leads its own process group, so the negated
@@ -4757,6 +4793,23 @@ mod tests {
     #[cfg(unix)]
     const HELPER_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(30);
 
+    /// How much of the end of each helper log a failure message includes.
+    #[cfg(unix)]
+    const LOG_TAIL_BYTES: usize = 64 * 1024;
+
+    /// The last `LOG_TAIL_BYTES` of a log, lossily decoded: a log cut at its
+    /// byte budget can end inside a multi-byte character.
+    #[cfg(unix)]
+    fn log_tail(log: &Path) -> String {
+        match std::fs::read(log) {
+            Ok(bytes) => {
+                let start = bytes.len().saturating_sub(LOG_TAIL_BYTES);
+                String::from_utf8_lossy(&bytes[start..]).into_owned()
+            }
+            Err(error) => error.to_string(),
+        }
+    }
+
     /// Wait until every file in `published` exists, failing at once, with what
     /// the helper and its descendants wrote, if the helper ends first.
     #[cfg(unix)]
@@ -4770,20 +4823,15 @@ mod tests {
         while !published.iter().all(|path| path.is_file()) {
             let exit = helper.exited_early();
             let expired = Instant::now() >= deadline;
-            if exit.is_some() || expired {
+            if !matches!(exit, Ok(None)) || expired {
                 let outcome = match exit {
-                    Some(status) => format!("helper exited early with {status}"),
-                    None => format!("not published within {HELPER_REGISTRATION_TIMEOUT:?}"),
+                    Ok(Some(status)) => format!("helper exited early with {status}"),
+                    Ok(None) => format!("not published within {HELPER_REGISTRATION_TIMEOUT:?}"),
+                    Err(error) => format!("helper could not be supervised: {error}"),
                 };
                 let output: String = logs
                     .iter()
-                    .map(|log| {
-                        format!(
-                            "\n--- {} ---\n{}",
-                            log.display(),
-                            std::fs::read_to_string(log).unwrap_or_else(|error| error.to_string())
-                        )
-                    })
+                    .map(|log| format!("\n--- {} ---\n{}", log.display(), log_tail(log)))
                     .collect();
                 panic!("{what}: {outcome}{output}");
             }
