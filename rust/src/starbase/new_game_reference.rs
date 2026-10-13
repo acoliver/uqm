@@ -81,6 +81,18 @@ impl PieceNumbers {
 }
 
 /// `#define NAME value` of `sis.h`, for a plain number.
+/// `GLOBAL (CrewCost) = N;` of `InitGameStructures` (`globdata.c`).
+pub fn new_game_crew_cost() -> u8 {
+    let start = GLOBDATA_C
+        .find("GLOBAL (CrewCost) =")
+        .expect("the crew price in globdata.c");
+    let tail = &GLOBDATA_C[start + "GLOBAL (CrewCost) =".len()..];
+    tail[..tail.find(';').expect("an assignment ends in a semicolon")]
+        .trim()
+        .parse()
+        .expect("the crew price is a number")
+}
+
 pub fn sis_h_define(name: &str) -> u32 {
     let line = SIS_H
         .lines()

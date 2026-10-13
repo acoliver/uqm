@@ -969,7 +969,7 @@ mod tests {
     fn test_visit_starbase_error_ends_the_lifecycle_with_that_error() {
         let ops = MockOps::new();
         let error = MainLoopError::Starbase(crate::starbase::StarbaseError::Unported(
-            crate::starbase::UnportedRoute::Shipyard,
+            crate::starbase::UnportedRoute::SaveLoad,
         ));
         {
             let mut state = ops.inner.borrow_mut();

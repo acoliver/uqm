@@ -10,6 +10,10 @@ pub const MODULES_PMAP_ANIM: &str = "graphics.modulesmenu";
 pub const OUTFIT_PMAP_ANIM: &str = "graphics.outfit";
 pub const SISMODS_MASK_PMAP_ANIM: &str = "graphics.outfitmodules";
 pub const OUTFIT_MUSIC: &str = "music.outfit";
+pub const SHIPYARD_PMAP_ANIM: &str = "graphics.shipyard";
+pub const SISBLU_MASK_ANIM: &str = "graphics.blueprints";
+pub const SHIPYARD_MUSIC: &str = "music.shipyard";
+pub const HANGAR_COLOR_TAB: &str = "colortable.hangar";
 
 // --- String table (`gamestr.h`): each base is the previous base plus the
 // previous group's count. ---
@@ -58,12 +62,15 @@ pub const MAINMENU_STRING_BASE: i32 = ORBITSCAN_STRING_BASE + ORBITSCAN_STRING_C
 // --- Menu entries (`menustat.h` PM_* enum) ---
 pub const PM_FUEL: u8 = 21;
 pub const PM_EXIT_OUTFIT: u8 = 24;
+pub const PM_CREW: u8 = 25;
+pub const PM_EXIT_SHIPYARD: u8 = 27;
 
 // --- Geometry (`units.h`, `sis.h`) ---
 pub const SAFE_X: i16 = 0;
 pub const SAFE_Y: i16 = 0;
 pub const STATUS_WIDTH: i32 = 64;
 pub const SIS_ORG_Y: i32 = 10 + SAFE_Y as i32;
+pub const SIS_ORG_X: i16 = 7 + SAFE_X;
 pub const RADAR_WIDTH: i32 = STATUS_WIDTH - 8;
 pub const RADAR_HEIGHT: i32 = 53;
 pub const SHIP_NAME_WIDTH: i16 = (STATUS_WIDTH - 4) as i16;

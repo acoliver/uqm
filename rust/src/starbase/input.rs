@@ -14,6 +14,8 @@ pub struct MenuPulses {
     pub left: bool,
     pub right: bool,
     pub select: bool,
+    /// `KEY_MENU_SPECIAL`.
+    pub special: bool,
     pub cancel: bool,
     pub page_up: bool,
     pub page_down: bool,

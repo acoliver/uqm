@@ -144,6 +144,9 @@ pub trait Gfx {
     /// `GetContextFontLeading`.
     fn font_leading(&self) -> i16;
 
+    /// `SetContextClipRect` of the current context.
+    fn set_context_clip_rect(&self, rect: Rect);
+
     fn fill_rect(&self, rect: Rect);
     fn draw_rect(&self, rect: Rect);
     fn draw_point(&self, point: Point);

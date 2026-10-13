@@ -16,6 +16,40 @@ use crate::mainloop::types::ActivityValue;
 /// Opaque `MUSIC_REF`.
 pub type MusicId = usize;
 
+/// Opaque `COLORMAP` handle.
+pub type ColorMapId = usize;
+
+/// `FLEET_INFO.allied_state`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlliedState {
+    DeadGuy,
+    GoodGuy,
+    BadGuy,
+}
+
+/// An `avail_race_q` entry: the template a built ship is cloned from. The
+/// position in [`Platform::race_templates`] is the race number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RaceTemplate {
+    pub allied: AlliedState,
+    /// `FLEET_INFO.melee_icon`.
+    pub melee_icon: FrameId,
+    /// `FLEET_INFO.crew_level`: the crew a full ship of this race has.
+    pub crew_level: u16,
+}
+
+/// A `SHIP_FRAGMENT` of `built_ship_q`: an escort ship.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Escort {
+    /// `SHIP_FRAGMENT.index`: the hangar slot.
+    pub slot: u8,
+    /// `SHIP_FRAGMENT.race_id`: the `avail_race_q` position.
+    pub race_id: u8,
+    pub crew_level: u16,
+    pub max_crew: u16,
+    pub melee_icon: FrameId,
+}
+
 /// `ONE_SECOND` (`timelib.h`).
 pub const ONE_SECOND: u32 = 840;
 
@@ -27,6 +61,8 @@ pub enum StateKey {
     MoonbaseOnShip,
     ChmmrBombState,
     LanderShields,
+    CrewPurchased0,
+    CrewPurchased1,
 }
 
 /// A snapshot of the `GLOBAL_SIS` and `GLOBAL` fields the screens read.
@@ -102,6 +138,13 @@ impl MenuSounds {
     };
 
     /// The fuel adjust sounds of `DoOutfit` (`outfit.c:775-778`).
+    /// `SetMenuSounds (MENU_SOUND_UP | MENU_SOUND_DOWN, MENU_SOUND_SELECT |
+    /// MENU_SOUND_CANCEL)` while the Shipyard edits crew.
+    pub const EDIT_CREW: Self = Self {
+        move_mask: Self::UP | Self::DOWN,
+        select_mask: Self::SELECT | Self::CANCEL,
+    };
+
     pub const FUEL_ADJUST: Self = Self {
         move_mask: Self::UP | Self::DOWN | Self::PAGE_UP | Self::PAGE_DOWN,
         select_mask: Self::SELECT | Self::CANCEL,
@@ -113,8 +156,9 @@ impl MenuSounds {
 /// [`StarbaseError::Unported`] rather than faking success.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnportedRoute {
-    /// `DoShipyard` (`shipyard.c`).
-    Shipyard,
+    /// `DoShipSpin` (`fmv.c`): the slide-show presentation of a ship, started
+    /// by the SPECIAL key in the Shipyard. It needs `ShowPresentation`.
+    ShipSpin,
     /// `GameOptions` Save/Load from the Outfit menu (`gameopt.c`).
     SaveLoad,
 }
@@ -122,7 +166,7 @@ pub enum UnportedRoute {
 impl std::fmt::Display for UnportedRoute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            UnportedRoute::Shipyard => "Shipyard",
+            UnportedRoute::ShipSpin => "the Shipyard ship spin presentation",
             UnportedRoute::SaveLoad => "Save/Load from the Outfit menu",
         })
     }
@@ -158,6 +202,27 @@ pub enum StarbaseError {
         "RU gauge update disagrees with the transaction: expected {expected} RU, found {actual} RU"
     )]
     ResUnitsMismatch { expected: u32, actual: u32 },
+    #[error("fleet queue reports allied state {0}")]
+    UnknownAlliedState(u16),
+    #[error("race {0} is not in the fleet queue")]
+    UnknownRace(u8),
+    #[error("no ship can be built: no race is allied")]
+    NoShipsAvailable,
+    #[error("hangar slot {0} holds no escort ship")]
+    EscortSlot(u8),
+    #[error("{crew} crew do not fit the crew pods")]
+    CrewExceedsPods { crew: u16 },
+    #[error("escort ship queue: {0}")]
+    EscortQueue(&'static str),
+    #[error(
+        "crew update disagrees with the transaction: expected {expected_crew} crew and {expected_res_units} RU, found {actual_crew} crew and {actual_res_units} RU"
+    )]
+    CrewMismatch {
+        expected_crew: u16,
+        expected_res_units: u32,
+        actual_crew: u16,
+        actual_res_units: u32,
+    },
 }
 
 /// Everything besides drawing that the screens do.
@@ -179,6 +244,12 @@ pub trait Platform: Gfx {
     /// `DeltaSISGauges (0, delta.fuel, delta.res_units)`: change the SIS
     /// state and redraw the status gauges.
     fn apply_gauge_delta(&self, delta: GaugeDelta);
+    /// `DeltaSISGauges (crew, 0, res_units)`: change the crew and RU, floored
+    /// at zero, and redraw the status gauges.
+    fn apply_crew_gauge_delta(&self, crew: i16, res_units: i32);
+    /// `GLOBAL (CrewCost)`.
+    fn crew_cost(&self) -> u8;
+    fn set_crew_cost(&self, cost: u8);
     /// `GLOBAL_SIS (DriveSlots[index]) = piece`.
     fn set_drive_slot(&self, index: usize, piece: u8);
     /// `GLOBAL_SIS (JetSlots[index]) = piece`.
@@ -192,6 +263,19 @@ pub trait Platform: Gfx {
     /// change.
     fn redraw_ship_status(&self, res_units: ResUnitsUpdate);
 
+    // --- Fleet ---
+    /// The `avail_race_q` entries in queue order.
+    fn race_templates(&self) -> Result<Vec<RaceTemplate>, StarbaseError>;
+    /// The `built_ship_q` entries in queue order.
+    fn escorts(&self) -> Result<Vec<Escort>, StarbaseError>;
+    /// `CloneShipFragment (race, &built_ship_q, 1)`, then place it in the
+    /// hangar slot (`ShowCombatShip`). `Ok(false)` when the queue is full.
+    fn add_escort(&self, race: u8, slot: u8) -> Result<bool, StarbaseError>;
+    /// `SHIP_FRAGMENT.crew_level` of the escort in the slot.
+    fn set_escort_crew(&self, slot: u8, crew_level: u16) -> Result<(), StarbaseError>;
+    /// `RemoveQueue` and `FreeShipFrag` of the escort in the slot.
+    fn remove_escort(&self, slot: u8) -> Result<(), StarbaseError>;
+
     // --- SIS frame ---
     fn draw_sis_frame(&self);
     fn draw_sis_message(&self, text: &str);
@@ -202,6 +286,8 @@ pub trait Platform: Gfx {
     fn set_menu_sounds(&self, sounds: MenuSounds);
     fn play_failure_sound(&self);
     fn flush_input(&self);
+    /// `AnyButtonPress (FALSE)`.
+    fn any_button_press(&self) -> bool;
     fn menu_style(&self) -> UiStyle;
     fn font_style(&self) -> UiStyle;
 
@@ -210,6 +296,16 @@ pub trait Platform: Gfx {
     fn load_graphic(&self, resource: &str) -> Result<FrameId, StarbaseError>;
     /// `DestroyDrawable (ReleaseDrawable (frame))`.
     fn destroy_drawable(&self, frame: FrameId);
+    /// `CaptureColorMap (LoadColorMap (resource))`.
+    fn load_color_map(&self, resource: &str) -> Result<ColorMapId, StarbaseError>;
+    /// `DestroyColorMap (ReleaseColorMap (map))`.
+    fn destroy_color_map(&self, map: ColorMapId);
+    /// `SetAbsColorMapIndex`.
+    fn abs_color_map(&self, map: ColorMapId, index: u16) -> ColorMapId;
+    /// `SetRelColorMapIndex`.
+    fn rel_color_map(&self, map: ColorMapId, offset: i16) -> ColorMapId;
+    /// `SetColorMap (GetColorMapAddress (map))`.
+    fn apply_color_map(&self, map: ColorMapId);
     fn load_music(&self, resource: &str) -> Result<MusicId, StarbaseError>;
     fn play_music(&self, music: MusicId);
     fn stop_music(&self);

@@ -13,9 +13,9 @@ use super::gfx::{
 use super::ids::{
     RadarLayout, DRIVE_SIDE, DRIVE_TOP, EMPTY_SLOT, FLAGSHIP_STRING_BASE, FUSION_THRUSTER,
     JET_SIDE, JET_TOP, LANDER_WIDTH, LANDER_X, LANDER_Y, MAINMENU_STRING_BASE, MAX_LANDERS,
-    MODULE_SIDE, MODULE_TOP, NAMING_STRING_BASE, NUM_MODULES, NUM_MODULE_SLOTS, PM_EXIT_OUTFIT,
-    PM_FUEL, RADAR_HEIGHT, RADAR_WIDTH, SAFE_X, SAFE_Y, SHIP_NAME_HEIGHT, SHIP_PIECE_OFFSET,
-    STARBASE_STRING_BASE, TURNING_JETS,
+    MODULE_SIDE, MODULE_TOP, NAMING_STRING_BASE, NUM_MODULES, NUM_MODULE_SLOTS, PM_CREW,
+    PM_EXIT_OUTFIT, PM_EXIT_SHIPYARD, PM_FUEL, RADAR_HEIGHT, RADAR_WIDTH, SAFE_X, SAFE_Y,
+    SHIP_NAME_HEIGHT, SHIP_PIECE_OFFSET, STARBASE_STRING_BASE, TURNING_JETS,
 };
 use super::platform::{SisView, StarbaseError, UiStyle, ONE_SECOND};
 use super::sis_modules::{
@@ -405,10 +405,15 @@ fn draw_pc_menu_frame<G: Gfx + ?Sized>(g: &G, rect: &mut Rect) {
 }
 
 /// `DrawPCMenu` (`menu.c:73-129`) for the Outfit entries.
-fn draw_pc_outfit_menu<G: Gfx + ?Sized>(g: &G, new_state: u8, fuel_cost: u8, rect: &mut Rect) {
+fn draw_pc_menu<G: Gfx + ?Sized>(
+    g: &G,
+    begin: u8,
+    end: u8,
+    new_state: u8,
+    price: u8,
+    rect: &mut Rect,
+) {
     const PC_MENU_HEIGHT: i32 = 8;
-    let begin = PM_FUEL;
-    let end = PM_EXIT_OUTFIT;
     let selected = begin + new_state;
     let items = i32::from(1 + end - begin);
 
@@ -429,11 +434,11 @@ fn draw_pc_outfit_menu<G: Gfx + ?Sized>(g: &G, new_state: u8, fuel_cost: u8, rec
     rect.corner.x += 1;
     rect.width -= 2;
     for index in begin..=end {
-        let label = if index == PM_FUEL {
+        let label = if index == begin {
             format!(
                 "{}({})",
-                g.game_string(MAINMENU_STRING_BASE + i32::from(PM_FUEL)),
-                fuel_cost
+                g.game_string(MAINMENU_STRING_BASE + i32::from(begin)),
+                price
             )
         } else {
             g.game_string(MAINMENU_STRING_BASE + i32::from(index))
@@ -467,9 +472,33 @@ pub fn draw_outfit_menu_strings<G: Gfx + ?Sized>(
     new_state: u8,
     fuel_cost: u8,
 ) {
-    let last_entry = PM_EXIT_OUTFIT - PM_FUEL;
+    draw_menu_strings(g, style, PM_FUEL, PM_EXIT_OUTFIT, new_state, fuel_cost);
+}
+
+/// `DrawMenuStateStrings (PM_CREW, new_state)`: the Shipyard menu, with the
+/// crew price in place of the fuel price.
+pub fn draw_shipyard_menu_strings<G: Gfx + ?Sized>(
+    g: &G,
+    style: UiStyle,
+    new_state: u8,
+    crew_cost: u8,
+) {
+    draw_menu_strings(g, style, PM_CREW, PM_EXIT_SHIPYARD, new_state, crew_cost);
+}
+
+/// `DrawMenuStateStrings (begin, new_state)` for a menu that ends at `end`;
+/// `price` is the number shown with the first entry.
+fn draw_menu_strings<G: Gfx + ?Sized>(
+    g: &G,
+    style: UiStyle,
+    begin: u8,
+    end: u8,
+    new_state: u8,
+    price: u8,
+) {
+    let last_entry = end - begin;
     let frame = (new_state <= last_entry)
-        .then(|| g.abs_frame(g.play_frame(), u16::from(PM_FUEL + new_state)));
+        .then(|| g.abs_frame(g.play_frame(), u16::from(begin + new_state)));
 
     g.pre_update_flash();
     let previous = g.set_context(ContextId::Status);
@@ -494,7 +523,7 @@ pub fn draw_outfit_menu_strings<G: Gfx + ?Sized>(
     let mut stamp_frame = frame;
     if frame.is_some() && style == UiStyle::Pc {
         rect.height = (RADAR_HEIGHT + 11) as i16;
-        draw_pc_outfit_menu(g, new_state, fuel_cost, &mut rect);
+        draw_pc_menu(g, begin, end, new_state, price, &mut rect);
         stamp_frame = None;
     } else {
         if style == UiStyle::Pc {
@@ -516,7 +545,7 @@ pub fn draw_outfit_menu_strings<G: Gfx + ?Sized>(
                 i32::from(origin.x) + RADAR_WIDTH - 2,
                 i32::from(origin.y) + RADAR_HEIGHT - 2,
                 Align::Right,
-                fuel_cost.to_string(),
+                price.to_string(),
             ));
         }
     }

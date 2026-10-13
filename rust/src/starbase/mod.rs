@@ -14,10 +14,10 @@
 //! The models are the tested logic that a Rust Starbase and Outfit screen
 //! will consume. They are not evidence that a fuel purchase works in a game.
 //!
-//! The Shipyard and Save/Load routes are expressed only as typed commands
-//! ([`MenuCommand::Shipyard`], [`OutfitStep::OpenSaveLoad`]). The Rust
-//! side has no Shipyard or Save/Load implementation, so this module neither
-//! executes them nor pretends they completed.
+//! Save/Load (`OutfitStep::OpenSaveLoad`, the Shipyard menu entry) and the
+//! Shipyard ship spin presentation are expressed only as typed failures. The
+//! Rust side has no `GameOptions` or `ShowPresentation`, so the screens end
+//! with [`StarbaseError::Unported`] rather than pretending they completed.
 //!
 //! # Input
 //!
@@ -41,6 +41,8 @@
 //! - [`visit`]: arrival time passage and post-visit cleanup (`starbase.c`
 //!   `VisitStarBase`, `CleanupAfterStarBase`).
 //! - [`outfit_menu`]: Outfit menu states (`outfit.c` `DoOutfit`).
+//! - [`shipyard`]: Shipyard rules (`shipyard.c`); `shipyard_screen` (private)
+//!   is the screen (`DoShipyard`, `DoModifyShips`).
 
 #[cfg(not(test))]
 pub mod cffi;
@@ -55,6 +57,8 @@ mod module_screen;
 pub mod outfit_menu;
 pub mod platform;
 pub mod screen;
+pub mod shipyard;
+mod shipyard_screen;
 pub mod sis_modules;
 pub mod starbase_menu;
 pub mod visit;
@@ -71,7 +75,8 @@ pub use module_guard::{
 pub use outfit_menu::{OutfitFrameInput, OutfitMenu, OutfitState, OutfitStep, SaveLoadReturn};
 pub use platform::{Platform, StarbaseError, UnportedRoute};
 pub use screen::{
-    cleanup_after_visit, do_time_passage, run_outfit, run_starbase_menu, StatusModeGuard,
+    cleanup_after_visit, do_time_passage, run_outfit, run_shipyard, run_starbase_menu,
+    StatusModeGuard,
 };
 pub use sis_modules::{
     fuel_bar_layout, FuelBar, FuelLayoutError, ModuleSlot, ModuleSlots, ModuleSlotsError,
@@ -89,6 +94,8 @@ pub use visit::{
 mod module_route_tests;
 #[cfg(test)]
 mod new_game_reference;
+#[cfg(test)]
+mod shipyard_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

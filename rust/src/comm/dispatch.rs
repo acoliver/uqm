@@ -887,7 +887,11 @@ unsafe fn init_communication_inner(which_comm: u32, ship_type: u16) -> u16 {
 ///
 /// Creates a SHIP_FRAGMENT in the destination queue by copying template
 /// data from the fleet queue (avail_race_q).
-unsafe fn clone_ship_fragment(ship_index: u8, dst_queue: *mut Queue, crew_level: u16) -> HLink {
+pub(crate) unsafe fn clone_ship_fragment(
+    ship_index: u8,
+    dst_queue: *mut Queue,
+    crew_level: u16,
+) -> HLink {
     let avail_q = avail_race_queue();
     let h_fleet = get_star_ship_from_index(avail_q, ship_index);
     if h_fleet.is_null() {
