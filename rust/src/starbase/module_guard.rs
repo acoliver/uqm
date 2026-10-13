@@ -137,10 +137,10 @@ pub fn check_module_removal(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::starbase::sis_modules::{EMPTY_SLOT, NUM_MODULE_SLOTS};
+    use crate::starbase::sis_modules::{EMPTY_MODULE_SLOT, NUM_MODULE_SLOTS};
 
     fn slots_with(entries: &[(usize, ModuleType)]) -> ModuleSlots {
-        let mut raw = [EMPTY_SLOT; NUM_MODULE_SLOTS];
+        let mut raw = [EMPTY_MODULE_SLOT; NUM_MODULE_SLOTS];
         for (index, module) in entries {
             raw[*index] = *module as u8;
         }
