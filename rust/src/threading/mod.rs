@@ -21,6 +21,8 @@
 //! # Reference
 //! See `sc2/src/libs/threads/` for the original C implementation.
 
+pub mod pacing;
+
 #[cfg(test)]
 mod ffi_tests;
 #[cfg(test)]

@@ -7,7 +7,7 @@
     "raw_url": "https://gist.githubusercontent.com/acoliver/03378acffcc0d62e7cfd094fc77c223c/raw/5aece912bec7e8a2a646bd1bfc95d18289f55020/uqm-native-ownership-ledger.json",
     "gist_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020",
     "sha256": "49073df15a115e790d2e72c02387359bf2eef321f25f2d4f0306b361f55dc789",
-    "projection_sha256": "107169fb8c7f63899c8a13f99d9fdba02c69bb08761d0d1207d24b5bb2c3b37c",
+    "projection_sha256": "b0ca66f327475151c15dc0560ba4252d0b1068054a10cca03c2192df24ca3e5d",
     "raw_revision": "5aece912bec7e8a2a646bd1bfc95d18289f55020"
   },
   "scan_root": "native",
@@ -1485,7 +1485,7 @@
       "issue": "RUNTIME",
       "canonical_source": "sc2/src/libs/threads/rust_thrcommon.c",
       "scan_root": "native",
-      "sha256": "f4b31695ad9b8369983a2eb7aba52b0988ff8496c0b933bbf3461152305ce62d",
+      "sha256": "66496226258a1804d5bfbcb193fcb29d6796fb365bf945f2c2e7f4084514a6f8",
       "archive_decision": "include",
       "provider": "native_object:native/rust_thrcommon.c.o",
       "reason": "Transitional C ambient archive member",
