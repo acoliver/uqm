@@ -1100,6 +1100,11 @@ mod os {
     /// presentation, so the gap between observer polls is added to each frame.
     pub(super) const OBSERVER_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
+    /// How long one wake may sleep: a poll interval, never past the deadline.
+    pub(super) fn poll_timeout(deadline: Instant, now: Instant) -> Duration {
+        OBSERVER_POLL_INTERVAL.min(deadline.saturating_duration_since(now))
+    }
+
     #[derive(Debug, serde::Serialize, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct RunLockRecord {
@@ -2682,16 +2687,11 @@ mod os {
                     Ok(false) if Instant::now() >= deadline => {
                         return Ok(SupervisorEvent::Deadline)
                     }
-                    Ok(false) => {
-                        match wake.wait(
-                            OBSERVER_POLL_INTERVAL
-                                .min(deadline.saturating_duration_since(Instant::now())),
-                        ) {
-                            Ok(()) => {}
-                            Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                            Err(error) => return Err(ChildSessionError::Observer(error)),
-                        }
-                    }
+                    Ok(false) => match wake.wait(poll_timeout(deadline, Instant::now())) {
+                        Ok(()) => {}
+                        Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                        Err(error) => return Err(ChildSessionError::Observer(error)),
+                    },
                     Err(error) if error.kind() == ErrorKind::Interrupted => {}
                     Err(error) => return Err(ChildSessionError::Wait(error)),
                 }
@@ -3920,28 +3920,32 @@ mod os_tests {
         assert!(failure.receipt.orphan_check_passed);
     }
 
-    /// Records every timeout it is given and answers with `respond`.
+    /// Records when each wait started and the timeout it was given, and
+    /// answers with `respond`.
     struct ScriptedWake<F: Fn(Duration) -> io::Result<()>> {
-        timeouts: std::sync::Mutex<Vec<Duration>>,
+        calls: std::sync::Mutex<Vec<(std::time::Instant, Duration)>>,
         respond: F,
     }
 
     impl<F: Fn(Duration) -> io::Result<()>> ScriptedWake<F> {
         fn new(respond: F) -> Self {
             Self {
-                timeouts: std::sync::Mutex::new(Vec::new()),
+                calls: std::sync::Mutex::new(Vec::new()),
                 respond,
             }
         }
 
-        fn timeouts(&self) -> Vec<Duration> {
-            self.timeouts.lock().unwrap().clone()
+        fn calls(&self) -> Vec<(std::time::Instant, Duration)> {
+            self.calls.lock().unwrap().clone()
         }
     }
 
     impl<F: Fn(Duration) -> io::Result<()>> ChangeWait for ScriptedWake<F> {
         fn wait(&self, timeout: Duration) -> io::Result<()> {
-            self.timeouts.lock().unwrap().push(timeout);
+            self.calls
+                .lock()
+                .unwrap()
+                .push((std::time::Instant::now(), timeout));
             (self.respond)(timeout)
         }
     }
@@ -3957,6 +3961,7 @@ mod os_tests {
         let failure = session
             .finish_observing_with_wake(|_| Ok(()), &wake)
             .expect_err("an always-ready wake must still time out");
+        let end = std::time::Instant::now();
         assert!(matches!(
             failure.error,
             ChildSessionError::Timeout {
@@ -3965,12 +3970,29 @@ mod os_tests {
             }
         ));
         assert!(failure.receipt.orphan_check_passed);
-        let timeouts = wake.timeouts();
-        assert!(!timeouts.is_empty());
-        assert!(timeouts.iter().all(|t| *t <= os::OBSERVER_POLL_INTERVAL));
-        assert!(
-            timeouts.iter().any(|t| *t < os::OBSERVER_POLL_INTERVAL),
-            "the last waits must be clamped to the time left before the deadline"
+        let calls = wake.calls();
+        assert!(!calls.is_empty());
+        for (called, timeout) in &calls {
+            assert!(*timeout <= os::OBSERVER_POLL_INTERVAL);
+            // The deadline had passed by the time the timeout was reported, so
+            // a wait clamped to the time left also ends before `end`.
+            assert!(*called + *timeout <= end);
+        }
+    }
+
+    #[test]
+    fn poll_timeout_is_one_poll_clamped_to_the_time_left() {
+        let base = std::time::Instant::now();
+        let deadline = base + Duration::from_millis(10);
+        assert_eq!(os::poll_timeout(deadline, base), os::OBSERVER_POLL_INTERVAL);
+        assert_eq!(
+            os::poll_timeout(deadline, deadline - Duration::from_micros(300)),
+            Duration::from_micros(300)
+        );
+        assert_eq!(os::poll_timeout(deadline, deadline), Duration::ZERO);
+        assert_eq!(
+            os::poll_timeout(deadline, deadline + Duration::from_millis(5)),
+            Duration::ZERO
         );
     }
 
@@ -3998,18 +4020,26 @@ mod os_tests {
     fn interrupted_wake_counts_as_a_wake() {
         let dir = TempDir::new().expect("tempdir");
         let config = make_config(&dir, Duration::from_secs(5), Duration::from_secs(2));
+        // The child exits only once the wake has been called, so the supervisor
+        // cannot see it exit before its first wait however slow the host is.
+        let released = dir.path().join("released");
         let mut command = Command::new("sh");
-        command.args(["-c", "sleep 0.05; exit 0"]);
+        command.args([
+            "-c",
+            "until [ -e \"$1\" ]; do sleep 0.01; done; exit 0",
+            "sh",
+        ]);
+        command.arg(&released);
         let session = ChildSession::spawn(command, config).expect("spawn");
-        let wake = ScriptedWake::new(|timeout| {
-            std::thread::sleep(timeout);
+        let wake = ScriptedWake::new(|_| {
+            std::fs::write(&released, b"").expect("release the child");
             Err(io::Error::from(io::ErrorKind::Interrupted))
         });
         let receipt = session
             .finish_observing_with_wake(|_| Ok(()), &wake)
             .expect("an interrupted wake is not an error");
         assert_eq!(receipt.exit_code, Some(0));
-        assert!(!wake.timeouts().is_empty());
+        assert!(!wake.calls().is_empty());
     }
 
     #[test]
