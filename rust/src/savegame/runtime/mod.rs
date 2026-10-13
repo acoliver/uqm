@@ -14,10 +14,19 @@
 //! are not ported yet (`solar` ports the reads of the summary and `location` the
 //! solar-location step of a save), so nothing
 //! here is wired to a menu and no selector here makes a save atomic.
+//!
+//! `ip_group_save` is the first owner of the group step of `SaveGame`
+//! (`PutGroupInfo (GROUPS_RANDOM, GROUP_SAVE_IP)`): it plans and installs the
+//! `RANDGRPINFO` image under an owner borrow the caller holds. It is not called
+//! by any save route yet. `SaveSisHyperState` (the flagship's element in the
+//! C display list), the `LastEncGroup` static of grpinfo.c and the removal of
+//! departed groups from the live `ip_group_q` have no Rust owner, so no
+//! function here writes a whole save.
 
 pub mod events;
 pub mod global;
 pub mod groups;
+pub mod ip_group_save;
 #[cfg(not(test))]
 pub mod live;
 pub mod location;
@@ -134,6 +143,8 @@ pub fn restore_runtime(
 
 #[cfg(test)]
 mod group_tests;
+#[cfg(test)]
+mod ip_group_save_tests;
 #[cfg(test)]
 mod location_tests;
 #[cfg(test)]
