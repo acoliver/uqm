@@ -22,6 +22,8 @@
 //! See `sc2/src/libs/threads/` for the original C implementation.
 
 pub mod pacing;
+#[cfg(target_os = "macos")]
+pub mod qos;
 
 #[cfg(test)]
 mod ffi_tests;

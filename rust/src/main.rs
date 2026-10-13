@@ -15,6 +15,10 @@ use uqm_rust::mainloop::logging;
 use uqm_rust::mainloop::options;
 
 fn main() {
+    // The frame loop runs on this thread; see threading::qos.
+    #[cfg(target_os = "macos")]
+    uqm_rust::threading::qos::declare_game_thread_interactive();
+
     // Collect args as C strings for the C init sequence
     let args: Vec<String> = std::env::args().collect();
     let c_args: Vec<CString> = args
