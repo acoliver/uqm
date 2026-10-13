@@ -1,16 +1,18 @@
 //! Capture and restore of the running game's "GlSt", "GmSt", "Evts", "Scan",
-//! "Grps" and "BtGp" sections.
+//! "Grps", "BtGp", "RacQ", "NpcQ" and "ShpQ" sections.
 //!
 //! The first three are the part of a save that lives in `GlobData`, the Rust
-//! game-state singleton and the game clock's event queue; the last three are
-//! the state files (`statefiles`). The functions here
-//! work on those live structures, not on copies. The other sections (race,
-//! group, ship and encounter queues, location, summary) and the
+//! game-state singleton and the game clock's event queue; the next three are
+//! the state files (`statefiles`); the last three are the fleet and ship
+//! queues of `GlobData` (`queues`). The functions here
+//! work on those live structures, not on copies. The other sections (the
+//! interplanetary group and encounter queues, location, summary) and the
 //! `SaveGame`/`LoadGame` orchestration are not ported yet, so nothing here is
 //! wired to a menu.
 
 pub mod events;
 pub mod global;
+pub mod queues;
 pub mod statefiles;
 
 use std::fmt;
@@ -43,6 +45,7 @@ pub enum RuntimeError {
     Events(EventError),
     GameState(GameStateOwnerError),
     StateFiles(statefiles::StateSectionError),
+    Queues(queues::QueueError),
 }
 
 impl fmt::Display for RuntimeError {
@@ -51,6 +54,7 @@ impl fmt::Display for RuntimeError {
             Self::Events(error) => write!(f, "event queue: {error}"),
             Self::GameState(error) => write!(f, "game state: {error}"),
             Self::StateFiles(error) => write!(f, "state files: {error}"),
+            Self::Queues(error) => write!(f, "ship queues: {error}"),
         }
     }
 }
@@ -60,6 +64,12 @@ impl std::error::Error for RuntimeError {}
 impl From<EventError> for RuntimeError {
     fn from(error: EventError) -> Self {
         Self::Events(error)
+    }
+}
+
+impl From<queues::QueueError> for RuntimeError {
+    fn from(error: queues::QueueError) -> Self {
+        Self::Queues(error)
     }
 }
 
@@ -102,6 +112,8 @@ pub fn restore_runtime(
     })
 }
 
+#[cfg(test)]
+mod queue_tests;
 #[cfg(test)]
 mod statefile_tests;
 #[cfg(test)]

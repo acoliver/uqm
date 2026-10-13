@@ -11,6 +11,7 @@
 
 use std::os::raw::c_void;
 
+use crate::c_bindings::{assert_c_layout, global_state};
 use crate::collections::queue::{AllocLink, CountLinks, HLink, PutQueue, Queue, ReinitQueue};
 use crate::comm::locdata::rust_sync_comm_data;
 use crate::mainloop::c_extern;
@@ -124,6 +125,50 @@ pub struct CFleetInfo {
     pub func_index: u8,
     pub dest_loc: CPoint,
 }
+
+assert_c_layout!(
+    CShipFragment,
+    global_state::SHIP_FRAGMENT {
+        pred: pred,
+        succ: succ,
+        species_id: SpeciesID,
+        captains_name_index: captains_name_index,
+        race_id: race_id,
+        index: index,
+        crew_level: crew_level,
+        max_crew: max_crew,
+        energy_level: energy_level,
+        max_energy: max_energy,
+        race_strings: race_strings,
+        icons: icons,
+        melee_icon: melee_icon,
+    }
+);
+assert_c_layout!(
+    CFleetInfo,
+    global_state::FLEET_INFO {
+        pred: pred,
+        succ: succ,
+        species_id: SpeciesID,
+        allied_state: allied_state,
+        days_left: days_left,
+        growth_fract: growth_fract,
+        crew_level: crew_level,
+        max_crew: max_crew,
+        growth: growth,
+        max_energy: max_energy,
+        loc: loc,
+        race_strings: race_strings,
+        icons: icons,
+        melee_icon: melee_icon,
+        actual_strength: actual_strength,
+        known_strength: known_strength,
+        known_loc: known_loc,
+        growth_err_term: growth_err_term,
+        func_index: func_index,
+        dest_loc: dest_loc,
+    }
+);
 
 // ---------------------------------------------------------------------------
 // C constants
@@ -245,7 +290,8 @@ pub mod ship {
     pub const BLACK_URQUAN_SHIP: u8 = 21;
     pub const YEHAT_REBEL_SHIP: u8 = 22;
     pub const URQUAN_DRONE_SHIP: u8 = 23;
-    pub const SAMATRA_SHIP: u8 = 24;
+    /// `SAMATRA_SHIP = URQUAN_DRONE_SHIP` (races.h).
+    pub const SAMATRA_SHIP: u8 = URQUAN_DRONE_SHIP;
 }
 
 /// C: `NPC_PLAYER_NUM`
@@ -892,7 +938,34 @@ pub(crate) unsafe fn clone_ship_fragment(
     dst_queue: *mut Queue,
     crew_level: u16,
 ) -> HLink {
-    let avail_q = avail_race_queue();
+    clone_ship_fragment_from(
+        avail_race_queue(),
+        ship_index,
+        dst_queue,
+        crew_level,
+        &mut production_captain_name,
+    )
+}
+
+/// `PickCaptainName ()` as the running game draws it.
+pub(crate) fn production_captain_name() -> u8 {
+    // SAFETY: `TFB_Random` takes no arguments and touches only the game's
+    // random state.
+    unsafe { pick_captain_name() }
+}
+
+/// `CloneShipFragment` against an explicit fleet queue and captain-name draw.
+///
+/// # Safety
+/// `avail_q` is a queue of `FLEET_INFO` links and `dst_queue` a queue of
+/// `SHIP_FRAGMENT` slots; both are well formed.
+pub(crate) unsafe fn clone_ship_fragment_from(
+    avail_q: *mut Queue,
+    ship_index: u8,
+    dst_queue: *mut Queue,
+    crew_level: u16,
+    pick_name: &mut dyn FnMut() -> u8,
+) -> HLink {
     let h_fleet = get_star_ship_from_index(avail_q, ship_index);
     if h_fleet.is_null() {
         return std::ptr::null_mut();
@@ -903,7 +976,7 @@ pub(crate) unsafe fn clone_ship_fragment(
     let captains_name_index = if ship_index == ship::SAMATRA_SHIP {
         0
     } else {
-        name_captain(dst_queue, (*template_ptr).species_id)
+        name_captain(dst_queue, (*template_ptr).species_id, pick_name)
     };
 
     // Build a new link in the destination queue
@@ -991,10 +1064,14 @@ pub unsafe fn place_flagship_at_star(location: (i16, i16)) -> Result<(), &'stati
 
 /// Port of C `NameCaptain(pQueue, SpeciesID)`. Picks a random captain name
 /// index, retrying if it matches an existing ship of the same species.
-unsafe fn name_captain(p_queue: *mut Queue, species_id: CSpeciesId) -> u8 {
+unsafe fn name_captain(
+    p_queue: *mut Queue,
+    species_id: CSpeciesId,
+    pick_name: &mut dyn FnMut() -> u8,
+) -> u8 {
     let mut name_index: u8;
     loop {
-        name_index = pick_captain_name();
+        name_index = pick_name();
 
         let mut h_star_ship = get_head_link(p_queue);
         let mut found_match = false;
@@ -1299,12 +1376,16 @@ mod tests {
     }
 
     #[test]
-    fn race_communication_maps_samatra_to_invalid() {
-        // SAMATRA_SHIP = 24, which is the last entry
+    fn samatra_ship_is_the_urquan_drone_slot_of_avail_race_q() {
+        // races.h: `SAMATRA_SHIP = URQUAN_DRONE_SHIP`, the last of the 24
+        // `avail_race_q` entries; index 24 names no fleet at all.
+        assert_eq!(ship::SAMATRA_SHIP, ship::URQUAN_DRONE_SHIP);
+        assert_eq!(ship::SAMATRA_SHIP, 23);
         assert_eq!(
             RACE_COMMUNICATION[ship::SAMATRA_SHIP as usize],
-            conv::INVALID
+            conv::URQUAN_DRONE
         );
+        assert_eq!(RACE_COMMUNICATION[24], conv::INVALID);
     }
 
     #[test]
@@ -1396,7 +1477,7 @@ mod tests {
     fn ship_type_ids_match_c_enum() {
         assert_eq!(ship::ARILOU_SHIP, 0);
         assert_eq!(ship::HUMAN_SHIP, 2);
-        assert_eq!(ship::SAMATRA_SHIP, 24);
+        assert_eq!(ship::SAMATRA_SHIP, 23);
     }
 
     #[test]
