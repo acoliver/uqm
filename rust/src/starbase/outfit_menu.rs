@@ -5,10 +5,11 @@
 //! `NextMenuState` `menu.c:211`, `PreviousMenuState` `menu.c:245`) as a pure
 //! frame step.
 //!
-//! This is the Outfit state machine only. It does not make the Outfit screen
-//! complete. The module chooser (`DoInstallModule`) and Save/Load
-//! (`GameOptions`) are returned as typed steps for a caller that does not
-//! exist yet. This model does not run them and does not fake them.
+//! This is the Outfit state machine only. The module chooser
+//! (`DoInstallModule`, see [`super::module_chooser`]) and Save/Load
+//! (`GameOptions`) are returned as typed steps for the screen to run. The
+//! screen runs the chooser; Save/Load is not ported and the screen reports it
+//! as unported.
 
 use super::fuel::FuelKey;
 use super::input::MenuPulses;

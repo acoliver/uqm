@@ -1,10 +1,9 @@
 //! Module purchase and removal rules from `DoInstallModule`.
 //!
 //! Ports the select-time guards of `outfit.c:244-295` and the price
-//! arithmetic used by the RU updates at `outfit.c:325-332`. The module
-//! chooser screen itself (slot cursor, flash rectangles, drawing) is not
-//! part of this slice. These functions answer only "may this slot change
-//! happen, and what does it cost".
+//! arithmetic used by the RU updates at `outfit.c:325-332`. These functions
+//! answer only "may this slot change happen, and what does it cost". The
+//! chooser that asks them is [`super::module_chooser`].
 //!
 //! A blocked change is a normal outcome (the C code plays
 //! `MENU_SOUND_FAILURE` and stays in the screen), so it is a value, not an
@@ -28,6 +27,12 @@ pub struct ModuleCosts([u8; NUM_MODULES]);
 #[error("expected {NUM_MODULES} module costs, got {actual}")]
 pub struct ModuleCostsError {
     pub actual: usize,
+}
+
+impl From<[u8; NUM_MODULES]> for ModuleCosts {
+    fn from(table: [u8; NUM_MODULES]) -> Self {
+        Self(table)
+    }
 }
 
 impl ModuleCosts {

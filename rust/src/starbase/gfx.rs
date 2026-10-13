@@ -100,7 +100,10 @@ pub enum FlashTarget {
     Off,
     /// `SetFlashRect (SFR_MENU_3DO)`: flash the 3DO menu frame.
     Menu3do,
-    /// Flash this rectangle (status context coordinates).
+    /// `SetFlashRect (SFR_MENU_ANY)`: flash the menu frame for either menu
+    /// style.
+    MenuAny,
+    /// Flash this rectangle, in the coordinates of the current context.
     Rect(Rect),
 }
 

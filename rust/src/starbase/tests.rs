@@ -736,13 +736,13 @@ fn gauge_update_that_disagrees_with_the_transaction_is_an_error() {
 }
 
 #[test]
-fn module_installation_and_save_load_fail_fast_and_release_resources() {
+fn module_installation_opens_its_chooser_and_save_load_fails_fast() {
+    // Modules is ported: selecting it opens the chooser, and cancelling the
+    // chooser and the Outfit screen ends the visit without an error. The
+    // purchases and removals are proved in `module_route_tests`.
     let platform = RecordingPlatform::new();
-    let result = outfit_with_script(&platform, [idle(), right(), select()]);
-    assert_eq!(
-        result,
-        Err(StarbaseError::Unported(UnportedRoute::ModuleInstall))
-    );
+    let result = outfit_with_script(&platform, [idle(), right(), select(), cancel(), cancel()]);
+    assert_eq!(result, Ok(()));
     assert_nothing_leaked(&platform);
 
     let platform = RecordingPlatform::new();

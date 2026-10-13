@@ -13,8 +13,10 @@ use super::gfx::{
     Point, Rect, Rgba, Stamp, TextDraw,
 };
 use super::input::MenuPulses;
+use super::new_game_reference::NewGameFlagship;
 use super::platform::{
-    MenuSounds, MusicId, Platform, SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
+    MenuSounds, MusicId, Platform, ResUnitsUpdate, SisView, StarbaseError, StateKey,
+    StatusMessageMode, UiStyle,
 };
 use super::sis_modules::{ModuleSlots, EMPTY_MODULE_SLOT};
 use crate::mainloop::types::ActivityValue;
@@ -51,6 +53,11 @@ pub enum Event {
     SetMessageMode(StatusMessageMode),
     SetFuelOnBoard(u32),
     GaugeDelta(GaugeDelta),
+    SetDriveSlot(usize, u8),
+    SetJetSlot(usize, u8),
+    SetModuleSlot(usize, u8),
+    SetNumLanders(u8),
+    ShipStatus(ResUnitsUpdate),
     SisFrame,
     SisMessage(String),
     SisTitle(String),
@@ -91,6 +98,8 @@ pub struct RecordingPlatform {
     pub font_style: Cell<UiStyle>,
     /// Make the gauge update apply a different fuel than requested.
     pub corrupt_gauge: Cell<bool>,
+    /// Make the ship status update apply one RU more than requested.
+    pub corrupt_res_units: Cell<bool>,
     /// A resource name that fails to load.
     pub failing_resource: RefCell<Option<String>>,
     /// Abort the game after this many pulses were consumed in total.
@@ -113,7 +122,7 @@ pub fn default_sis() -> SisView {
         total_element_mass: 0,
         module_slots,
         drive_slots: [1, 1, 1, 1, 1, 1, 20, 20, 20, 20, 20],
-        jet_slots: [2, 2, 2, 2, 20, 20, 20, 20],
+        jet_slots: [2, 2, 2, 2, 21, 21, 21, 21],
         num_landers: 3,
         ship_name: "Vindicator".to_owned(),
         fuel_cost: 20,
@@ -133,6 +142,7 @@ impl RecordingPlatform {
             menu_style: Cell::new(UiStyle::ThreeDo),
             font_style: Cell::new(UiStyle::ThreeDo),
             corrupt_gauge: Cell::new(false),
+            corrupt_res_units: Cell::new(false),
             failing_resource: RefCell::new(None),
             abort_after_pulses: Cell::new(None),
             consumed: Cell::new(0),
@@ -142,6 +152,16 @@ impl RecordingPlatform {
             next_music: Cell::new(1),
             message_mode: Cell::new(StatusMessageMode::Date),
         }
+    }
+
+    /// A platform whose ship is the one a new game starts with, read from
+    /// the C initializer, with `res_units` to spend.
+    pub fn with_new_game_flagship(res_units: u32) -> Self {
+        let platform = Self::new();
+        let mut flagship = NewGameFlagship::from_c_source();
+        flagship.res_units = res_units;
+        *platform.sis.borrow_mut() = flagship.sis_view();
+        platform
     }
 
     pub fn push_pulses(&self, pulses: impl IntoIterator<Item = MenuPulses>) {
@@ -206,6 +226,10 @@ pub fn left() -> MenuPulses {
 
 pub fn up() -> MenuPulses {
     press(|p| p.up = true)
+}
+
+pub fn down() -> MenuPulses {
+    press(|p| p.down = true)
 }
 
 pub fn cancel() -> MenuPulses {
@@ -419,6 +443,38 @@ impl Platform for RecordingPlatform {
         sis.res_units = applied.res_units;
         if self.corrupt_gauge.get() {
             sis.fuel_on_board += 100;
+        }
+    }
+
+    fn set_drive_slot(&self, index: usize, piece: u8) {
+        self.sis.borrow_mut().drive_slots[index] = piece;
+        self.record(Event::SetDriveSlot(index, piece));
+    }
+
+    fn set_jet_slot(&self, index: usize, piece: u8) {
+        self.sis.borrow_mut().jet_slots[index] = piece;
+        self.record(Event::SetJetSlot(index, piece));
+    }
+
+    fn set_module_slot(&self, index: usize, piece: u8) {
+        self.sis.borrow_mut().module_slots[index] = piece;
+        self.record(Event::SetModuleSlot(index, piece));
+    }
+
+    fn set_num_landers(&self, count: u8) {
+        self.sis.borrow_mut().num_landers = count;
+        self.record(Event::SetNumLanders(count));
+    }
+
+    fn redraw_ship_status(&self, res_units: ResUnitsUpdate) {
+        self.record(Event::ShipStatus(res_units));
+        let mut sis = self.sis.borrow_mut();
+        if let ResUnitsUpdate::Change(delta) = res_units {
+            // `DeltaSISGauges_resunitDelta`: a payment floors at zero.
+            sis.res_units = sis.res_units.saturating_add_signed(delta);
+            if self.corrupt_res_units.get() {
+                sis.res_units += 1;
+            }
         }
     }
 

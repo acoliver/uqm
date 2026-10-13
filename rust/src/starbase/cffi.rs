@@ -15,7 +15,8 @@ use super::gfx::{
 };
 use super::input::MenuPulses;
 use super::platform::{
-    MenuSounds, MusicId, Platform, SisView, StarbaseError, StateKey, StatusMessageMode, UiStyle,
+    MenuSounds, MusicId, Platform, ResUnitsUpdate, SisView, StarbaseError, StateKey,
+    StatusMessageMode, UiStyle,
 };
 use crate::c_bindings::controller_input::{
     PulsedInputState, KEY_MENU_CANCEL, KEY_MENU_DOWN, KEY_MENU_LEFT, KEY_MENU_PAGE_DOWN,
@@ -32,6 +33,10 @@ const OPT_PC: c_int = 0x02;
 const MENU_SOUND_FAILURE: c_int = 2;
 /// `SFR_MENU_3DO` is `(RECT*)~0L`.
 const SFR_MENU_3DO: usize = usize::MAX;
+/// `SFR_MENU_ANY` is `(RECT*)~1L`.
+const SFR_MENU_ANY: usize = usize::MAX - 1;
+/// `UNDEFINED_DELTA` (`sis.h`).
+const UNDEFINED_DELTA: i16 = 0x7FFF;
 
 extern "C" {
     static mut ScreenWidth: c_int;
@@ -371,6 +376,10 @@ impl Gfx for CffiPlatform {
                 // SAFETY: `SFR_MENU_3DO` is the C sentinel pointer `~0`.
                 unsafe { SetFlashRect(SFR_MENU_3DO as *const c_void) };
             }
+            FlashTarget::MenuAny => {
+                // SAFETY: `SFR_MENU_ANY` is the C sentinel pointer `~1`.
+                unsafe { SetFlashRect(SFR_MENU_ANY as *const c_void) };
+            }
             FlashTarget::Rect(rect) => {
                 let rect = to_c_rect(rect);
                 // SAFETY: the rectangle is copied by the call.
@@ -520,6 +529,36 @@ impl Platform for CffiPlatform {
     fn apply_gauge_delta(&self, delta: GaugeDelta) {
         // SAFETY: plain value call; the status gauges redraw themselves.
         unsafe { DeltaSISGauges(0, delta.fuel, delta.res_units) };
+    }
+
+    fn set_drive_slot(&self, index: usize, piece: u8) {
+        // SAFETY: the game thread owns `GlobData`; the caller bounds `index`
+        // by `NUM_DRIVE_SLOTS`, and the array index checks it again.
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.drive_slots[index] = piece };
+    }
+
+    fn set_jet_slot(&self, index: usize, piece: u8) {
+        // SAFETY: as for `set_drive_slot`.
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.jet_slots[index] = piece };
+    }
+
+    fn set_module_slot(&self, index: usize, piece: u8) {
+        // SAFETY: as for `set_drive_slot`.
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.module_slots[index] = piece };
+    }
+
+    fn set_num_landers(&self, count: u8) {
+        // SAFETY: the game thread owns `GlobData`.
+        unsafe { (*std::ptr::addr_of_mut!(GlobData)).sis_state.num_landers = count };
+    }
+
+    fn redraw_ship_status(&self, res_units: ResUnitsUpdate) {
+        let res_units = match res_units {
+            ResUnitsUpdate::Redraw => i32::from(UNDEFINED_DELTA),
+            ResUnitsUpdate::Change(delta) => delta,
+        };
+        // SAFETY: plain value call; the status panel redraws itself.
+        unsafe { DeltaSISGauges(UNDEFINED_DELTA, UNDEFINED_DELTA, res_units) };
     }
 
     fn draw_sis_frame(&self) {

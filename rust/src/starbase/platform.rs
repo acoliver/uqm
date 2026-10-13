@@ -9,6 +9,7 @@
 use super::fuel::{FuelError, GaugeDelta};
 use super::gfx::{FrameId, Gfx};
 use super::input::MenuPulses;
+use super::module_chooser::ModuleChooserError;
 use super::sis_modules::{FuelLayoutError, ModuleSlotsError};
 use crate::mainloop::types::ActivityValue;
 
@@ -45,6 +46,19 @@ pub struct SisView {
     pub fuel_cost: u8,
     /// `GLOBAL (ModuleCost)`.
     pub module_cost: [u8; 20],
+}
+
+/// The RU argument of `DeltaSISGauges (UNDEFINED_DELTA, UNDEFINED_DELTA,
+/// resunit_delta)`, which redraws the whole ship status and leaves crew and
+/// fuel as they are (`sis.c:1115-1161`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResUnitsUpdate {
+    /// `UNDEFINED_DELTA`: redraw the RU gauge without changing it.
+    Redraw,
+    /// Add this many RU (negative pays), floored at zero, then redraw. The
+    /// C `int` argument must not be `UNDEFINED_DELTA` (0x7FFF); module
+    /// prices are at most 255 * 50 RU, so they never are.
+    Change(i32),
 }
 
 /// `StatMsgMode` (`sis.h`).
@@ -103,8 +117,6 @@ pub enum UnportedRoute {
     Shipyard,
     /// `GameOptions` Save/Load from the Outfit menu (`gameopt.c`).
     SaveLoad,
-    /// `DoInstallModule` (`outfit.c:140-535`).
-    ModuleInstall,
 }
 
 impl std::fmt::Display for UnportedRoute {
@@ -112,7 +124,6 @@ impl std::fmt::Display for UnportedRoute {
         f.write_str(match self {
             UnportedRoute::Shipyard => "Shipyard",
             UnportedRoute::SaveLoad => "Save/Load from the Outfit menu",
-            UnportedRoute::ModuleInstall => "module installation",
         })
     }
 }
@@ -141,6 +152,12 @@ pub enum StarbaseError {
     },
     #[error("ship name is not valid UTF-8")]
     ShipName,
+    #[error("module chooser: {0}")]
+    ModuleChooser(#[from] ModuleChooserError),
+    #[error(
+        "RU gauge update disagrees with the transaction: expected {expected} RU, found {actual} RU"
+    )]
+    ResUnitsMismatch { expected: u32, actual: u32 },
 }
 
 /// Everything besides drawing that the screens do.
@@ -162,6 +179,18 @@ pub trait Platform: Gfx {
     /// `DeltaSISGauges (0, delta.fuel, delta.res_units)`: change the SIS
     /// state and redraw the status gauges.
     fn apply_gauge_delta(&self, delta: GaugeDelta);
+    /// `GLOBAL_SIS (DriveSlots[index]) = piece`.
+    fn set_drive_slot(&self, index: usize, piece: u8);
+    /// `GLOBAL_SIS (JetSlots[index]) = piece`.
+    fn set_jet_slot(&self, index: usize, piece: u8);
+    /// `GLOBAL_SIS (ModuleSlots[index]) = piece`.
+    fn set_module_slot(&self, index: usize, piece: u8);
+    /// `GLOBAL_SIS (NumLanders) = count`.
+    fn set_num_landers(&self, count: u8);
+    /// `DeltaSISGauges (UNDEFINED_DELTA, UNDEFINED_DELTA, resunit_delta)`:
+    /// redraw the ship status panel from the SIS state and apply the RU
+    /// change.
+    fn redraw_ship_status(&self, res_units: ResUnitsUpdate);
 
     // --- SIS frame ---
     fn draw_sis_frame(&self);
