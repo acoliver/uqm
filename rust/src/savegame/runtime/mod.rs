@@ -1,6 +1,7 @@
 //! Capture and restore of the running game's "GlSt", "GmSt", "Evts", "Scan",
 //! "Grps", "BtGp", "RacQ", "NpcQ", "ShpQ", "IGpQ" and "Enct" sections, plus the
-//! "Summ" summary and the "Star" location of a save.
+//! "Summ" summary and the "Star" location of a save, and the preparation of the
+//! solar-system location (`location`) that `SaveGameState` records.
 //!
 //! The first three are the part of a save that lives in `GlobData`, the Rust
 //! game-state singleton and the game clock's event queue; the next three are
@@ -10,7 +11,8 @@
 //! state and the star catalog the same way. The functions here work on those
 //! live structures, not on copies. The `SaveGame`/`LoadGame` orchestration, the
 //! initialisation of the solar-system state and the owner of the star catalog
-//! are not ported yet (`solar` ports only the reads of the summary), so nothing
+//! are not ported yet (`solar` ports the reads of the summary and `location` the
+//! solar-location step of a save), so nothing
 //! here is wired to a menu and no selector here makes a save atomic.
 
 pub mod events;
@@ -18,6 +20,7 @@ pub mod global;
 pub mod groups;
 #[cfg(not(test))]
 pub mod live;
+pub mod location;
 pub mod queues;
 pub mod solar;
 pub mod star;
@@ -131,6 +134,8 @@ pub fn restore_runtime(
 
 #[cfg(test)]
 mod group_tests;
+#[cfg(test)]
+mod location_tests;
 #[cfg(test)]
 mod queue_tests;
 #[cfg(test)]

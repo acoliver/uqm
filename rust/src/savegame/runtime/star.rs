@@ -117,13 +117,22 @@ pub fn capture_star(
             postfix: 0,
         });
     }
+    Ok(wire(&catalog[catalog_index(catalog, current)?]))
+}
+
+/// `CurStarDescPtr - star_array`: the position of `current` in `catalog`.
+/// Only addresses are compared; nothing is dereferenced. A NULL pointer, or
+/// one that is not exactly an entry of the table, is
+/// [`StarError::CurrentOutsideCatalog`].
+pub fn catalog_index(catalog: &[CStarDesc], current: *const CStarDesc) -> Result<usize, StarError> {
+    check_catalog(catalog)?;
     let start = catalog.as_ptr() as usize;
     let offset = (current as usize).wrapping_sub(start);
     let entry = std::mem::size_of::<CStarDesc>();
     if offset >= CATALOG_LEN * entry || !offset.is_multiple_of(entry) {
         return Err(StarError::CurrentOutsideCatalog);
     }
-    Ok(wire(&catalog[offset / entry]))
+    Ok(offset / entry)
 }
 
 /// `FindStar (NULL, &point, 0, 0)` (starmap.c): the index of the catalog entry
