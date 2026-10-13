@@ -4293,7 +4293,7 @@ mod tests {
             executable_digest: "nested-test".into(),
         };
         let _nested = ChildSession::spawn(command, config).expect("spawn nested ChildSession");
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + HELPER_REGISTRATION_TIMEOUT;
         while !pid_file.is_file() {
             assert!(Instant::now() < deadline, "nested helper did not register");
             thread::sleep(Duration::from_millis(5));
@@ -4339,7 +4339,15 @@ mod tests {
             ],
             test_limits,
         );
-        panic!("outer supervisor was not terminated: {captured:?}");
+        panic!(
+            "outer supervisor was not terminated: exit {:?}, signal {:?}, launch error {:?}\n\
+             controller stdout:\n{}\ncontroller stderr:\n{}",
+            captured.exit_code,
+            captured.signal,
+            captured.launch_error,
+            String::from_utf8_lossy(&captured.stdout),
+            String::from_utf8_lossy(&captured.stderr),
+        );
     }
 
     #[cfg(unix)]
@@ -4577,8 +4585,34 @@ mod tests {
     impl OwnedHelper {
         /// Spawn one of this binary's helper tests as an owned process.
         fn spawn(test_name: &str, environment: &[(&str, std::ffi::OsString)]) -> Self {
+            Self::spawn_with_output(test_name, environment, None)
+        }
+
+        /// Spawn a helper whose stdout and stderr are kept in `output_log`, so
+        /// that a helper which dies early can say why.
+        fn spawn_logged(
+            test_name: &str,
+            environment: &[(&str, std::ffi::OsString)],
+            output_log: &Path,
+        ) -> Self {
+            Self::spawn_with_output(test_name, environment, Some(output_log))
+        }
+
+        fn spawn_with_output(
+            test_name: &str,
+            environment: &[(&str, std::ffi::OsString)],
+            output_log: Option<&Path>,
+        ) -> Self {
             use std::os::unix::process::CommandExt as _;
 
+            let (stdout, stderr) = match output_log {
+                Some(path) => {
+                    let log = std::fs::File::create(path).expect("create helper output log");
+                    let duplicate = log.try_clone().expect("duplicate helper output log");
+                    (Stdio::from(log), Stdio::from(duplicate))
+                }
+                None => (Stdio::null(), Stdio::null()),
+            };
             let (lifeline_read, lifeline_write) = pipe_cloexec().expect("owner lifeline");
             let executable = std::env::current_exe().expect("test executable");
             let mut command = Command::new(executable);
@@ -4587,8 +4621,8 @@ mod tests {
                 .env(HELPER_LIFELINE_FD_ENV, lifeline_read.to_string())
                 .process_group(0)
                 .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
+                .stdout(stdout)
+                .stderr(stderr);
             for (name, value) in environment {
                 command.env(name, value);
             }
@@ -4627,6 +4661,34 @@ mod tests {
 
         fn pid(&self) -> libc::pid_t {
             libc::pid_t::try_from(self.child.id()).expect("helper identifier fits in a PID")
+        }
+
+        /// The exit status of a helper that has already ended on its own, or
+        /// `None` while it is still running.
+        ///
+        /// The helper's group is killed before it is marked reaped: a helper
+        /// that died may have left descendants that ignore `SIGTERM`, and
+        /// `Drop` no longer reaches them once the leader is reaped. The kernel
+        /// does not recycle a process identifier while a group of that number
+        /// has members, so the kill cannot reach an unrelated group.
+        fn exited_early(&mut self) -> Option<std::process::ExitStatus> {
+            if self.reaped {
+                return None;
+            }
+            let status = self.child.try_wait().expect("poll owned helper")?;
+            let pid = self.pid();
+            // SAFETY: see above; at worst the group no longer exists.
+            if unsafe { libc::kill(-pid, libc::SIGKILL) } == -1 {
+                let error = std::io::Error::last_os_error();
+                assert_eq!(
+                    error.raw_os_error(),
+                    Some(libc::ESRCH),
+                    "cannot kill group of exited helper {pid}: {error}"
+                );
+            }
+            self.release_lifeline();
+            self.reaped = true;
+            Some(status)
         }
 
         fn release_lifeline(&mut self) {
@@ -4686,6 +4748,46 @@ mod tests {
                     panic!("{error}");
                 }
             }
+        }
+    }
+
+    /// How long a test waits for the processes of a helper chain to register.
+    /// Every stage of such a chain waits on this one bound, so no inner stage
+    /// gives up before the test that is watching it.
+    #[cfg(unix)]
+    const HELPER_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(30);
+
+    /// Wait until every file in `published` exists, failing at once, with what
+    /// the helper and its descendants wrote, if the helper ends first.
+    #[cfg(unix)]
+    fn wait_for_published(
+        helper: &mut OwnedHelper,
+        published: &[&Path],
+        logs: &[&Path],
+        what: &str,
+    ) {
+        let deadline = Instant::now() + HELPER_REGISTRATION_TIMEOUT;
+        while !published.iter().all(|path| path.is_file()) {
+            let exit = helper.exited_early();
+            let expired = Instant::now() >= deadline;
+            if exit.is_some() || expired {
+                let outcome = match exit {
+                    Some(status) => format!("helper exited early with {status}"),
+                    None => format!("not published within {HELPER_REGISTRATION_TIMEOUT:?}"),
+                };
+                let output: String = logs
+                    .iter()
+                    .map(|log| {
+                        format!(
+                            "\n--- {} ---\n{}",
+                            log.display(),
+                            std::fs::read_to_string(log).unwrap_or_else(|error| error.to_string())
+                        )
+                    })
+                    .collect();
+                panic!("{what}: {outcome}{output}");
+            }
+            thread::sleep(Duration::from_millis(5));
         }
     }
 
@@ -4932,19 +5034,24 @@ mod tests {
         let nested_pid_file = directory.join("nested.pid");
         let outer_pid_file = directory.join("outer.pid");
         let mut unrelated = OwnedHelper::spawn_anchor_target("wait");
-        let mut supervisor = OwnedHelper::spawn(
+        let supervisor_log = directory.join("supervisor.log");
+        let mut supervisor = OwnedHelper::spawn_logged(
             "ci::exec::tests::outer_supervisor_helper_process",
             &[
                 ("UQM_TEST_OUTER_SUPERVISOR", "1".into()),
                 ("UQM_TEST_NESTED_PID_FILE", nested_pid_file.clone().into()),
                 ("UQM_TEST_OUTER_PID_FILE", outer_pid_file.clone().into()),
             ],
+            &supervisor_log,
         );
-        let deadline = Instant::now() + Duration::from_secs(30);
-        while !nested_pid_file.is_file() || !outer_pid_file.is_file() {
-            assert!(Instant::now() < deadline, "nested group did not register");
-            thread::sleep(Duration::from_millis(5));
-        }
+        let nested_stdout_log = nested_pid_file.with_extension("stdout.log");
+        let nested_stderr_log = nested_pid_file.with_extension("stderr.log");
+        wait_for_published(
+            &mut supervisor,
+            &[&nested_pid_file, &outer_pid_file],
+            &[&supervisor_log, &nested_stdout_log, &nested_stderr_log],
+            "nested group did not register",
+        );
         let nested_pid = std::fs::read_to_string(&nested_pid_file)
             .expect("read nested PID")
             .parse::<i32>()
