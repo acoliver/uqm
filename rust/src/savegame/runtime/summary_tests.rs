@@ -8,17 +8,22 @@
 //! `globdata.h` and `planets/devices.c`, and from the text of `plandata.c`.
 //! None comes from the encoder or from the code under test.
 //!
-//! The solar-system owner is still C, so these tests answer for it with a
-//! stand-in that records how often it was asked; what they check is when
-//! `PrepareSummary`'s branches consult it and what they do with the answer.
+//! Most of these tests answer for the solar-system state with a stand-in that
+//! records how often it was asked; what they check is when `PrepareSummary`'s
+//! branches consult it and what they do with the answer. The last group of
+//! solar tests runs the real Rust computation (`solar`) over a wired
+//! `SOLARSYS_STATE` and checks what ends up in the summary.
 
 use std::cell::Cell;
 
 use serial_test::serial;
 
 use super::queue_tests::{LiveGame, C_WRITTEN_SAVE};
+use super::solar::{SolarError, SolarSystem};
+use super::solar_tests::{owner, text, System, Table, FLAGSHIP_NAME};
 use super::star::*;
 use super::summary::*;
+use crate::comm::dispatch::{IN_INTERPLANETARY, IN_LAST_BATTLE};
 use crate::comm::locdata::CSisState;
 use crate::savegame::types::{Point, StarDesc};
 use crate::state::ffi::replace_game_state;
@@ -138,9 +143,9 @@ impl Solar {
 }
 
 impl SolarSystemOwner for Solar {
-    fn planet_or_moon_name(&self) -> [u8; 16] {
+    fn planet_or_moon_name(&self) -> Result<[u8; 16], SolarError> {
         self.name_asks.set(self.name_asks.get() + 1);
-        self.planet
+        Ok(self.planet)
     }
     fn player_in_planet_orbit(&self) -> bool {
         self.orbit_asks.set(self.orbit_asks.get() + 1);
@@ -635,6 +640,144 @@ fn a_changed_owner_changes_the_summary() {
     assert_eq!(second.sis.num_landers, 2);
     assert_eq!(second.year_index, first.year_index + 1);
     assert_eq!((first.mcredit_lo, second.mcredit_lo), (0, 9));
+}
+
+// ---------------------------------------------------------------------------
+// Summ over the Rust solar-system reads
+// ---------------------------------------------------------------------------
+
+/// `GAME_STRING (PLANET_NUMBER_BASE + n)` is `s<375 + n>` in the test table.
+const SOL_STAR: u8 = 1;
+const LUNA: &str = "s384";
+const EARTH: &str = "s377";
+const SA_MATRA_NAME: &str = "s407";
+
+fn interplanetary_game() -> LiveGame {
+    let mut game = LiveGame::bare();
+    game.current_activity = IN_INTERPLANETARY | START_ENCOUNTER;
+    game
+}
+
+fn summary_over(
+    system: &System,
+    game: &LiveGame,
+    star: Option<u8>,
+) -> Result<crate::savegame::types::Summary, SummaryError> {
+    capture_summary(&sis(), game, &owner(system, star, sis().planet_name), b"")
+}
+
+#[test]
+#[serial]
+fn the_summary_names_the_moon_the_flagship_orbits() {
+    install(&blank_state());
+    let game = interplanetary_game();
+    let summary = summary_over(&System::orbiting_moon(2, 1), &game, Some(SOL_STAR)).unwrap();
+    assert_eq!(text(summary.sis.planet_name), LUNA);
+    assert_eq!(summary.activity, IN_PLANET_ORBIT);
+    // Everything else of the flagship is the live `SIS_STATE`.
+    assert_eq!(summary.sis.fuel_on_board, sis().fuel_on_board);
+    assert_eq!(summary.sis.ship_name, sis().ship_name);
+}
+
+#[test]
+#[serial]
+fn a_changed_solar_system_changes_the_summary() {
+    install(&blank_state());
+    let game = interplanetary_game();
+
+    let mut system = System::orbiting_planet(2);
+    let at_earth = summary_over(&system, &game, Some(SOL_STAR)).unwrap();
+    assert_eq!(text(at_earth.sis.planet_name), EARTH);
+    assert_eq!(at_earth.activity, IN_PLANET_ORBIT);
+
+    // Leaving orbit keeps the name of the inner system's planet but not the
+    // orbit activity.
+    system.InOrbit = 0;
+    let flying = summary_over(&system, &game, Some(SOL_STAR)).unwrap();
+    assert_eq!(text(flying.sis.planet_name), EARTH);
+    assert_eq!(flying.activity, IN_INTERPLANETARY as u8);
+
+    // Back out to the outer system: the flagship's own planet name.
+    let outer = System::outer();
+    let outside = summary_over(&outer, &game, Some(SOL_STAR)).unwrap();
+    assert_eq!(&outside.sis.planet_name, &sis().planet_name);
+    assert_eq!(outside.activity, IN_INTERPLANETARY as u8);
+
+    // Orbiting an unnamed moon of an unnamed star.
+    let moon = System::orbiting_moon(3, 2);
+    let at_moon = summary_over(&moon, &game, Some(6)).unwrap();
+    assert_eq!(text(at_moon.sis.planet_name), "Alpha Centauri");
+    let mut short = sis();
+    short.planet_name = FLAGSHIP_NAME;
+    let at_moon =
+        capture_summary(&short, &game, &owner(&moon, Some(6), FLAGSHIP_NAME), b"").unwrap();
+    assert_eq!(text(at_moon.sis.planet_name), "Beta Hydri-C");
+}
+
+#[test]
+#[serial]
+fn a_starbase_visit_is_a_starbase_even_in_orbit_and_is_still_named() {
+    let mut state = blank_state();
+    set_key(&mut state, "GLOBAL_FLAGS_AND_DATA", 0xFF);
+    install(&state);
+    let game = interplanetary_game();
+    let summary = summary_over(&System::orbiting_moon(2, 0), &game, Some(SOL_STAR)).unwrap();
+    assert_eq!(summary.activity, IN_STARBASE);
+    assert_eq!(text(summary.sis.planet_name), "s422");
+}
+
+#[test]
+#[serial]
+fn the_final_battle_summary_names_sa_matra_whatever_the_system_holds() {
+    install(&blank_state());
+    let mut game = LiveGame::bare();
+    game.current_activity = IN_LAST_BATTLE | START_ENCOUNTER;
+    let summary = summary_over(&System::orbiting_planet(2), &game, Some(SOL_STAR)).unwrap();
+    assert_eq!(text(summary.sis.planet_name), SA_MATRA_NAME);
+    assert_eq!(summary.activity, IN_LAST_BATTLE as u8);
+}
+
+#[test]
+#[serial]
+fn the_other_activities_do_not_read_the_solar_system() {
+    install(&blank_state());
+    // A state `planet_or_moon_name` would reject.
+    let mut broken = System::inner(2);
+    broken.pOrbitalDesc = std::ptr::null_mut();
+    for activity in [0u16, 2, 3, 5, 6, 7, 8] {
+        let mut game = LiveGame::bare();
+        game.current_activity = activity | START_ENCOUNTER;
+        let summary = summary_over(&broken, &game, Some(SOL_STAR)).unwrap();
+        assert_eq!(
+            &summary.sis.planet_name,
+            &sis().planet_name,
+            "activity {activity}"
+        );
+    }
+}
+
+#[test]
+#[serial]
+fn a_broken_solar_system_is_an_error_not_a_guessed_name() {
+    install(&blank_state());
+    let game = interplanetary_game();
+    let mut broken = System::inner(2);
+    broken.pOrbitalDesc = std::ptr::null_mut();
+    assert_eq!(
+        summary_over(&broken, &game, Some(SOL_STAR)).unwrap_err(),
+        SummaryError::Solar(SolarError::OrbitalWorldMissing)
+    );
+}
+
+#[test]
+#[serial]
+fn no_solar_system_summarises_as_plain_interplanetary_flight() {
+    install(&blank_state());
+    let game = interplanetary_game();
+    let solar = SolarSystem::new(None, None, sis().planet_name, &Table);
+    let summary = capture_summary(&sis(), &game, &solar, b"").unwrap();
+    assert_eq!(summary.activity, IN_INTERPLANETARY as u8);
+    assert_eq!(&summary.sis.planet_name, &sis().planet_name);
 }
 
 // ---------------------------------------------------------------------------
