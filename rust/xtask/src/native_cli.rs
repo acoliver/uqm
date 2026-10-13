@@ -396,6 +396,7 @@ fn run_suite(root: &Path, options: &Options) -> Result<(), String> {
             scenarios: selection,
             evidence_root: Some(artifacts),
             content_root: Some(content),
+            verify_workflow_selection: true,
         },
     )
 }

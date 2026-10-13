@@ -702,6 +702,13 @@ pub(crate) struct NativeRunRequest {
     pub scenarios: Option<String>,
     pub evidence_root: Option<PathBuf>,
     pub content_root: Option<PathBuf>,
+    /// Recompute the selection from the trusted workflow event and require
+    /// equality with `scenarios`. Only a run whose binary was built from the
+    /// trusted source can do this meaningfully: the `native run` command in the
+    /// workflow job. The gate step runs a binary built from the source under
+    /// test, with no workflow event in its cleared environment, and receives
+    /// names the trusted controller already derived from the retained receipt.
+    pub verify_workflow_selection: bool,
 }
 
 impl NativeRunRequest {
@@ -710,12 +717,35 @@ impl NativeRunRequest {
             scenarios: env::var(ci::exec::AUTOPLAY_SCENARIOS_ENV).ok(),
             evidence_root: env::var_os("UQM_CI_NATIVE_ACCEPTANCE_EVIDENCE_ROOT").map(PathBuf::from),
             content_root: env::var_os("UQM_CI_NATIVE_CONTENT_ROOT").map(PathBuf::from),
+            verify_workflow_selection: false,
         }
     }
 }
 
 fn native_test(root: &Path) -> Result<(), String> {
     native_test_with(root, &NativeRunRequest::from_environment())
+}
+
+/// The scripts one native run executes.
+///
+/// With `workflow` supplied the requested names must equal the selection the
+/// trusted workflow event derives; without it the requested names stand, which
+/// is the case for names a trusted controller has already bound.
+fn native_run_selection(
+    root: &Path,
+    authority: &ci::authority::Authority,
+    request: &NativeRunRequest,
+    workflow: Option<&ci::controller::WorkflowInputs>,
+) -> Result<Vec<ci::authority::PinnedScript>, String> {
+    let selected = selected_acceptance_scripts(authority, request.scenarios.as_deref())?;
+    if let Some(inputs) = workflow {
+        let policy = ci::authority::load_policy_bytes(root)?;
+        let binding = ci::controller::derive_binding(root, authority, &policy, inputs)?;
+        if binding.selected(authority, &binding.source_sha, &policy)? != selected {
+            return Err("requested native suite differs from trusted workflow selection".into());
+        }
+    }
+    Ok(selected)
 }
 
 pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Result<(), String> {
@@ -729,19 +759,10 @@ pub(crate) fn native_test_with(root: &Path, request: &NativeRunRequest) -> Resul
     }
     let authority = ci::authority::load_authority(root)?;
     ci::authority::validate_authority(&authority)?;
-    let selected = selected_acceptance_scripts(&authority, request.scenarios.as_deref())?;
-    if env::var_os("UQM_CI_SOURCE_ROOT").is_some() {
-        let policy = ci::authority::load_policy_bytes(root)?;
-        let binding = ci::controller::derive_binding(
-            root,
-            &authority,
-            &policy,
-            &ci::controller::WorkflowInputs::from_env(),
-        )?;
-        if binding.selected(&authority, &binding.source_sha, &policy)? != selected {
-            return Err("requested native suite differs from trusted workflow selection".into());
-        }
-    }
+    let workflow = (request.verify_workflow_selection
+        && env::var_os("UQM_CI_SOURCE_ROOT").is_some())
+    .then(ci::controller::WorkflowInputs::from_env);
+    let selected = native_run_selection(root, &authority, request, workflow.as_ref())?;
     let mut accounting =
         native_suite::from_request(request.evidence_root.as_deref(), &selected, &authority)?;
     let mut phase = native_suite::SuitePhase::Preflight;
@@ -3275,6 +3296,49 @@ fn hex_sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn checkout_root() -> &'static Path {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+    }
+
+    /// A gate step has no workflow event in its cleared environment. It is
+    /// handed the names the trusted controller retained and runs exactly those.
+    #[test]
+    fn controller_supplied_selection_stands_without_a_workflow_event() {
+        let root = checkout_root();
+        let authority = ci::authority::load_authority(root).unwrap();
+        let request = NativeRunRequest {
+            scenarios: Some("main-menu-v1".into()),
+            ..NativeRunRequest::default()
+        };
+        assert!(!request.verify_workflow_selection);
+        let selected = native_run_selection(root, &authority, &request, None).unwrap();
+        let paths: Vec<_> = selected.iter().map(|pin| pin.path.as_str()).collect();
+        assert_eq!(paths, ["rust/scripts/main-menu-v1.json"]);
+    }
+
+    /// The trusted workflow-job route still refuses a suite narrower than the
+    /// one the event selects.
+    #[test]
+    fn workflow_route_rejects_a_narrower_suite_than_the_event_selects() {
+        let root = checkout_root();
+        let authority = ci::authority::load_authority(root).unwrap();
+        let request = NativeRunRequest {
+            scenarios: Some("main-menu-v1".into()),
+            verify_workflow_selection: true,
+            ..NativeRunRequest::default()
+        };
+        let inputs = ci::controller::WorkflowInputs::local();
+        let error = native_run_selection(root, &authority, &request, Some(&inputs)).unwrap_err();
+        assert_eq!(
+            error,
+            "requested native suite differs from trusted workflow selection"
+        );
+    }
 
     /// What the child is handed is what it enforces: a long script receives its
     /// pinned outer deadline and a short script receives the default.
