@@ -88,10 +88,10 @@ extern "C" {
     fn LoadStringTableInstance(resource: *const c_char) -> *mut c_void;
     fn CaptureStringTable(table: *mut c_void) -> *mut c_void;
     fn ReleaseStringTable(entry: *mut c_void) -> *mut c_void;
-    fn DestroyStringTable(table: *mut c_void) -> u8;
+    fn DestroyStringTable(table: *mut c_void) -> c_int;
     fn SetRelStringTableIndex(entry: *mut c_void, offset: i16) -> *mut c_void;
     fn GetColorMapAddress(map: *mut c_void) -> *mut c_void;
-    fn SetColorMap(map: *mut c_void) -> u8;
+    fn SetColorMap(map: *mut c_void) -> c_int;
 }
 
 /// `&GLOBAL (built_ship_q)`.
@@ -681,11 +681,8 @@ impl Platform for CffiPlatform {
     fn remove_escort(&self, slot: u8) -> Result<(), StarbaseError> {
         let link = escort_link(slot)?;
         let queue = built_ship_queue();
-        // SAFETY: `link` belongs to `queue`.
-        unsafe {
-            RemoveQueue(queue, link);
-            FreeLink(queue, link);
-        }
+        RemoveQueue(queue, link);
+        FreeLink(queue, link);
         Ok(())
     }
 
