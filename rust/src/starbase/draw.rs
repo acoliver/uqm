@@ -17,8 +17,11 @@ use super::ids::{
     PM_FUEL, RADAR_HEIGHT, RADAR_WIDTH, SAFE_X, SAFE_Y, SHIP_NAME_HEIGHT, SHIP_PIECE_OFFSET,
     STARBASE_STRING_BASE, TURNING_JETS,
 };
-use super::platform::{SisView, UiStyle, ONE_SECOND};
-use super::sis_modules::{FuelBar, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE, HEFUEL_TANK_CAPACITY};
+use super::platform::{SisView, StarbaseError, UiStyle, ONE_SECOND};
+use super::sis_modules::{
+    fuel_bar_layout, FuelBar, ModuleSlots, ModuleType, FUEL_TANK_CAPACITY, FUEL_TANK_SCALE,
+    HEFUEL_TANK_CAPACITY,
+};
 use super::starbase_menu::StarbaseState;
 
 const HIGHLIGHT_YELLOW: Rgba = Rgba::rgb15(0x1F, 0x1F, 0x0A);
@@ -334,6 +337,17 @@ pub fn redistribute_fuel<G: Gfx + ?Sized>(g: &G, layout: &[FuelBar]) {
     g.restore_context(previous);
 }
 
+/// `RedistributeFuel` for the fuel on board and the module slots of `sis`.
+pub fn redistribute_fuel_from_sis<G: Gfx + ?Sized>(
+    g: &G,
+    sis: &SisView,
+) -> Result<(), StarbaseError> {
+    let slots = ModuleSlots::from_raw(&sis.module_slots)?;
+    let layout = fuel_bar_layout(&slots, sis.fuel_on_board)?;
+    redistribute_fuel(g, &layout);
+    Ok(())
+}
+
 /// `DisplayLanders` (`outfit.c:143-169`).
 pub fn display_landers<G: Gfx + ?Sized>(
     g: &G,
@@ -510,6 +524,86 @@ pub fn draw_outfit_menu_strings<G: Gfx + ?Sized>(
     g.restore_context(previous);
     g.post_update_flash();
 }
+
+/// What `DrawModuleStrings` shows for a module: its picture and price.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModuleOnShow {
+    pub module: ModuleType,
+    /// `ModuleCost[module] * MODULE_COST_SCALE`.
+    pub price: u32,
+}
+
+/// `DrawModuleStrings` (`outfit.c:49-98`): the picture of the module and its
+/// price in the radar area, or a blank radar area for `None` (an
+/// `EMPTY_SLOT` byte). `menu_frame` is the module menu art
+/// (`MENU_STATE.CurFrame`).
+pub fn draw_module_strings<G: Gfx + ?Sized>(
+    g: &G,
+    menu_frame: FrameId,
+    shown: Option<ModuleOnShow>,
+) {
+    let previous = g.set_context(ContextId::Status);
+    let clip = g.context_clip_rect();
+    let (screen_width, screen_height) = g.screen_size();
+    let radar = RadarLayout::for_screen(screen_width, screen_height);
+    let origin = Point {
+        x: (radar.x - i32::from(clip.corner.x)) as i16,
+        y: (radar.y - i32::from(clip.corner.y)) as i16,
+    };
+    g.batch();
+    g.set_fg_color(MENU_BACKDROP);
+    g.fill_rect(Rect {
+        corner: Point {
+            x: origin.x - 1,
+            y: origin.y - 11,
+        },
+        width: (RADAR_WIDTH + 2) as i16,
+        height: 11,
+    });
+    match shown {
+        None => {
+            g.set_fg_color(Rgba::BLACK);
+            g.fill_rect(Rect {
+                corner: origin,
+                width: RADAR_WIDTH as i16,
+                height: RADAR_HEIGHT as i16,
+            });
+        }
+        Some(view) => {
+            g.draw_stamp(Stamp {
+                origin,
+                frame: g.abs_frame(menu_frame, u16::from(view.module as u8)),
+            });
+            g.set_font(FontId::Tiny);
+            g.set_fg_color(THREEDO_MENU_TEXT);
+            g.draw_text(&text_at(
+                i32::from(origin.x) + RADAR_WIDTH - 2,
+                i32::from(origin.y) + RADAR_HEIGHT - 2,
+                Align::Right,
+                view.price.to_string(),
+            ));
+        }
+    }
+    g.unbatch();
+    g.restore_context(previous);
+}
+
+/// `ClearSISRect (CLEAR_SIS_RADAR)` (`sis.c:82-120`): the menu strip with no
+/// menu entry drawn.
+pub fn clear_sis_radar<G: Gfx + ?Sized>(g: &G, style: UiStyle, fuel_cost: u8) {
+    let previous = g.set_context(ContextId::Status);
+    let old_color = g.set_fg_color(MENU_BACKDROP);
+    g.batch();
+    // `DrawMenuStateStrings ((BYTE)~0, 1)`: no entry has that number, so no
+    // menu art is chosen and only the backdrop is filled.
+    draw_outfit_menu_strings(g, style, NO_MENU_ENTRY, fuel_cost);
+    g.unbatch();
+    g.set_fg_color(old_color);
+    g.restore_context(previous);
+}
+
+/// A menu entry number past every Outfit entry.
+const NO_MENU_ENTRY: u8 = u8::MAX;
 
 /// `GetGaugeRect` (`sis.c:830-837`); the rectangle is relative to the
 /// status context.

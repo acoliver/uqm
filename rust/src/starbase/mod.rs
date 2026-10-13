@@ -33,6 +33,9 @@
 //!   `ChangeFuelQuantity`, `sis.c` `DeltaSISGauges`).
 //! - [`module_guard`]: module purchase and removal rules (`outfit.c`
 //!   `DoInstallModule`).
+//! - [`module_chooser`]: the module chooser's cursor and frame step
+//!   (`outfit.c` `DoInstallModule`).
+//! - `module_screen` (private): the chooser's drawing and SIS changes.
 //! - [`starbase_menu`]: the four-state Starbase menu (`starbase.c`
 //!   `DoStarBase`).
 //! - [`visit`]: arrival time passage and post-visit cleanup (`starbase.c`
@@ -46,7 +49,9 @@ pub mod fuel;
 pub mod gfx;
 pub mod ids;
 pub mod input;
+pub mod module_chooser;
 pub mod module_guard;
+mod module_screen;
 pub mod outfit_menu;
 pub mod platform;
 pub mod screen;
@@ -80,6 +85,10 @@ pub use visit::{
     LOST_DAYS,
 };
 
+#[cfg(test)]
+mod module_route_tests;
+#[cfg(test)]
+mod new_game_reference;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

@@ -110,6 +110,21 @@ pub const JET_TOP: Point = Point { x: 70, y: 73 + 21 };
 pub const MODULE_SIDE: Point = Point { x: 17, y: 14 };
 pub const MODULE_TOP: Point = Point { x: 17, y: 96 + 21 };
 
+// --- Module chooser (`sis.h`, `outfit.c`) ---
+/// `NUM_BOMB_MODULES` (`sis.h:93`): the module slots the Chmmr bomb takes.
+pub const NUM_BOMB_MODULES: u8 = 10;
+/// `CHMMR_BOMB_STATE == 3`: the bomb is installed.
+pub const CHMMR_BOMB_INSTALLED: u32 = 3;
+/// Module slots that may hold a weapon when no bomb is installed: slot 0 and
+/// the last three (`outfit.c:433-435`: `delta_item > 0 && delta_item < 13`
+/// rules every other slot out).
+pub const WEAPON_EXCLUDED_SLOTS: std::ops::Range<u8> = 1..13;
+/// Flash rectangle sizes in the space context (`outfit.c:488-531`).
+pub const LANDER_FLASH_SIZE: (i16, i16) = (11 + 2, 13 + 2);
+pub const DRIVE_FLASH_SIZE: (i16, i16) = (8, 6);
+pub const JET_FLASH_SIZE: (i16, i16) = (9, 10);
+pub const MODULE_FLASH_SIZE: (i16, i16) = (SHIP_PIECE_OFFSET + 2, 34);
+
 // --- Landers (`outfit.c:136-139`) ---
 pub const LANDER_X: i16 = 24;
 pub const LANDER_Y: i16 = 67;

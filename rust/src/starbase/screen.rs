@@ -9,13 +9,13 @@
 //! Resources a screen loads are owned by guard values, so every exit
 //! releases them: a normal exit, an abort or load request, and an error.
 //!
-//! Routes the Rust game cannot serve (Shipyard, Save/Load, module
-//! installation) end the screen with [`StarbaseError::Unported`].
+//! Routes the Rust game cannot serve (Shipyard, Save/Load) end the screen with
+//! [`StarbaseError::Unported`].
 
 use super::draw::{
     display_landers, draw_base_state_strings, draw_flagship_name, draw_flagship_stats,
     draw_outfit_menu_strings, draw_ship_piece, flash_fuel_gauge, redistribute_fuel,
-    rotate_starbase, StarbaseAnimation,
+    redistribute_fuel_from_sis, rotate_starbase, StarbaseAnimation,
 };
 use super::fuel::{change_fuel_quantity, round_fuel_on_outfit_entry, FuelChange, FuelRuState};
 use super::gfx::{ContextHandle, ContextId, FlashTarget, FrameId, Gfx, Point, Rgba, Stamp};
@@ -23,6 +23,8 @@ use super::ids::{
     EMPTY_SLOT, MODULES_PMAP_ANIM, OUTFIT_MUSIC, OUTFIT_PMAP_ANIM, SISMODS_MASK_PMAP_ANIM,
     STARBASE_ANIM, STARBASE_MUSIC, STARBASE_STRING_BASE,
 };
+use super::module_chooser::ModuleChooser;
+use super::module_screen::{chooser_frame, ChooserArt, ChooserOutcome};
 use super::outfit_menu::{OutfitFrameInput, OutfitMenu, OutfitState, OutfitStep};
 use super::platform::{
     MenuSounds, MusicId, Platform, StarbaseError, StateKey, StatusMessageMode, UiStyle,
@@ -267,11 +269,24 @@ impl<P: Platform + ?Sized> Drop for OutfitAssets<'_, P> {
     }
 }
 
-/// `DoOutfit`.
+impl<P: Platform + ?Sized> OutfitAssets<'_, P> {
+    /// The art the module chooser draws from. The Outfit screen loads all of
+    /// it before any frame can open the chooser.
+    fn chooser_art(&self) -> ChooserArt {
+        ChooserArt {
+            menu_frame: self.menu_frame.expect("the Outfit art is loaded"),
+            module_frame: self.module_frame.expect("the Outfit art is loaded"),
+        }
+    }
+}
+
+/// `DoOutfit`. While the module chooser (`DoInstallModule`) is open it holds
+/// the input loop, as `MENU_STATE.InputFunc` does in C.
 pub struct OutfitScreen<'a, P: Platform + ?Sized> {
     platform: &'a P,
     menu: OutfitMenu,
     assets: Option<OutfitAssets<'a, P>>,
+    chooser: Option<ModuleChooser>,
 }
 
 impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
@@ -281,11 +296,15 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
             platform,
             menu: OutfitMenu::new(),
             assets: None,
+            chooser: None,
         }
     }
 
     /// One `DoOutfit` call. `Ok(true)` keeps the loop running.
     pub fn frame(&mut self) -> Result<bool, StarbaseError> {
+        if let Some(chooser) = self.chooser.take() {
+            return self.chooser_frame(chooser);
+        }
         let p = self.platform;
         let input = OutfitFrameInput {
             pulses: p.pulses(),
@@ -316,7 +335,10 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
                 self.pace_fuel_adjust();
             }
             OutfitStep::EnterModules => {
-                return Err(StarbaseError::Unported(UnportedRoute::ModuleInstall));
+                // `DoInstallModule` runs at once, in the frame that selected
+                // Modules, to set itself up.
+                let chooser = ModuleChooser::new(p.game_state(StateKey::ChmmrBombState));
+                return self.chooser_frame(chooser);
             }
             OutfitStep::OpenSaveLoad => {
                 return Err(StarbaseError::Unported(UnportedRoute::SaveLoad));
@@ -325,6 +347,20 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
                 self.assets = None;
                 return Ok(false);
             }
+        }
+        Ok(true)
+    }
+
+    /// One `DoInstallModule` call.
+    fn chooser_frame(&mut self, chooser: ModuleChooser) -> Result<bool, StarbaseError> {
+        let art = self
+            .assets
+            .as_ref()
+            .expect("the Outfit art is loaded")
+            .chooser_art();
+        match chooser_frame(self.platform, art, chooser)? {
+            ChooserOutcome::Stay(chooser) => self.chooser = Some(chooser),
+            ChooserOutcome::BackToOutfit => {}
         }
         Ok(true)
     }
@@ -347,10 +383,7 @@ impl<'a, P: Platform + ?Sized> OutfitScreen<'a, P> {
     }
 
     fn redistribute(&self, sis: &super::platform::SisView) -> Result<(), StarbaseError> {
-        let slots = ModuleSlots::from_raw(&sis.module_slots)?;
-        let layout = fuel_bar_layout(&slots, sis.fuel_on_board)?;
-        redistribute_fuel(self.platform, &layout);
-        Ok(())
+        redistribute_fuel_from_sis(self.platform, sis)
     }
 
     fn initialize(&mut self) -> Result<(), StarbaseError> {
