@@ -5,6 +5,11 @@
 use std::ffi::{c_char, c_void};
 use std::sync::Mutex;
 
+use crate::battle::velocity::VelocityDesc;
+use crate::c_bindings::{assert_c_layout, global_state};
+use crate::state::game_state::NUM_GAME_STATE_BYTES;
+use crate::time::clock_bridge::ClockState;
+
 use super::types::{AnimationDescData, CommData, TextAlign, TextValign, MAX_ANIMATIONS};
 
 #[cfg(not(test))]
@@ -92,49 +97,133 @@ pub struct CQueue {
     pub num_objects: u8,
 }
 
-/// C `GLOBDATA` struct (globdata.h) — repr(C) mirror with the fields we access.
-/// Layout verified via offsetof: SIS_STATE at 0 (124 bytes), GAME_STATE at 128 (512 bytes).
-/// Total size 640 bytes.
+/// C `GLOBDATA` struct (globdata.h) — repr(C) mirror.
+/// `SIS_STATE` is at 0 (124 bytes) and `GAME_STATE` at 128 (512 bytes), 640 in
+/// all; the build compares these against the bindgen layout below.
 #[repr(C)]
 pub struct CGlobData {
-    pub sis_state: CSisState,        // offset 0, size 124
-    _pad_sis_to_game_state: [u8; 4], // pad to offset 128
-    pub game_state: CGameState,      // offset 128, size 512
+    pub sis_state: CSisState,   // offset 0, size 124
+    pub game_state: CGameState, // offset 128, size 512
 }
 
-/// C `GAME_STATE` struct (globdata.h) — partial repr(C) mirror.
-/// Only the fields accessed from Rust are named; padding matches C layout.
-/// Layout verified via C offsetof. Total size 512 bytes.
+/// C `GAME_STATE` struct (globdata.h) — repr(C) mirror of every field.
+///
+/// No padding is written by hand: each gap the C compiler leaves is the same
+/// alignment gap `repr(C)` leaves here, and the layout assertions below fail
+/// the build if any offset or the 512-byte size ever differs.
 #[repr(C)]
 pub struct CGameState {
-    pub glob_flags: u8,             // offset 0
-    pub crew_cost: u8,              // offset 1
-    pub fuel_cost: u8,              // offset 2
-    pub module_cost: [u8; 20],      // offset 3, NUM_MODULES=20
-    pub element_worth: [u8; 8],     // offset 23, NUM_ELEMENT_CATEGORIES=8
-    _display_array_pad: u8,         // offset 31, align PRIMITIVE* to 32
-    _display_array: *mut c_void,    // offset 32, PRIMITIVE*
-    pub current_activity: u16,      // offset 40 (verified)
-    _current_activity_pad: [u8; 6], // align CLOCK_STATE to offset 48
-    _clock_state: [u8; 48],         // offset 48, CLOCK_STATE
-    _autopilot: [u8; 4],            // offset 96, POINT
-    _ip_location: [u8; 4],          // offset 100, POINT
-    pub ship_stamp: CStamp,         // offset 104, STAMP
-    _ship_facing: u16,              // offset 120, UWORD
-    _ip_planet: u8,                 // offset 122, BYTE
+    pub glob_flags: u8,          // offset 0
+    pub crew_cost: u8,           // offset 1
+    pub fuel_cost: u8,           // offset 2
+    pub module_cost: [u8; 20],   // offset 3, NUM_MODULES=20
+    pub element_worth: [u8; 8],  // offset 23, NUM_ELEMENT_CATEGORIES=8
+    _display_array: *mut c_void, // offset 32, PRIMITIVE*
+    pub current_activity: u16,   // offset 40
+    pub game_clock: ClockState,  // offset 48, CLOCK_STATE
+    pub autopilot: CPoint,       // offset 96
+    pub ip_location: CPoint,     // offset 100
+    pub ship_stamp: CStamp,      // offset 104
+    pub ship_facing: u16,        // offset 120
+    pub ip_planet: u8,           // offset 122
     // `GLOBAL(in_orbit)`: save/load-only orbit encoding, not live orbit state.
-    _in_orbit: u8,                   // offset 123, BYTE
-    pub _velocity: [u8; 18],         // offset 124, VELOCITY_DESC
-    _velocity_pad: [u8; 2],          // align BattleGroupRef to offset 144
-    _battle_group_ref: u32,          // offset 144, DWORD
-    pub avail_race_q: CQueue,        // offset 152 (verified)
-    pub npc_built_ship_q: CQueue,    // offset 192 (verified)
-    pub ip_group_q: CQueue,          // offset 232 (verified)
-    pub encounter_q: CQueue,         // offset 272 (verified)
-    pub built_ship_q: CQueue,        // offset 312 (verified)
-    pub game_state_bytes: [u8; 155], // offset 352, GameState array (155 bytes)
-    _final_pad: [u8; 5],             // pad to 512 total
+    pub in_orbit: u8,                                 // offset 123
+    pub velocity: VelocityDesc,                       // offset 124, VELOCITY_DESC
+    pub battle_group_ref: u32,                        // offset 144, DWORD
+    pub avail_race_q: CQueue,                         // offset 152
+    pub npc_built_ship_q: CQueue,                     // offset 192
+    pub ip_group_q: CQueue,                           // offset 232
+    pub encounter_q: CQueue,                          // offset 272
+    pub built_ship_q: CQueue,                         // offset 312
+    pub game_state_bytes: [u8; NUM_GAME_STATE_BYTES], // offset 352, GameState array
 }
+
+assert_c_layout!(
+    CSisState,
+    global_state::SIS_STATE {
+        log_x: log_x,
+        log_y: log_y,
+        res_units: ResUnits,
+        fuel_on_board: FuelOnBoard,
+        crew_enlisted: CrewEnlisted,
+        total_element_mass: TotalElementMass,
+        total_bio_mass: TotalBioMass,
+        module_slots: ModuleSlots,
+        drive_slots: DriveSlots,
+        jet_slots: JetSlots,
+        num_landers: NumLanders,
+        element_amounts: ElementAmounts,
+        ship_name: ShipName,
+        commander_name: CommanderName,
+        planet_name: PlanetName,
+    }
+);
+
+assert_c_layout!(
+    CGlobData,
+    global_state::GLOBDATA {
+        sis_state: SIS_state,
+        game_state: Game_state,
+    }
+);
+
+assert_c_layout!(
+    CGameState,
+    global_state::GAME_STATE {
+        glob_flags: glob_flags,
+        crew_cost: CrewCost,
+        fuel_cost: FuelCost,
+        module_cost: ModuleCost,
+        element_worth: ElementWorth,
+        _display_array: DisplayArray,
+        current_activity: CurrentActivity,
+        game_clock: GameClock,
+        autopilot: autopilot,
+        ip_location: ip_location,
+        ship_stamp: ShipStamp,
+        ship_facing: ShipFacing,
+        ip_planet: ip_planet,
+        in_orbit: in_orbit,
+        velocity: velocity,
+        battle_group_ref: BattleGroupRef,
+        avail_race_q: avail_race_q,
+        npc_built_ship_q: npc_built_ship_q,
+        ip_group_q: ip_group_q,
+        encounter_q: encounter_q,
+        built_ship_q: built_ship_q,
+        game_state_bytes: GameState,
+    }
+);
+
+assert_c_layout!(CPoint, global_state::POINT { x: x, y: y });
+assert_c_layout!(
+    CStamp,
+    global_state::STAMP {
+        origin: origin,
+        frame: frame
+    }
+);
+assert_c_layout!(
+    CQueue,
+    global_state::QUEUE {
+        head: head,
+        tail: tail,
+        pq_tab: pq_tab,
+        free_list: free_list,
+        object_size: object_size,
+        num_objects: num_objects,
+    }
+);
+assert_c_layout!(
+    VelocityDesc,
+    global_state::VELOCITY_DESC {
+        travel_angle: TravelAngle,
+        vector: vector,
+        fract: fract,
+        error: error,
+        incr: incr,
+    }
+);
 
 /// C `ANIMATION_DESC` struct (commanim.h).
 /// Fields in declaration order, matching the C layout for direct FFI reads.
