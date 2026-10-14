@@ -2966,7 +2966,7 @@ mod tests {
         assert_eq!(record.scenario.requested_seed, seed);
     }
 
-    /// `USE_RUST_RESTART` runs the Rust restart menu, so the new-campaign seed
+    /// Automation runs the Rust restart menu, so the new-campaign seed
     /// must be applied there, not only in the retired C `RestartMenu`.
     #[test]
     fn rust_restart_path_applies_and_records_the_new_game_seed() {
