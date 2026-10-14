@@ -156,13 +156,22 @@ pub fn sleep_for(env: &mut impl PacingEnv, duration: u32) {
 mod linked {
     use super::{sleep_for, sleep_until, PacingEnv, PacingStats};
     use crate::callback::ffi::{Async_process, Async_timeBeforeNextMs};
+    #[cfg(target_os = "macos")]
+    use crate::threading::critical_timer::CriticalTimer;
+    #[cfg(not(target_os = "macos"))]
     use crate::threading::hibernate_thread;
     use std::sync::{Mutex, MutexGuard, OnceLock};
-    use std::time::{Duration, Instant};
+    #[cfg(not(target_os = "macos"))]
+    use std::time::Duration;
+    use std::time::Instant;
 
     /// Only the game thread sleeps, so the lock is never contended.
     static STATS: Mutex<PacingStats> = Mutex::new(PacingStats::new());
     static CLOCK_ORIGIN: OnceLock<Instant> = OnceLock::new();
+    /// macOS coalesces plain sleeps into ~16 ms steps on loaded hosts; see
+    /// `threading::critical_timer`. One queue lives as long as the process.
+    #[cfg(target_os = "macos")]
+    static SLEEP_TIMER: OnceLock<CriticalTimer> = OnceLock::new();
 
     extern "C" {
         fn GetTimeCounter() -> u32;
@@ -207,6 +216,12 @@ mod linked {
         }
 
         fn sleep_ms(&mut self, ms: u32) {
+            #[cfg(target_os = "macos")]
+            SLEEP_TIMER
+                .get_or_init(|| CriticalTimer::new().expect("create pacing critical timer queue"))
+                .sleep(std::time::Duration::from_millis(u64::from(ms)))
+                .expect("wait on pacing critical timer");
+            #[cfg(not(target_os = "macos"))]
             hibernate_thread(Duration::from_millis(u64::from(ms)));
         }
 

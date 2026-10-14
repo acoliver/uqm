@@ -413,6 +413,11 @@ impl BoundOutputDirectory {
     }
 }
 
+/// Ident of the timeout timer on the wake's queue. The vnode watch uses the
+/// directory's file descriptor as its ident, which is never `usize::MAX`.
+#[cfg(target_os = "macos")]
+const TIMER_IDENT: libc::uintptr_t = libc::uintptr_t::MAX;
+
 /// Wakes a waiter when something is published into a [`BoundOutputDirectory`].
 ///
 /// Every publish renames a new file over the target, which replaces the file
@@ -467,23 +472,7 @@ impl BoundOutputDirectory {
         // SAFETY: openat returned a new descriptor that nothing else owns.
         let directory = unsafe { OwnedFd::from_raw_fd(raw_directory) };
 
-        // Darwin creates kqueue descriptors without close-on-exec and sets it
-        // in a second call, so no child may be forked in between.
-        let queue = {
-            let _guard = super::child_session::guard_descriptor_inheritance();
-            // SAFETY: kqueue takes no arguments.
-            let raw_queue = unsafe { libc::kqueue() };
-            if raw_queue < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            // SAFETY: kqueue returned a new descriptor that nothing else owns.
-            let queue = unsafe { OwnedFd::from_raw_fd(raw_queue) };
-            // SAFETY: the queue descriptor is open.
-            if unsafe { libc::fcntl(queue.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) } != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            queue
-        };
+        let queue = crate::threading::critical_timer::create_queue()?;
 
         let registration = libc::kevent {
             ident: directory.as_raw_fd() as libc::uintptr_t,
@@ -520,45 +509,20 @@ impl DirectoryChangeWake {
     pub fn wait(&self, timeout: std::time::Duration) -> std::io::Result<()> {
         #[cfg(target_os = "macos")]
         {
-            use std::os::fd::AsRawFd as _;
+            use crate::threading::critical_timer::{timer_change, wait_for_event};
+            use std::os::fd::AsFd as _;
 
-            let limit = libc::timespec {
-                tv_sec: libc::time_t::try_from(timeout.as_secs()).unwrap_or(libc::time_t::MAX),
-                tv_nsec: libc::c_long::from(timeout.subsec_nanos()),
-            };
-            let mut event = libc::kevent {
-                ident: 0,
-                filter: 0,
-                flags: 0,
-                fflags: 0,
-                data: 0,
-                udata: std::ptr::null_mut(),
-            };
-            // SAFETY: no change list, room for exactly one event, valid timeout.
-            let ready = unsafe {
-                libc::kevent(
-                    self.queue.as_raw_fd(),
-                    std::ptr::null(),
-                    0,
-                    &mut event,
-                    1,
-                    &limit,
-                )
-            };
-            match ready {
-                1 if event.flags & libc::EV_ERROR != 0 => {
-                    Err(std::io::Error::from_raw_os_error(event.data as i32))
-                }
-                0 | 1 => Ok(()),
-                _ => {
-                    let error = std::io::Error::last_os_error();
-                    if error.kind() == std::io::ErrorKind::Interrupted {
-                        Ok(())
-                    } else {
-                        Err(error)
-                    }
-                }
+            if timeout.is_zero() {
+                return Ok(());
             }
+            // The timer rides on the directory's queue so one blocking call
+            // returns on whichever comes first, and it is a critical timer
+            // because a plain timeout is coalesced to ~16 ms steps on hosted
+            // runners. A one-shot timer that outlives a wake won by the
+            // directory is re-armed by the next wait; if it fires first it
+            // can only end a later wait early, and callers re-read and
+            // re-validate after every wake.
+            wait_for_event(self.queue.as_fd(), &[timer_change(TIMER_IDENT, timeout)])
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -6358,6 +6322,31 @@ mod tests {
             let started = Instant::now();
             wake.wait(Duration::from_millis(20)).unwrap();
             assert!(started.elapsed() >= Duration::from_millis(20));
+        }
+
+        #[test]
+        fn zero_timeout_returns_immediately() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            let started = Instant::now();
+            wake.wait(Duration::ZERO).unwrap();
+            assert!(started.elapsed() < Duration::from_millis(10));
+        }
+
+        #[test]
+        fn a_timer_left_armed_by_a_directory_wake_does_not_cut_the_next_wait_short() {
+            let root = tempfile::tempdir().unwrap();
+            let bound = BoundOutputDirectory::open(root.path()).unwrap();
+            let wake = bound.change_wake().unwrap();
+            // The directory wins and the 5 ms timer is left armed.
+            publish(&bound);
+            wake.wait(Duration::from_millis(5)).unwrap();
+            // Let that timer fire while nobody is waiting.
+            std::thread::sleep(Duration::from_millis(50));
+            let started = Instant::now();
+            wake.wait(Duration::from_millis(30)).unwrap();
+            assert!(started.elapsed() >= Duration::from_millis(30));
         }
 
         #[test]
