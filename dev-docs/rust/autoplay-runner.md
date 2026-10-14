@@ -1,5 +1,7 @@
 # Autoplay runner contract
 
+The native UI suite is a local gate: hosted GitHub runners do not run it (too slow and too limited for a real-window suite). Run it on a real Mac window with the `native` CLI described below.
+
 Implementation for Issue #34 stays in PR #209, including its related controller-policy and provenance corrections. Source admission, a successful game child, validated native evidence and trusted CI acceptance are separate results. None implies the next.
 
 ## Deadlines

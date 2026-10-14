@@ -1,5 +1,16 @@
 # Clean-checkout CI gates
 
+## Native UI suite is a local gate
+
+Hosted GitHub runners do not run the native-window UI suite. The 32-scenario suite takes
+about 4500 s on arm64, the Intel runner renders at about 14 fps, and the evidence exceeds
+upload limits. Hosted CI keeps the code-quality gates (format, check, clippy, tests,
+ownership-link, harness, complexity, security, coverage, cache, workflow, mutations).
+The native suite is a local gate run on a real Mac window with
+`cargo run --locked --manifest-path rust/xtask/Cargo.toml -- native run|validate|report|gallery|replay`
+(see `dev-docs/rust/autoplay-runner.md`). Its authority data stays in `rust/ci/gates.json`
+under `native_acceptance` because the local CLI reads the pinned scenario scripts from it.
+
 Issue #27/S4 owns CI composition. It consumes S1 provider and strict-link checks,
 S2 matrix, build, determinism, verification, and package commands, and S3 fixtures,
 probes, harnesses, gameplay proof, and teardown commands. Those domains retain the
@@ -43,7 +54,7 @@ establish acceptance for the current workflow event.
 Suite finalization retains a bounded intent tied to the preceding immutable
 journal event. An interrupted publication recovers into a failed diagnostic
 bundle without starting another child. Success also requires completed, drained,
-verified-empty controller supervision. Plan, gates, autoplay and the required
+verified-empty controller supervision. Plan, gates and the required
 aggregate consume the base-owned `workflow_transport.py` implementation for descriptor traversal,
 content-addressed indexes and upload receipts. Bootstrap failure indexes remain
 available before that helper is installed.
@@ -117,15 +128,12 @@ before authoritative gates run, and successful transport retains
 `containment-check.result.json`. An always-running, marker-gated cleanup removes the
 identity after killing and checking its remaining processes. The outer workflow
 supervisor's receipt describes only its own process-tree boundary; dedicated-UID
-containment is established by the separate containment-check receipt. The exact
-`tests.native-acceptance` step has a narrower macOS execution rule described below.
-After untrusted gates return, a base-owned supervised check revalidates the exact
+containment is established by the separate containment-check receipt. After untrusted gates return, a base-owned supervised check revalidates the exact
 source SHA, tracked and untracked state, and authority bytes, retaining
 `source-revalidation.result.json`.
 
-Candidate-policy admission preserves every base field except two bounded additions:
-the known `autoplay` mutation and scenario pins already embedded in the installed
-controller's inventory. Existing pins cannot be removed, changed or reordered.
+Candidate-policy admission preserves every base field except one bounded addition:
+scenario pins already embedded in the installed controller's inventory. Existing pins cannot be removed, changed or reordered.
 The singleton policy used by base `212bd046ad7dccc7b695d378deac1b1c148d8be9`
 may gain `scenario_scripts`, but its original script pin must remain. Commands,
 tools, tuples, content, acceptance predicates, runtime limits, permissions and
@@ -189,7 +197,9 @@ base pin and rejects it. The installed base controller has to carry this policy
 before a candidate with the override can be admitted, and nothing in this change
 relaxes that comparison.
 
-Autoplay selection is bound to a typed `uqm-s4-selection-v1` document. The base-owned
+The sections below on autoplay selection and the `native-acceptance` step describe the local
+native suite (`native run`, `native-test`); hosted CI no longer runs them (see the
+local gate section). Autoplay selection is bound to a typed `uqm-s4-selection-v1` document. The base-owned
 plan controller records event, exact source/controller/base revisions, merge base,
 raw NUL-delimited changed paths, policy digest and the derived ordered scenario set.
 Only `pull_request_target` may use changed-path selection. Empty, unmapped or
@@ -296,7 +306,8 @@ target dependencies. The bootstrap gate launches that package path with the fixe
 `rust/scripts/main-menu-v1.json` profile, validates its LCAR offline, and captures
 teardown.
 
-The tests gate contains a separate `native-acceptance` authority step on every tuple.
+The hosted tests gate no longer contains the `native-acceptance` step. The text that follows
+describes how the local native suite executes on a macOS Aqua session.
 Linux executes the step under the dedicated identity and records that native-window
 acceptance is not required there. On macOS, the base-owned controller permits the
 current Aqua session only for the exact hidden command derived from this step. Cocoa

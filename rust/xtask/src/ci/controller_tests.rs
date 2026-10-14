@@ -213,10 +213,6 @@ fn singleton_base_policy_migrates_without_replacing_its_original_script_pin() {
         .as_object_mut()
         .unwrap()
         .remove("scenario_scripts");
-    base["mutation_targets"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|v| v != "autoplay");
     let base_bytes = serde_json::to_vec(&base).unwrap();
     admit_policy(&base_bytes, candidate).unwrap();
     let mut forged: serde_json::Value = serde_json::from_slice(candidate).unwrap();

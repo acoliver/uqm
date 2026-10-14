@@ -429,10 +429,6 @@ mod external_controller_regressions {
             .as_array_mut()
             .unwrap()
             .truncate(1);
-        base["mutation_targets"]
-            .as_array_mut()
-            .unwrap()
-            .retain(|item| item != "autoplay");
         let controller = temp.path().join("controller-a");
         let candidate = temp.path().join("candidate-b");
         let commit = |root: &Path, bytes: &[u8]| {

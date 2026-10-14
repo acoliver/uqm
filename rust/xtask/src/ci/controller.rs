@@ -56,7 +56,7 @@ pub fn admit_policy(base: &[u8], candidate: &[u8]) -> Result<(), String> {
                 cursor += 1;
             } else {
                 let permitted = if pointer == "/mutation_targets" {
-                    item == "autoplay"
+                    false
                 } else {
                     serde_json::from_value::<PinnedScript>(item.clone()).is_ok_and(|pin| {
                         installed.native_acceptance.scenario_scripts.contains(&pin)
@@ -401,7 +401,7 @@ pub fn admit_command(base: &Path, candidate: &Path, output: &Path) -> Result<(),
             "controller_sha": std::env::var("UQM_CI_CONTROLLER_SHA").ok(),
             "source_sha": std::env::var("UQM_CI_EXPECTED_SHA").ok(),
             "decision": "admitted",
-            "rules": "preserve-base-plus-installed-script-pins-and-autoplay-mutation",
+            "rules": "preserve-base-plus-installed-script-pins",
         }))
         .map_err(|e| e.to_string())?
     );
@@ -436,10 +436,6 @@ mod tests {
     fn base_rules_admit_known_additions_without_authorizing_other_changes() {
         let candidate = include_bytes!("../../../ci/gates.json");
         let mut base: serde_json::Value = serde_json::from_slice(candidate).unwrap();
-        base["mutation_targets"]
-            .as_array_mut()
-            .unwrap()
-            .retain(|v| v != "autoplay");
         base["native_acceptance"]["scenario_scripts"]
             .as_array_mut()
             .unwrap()

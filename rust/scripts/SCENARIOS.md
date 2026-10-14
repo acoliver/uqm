@@ -1,5 +1,7 @@
 # Runtime automation paths
 
+The native UI suite that runs these scenarios is a local gate on a real Mac window (`native run/validate/report/gallery/replay`). Hosted GitHub runners do not run it.
+
 Automation can either play through normal game state or, for tests that do not
 need navigation coverage, activate a deterministic start scene.
 

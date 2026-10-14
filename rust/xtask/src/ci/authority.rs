@@ -36,11 +36,10 @@ pub enum MutationTarget {
     Cache,
     Workflow,
     Artifact,
-    Autoplay,
 }
 
 impl MutationTarget {
-    pub const COUNT: usize = 14;
+    pub const COUNT: usize = 13;
 
     pub fn parse(value: &str) -> Option<Self> {
         match value {
@@ -57,7 +56,6 @@ impl MutationTarget {
             "cache" => Some(Self::Cache),
             "workflow" => Some(Self::Workflow),
             "artifact" => Some(Self::Artifact),
-            "autoplay" => Some(Self::Autoplay),
             _ => None,
         }
     }
@@ -77,7 +75,6 @@ impl MutationTarget {
             Self::Cache => "mutations.cache.rejects_prepopulated_registry",
             Self::Workflow => "mutations.workflow.rejects_trust_boundary_weakening",
             Self::Artifact => "mutations.artifact.rejects_coherently_rehashed_provenance_forgery",
-            Self::Autoplay => "mutations.autoplay.rejects_narrowed_full_suite",
         }
     }
 }

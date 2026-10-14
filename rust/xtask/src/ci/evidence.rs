@@ -9599,9 +9599,6 @@ fn expected_collection_identities<'a>(
                 "workflow.no_direct_gate_commands",
                 "workflow.no_cache_action",
                 "workflow.always_uploaded_failure_evidence",
-                "workflow.autoplay_runner",
-                "workflow.autoplay_validate_replay",
-                "workflow.required_aggregate_observes_autoplay",
                 "workflow.content_addressed_transport",
             ],
         )
@@ -10991,190 +10988,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn native_suite_failure_offline_transport_checks_selection_and_journal() {
-        let root = tempfile::tempdir().unwrap();
-        let authority: Authority =
-            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let step = gate
-            .steps
-            .iter()
-            .find(|step| step.id == "native-acceptance")
-            .unwrap();
-        let acceptance = root.path().join("payloads/native-window.acceptance");
-        fs::create_dir(root.path().join("payloads")).unwrap();
-        let mut suite = crate::native_suite::SuiteAccounting::create(
-            &acceptance,
-            &authority.native_acceptance.scenario_scripts[..3],
-            false,
-        )
-        .unwrap();
-        suite
-            .fail(
-                crate::native_suite::SuitePhase::Preflight,
-                None,
-                "source mismatch".into(),
-            )
-            .unwrap();
-        suite.finish().unwrap();
-        let mut index = valid_index();
-        index.tuple = "macos-aarch64".into();
-        index.entries.clear();
-        for file in regular_file_inventory(&acceptance).unwrap() {
-            let path = format!("payloads/native-window.acceptance/{}", file.relative_path);
-            index.entries.push(
-                entry(
-                    root.path(),
-                    &path,
-                    "native-window.failure",
-                    "application/octet-stream",
-                    "tests",
-                    &step.command,
-                )
-                .unwrap(),
-            );
-        }
-        assert!(
-            validate_failed_native_acceptance_evidence(root.path(), &index, &authority, gate)
-                .is_empty()
-        );
-        fs::write(acceptance.join("suite-events/000000.json"), b"{}").unwrap();
-        assert!(
-            validate_failed_native_acceptance_evidence(root.path(), &index, &authority, gate)
-                .contains(&"evidence.native_window.failure.suite".to_string())
-        );
-    }
-
-    #[test]
-    fn native_success_reader_requires_event_selection_and_rejects_failed_or_flat_layout() {
-        let policy = include_bytes!("../../../ci/gates.json");
-        let authority: Authority = serde_json::from_slice(policy).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let step = gate
-            .steps
-            .iter()
-            .find(|step| step.id == "native-acceptance")
-            .unwrap();
-        for event in [
-            super::super::controller::WorkflowEvent::Push,
-            super::super::controller::WorkflowEvent::PullRequestTarget,
-        ] {
-            let root = tempfile::tempdir().unwrap();
-            let pr = event == super::super::controller::WorkflowEvent::PullRequestTarget;
-            let paths = ["rust/src/battle/x.rs".to_string()];
-            let binding = super::super::controller::SelectionBinding {
-                schema: "uqm-s4-selection-v1".into(),
-                event,
-                source_sha: "a".repeat(40),
-                controller_sha: "b".repeat(40),
-                base_sha: pr.then(|| "c".repeat(40)),
-                merge_base_sha: pr.then(|| "d".repeat(40)),
-                changed_paths_z: if pr {
-                    b"rust/src/battle/x.rs\0".to_vec()
-                } else {
-                    Vec::new()
-                },
-                authority_sha256: hex_sha256(policy),
-                autoplay: super::super::controller::event_selection(
-                    event,
-                    pr.then_some(paths.as_slice()),
-                ),
-            };
-            let selected = binding
-                .selected(&authority, &binding.source_sha, policy)
-                .unwrap();
-            let mut index = valid_index();
-            index.source_sha = binding.source_sha.clone();
-            index.tuple = "macos-aarch64".into();
-            index.entries.clear();
-            write_bundle_entry(
-                root.path(),
-                &mut index.entries,
-                "payloads/authority.snapshot/gates.json",
-                "authority.snapshot",
-                &step.command,
-                policy,
-            );
-            let receipt = serde_json::to_vec(&serde_json::json!({"selection":binding})).unwrap();
-            let receipt_path = SOURCE_PREFLIGHT_RELATIVE;
-            write_bundle_entry(
-                root.path(),
-                &mut index.entries,
-                receipt_path,
-                "preflight.source",
-                &step.command,
-                &receipt,
-            );
-            let acceptance = root.path().join("payloads/native-window.acceptance");
-            let mut suite =
-                crate::native_suite::SuiteAccounting::create(&acceptance, &selected, false)
-                    .unwrap();
-            suite
-                .fail(
-                    crate::native_suite::SuitePhase::Preflight,
-                    None,
-                    "fixture failure".into(),
-                )
-                .unwrap();
-            suite.finish().unwrap();
-            for file in regular_file_inventory(&acceptance).unwrap() {
-                let path = format!("payloads/native-window.acceptance/{}", file.relative_path);
-                index.entries.push(
-                    entry(
-                        root.path(),
-                        &path,
-                        "native-window.acceptance",
-                        "application/octet-stream",
-                        "tests",
-                        &step.command,
-                    )
-                    .unwrap(),
-                );
-            }
-            let contracts =
-                validate_native_acceptance_evidence(root.path(), &index, &authority, gate);
-            assert!(
-                contracts
-                    .iter()
-                    .any(|c| c.contains("suite did not complete")),
-                "{contracts:?}"
-            );
-            fs::write(root.path().join(receipt_path), b"{}").unwrap();
-            assert!(
-                validate_native_acceptance_evidence(root.path(), &index, &authority, gate)
-                    .contains(&"evidence.native_window.selection".into())
-            );
-            fs::write(root.path().join(receipt_path), &receipt).unwrap();
-            fs::remove_dir_all(&acceptance).unwrap();
-            fs::create_dir(&acceptance).unwrap();
-            fs::write(acceptance.join("native-acceptance.json"), b"{}").unwrap();
-            index
-                .entries
-                .retain(|entry| entry.role != "native-window.acceptance");
-            let path = "payloads/native-window.acceptance/native-acceptance.json";
-            index.entries.push(
-                entry(
-                    root.path(),
-                    path,
-                    "native-window.acceptance",
-                    "application/octet-stream",
-                    "tests",
-                    &step.command,
-                )
-                .unwrap(),
-            );
-            let contracts =
-                validate_native_acceptance_evidence(root.path(), &index, &authority, gate);
-            assert!(
-                contracts
-                    .iter()
-                    .any(|c| c.starts_with("evidence.native_window.suite")),
-                "{contracts:?}"
-            );
-        }
-    }
-
     fn write_bundle_entry(
         root: &Path,
         entries: &mut Vec<EvidenceEntry>,
@@ -12114,9 +11927,6 @@ mod tests {
             "workflow.no_direct_gate_commands",
             "workflow.no_cache_action",
             "workflow.always_uploaded_failure_evidence",
-            "workflow.autoplay_runner",
-            "workflow.autoplay_validate_replay",
-            "workflow.required_aggregate_observes_autoplay",
             "workflow.content_addressed_transport",
         ]
         .into_iter()
@@ -17819,7 +17629,7 @@ mod tests {
             serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
         let gate = authority.gate("tests").unwrap();
         let bundle = tempfile::tempdir().unwrap();
-        let index = failed_process_fixture(bundle.path(), gate, 1);
+        let index = failed_process_fixture(bundle.path(), gate, 0);
 
         assert_eq!(
             validate_failed_process_receipts(
@@ -17996,38 +17806,6 @@ mod tests {
     }
 
     #[test]
-    fn prelaunch_failure_of_the_native_acceptance_step_validates() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let position = gate
-            .steps
-            .iter()
-            .position(|step| step.id == "native-acceptance")
-            .unwrap();
-        for reason in [
-            "selection",
-            "native-acceptance-root",
-            "launch-context",
-            "dedicated_containment",
-            "trusted-control-plane-integrity",
-        ] {
-            let bundle = tempfile::tempdir().unwrap();
-            let index = prelaunch_failure_fixture(
-                bundle.path(),
-                gate,
-                position,
-                &format!("tests.pre.native-acceptance.{reason}"),
-            );
-            assert_eq!(
-                prelaunch_contracts(bundle.path(), &index, gate),
-                Vec::<String>::new(),
-                "{reason}"
-            );
-        }
-    }
-
-    #[test]
     fn prelaunch_failure_of_the_package_root_has_no_step_receipts() {
         let authority: Authority =
             serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
@@ -18054,24 +17832,6 @@ mod tests {
             prelaunch_contracts(bundle.path(), &elsewhere, other),
             vec!["evidence.prelaunch.tests.failure_contract".to_string()]
         );
-    }
-
-    #[test]
-    fn prelaunch_failure_rejects_a_receipt_for_the_step_that_never_launched() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let position = gate
-            .steps
-            .iter()
-            .position(|step| step.id == "native-acceptance")
-            .unwrap();
-        let bundle = tempfile::tempdir().unwrap();
-        let mut index = failed_process_fixture(bundle.path(), gate, position);
-        index.first_failed_contract = Some("tests.pre.native-acceptance.selection".into());
-        assert!(prelaunch_contracts(bundle.path(), &index, gate)
-            .iter()
-            .any(|contract| contract.starts_with("evidence.subordinate.tests.step_entry_count")));
     }
 
     #[test]
@@ -20291,213 +20051,6 @@ mod tests {
     }
 
     #[test]
-    fn native_acceptance_postprocess_failure_replays_after_successful_test_step() {
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let step = gate
-            .steps
-            .iter()
-            .find(|step| step.id == "native-acceptance")
-            .unwrap();
-        let unrelated_step = gate
-            .steps
-            .iter()
-            .find(|step| step.id == "xtask-test")
-            .unwrap();
-        let bundle = tempfile::tempdir().unwrap();
-        let seed = setup_failure_bundle(bundle.path(), "ownership.zero_native_delta");
-        let mut entries = seed.entries;
-        let delta_entry = entries
-            .iter()
-            .find(|entry| entry.role == "ownership.zero-native-delta")
-            .unwrap();
-        let mut delta: serde_json::Value =
-            serde_json::from_slice(&fs::read(bundle.path().join(&delta_entry.path)).unwrap())
-                .unwrap();
-        delta["categories"]["tracked_sources"]["measured_delta"] = serde_json::json!(0);
-        delta["categories"]["tracked_sources"]["changed_paths"] = serde_json::json!([]);
-        delta["passed"] = serde_json::json!(true);
-        rewrite_bundle_entry(
-            bundle.path(),
-            &mut entries,
-            "ownership.zero-native-delta",
-            &serde_json::to_vec(&delta).unwrap(),
-        );
-        let source_entry = entries
-            .iter()
-            .find(|entry| entry.role == "preflight.source")
-            .unwrap();
-        let mut source: serde_json::Value =
-            serde_json::from_slice(&fs::read(bundle.path().join(&source_entry.path)).unwrap())
-                .unwrap();
-        source["tuple"] = serde_json::json!("macos-aarch64");
-        source["expected_tuple"] = serde_json::json!("macos-aarch64");
-        rewrite_bundle_entry(
-            bundle.path(),
-            &mut entries,
-            "preflight.source",
-            &serde_json::to_vec(&source).unwrap(),
-        );
-        let controller = vec![
-            "uqm-xtask".to_string(),
-            "ci".to_string(),
-            "run".to_string(),
-            gate.id.clone(),
-        ];
-        for entry in &mut entries {
-            entry.producing_command = controller.clone();
-            if matches!(
-                entry.role.as_str(),
-                "authority.snapshot"
-                    | "preflight.source"
-                    | "preflight.tools"
-                    | "cache.initial-state"
-            ) {
-                entry.producing_gate = gate.id.clone();
-            }
-        }
-        write_builtin_step_fixture(
-            bundle.path(),
-            &mut entries,
-            &gate.id,
-            &step.id,
-            &step.command,
-            (Some(0), None, None),
-        );
-        let contract = "tests.post.native-acceptance.native-window-acceptance";
-        let result = serde_json::to_vec(&serde_json::json!({
-            "schema": "uqm-s4-gate-result-v1",
-            "gate": gate.id,
-            "owner": gate.owner,
-            "kind": gate.kind,
-            "passed": false,
-            "first_failed_contract": contract,
-            "detail": "native acceptance retention failed",
-            "controller_command": controller
-        }))
-        .unwrap();
-        write_bundle_entry(
-            bundle.path(),
-            &mut entries,
-            &format!("{}/gate.result.json", gate.id),
-            "gate.result",
-            &controller,
-            &result,
-        );
-        entries.last_mut().unwrap().producing_gate = gate.id.clone();
-        let index = EvidenceIndex::build_and_validate(
-            bundle.path(),
-            &fixture_tuples(),
-            EvidenceContext {
-                source_sha: "a".repeat(40),
-                clean: true,
-                tuple: "macos-aarch64".to_string(),
-                features: vec!["audio_heart".to_string()],
-                cache_mode: "isolated-empty".to_string(),
-                first_failed_contract: Some(contract.to_string()),
-            },
-            entries,
-        )
-        .unwrap();
-        assert!(
-            index.offline_validation.passed,
-            "{:?}",
-            index.offline_validation.contracts
-        );
-        let mut unrelated_test_failure = index.clone();
-        unrelated_test_failure.first_failed_contract = Some("tests.xtask-test".to_string());
-        unrelated_test_failure.entries.retain(|entry| {
-            entry.producing_gate != gate.id || !entry.path.contains("tests/native-acceptance.")
-        });
-        write_builtin_step_fixture(
-            bundle.path(),
-            &mut unrelated_test_failure.entries,
-            &gate.id,
-            &unrelated_step.id,
-            &unrelated_step.command,
-            (Some(0), None, None),
-        );
-        let step_result_entry = unrelated_test_failure
-            .entries
-            .iter()
-            .find(|entry| {
-                entry.role == "step.result"
-                    && entry.producing_gate == gate.id
-                    && entry.path.ends_with("tests/xtask-test.result.json")
-            })
-            .unwrap();
-        let step_result_path = step_result_entry.path.clone();
-        let successful_step_result = fs::read(bundle.path().join(&step_result_path)).unwrap();
-        let mut step_result: serde_json::Value =
-            serde_json::from_slice(&successful_step_result).unwrap();
-        step_result["exit_code"] = serde_json::json!(1);
-        step_result["success"] = serde_json::json!(false);
-        rewrite_bundle_entry(
-            bundle.path(),
-            &mut unrelated_test_failure.entries,
-            "step.result",
-            &serde_json::to_vec(&step_result).unwrap(),
-        );
-        let failed_gate_result = serde_json::to_vec(&serde_json::json!({
-            "schema": "uqm-s4-gate-result-v1",
-            "gate": gate.id,
-            "owner": gate.owner,
-            "kind": gate.kind,
-            "passed": false,
-            "first_failed_contract": "tests.xtask-test",
-            "detail": "unrelated test failure",
-            "controller_command": controller
-        }))
-        .unwrap();
-        rewrite_bundle_entry(
-            bundle.path(),
-            &mut unrelated_test_failure.entries,
-            "gate.result",
-            &failed_gate_result,
-        );
-        assert_eq!(
-            production_contracts(bundle.path(), &unrelated_test_failure),
-            Vec::<String>::new()
-        );
-        fs::write(
-            bundle.path().join(&step_result_path),
-            successful_step_result,
-        )
-        .unwrap();
-        fs::write(
-            bundle.path().join(format!("{}/gate.result.json", gate.id)),
-            &result,
-        )
-        .unwrap();
-        let diagnostic_path =
-            "payloads/native-window.acceptance/automation/native-window-state.json";
-        let diagnostic_bytes = br#"{"schema":"diagnostic-partial"}"#;
-        let mut partial = index.clone();
-        write_bundle_entry(
-            bundle.path(),
-            &mut partial.entries,
-            diagnostic_path,
-            "native-window.acceptance",
-            &step.command,
-            diagnostic_bytes,
-        );
-        let partial_entry = partial.entries.last_mut().unwrap();
-        partial_entry.mime = "application/octet-stream".to_string();
-        partial_entry.producing_gate = gate.id.clone();
-        assert_eq!(
-            production_contracts(bundle.path(), &partial),
-            Vec::<String>::new()
-        );
-
-        let mut wrong_producer = partial;
-        wrong_producer.entries.last_mut().unwrap().producing_command = vec!["forged".to_string()];
-        assert!(production_contracts(bundle.path(), &wrong_producer)
-            .iter()
-            .any(|contract| contract == "evidence.native_window.failed_entry_identity"));
-    }
-
-    #[test]
     #[ignore = "requires UQM_TEST_NATIVE_CONTENT_PACKAGE with the authority-pinned content package"]
     fn authority_valid_native_failure_bundle_replays_without_repository_state() {
         use uqm_rust::automation::{
@@ -20955,33 +20508,6 @@ mod tests {
         assert_eq!(
             validate_native_acceptance_evidence(root.path(), &index, &authority, gate),
             vec!["evidence.native_window.unexpected_tuple"]
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn native_acceptance_rejects_a_symlinked_payload_root_without_following_it() {
-        use std::os::unix::fs::symlink;
-
-        let root = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        fs::write(outside.path().join("native-acceptance.json"), b"{}").unwrap();
-        fs::create_dir_all(root.path().join("payloads")).unwrap();
-        symlink(
-            outside.path(),
-            root.path().join("payloads/native-window.acceptance"),
-        )
-        .unwrap();
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let mut index = valid_index();
-        index.tuple = "macos-aarch64".to_string();
-        index.entries.clear();
-
-        assert_eq!(
-            validate_native_acceptance_evidence(root.path(), &index, &authority, gate),
-            vec!["evidence.native_window.non_regular"]
         );
     }
 
