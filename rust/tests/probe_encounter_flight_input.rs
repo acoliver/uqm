@@ -97,22 +97,106 @@ fn each_scenario_proves_movement_from_the_live_position() {
     }
 }
 
+/// The hyperspace flagship turns one facing (a sixteenth of a circle) every
+/// `TURN_WAIT` (17) frames plus the turning frame itself while a turn key is
+/// held, starting from `turn_wait == 0` (`ship_preprocess`, `sis_ship.c`).
+/// Holding for 55 to 72 frames therefore turns exactly four facings, a right
+/// angle. A turn hold may not exceed that window: a longer hold spins the ship
+/// an uncontrolled number of times and the next thrust points anywhere.
+const MAX_TURN_HOLD_TICKS: u64 = 72;
+
+/// A flight leg is one `thrust` tap. Each is bracketed by a position snapshot
+/// immediately before it and a displacement proof immediately after it, so no
+/// scenario can pass while the ship sits against the universe edge.
 #[test]
-fn v3_and_v4_keep_their_hold_lengths_and_capture_order() {
-    for (name, hold) in [("probe-encounter-v3", 2000), ("probe-encounter-v4", 3000)] {
+fn every_thrust_leg_is_bracketed_by_a_position_record_and_a_displacement_proof() {
+    for name in SCRIPTS {
+        let steps = script_steps(name);
+        let mut legs = 0;
+        for (index, step) in steps.iter().enumerate() {
+            if action_of(step) != "tap_player_key" || step["key"] != "thrust" {
+                continue;
+            }
+            legs += 1;
+            assert!(
+                index > 0 && action_of(&steps[index - 1]) == "record_hyperspace_position",
+                "{name} step {index}: a thrust leg must follow record_hyperspace_position"
+            );
+            let proof = steps
+                .get(index + 1)
+                .unwrap_or_else(|| panic!("{name} ends on a thrust leg"));
+            assert_eq!(
+                action_of(proof),
+                "assert_hyperspace_displacement",
+                "{name} step {index}: a thrust leg must be followed by a displacement proof"
+            );
+            assert!(proof["minimum_logical_units"].as_u64().unwrap_or(0) >= 16);
+        }
+        assert!(legs >= 3, "{name} flies {legs} legs");
+    }
+}
+
+#[test]
+fn turns_are_short_exact_taps_not_spins() {
+    for name in SCRIPTS {
+        for (index, step) in script_steps(name).iter().enumerate() {
+            if action_of(step) != "tap_player_key" || step["key"] == "thrust" {
+                continue;
+            }
+            let hold = step["hold"].as_u64().unwrap_or(0);
+            assert!(
+                (1..=MAX_TURN_HOLD_TICKS).contains(&hold),
+                "{name} step {index} holds a turn key for {hold} ticks; at most \
+                 {MAX_TURN_HOLD_TICKS} (a right angle)"
+            );
+        }
+    }
+}
+
+/// Without fuel the flagship cannot thrust (`sis_ship.c`), and without room
+/// the leg ends at the universe edge. Sol sits about 27 800 logical units from
+/// the nearest edges and the flagship covers about 12 per thrust tick, so the
+/// flight's total thrust is bounded: 1 000 raw fuel pays for about 1 100 ticks
+/// (measured 0.009 HUD fuel per thrust tick), 6 000 raw fuel for far more than
+/// the 2 200 ticks that also keep a straight run inside the margin.
+#[test]
+fn total_thrust_stays_inside_the_fuel_and_the_edge_margin() {
+    for name in SCRIPTS {
+        let total: u64 = script_steps(name)
+            .iter()
+            .filter(|step| action_of(step) == "tap_player_key" && step["key"] == "thrust")
+            .map(|step| step["hold"].as_u64().unwrap_or(0))
+            .sum();
+        let limit = if PREPARED.contains(&name) { 2200 } else { 800 };
+        assert!(
+            total <= limit,
+            "{name} thrusts {total} ticks, over its {limit} tick limit"
+        );
+    }
+}
+
+#[test]
+fn v3_and_v4_fly_a_four_leg_square_with_exact_right_angle_turns() {
+    for (name, hold) in [("probe-encounter-v3", 500), ("probe-encounter-v4", 550)] {
         let steps = script_steps(name);
         let legs: Vec<&Value> = steps
             .iter()
-            .filter(|step| step["action"] == "tap_player_key")
+            .filter(|step| action_of(step) == "tap_player_key")
             .collect();
-        assert_eq!(legs.len(), 4, "{name} keeps four flight legs");
-        for leg in legs {
-            assert_eq!(leg["hold"], hold, "{name} keeps its hold length");
+        assert_eq!(legs.len(), 8, "{name} keeps four legs and four turns");
+        for (index, leg) in legs.iter().enumerate() {
+            if index % 2 == 0 {
+                assert_eq!(leg["key"], "thrust");
+                assert_eq!(leg["hold"], hold, "{name} keeps its leg length");
+            } else {
+                assert_eq!(leg["key"], "right", "{name} turns the same way");
+                assert_eq!(leg["hold"], 60, "{name} turns four facings");
+            }
             assert_eq!(leg["settle"], 5);
         }
         let captures: Vec<&str> = steps
             .iter()
-            .filter(|step| step["action"] == "capture")
+            .filter(|step| action_of(step) == "capture")
             .filter_map(|step| step["label"].as_str())
             .collect();
         assert_eq!(captures.first(), Some(&"new-game-confirmed"));
@@ -337,46 +421,28 @@ fn preparation_uses_only_player_and_menu_inputs_and_queries() {
 }
 
 #[test]
-fn the_flight_after_preparation_is_the_original_flight() {
-    let expected: [(&str, u64, &[&str]); 2] = [
-        (
-            "probe-encounter-v3",
-            2000,
-            &[
-                "new-game-confirmed",
-                "hyperspace-start",
-                "fly-up-long-1",
-                "fly-right-long-1",
-                "fly-up-long-2",
-                "fly-right-long-2",
-                "probe-encounter-final",
-            ],
-        ),
-        (
-            "probe-encounter-v4",
-            3000,
-            &[
-                "new-game-confirmed",
-                "hyperspace-start",
-                "fly-down-long",
-                "fly-left-long",
-                "fly-down-long-2",
-                "fly-left-long-2",
-                "probe-encounter-final",
-            ],
-        ),
+fn the_flight_after_preparation_is_the_square_route() {
+    let captures: &[&str] = &[
+        "new-game-confirmed",
+        "hyperspace-start",
+        "leg-1",
+        "turn-1",
+        "leg-2",
+        "turn-2",
+        "leg-3",
+        "turn-3",
+        "leg-4",
+        "turn-4",
+        "probe-encounter-final",
     ];
-    for (name, hold, captures) in expected {
+    for name in PREPARED {
         let steps = script_steps(name);
         let labels: Vec<&str> = steps
             .iter()
             .filter(|step| action_of(step) == "capture")
             .filter_map(|step| step["label"].as_str())
             .collect();
-        assert_eq!(
-            labels, captures,
-            "{name} keeps exactly its original captures"
-        );
+        assert_eq!(labels, captures, "{name} keeps exactly its route captures");
         let fly = position(&steps, 0, |step| {
             action_of(step) == "navigate_to_hyperspace"
         });
@@ -384,13 +450,12 @@ fn the_flight_after_preparation_is_the_original_flight() {
             .iter()
             .filter(|step| action_of(step) == "tap_player_key")
             .collect();
-        assert_eq!(flight_taps.len(), 4);
-        assert!(flight_taps.iter().all(|tap| tap["hold"] == hold));
+        assert_eq!(flight_taps.len(), 8);
         let displacement = steps[fly..]
             .iter()
             .filter(|step| action_of(step) == "assert_hyperspace_displacement")
             .count();
-        assert_eq!(displacement, 2, "{name} keeps both displacement proofs");
+        assert_eq!(displacement, 4, "{name} proves every leg");
         // The preparation adds no capture of its own.
         assert!(prep_of(name)
             .iter()

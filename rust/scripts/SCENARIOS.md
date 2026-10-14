@@ -101,9 +101,9 @@ Limits of this preparation:
 
 - Only `probe-encounter-v3` and `probe-encounter-v4` carry the preparation.
   `probe-encounter-v1`, `-v2`, `-v5`, `-v6` and `-v7` still start from the
-  opening 1000 raw fuel. Whether their flights fit that tank is an estimate,
-  not a measurement, and no live run has shown it either way. They keep their
-  original holds and turns; nothing was shortened to make them fit.
+  opening 1000 raw fuel, which pays for about 1100 thrust ticks (0.009 HUD
+  fuel per tick, derived from one real-window run). Their total thrust is
+  capped at 800 ticks, see "Hyperspace flight legs" below.
 - The preparation has not run live. The Moon base pickup, the 2500 RU reward
   and the 50 Outfit purchases are checked only by unit tests of the pure
   transaction model and by the script invariants in
@@ -114,6 +114,47 @@ Limits of this preparation:
   them.
 - `repro-comm-menu-initial` starts in the Commander conversation and finishes
   inside it, so it never reaches the Starbase menu. It is unchanged.
+
+## Hyperspace flight legs
+
+Every `probe-encounter-v1` to `v7` thrust leg is a `tap_player_key` thrust
+bracketed by `record_hyperspace_position` immediately before it and
+`assert_hyperspace_displacement` (minimum 16 logical units) immediately after
+it. A leg that does not move the ship fails the run; no later leg can hide it.
+A real-window run of v3 showed why: the old 2000-tick legs and multi-thousand
+tick turn holds drove the ship into the universe edge (x=3, HUD 000.0), and the
+remaining legs passed while the ship sat still. Without fuel the flagship also
+cannot thrust (`sis_ship.c`), so a leg can fail for an empty tank.
+
+Turns are exact. The flagship turns one facing (a sixteenth of a circle) on the
+first frame a turn key is held and then every 18 frames (`ship_preprocess` in
+`ship.c`, `TURN_WAIT` 17 in `sis_ship.c`, no turn modules on a new game). A
+60 tick hold turns exactly four facings, a right angle, and every turn in the
+scripts is that same `right` tap. This assumes one input tick per game frame.
+The facing is not read back, so a real-window run is what confirms it.
+
+Routes (leg = thrust ticks, every turn a 60 tick `right` tap after the leg):
+
+| Script | Legs | Turns | Fuel at start |
+| --- | --- | --- | --- |
+| v1 | 5 x 100 | 5 | 1000 raw |
+| v2 | 9 x 80 | 9 | 1000 raw |
+| v3 | 4 x 500 | 4, closes one square | 6000 raw |
+| v4 | 4 x 550 | 4, closes one square | 6000 raw |
+| v5 | 16 x 50 | 16, four squares | 1000 raw |
+| v6 | 3 x 200 | 2 | 1000 raw |
+| v7 | 3 x 200 | 2 | 1000 raw |
+
+The start heading is whatever the solar-system exit leaves. Sol is about
+27 800 logical units from the nearest universe edges and the flagship covers
+about 12 per thrust tick, so each script's total thrust is capped (800 ticks on
+the opening tank, 2200 on the prepared tank) such that even a straight run
+cannot reach an edge or empty the tank. `tests/probe_encounter_flight_input.rs`
+enforces the bracketing, the turn bound (at most 72 ticks) and the caps.
+
+The captures that named a direction (`fly-up-long-1`, `after-fly-right-2`, ...)
+claimed a heading the scenario did not control. They are now `leg-N`/`turn-N`
+(v3, v4) and `after-leg-N`/`after-turn-N` (v1, v2, v5, v6).
 
 ## Player controls and navigation
 
