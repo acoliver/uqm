@@ -296,10 +296,7 @@ fn run() -> Result<(), String> {
     run_preflight(&root, preflight_for(&command)?)
         .map_err(|error| format!("{command} preflight: {error}"))?;
     match command.as_str() {
-        "__ci-test" => test_all(&root, false).map_err(|error| format!("test command: {error}")),
-        "__ci-native-test" => {
-            native_test(&root).map_err(|error| format!("native test command: {error}"))
-        }
+        "__ci-test" => test_all(&root).map_err(|error| format!("test command: {error}")),
         "__ci-package" => package(&root),
         "__ci-capture-dependencies" => capture_dependencies(&root),
         "__ci-production" => production(&root).map(|_| ()),
@@ -308,10 +305,7 @@ fn run() -> Result<(), String> {
         "__ci-ownership-fixture" => verify_fixture_ownership(&root),
         "debug" => build_profile(&root, Profile::Debug),
         "release" => build_profile(&root, Profile::Release),
-        "test" => test_all(&root, true).map_err(|error| format!("test command: {error}")),
-        "native-test" => {
-            native_test(&root).map_err(|error| format!("native test command: {error}"))
-        }
+        "test" => test_all(&root).map_err(|error| format!("test command: {error}")),
         "probe" => run_script(&root, "rust/probes/run_p00_probes.sh"),
         "harness" => run_harnesses(&root),
         "production" => production(&root).map(|_| ()),
@@ -378,7 +372,7 @@ fn validate_native_suite_bundle(
 }
 
 fn usage() -> String {
-    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native|native-test|probe|harness|package|production|prove|verify|capture-dependencies|doctor|matrix|ci>".into()
+    "usage: cargo run --manifest-path rust/xtask/Cargo.toml -- <debug|release|test|native|probe|harness|package|production|prove|verify|capture-dependencies|doctor|matrix|ci>".into()
 }
 
 fn native_preflight(subcommand: Option<&str>) -> Preflight {
@@ -405,7 +399,6 @@ fn preflight_for(command: &str) -> Result<Preflight, String> {
         | "capture-dependencies"
         | "__ci-capture-dependencies"
         | "doctor" => Ok(Preflight::Full),
-        "native-test" | "__ci-native-test" => Ok(Preflight::StrictSource),
         "verify"
         | "test"
         | "native"
@@ -594,7 +587,7 @@ fn require_test_inventory(command: &Command, route: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn test_all(root: &Path, run_native_acceptance: bool) -> Result<(), String> {
+fn test_all(root: &Path) -> Result<(), String> {
     let cargo_target = ci_cargo_target_dir()?;
     let test_cargo = retained_rust_tool_program("CARGO", "cargo")?;
 
@@ -643,7 +636,7 @@ fn test_all(root: &Path, run_native_acceptance: bool) -> Result<(), String> {
     prepare_canonical_build(&toolchain)?;
     let marker = serde_json::to_string(&toolchain)
         .map_err(|error| format!("cannot serialize toolchain: {error}"))?;
-    let linked_build_proof = build_linked_test_proof(root, &toolchain, cargo_target.as_deref())?;
+    build_linked_test_proof(root, &toolchain, cargo_target.as_deref())?;
     let linked_arguments = cargo_args_with_target(
         [
             "test",
@@ -682,13 +675,6 @@ fn test_all(root: &Path, run_native_acceptance: bool) -> Result<(), String> {
             .args(linked_arguments),
         "Cargo test strict linked provider fixture",
     )?;
-    if run_native_acceptance {
-        run_native_window_acceptance(
-            root,
-            &linked_build_proof,
-            &NativeRunRequest::from_environment(),
-        )?;
-    }
     Ok(())
 }
 
@@ -709,21 +695,6 @@ pub(crate) struct NativeRunRequest {
     /// test, with no workflow event in its cleared environment, and receives
     /// names the trusted controller already derived from the retained receipt.
     pub verify_workflow_selection: bool,
-}
-
-impl NativeRunRequest {
-    fn from_environment() -> Self {
-        Self {
-            scenarios: env::var(ci::exec::AUTOPLAY_SCENARIOS_ENV).ok(),
-            evidence_root: env::var_os("UQM_CI_NATIVE_ACCEPTANCE_EVIDENCE_ROOT").map(PathBuf::from),
-            content_root: env::var_os("UQM_CI_NATIVE_CONTENT_ROOT").map(PathBuf::from),
-            verify_workflow_selection: false,
-        }
-    }
-}
-
-fn native_test(root: &Path) -> Result<(), String> {
-    native_test_with(root, &NativeRunRequest::from_environment())
 }
 
 /// The scripts one native run executes.
@@ -4234,10 +4205,6 @@ mod native_admission_regressions {
                 Preflight::ContractOnly
             ));
         }
-        assert!(matches!(
-            preflight_for("native-test").unwrap(),
-            Preflight::StrictSource
-        ));
     }
 
     #[test]

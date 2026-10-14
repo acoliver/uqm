@@ -90,24 +90,6 @@ pub fn admit_policy(base: &[u8], candidate: &[u8]) -> Result<(), String> {
     }
     Ok(())
 }
-pub fn retained_selection(
-    root: &Path,
-    authority: &Authority,
-    source: &str,
-) -> Result<Vec<PinnedScript>, String> {
-    let policy =
-        super::evidence::read_regular_relative(root, super::evidence::AUTHORITY_SNAPSHOT_RELATIVE)
-            .map_err(|e| e.to_string())?;
-    let receipt =
-        super::evidence::read_regular_relative(root, super::evidence::SOURCE_PREFLIGHT_RELATIVE)
-            .map_err(|e| e.to_string())?;
-    let receipt: serde_json::Value = serde_json::from_slice(&receipt).map_err(|e| e.to_string())?;
-    let binding: SelectionBinding =
-        serde_json::from_value(receipt["selection"].clone()).map_err(|e| e.to_string())?;
-    binding.bind_environment()?;
-    binding.selected(authority, source, &policy)
-}
-
 /// Retained controller input, not a candidate's requested scenario list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

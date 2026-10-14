@@ -477,7 +477,6 @@ fn validate_transport_index_snapshot(root: &Path, index: &TransportIndex) -> Vec
                 "architecture",
                 "prerequisites",
                 "tools",
-                "native-content",
             ];
             expected_steps.push("containment-check");
             expected_steps.push("authoritative-gates");
@@ -990,7 +989,6 @@ fn receipt_set_has_prefix(receipts: &BTreeSet<String>, prefix: &str) -> bool {
 }
 
 fn validate_successful_workflow_subprocess_receipts(
-    index: &TransportIndex,
     job: &str,
     setup: &WorkflowSetupResults,
     authority: Option<&Authority>,
@@ -1059,25 +1057,11 @@ fn validate_successful_workflow_subprocess_receipts(
             contracts.push("transport.gates.tool_component_receipts".to_string());
         }
     }
-    if job == "gates"
-        && step_succeeded("native-content")
-        && authority.is_some_and(|authority| {
-            index
-                .tuple
-                .as_deref()
-                .is_some_and(|tuple| tuple.starts_with(&authority.native_acceptance.platform))
-        })
-        && !has_success("native-content.result.json")
-    {
-        contracts.push("transport.gates.native_content_receipt".to_string());
-    }
 }
 
 fn validate_failed_workflow_subprocess_receipts(
-    index: &TransportIndex,
     job: &str,
     setup: &WorkflowSetupResults,
-    authority: Option<&Authority>,
     failed: &BTreeSet<String>,
     contracts: &mut Vec<String>,
 ) {
@@ -1094,17 +1078,6 @@ fn validate_failed_workflow_subprocess_receipts(
     }
     if step_failed("tools") && !receipt_set_has_prefix(failed, "tools-") {
         contracts.push("transport.gates.failed_tool_receipt".to_string());
-    }
-    if step_failed("native-content")
-        && authority.is_some_and(|authority| {
-            index
-                .tuple
-                .as_deref()
-                .is_some_and(|tuple| tuple.starts_with(&authority.native_acceptance.platform))
-        })
-        && !has_failed("native-content.result.json")
-    {
-        contracts.push("transport.gates.failed_native_content_receipt".to_string());
     }
     if step_failed("containment-check") && !has_failed("containment-check.result.json") {
         contracts.push("transport.gates.failed_uid_containment_receipt".to_string());
@@ -1129,15 +1102,8 @@ fn validate_workflow_subprocess_receipts(
     contracts: &mut Vec<String>,
 ) {
     let (successful, failed) = collect_workflow_subprocess_receipts(root, index, job, contracts);
-    validate_successful_workflow_subprocess_receipts(
-        index,
-        job,
-        setup,
-        authority,
-        &successful,
-        contracts,
-    );
-    validate_failed_workflow_subprocess_receipts(index, job, setup, authority, &failed, contracts);
+    validate_successful_workflow_subprocess_receipts(job, setup, authority, &successful, contracts);
+    validate_failed_workflow_subprocess_receipts(job, setup, &failed, contracts);
 }
 
 fn validate_plan_payload(
@@ -3908,10 +3874,6 @@ fn validate_successful_process_gate(
         contracts.extend(validate_successful_package_gate(
             root, index, authority, expected,
         ));
-    } else if expected.id == "tests" {
-        contracts.extend(validate_native_acceptance_evidence(
-            root, index, authority, expected,
-        ));
     }
     contracts.extend(validate_subordinate_outputs(
         index,
@@ -3990,14 +3952,6 @@ fn validate_failed_process_gate(
             failed_gate,
             first_failed,
         ));
-    } else if failed_gate.id == "tests"
-        && first_failed == "tests.post.native-acceptance.native-window-acceptance"
-    {
-        contracts.extend(validate_failed_native_acceptance_postprocess(
-            root,
-            index,
-            failed_gate,
-        ));
     } else {
         contracts.extend(validate_failed_process_receipts(
             root,
@@ -4031,14 +3985,6 @@ fn validate_failed_process_gate(
                 .is_none_or(|step| !security_revision_matches(root, index, authority, step))
         {
             contracts.push("evidence.security.advisory_database_revision".to_string());
-        }
-        if failed_gate.id == "tests" && first_failed == "tests.native-acceptance" {
-            contracts.extend(validate_failed_native_acceptance_evidence(
-                root,
-                index,
-                authority,
-                failed_gate,
-            ));
         }
     }
 }
@@ -4359,244 +4305,6 @@ fn validate_failed_security_postprocess(
     }
     contracts
 }
-fn validate_failed_native_acceptance_postprocess(
-    root: &Path,
-    index: &EvidenceIndex,
-    gate: &super::authority::Gate,
-) -> Vec<String> {
-    let mut contracts = Vec::new();
-    let Some(step) = gate
-        .steps
-        .iter()
-        .find(|step| step.id == "native-acceptance")
-    else {
-        return vec!["evidence.native_window.authority_step".to_string()];
-    };
-    contracts.extend(validate_builtin_step(
-        root,
-        index,
-        &gate.id,
-        &step.id,
-        &[0],
-        |command| command == step.command,
-    ));
-    let entries: Vec<_> = index
-        .entries
-        .iter()
-        .filter(|entry| entry.role == "native-window.acceptance")
-        .collect();
-    for entry in entries {
-        if entry.producing_gate != gate.id
-            || entry.producing_command != step.command
-            || !entry.path.starts_with("payloads/native-window.acceptance/")
-        {
-            contracts.push("evidence.native_window.failed_entry_identity".to_string());
-        }
-    }
-    contracts
-}
-#[derive(serde::Deserialize)]
-#[serde(untagged)]
-enum NativeAcceptanceFailureEnvelope {
-    Runtime(Box<uqm_rust::automation::NativeAcceptanceFailureManifest>),
-    Setup(Box<uqm_rust::automation::NativeAcceptanceSetupFailureManifest>),
-}
-
-fn validate_failed_native_acceptance_evidence(
-    root: &Path,
-    index: &EvidenceIndex,
-    authority: &Authority,
-    gate: &super::authority::Gate,
-) -> Vec<String> {
-    let mut contracts = Vec::new();
-    let entries: Vec<_> = index
-        .entries
-        .iter()
-        .filter(|entry| entry.role == "native-window.failure")
-        .collect();
-    if entries.is_empty() {
-        return contracts;
-    }
-    if !index.tuple.starts_with("macos-") {
-        return vec!["evidence.native_window.failure.platform".to_string()];
-    }
-    let Some(step) = gate
-        .steps
-        .iter()
-        .find(|step| step.id == "native-acceptance")
-    else {
-        return vec!["evidence.native_window.failure.step".to_string()];
-    };
-    let acceptance_root = root.join("payloads/native-window.acceptance");
-    let mut actual_paths = Vec::new();
-    collect_native_acceptance_paths(&acceptance_root, &mut actual_paths, &mut contracts);
-    actual_paths.sort();
-    let expected_paths: Vec<_> = actual_paths
-        .iter()
-        .map(|path| format!("payloads/native-window.acceptance/{path}"))
-        .collect();
-    let mut indexed_paths: Vec<_> = entries.iter().map(|entry| entry.path.clone()).collect();
-    indexed_paths.sort();
-    if expected_paths != indexed_paths
-        || entries.iter().any(|entry| {
-            entry.producing_gate != gate.id
-                || entry.producing_command != step.command
-                || entry.mime != "application/octet-stream"
-        })
-    {
-        contracts.push("evidence.native_window.failure.inventory".to_string());
-    }
-    if actual_paths.iter().any(|path| path == "suite-index.json") {
-        if crate::native_suite::validate_failure_diagnostics(&acceptance_root, authority).is_err() {
-            contracts.push("evidence.native_window.failure.suite".to_string());
-        }
-        return contracts;
-    }
-    let manifest_path = "payloads/native-window.acceptance/native-acceptance-failure.json";
-    let manifest: Option<NativeAcceptanceFailureEnvelope> = read_bundle_file(root, manifest_path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok());
-    let Some(manifest) = manifest else {
-        contracts.push("evidence.native_window.failure.manifest".to_string());
-        return contracts;
-    };
-    let native = &authority.native_acceptance;
-    let manifest = match manifest {
-        NativeAcceptanceFailureEnvelope::Runtime(manifest) => manifest,
-        NativeAcceptanceFailureEnvelope::Setup(manifest) => {
-            if manifest.runtime_contract != authority.native_runtime_contract()
-                || manifest.acceptance_policy != native.acceptance_policy
-            {
-                contracts.push("evidence.native_window.failure.authority_contract".to_string());
-            }
-            if uqm_rust::automation::validate_native_acceptance_setup_failure_bundle(
-                &acceptance_root,
-                &manifest,
-            )
-            .is_err()
-            {
-                contracts.push("evidence.native_window.failure.result".to_string());
-            }
-            return contracts;
-        }
-    };
-    if manifest.runtime_contract != authority.native_runtime_contract()
-        || manifest.acceptance_policy != native.acceptance_policy
-    {
-        contracts.push("evidence.native_window.failure.authority_contract".to_string());
-    }
-    if uqm_rust::automation::validate_native_acceptance_failure_bundle(&acceptance_root, &manifest)
-        .is_err()
-    {
-        contracts.push("evidence.native_window.failure.result".to_string());
-        return contracts;
-    }
-    let expected_script = Path::new(&native.script)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| format!("inputs/{name}"));
-    if expected_script.as_deref() != Some(manifest.script.relative_path.as_str())
-        || manifest.script.sha256 != native.script_sha256
-        || manifest.script.byte_length != native.script_byte_length
-    {
-        contracts.push("evidence.native_window.failure.script".to_string());
-    }
-    if manifest.content_package.relative_path
-        != format!("inputs/content/packages/{}", native.content_filename)
-        || manifest.content_package.sha256 != native.content_sha256
-        || manifest.content_package.byte_length != native.content_byte_length
-    {
-        contracts.push("evidence.native_window.failure.content".to_string());
-    }
-    let version_bytes = format!("{}\n", native.content_version).into_bytes();
-    let version_input = manifest
-        .retained_files
-        .iter()
-        .find(|input| input.relative_path == "inputs/content/version");
-    if version_input.is_none_or(|input| {
-        input.byte_length != version_bytes.len() as u64
-            || input.sha256 != hex_sha256(&version_bytes)
-    }) {
-        contracts.push("evidence.native_window.failure.content_version".to_string());
-    }
-    contracts
-}
-
-fn validate_native_acceptance_evidence(
-    root: &Path,
-    index: &EvidenceIndex,
-    authority: &Authority,
-    gate: &super::authority::Gate,
-) -> Vec<String> {
-    let entries: Vec<_> = index
-        .entries
-        .iter()
-        .filter(|entry| entry.role == "native-window.acceptance")
-        .collect();
-    let acceptance_root = root.join("payloads/native-window.acceptance");
-    let native_tuple_prefix = format!("{}-", authority.native_acceptance.platform);
-    if !index.tuple.starts_with(&native_tuple_prefix) {
-        let payload_exists = match fs::symlink_metadata(&acceptance_root) {
-            Ok(_) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(_) => true,
-        };
-        return if entries.is_empty() && !payload_exists {
-            Vec::new()
-        } else {
-            vec!["evidence.native_window.unexpected_tuple".to_string()]
-        };
-    }
-    let Some(step) = gate
-        .steps
-        .iter()
-        .find(|step| step.id == "native-acceptance")
-    else {
-        return vec!["evidence.native_window.authority_step".to_string()];
-    };
-    let mut contracts = Vec::new();
-    let mut actual_paths = Vec::new();
-    collect_native_acceptance_paths(&acceptance_root, &mut actual_paths, &mut contracts);
-    if !contracts.is_empty() {
-        return contracts;
-    }
-    actual_paths.sort();
-    let mut indexed_paths: Vec<_> = entries.iter().map(|entry| entry.path.clone()).collect();
-    indexed_paths.sort();
-    let expected_paths: Vec<_> = actual_paths
-        .iter()
-        .map(|path| format!("payloads/native-window.acceptance/{path}"))
-        .collect();
-    if indexed_paths != expected_paths {
-        contracts.push("evidence.native_window.file_set".to_string());
-    }
-    for entry in &entries {
-        if entry.producing_gate != gate.id
-            || entry.producing_command != step.command
-            || !entry.path.starts_with("payloads/native-window.acceptance/")
-        {
-            contracts.push("evidence.native_window.entry_identity".to_string());
-        }
-    }
-    let selected = super::controller::retained_selection(root, authority, &index.source_sha);
-    let policy = read_bundle_file(root, AUTHORITY_SNAPSHOT_RELATIVE);
-    match (selected, policy) {
-        (Ok(selected), Ok(policy)) => {
-            if let Err(error) = crate::native_suite::validate_success(
-                &acceptance_root,
-                &selected,
-                authority,
-                &index.source_sha,
-                &policy,
-            ) {
-                contracts.push(format!("evidence.native_window.suite ({error})"));
-            }
-        }
-        _ => contracts.push("evidence.native_window.selection".into()),
-    }
-    contracts
-}
-
 pub(crate) fn linked_outer_correlation_contracts(
     linked_receipt: Option<&[u8]>,
     nested_authority: Option<&[u8]>,
@@ -4620,25 +4328,6 @@ pub(crate) fn linked_outer_correlation_contracts(
     }
     contracts
 }
-fn collect_native_acceptance_paths(
-    root: &Path,
-    paths: &mut Vec<String>,
-    contracts: &mut Vec<String>,
-) {
-    match regular_file_inventory(root) {
-        Ok(files) => paths.extend(files.into_iter().map(|file| file.relative_path)),
-        Err(error)
-            if matches!(
-                error.raw_os_error(),
-                Some(libc::ELOOP) | Some(libc::ENOTDIR)
-            ) =>
-        {
-            contracts.push("evidence.native_window.non_regular".to_string());
-        }
-        Err(error) => contracts.push(format!("evidence.native_window.walk ({error})")),
-    }
-}
-
 fn subordinate_output_names(gate: &str, step: &str) -> &'static [&'static str] {
     match (gate, step) {
         ("probes-harnesses", "p00-probes") => &["p00-probe-results.log"],
@@ -10811,13 +10500,6 @@ mod tests {
         let bytes = include_bytes!("../../../build/supported-matrix.json");
         let matrix: super::super::authority::Matrix = serde_json::from_slice(bytes).unwrap();
         matrix.derive_contract_tuples().unwrap()
-    }
-
-    fn native_runtime_contract() -> uqm_rust::automation::native_window::NativeWindowRuntimeContract
-    {
-        let authority: Authority =
-            serde_json::from_str(include_str!("../../../ci/gates.json")).unwrap();
-        authority.native_runtime_contract()
     }
 
     fn native_acceptance_policy() -> uqm_rust::automation::native_window::NativeAcceptancePolicy {
@@ -18602,7 +18284,6 @@ mod tests {
                 "tools-component-rustfmt.result.json",
                 "tools-component-clippy.result.json",
                 "tools-component-llvm-tools-preview.result.json",
-                "native-content.result.json",
                 "xtask-build.result.json",
                 "policy-admission.result.json",
                 "source-revalidation.result.json",
@@ -18632,12 +18313,6 @@ mod tests {
                 "tools",
                 "tools-rustup.result.json",
                 "transport.gates.failed_tool_receipt",
-            ),
-            (
-                "gates",
-                "native-content",
-                "native-content.result.json",
-                "transport.gates.failed_native_content_receipt",
             ),
             (
                 "gates",
@@ -19019,7 +18694,6 @@ mod tests {
                     {"step": "architecture", "outcome": "success"},
                     {"step": "prerequisites", "outcome": "success"},
                     {"step": "tools", "outcome": "success"},
-                    {"step": "native-content", "outcome": "success"},
                     {"step": "containment-check", "outcome": "success"},
                     {"step": "authoritative-gates", "outcome": "cancelled"},
                     {"step": "source-revalidation", "outcome": "success"}
@@ -19072,7 +18746,6 @@ mod tests {
                     {"step": "architecture", "outcome": "success"},
                     {"step": "prerequisites", "outcome": "success"},
                     {"step": "tools", "outcome": "success"},
-                    {"step": "native-content", "outcome": "success"},
                     {"step": "containment-check", "outcome": "success"},
                     {"step": "authoritative-gates", "outcome": "failure"},
                     {"step": "source-revalidation", "outcome": "success"}
@@ -19140,7 +18813,6 @@ mod tests {
                     {"step": "architecture", "outcome": "success"},
                     {"step": "prerequisites", "outcome": "success"},
                     {"step": "tools", "outcome": "success"},
-                    {"step": "native-content", "outcome": "success"},
                     {"step": "containment-check", "outcome": "success"},
                     {"step": "authoritative-gates", "outcome": "failure"},
                     {"step": "source-revalidation", "outcome": "success"}
@@ -20047,650 +19719,6 @@ mod tests {
             pre_index.offline_validation.passed,
             "{:?}",
             pre_index.offline_validation.contracts
-        );
-    }
-
-    #[test]
-    #[ignore = "requires UQM_TEST_NATIVE_CONTENT_PACKAGE with the authority-pinned content package"]
-    fn authority_valid_native_failure_bundle_replays_without_repository_state() {
-        use uqm_rust::automation::{
-            native_acceptance_failure_inventory, NativeAcceptanceFailureManifest,
-            NativeChildCleanupReceipt, NativeProcessIdentity, NativeRetainedInput,
-            NativeWindowBounds, NativeWindowConfigFile, NATIVE_ACCEPTANCE_FAILURE_SCHEMA,
-            NATIVE_WINDOW_CONFIG_SCHEMA,
-        };
-
-        let content_source = std::env::var_os("UQM_TEST_NATIVE_CONTENT_PACKAGE")
-            .map(PathBuf::from)
-            .expect("UQM_TEST_NATIVE_CONTENT_PACKAGE must name the pinned content package");
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let step = gate
-            .steps
-            .iter()
-            .find(|step| step.id == "native-acceptance")
-            .unwrap();
-        let bundle = tempfile::tempdir().unwrap();
-        let acceptance = bundle.path().join("payloads/native-window.acceptance");
-        fs::create_dir_all(acceptance.join("inputs")).unwrap();
-        let executable_bytes = b"retained linked executable";
-        let script_bytes = include_bytes!("../../../scripts/linked-playable-v1.json");
-        fs::write(acceptance.join("inputs/uqm"), executable_bytes).unwrap();
-        fs::write(
-            acceptance.join("inputs/linked-playable-v1.json"),
-            script_bytes,
-        )
-        .unwrap();
-        let content_relative = format!(
-            "inputs/content/packages/{}",
-            authority.native_acceptance.content_filename
-        );
-        fs::create_dir_all(acceptance.join("inputs/content/packages")).unwrap();
-        fs::write(
-            acceptance.join("inputs/content/version"),
-            format!("{}\n", authority.native_acceptance.content_version),
-        )
-        .unwrap();
-        fs::write(
-            acceptance.join("native-window-proof.json"),
-            serde_json::to_vec(&NativeWindowConfigFile {
-                schema: NATIVE_WINDOW_CONFIG_SCHEMA.to_string(),
-                nonce: "a".repeat(64),
-                client_bounds: NativeWindowBounds {
-                    x: 80,
-                    y: 80,
-                    width: 1280,
-                    height: 960,
-                },
-                runtime_contract: authority.native_runtime_contract(),
-                acceptance_policy: authority.native_acceptance.acceptance_policy,
-            })
-            .unwrap(),
-        )
-        .unwrap();
-        fs::copy(&content_source, acceptance.join(&content_relative)).unwrap();
-        let content_bytes = fs::read(acceptance.join(&content_relative)).unwrap();
-        assert_eq!(
-            content_bytes.len() as u64,
-            authority.native_acceptance.content_byte_length
-        );
-        assert_eq!(
-            hex_sha256(&content_bytes),
-            authority.native_acceptance.content_sha256
-        );
-        let retained = |relative_path: &str, bytes: &[u8]| NativeRetainedInput {
-            relative_path: relative_path.to_string(),
-            byte_length: bytes.len() as u64,
-            sha256: hex_sha256(bytes),
-        };
-        let collection = acceptance.to_string_lossy();
-        let manifest = NativeAcceptanceFailureManifest {
-            schema: NATIVE_ACCEPTANCE_FAILURE_SCHEMA.to_string(),
-            command: vec![
-                acceptance.join("inputs/uqm").to_string_lossy().into_owned(),
-                format!("--configdir={collection}/config"),
-                format!("--contentdir={collection}/inputs/content"),
-                format!("--automation-script={collection}/inputs/linked-playable-v1.json"),
-                format!("--automation-output={collection}/runtime-automation"),
-                format!("--native-window-proof={collection}/native-window-proof.json"),
-            ],
-            environment: std::collections::BTreeMap::from([(
-                "SDL_AUDIODRIVER".to_string(),
-                "dummy".to_string(),
-            )]),
-            executable: retained("inputs/uqm", executable_bytes),
-            script: retained("inputs/linked-playable-v1.json", script_bytes),
-            content_package: retained(&content_relative, &content_bytes),
-            runtime_contract: authority.native_runtime_contract(),
-            acceptance_policy: authority.native_acceptance.acceptance_policy,
-            retained_files: native_acceptance_failure_inventory(
-                &acceptance,
-                authority.native_runtime_contract().inventory_limits,
-            )
-            .unwrap(),
-            child: NativeChildCleanupReceipt {
-                process: NativeProcessIdentity {
-                    pid: 42,
-                    start_time: "1234".to_string(),
-                    executable_sha256: hex_sha256(executable_bytes),
-                    nonce: "a".repeat(64),
-                },
-                exit_code: Some(0),
-                signal: None,
-                term_sent: false,
-                kill_sent: false,
-                stdout_bytes: 0,
-                stderr_bytes: 1,
-                output_drained: true,
-                initial_process_group_empty: true,
-                config_root_removed: true,
-                materialized_content_removed: true,
-            },
-            failure_contract: serde_json::from_value(serde_json::json!("semantic")).unwrap(),
-            error: "semantic acceptance failed".to_string(),
-            passed: false,
-        };
-        assert_eq!(
-            uqm_rust::automation::validate_native_acceptance_failure_bundle(&acceptance, &manifest,),
-            Ok(())
-        );
-        fs::write(
-            acceptance.join("native-acceptance-failure.json"),
-            serde_json::to_vec_pretty(&manifest).unwrap(),
-        )
-        .unwrap();
-
-        let seed = setup_failure_bundle(bundle.path(), "ownership.zero_native_delta");
-        let mut entries = seed.entries;
-        let delta_entry = entries
-            .iter()
-            .find(|entry| entry.role == "ownership.zero-native-delta")
-            .unwrap();
-        let mut delta: serde_json::Value =
-            serde_json::from_slice(&fs::read(bundle.path().join(&delta_entry.path)).unwrap())
-                .unwrap();
-        delta["categories"]["tracked_sources"]["measured_delta"] = serde_json::json!(0);
-        delta["categories"]["tracked_sources"]["changed_paths"] = serde_json::json!([]);
-        delta["passed"] = serde_json::json!(true);
-        rewrite_bundle_entry(
-            bundle.path(),
-            &mut entries,
-            "ownership.zero-native-delta",
-            &serde_json::to_vec(&delta).unwrap(),
-        );
-        let source_entry = entries
-            .iter()
-            .find(|entry| entry.role == "preflight.source")
-            .unwrap();
-        let mut source: serde_json::Value =
-            serde_json::from_slice(&fs::read(bundle.path().join(&source_entry.path)).unwrap())
-                .unwrap();
-        source["tuple"] = serde_json::json!("macos-aarch64");
-        source["expected_tuple"] = serde_json::json!("macos-aarch64");
-        rewrite_bundle_entry(
-            bundle.path(),
-            &mut entries,
-            "preflight.source",
-            &serde_json::to_vec(&source).unwrap(),
-        );
-        let controller = vec![
-            "uqm-xtask".to_string(),
-            "ci".to_string(),
-            "run".to_string(),
-            gate.id.clone(),
-        ];
-        for entry in &mut entries {
-            entry.producing_command = controller.clone();
-            if matches!(
-                entry.role.as_str(),
-                "authority.snapshot"
-                    | "preflight.source"
-                    | "preflight.tools"
-                    | "cache.initial-state"
-            ) {
-                entry.producing_gate = gate.id.clone();
-            }
-        }
-        for prerequisite in gate
-            .steps
-            .iter()
-            .take_while(|candidate| candidate.id != step.id)
-        {
-            write_builtin_step_fixture(
-                bundle.path(),
-                &mut entries,
-                &gate.id,
-                &prerequisite.id,
-                &prerequisite.command,
-                (Some(0), None, None),
-            );
-        }
-        write_builtin_step_fixture(
-            bundle.path(),
-            &mut entries,
-            &gate.id,
-            &step.id,
-            &step.command,
-            (Some(1), None, None),
-        );
-        for relative in manifest
-            .retained_files
-            .iter()
-            .map(|file| file.relative_path.as_str())
-            .chain(std::iter::once("native-acceptance-failure.json"))
-        {
-            let bundle_relative = format!("payloads/native-window.acceptance/{relative}");
-            entries.push(
-                entry(
-                    bundle.path(),
-                    &bundle_relative,
-                    "native-window.failure",
-                    "application/octet-stream",
-                    &gate.id,
-                    &step.command,
-                )
-                .unwrap(),
-            );
-        }
-        let contract = "tests.native-acceptance";
-        let result = serde_json::to_vec(&serde_json::json!({
-            "schema": "uqm-s4-gate-result-v1",
-            "gate": gate.id,
-            "owner": gate.owner,
-            "kind": gate.kind,
-            "passed": false,
-            "first_failed_contract": contract,
-            "detail": "native acceptance reported a semantic failure",
-            "controller_command": controller
-        }))
-        .unwrap();
-        write_bundle_entry(
-            bundle.path(),
-            &mut entries,
-            &format!("{}/gate.result.json", gate.id),
-            "gate.result",
-            &controller,
-            &result,
-        );
-        entries.last_mut().unwrap().producing_gate = gate.id.clone();
-        let index = EvidenceIndex::build_and_validate(
-            bundle.path(),
-            &fixture_tuples(),
-            EvidenceContext {
-                source_sha: "a".repeat(40),
-                clean: true,
-                tuple: "macos-aarch64".to_string(),
-                features: vec!["audio_heart".to_string()],
-                cache_mode: "isolated-empty".to_string(),
-                first_failed_contract: Some(contract.to_string()),
-            },
-            entries,
-        )
-        .unwrap();
-        assert!(
-            index.offline_validation.passed,
-            "{:?}",
-            index.offline_validation.contracts
-        );
-        fs::write(
-            bundle.path().join("evidence-index.json"),
-            serde_json::to_vec_pretty(&index).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(index.first_failed_contract.as_deref(), Some(contract));
-        validate_evidence_command(
-            Path::new("/definitely-not-a-repository"),
-            bundle.path().join("evidence-index.json").to_str().unwrap(),
-        )
-        .unwrap();
-
-        let manifest_path = "payloads/native-window.acceptance/native-acceptance-failure.json";
-        let script_path = "payloads/native-window.acceptance/inputs/linked-playable-v1.json";
-        let content_path = format!("payloads/native-window.acceptance/{content_relative}");
-        let assert_rejects = |forged: &EvidenceIndex, expected: &str| {
-            let contracts = production_contracts(bundle.path(), forged);
-            assert!(
-                contracts.iter().any(|contract| contract == expected),
-                "expected {expected}, got {contracts:?}"
-            );
-        };
-
-        let mut forged = index.clone();
-        let mut forged_script = script_bytes.to_vec();
-        forged_script.push(b" "[0]);
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            script_path,
-            &forged_script,
-        );
-        let mut forged_manifest = manifest.clone();
-        forged_manifest.script.sha256 = hex_sha256(&forged_script);
-        forged_manifest.script.byte_length = forged_script.len() as u64;
-        let retained_script = forged_manifest
-            .retained_files
-            .iter_mut()
-            .find(|file| file.relative_path == "inputs/linked-playable-v1.json")
-            .unwrap();
-        retained_script.sha256 = hex_sha256(&forged_script);
-        retained_script.byte_length = forged_script.len() as u64;
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&forged_manifest).unwrap(),
-        );
-        assert_rejects(&forged, "evidence.native_window.failure.script");
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            script_path,
-            script_bytes,
-        );
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&manifest).unwrap(),
-        );
-
-        let mut forged_content = content_bytes.clone();
-        forged_content.push(0);
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            &content_path,
-            &forged_content,
-        );
-        let mut forged_manifest = manifest.clone();
-        forged_manifest.content_package.sha256 = hex_sha256(&forged_content);
-        forged_manifest.content_package.byte_length = forged_content.len() as u64;
-        let retained_content = forged_manifest
-            .retained_files
-            .iter_mut()
-            .find(|file| file.relative_path == content_relative)
-            .unwrap();
-        retained_content.sha256 = hex_sha256(&forged_content);
-        retained_content.byte_length = forged_content.len() as u64;
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&forged_manifest).unwrap(),
-        );
-        assert_rejects(&forged, "evidence.native_window.failure.content");
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            &content_path,
-            &content_bytes,
-        );
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&manifest).unwrap(),
-        );
-
-        let mut forged_manifest = manifest.clone();
-        forged_manifest.child.exit_code = Some(0);
-        forged_manifest.child.signal = Some(9);
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&forged_manifest).unwrap(),
-        );
-        assert_rejects(&forged, "evidence.native_window.failure.result");
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&manifest).unwrap(),
-        );
-
-        let mut forged_manifest = manifest.clone();
-        forged_manifest.acceptance_policy.stable_presentation_floor -= 1;
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&forged_manifest).unwrap(),
-        );
-        assert_rejects(&forged, "evidence.native_window.failure.authority_contract");
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&manifest).unwrap(),
-        );
-
-        let mut forged_manifest = manifest.clone();
-        forged_manifest.runtime_contract.capture_timeout_ms -= 1;
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&forged_manifest).unwrap(),
-        );
-        assert_rejects(&forged, "evidence.native_window.failure.authority_contract");
-        rewrite_bundle_path(
-            bundle.path(),
-            &mut forged.entries,
-            manifest_path,
-            &serde_json::to_vec_pretty(&manifest).unwrap(),
-        );
-
-        let mut forged_identity = index.clone();
-        let native_entry = forged_identity
-            .entries
-            .iter_mut()
-            .find(|entry| entry.role == "native-window.failure")
-            .unwrap();
-        native_entry.producing_command = vec!["forged".to_string()];
-        assert_rejects(&forged_identity, "evidence.native_window.failure.inventory");
-        let mut forged_role = index.clone();
-        forged_role
-            .entries
-            .iter_mut()
-            .find(|entry| entry.role == "native-window.failure")
-            .unwrap()
-            .role = "native-window.acceptance".to_string();
-        assert_rejects(&forged_role, "evidence.native_window.failure.inventory");
-        let mut forged_path = index.clone();
-        forged_path
-            .entries
-            .iter_mut()
-            .find(|entry| entry.role == "native-window.failure")
-            .unwrap()
-            .path = manifest_path.to_string();
-        assert_rejects(&forged_path, "evidence.native_window.failure.inventory");
-    }
-
-    #[test]
-    fn non_macos_native_acceptance_rejects_unindexed_payloads() {
-        let root = tempfile::tempdir().unwrap();
-        let authority: Authority =
-            serde_json::from_slice(include_bytes!("../../../ci/gates.json")).unwrap();
-        let gate = authority.gate("tests").unwrap();
-        let mut index = valid_index();
-        index.tuple = "linux-x86_64".to_string();
-        index.entries.clear();
-
-        assert!(
-            validate_native_acceptance_evidence(root.path(), &index, &authority, gate).is_empty()
-        );
-
-        let native_root = root.path().join("payloads/native-window.acceptance");
-        fs::create_dir_all(&native_root).unwrap();
-        fs::write(native_root.join("unindexed.json"), b"{}").unwrap();
-        assert_eq!(
-            validate_native_acceptance_evidence(root.path(), &index, &authority, gate),
-            vec!["evidence.native_window.unexpected_tuple"]
-        );
-    }
-
-    #[test]
-    fn native_failure_manifest_requires_truthful_cleanup_provenance_and_inventory() {
-        use uqm_rust::automation::{
-            native_acceptance_failure_inventory, validate_native_acceptance_failure_bundle,
-            NativeAcceptanceFailureManifest, NativeChildCleanupReceipt, NativeProcessIdentity,
-            NativeRetainedInput, NativeWindowBounds, NativeWindowConfigFile,
-            NATIVE_ACCEPTANCE_FAILURE_SCHEMA, NATIVE_WINDOW_CONFIG_SCHEMA,
-        };
-
-        let root = tempfile::tempdir().unwrap();
-        let executable_bytes = b"retained linked executable";
-        let script_bytes = include_bytes!("../../../scripts/linked-playable-v1.json");
-        let content_bytes = b"retained native content";
-        for (relative, bytes) in [
-            ("inputs/uqm", executable_bytes.as_slice()),
-            ("inputs/linked-playable-v1.json", script_bytes.as_slice()),
-            (
-                "inputs/content/packages/uqm-0.8.0-content.uqm",
-                content_bytes.as_slice(),
-            ),
-            ("inputs/content/version", b"0.8.0\n".as_slice()),
-        ] {
-            let path = root.path().join(relative);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(path, bytes).unwrap();
-        }
-        fs::write(
-            root.path().join("native-window-proof.json"),
-            serde_json::to_vec(&NativeWindowConfigFile {
-                schema: NATIVE_WINDOW_CONFIG_SCHEMA.to_string(),
-                nonce: "a".repeat(64),
-                client_bounds: NativeWindowBounds {
-                    x: 80,
-                    y: 80,
-                    width: 1280,
-                    height: 960,
-                },
-                runtime_contract: native_runtime_contract(),
-                acceptance_policy: native_acceptance_policy(),
-            })
-            .unwrap(),
-        )
-        .unwrap();
-        let retained = |relative_path: &str, bytes: &[u8]| NativeRetainedInput {
-            relative_path: relative_path.to_string(),
-            byte_length: bytes.len() as u64,
-            sha256: hex_sha256(bytes),
-        };
-        let executable = retained("inputs/uqm", executable_bytes);
-        let script = retained("inputs/linked-playable-v1.json", script_bytes);
-        let content = retained(
-            "inputs/content/packages/uqm-0.8.0-content.uqm",
-            content_bytes,
-        );
-        let manifest = NativeAcceptanceFailureManifest {
-            schema: NATIVE_ACCEPTANCE_FAILURE_SCHEMA.to_string(),
-            command: vec![
-                "/collection/inputs/uqm".to_string(),
-                "--configdir=/collection/config".to_string(),
-                "--contentdir=/collection/inputs/content".to_string(),
-                "--automation-script=/collection/inputs/linked-playable-v1.json".to_string(),
-                "--automation-output=/collection/runtime-automation".to_string(),
-                "--native-window-proof=/collection/native-window-proof.json".to_string(),
-            ],
-            environment: std::collections::BTreeMap::from([(
-                "SDL_AUDIODRIVER".to_string(),
-                "dummy".to_string(),
-            )]),
-            executable,
-            script,
-            content_package: content,
-            runtime_contract: native_runtime_contract(),
-            acceptance_policy: native_acceptance_policy(),
-            retained_files: native_acceptance_failure_inventory(
-                root.path(),
-                native_runtime_contract().inventory_limits,
-            )
-            .unwrap(),
-            child: NativeChildCleanupReceipt {
-                process: NativeProcessIdentity {
-                    pid: 42,
-                    start_time: "1234".to_string(),
-                    executable_sha256: hex_sha256(executable_bytes),
-                    nonce: "a".repeat(64),
-                },
-                exit_code: None,
-                signal: Some(15),
-                term_sent: true,
-                kill_sent: false,
-                stdout_bytes: 12,
-                stderr_bytes: 3,
-                output_drained: true,
-                initial_process_group_empty: true,
-                config_root_removed: true,
-                materialized_content_removed: true,
-            },
-            failure_contract: serde_json::from_value(serde_json::json!("child-supervision"))
-                .unwrap(),
-            error: "child supervision failed".to_string(),
-            passed: false,
-        };
-        for contract in ["child-supervision", "child-exit"] {
-            let mut typed = manifest.clone();
-            typed.failure_contract = serde_json::from_value(serde_json::json!(contract)).unwrap();
-            assert!(validate_native_acceptance_failure_bundle(root.path(), &typed).is_ok());
-        }
-        for contract in ["observer", "config-cleanup", "semantic"] {
-            let mut typed = manifest.clone();
-            typed.failure_contract = serde_json::from_value(serde_json::json!(contract)).unwrap();
-            typed.child.exit_code = Some(0);
-            typed.child.signal = None;
-            typed.child.term_sent = false;
-            assert!(validate_native_acceptance_failure_bundle(root.path(), &typed).is_ok());
-        }
-
-        for exit_code in [0, 1, 255] {
-            let mut exited = manifest.clone();
-            exited.child.exit_code = Some(exit_code);
-            exited.child.signal = None;
-            exited.child.term_sent = false;
-            assert!(validate_native_acceptance_failure_bundle(root.path(), &exited).is_ok());
-        }
-        for (exit_code, signal) in [
-            (None, None),
-            (Some(-1), None),
-            (Some(256), None),
-            (None, Some(0)),
-            (None, Some(-1)),
-            (Some(1), Some(15)),
-        ] {
-            let mut invalid = manifest.clone();
-            invalid.child.exit_code = exit_code;
-            invalid.child.signal = signal;
-            assert!(validate_native_acceptance_failure_bundle(root.path(), &invalid).is_err());
-        }
-        let mut undrained = manifest.clone();
-        undrained.child.output_drained = false;
-        assert!(validate_native_acceptance_failure_bundle(root.path(), &undrained).is_err());
-        let mut orphaned = manifest.clone();
-        orphaned.child.initial_process_group_empty = false;
-        assert!(validate_native_acceptance_failure_bundle(root.path(), &orphaned).is_err());
-        let mut missing_cleanup = manifest.clone();
-        missing_cleanup.child.config_root_removed = false;
-        assert!(validate_native_acceptance_failure_bundle(root.path(), &missing_cleanup).is_err());
-
-        let config_file = root.path().join("config/uqm.cfg");
-        fs::create_dir_all(config_file.parent().unwrap()).unwrap();
-        fs::write(&config_file, b"retained config after failed cleanup").unwrap();
-        let mut config_failure = manifest.clone();
-        config_failure.failure_contract =
-            serde_json::from_value(serde_json::json!("config-cleanup")).unwrap();
-        config_failure.child.exit_code = Some(0);
-        config_failure.child.signal = None;
-        config_failure.child.term_sent = false;
-        config_failure.child.config_root_removed = false;
-        config_failure.retained_files = native_acceptance_failure_inventory(
-            root.path(),
-            native_runtime_contract().inventory_limits,
-        )
-        .unwrap();
-        assert!(validate_native_acceptance_failure_bundle(root.path(), &config_failure).is_ok());
-        fs::remove_file(config_file).unwrap();
-        fs::remove_dir(root.path().join("config")).unwrap();
-
-        let mut contradictory_terminal = manifest.clone();
-        contradictory_terminal.child.exit_code = Some(1);
-        assert!(
-            validate_native_acceptance_failure_bundle(root.path(), &contradictory_terminal)
-                .is_err()
-        );
-        let mut forged_command = manifest.clone();
-        forged_command.command[2] = "--contentdir=/outside".to_string();
-        assert!(validate_native_acceptance_failure_bundle(root.path(), &forged_command).is_err());
-        let mut forged_digest = manifest.clone();
-        forged_digest.executable.sha256 = "b".repeat(64);
-        assert!(validate_native_acceptance_failure_bundle(root.path(), &forged_digest).is_err());
-        let mut omitted_inventory = manifest;
-        omitted_inventory.retained_files.pop();
-        assert!(
-            validate_native_acceptance_failure_bundle(root.path(), &omitted_inventory).is_err()
         );
     }
 

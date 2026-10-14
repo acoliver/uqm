@@ -455,14 +455,11 @@ jobs:
           supervisor="${RUNNER_TEMP}/s4-gates-workflow-supervisor.py"
           install -m 0500 "${controller}/rust/xtask/src/ci/workflow_transport.py" "${RUNNER_TEMP}/s4-workflow-transport.py"
           verify_trusted_path "${RUNNER_TEMP}/s4-workflow-transport.py" f 0500
-          native_helper="${RUNNER_TEMP}/s4-gates-workflow-native-content.py"
           authority="${RUNNER_TEMP}/s4-gates-authority.json"
           echo "UQM_CI_AUTHORITY_PATH=${authority}" >> "${GITHUB_ENV}"
           install -m 0500 "${controller}/rust/xtask/src/ci/workflow_supervisor.py" "${supervisor}"
-          install -m 0500 "${controller}/rust/xtask/src/ci/workflow_native_content.py" "${native_helper}"
           install -m 0440 "${controller}/rust/ci/gates.json" "${authority}"
           verify_trusted_path "${supervisor}" f 0500
-          verify_trusted_path "${native_helper}" f 0500
           verify_trusted_path "${authority}" f 0440
           EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
           supervise_bootstrap() {
@@ -710,33 +707,6 @@ jobs:
           find -P "${RUSTUP_HOME}" -type d -exec chmod g+rx {} +
           find -P "${RUSTUP_HOME}" -type f -exec chmod g+r {} +
           printf '%s\n' "${tools}/bin" >> "${GITHUB_PATH}"
-      - name: Provision authority-pinned native acceptance content
-        id: native_content
-        shell: bash
-        working-directory: ${{ runner.temp }}
-        env:
-          MATRIX_OS: ${{ matrix.os }}
-          NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}
-        run: |
-          set -euo pipefail
-          EVIDENCE_DIR="${RUNNER_TEMP}/s4-command-evidence"
-          mkdir -p "${EVIDENCE_DIR}"
-          if [[ "${MATRIX_OS}" != "$(jq -er '.platform' <<<"${NATIVE_ACCEPTANCE_JSON}")" ]]; then
-            exit 0
-          fi
-          content_root="${RUNNER_TEMP}/s4-native-content"
-          filename="$(jq -er '.content_filename' <<<"${NATIVE_ACCEPTANCE_JSON}")"
-          destination="${content_root}/${filename}"
-          mkdir -p "${content_root}"
-          python3 "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
-            --authority "${RUNNER_TEMP}/s4-gates-authority.json" \
-            --receipt "${EVIDENCE_DIR}/native-content.result.json" \
-            --stdout "${EVIDENCE_DIR}/native-content.stdout.log" \
-            --stderr "${EVIDENCE_DIR}/native-content.stderr.log" \
-            -- python3 "${RUNNER_TEMP}/s4-gates-workflow-native-content.py" \
-              --authority-json "${NATIVE_ACCEPTANCE_JSON}" \
-              --destination "${destination}"
-          printf 'UQM_CI_NATIVE_CONTENT_ROOT=%s\n' "${content_root}" >> "${GITHUB_ENV}"
       - name: Provision dedicated Darwin containment identity
         id: containment_provision
         if: runner.os == 'macOS'
@@ -877,16 +847,14 @@ jobs:
               git diff --quiet --no-ext-diff HEAD --
               test -z \"\$(git ls-files --others --exclude-standard)\"
               cmp -- rust/ci/gates.json \"\$2\"
-              test \"\$(find -P \"\$6\" -prune -type d -user \"\$7\" -perm 0750 -print)\" = \"\$6\"
-              test \"\$(find -P \"\$3\" -prune -type f -user \"\$7\" -perm 0500 -print)\" = \"\$3\"
-              test \"\$(find -P \"\$4\" -prune -type f -user \"\$7\" -perm 0550 -print)\" = \"\$4\"
-              test \"\$(find -P \"\$5\" -prune -type f -user \"\$7\" -perm 0500 -print)\" = \"\$5\"
-              test \"\$(find -P \"\$2\" -prune -type f -user \"\$7\" -perm 0440 -print)\" = \"\$2\"
+              test \"\$(find -P \"\$5\" -prune -type d -user \"\$6\" -perm 0750 -print)\" = \"\$5\"
+              test \"\$(find -P \"\$3\" -prune -type f -user \"\$6\" -perm 0500 -print)\" = \"\$3\"
+              test \"\$(find -P \"\$4\" -prune -type f -user \"\$6\" -perm 0550 -print)\" = \"\$4\"
+              test \"\$(find -P \"\$2\" -prune -type f -user \"\$6\" -perm 0440 -print)\" = \"\$2\"
             " source-revalidation "${EXPECTED_SOURCE_SHA}" \
               "${RUNNER_TEMP}/s4-gates-authority.json" \
               "${RUNNER_TEMP}/s4-gates-workflow-supervisor.py" \
               "${RUNNER_TEMP}/s4-gates-controller" \
-              "${RUNNER_TEMP}/s4-gates-workflow-native-content.py" \
               "${RUNNER_TEMP}" "$(id -u)"
       - name: Remove dedicated Linux containment identity
         id: linux_containment_cleanup
@@ -967,7 +935,6 @@ jobs:
           CONTAINMENT_CHECK_OUTCOME: ${{ steps.containment_check.outcome }}
           GATES_OUTCOME: ${{ steps.authoritative_gates.outcome }}
           JOB_STATUS: ${{ job.status }}
-          NATIVE_CONTENT_OUTCOME: ${{ steps.native_content.outcome }}
           PREREQUISITES_OUTCOME: ${{ steps.prerequisites.outcome }}
           SOURCE_REVALIDATION_OUTCOME: ${{ steps.source_revalidation.outcome }}
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -990,7 +957,6 @@ jobs:
               {"step": "architecture", "outcome": os.environ["ARCHITECTURE_OUTCOME"]},
               {"step": "prerequisites", "outcome": os.environ["PREREQUISITES_OUTCOME"]},
               {"step": "tools", "outcome": os.environ["TOOLS_OUTCOME"]},
-              {"step": "native-content", "outcome": os.environ["NATIVE_CONTENT_OUTCOME"]},
           ]
           steps.append({
               "step": "containment-check",

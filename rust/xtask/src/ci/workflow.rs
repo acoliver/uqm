@@ -490,45 +490,6 @@ fn valid_tool_install_step(step: &Yaml) -> bool {
         })
 }
 
-fn valid_native_content_step(step: &Yaml, authority: &super::authority::Authority) -> bool {
-    step.get_str(&["env", "NATIVE_ACCEPTANCE_JSON"])
-        == Some("${{ needs.plan.outputs.native_acceptance }}")
-        && step.get_str(&["env", "MATRIX_OS"]) == Some("${{ matrix.os }}")
-        && step.get_str(&["run"]).is_some_and(|run| {
-            [
-                ".platform",
-                ".content_filename",
-                "s4-gates-workflow-supervisor.py",
-                "native-content.result.json",
-                "s4-gates-workflow-native-content.py",
-                "--authority-json",
-                "--destination",
-                "UQM_CI_NATIVE_CONTENT_ROOT",
-            ]
-            .iter()
-            .all(|needle| run.contains(needle))
-                && [
-                    "content_url",
-                    "content_byte_length",
-                    "content_sha256",
-                    "content_transport",
-                    "attempt_limit",
-                    "read_timeout_seconds",
-                    "backoff_seconds",
-                    "timeout=read_timeout",
-                    "time.sleep(backoff_seconds[attempt])",
-                    "dir_fd=directory_fd",
-                    "os.link(",
-                    "follow_symlinks=False",
-                    "os.fsync(directory_fd)",
-                ]
-                .iter()
-                .all(|needle| include_str!("workflow_native_content.py").contains(needle))
-                && !run.contains(&authority.native_acceptance.content_url)
-                && !run.contains(&authority.native_acceptance.content_sha256)
-        })
-}
-
 fn valid_plan_bootstrap(run: &str, authority: &super::authority::Authority) -> bool {
     run.contains(".tools.rust.version")
         && run.contains(".tools.rust.integrity_identity")
@@ -571,9 +532,6 @@ fn valid_gate_controller_bootstrap(step: &Yaml) -> bool {
                 && run.contains("verify_trusted_path \"${RUNNER_TEMP}\" d 0750")
                 && run.contains(
                     "install -m 0500 \"${controller}/rust/xtask/src/ci/workflow_supervisor.py\" \"${supervisor}\"",
-                )
-                && run.contains(
-                    "install -m 0500 \"${controller}/rust/xtask/src/ci/workflow_native_content.py\" \"${native_helper}\"",
                 )
                 && run.contains(
                     "install -m 0440 \"${controller}/rust/ci/gates.json\" \"${authority}\"",
@@ -650,9 +608,6 @@ fn rule_tool_authority_consumers(
     let install_step = gate_steps
         .iter()
         .find(|step| step.get_str(&["name"]) == Some("Install pinned gate tools"));
-    let native_content_step = gate_steps.iter().find(|step| {
-        step.get_str(&["name"]) == Some("Provision authority-pinned native acceptance content")
-    });
     let mut failures = Vec::new();
     let expected_schema_check = format!(
         "test \"$(jq -er '.schema' \"${{output}}\")\" = \"{}\"",
@@ -754,11 +709,6 @@ fn rule_tool_authority_consumers(
     if !install_step.is_some_and(|step| valid_tool_install_step(step)) {
         failures.push("tool installation does not consume every authority pin".into());
     }
-    if !native_content_step.is_some_and(|step| valid_native_content_step(step, authority)) {
-        failures.push(
-            "native acceptance content provisioning does not consume generated authority".into(),
-        );
-    }
     if failures.is_empty() {
         RuleResult {
             rule: rule.into(),
@@ -779,7 +729,6 @@ fn rule_precontainment_isolation(document: &Yaml) -> RuleResult {
         "Admit candidate policy with base-owned controller",
         "Install native prerequisites",
         "Install pinned gate tools",
-        "Provision authority-pinned native acceptance content",
     ];
     let isolated = isolated_steps.iter().all(|name| {
         steps.iter().any(|step| {
@@ -1059,7 +1008,7 @@ fn rule_supervised_workflow_subprocesses(document: &Yaml) -> RuleResult {
     let Some(jobs) = document.get("jobs") else {
         return fail(rule, "workflow lacks a jobs map");
     };
-    let required: [(&str, &str, &str, usize, &[&str]); 8] = [
+    let required: [(&str, &str, &str, usize, &[&str]); 7] = [
         (
             "plan",
             "Build base-owned external xtask",
@@ -1111,13 +1060,6 @@ fn rule_supervised_workflow_subprocesses(document: &Yaml) -> RuleResult {
                 "tools-actionlint",
                 "tools-component-${component}",
             ],
-        ),
-        (
-            "gates",
-            "Provision authority-pinned native acceptance content",
-            "s4-gates-workflow-supervisor.py",
-            1,
-            &["native-content.result.json"],
         ),
         (
             "gates",
@@ -1398,11 +1340,10 @@ fn valid_post_gate_source_revalidation(step: &Yaml) -> bool {
             "git diff --quiet --no-ext-diff HEAD --",
             "git ls-files --others --exclude-standard",
             "cmp -- rust/ci/gates.json \\\"\\$2\\\"",
-            "find -P \\\"\\$6\\\" -prune -type d -user \\\"\\$7\\\" -perm 0750",
-            "find -P \\\"\\$3\\\" -prune -type f -user \\\"\\$7\\\" -perm 0500",
-            "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$7\\\" -perm 0550",
-            "find -P \\\"\\$5\\\" -prune -type f -user \\\"\\$7\\\" -perm 0500",
-            "find -P \\\"\\$2\\\" -prune -type f -user \\\"\\$7\\\" -perm 0440",
+            "find -P \\\"\\$5\\\" -prune -type d -user \\\"\\$6\\\" -perm 0750",
+            "find -P \\\"\\$3\\\" -prune -type f -user \\\"\\$6\\\" -perm 0500",
+            "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$6\\\" -perm 0550",
+            "find -P \\\"\\$2\\\" -prune -type f -user \\\"\\$6\\\" -perm 0440",
             "source-revalidation \"${EXPECTED_SOURCE_SHA}\"",
             "\"${RUNNER_TEMP}/s4-gates-authority.json\"",
         ]
@@ -1621,11 +1562,6 @@ fn rule_matrix_shell_transport(document: &Yaml) -> RuleResult {
         ),
         (
             "Install native prerequisites",
-            "MATRIX_OS",
-            "${{ matrix.os }}",
-        ),
-        (
-            "Provision authority-pinned native acceptance content",
             "MATRIX_OS",
             "${{ matrix.os }}",
         ),
@@ -2059,7 +1995,6 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                     ("ARCHITECTURE_OUTCOME", "steps.architecture.outcome"),
                     ("CHECKOUT_OUTCOME", "steps.checkout_gates.outcome"),
                     ("GATES_OUTCOME", "steps.authoritative_gates.outcome"),
-                    ("NATIVE_CONTENT_OUTCOME", "steps.native_content.outcome"),
                     ("PREREQUISITES_OUTCOME", "steps.prerequisites.outcome"),
                     ("TOOLS_OUTCOME", "steps.tools.outcome"),
                     ("XTASK_BUILD_OUTCOME", "steps.xtask_build.outcome"),
@@ -2089,7 +2024,6 @@ fn valid_transport_setup_results(id: &str, index_steps: &[&Yaml]) -> bool {
                                 "{\"step\": \"architecture\", \"outcome\": os.environ[\"ARCHITECTURE_OUTCOME\"]}",
                                 "{\"step\": \"prerequisites\", \"outcome\": os.environ[\"PREREQUISITES_OUTCOME\"]}",
                                 "{\"step\": \"tools\", \"outcome\": os.environ[\"TOOLS_OUTCOME\"]}",
-                                "{\"step\": \"native-content\", \"outcome\": os.environ[\"NATIVE_CONTENT_OUTCOME\"]}",
                                 "\"step\": \"containment-check\"",
                                 "{\"step\": \"authoritative-gates\", \"outcome\": os.environ[\"GATES_OUTCOME\"]}",
                                 "\"step\": \"source-revalidation\"",
@@ -3489,12 +3423,12 @@ total_timeout=60
 
         for (from, to) in [
             (
-                "find -P \\\"\\$6\\\" -prune -type d -user \\\"\\$7\\\" -perm 0750",
-                "find -P \\\"\\$6\\\" -prune -type d -user \\\"\\$7\\\" -perm 0770",
+                "find -P \\\"\\$5\\\" -prune -type d -user \\\"\\$6\\\" -perm 0750",
+                "find -P \\\"\\$5\\\" -prune -type d -user \\\"\\$6\\\" -perm 0770",
             ),
             (
-                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$7\\\" -perm 0550",
-                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$7\\\" -perm 0770",
+                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$6\\\" -perm 0550",
+                "find -P \\\"\\$4\\\" -prune -type f -user \\\"\\$6\\\" -perm 0770",
             ),
         ] {
             let mutated = WORKFLOW.replacen(from, to, 1);
@@ -3760,19 +3694,6 @@ total_timeout=60
     }
 
     #[test]
-    fn native_content_authority_bypass_is_rejected() {
-        let mutated = WORKFLOW.replacen(
-            "MATRIX_OS: ${{ matrix.os }}
-          NATIVE_ACCEPTANCE_JSON: ${{ needs.plan.outputs.native_acceptance }}",
-            "MATRIX_OS: ${{ matrix.os }}
-          NATIVE_ACCEPTANCE_JSON: '{}'",
-            1,
-        );
-        assert_ne!(mutated, *WORKFLOW);
-        assert!(!rule(&mutated, "workflow.tool_authority").passed);
-    }
-
-    #[test]
     fn missing_timeout_mutation_is_rejected() {
         let mutated = WORKFLOW.replacen("    timeout-minutes: 20\n", "", 1);
         assert!(!rule(&mutated, "workflow.timeouts").passed);
@@ -3855,31 +3776,6 @@ total_timeout=60
             String::from_utf8_lossy(&output.stderr)
         );
         assert!(!marker.exists());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn native_content_helper_executes_authority_transport_budgets() {
-        use std::process::Command;
-
-        let temporary = tempfile::tempdir().unwrap();
-        let destination = temporary.path().join("content.uqm");
-        let helper =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ci/workflow_native_content.py");
-        let source = "\nimport hashlib\nimport importlib.util\nimport json\nimport os\nimport stat\nimport sys\nsys.dont_write_bytecode = True\nspec = importlib.util.spec_from_file_location(\"uqm_workflow_native_content\", sys.argv[1])\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\npayload = b\"authority-owned-content\"\nopens = []\nsleeps = []\nclass Response:\n    def __init__(self):\n        self.done = False\n    def __enter__(self):\n        return self\n    def __exit__(self, *args):\n        return False\n    def read(self, _limit):\n        if self.done:\n            return b\"\"\n        self.done = True\n        return payload\ndef urlopen(_request, timeout):\n    opens.append(timeout)\n    if len(opens) < 3:\n        raise OSError(\"injected transport failure\")\n    return Response()\nmodule.urllib.request.urlopen = urlopen\nmodule.time.sleep = sleeps.append\ndestination = sys.argv[2]\nauthority = {\n    \"content_filename\": \"content.uqm\",\n    \"content_url\": \"https://example.invalid/content.uqm\",\n    \"content_byte_length\": len(payload),\n    \"content_sha256\": hashlib.sha256(payload).hexdigest(),\n    \"content_transport\": {\n        \"attempt_limit\": 3,\n        \"read_timeout_seconds\": 17,\n        \"backoff_seconds\": [2, 5],\n    },\n}\nsys.argv = [sys.argv[1], \"--authority-json\", json.dumps(authority), \"--destination\", destination]\nopen_descriptors_before = set(os.listdir(\"/dev/fd\"))\nassert module.main() == 0\nassert set(os.listdir(\"/dev/fd\")) == open_descriptors_before\nassert opens == [17, 17, 17]\nassert sleeps == [2, 5]\nassert open(destination, \"rb\").read() == payload\nassert stat.S_IMODE(os.stat(destination).st_mode) == 0o440\nbad_directory = destination + \".bad-dir\"\nos.mkdir(bad_directory)\nbad_destination = os.path.join(bad_directory, \"content.uqm\")\nauthority[\"content_sha256\"] = \"0\" * 64\nsys.argv = [sys.argv[1], \"--authority-json\", json.dumps(authority), \"--destination\", bad_destination]\ntry:\n    module.main()\n    raise AssertionError(\"permanent content-integrity failure was retried or accepted\")\nexcept ValueError as error:\n    assert \"SHA-256 mismatch\" in str(error)\nassert opens == [17, 17, 17, 17]\nassert sleeps == [2, 5]\nassert not os.path.exists(bad_destination)\nshort_directory = destination + \".short-dir\"\nos.mkdir(short_directory)\nshort_destination = os.path.join(short_directory, \"content.uqm\")\nauthority[\"content_sha256\"] = hashlib.sha256(payload).hexdigest()\nshort_opens = []\nclass ShortResponse(Response):\n    def read(self, _limit):\n        if self.done:\n            return b\"\"\n        self.done = True\n        return payload[:-1]\ndef short_urlopen(_request, timeout):\n    short_opens.append(timeout)\n    if len(short_opens) == 1:\n        return ShortResponse()\n    return Response()\nmodule.urllib.request.urlopen = short_urlopen\nsys.argv = [sys.argv[1], \"--authority-json\", json.dumps(authority), \"--destination\", short_destination]\nassert module.main() == 0\nassert short_opens == [17, 17]\nassert sleeps == [2, 5, 2]\nassert open(short_destination, \"rb\").read() == payload\n";
-        let output = Command::new("python3")
-            .env("PYTHONDONTWRITEBYTECODE", "1")
-            .arg("-c")
-            .arg(source)
-            .arg(helper)
-            .arg(&destination)
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "native content helper failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
     }
 
     #[test]
