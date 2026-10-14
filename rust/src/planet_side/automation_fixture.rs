@@ -1019,7 +1019,9 @@ mod tests {
         let result = port
             .step_world(&session.lander, HazardChances::default())
             .unwrap();
-        assert!(result.effects.sounds.contains(&SoundCue::LanderHits));
+        // C plays LANDER_HITS inside shotCreature, which a Brainbox never reaches.
+        assert!(!result.effects.sounds.contains(&SoundCue::LanderHits));
+        assert_eq!(result.effects.retrieved.len(), 1);
         port.apply_world_step(&result, &mut Audio { played: Vec::new() })
             .unwrap();
         assert_eq!(

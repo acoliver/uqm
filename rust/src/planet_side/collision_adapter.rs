@@ -317,6 +317,29 @@ where
             )?;
         }
 
+        // A stun bolt on a value-0 creature skips `shotCreature` and runs the
+        // node pickup: persist the retrieved node, then drop the entity. A node
+        // the callback declines stays on the surface, as in C.
+        for entity_id in &result.effects.retrieved {
+            let mapping = {
+                let surface = self.surface.borrow();
+                surface
+                    .generated
+                    .iter()
+                    .find(|entry| entry.entity == *entity_id)
+                    .copied()
+            };
+            let should_remove = match mapping {
+                Some(mapping) => {
+                    persist_pickup(&mut self.generator, &mut self.persistence, mapping)?
+                }
+                None => true,
+            };
+            if should_remove {
+                remove_surface_entity(&mut self.surface.borrow_mut(), *entity_id)?;
+            }
+        }
+
         // Advance every creature's animation frame atomically: frame + mask.
         for (entity_id, kind, animation_frame) in &result.effects.creature_frames {
             advance_creature_animation_frame(
@@ -370,11 +393,7 @@ fn classify(kind: &SurfaceEntityKind) -> Option<LanderCollision> {
         }),
         SurfaceEntityKind::EnergyNode { node } => Some(LanderCollision::Energy { node: *node }),
         SurfaceEntityKind::LiveCreature { kind, .. } => Some(LanderCollision::LiveCreature {
-            danger: if kind.is_brainbox_bulldozer() {
-                super::creatures::CreatureDanger::Monstrous
-            } else {
-                CreatureCatalog::stats(*kind).danger
-            },
+            danger: CreatureCatalog::stats(*kind).danger,
         }),
         SurfaceEntityKind::CannedCreature { value } => {
             Some(LanderCollision::CannedBiological { value: *value })
@@ -650,6 +669,135 @@ mod tests {
             }]
         ));
         assert_eq!(adapter.random.calls, 2);
+    }
+
+    fn brainbox_entity(hit_points: u8) -> SurfaceEntity {
+        SurfaceEntity {
+            kind: SurfaceEntityKind::LiveCreature {
+                kind: super::super::creatures::CreatureKind::new(24).unwrap(),
+                hit_points,
+                aware: false,
+                velocity: crate::battle::velocity::VelocityDesc::new(),
+                thrust_wait: 0,
+                frame_index: 0,
+            },
+            position: SurfacePoint::default(),
+            finite_life: None,
+        }
+    }
+
+    struct RecordingAudio;
+
+    impl super::super::runtime::PlanetSideAudio for RecordingAudio {
+        fn play(&mut self, _cue: SoundCue) -> Result<(), AdapterError> {
+            Ok(())
+        }
+    }
+
+    /// C `lander.c` creature table: Brainbox Bulldozer is `DANGER_HARMLESS`, and
+    /// the contact roll `TFB_Random() % 128 < danger_vals[0]` can never succeed,
+    /// yet the random value is still drawn on every contact frame.
+    #[test]
+    fn brainbox_contact_never_bites_but_still_draws_one_random_per_frame() {
+        use super::super::collision::{resolve_lander_collision, CollisionState};
+        use super::super::model::ShieldSet;
+
+        let surface = shared_surface_with_entity(brainbox_entity(1));
+        let mut adapter = test_adapter(surface);
+        let mut crew = CrewCount::new(12);
+        let mut minerals = super::super::cargo::MineralCargo::new(100, 0, false);
+        let mut biological = super::super::cargo::BioCargo::default();
+        const FRAMES: usize = 64;
+        for _ in 0..FRAMES {
+            // A roll of 0 would bite at every danger level above Harmless.
+            adapter.random.values.extend([0, 0]);
+            let contacts = adapter.contacts(&lander()).unwrap();
+            let [contact] = contacts.as_slice() else {
+                panic!("expected exactly one contact");
+            };
+            resolve_lander_collision(
+                &mut CollisionState {
+                    crew: &mut crew,
+                    shields: ShieldSet::default(),
+                    minerals: &mut minerals,
+                    biological: &mut biological,
+                },
+                contact.collision,
+                contact.rolls,
+            );
+        }
+        assert_eq!(crew, CrewCount::new(12), "a Brainbox must never cost crew");
+        assert_eq!(
+            adapter.random.calls, FRAMES,
+            "one random draw per contact frame, no shield draw"
+        );
+    }
+
+    /// C `lander.c` ~786-803: a stun bolt on a creature whose catalog value is 0
+    /// skips `shotCreature`, so the first bolt retires the node through
+    /// `callPickupForScanType`/`setNodeRetrieved` whatever its hit points were.
+    #[test]
+    fn first_stun_bolt_retires_a_multi_hit_point_brainbox_node() {
+        use super::super::generation::{GeneratedEntity, ScanNodeId, ScanType};
+
+        let _telemetry = telemetry_guard();
+        let mut world = SurfaceWorld::new();
+        let id = world.insert(brainbox_entity(3));
+        let mut masks = SurfaceMasks::new((0..16).map(|_| solid()).collect()).unwrap();
+        masks.insert_entity(id, solid());
+        let node = ScanNodeId::new(4).unwrap();
+        let surface =
+            super::super::assembly::share_surface(super::super::assembly::SurfaceAssembly {
+                world,
+                generated: vec![GeneratedEntity {
+                    entity: id,
+                    scan: ScanType::Biological,
+                    node,
+                }],
+                frames: super::super::graphics_adapter::SurfaceFrameRegistry::default(),
+                masks,
+            });
+        let mut adapter = test_adapter(surface.clone());
+        adapter
+            .register_shot(Shot {
+                position: SurfacePoint::default(),
+                facing: 0,
+                velocity_x: 0,
+                velocity_y: 0,
+                life: 12,
+            })
+            .unwrap();
+        let before = super::super::telemetry::observation();
+
+        let result = adapter
+            .step_world(&lander(), super::super::world::HazardChances::default())
+            .unwrap();
+        adapter
+            .apply_world_step(&result, &mut RecordingAudio)
+            .unwrap();
+
+        assert!(
+            adapter.persistence.is_retrieved(ScanType::Biological, node),
+            "the Brainbox node must be recorded as retrieved"
+        );
+        let surface = surface.borrow();
+        assert!(
+            surface.world.get(id).is_none(),
+            "the Brainbox must be removed, not canned"
+        );
+        assert!(
+            surface.generated.is_empty(),
+            "the retired node mapping must be dropped"
+        );
+        assert!(
+            !result.effects.sounds.contains(&SoundCue::LanderHits),
+            "shotCreature, which plays LANDER_HITS, is not reached for a value-0 creature"
+        );
+        assert_eq!(
+            super::super::telemetry::observation().creature_hits,
+            before.creature_hits + 1,
+            "the bolt still counts as a creature hit"
+        );
     }
 
     #[test]
